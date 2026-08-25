@@ -505,6 +505,11 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .pf-v6-c-toolbar__expandable-content .console-log-toolbar__separator { display: none; }
 /* Names the time-range select, which otherwise showed only its resting option ("Full run") and
    read as an action nobody could name. */
+/* The label and its help circle sit on one baseline above the field. PF sizes a toolbar item's
+   direct children with flex-basis:100%, which turned the circle into a full-width ellipse; both
+   children here want their own width. */
+.console-log-toolbar__labelrow { display: flex; align-items: center; gap: 0.35rem; }
+.pf-v6-c-toolbar__item.console-log-toolbar__labelrow > * { flex: 0 0 auto; }
 .console-log-toolbar__label {
   font-size: 0.72rem;
   letter-spacing: 0.04em;

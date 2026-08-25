@@ -94,8 +94,9 @@
                  on the timeline, so hidden until the waterfall is shown (updateTimelineControl). -->
             <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" id="log-timerange" aria-label="Time range" hidden>
               <div class="pf-v6-c-toolbar__item console-log-toolbar__separator"><div class="pf-v6-c-divider pf-m-vertical" role="separator" aria-hidden="true"></div></div>
-              <div class="pf-v6-c-toolbar__item">
+              <div class="pf-v6-c-toolbar__item console-log-toolbar__labelrow">
                 <label class="console-log-toolbar__label" for="time-range">Range</label>
+                <button id="time-range-help" class="console-render-help-glyph" type="button" aria-label="What Range does" title="Scope the waterfall to a slice of wall-clock time, counted back from the end of the run. It is a picker, not something to type in: choose Full run or one of the windows. Dragging across the waterfall sets a custom window and shows a Reset beside this.">?</button>
               </div>
               <div class="pf-v6-c-toolbar__item">
                 <span class="pf-v6-c-form-control">
@@ -108,6 +109,15 @@
                     <option value="900">Last 15m</option>
                     <option value="custom" hidden>Custom</option>
                   </select>
+                  <!-- PF sets appearance:none on a wrapped select and reserves inline-end padding for
+                       an indicator it does not draw, so without this the control is a bare box with a
+                       gap on the right - it reads as a text field. Same chevron settings/memory.ts
+                       builds for the same reason. -->
+                  <span class="pf-v6-c-form-control__utilities">
+                    <span class="pf-v6-c-form-control__toggle-icon">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                    </span>
+                  </span>
                 </span>
               </div>
               <div class="pf-v6-c-toolbar__item">

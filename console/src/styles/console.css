@@ -119,6 +119,12 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
   grid-template-columns: minmax(0, 1fr);
   justify-content: stretch;
   justify-items: stretch;
+  /* A menu, not a sheet. Below PF's lg stop the panel goes full-bleed, which on a 900px window
+     stretched every control to the window: Open graph came out 409px wide and the range select 823px,
+     so a picker read as a text field somebody was meant to fill in. Capping the column keeps the
+     controls control-sized there, and costs nothing on a phone narrower than the cap. */
+  max-inline-size: 30rem;
+  margin-inline-start: auto;
 }
 /* Inside a group the short actions pair up rather than spending a row each: auto-fit over a 9rem
    floor puts Copy beside Copy command and Open graph beside Fullscreen, and collapses to one column
@@ -132,7 +138,10 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
 /* Only the LEAF clusters flow. The outer action group holds two clusters and the rule between them,
    so pairing at that level puts a cluster in each half and leaves the rule occupying a cell. */
 [data-overflow-panel] .pf-v6-c-toolbar__group.pf-m-action-group-inline {
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  /* 11rem, not 9: the floor has to clear the longest label plus its icon and padding, or the track
+     is narrower than the button's content and the label runs into the clipped edge ("Collapse
+     sections" ended 1px from it). */
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
 }
 /* A vertical rule has nothing to divide once the row is a column; hide the item, not just the rule,
    or it keeps its cell. */

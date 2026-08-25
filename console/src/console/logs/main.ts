@@ -685,6 +685,8 @@ function wireControls(): void {
   // as the body text.
   const filterHelpBtn = el("log-filter-help");
   if (filterHelpBtn) attachHelpPopover(filterHelpBtn);
+  const rangeHelpBtn = el("time-range-help");
+  if (rangeHelpBtn) attachHelpPopover(rangeHelpBtn);
 
   // Filter box: debounced live-filter that narrows both views and syncs the #q= fragment.
   const filterEl = el("log-filter");
