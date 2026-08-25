@@ -65,7 +65,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
 | . | 44 | `magus query project:.` | `generate`, `buzz-test`, `lint` |
-| console | 7 | `magus query project:console` | `preflight`, `ci`, `build` |
+| console | 8 | `magus query project:console` | `preflight`, `build`, `ci` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `lint` |
@@ -129,12 +129,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run. |
-| `build` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
+| `build` |  |
 | `lint` | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate. |
 | `format` | `format:rw` maintains declared source inputs. |
 | `security` | security audits the dependency tree against the npm advisory database. |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps. |
 | `preflight` |  |
+| `diffdemo-generate` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
 
 ## Project: docs
 

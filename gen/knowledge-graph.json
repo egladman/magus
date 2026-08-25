@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2377,
-  "edge_count": 6064,
+  "node_count": 2379,
+  "edge_count": 6067,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -8052,8 +8052,7 @@
       "id": "function:console/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:160",
+      "source": "console/magusfile.buzz:180",
       "attrs": {
         "exported": "true"
       }
@@ -8063,7 +8062,17 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:220",
+      "source": "console/magusfile.buzz:241",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:console/magusfile.buzz:diffdemo_generate",
+      "kind": "function",
+      "label": "diffdemo_generate",
+      "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds. Regenerates the Diff showcase's changeset from its .patch fixture.  The showcase renders with NO daemon, so it cannot a",
+      "source": "console/magusfile.buzz:173",
       "attrs": {
         "exported": "true"
       }
@@ -8073,7 +8082,7 @@
       "kind": "function",
       "label": "format",
       "doc": "`format:rw` maintains declared source inputs.",
-      "source": "console/magusfile.buzz:189",
+      "source": "console/magusfile.buzz:210",
       "attrs": {
         "exported": "true"
       }
@@ -8090,7 +8099,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:178",
+      "source": "console/magusfile.buzz:199",
       "attrs": {
         "exported": "true"
       }
@@ -8109,7 +8118,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:213",
+      "source": "console/magusfile.buzz:234",
       "attrs": {
         "exported": "true"
       }
@@ -20223,7 +20232,7 @@
       "source": "console",
       "attrs": {
         "engine": "buzz",
-        "target_count": "7"
+        "target_count": "8"
       }
     },
     {
@@ -20912,7 +20921,6 @@
       "id": "target:console:build",
       "kind": "target",
       "label": "build",
-      "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
       "source": "console",
       "attrs": {
         "engine": "buzz"
@@ -20925,6 +20933,17 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
       "source": "console",
       "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:console:diffdemo-generate",
+      "kind": "target",
+      "label": "diffdemo-generate",
+      "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
+      "source": "console",
+      "attrs": {
+        "declared_as": "diffdemo_generate",
         "engine": "buzz"
       }
     },
@@ -45324,6 +45343,14 @@
     },
     {
       "source": "file:console/magusfile.buzz",
+      "target": "function:console/magusfile.buzz:diffdemo_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "file:console/magusfile.buzz",
       "target": "function:console/magusfile.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -64412,6 +64439,14 @@
     },
     {
       "source": "project:console",
+      "target": "target:console:diffdemo-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "project:console",
       "target": "target:console:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -66865,6 +66900,14 @@
     {
       "source": "target:console:build",
       "target": "target:.:graph-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "target:console:build",
+      "target": "target:console:diffdemo-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,

@@ -119,8 +119,17 @@ export interface DiffSession {
   readonly suggestions?: readonly DiffSuggestion[];
 }
 
+import type { WireFile } from "./parse";
+
 export interface DiffResponse {
+  // The changeset arrives PARSED. The daemon owns the reader, including the hunk digests a
+  // read receipt is keyed by, so this surface never hashes anything.
+  readonly files: readonly WireFile[];
+  // The same changeset as raw text. Unused here, and kept on the type because the route sends
+  // it - a caller wanting the interchange format itself has it without a second request.
   readonly patch: string;
+  // digest identifies the changeset as a whole, for telling a current answer from a frozen one.
+  readonly digest: string;
   readonly clean: boolean;
 }
 
@@ -229,38 +238,4 @@ export class HttpError extends Error {
     super(`daemon answered ${status}`);
     this.status = status;
   }
-}
-
-// hunkDigest MUST match internal/diff.HunkDigest byte for byte, or a mark made in the
-// console is invisible to the CLI and to an agent reading the same session.
-//
-// Path plus body, NUL-separated, each line newline-terminated; the hunk header is excluded
-// because its line numbers move whenever anything above it changes, and digesting them would
-// reset every mark in a file on any edit near the top. SHA-256, first 16 hex characters.
-export async function hunkDigest(path: string, lines: readonly string[]): Promise<string> {
-  const enc = new TextEncoder();
-  const parts: Uint8Array[] = [enc.encode(path), new Uint8Array([0])];
-  for (const l of lines) parts.push(enc.encode(`${l}\n`));
-  let n = 0;
-  for (const p of parts) n += p.length;
-  const buf = new Uint8Array(n);
-  let off = 0;
-  for (const p of parts) {
-    buf.set(p, off);
-    off += p.length;
-  }
-  const hash = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-    .slice(0, 16);
-}
-
-// Mirrors the server digest for snapshot pairing.
-export async function patchDigest(patch: string): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(patch));
-  return Array.from(new Uint8Array(hash))
-    .slice(0, 16)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }

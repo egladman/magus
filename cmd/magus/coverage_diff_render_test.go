@@ -127,12 +127,27 @@ func TestChangedPathsFromPatchReadsTheHeaders(t *testing.T) {
 		"+// a change",
 		"diff --git a/docs/graph.json b/docs/graph.json",
 		"diff --git a/cmd/magus/diff.go b/cmd/magus/diff.go",
-		"diff --git malformed-without-b-prefix",
 		"",
 	}, "\n")
 
 	assert.Equal(t, []string{"cmd/magus/diff.go", "docs/graph.json"}, changedPathsFromPatch(patch))
 	assert.Empty(t, changedPathsFromPatch(""))
+}
+
+// A header with no a//b prefixes is not malformed - it is what `git diff --no-prefix` emits,
+// and diff.noPrefix is a setting plenty of people turn on. This used to be pinned the other
+// way, as a line to skip, so such a patch reported ZERO changed files at exit 0. The reader
+// falls back to a whitespace split there, which cannot handle a path containing spaces but
+// names the file rather than dropping it.
+func TestNoPrefixHeadersStillNameTheirFiles(t *testing.T) {
+	patch := strings.Join([]string{
+		"diff --git f.txt renamed.txt",
+		"similarity index 100%",
+		"rename from f.txt",
+		"rename to renamed.txt",
+		"",
+	}, "\n")
+	assert.Equal(t, []string{"renamed.txt"}, changedPathsFromPatch(patch))
 }
 
 // TestDiffInputFromArgs pins the refusal that matters most: a git ref typed by someone

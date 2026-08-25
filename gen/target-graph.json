@@ -1354,10 +1354,21 @@
           ]
         },
         {
-          "name": "build",
+          "name": "diffdemo-generate",
+          "declared": "diffdemo_generate",
           "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "src/console/diff/gen/*.ts"
+            }
+          ]
+        },
+        {
+          "name": "build",
           "dependencies": [
-            "preflight"
+            "preflight",
+            "diffdemo-generate"
           ],
           "charms": [
             "rw"
@@ -1371,6 +1382,9 @@
           "chain": [
             {
               "target": "preflight"
+            },
+            {
+              "target": "diffdemo-generate"
             },
             {
               "project": ".",

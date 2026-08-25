@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parsePatch } from "./parse";
+import { patchFixture } from "./fixtures";
 import {
   buildRows,
   byHunk,
@@ -45,7 +45,7 @@ const REPLACEMENT = [
 ].join("\n");
 
 test("unified rows are one per line, with a file and a hunk heading", () => {
-  const rows = buildRows(parsePatch(REPLACEMENT), "unified");
+  const rows = buildRows(patchFixture(REPLACEMENT), "unified");
   assert.deepEqual(
     rows.map((r) => r.kind),
     ["file", "hunk", "line", "line", "line", "line", "line", "line"],
@@ -56,7 +56,7 @@ test("unified rows are one per line, with a file and a hunk heading", () => {
 // replacement and must sit SIDE BY SIDE. Emitting each as it arrives stacks old above new,
 // which is just the unified view in two columns.
 test("split pairs a deletion run against the addition run that follows it", () => {
-  const rows = buildRows(parsePatch(REPLACEMENT), "split");
+  const rows = buildRows(patchFixture(REPLACEMENT), "split");
   const pairs = rows.filter((r): r is Extract<Row, { kind: "pair" }> => r.kind === "pair");
   assert.deepEqual(
     pairs.map((p) => [p.left?.text ?? null, p.right?.text ?? null]),
@@ -72,7 +72,7 @@ test("split pairs a deletion run against the addition run that follows it", () =
 // An uneven replacement must pad the short side, not truncate the long one.
 test("split pads the shorter side of an uneven replacement", () => {
   const patch = ["--- a/x", "+++ b/x", "@@ -1,3 +1,2 @@", "-a", "-b", "-c", "+z", ""].join("\n");
-  const pairs = buildRows(parsePatch(patch), "split").filter(
+  const pairs = buildRows(patchFixture(patch), "split").filter(
     (r): r is Extract<Row, { kind: "pair" }> => r.kind === "pair",
   );
   assert.equal(pairs.length, 3);
@@ -89,7 +89,7 @@ test("split pads the shorter side of an uneven replacement", () => {
 // Additions with no deletions opposite them occupy the right column only.
 test("split leaves the left column empty for a pure addition run", () => {
   const patch = ["--- a/x", "+++ b/x", "@@ -1,1 +1,3 @@", " ctx", "+one", "+two", ""].join("\n");
-  const pairs = buildRows(parsePatch(patch), "split").filter(
+  const pairs = buildRows(patchFixture(patch), "split").filter(
     (r): r is Extract<Row, { kind: "pair" }> => r.kind === "pair",
   );
   assert.deepEqual(
@@ -115,7 +115,7 @@ test("split does not zip two replacements across a context line", () => {
     "+b2",
     "",
   ].join("\n");
-  const pairs = buildRows(parsePatch(patch), "split").filter(
+  const pairs = buildRows(patchFixture(patch), "split").filter(
     (r): r is Extract<Row, { kind: "pair" }> => r.kind === "pair",
   );
   assert.deepEqual(
@@ -132,7 +132,7 @@ test("split does not zip two replacements across a context line", () => {
 // through would zip the first run's additions against the second run's deletions.
 test("split starts a new replacement when a deletion follows an addition", () => {
   const patch = ["--- a/x", "+++ b/x", "@@ -1,2 +1,2 @@", "-a", "+b", "-c", "+d", ""].join("\n");
-  const pairs = buildRows(parsePatch(patch), "split").filter(
+  const pairs = buildRows(patchFixture(patch), "split").filter(
     (r): r is Extract<Row, { kind: "pair" }> => r.kind === "pair",
   );
   assert.deepEqual(
@@ -150,7 +150,7 @@ test("a comment becomes a row directly under the hunk it annotates", () => {
   const comments = [
     { id: "c1", path: "x.ts", hunk: 0, author: "agent" as const, body: "look", resolved: false },
   ];
-  const rows = buildRows(parsePatch(REPLACEMENT), "unified", byHunk(comments));
+  const rows = buildRows(patchFixture(REPLACEMENT), "unified", byHunk(comments));
   assert.deepEqual(
     rows.map((r) => r.kind),
     ["file", "hunk", "comment", "line", "line", "line", "line", "line", "line"],
@@ -173,7 +173,7 @@ test("comments land on their own hunk, not the first one", () => {
   const comments = [
     { id: "c1", path: "a.ts", hunk: 1, author: "human" as const, body: "second", resolved: false },
   ];
-  const rows = buildRows(parsePatch(patch), "unified", byHunk(comments));
+  const rows = buildRows(patchFixture(patch), "unified", byHunk(comments));
   const at = rows.findIndex((r) => r.kind === "comment");
   const prevHunk = rows.slice(0, at).filter((r) => r.kind === "hunk").length;
   assert.equal(prevHunk, 2, "the comment must follow the SECOND hunk header");
@@ -191,7 +191,7 @@ test("several comments on one hunk keep their order", () => {
     { id: "c1", path: "x.ts", hunk: 0, author: "agent" as const, body: "first", resolved: false },
     { id: "c2", path: "x.ts", hunk: 0, author: "human" as const, body: "reply", resolved: false },
   ];
-  const rows = buildRows(parsePatch(REPLACEMENT), "unified", byHunk(comments));
+  const rows = buildRows(patchFixture(REPLACEMENT), "unified", byHunk(comments));
   const bodies = rows
     .filter((r): r is Extract<Row, { kind: "comment" }> => r.kind === "comment")
     .map((r) => r.comment.body);
@@ -199,8 +199,8 @@ test("several comments on one hunk keep their order", () => {
 });
 
 test("no comments leaves the row shape untouched", () => {
-  const withNone = buildRows(parsePatch(REPLACEMENT), "unified", byHunk([]));
-  const without = buildRows(parsePatch(REPLACEMENT), "unified");
+  const withNone = buildRows(patchFixture(REPLACEMENT), "unified", byHunk([]));
+  const without = buildRows(patchFixture(REPLACEMENT), "unified");
   assert.deepEqual(
     withNone.map((r) => r.kind),
     without.map((r) => r.kind),
@@ -226,7 +226,7 @@ test("headings are indexed for navigation in both modes", () => {
     "+n",
     "",
   ].join("\n");
-  const rows = buildRows(parsePatch(patch), "unified");
+  const rows = buildRows(patchFixture(patch), "unified");
   assert.equal(fileRowIndexes(rows).length, 2);
   assert.equal(hunkRowIndexes(rows).length, 3);
   for (const i of hunkRowIndexes(rows)) assert.equal(at(rows, i, "rows").kind, "hunk");
@@ -266,7 +266,7 @@ test("navigation preserves exact boundaries in a large hunk index", () => {
 });
 
 test("content rows retain their hunk for lazy per-hunk rendering work", () => {
-  const rows = buildRows(parsePatch(REPLACEMENT), "unified");
+  const rows = buildRows(patchFixture(REPLACEMENT), "unified");
   const hunk = rows.find((row): row is Extract<Row, { kind: "hunk" }> => row.kind === "hunk");
   const line = rows.find((row): row is Extract<Row, { kind: "line" }> => row.kind === "line");
   assert.ok(hunk);
@@ -282,7 +282,7 @@ test("a file with no hunks still gets its heading row", () => {
     "Binary files a/logo.png and b/logo.png differ",
     "",
   ].join("\n");
-  const rows = buildRows(parsePatch(patch), "unified");
+  const rows = buildRows(patchFixture(patch), "unified");
   assert.equal(rows.length, 1);
   assert.equal(at(rows, 0, "rows").kind, "file");
 });
@@ -382,7 +382,7 @@ test("maxLineChars picks up a hunk header longer than every code line", () => {
     "+new",
     "",
   ].join("\n");
-  const rows = buildRows(parsePatch(longHeader), "unified");
+  const rows = buildRows(patchFixture(longHeader), "unified");
   const hunk = rows.find((r) => r.kind === "hunk");
   assert.equal(hunk?.hunk.header.length, maxLineChars(rows));
 });
@@ -398,7 +398,7 @@ test("maxLineChars picks up a comment longer than every code line", () => {
       resolved: false,
     },
   ];
-  const rows = buildRows(parsePatch(SHORT_LINES), "unified", byHunk(comments));
+  const rows = buildRows(patchFixture(SHORT_LINES), "unified", byHunk(comments));
   assert.equal(maxLineChars(rows), comments[0].body.length);
 });
 
@@ -409,7 +409,7 @@ test("maxLineChars picks up a story sentence longer than every code line", () =>
       [{ host: "claude-code", read: ["a/very/long/path/that/pushes/this/sentence/out.ts"] }],
     ],
   ]);
-  const rows = buildRows(parsePatch(SHORT_LINES), "unified", undefined, touches);
+  const rows = buildRows(patchFixture(SHORT_LINES), "unified", undefined, touches);
   const story = rows.find((r) => r.kind === "story");
   assert.ok(story);
   assert.equal(maxLineChars(rows), storyText(story.touch).length);
@@ -425,7 +425,7 @@ test("maxLineChars applies in split mode too: hunk headers are emitted regardles
     "+new",
     "",
   ].join("\n");
-  const rows = buildRows(parsePatch(longHeader), "split");
+  const rows = buildRows(patchFixture(longHeader), "split");
   const hunk = rows.find((r) => r.kind === "hunk");
   assert.equal(hunk?.hunk.header.length, maxLineChars(rows));
 });
@@ -448,7 +448,7 @@ test("maxLineChars expands tabs to their rendered width rather than counting the
     "+a line of plain text with no tabs in it at all", // .length 46, comfortably over 25
     "",
   ].join("\n");
-  const rows = buildRows(parsePatch(patch), "unified");
+  const rows = buildRows(patchFixture(patch), "unified");
   // The tab-heavy line (width 25) must NOT win over the 46-character plain line - this pins
   // that tabs still lose to genuinely longer plain text, not just that they count for something.
   assert.equal(maxLineChars(rows), "a line of plain text with no tabs in it at all".length);
@@ -464,7 +464,7 @@ test("maxLineChars: a short, deeply-indented line can still outrun a longer flat
     "+a forty-six character line of flat unindented text", // shorter than 53 either way
     "",
   ].join("\n");
-  const rows = buildRows(parsePatch(patch), "unified");
+  const rows = buildRows(patchFixture(patch), "unified");
   assert.equal(maxLineChars(rows), 53);
 });
 

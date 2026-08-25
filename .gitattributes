@@ -52,6 +52,7 @@ cmd/magus/completions/* merge=magus linguist-generated
 cmd/magus/gen/*.go merge=magus linguist-generated
 console/coverage.svg merge=magus linguist-generated
 console/gen/** merge=magus linguist-generated
+console/src/console/diff/gen/*.ts merge=magus linguist-generated
 console/src/gen/** merge=magus linguist-generated
 coverage.hand.out merge=magus linguist-generated
 coverage.out merge=magus linguist-generated

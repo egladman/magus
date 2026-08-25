@@ -1,19 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEMO_PATCH, demoSession, applyDemoOp } from "./demo";
-import { parsePatch } from "./parse";
+import { demoSession, applyDemoOp } from "./demo";
+import { fromWire } from "./parse";
+import { DEMO_FILES } from "./gen/demo";
 import { order, stats, visibleFiles } from "./order";
 import { buildRows, byHunk } from "./rows";
 
-// The fixture is data a person edits by hand, so what is pinned here is the ways it can go
+// demo.patch is data a person edits by hand, so what is pinned here is the ways it can go
 // quietly wrong: an annotation for a path the patch does not carry (the file then renders with
-// no chips and no ranking, and nothing says so), a hunk index a comment cannot reach, or a
-// hand-counted @@ header that has drifted from the lines under it.
+// no chips and no ranking, and nothing says so), or a hunk index a comment cannot reach.
+//
+// It reads the GENERATED changeset rather than the patch, because that is what the showcase
+// actually renders. A hand-counted @@ header no longer needs pinning here - the same Go reader
+// the product uses produces this, so a header that disagrees with its body is its problem now.
 
-const files = parsePatch(DEMO_PATCH);
+const files = fromWire(DEMO_FILES);
 const session = demoSession();
 
-test("the demo patch parses into the changeset it claims", () => {
+test("the generated changeset holds the files the showcase claims", () => {
   assert.deepEqual(
     files.map((f) => f.path),
     [

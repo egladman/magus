@@ -95,8 +95,8 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 			asOf = diff.PatchDigest(patch)
 			// The same read also gives the hunk-to-file mapping, which is the only thing
 			// that lets a later viewed mark say it FINISHED a file rather than just landing
-			// somewhere. The console computes these digests itself, so the daemon otherwise
-			// sees opaque strings.
+			// somewhere.
+			//
 			// Fingerprints each changed file HERE, at the content the reader is about to
 			// look at, so a receipt minted later attests to what they saw rather than to
 			// whatever the file holds by then. The advertised scenario is a paired review
@@ -115,11 +115,21 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 // PatchHandler serves GET /api/v1/diff/patch: the working tree's uncommitted changes as one unified
 // patch, for the console's review surface.
 //
-// The patch ships as TEXT rather than as a parsed file/hunk tree, and that split is the
-// design rather than a shortcut. A unified patch is the one interchange format every backend
-// and every forge already emits, so a reader written against it works unchanged on a patch
-// this route produced and on one fetched from a provider later. Parsing it here would fork
-// that reader in two and make the provider case the odd one out.
+// The changeset ships PARSED, and the raw patch travels beside it for a caller that wants the
+// interchange format itself.
+//
+// This route used to send text only, on the reasoning that a unified patch is what every
+// backend and every forge emits, so one reader in the browser would serve both this route and
+// a pull-request patch fetched from a provider later. What it actually bought was two readers
+// - one here, one in TypeScript - and they drifted: the browser learned Mercurial's headerless
+// dialect and POSIX's tab-delimited timestamps and this side did not, so `magus diff` reported
+// an empty changeset on an hg tree while the console rendered it correctly.
+//
+// Drift was never going to stay cosmetic, because a hunk's DIGEST is its identity: it is what
+// a read receipt is keyed by and what lets a mark made in the console be seen by the CLI and
+// by an agent. Two implementations computing that independently is a shared session that can
+// disagree with itself. The provider case the old split was defending is served by handing
+// that patch to the same parser, which is one reader either way.
 //
 // Optional `path` query parameters scope the diff, repeated once per path. Absent, the whole
 // repository is diffed. A service with no workspace yields 503, not 500 - the same posture
@@ -266,8 +276,17 @@ func NewPatchHandler(src patchSource, log *slog.Logger) *PatchHandler {
 // had nothing to review, which is DISTINCT from an empty patch the reader failed to parse -
 // a console that cannot tell those apart renders "no changes" over a bug.
 type diffResponse struct {
+	// Files is the changeset already parsed. The console renders from this and does not read
+	// Patch at all; see the note on PatchHandler for why the parse moved here.
+	Files []diff.File `json:"files"`
+	// Patch is the same changeset as raw text, kept for a caller that wants the interchange
+	// format itself - a script piping it onward, or a reader diffing it against another tool's.
 	Patch string `json:"patch"`
-	Clean bool   `json:"clean"`
+	// Digest identifies the changeset as a whole, so a client that joined later can tell a
+	// current answer from a frozen one. Computed here for the same reason the hunk digests are:
+	// the console would otherwise hash the patch itself to reach the same number.
+	Digest string `json:"digest"`
+	Clean  bool   `json:"clean"`
 }
 
 func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
@@ -283,7 +302,12 @@ func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "diff error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, diffResponse{Patch: patch, Clean: strings.TrimSpace(patch) == ""})
+	writeJSON(w, diffResponse{
+		Files:  diff.Parse(patch),
+		Patch:  patch,
+		Digest: diff.PatchDigest(patch),
+		Clean:  strings.TrimSpace(patch) == "",
+	})
 }
 
 // scopePaths reads the repeated `path` query parameter, dropping empties so a stray `?path=`

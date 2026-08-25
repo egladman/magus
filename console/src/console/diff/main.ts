@@ -23,7 +23,14 @@
 // single-letter keys are handled on the scroll container rather than as global chords on
 // purpose: a bare "v" must not fire while someone is typing in another surface.
 
-import { parsePatch, type DiffFile, type DiffLine, type FileStatus, type Hunk } from "./parse";
+import {
+  fromWire,
+  type DiffFile,
+  type DiffLine,
+  type FileStatus,
+  type Hunk,
+  type WireFile,
+} from "./parse";
 import {
   buildRows,
   byHunk,
@@ -51,14 +58,13 @@ import {
   fetchSession,
   fetchReviewSession,
   mutate,
-  hunkDigest,
-  patchDigest,
   HttpError,
   type DiffSession,
   type DiffAnnotation,
   type DiffTouch,
 } from "./session";
-import { DEMO_PATCH, demoSession, applyDemoOp } from "./demo";
+import { demoSession, applyDemoOp } from "./demo";
+import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
@@ -102,8 +108,9 @@ interface State {
   cursor: number;
   session: DiffSession | null;
   viewed: Set<string>;
-  // digestByRow maps a hunk row index to its content digest, computed once per rebuild so a
-  // keypress never awaits a hash.
+  // digestByRow maps a hunk row index to the digest the daemon computed for that hunk. Filled
+  // in full at rebuild - the browser hashes nothing, so every digest is known before the first
+  // paint rather than resolving as rows scroll into view.
   digestByRow: Map<number, string>;
   showGenerated: boolean;
   overview: boolean;
@@ -598,39 +605,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   let paintedFirst = -1;
   let paintedLast = -1;
-  let digestPaintQueued = false;
-
-  const primeVisibleHunkDigests = (first: number, last: number): void => {
-    // Paint only hunks in the virtual window.
-    let lo = 0;
-    let hi = state.hunks.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      if ((state.hunks[mid] ?? Number.POSITIVE_INFINITY) < first) lo = mid + 1;
-      else hi = mid;
-    }
-    for (let i = lo; i < state.hunks.length; i++) {
-      const row = state.hunks[i];
-      if (row === undefined || row >= last) break;
-      if (state.digestByRow.has(row) || pendingDigests.has(row)) continue;
-      void digestForHunk(row).finally(() => {
-        if (digestPaintQueued || disposed) return;
-        digestPaintQueued = true;
-        requestAnimationFrame(() => {
-          digestPaintQueued = false;
-          if (!disposed) {
-            paint(true);
-            // The "N/M hunks read" chip counts only hunks whose digest is known (see
-            // renderToolbar), so a hunk carrying a mark from an earlier session stays uncounted
-            // until it scrolls into view and its digest resolves here. Re-render the chip at that
-            // point rather than leaving it to catch up on some unrelated toolbar change.
-            renderToolbar();
-          }
-        });
-      });
-    }
-  };
-
   const paint = (force = false): void => {
     const total = state.rows.length;
     if (total === 0) {
@@ -670,7 +644,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
       paintedFirst = first;
       paintedLast = last;
     }
-    primeVisibleHunkDigests(first, last);
     paintPinned(top);
     markActiveFile(top);
   };
@@ -1054,28 +1027,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // --- model rebuild --------------------------------------------------------
 
-  // Materialize hunk digests only when a review action needs them.
-  let pendingDigests = new Map<number, Promise<string>>();
-  const digestForHunk = async (rowIndex: number): Promise<string | undefined> => {
-    const known = state.digestByRow.get(rowIndex);
-    if (known) return known;
-    const pending = pendingDigests.get(rowIndex);
-    if (pending) return pending;
-    const row = state.rows[rowIndex];
-    if (!row || row.kind !== "hunk") return undefined;
-    const body = row.hunk.lines.map((line) =>
-      line.kind === "meta" ? `\\${line.text}` : `${markerFor(line.kind)}${line.text}`,
-    );
-    const work = hunkDigest(row.file.path, body);
-    pendingDigests.set(rowIndex, work);
-    try {
-      const digest = await work;
-      if (!disposed && state.rows[rowIndex] === row) state.digestByRow.set(rowIndex, digest);
-      return digest;
-    } finally {
-      pendingDigests.delete(rowIndex);
-    }
-  };
+  // The daemon computed every digest, so this is a lookup rather than a hash. It used to hash
+  // in the browser, lazily and per visible hunk, which is why the read count lagged: a hunk
+  // already marked in an earlier session stayed uncounted until it scrolled into view.
+  const digestForHunk = (rowIndex: number): string | undefined => state.digestByRow.get(rowIndex);
 
   const hunkOrdinal = (rows: readonly Row[]): Int32Array => {
     const ordinals = new Int32Array(rows.length);
@@ -1127,9 +1082,13 @@ export function activate(host: HTMLElement): SurfaceInstance {
     spacer.style.height = `${state.offsets[state.rows.length]}px`;
     const rowFloorPx = (maxLineChars(state.rows) + LINE_PREFIX_CHARS) * monoCharWidth();
     scroll.style.setProperty("--console-diff-min-row-width", `${rowFloorPx}px`);
-    // Rebuilds invalidate row-indexed digest entries.
+    // Row indices move on every rebuild, so the map is rebuilt with them - but it is filled
+    // completely here, from digests that arrived with the changeset.
     state.digestByRow = new Map();
-    pendingDigests = new Map();
+    for (const row of state.hunks) {
+      const r = state.rows[row];
+      if (r?.kind === "hunk") state.digestByRow.set(row, r.hunk.digest);
+    }
     paint(true);
     renderSidebar();
     renderToolbar();
@@ -1515,7 +1474,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const toggleViewed = async (): Promise<void> => {
     const i = currentHunkRow();
     if (i === null) return;
-    const digest = await digestForHunk(i);
+    const digest = digestForHunk(i);
     if (!digest) return;
     if (!canCollaborate()) {
       flashCollaborationNotice();
@@ -1839,7 +1798,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (demo) {
       state.collaboration = "live";
       const sess = demoSession();
-      state.changeset = order(parsePatch(DEMO_PATCH), sess);
+      state.changeset = order(fromWire(DEMO_FILES), sess);
       state.phase = "ready";
       root.dataset.phase = "ready";
       root.dataset.overview = "off";
@@ -1860,14 +1819,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
       );
       return;
     }
-    let patch: string;
+    let files: readonly WireFile[];
+    let digest = "";
     try {
       const res = await fetchPatch(hp, controller.signal);
       if (res.clean) {
         showEmpty("Nothing to read", "The working tree is clean. Every change is committed.");
         return;
       }
-      patch = res.patch;
+      files = res.files;
+      digest = res.digest;
     } catch (e) {
       if (disposed) return;
       const status = e instanceof HttpError ? e.status : 0;
@@ -1878,7 +1839,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       return;
     }
 
-    const parsed = parsePatch(patch);
+    const parsed = fromWire(files);
     if (parsed.length === 0) {
       // NOT an empty state: the daemon sent a patch and this reader failed on it. Titling that
       // "nothing to read" tells someone their tree is clean when it is not, which is the one
@@ -1901,7 +1862,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // PHASE TWO: annotate and attach the session. Failure here leaves a working diff viewer
     // rather than an error - the annotations are the differentiator, not the product.
     try {
-      const snapshot = await patchDigest(patch);
+      const snapshot = digest;
       const sess = await fetchSession(
         hp,
         parsed.map((f) => f.path),

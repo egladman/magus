@@ -131,15 +131,23 @@ func TestParseHunksReadsAHeaderlessUnifiedPatch(t *testing.T) {
 	require.Len(t, files[1].Hunks, 1)
 }
 
-func TestUnifiedHeaderPathsSurviveSpacesTimestampsAndDeletion(t *testing.T) {
+func TestHeaderPathsSurviveSpacesAndTimestamps(t *testing.T) {
 	// A tab separates path from timestamp, which is the only reason a path with spaces is
 	// readable; cutting on whitespace would truncate this one at "my".
-	assert.Equal(t, "my file.go",
-		pathFromUnifiedHeader("--- a/my file.go\t2026-01-01", "+++ b/my file.go\t2026-01-01"))
-	// A deletion names /dev/null on the new side, so the old side is the only name there is.
-	assert.Equal(t, "gone.go", pathFromUnifiedHeader("--- a/gone.go", "+++ /dev/null"))
-	// No timestamps at all is legal and common from hand-rolled tools.
-	assert.Equal(t, "x.txt", pathFromUnifiedHeader("--- x.txt", "+++ x.txt"))
+	assert.Equal(t, "my file.go", stripPathPrefix("a/my file.go\t2026-01-01 09:00:00 -0400"))
+	// No timestamp at all is legal and common from hand-rolled tools.
+	assert.Equal(t, "x.txt", stripPathPrefix("x.txt"))
+	// /dev/null passes through: callers key on it to tell an add from a delete.
+	assert.Equal(t, "/dev/null", stripPathPrefix("/dev/null"))
+}
+
+// A deletion names /dev/null on the new side, so the old side is the only name the patch
+// carries - and a sidebar cannot list "/dev/null".
+func TestADeletionIsNamedByItsOldPath(t *testing.T) {
+	files := Parse("--- a/gone.go\t2026-01-01\n+++ /dev/null\t2026-01-01\n@@ -1 +0,0 @@\n-bye\n")
+	require.Len(t, files, 1)
+	assert.Equal(t, "gone.go", files[0].Path)
+	assert.Equal(t, StatusDeleted, files[0].Status)
 }
 
 // A `-- x` removed line inside a hunk starts with "--- " when the removed text itself begins
