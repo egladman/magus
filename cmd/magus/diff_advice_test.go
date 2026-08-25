@@ -161,9 +161,14 @@ func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
 	}
 }
 
-// A warning is not a failure: the advisor ran and published, so its note must not carry
-// the could-not-run stamp.
-func TestCollectAdviceDoesNotStampAWarningAsAFailure(t *testing.T) {
+// A warning from an advisor that RAN is not the reader's business.
+//
+// These are lint diagnostics about the advisor's own source - magus's shipped scripts, not
+// anything in the changeset. Printing them unconditionally is what made a one-line docs fix
+// draw ~40 lines of BZZ3001/BZZ3002 about merge-conflict.buzz and doctor.buzz; four
+// personas hit it independently and the drive-by contributor named it as the point they
+// nearly abandoned the repo, assuming they had broken something.
+func TestCollectAdviceDropsWarningsFromAnAdvisorThatRan(t *testing.T) {
 	dir := stubAdviceDir(t, map[string]string{"warned.buzz": warningAdvisor})
 
 	sections, notes, err := collectAdvice(context.Background(), dir, []string{"warned.buzz"}, "main")
@@ -173,13 +178,27 @@ func TestCollectAdviceDoesNotStampAWarningAsAFailure(t *testing.T) {
 	if len(sections) != 1 {
 		t.Fatalf("sections = %+v, want the advisor's finding: it ran", sections)
 	}
-	if len(notes) == 0 {
-		t.Fatal("want the warning surfaced as a note")
+	if len(notes) != 0 {
+		t.Fatalf("notes = %v, want none: the advisor ran, so its own lint is not the reader's business", notes)
 	}
-	for _, n := range notes {
-		if strings.HasPrefix(n, "could not run: ") {
-			t.Errorf("note = %q, want no could-not-run stamp on a warning", n)
-		}
+}
+
+// ...but when the advisor CRASHED, its warnings are kept and ordered above the failure: a
+// BZZ3001 over a crash is usually the explanation for it, which is the whole reason they
+// were ever collected.
+func TestCollectAdviceKeepsWarningsFromAnAdvisorThatFailed(t *testing.T) {
+	dir := stubAdviceDir(t, map[string]string{"broken.buzz": brokenAdvisor})
+
+	_, notes, err := collectAdvice(context.Background(), dir, []string{"broken.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(notes) == 0 {
+		t.Fatal("want the failure surfaced as a note")
+	}
+	last := notes[len(notes)-1]
+	if !strings.HasPrefix(last, "could not run: ") {
+		t.Errorf("last note = %q, want the could-not-run stamp last, after any warnings", last)
 	}
 }
 

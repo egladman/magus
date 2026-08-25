@@ -111,15 +111,23 @@ func collectAdvice(ctx context.Context, dir string, files []string, base string)
 		// then dies has already said something true, and dropping it would report the
 		// finding as absent rather than as partial.
 		sections = append(sections, parseAdviceSections(out)...)
-		// Warnings first, then the failure: that is the order they happened in, and a
-		// BZZ3001 above a crash is usually the explanation for it.
-		for _, w := range warnings {
-			notes = append(notes, fmt.Sprintf("%s: %s", file, w))
-		}
 		if err != nil {
+			// Warnings first, then the failure: that is the order they happened in, and a
+			// BZZ3001 above a crash is usually the explanation for it.
+			//
+			// ONLY when it crashed. These are lint diagnostics about the advisor's own
+			// source - magus's shipped scripts, not the reader's change - and an advisor
+			// that ran fine has told the reader nothing by emitting them. Four personas
+			// independently hit the version that printed them unconditionally: a one-line
+			// docs fix drew ~40 lines of BZZ3001/BZZ3002 about `merge-conflict.buzz` and
+			// `doctor.buzz`, and the drive-by contributor named it the moment they nearly
+			// closed the laptop, assuming they had broken something. Lint about magus's
+			// own sources belongs in magus's own lint run.
+			for _, w := range warnings {
+				notes = append(notes, fmt.Sprintf("%s: %s", file, w))
+			}
 			// Stamped here, not at render time: warnings and failures share one ordered
-			// stream, and only this frame knows which is which. An advisor with ten
-			// warnings still ran and published.
+			// stream, and only this frame knows which is which.
 			notes = append(notes, fmt.Sprintf("could not run: %s: %v", file, err))
 		}
 	}
