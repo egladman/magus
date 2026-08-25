@@ -31,7 +31,12 @@ type Hunk struct {
 // has nothing to check it against - so a comment lands at a plausible coordinate nothing
 // verified, on a file that might not even be in the change.
 //
-// Deliberately shallow. It reads `diff --git` and `@@` boundaries and keeps line text; it does
+// Both header dialects open a file: git's `diff --git a/x b/x` and the bare `--- x` / `+++ x`
+// pair that GNU `diff -u` and `patch` speak. Recognizing only git's meant a hand-rolled patch
+// parsed to zero files, which this command then reported as an empty changeset - a wrong
+// answer that reads exactly like a right one.
+//
+// Deliberately shallow. It reads those boundaries and `@@` and keeps line text; it does
 // not model renames, modes, or binary payloads, because nothing downstream of it asks. The
 // console's parse.ts is the rich parser and it stays the rich parser - duplicating that here
 // would be a second implementation to drift, and drift between the two is exactly what makes
@@ -40,6 +45,9 @@ func ParseHunks(patch string) []FileHunks {
 	var out []FileHunks
 	var cur *FileHunks
 	var hunk *Hunk
+	// git prints its own header AND the `---`/`+++` pair for the same file. The pair is
+	// redundant there and must not open a second, hunkless entry for it.
+	gitNamed := false
 
 	flushHunk := func() {
 		if cur == nil || hunk == nil {
@@ -65,11 +73,26 @@ func ParseHunks(patch string) []FileHunks {
 	if n := len(lines); n > 0 && lines[n-1] == "" {
 		lines = lines[:n-1]
 	}
-	for _, line := range lines {
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
 		switch {
 		case strings.HasPrefix(line, "diff --git "):
 			flushFile()
 			cur = &FileHunks{Path: pathFromGitHeader(line)}
+			gitNamed = true
+		// The pair is matched by LOOKAHEAD rather than by remembering the previous line,
+		// because a lone `--- x` is also how a hunk body spells a removed line beginning
+		// "-- ". Requiring the `+++` partner on the very next line is what every unified-diff
+		// reader uses to tell the two apart, and it also keeps the `---` out of the open
+		// hunk's text, where it would have changed that hunk's digest.
+		case strings.HasPrefix(line, "--- ") && i+1 < len(lines) && strings.HasPrefix(lines[i+1], "+++ "):
+			if gitNamed {
+				gitNamed = false // git already named this file; the pair adds nothing
+			} else {
+				flushFile()
+				cur = &FileHunks{Path: pathFromUnifiedHeader(line, lines[i+1])}
+			}
+			i++ // the +++ line is consumed with its --- partner
 		case strings.HasPrefix(line, "@@"):
 			if cur == nil {
 				continue
@@ -98,6 +121,33 @@ func pathFromGitHeader(line string) string {
 		return ""
 	}
 	return strings.TrimPrefix(rest[cut+1:], "b/")
+}
+
+// pathFromUnifiedHeader reads the path out of a bare `--- old` / `+++ new` pair.
+//
+// The new side names the file, except on a deletion, where it is /dev/null and the old side
+// is the only name the patch carries. GNU separates the path from its timestamp with a TAB,
+// which is what makes a path containing spaces readable at all, so the cut is on that tab and
+// never on whitespace. The a/ and b/ prefixes are git's convention but `diff -u a/x b/x`
+// produces them too, so they are trimmed on either side.
+func pathFromUnifiedHeader(oldLine, newLine string) string {
+	clean := func(line, prefix string) string {
+		rest := strings.TrimPrefix(line, prefix)
+		if tab := strings.IndexByte(rest, '\t'); tab >= 0 {
+			rest = rest[:tab]
+		}
+		rest = strings.TrimRight(rest, " ")
+		for _, p := range []string{"a/", "b/"} {
+			if strings.HasPrefix(rest, p) {
+				return rest[len(p):]
+			}
+		}
+		return rest
+	}
+	if p := clean(newLine, "+++ "); p != "" && p != "/dev/null" {
+		return p
+	}
+	return clean(oldLine, "--- ")
 }
 
 // HunkCounts reports how many hunks each path has, which is all a validator needs.

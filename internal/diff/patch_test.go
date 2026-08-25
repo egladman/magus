@@ -101,3 +101,55 @@ func TestParseHunksOnEmptyOrHeaderOnlyPatch(t *testing.T) {
 	require.Len(t, files, 1)
 	assert.Empty(t, files[0].Hunks)
 }
+
+// A patch from GNU `diff -u` or from `patch` carries no `diff --git` line at all. Reading only
+// git's dialect made these parse to zero files, which the CLI then reported as an empty
+// changeset at exit 0 - the shape of a right answer wrapped around a wrong one.
+const gnuPatch = "--- old/a.go\t2026-08-25 09:00:00.000000000 -0400\n" +
+	"+++ new/a.go\t2026-08-25 09:01:00.000000000 -0400\n" +
+	"@@ -1,3 +1,3 @@\n" +
+	" ctx\n" +
+	"-old\n" +
+	"+new\n" +
+	"--- old/b.md\t2026-08-25 09:00:00.000000000 -0400\n" +
+	"+++ new/b.md\t2026-08-25 09:01:00.000000000 -0400\n" +
+	"@@ -1 +1 @@\n" +
+	"-before\n" +
+	"+after\n"
+
+func TestParseHunksReadsAHeaderlessUnifiedPatch(t *testing.T) {
+	files := ParseHunks(gnuPatch)
+	require.Len(t, files, 2)
+	// The NEW side names the file: it is the one that exists on disk now, which is what
+	// every consumer of this path goes on to look up.
+	assert.Equal(t, "new/a.go", files[0].Path)
+	require.Len(t, files[0].Hunks, 1)
+	// The second file's `---` opened a new file rather than landing in the first file's hunk,
+	// which would have changed that hunk's digest and unmarked it for anyone who had read it.
+	assert.Equal(t, []string{" ctx", "-old", "+new"}, files[0].Hunks[0].Lines)
+	assert.Equal(t, "new/b.md", files[1].Path)
+	require.Len(t, files[1].Hunks, 1)
+}
+
+func TestUnifiedHeaderPathsSurviveSpacesTimestampsAndDeletion(t *testing.T) {
+	// A tab separates path from timestamp, which is the only reason a path with spaces is
+	// readable; cutting on whitespace would truncate this one at "my".
+	assert.Equal(t, "my file.go",
+		pathFromUnifiedHeader("--- a/my file.go\t2026-01-01", "+++ b/my file.go\t2026-01-01"))
+	// A deletion names /dev/null on the new side, so the old side is the only name there is.
+	assert.Equal(t, "gone.go", pathFromUnifiedHeader("--- a/gone.go", "+++ /dev/null"))
+	// No timestamps at all is legal and common from hand-rolled tools.
+	assert.Equal(t, "x.txt", pathFromUnifiedHeader("--- x.txt", "+++ x.txt"))
+}
+
+// A `-- x` removed line inside a hunk starts with "--- " when the removed text itself begins
+// "-- ". Only the `+++` partner on the very next line separates a real header from that, and
+// getting it wrong silently splits one file's hunks across two phantom entries.
+func TestALoneDashLineStaysInsideItsHunk(t *testing.T) {
+	patch := "--- a/x.md\n+++ b/x.md\n@@ -1,2 +1,2 @@\n" +
+		"--- not a header, just removed text\n" +
+		"+kept\n"
+	files := ParseHunks(patch)
+	require.Len(t, files, 1)
+	assert.Equal(t, []string{"--- not a header, just removed text", "+kept"}, files[0].Hunks[0].Lines)
+}
