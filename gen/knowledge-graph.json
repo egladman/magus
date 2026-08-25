@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2379,
-  "edge_count": 6067,
+  "edge_count": 6068,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -27500,6 +27500,14 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "benchmarks/README.md"
+    },
+    {
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
       "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",

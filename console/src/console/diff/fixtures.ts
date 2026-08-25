@@ -11,8 +11,11 @@
 // needs to see - a five-line patch says what is being rendered, a hand-written tree of rows
 // does not. `patchFixture` exists so they can keep doing that without the app carrying a parser.
 //
-// fixtures.test.ts fails if any non-test module imports this, because a rule that lives
-// only in a comment is a rule with roughly even odds.
+// Two tests hold it there, because a rule that lives only in a comment is a rule with roughly
+// even odds. One fails if any non-test module imports this. The other parses demo.patch with
+// BOTH readers and compares the trees - that patch is the one corpus which exists in both
+// forms, since Go's output for it is committed to gen/demo.ts, so "these two could drift" is
+// answered on every run rather than promised in a header.
 
 import type { DiffFile, DiffLine, FileStatus, Hunk, LineKind } from "./parse";
 

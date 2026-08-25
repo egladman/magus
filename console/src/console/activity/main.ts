@@ -278,7 +278,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     scroll: refs.scroll,
     title: "Events",
     label: "Event index",
-    bodyTitle: "Detail",
+    bodyTitle: "Details",
     onRefresh: load,
     hideWhenEmpty: true,
   });

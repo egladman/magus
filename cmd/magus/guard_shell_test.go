@@ -879,6 +879,9 @@ func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
 		"./magus run format . --silent; ./magus run lint . --silent",
 		"magus run generate . && magus run lint .",
 		"./magus run generate . --silent; ./magus run format . --silent; ./magus run lint . --silent",
+		// The gate counts too, and this exact line is how the rule's own author tripped MGS4007
+		// an hour after writing it: console:build left an output behind that the gate then read.
+		"./magus run build console --silent; ./magus affected ci --no-default-charms",
 	}
 	for _, cmd := range chained {
 		v := evaluateBashGuard(cmd)

@@ -48,8 +48,12 @@ const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 //
 // It matches the SHAPE rather than parsed commands because the mistake is the chaining, and
 // every spelling of it - ; && || - is the same mistake.
+// `affected` counts as a second one: the gate runs the whole pipeline over everything the diff
+// reaches, so building a project immediately before it is asking for the same work twice. That
+// spelling slipped past the first version of this rule, which only looked for `run`, and the
+// author of the rule then made exactly that mistake within the hour.
 var guardChainedRunRe = regexp.MustCompile(
-	cmdPos + `(?:\./)?magus\s+run\s[^;&|]*[;&|]+\s*(?:\./)?magus\s+run\s`)
+	cmdPos + `(?:\./)?magus\s+(?:run|affected)\s[^;&|]*[;&|]+\s*(?:\./)?magus\s+(?:run|affected)\s`)
 
 // guardToolMatch is one command spell operation Magus can run on the caller's
 // behalf. It is derived from the registered spell catalog, never a hand-kept
@@ -510,7 +514,8 @@ const (
 	// which case this is. What the guard can see is that the chain is worth questioning.
 	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `magus run lint .` alone runs all three in order.\n" +
 		"Check what a target already pulls in before chaining: `magus run <target> <project> --dry-run` prints the plan without executing it.\n" +
-		"Each extra invocation reloads the workspace and re-evaluates every magusfile to redo work the previous one did. And `magus run` takes one TARGET and many PROJECTS (`magus run build api web`), so two targets never belong in one call either."
+		"`magus affected ci` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice - and the second run can trip MGS4007 on an output the first one left behind.\n" +
+		"Each extra invocation reloads the workspace and re-evaluates every magusfile. And `magus run` takes one TARGET and many PROJECTS (`magus run build api web`), so two targets never belong in one call either."
 
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
