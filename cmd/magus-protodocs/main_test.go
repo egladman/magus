@@ -776,6 +776,21 @@ func TestDescribeRulesWalksProtovalidateGenerically(t *testing.T) {
 	assert.Contains(t, got, "string.len: 4")
 }
 
+// TestConstraintLeavesRenderInFieldNumberOrder asserts the whole slice rather than
+// membership. Every other assertion here is a Contains, so when protoreflect's
+// undefined-order Range put two rules of one block in either order, this suite stayed
+// green while the generator wrote different bytes each run - only the docs drift gate
+// caught it, and a drift gate cannot say which run was right.
+func TestConstraintLeavesRenderInFieldNumberOrder(t *testing.T) {
+	rules := &validate.FieldRules{Type: &validate.FieldRules_Int32{Int32: &validate.Int32Rules{
+		GreaterThan: &validate.Int32Rules_Gte{Gte: 0},
+		LessThan:    &validate.Int32Rules_Lte{Lte: 1000},
+	}}}
+
+	assert.Equal(t, []string{"int32.lte: 1000", "int32.gte: 0"}, describeRules(rules.ProtoReflect()),
+		"lte is field 3 and gte is field 5, so lte leads regardless of the order they were set in")
+}
+
 // TestDescribeSubRulesNotesFurtherNesting rather than recursing without bound:
 // repeated.items is itself a FieldRules, and nothing in this schema goes deeper.
 func TestDescribeSubRulesNotesFurtherNesting(t *testing.T) {

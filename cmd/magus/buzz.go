@@ -140,6 +140,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// other non-error progress output.
 	if !global.quiet && !global.silent {
 		for _, w := range sess.Warnings() {
+			w.File = name
 			fmt.Fprintln(os.Stderr, w)
 		}
 	}

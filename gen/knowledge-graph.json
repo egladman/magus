@@ -8951,41 +8951,41 @@
       "kind": "function",
       "label": "cleanConventionDef",
       "doc": "cleanConventionDef reduces a section's lead paragraph to a short plain-text blurb: drop backticks and bold markers, and a trailing colon.",
-      "source": "docs/lib/conventions.buzz:49"
+      "source": "docs/lib/conventions.buzz:50"
     },
     {
       "id": "function:docs/lib/conventions.buzz:closesFence",
       "kind": "function",
       "label": "closesFence",
       "doc": "closesFence reports whether the line is a closing fence for an open marker: the same character, at least as long, and nothing else on the line.",
-      "source": "docs/lib/conventions.buzz:212"
+      "source": "docs/lib/conventions.buzz:214"
     },
     {
       "id": "function:docs/lib/conventions.buzz:conventionHint",
       "kind": "function",
       "label": "conventionHint",
-      "source": "docs/lib/conventions.buzz:69"
+      "source": "docs/lib/conventions.buzz:70"
     },
     {
       "id": "function:docs/lib/conventions.buzz:fenceLang",
       "kind": "function",
       "label": "fenceLang",
       "doc": "fenceLang is the first word of the info string after the opening marker, lowercased.",
-      "source": "docs/lib/conventions.buzz:203"
+      "source": "docs/lib/conventions.buzz:205"
     },
     {
       "id": "function:docs/lib/conventions.buzz:fenceMarker",
       "kind": "function",
       "label": "fenceMarker",
       "doc": "fenceMarker returns the fence marker a line opens with, or \"\". CommonMark counts the marker's LENGTH, which is what lets a four-backtick fence hold three-backtick fences inside it - the conventions page does exactly that to show how a runnable block is authored, and a naive toggle would read the inner fence as a close and mis-attribute every rule after it.",
-      "source": "docs/lib/conventions.buzz:195"
+      "source": "docs/lib/conventions.buzz:197"
     },
     {
       "id": "function:docs/lib/conventions.buzz:injectConventionHints",
       "kind": "function",
       "label": "injectConventionHints",
       "doc": "injectConventionHints adds a \"?\" hint into each rendered convention marker: an admonition title and a code-block caption. It runs after the content transforms, so it sees the final <p class=\"admonition-title\"> / <figcaption> markup. The conventions page itself is skipped by the caller (it defines these). A marker whose section is missing from the corpus is left untouched.",
-      "source": "docs/lib/conventions.buzz:85",
+      "source": "docs/lib/conventions.buzz:86",
       "attrs": {
         "exported": "true"
       }
@@ -8995,41 +8995,41 @@
       "kind": "function",
       "label": "injectFirstPlaceholderHint",
       "doc": "injectFirstPlaceholderHint appends a \"?\" hint after the FIRST inline <code> on the page that holds an angle-bracket placeholder (&lt;...&gt;), linking to the placeholders convention. First occurrence only - like the glossary linker - so a page that uses the syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced block by having no newline, so a multi-line code block is never hinted.",
-      "source": "docs/lib/conventions.buzz:100"
+      "source": "docs/lib/conventions.buzz:101"
     },
     {
       "id": "function:docs/lib/conventions.buzz:insertBeforeClose",
       "kind": "function",
       "label": "insertBeforeClose",
       "doc": "insertBeforeClose inserts `ins` just before the first `close` following each `open` marker. Returns html unchanged when ins is \"\" (the section was not in the corpus).",
-      "source": "docs/lib/conventions.buzz:124"
+      "source": "docs/lib/conventions.buzz:125"
     },
     {
       "id": "function:docs/lib/conventions.buzz:isCommentLine",
       "kind": "function",
       "label": "isCommentLine",
       "doc": "isCommentLine reports whether a line inside a fence is a comment - the form the docs use to show a command's expected output.",
-      "source": "docs/lib/conventions.buzz:253"
+      "source": "docs/lib/conventions.buzz:255"
     },
     {
       "id": "function:docs/lib/conventions.buzz:isDigit",
       "kind": "function",
       "label": "isDigit",
       "doc": "isDigit reports whether byte b is ASCII 0-9.",
-      "source": "docs/lib/conventions.buzz:226"
+      "source": "docs/lib/conventions.buzz:228"
     },
     {
       "id": "function:docs/lib/conventions.buzz:isShellLang",
       "kind": "function",
       "label": "isShellLang",
-      "source": "docs/lib/conventions.buzz:218"
+      "source": "docs/lib/conventions.buzz:220"
     },
     {
       "id": "function:docs/lib/conventions.buzz:lintMarkdown",
       "kind": "function",
       "label": "lintMarkdown",
       "doc": "lintMarkdown checks one page against the conventions it can be checked against, and returns every violation rather than the first: a run that reports one nit per invocation trains people to fix one thing and re-run, which is the slowest possible loop.",
-      "source": "docs/lib/conventions.buzz:260",
+      "source": "docs/lib/conventions.buzz:262",
       "attrs": {
         "exported": "true"
       }
@@ -9039,7 +9039,7 @@
       "kind": "function",
       "label": "looksLikeRepoPath",
       "doc": "looksLikeRepoPath reports whether an inline-code token is claiming a file in THIS repository. The bar is deliberately high, and it was raised by running the rule over the corpus: the first draft produced 67 hits of which about eight were real. Everything the exclusions below remove is a path this repo legitimately writes about without owning - a reader's own workspace, their home directory, a cache tree that only exists at runtime.  Two limits are worth knowing, because they are the price of a quiet rule:",
-      "source": "docs/lib/conventions.buzz:302",
+      "source": "docs/lib/conventions.buzz:304",
       "attrs": {
         "exported": "true"
       }
@@ -9049,7 +9049,7 @@
       "kind": "function",
       "label": "namesPinnedVersion",
       "doc": "namesPinnedVersion reports whether s pins a magus version literally - \"magus 0.4.2\", \"magus v0.4.2\". Sample output in the docs is supposed to show the SHAPE of what a command prints, because a pasted-in version goes stale the next release and nothing notices. This is the rule that caught `# magus 0.4.2` under \"Shell commands\", which was two releases behind AND the wrong format.",
-      "source": "docs/lib/conventions.buzz:233",
+      "source": "docs/lib/conventions.buzz:235",
       "attrs": {
         "exported": "true"
       }
@@ -9069,7 +9069,7 @@
       "kind": "function",
       "label": "pathCheckApplies",
       "doc": "pathCheckApplies reports whether a page's inline paths are claims about THIS repository. Two trees are exempt because their whole job is describing someone else's workspace: the diagnostic explainers under reference/codes/ walk through an example project (`api/`, `pkg/build.go`), and the guides walk through the reader's own machine and config. Scoping this by tree rather than by pattern keeps the rule honest - the exemption is a statement about what those pages are for, not a list of strings to suppress.",
-      "source": "docs/lib/conventions.buzz:336",
+      "source": "docs/lib/conventions.buzz:338",
       "attrs": {
         "exported": "true"
       }
@@ -9079,7 +9079,7 @@
       "kind": "function",
       "label": "pathReferences",
       "doc": "pathReferences collects every repo path named in inline code OUTSIDE a fenced block, with the line it sits on. Prose is where a path claim is load-bearing - a reader follows it - whereas a path inside a command block is often illustrative, so scanning only prose keeps this honest without keeping it noisy.  The caller decides which of these are broken; this half cannot touch the filesystem.",
-      "source": "docs/lib/conventions.buzz:348",
+      "source": "docs/lib/conventions.buzz:350",
       "attrs": {
         "exported": "true"
       }
@@ -9089,13 +9089,13 @@
       "kind": "function",
       "label": "runOf",
       "doc": "runOf returns the leading run of byte `ch` in s (\"```buzz\" -> \"```\").",
-      "source": "docs/lib/conventions.buzz:184"
+      "source": "docs/lib/conventions.buzz:186"
     },
     {
       "id": "function:docs/lib/conventions.buzz:trimTrailingSlash",
       "kind": "function",
       "label": "trimTrailingSlash",
-      "source": "docs/lib/conventions.buzz:325"
+      "source": "docs/lib/conventions.buzz:327"
     },
     {
       "id": "function:docs/lib/csp.buzz:computeCSP",
