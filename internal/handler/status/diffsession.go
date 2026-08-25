@@ -91,7 +91,7 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		var finished string
 		sess, finished = h.sessions.MarkViewed(h.root, req.Digest, req.On)
 		// Finishing a file in the console earns a read receipt, exactly as stepping its last
-		// hunk in `magus diff --tui` does. One rule, two surfaces: the reader chooses where
+		// hunk in the terminal viewer does. One rule, two surfaces: the reader chooses where
 		// to read and magus does not care which they picked.
 		//
 		// Only a mark arriving HERE mints one. This route is the human's - the MCP surface

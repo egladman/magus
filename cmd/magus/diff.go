@@ -90,9 +90,8 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// The agent guard denies --ack outright, but it fails OPEN where it is not wired,
 		// and a receipt minted by a script is precisely the laundering this refuses. Not a
 		// usage error: the flags are fine and the caller is not a person.
-		// 2, matching --tui at a non-interactive terminal: the flags are fine and the
-		// request cannot be served as asked, which the documented taxonomy separates from
-		// a 1 (the changeset could not be read).
+		// 2 rather than 1: the flags are fine and the caller is not who this is for, which
+		// the documented taxonomy separates from a 1 (the changeset could not be read).
 		fmt.Fprintln(os.Stderr, "magus: diff --ack records that a person read this, so it needs an interactive terminal")
 		return errSilent{exitCode: 2}
 	}
@@ -200,8 +199,9 @@ type diffTUITerm struct {
 	// are both terminals.
 	Reads bool
 	// Paints is stdout, which the viewer draws the changeset on. Reads never looks at it, and
-	// `magus diff --tui > file` is what fell through the gap: the flags passed, then
-	// tty.OpenInput refused with a bare error naming none of this.
+	// `magus diff > file` is what fell through the gap: stdin is still a keyboard, so nothing
+	// else catches a redirected stdout, and tty.OpenInput used to refuse with a bare error
+	// naming none of this. Now it is one of the conditions the viewer stands aside on.
 	Paints bool
 }
 
@@ -1104,10 +1104,9 @@ func diffNextStepLines(readable int) []string {
 	if readable == 0 {
 		return nil
 	}
-	// The exit is named in the same breath as the entrance. --tui takes over the screen, and
-	// an invitation into a full-screen mode that does not say how to leave it is the kind
-	// that gets declined once and never taken again. The viewer's own footer says `q quit`
-	// too, but that is only readable by someone already inside.
+	// No entrance to name any more: at a terminal the viewer already opened, so what this
+	// report needs to teach is the two ways OUT of it - the report itself, and the impact
+	// question the viewer has nowhere to put.
 	return []string{
 		"",
 		"the blast radius:  magus diff --impact",

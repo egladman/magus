@@ -186,7 +186,7 @@ func mkdirAllWrite(path, body string) error {
 }
 
 // TestMarkViewedReportsTheFileItFinished is what lets the console earn a read receipt the
-// same way `magus diff --tui` does: a mark is just a digest, and only the store knows which
+// same way the terminal viewer does: a mark is just a digest, and only the store knows which
 // file it belongs to and whether that file is now complete.
 func TestMarkViewedReportsTheFileItFinished(t *testing.T) {
 	s := NewStore("")
