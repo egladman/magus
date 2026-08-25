@@ -608,3 +608,37 @@ func TestParityDirtyDiffIsNeverColorized(t *testing.T) {
 		assert.NotContains(t, patch, "\x1b[", "an escape sequence hides the header that follows it")
 	})
 }
+
+// vcsMove renames a tracked file using the backend's own command, so the backend records it
+// as a rename rather than seeing an unrelated delete and add.
+func vcsMove(t *testing.T, b parityBackend, dir, from, to string) {
+	t.Helper()
+	switch b.bin {
+	case "git", "hg", "sl":
+		vcsTestRun(t, dir, b.bin, "mv", from, to)
+	case "jj":
+		// jj has no index: the working copy IS the change, so an ordinary move is recorded.
+		require.NoError(t, os.Rename(filepath.Join(dir, from), filepath.Join(dir, to)))
+	}
+}
+
+// A rename must not arrive as a delete plus an add. Mercurial's own diff format renders one
+// exactly that way, so a renamed 2000-line file reached this tool as 4000 changed lines whose
+// content nobody touched - and every consumer treats DirtyDiff as "what a person has to
+// review", so that inflates the ranking, the counts, and the hunks a read receipt is keyed by.
+//
+// Asserted on CONTENT rather than on the word "rename", because the backends spell the header
+// differently and the property that matters is the absence of churn, not the spelling.
+func TestParityRenameIsNotDeletePlusAdd(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"old.txt": "alpha\nbeta\ngamma\n"})
+		vcsMove(t, b, dir, "old.txt", "new.txt")
+
+		patch, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+		require.NotEmpty(t, patch, "the rename must show up at all")
+		assert.NotContains(t, patch, "+alpha", "content re-added means the rename was lost")
+		assert.NotContains(t, patch, "-alpha", "content removed means the rename was lost")
+	})
+}

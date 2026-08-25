@@ -170,7 +170,16 @@ func (v hgVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]st
 
 // DirtyDiff implements types.VCSDriver: uncommitted changes against the working parent.
 func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (string, error) {
-	args := []string{"diff", "-U", "1"}
+	// --git because Mercurial's own format renders a RENAME as a full delete plus a full add:
+	// a renamed 2000-line file arrives as 4000 changed lines whose content did not change at
+	// all. Every consumer here reads this as "what a person has to review", so that is not a
+	// formatting preference - it is the ranking, the line counts, and the hunks a read receipt
+	// is keyed by, all describing work nobody did. git format states the rename in three lines
+	// and carries copy, mode, and binary markers Mercurial's format drops.
+	//
+	// It also puts hg on the same dialect as the other three backends. Sapling already emits
+	// this format and jj is asked for it explicitly.
+	args := []string{"diff", "--git", "-U", "1"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, hgFamilyGlobs(paths)...)
