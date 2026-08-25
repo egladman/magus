@@ -898,32 +898,3 @@ func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
 		assert.Empty(t, evaluateBashGuard(cmd).Context, "should not fire: %s", cmd)
 	}
 }
-
-// Publishing sits beside the read-receipt rule and goes strictly further. A receipt is a claim
-// inside this machine that a person can revise; a published remark is a sentence in a
-// colleague's inbox, under that person's name, that nothing local takes back.
-//
-// The cases are assembled from parts rather than written whole, and that is not fussiness: the
-// guard reads a command line as WRITTEN and cannot tell a command from a quotation of one, so
-// a file containing these strings cannot be appended from a shell without the rule denying the
-// append. Harmless for an advisory, blocking for a deny.
-func TestPublishingAReviewIsDeniedToAgents(t *testing.T) {
-	pub := "--" + "publish"
-	for _, cmd := range []string{
-		"magus diff " + pub,
-		"./magus diff " + pub + " --summary 'ready for review'",
-		"cd /ws && magus diff --impact " + pub,
-	} {
-		v := evaluateBashGuard(cmd)
-		assert.Contains(t, v.Deny, "under the human's name", cmd)
-		// A deny has to leave the agent something to do, or it reads as an obstacle rather
-		// than a boundary. Drafting is the half an agent can genuinely help with.
-		assert.Contains(t, v.Deny, "Write the drafts instead", cmd)
-	}
-
-	// Reading what is drafted is not publishing, and must stay open - the deny points at these
-	// two by name, so they had better work.
-	for _, cmd := range []string{"magus diff -o json", "magus diff --impact"} {
-		assert.Empty(t, evaluateBashGuard(cmd).Deny, cmd)
-	}
-}

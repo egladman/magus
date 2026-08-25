@@ -379,17 +379,6 @@ var (
 	// person at a terminal never meets this rule.
 	guardReadAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
 
-	// guardPublishRe matches an invocation that would send a review to a host.
-	//
-	// Beside the receipt rule and strictly further than it. A receipt is a claim inside this
-	// machine that a person can revise; a published review is a sentence in a colleague's
-	// inbox, under that person's name, which no local action takes back. An agent that can
-	// publish can speak as the human to their team.
-	//
-	// It is also the obvious tidy-up at the end of a task, exactly as stamping the changeset
-	// is - which is why the rule has to exist rather than relying on nobody thinking of it.
-	guardPublishRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--publish\b`)
-
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
 	// The flag is not portable and the two spellings silently destroy each other's work:
@@ -495,11 +484,6 @@ const (
 		"This is not a permission you are missing - there is no spelling of it an agent may use, and an agent stamping the changeset would make the measure mean nothing for everybody, including the human relying on it.\n" +
 		"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on.\n" +
 		"If you were asked to mark the change reviewed, say that you cannot and hand back the unread list."
-
-	denyPublishReview = "Publishing a review sends comments to a HOST under the human's name, so only they can send one.\n" +
-		"This is not a permission you are missing. A published remark lands in a colleague's inbox attributed to a person who did not write it, and nothing local takes it back.\n" +
-		"Write the drafts instead and leave them: a draft is yours to propose and theirs to send. `magus diff -o json` shows what is already drafted, and the review surface shows the same set for them to read, edit and publish.\n" +
-		"If you were asked to publish, say that you cannot and hand back what you drafted."
 
 	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled.\n" +
@@ -634,9 +618,6 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	// human's statement, and both have to hold however the command is spelled.
 	if guardReadAckRe.MatchString(command) {
 		return bashGuardVerdict{Deny: denyReadAck}
-	}
-	if guardPublishRe.MatchString(command) {
-		return bashGuardVerdict{Deny: denyPublishReview}
 	}
 	if guardSedInPlaceRe.MatchString(command) {
 		return bashGuardVerdict{Deny: denySedInPlace}
