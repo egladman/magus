@@ -48,15 +48,15 @@ func TestCollectRationale(t *testing.T) {
 	assert.Equal(t, "no store holds v1 descriptors", got[0].Until)
 }
 
-func TestPreflightRationaleLines(t *testing.T) {
+func TestImpactRationaleLines(t *testing.T) {
 	t.Run("empty says nothing was marked, not nothing was checked", func(t *testing.T) {
-		lines := preflightRationaleLines(nil)
+		lines := impactRationaleLines(nil)
 		require.Len(t, lines, 1)
 		assert.Contains(t, lines[0], "no compat(until:) marker")
 	})
 
 	t.Run("names the file, the line, and the condition", func(t *testing.T) {
-		lines := preflightRationaleLines([]rationaleHit{{Path: "a.go", Line: 12, Until: "no store holds v1"}})
+		lines := impactRationaleLines([]rationaleHit{{Path: "a.go", Line: 12, Until: "no store holds v1"}})
 		assert.Contains(t, lines[0], "1 compat(until:) marker")
 		assert.Equal(t, "      a.go:12 until no store holds v1", lines[1])
 	})
@@ -80,7 +80,21 @@ func TestPreflightRationaleLines(t *testing.T) {
 		for i := range rationaleShown + 3 {
 			hits = append(hits, rationaleHit{Path: "a.go", Line: i, Until: "x"})
 		}
-		lines := preflightRationaleLines(hits)
+		lines := impactRationaleLines(hits)
 		assert.Contains(t, lines[rationaleShown+1], "and 3 more")
 	})
+}
+
+// The scanner used to report its own constant - `const compatMarker = "compat(until: "` -
+// as a decision governing the reader's change, alongside its own test fixtures, rendering
+// a line whose condition was a bare quote character. The file comment claimed the marker's
+// trailing space prevented this; it cannot, because the constant contains that space too.
+func TestAMarkerInAStringLiteralIsNotADecision(t *testing.T) {
+	assert.False(t, inAComment(`const compatMarker = "`), "the scanner's own constant")
+	assert.False(t, inAComment(`		{"`), "a table-driven fixture")
+
+	assert.True(t, inAComment("\t// "), "a line comment")
+	assert.True(t, inAComment("// "), "a line comment at column 0")
+	assert.True(t, inAComment("  * "), "a block comment continuation")
+	assert.True(t, inAComment("# "), "a shell or yaml comment")
 }

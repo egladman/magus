@@ -15,10 +15,9 @@ import (
 // CONDITION, which is the half a reader needs: what would have to become true before the
 // code below may go.
 //
-// The trailing space is load-bearing rather than cosmetic. Without it the scan matches the
-// marker wherever it appears as a bare token - this file's own constant, a doc comment
-// naming the convention, a lint rule's pattern - and a report whose first two hits are the
-// code that produced the report is one nobody reads a third time.
+// The trailing space is not what keeps this constant out of its own report - it cannot be,
+// since the constant contains the space too and so matches itself. inAComment is what does
+// that, by requiring the marker to sit in a comment rather than in a string literal.
 const compatMarker = "compat(until: "
 
 // rationaleHit is one deliberate decision recorded beside code this change touches.
@@ -74,7 +73,7 @@ func compatMarkersIn(root, rel string) []rationaleHit {
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for line := 1; sc.Scan(); line++ {
 		idx := strings.Index(sc.Text(), compatMarker)
-		if idx < 0 {
+		if idx < 0 || !inAComment(sc.Text()[:idx]) {
 			continue
 		}
 		until := compatUntil(sc.Text()[idx:])
@@ -84,6 +83,24 @@ func compatMarkersIn(root, rel string) []rationaleHit {
 		out = append(out, rationaleHit{Path: rel, Line: line, Until: until})
 	}
 	return out
+}
+
+// inAComment reports whether the text preceding a marker opens a comment.
+//
+// The convention writes this marker in a comment beside the code it explains, so a match
+// anywhere else is a mention of the convention rather than a use of it - this file's own
+// constant, and the fixtures in its test, both of which reported themselves as decisions
+// governing the reader's change.
+//
+// Not a parser, and it does not need to be: it cannot tell a `//` inside a string from one
+// that starts a comment. The cases that matters for are files whose subject IS this marker,
+// where the remaining noise is a handful of lines in one test.
+func inAComment(before string) bool {
+	if strings.Contains(before, "//") || strings.Contains(before, "#") || strings.Contains(before, "/*") {
+		return true
+	}
+	// A block comment's continuation lines carry only a leading star.
+	return strings.HasPrefix(strings.TrimLeft(before, " \t"), "*")
 }
 
 // compatUntil extracts the retirement condition from a marker, empty when there is none.
@@ -99,8 +116,8 @@ func compatUntil(s string) string {
 	return strings.TrimSpace(rest)
 }
 
-// preflightRationaleLines renders the section, including its empty form.
-func preflightRationaleLines(hits []rationaleHit) []string {
+// impactRationaleLines renders the section, including its empty form.
+func impactRationaleLines(hits []rationaleHit) []string {
 	if len(hits) == 0 {
 		return []string{"RATIONALE: no compat(until:) marker in the files you changed"}
 	}
