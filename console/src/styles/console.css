@@ -925,6 +925,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      the tab meets the window above and the content below, and casting onto either would fight the
      strip's own cast rather than separate one tab from the next. */
   box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--right);
+  /* ...and it has to paint ABOVE both neighbours, or only the left cast is visible. Every item is
+     opaque (--console-chrome) and PF gives them all position:relative with z-index auto, so they
+     paint in tree order: the tab AFTER this one covers the right cast, while the tab before it is
+     already painted and the left cast lands on top. Both casts compute either way, which is what
+     makes the loss invisible in the source. position restated here so the z-index cannot go inert
+     if PF stops setting it. */
+  position: relative; z-index: 1;
 }
 /* ...but the FIRST tab casts only right. It has no left neighbour to be separated from - what is over
    there is the frame's own edge, and the cast landed on top of that hairline as a soft smudge, making
