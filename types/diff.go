@@ -30,6 +30,30 @@ const (
 	DiffRoleUnclaimed = "unclaimed"
 )
 
+// DiffReadState is whether anybody recorded reading this file AT the content it holds now.
+//
+// It is the one fact in a review that no analysis can supply. Every other annotation here
+// describes what a change DOES; this describes whether a person weighed it, which is the
+// property that decays when work is produced faster than it is read.
+//
+// Never inferred. magus could watch an editor and call an open file read, and a measure
+// satisfied by scrolling is worse than none because it launders skimming into review. A
+// receipt exists only where somebody typed `magus diff --ack`.
+const (
+	// DiffReadUnknown means no receipt store was readable, so the question was not asked.
+	// It is the zero value, and it must never render as unread: "nobody has read this" and
+	// "nobody checked whether anyone read this" are opposite claims and only one accuses.
+	DiffReadUnknown = ""
+	// DiffReadUnread means the store was read and holds no receipt for this file.
+	DiffReadUnread = "unread"
+	// DiffReadRead means a receipt covers this file at exactly its current content.
+	DiffReadRead = "read"
+	// DiffReadStale means a receipt exists for this file at DIFFERENT content: it was read,
+	// then edited. Distinct from unread because it is the more dangerous shape - somebody
+	// did look, which is exactly why nobody will look again.
+	DiffReadStale = "stale"
+)
+
 // DiffSurface is how far a changed symbol's referents reach, which is the question a
 // semver decision actually turns on. It is EVIDENCE, never a verdict: magus reports where a
 // symbol is used and lets the reader decide the bump.
@@ -178,6 +202,10 @@ type DiffFile struct {
 	// Touches are the agent sessions that wrote this file and what they had READ first.
 	// Empty when no guard hook is wired, which is the common case and not a fault.
 	Touches []DiffTouch `json:"touches,omitempty" yaml:"touches,omitempty"`
+	// ReadState is one of the DiffReadState constants: whether a person recorded reading
+	// this file at its current content. Empty is DiffReadUnknown - nobody checked - and is
+	// deliberately not "unread".
+	ReadState string `json:"read_state,omitempty" yaml:"read_state,omitempty"`
 	// Churn is how often this file has been changing, nil when no history lens was attached.
 	// Nil is DISTINCT from zero: "nobody measured" and "this file is quiet" are different
 	// facts, and a review that renders the first as the second is lying quietly.
@@ -412,6 +440,23 @@ func (r Diff) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 	// of the order it is supposed to drive. SortForReading is idempotent, so re-running it is
 	// the cheap way to keep ONE definition of review order rather than a second one here.
 	r.SortForReading()
+}
+
+// AttachReadState folds recorded read receipts onto the review, in place.
+//
+// Supplied by the caller for the same reason AttachReplay's data is: the receipts live beside
+// the cache dir, and fingerprinting each file to check one is a cost the caller decides to
+// pay while the fold stays defined once. A file the map does not name keeps DiffReadUnknown,
+// which is why an empty map returns early rather than marking everything unread.
+func (r Diff) AttachReadState(byPath map[string]string) {
+	if len(byPath) == 0 {
+		return
+	}
+	for i := range r.Files {
+		if s, ok := byPath[r.Files[i].Path]; ok {
+			r.Files[i].ReadState = s
+		}
+	}
 }
 
 // AttachReplay folds the agent trail onto the review, in place.

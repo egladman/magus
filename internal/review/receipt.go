@@ -1,15 +1,21 @@
-// Package review records which changed files a person has said they read.
+// Package review records which changed files have been marked as read.
 //
 // A changeset that compiles and a changeset somebody understood are different things, and
-// until now nothing in magus could tell them apart. The rest of the tool measures what the
-// code does; this measures whether anyone looked - which is the property that actually
-// decays when work is generated faster than it is read.
+// nothing else in magus tells them apart. The rest of the tool measures what the code does;
+// this measures whether anyone looked - the property that decays when work is produced
+// faster than it is read.
 //
-// A receipt is DELIBERATELY not inferred. magus could watch an editor and guess from a file
-// being open, and a metric satisfied by scrolling is worse than no metric, because it
-// launders "I skimmed it" into "reviewed". So a receipt exists only where a person typed
-// the command that creates one, and it is a claim they made rather than an observation
-// magus stole.
+// A receipt is DELIBERATELY not inferred. magus could watch an editor and call an open file
+// read, and a measure satisfied by scrolling is worse than none because it launders
+// skimming into review. So a receipt exists only where somebody typed the command that
+// writes one.
+//
+// It records NO identity, and the store says nothing about who read anything. The store is
+// per-workspace and lives in the cache dir, so it describes one checkout on one machine and
+// travels nowhere. A name here would be self-attested by whatever wrote the file - the
+// forgeable kind the notes store already refused - and would read as accountability while
+// providing none. What a receipt asserts is exactly this: at this content, somebody said
+// read.
 package review
 
 import (
@@ -23,16 +29,18 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/types"
 )
 
 // receiptFile is where the store lives, under the cache dir rather than in the tree.
 //
-// Not committed, and not shareable: a receipt is one person's statement about one working
-// tree, and a receipt that traveled would let one reader's acknowledgement stand in for
-// everyone else's - the exact laundering this package exists to refuse.
+// Not committed and not shared: a receipt describes one working tree, and one that traveled
+// would let a stranger's acknowledgement stand in for the reader's own - the laundering this
+// package exists to refuse.
 const receiptFile = "review/receipts.json"
 
-// Receipt is one person's claim to have read a file at one specific content.
+// Receipt marks a file as read at one specific content. It names no reader; see the package
+// doc for why.
 type Receipt struct {
 	Path string `json:"path"`
 	// Digest fingerprints the content that was read, so the receipt VOIDS when the file
@@ -105,6 +113,37 @@ func Record(cacheDir string, add []Receipt) error {
 		return err
 	}
 	return os.WriteFile(dst, append(b, '\n'), 0o644)
+}
+
+// States reports each path's types.DiffReadState against the recorded receipts.
+//
+// One definition, because the CLI's preflight report and the console's review surface must
+// agree on what "read" means - two callers deciding for themselves is how one surface comes
+// to call a file reviewed while the other calls it stale.
+//
+// A path that cannot be read on disk is left out entirely rather than called unread: a
+// deleted file is not something anyone failed to review.
+func States(root, cacheDir string, paths []string) (map[string]string, error) {
+	store, err := Load(cacheDir)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(paths))
+	for _, p := range paths {
+		digest := DigestFile(filepath.Join(root, filepath.FromSlash(p)))
+		if digest == "" {
+			continue
+		}
+		switch {
+		case store.Covers(p, digest):
+			out[p] = types.DiffReadRead
+		case store[p].Digest != "":
+			out[p] = types.DiffReadStale
+		default:
+			out[p] = types.DiffReadUnread
+		}
+	}
+	return out, nil
 }
 
 // DigestFile fingerprints a file's current content.

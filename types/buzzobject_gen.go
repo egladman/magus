@@ -483,6 +483,7 @@ func (v DiffFile) BuzzObject() BuzzObject {
 		"symbols":   itemsSymbols,
 		"surface":   v.Surface,
 		"touches":   itemsTouches,
+		"readState": v.ReadState,
 		"churn":     optChurn,
 		"noHistory": v.NoHistory,
 		"reach":     optReach,

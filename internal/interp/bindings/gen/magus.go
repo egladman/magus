@@ -896,6 +896,7 @@ func buzzValueMagusDiffFile(v types.DiffFile) vm.Value {
 		itemsTouches[indexTouches] = buzzValueMagusDiffTouch(v.Touches[indexTouches])
 	}
 	out.MapSet("touches", vm.ListValue(itemsTouches))
+	out.MapSet("readState", vm.StrValue(v.ReadState))
 	optChurn := vm.Null
 	if v.Churn != nil {
 		optChurn = buzzValueMagusDiffChurn((*v.Churn))

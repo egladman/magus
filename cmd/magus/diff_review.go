@@ -29,34 +29,40 @@ type preflightReview struct {
 // point, and a hundred paths in a report nobody scrolls is the count told worse.
 const unreadShown = 10
 
-// collectReview joins the receipt store onto the changeset.
+// collectReview tallies the read state already folded onto the changeset by annotateDiff.
 //
-// nil when the receipts cannot be read at all, which the renderer states as unmeasured
-// rather than as unread. Those are opposite claims and only one of them is an accusation.
+// It reads DiffFile.ReadState rather than consulting the store a second time, so the
+// terminal report and the console's review surface cannot disagree about which files
+// somebody has read - they are looking at one join.
+//
+// nil when no file carries a state at all, which the renderer states as unmeasured rather
+// than as unread. Those are opposite claims and only one of them accuses.
 //
 // Generated files are excluded: reading a machine's restatement of an edit made elsewhere
-// is not the review, which is the same reason the file list folds them away by default.
-func collectReview(root, cacheDir string, rev types.Diff) *preflightReview {
-	store, err := review.Load(cacheDir)
-	if err != nil {
-		return nil
-	}
+// is not the review, the same reason the file list folds them away by default.
+func collectReview(rev types.Diff) *preflightReview {
 	out := &preflightReview{}
+	measured := false
 	for _, f := range rev.Files {
 		if f.Generated() {
 			continue
 		}
 		out.Files++
-		digest := review.DigestFile(filepath.Join(root, filepath.FromSlash(f.Path)))
-		switch {
-		case store.Covers(f.Path, digest):
+		switch f.ReadState {
+		case types.DiffReadRead:
+			measured = true
 			out.Read++
-		case store[f.Path].Digest != "":
+		case types.DiffReadStale:
+			measured = true
 			out.Stale++
 			out.Unread = append(out.Unread, f.Path+" (read, then changed)")
-		default:
+		case types.DiffReadUnread:
+			measured = true
 			out.Unread = append(out.Unread, f.Path)
 		}
+	}
+	if !measured && out.Files > 0 {
+		return nil
 	}
 	return out
 }

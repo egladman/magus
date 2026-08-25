@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,11 +33,21 @@ func reviewFixture(t *testing.T, files map[string]string, roles map[string]strin
 	return root, cache, rev
 }
 
+// attach folds the receipt store onto the changeset the way annotateDiff does, so these
+// tests exercise the join the CLI and the console both go through rather than a second one.
+func attach(t *testing.T, root, cache string, rev types.Diff) types.Diff {
+	t.Helper()
+	states, err := review.States(root, cache, diffPaths(rev))
+	require.NoError(t, err)
+	rev.AttachReadState(states)
+	return rev
+}
+
 func TestCollectReview(t *testing.T) {
 	t.Run("an unacknowledged changeset reports every file unread", func(t *testing.T) {
 		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"}, nil)
 
-		got := collectReview(root, cache, rev)
+		got := collectReview(attach(t, root, cache, rev))
 		require.NotNil(t, got)
 		assert.Equal(t, 2, got.Files)
 		assert.Equal(t, 0, got.Read)
@@ -50,7 +61,7 @@ func TestCollectReview(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 1, n)
 
-		got := collectReview(root, cache, rev)
+		got := collectReview(attach(t, root, cache, rev))
 		require.NotNil(t, got)
 		assert.Equal(t, 1, got.Read)
 		assert.Empty(t, got.Unread)
@@ -65,7 +76,7 @@ func TestCollectReview(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nfunc G() {}\n"), 0o644))
 
-		got := collectReview(root, cache, rev)
+		got := collectReview(attach(t, root, cache, rev))
 		require.NotNil(t, got)
 		assert.Equal(t, 0, got.Read)
 		assert.Equal(t, 1, got.Stale)
@@ -79,7 +90,7 @@ func TestCollectReview(t *testing.T) {
 			map[string]string{"a.go": "package a\n", "gen/x.go": "package gen\n"},
 			map[string]string{"gen/x.go": types.DiffRoleOutput})
 
-		got := collectReview(root, cache, rev)
+		got := collectReview(attach(t, root, cache, rev))
 		require.NotNil(t, got)
 		assert.Equal(t, 1, got.Files)
 
@@ -88,7 +99,9 @@ func TestCollectReview(t *testing.T) {
 		assert.Equal(t, 1, n)
 	})
 
-	t.Run("a deleted file records no receipt", func(t *testing.T) {
+	// A file nothing could fingerprint carries no state, and a changeset of only those was
+	// not measured. Reporting it as unread would accuse somebody of skipping a deletion.
+	t.Run("a deleted file is unmeasured, not unread", func(t *testing.T) {
 		root, cache := t.TempDir(), t.TempDir()
 		rev := types.Diff{Files: []types.DiffFile{{Path: "gone.go", Role: types.DiffRoleSource}}}
 
@@ -96,9 +109,7 @@ func TestCollectReview(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 0, n)
 
-		got := collectReview(root, cache, rev)
-		require.NotNil(t, got)
-		assert.Equal(t, 0, got.Read)
+		assert.Nil(t, collectReview(attach(t, root, cache, rev)))
 	})
 }
 

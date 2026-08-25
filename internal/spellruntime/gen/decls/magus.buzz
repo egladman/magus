@@ -157,6 +157,7 @@ export object DiffFile {
     symbols: [DiffSymbol] = [],
     surface: str = "",
     touches: [DiffTouch] = [],
+    readState: str = "",
     churn: DiffChurn? = null,
     noHistory: bool = false,
     reach: int? = null,

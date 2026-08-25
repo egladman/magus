@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -302,6 +303,12 @@ func annotateDiff(ctx context.Context, m *magus.Magus, paths []string, base stri
 	// The agent trail: which sessions wrote each file and what they had read first. Empty when
 	// no guard hook is wired, which is the common case rather than a fault.
 	rev.AttachReplay(diffTouches(m.Root(), m.CacheDir(), paths))
+	// Which of these files somebody has recorded reading. Best-effort like every other
+	// overlay: an unreadable store leaves every file DiffReadUnknown, which renders as
+	// unmeasured rather than as unread.
+	if states, serr := review.States(m.Root(), m.CacheDir(), paths); serr == nil {
+		rev.AttachReadState(states)
+	}
 	return rev, nil
 }
 
@@ -1184,7 +1191,7 @@ func collectPreflight(ctx context.Context, m *magus.Magus, rootOverride string, 
 	// exactly as diffCmd's own load did.
 	p.Anchors = preflightAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
 	p.Rationale = collectRationale(m.Root(), rev)
-	p.Review = collectReview(m.Root(), m.CacheDir(), rev)
+	p.Review = collectReview(rev)
 	return p
 }
 

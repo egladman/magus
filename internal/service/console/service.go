@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -344,6 +345,12 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 	// diffReplayEvents rather than the whole history, because the question is about the
 	// change in front of the reader, not about the repository's whole past.
 	rev.AttachReplay(diffTouches(s.magus.Root(), s.magus.CacheDir(), paths))
+	// Which of these files somebody has recorded reading, from the same store `magus diff
+	// --ack` writes. The console gets it because "how much of this has anyone read" is a
+	// question a review surface should answer without the reader dropping to a terminal.
+	if states, serr := review.States(s.magus.Root(), s.magus.CacheDir(), paths); serr == nil {
+		rev.AttachReadState(states)
+	}
 	return rev, nil
 }
 
