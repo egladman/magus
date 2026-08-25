@@ -155,6 +155,10 @@ const SURFACE_ACCENTS: Record<string, string> = {
   dashboard: "--console-moss", // green: live/healthy status
   activity: "--console-rust", // terracotta: warm history trail
   logs: "--console-indigo", // restrained indigo: cool, reading captured output
+  // Plum because Runs has to read as neither of the two surfaces it sits between: it is not the
+  // trail of what happened (Activity, rust) and not the output you sit and read (Log Viewer,
+  // indigo), it is the ledger you pick a run out of.
+  runs: "--console-plum",
   graph: "--console-slate", // steel blue: nodes and connections
   // Clay, not one of the greens: the greens in this palette already mean "live/healthy" (moss on the
   // dashboard), and a note is not a status. A warm earth tone reads as something a person left behind.
@@ -188,6 +192,12 @@ const SURFACE_ICONS: Record<string, string> = {
     '<path d="M3 21h18"/><rect x="5" y="11" width="4" height="8" rx="1"/><rect data-motion="bars" x="10" y="6" width="4" height="13" rx="1"/><rect x="15" y="14" width="4" height="5" rx="1"/>',
   // Activity: a waveform; it breathes on hover.
   activity: '<path data-motion="wave" d="M3 12h3l2-5 3 10 3-8 2 3h5"/>',
+  // Runs: a stopwatch, and deliberately not another stack of rows - the Log Viewer already owns
+  // "lines of text" and Activity owns the trail, so a third one would say nothing about which
+  // surface you are looking at. A run STARTED, took time, and ended, which is what a dial says at
+  // 16px. The hand sweeps a FULL turn on hover so the one-shot animation ends where it began; a
+  // partial sweep snaps back.
+  runs: '<path d="M10 2.5h4"/><path d="M12 2.5v2.2"/><circle cx="12" cy="13.5" r="7.2"/><path data-motion="sweep" d="M12 13.5V9"/>',
   // Notes: a page of prose lying ASKEW - the one glyph in this set that is not square to the grid,
   // because a note is the one thing in the graph a person put there by hand. The tilt is the whole
   // idea; drawn upright it is just the generic document icon and says "file", not "someone wrote

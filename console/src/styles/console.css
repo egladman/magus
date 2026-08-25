@@ -913,12 +913,25 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    #console-titlebar), so it is the tabs you are NOT looking at that have to step back off the page.
    Transparent here would leave every tab flush with the surface and the active one unmarked. */
 #console-tabs .pf-v6-c-tabs__item { background: var(--console-chrome); }
+/* One hairline per tab, on the TRAILING edge only. Not a `:not(:last-child)` separator: the closing
+   line past the last tab is wanted, so the run ends somewhere definite instead of trailing off into
+   the bar. Nothing draws a LEADING border - to the first tab's left is the frame's own edge (on a
+   phone, the scroll origin), and a hairline there doubles that edge, the same smudge the current
+   tab's box-shadow avoids with :first-child below. */
+#console-tabs .pf-v6-c-tabs__item { border-inline-end: 1px solid var(--pf-t--global--border--color--default); }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
   background: transparent;
   /* Lifted on the SIDES, which is where its neighbors are. Top and bottom are the strip's own edges -
      the tab meets the window above and the content below, and casting onto either would fight the
      strip's own cast rather than separate one tab from the next. */
   box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--right);
+  /* ...and it has to paint ABOVE both neighbours, or only the left cast is visible. Every item is
+     opaque (--console-chrome) and PF gives them all position:relative with z-index auto, so they
+     paint in tree order: the tab AFTER this one covers the right cast, while the tab before it is
+     already painted and the left cast lands on top. Both casts compute either way, which is what
+     makes the loss invisible in the source. position restated here so the z-index cannot go inert
+     if PF stops setting it. */
+  position: relative; z-index: 1;
 }
 /* ...but the FIRST tab casts only right. It has no left neighbour to be separated from - what is over
    there is the frame's own edge, and the cast landed on top of that hairline as a soft smudge, making
@@ -1776,6 +1789,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   .console-launcher-card:hover .console-launcher-card__icon [data-motion="press"] { animation: console-launcher-press 0.45s var(--console-ease, ease); }
 }
 @keyframes console-launcher-press { 40% { transform: translateY(1px); } }
+/* The stopwatch hand sweeps one full turn. transform-box is view-box, not the fill-box the other
+   inner-element motions use: the hand's own bounding box is the line from the dial center to its
+   tip, so a fill-box origin would spin it about its own midpoint and the hand would orbit rather
+   than sweep. view-box lets the origin be named in viewBox units - the dial's center. */
+@media (hover: hover) {
+  .console-launcher-card:hover .console-launcher-card__icon [data-motion="sweep"] { animation: console-launcher-sweep 0.85s var(--console-ease, ease); transform-box: view-box; transform-origin: 12px 13.5px; }
+}
+@keyframes console-launcher-sweep { to { transform: rotate(360deg); } }
 
 /* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay
    (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives
