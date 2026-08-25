@@ -351,6 +351,18 @@ var (
 	// however the write is spelled.
 	guardNotesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+edit\b`)
 
+	// guardReadAckRe matches an invocation that would mint a read receipt.
+	//
+	// A receipt is a claim that a PERSON read something, and it is the only fact in a
+	// review no analysis can supply. An agent that can mint one turns the whole measure
+	// into a formality it satisfies on the way past - and it would, because stamping the
+	// changeset is the obvious tidy-up at the end of a task.
+	//
+	// The guard is the right place precisely because of what it sees: it is wired into
+	// agent hosts, so every command reaching it came from an agent by construction. A
+	// person at a terminal never meets this rule.
+	guardReadAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
+
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
 	// The flag is not portable and the two spellings silently destroy each other's work:
@@ -451,6 +463,11 @@ const (
 	// workspace vocabulary and routes through discovery.
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `magus affected ci` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
+
+	denyReadAck = "A read receipt records that a PERSON read a change, so only a person can record one.\n" +
+		"This is not a permission you are missing - there is no spelling of it an agent may use, and an agent stamping the changeset would make the measure mean nothing for everybody, including the human relying on it.\n" +
+		"Report what is unread instead: `magus diff --cost` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on.\n" +
+		"If you were asked to mark the change reviewed, say that you cannot and hand back the unread list."
 
 	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled.\n" +
@@ -572,6 +589,11 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	// note authored from piped prose is a command, so only this catches it.
 	if guardNotesWriteRe.MatchString(command) {
 		return bashGuardVerdict{Deny: denyNotesAuthor}
+	}
+	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
+	// human's statement, and both have to hold however the command is spelled.
+	if guardReadAckRe.MatchString(command) {
+		return bashGuardVerdict{Deny: denyReadAck}
 	}
 	if guardSedInPlaceRe.MatchString(command) {
 		return bashGuardVerdict{Deny: denySedInPlace}

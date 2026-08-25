@@ -832,3 +832,37 @@ func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 	assert.Contains(t, v.Context, "magus graph build", "a cold index must name the command that fixes it")
 	assert.Contains(t, v.Context, "unknown, not absent", "the verdict's meaning is the point, not just the command")
 }
+
+// TestGuardDeniesReadAck is the integrity property the whole read-receipt feature rests on.
+//
+// A receipt claims a PERSON read something. An agent able to mint one turns the measure into
+// a formality it satisfies on the way past - and it would, because stamping the changeset is
+// the obvious tidy-up at the end of a task. The guard is the right place because of what it
+// sees: it is wired into agent hosts, so everything reaching it came from an agent, and a
+// person at a terminal never meets this rule.
+func TestGuardDeniesReadAck(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus diff ` + "--ack",
+		`./magus diff --cost ` + "--ack",
+		`cd /tmp && magus diff ` + "--ack" + ` --reason x`,
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+		assert.Contains(t, v.Deny, "only a person can record one")
+	}
+}
+
+// Reading the report is exactly what an agent SHOULD do, so the deny must not reach it. A
+// rule that swallowed the read path would push agents off the surface entirely, which is the
+// opposite of the point: an agent that cannot mint a receipt should still be able to say
+// which files carry none.
+func TestGuardAllowsReadingTheReport(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus diff --cost`,
+		`magus diff -o json`,
+	} {
+		assert.Empty(t, evaluateBashGuard(cmd).Deny, "unexpected deny for %q", cmd)
+	}
+}

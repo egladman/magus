@@ -64,6 +64,22 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if rf.Ack && (rf.Tui || rf.Watch) {
 		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
 	}
+	if rf.Ack && strings.TrimSpace(rf.Reason) == "" {
+		// One keystroke covering the whole changeset is the claim that needs saying out
+		// loud. Stepping the files in --tui earns a receipt per file and needs no reason;
+		// this is the other path, and the reason it carries is what a later reader weighs
+		// it by. Same shape as the acknowledged suppressions elsewhere in magus, where the
+		// exemption is free and the sentence explaining it is required.
+		return usagef("magus diff: --ack stamps every changed file at once, so it needs --reason " +
+			"(\"codemod output, spot-checked 3 of 40\"). To earn receipts file by file instead, read them in `magus diff --tui`")
+	}
+	if rf.Ack && !isInteractiveTTY() {
+		// The agent guard denies --ack outright, but it fails OPEN where it is not wired,
+		// and a receipt minted by a script is precisely the laundering this refuses. Not a
+		// usage error: the flags are fine and the caller is not a person.
+		fmt.Fprintln(os.Stderr, "magus: diff --ack records that a person read this, so it needs an interactive terminal")
+		return types.ExitError{Code: 1}
+	}
 	if rf.Cost && rf.Tui {
 		// Refused rather than ignored. The viewer has nowhere to put a report, so accepting the
 		// flag would answer the question with a page that never mentions it - and a flag that
@@ -243,11 +259,12 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		return err
 	}
 	if rf.Ack {
-		n, err := ackChangeset(m.Root(), m.CacheDir(), rev, time.Now())
+		reason := strings.TrimSpace(rf.Reason)
+		n, err := ackChangeset(m.Root(), m.CacheDir(), rev, reason, time.Now())
 		if err != nil {
 			return err
 		}
-		fmt.Printf("recorded %d read receipt(s) at the current content; editing a file voids its receipt\n", n)
+		fmt.Printf("recorded %d read receipt(s) at the current content, reason %q; editing a file voids its receipt\n", n, reason)
 		return nil
 	}
 
@@ -404,6 +421,10 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 	if err != nil {
 		return err
 	}
+	files := diffTUIFiles(rev, diff.ParseHunks(patch))
+	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
+	// always explicit; this is what makes them outlive the session.
+	sync = newEarnedSync(sync, m.Root(), m.CacheDir(), files, sess.Viewed)
 	// Closed here rather than inside difftui: how a Sync gets its writes out - inline, or over a
 	// goroutine that has to be drained - is this file's business, and the viewer stays ignorant
 	// of it. Deferred before Run, so it also runs on the interrupts Run RETURNS from: `q`,
@@ -415,7 +436,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 		Out:   os.Stdout,
 		Probe: tty.SystemProbe,
 		Input: difftui.Input{
-			Files:       diffTUIFiles(rev, diff.ParseHunks(patch)),
+			Files:       files,
 			Unranked:    !rev.Ranked(),
 			Viewed:      sess.Viewed,
 			Comments:    sess.Comments,
@@ -1191,7 +1212,11 @@ func collectPreflight(ctx context.Context, m *magus.Magus, rootOverride string, 
 	// exactly as diffCmd's own load did.
 	p.Anchors = preflightAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
 	p.Rationale = collectRationale(m.Root(), rev)
-	p.Review = collectReview(rev)
+	var requiredIn func(string) bool
+	if ws, werr := inspectWorkspace(ctx, rootOverride); werr == nil {
+		requiredIn = reviewRequiredMatcher(ws)
+	}
+	p.Review = collectReview(rev, requiredIn, bulkReasons(m.CacheDir(), rev))
 	return p
 }
 

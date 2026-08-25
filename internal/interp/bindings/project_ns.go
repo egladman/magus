@@ -211,6 +211,21 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 		opts = append(opts, workspace.WithNoLanguage(reason))
 	}
+	// Globs, not a bool. Declaring WHERE reading matters is what keeps the report quiet
+	// everywhere else; a project-wide switch would make every changed file a finding, which
+	// is the shape people learn to skip.
+	if rv, ok := v.MapGet("review_required"); ok && rv.IsList() {
+		var globs []string
+		for _, item := range rv.ListItems() {
+			if item.IsStr() && strings.TrimSpace(item.AsString()) != "" {
+				globs = append(globs, strings.TrimSpace(item.AsString()))
+			}
+		}
+		if len(globs) == 0 {
+			return nil, fmt.Errorf(`magus.project: "review_required" needs at least one glob naming where an unread change matters, e.g. ["internal/cache/**", "internal/secret/**"]`)
+		}
+		opts = append(opts, workspace.WithReviewRequired(globs...))
+	}
 	if sv, ok := v.MapGet("spells"); ok && sv.IsList() {
 		// Each item is a spell handle. A local spell (.load) is registered by value
 		// here, at bind time, from the resolved spec its handle carries; built-ins

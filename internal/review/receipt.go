@@ -48,6 +48,13 @@ type Receipt struct {
 	// path, which is the one way this could actively mislead.
 	Digest string    `json:"digest"`
 	At     time.Time `json:"at"`
+	// Reason is why one keystroke covered this file, set only by a bulk `--ack` and empty
+	// for a receipt earned by stepping the file in the viewer.
+	//
+	// Kept and reported rather than merely required at the prompt. A reason that vanished
+	// after being typed would be a toll rather than a record, and the point is that a
+	// later reader can weigh "read it" against "assumed it was fine, here is why".
+	Reason string `json:"reason,omitempty"`
 }
 
 // Store is every receipt in a workspace, keyed by path.

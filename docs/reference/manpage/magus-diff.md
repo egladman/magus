@@ -47,11 +47,17 @@ target IS a gate, and this flag must never read as one. Each section says when
 it could not measure something, so an empty one reads as "nobody looked"
 rather than as a clean bill of health.
 
---cost also reports how much of the change carries a read receipt. --ack
-records one for every changed file at its CURRENT content, so an edit after
-the fact voids it. magus never infers a receipt from an editor or a session:
-a metric satisfied by scrolling would launder skimming into review, so one
-exists only where a person typed --ack.
+--cost also reports how much of the change carries a read receipt, and a
+receipt is minted two ways. Stepping a file in --tui records one for it:
+the viewer knows where a reader got to, so that receipt is earned. --ack
+stamps the whole changeset at once and therefore requires --reason, which
+is kept and reported beside the count - claiming forty files in one
+keystroke is a claim worth signing.
+
+A receipt covers a file at its CURRENT content, so editing it afterwards
+voids the receipt. magus never infers one from an editor or a session: a
+measure satisfied by scrolling would launder skimming into review. --ack
+also refuses without a terminal, and agent hosts are denied it outright.
 
 ## Options
 
@@ -63,6 +69,9 @@ exists only where a person typed --ack.
 
 **--generated**
 : Include declared target outputs, which are folded away by default
+
+**--reason** *string*
+: Why one keystroke covers the whole changeset (required by --ack, and kept on the record)
 
 **--tui**
 : Read the changeset interactively, joined to the session the console and an agent share

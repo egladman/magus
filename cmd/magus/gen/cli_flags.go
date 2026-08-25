@@ -145,6 +145,8 @@ const (
 	FlagDiffCost = "cost"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
+	// diff: --reason
+	FlagDiffReason = "reason"
 	// diff: --tui
 	FlagDiffTui = "tui"
 	// diff: --watch
@@ -1007,11 +1009,12 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 
 // DiffFlags are the flags declared for `magus diff`.
 type DiffFlags struct {
-	Generated bool // --generated
-	Cost      bool // --cost
-	Tui       bool // --tui
-	Watch     bool // --watch
-	Ack       bool // --ack
+	Generated bool   // --generated
+	Cost      bool   // --cost
+	Tui       bool   // --tui
+	Watch     bool   // --watch
+	Ack       bool   // --ack
+	Reason    string // --reason
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
@@ -1022,6 +1025,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --cost reports what carries no such record")
+	fs.StringVar(&f.Reason, FlagDiffReason, "", "Why one keystroke covers the whole changeset (required by --ack, and kept on the record)")
 	return &f
 }
 

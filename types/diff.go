@@ -457,6 +457,10 @@ func (r Diff) AttachReadState(byPath map[string]string) {
 			r.Files[i].ReadState = s
 		}
 	}
+	// Re-sort for the reason AttachChurn does: this call is what makes ReadState known, and
+	// the review was ordered before any receipt was read. Leaving the old order would keep a
+	// ranking key magus now has out of the order it drives.
+	r.SortForReading()
 }
 
 // AttachReplay folds the agent trail onto the review, in place.
@@ -496,6 +500,23 @@ func (r Diff) AttachReplay(byPath map[string][]DiffTouch) {
 // and an unmeasured file has made no promise. Ranking the two together is what let an
 // unindexed workspace render pure path order while the header still claimed a ranking - see
 // Ranked, which is how a caller is supposed to notice.
+// readRank orders the read states by how much a reader still owes the file.
+//
+// DiffReadUnknown ranks with read rather than with unread, deliberately. Unknown means
+// nobody checked, and sorting an unmeasured workspace's whole changeset to the top would
+// dress "no receipt store" up as "you have read none of this" - the same collapse the
+// state constants refuse everywhere else.
+func readRank(state string) int {
+	switch state {
+	case DiffReadStale:
+		return 0
+	case DiffReadUnread:
+		return 1
+	default:
+		return 2
+	}
+}
+
 func (r Diff) SortForReading() {
 	rank := func(f DiffFile) int {
 		switch f.Role {
@@ -528,6 +549,18 @@ func (r Diff) SortForReading() {
 		}
 		if a.Reach != nil && b.Reach != nil && *a.Reach != *b.Reach {
 			return *b.Reach - *a.Reach // widest reach first
+		}
+		// Among files of equal consequence, the ones nobody has read come first, and a
+		// file read and then edited comes first of all - somebody looked, which is exactly
+		// why nobody will look again.
+		//
+		// A TIEBREAK, never a reordering: reach still decides whenever it is known,
+		// because a widely-referenced file you have read is still likelier to break things
+		// than an unread leaf. What this buys is that a receipt pays for itself the moment
+		// it is minted - read a file and it sinks, edit it and it surfaces - so the record
+		// is worth keeping for its own sake rather than because a report scolds you.
+		if ra, rb := readRank(a.ReadState), readRank(b.ReadState); ra != rb {
+			return ra - rb
 		}
 		// A file magus has no history for reads BEFORE one it does, but only as a tiebreak:
 		// reach still decides whenever it is known, because "widely referenced" beats "new"

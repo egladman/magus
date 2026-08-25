@@ -111,6 +111,7 @@ flag clean/cache
 flag diff/ack
 flag diff/cost
 flag diff/generated
+flag diff/reason
 flag diff/tui
 flag diff/watch
 flag doctor/fix

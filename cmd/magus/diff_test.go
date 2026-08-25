@@ -271,7 +271,8 @@ func TestPreflightRendersEverySection(t *testing.T) {
 		"",
 		"REVIEW: 3 of 4 changed file(s) carry a read receipt; 1 were read and then edited",
 		"      internal/cache/cache.go (read, then changed)",
-		"      record what you have read: magus diff --ack",
+		"      read them through: magus diff --tui",
+		"      or cover them at once, on the record: magus diff --ack --reason <why>",
 	}, preflightLines(preflightFixture()))
 }
 
@@ -299,7 +300,7 @@ func TestPreflightEmptyFormsSayNobodyLooked(t *testing.T) {
 		"",
 		"RATIONALE: no compat(until:) marker in the files you changed",
 		"",
-		"REVIEW: read receipts unavailable; run `magus diff --ack` to start recording them",
+		"REVIEW: read receipts unavailable; read a file through in `magus diff --tui` to earn one",
 	}, lines)
 
 	// The one number that must never appear: a reach nobody has ever timed is not free.

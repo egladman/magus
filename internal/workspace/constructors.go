@@ -100,6 +100,11 @@ func WithNoLanguage(reason string) ProjectOption {
 	return func(p *types.Project) error { p.NoLanguage = reason; return nil }
 }
 
+// WithReviewRequired declares the globs where an unread change is worth reporting.
+func WithReviewRequired(globs ...string) ProjectOption {
+	return func(p *types.Project) error { p.ReviewRequired = append(p.ReviewRequired, globs...); return nil }
+}
+
 // WithWatchIgnore appends patterns to the project's watch ignore list.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return func(p *types.Project) error {
