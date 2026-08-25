@@ -193,3 +193,27 @@ func TestAnEmptyReplyIsRefusedBeforeTheHostIsAsked(t *testing.T) {
 		t.Fatalf("want the empty-body reason, got %q", w.Body.String())
 	}
 }
+
+// A malformed thread does NOT hide the readable ones, and does not pass unmentioned. Both
+// failure modes are the same mistake in different directions: 502 would hide a whole
+// conversation behind one bad remark, and silence would say a colleague said nothing.
+//
+// With no provider wired there is nothing to decode, so what this pins is the shape - threads
+// and reason travel together on one 200 - rather than the decode itself, which is pinned in
+// internal/interp/bindings.
+func TestAReviewReadCarriesThreadsAndItsReasonTogether(t *testing.T) {
+	h := NewDiffReviewHandler(fixedOrigin{branch: "feat/x"}, nil)
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got diffReviewResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Threads == nil {
+		t.Fatal("threads must be an empty array even when a reason is set")
+	}
+}

@@ -31,12 +31,35 @@ func OpenReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 	if err != nil {
 		return types.ReviewTarget{Reason: "review provider: " + err.Error()}
 	}
-	m, _ := resp.Data.(map[string]any)
-	return types.ReviewTarget{
-		Number: intOf(m["number"]),
-		Repo:   strOf(m["repo"]),
-		Reason: strOf(m["reason"]),
+	at, err := decodeReviewTarget(resp.Data)
+	if err != nil {
+		// A malformed answer becomes a REASON rather than a zero target, because those two
+		// render identically and mean opposite things. Silently zeroing `number` would say
+		// "no pull request for this branch", sending the reader to look at their branch when
+		// the fault is in their spell.
+		return types.ReviewTarget{Reason: err.Error()}
 	}
+	return at
+}
+
+func decodeReviewTarget(data any) (types.ReviewTarget, error) {
+	where := "review provider: " + spells.OpenReviewContract
+	m, ok := data.(map[string]any)
+	if !ok {
+		return types.ReviewTarget{}, fmt.Errorf("%s returned %T, want a record", where, data)
+	}
+	var at types.ReviewTarget
+	var err error
+	if at.Number, err = intField(m, "number", where); err != nil {
+		return types.ReviewTarget{}, err
+	}
+	if at.Repo, err = strField(m, "repo", where); err != nil {
+		return types.ReviewTarget{}, err
+	}
+	if at.Reason, err = strField(m, "reason", where); err != nil {
+		return types.ReviewTarget{}, err
+	}
+	return at, nil
 }
 
 // PublishReview sends drafts as ONE review and reports how many the host accepted.
@@ -73,8 +96,12 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, d
 	if err != nil {
 		return 0, err
 	}
-	m, _ := resp.Data.(map[string]any)
-	return intOf(m["count"]), nil
+	where := "review provider: " + spells.PublishReviewContract
+	m, ok := resp.Data.(map[string]any)
+	if !ok {
+		return 0, fmt.Errorf("%s returned %T, want a record", where, resp.Data)
+	}
+	return intField(m, "count", where)
 }
 
 // ReplyReview answers one existing thread, so a conversation can be finished without leaving.
@@ -103,37 +130,69 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 
 // ReviewThreads reads the comment threads already on the review.
 //
-// Empty on every failure, for the reason OpenReview gives about itself: this is the one call
-// that makes a local surface depend on a host being reachable, and the surface has to keep
-// working when it is not.
-func ReviewThreads(ctx context.Context, at types.ReviewTarget) []types.ReviewThread {
+// Empty on an unreachable host, for the reason OpenReview gives about itself: this is the one
+// call that makes a local surface depend on a host being reachable, and the surface has to keep
+// working when it is not. Nil error, empty list.
+//
+// A MALFORMED thread is different, and is reported. Dropping one leaves the surface saying a
+// colleague said nothing, which is the single worst thing a review reader can be told - and
+// the threads that did decode still come back, so the caller shows what it has and says what
+// it could not read.
+func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewThread, error) {
 	drv, ok := reviewDriver()
 	if !ok || at.Number == 0 {
-		return nil
+		return nil, nil
 	}
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.ThreadsContract,
 		Params: map[string]any{"repo": at.Repo, "number": at.Number},
 	})
 	if err != nil {
-		return nil
+		//nolint:nilerr // an unreachable host is not a failure of this call: the surface has
+		// to keep working when the forge is down, and a diff that will not open because
+		// GitHub is slow is a worse tool than one that shows the change and says nothing
+		// about the conversation. A MALFORMED answer is different and is reported below.
+		return nil, nil
 	}
-	rows, _ := resp.Data.([]any)
+	where := "review provider: " + spells.ThreadsContract
+	rows, ok := resp.Data.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%s returned %T, want a list", where, resp.Data)
+	}
 	out := make([]types.ReviewThread, 0, len(rows))
-	for _, r := range rows {
-		m, ok := r.(map[string]any)
-		if !ok {
-			continue
+	for i, r := range rows {
+		t, err := decodeReviewThread(r, fmt.Sprintf("%s[%d]", where, i))
+		if err != nil {
+			return out, err
 		}
-		out = append(out, types.ReviewThread{
-			ID:     strOf(m["id"]),
-			Path:   strOf(m["path"]),
-			Line:   intOf(m["line"]),
-			Author: strOf(m["author"]),
-			Body:   strOf(m["body"]),
-		})
+		out = append(out, t)
 	}
-	return out
+	return out, nil
+}
+
+func decodeReviewThread(row any, where string) (types.ReviewThread, error) {
+	m, ok := row.(map[string]any)
+	if !ok {
+		return types.ReviewThread{}, fmt.Errorf("%s is %T, want a record", where, row)
+	}
+	var t types.ReviewThread
+	var err error
+	if t.ID, err = strField(m, "id", where); err != nil {
+		return types.ReviewThread{}, err
+	}
+	if t.Path, err = strField(m, "path", where); err != nil {
+		return types.ReviewThread{}, err
+	}
+	if t.Line, err = intField(m, "line", where); err != nil {
+		return types.ReviewThread{}, err
+	}
+	if t.Author, err = strField(m, "author", where); err != nil {
+		return types.ReviewThread{}, err
+	}
+	if t.Body, err = strField(m, "body", where); err != nil {
+		return types.ReviewThread{}, err
+	}
+	return t, nil
 }
 
 func reviewDriver() (spells.Driver, bool) {
@@ -142,26 +201,4 @@ func reviewDriver() (spells.Driver, bool) {
 		return nil, false
 	}
 	return project.DefaultSpellRegistry().Lookup(name)
-}
-
-// strOf and intOf read one field out of a spell's answer without trusting its type.
-//
-// A spell is user code returning a dynamically-typed map, so a wrong type is a spell bug and
-// must degrade to a zero value rather than panicking inside magus. Buzz integers arrive as
-// float64 through the JSON boundary, which is why that case is here and not an oversight.
-func strOf(v any) string {
-	s, _ := v.(string)
-	return s
-}
-
-func intOf(v any) int {
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	}
-	return 0
 }

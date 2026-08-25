@@ -1157,6 +1157,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
         ),
       );
     }
+    // A reason alongside an OPEN review is not "there is no review" - it is a review that was
+    // read incompletely, most often a thread the provider returned in a shape magus could not
+    // decode. Shown, because the alternative is a conversation quietly missing a remark.
+    if (info.reason) {
+      chips.push(label("partly read", "pf-m-red", info.reason));
+    }
     // Threads on files this changeset does not touch have nowhere in the stream to sit. Counted
     // rather than dropped: "your colleague said nothing" is the one thing a review surface must
     // never say by accident.

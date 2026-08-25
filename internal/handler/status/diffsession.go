@@ -324,7 +324,14 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		Threads: []types.ReviewThread{},
 	}
 	if at.Open() {
-		out.Threads = append(out.Threads, bindings.ReviewThreads(r.Context(), at)...)
+		threads, err := bindings.ReviewThreads(r.Context(), at)
+		out.Threads = append(out.Threads, threads...)
+		if err != nil {
+			// The threads that DID decode still travel, and the reason rides beside them.
+			// Answering 502 here would hide a readable conversation behind one malformed
+			// remark, and dropping the remark silently would say a colleague said nothing.
+			out.Reason = err.Error()
+		}
 	}
 	writeJSON(w, out)
 }

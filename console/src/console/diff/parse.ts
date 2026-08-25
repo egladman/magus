@@ -90,7 +90,15 @@ interface WireRow {
   text: string;
   old_line: number | null;
   new_line: number | null;
-  emph?: Span;
+  emph?: WireSpan;
+}
+
+// Mutable and separate from the readonly Span above, the same way WireRow is separate from
+// DiffLine: identical today, and the point of the split is that the wire may change without
+// that being a change to what the renderer holds.
+interface WireSpan {
+  start: number;
+  end: number;
 }
 
 interface WireHunk {
@@ -151,7 +159,10 @@ export function fromWire(files: readonly WireFile[] | null | undefined): DiffFil
         text: r.text,
         oldLine: r.old_line,
         newLine: r.new_line,
-        ...(r.emph === undefined ? {} : { emph: r.emph }),
+        // Copied, not carried over: every other field here is read off the wire object into a
+        // fresh one, and passing this reference through would leave the render tree holding a
+        // piece of the transport payload.
+        ...(r.emph === undefined ? {} : { emph: { start: r.emph.start, end: r.emph.end } }),
       })),
     })),
   }));
