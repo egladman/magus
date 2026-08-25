@@ -47,7 +47,16 @@ target IS a gate, and this flag must never read as one. Each section says when
 it could not measure something, so an empty one reads as "nobody looked"
 rather than as a clean bill of health.
 
+--cost also reports how much of the change carries a read receipt. --ack
+records one for every changed file at its CURRENT content, so an edit after
+the fact voids it. magus never infers a receipt from an editor or a session:
+a metric satisfied by scrolling would launder skimming into review, so one
+exists only where a person typed --ack.
+
 ## Options
+
+**--ack**
+: Record that you have read the changed files at their current content; --cost reports what carries no such record
 
 **--cost**
 : Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors
