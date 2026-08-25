@@ -1,6 +1,7 @@
 package diff
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -334,4 +335,86 @@ func TestAPatchMixingBothDialectsKeepsEveryFile(t *testing.T) {
 	require.Len(t, files, 3)
 	assert.Equal(t, []string{"f.txt", "g.txt", "new.txt"},
 		[]string{files[0].Path, files[1].Path, files[2].Path})
+}
+
+// Intra-line emphasis: which PART of a changed line changed. Computed once, here, and shipped
+// to both surfaces - these cases came from the terminal viewer's own test when the second
+// implementation was removed, and they are the behavior both readers now share.
+//
+// The table names what each line's span SELECTS rather than its offsets, because the offsets
+// are a coordinate and the selected text is the claim.
+func TestEmphasisMarksOnlyThePairedRewrite(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+		want  []string
+	}{
+		{"one changed argument is the only part emphasised",
+			[]string{" ctx", "-call(a, b)", "+call(a, c)"},
+			[]string{"", "b", "c"}},
+		{"a wholly different line has nothing to point at",
+			[]string{"-one", "+two"},
+			[]string{"", ""}},
+		{"runs of unequal length are not paired at all",
+			[]string{"-one", "+two", "+three"},
+			[]string{"", "", ""}},
+		{"an insertion has no partner to differ from",
+			[]string{" ctx", "+added"},
+			[]string{"", ""}},
+		{"a two-line rewrite pairs positionally",
+			[]string{"-let a = 1", "-let b = 2", "+let a = 9", "+let b = 8"},
+			[]string{"1", "2", "9", "8"}},
+		{"a second run pairs on its own",
+			[]string{"-call(a, b)", "+call(a, c)", " ctx", "-x := 1", "+x := 2"},
+			[]string{"b", "c", "", "1", "2"}},
+		{"a multi-byte prefix does not shift what the span selects",
+			[]string{`-x = "` + "αβγ" + ` one"`, `+x = "` + "αβγ" + ` two"`},
+			[]string{"one", "two"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			files := Parse("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n" +
+				strings.Join(tc.lines, "\n") + "\n")
+			require.Len(t, files, 1)
+			require.Len(t, files[0].Hunks, 1)
+			h := files[0].Hunks[0]
+
+			// Read back through the RAW-line view, which is the one a terminal slices: it
+			// exercises the UTF-16 offsets the browser gets AND the conversion back, so a bug
+			// in either shows up as the wrong word rather than as a number nobody can read.
+			spans := RawLineEmphasis(h)
+			got := make([]string, 0, len(h.Lines))
+			for i, line := range h.Lines {
+				if i >= len(spans) || spans[i].Empty() {
+					got = append(got, "")
+					continue
+				}
+				got = append(got, line[spans[i].Start:spans[i].End])
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// The renderer slices the raw line with these numbers, so a span counted in RUNES would not
+// merely highlight the wrong word - it would cut a rune in half and hand the terminal invalid
+// UTF-8. Three two-byte runes sit ahead of the change, so byte and rune offsets differ.
+func TestEmphasisSpansAreByteOffsetsIntoTheRawLine(t *testing.T) {
+	files := Parse("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n" +
+		`-x = "` + "αβγ" + ` one"` + "\n" +
+		`+x = "` + "αβγ" + ` two"` + "\n")
+	require.Len(t, files, 1)
+	h := files[0].Hunks[0]
+	spans := RawLineEmphasis(h)
+	require.Len(t, spans, 2)
+
+	assert.Equal(t, 13, spans[0].Start, "the marker plus five ASCII bytes plus six bytes of Greek")
+	assert.Equal(t, 16, spans[0].End)
+	assert.Equal(t, "one", h.Lines[0][spans[0].Start:spans[0].End])
+
+	// The same change, in the UTF-16 units the browser indexes by: three Greek characters are
+	// one unit each there, so the offset is three smaller and the marker is not counted.
+	require.NotNil(t, h.Rows[0].Emph)
+	assert.Equal(t, 9, h.Rows[0].Emph.Start)
+	assert.Equal(t, 12, h.Rows[0].Emph.End)
 }

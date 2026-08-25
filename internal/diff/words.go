@@ -1,15 +1,54 @@
 package diff
 
-// Span is a half-open [Start, End) range of a line to emphasize, in BYTES. The zero Span means
-// there is nothing to emphasize on that side; Emphasize never returns a span that marks
-// nothing, so the zero value is unambiguous.
+// Span is a half-open [Start, End) range of a line to emphasize. The zero Span means there is
+// nothing to emphasize on that side; Emphasize never returns a span that marks nothing, so the
+// zero value is unambiguous.
+//
+// The UNIT depends on where the span came from, which is why both spellings are named at their
+// source: Emphasize returns BYTES, because that is what a Go caller slices a string with, and
+// Row.Emph carries UTF-16 code units, because that is what the browser it is shipped to indexes
+// by. ByteSpan converts the second back into the first.
 type Span struct {
-	Start int
-	End   int
+	Start int `json:"start"`
+	End   int `json:"end"`
 }
 
 // Empty reports whether the span marks nothing.
 func (s Span) Empty() bool { return s.End <= s.Start }
+
+// ByteSpan converts a UTF-16 span over text into the byte offsets a Go caller slices with.
+//
+// Out-of-range input yields an empty span rather than a panic: this converts a number that
+// travelled, and a renderer must not crash on a line it was handed.
+func ByteSpan(text string, s Span) Span {
+	if s.Empty() {
+		return Span{}
+	}
+	start, end := -1, -1
+	units := 0
+	for i, r := range text {
+		if units == s.Start && start < 0 {
+			start = i
+		}
+		if units == s.End && end < 0 {
+			end = i
+		}
+		units++
+		if r > 0xFFFF {
+			units++
+		}
+	}
+	if units == s.Start && start < 0 {
+		start = len(text)
+	}
+	if units == s.End && end < 0 {
+		end = len(text)
+	}
+	if start < 0 || end < 0 || end <= start {
+		return Span{}
+	}
+	return Span{Start: start, End: end}
+}
 
 // Emphasize reports which PART of a changed line changed, as a span of the before side and a
 // span of the after side.
@@ -29,19 +68,18 @@ func (s Span) Empty() bool { return s.End <= s.Start }
 // completely that emphasizing everything would be noise rather than signal - in each case the
 // row color already says all there is to say.
 //
-// This is a port of console/src/console/diff/words.ts, which stays the source of truth. The
-// two must agree exactly or the same changed line is highlighted differently in the browser
-// than in the terminal. TestEmphasizeMatchesTheConsoleImplementation checks THIS side against
-// vectors transcribed from words.ts as it stands on this branch and pinned as literals; it
-// does not run the TypeScript, so an edit over there does not fail the suite. Re-transcribe
-// when words.ts moves - nothing else will notice.
+// This is the ONE implementation. It used to be a port of a TypeScript original that stayed
+// the source of truth, with a comment asking the next editor to re-transcribe the test vectors
+// by hand because "nothing else will notice" - which is a drift hazard with a manual
+// mitigation, and manual mitigations are how the same changed line came to be highlightable
+// two different ways depending on where you opened it. Parse calls this now and ships the
+// result, so both surfaces read one answer.
 //
-// BOUNDARY SEMANTICS: the scan compares RUNES and the returned offsets are BYTES. JavaScript
-// indexes by UTF-16 code unit, so scanning Go's bytes is not the same algorithm - "café"
-// and "cafè" share a lead byte, and a byte-wise common prefix would end in the middle of
-// a rune and hand back an offset that slices the line into invalid UTF-8. Comparing runes
-// reproduces the console's answer for every character in the BMP, which is every character
-// source code contains; returning bytes is what a Go caller slices a string with.
+// BOUNDARY SEMANTICS: the scan compares RUNES and the returned offsets are BYTES. Byte-wise
+// scanning is not the same algorithm - "café" and "cafè" share a lead byte, and a byte-wise
+// common prefix would end in the middle of a rune and hand back an offset that slices the line
+// into invalid UTF-8. Bytes are what a Go caller slices a string with; the browser is handed
+// UTF-16 offsets instead, converted where the row is built.
 func Emphasize(before, after string) (Span, Span) {
 	if before == after || before == "" || after == "" {
 		return Span{}, Span{}

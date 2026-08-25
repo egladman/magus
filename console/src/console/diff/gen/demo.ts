@@ -692,13 +692,21 @@ export const DEMO_FILES: readonly WireFile[] = [
             "kind": "del",
             "text": "\t\tAudience:  svcs[0],",
             "old_line": 56,
-            "new_line": null
+            "new_line": null,
+            "emph": {
+              "start": 13,
+              "end": 20
+            }
           },
           {
             "kind": "add",
             "text": "\t\tAudience:  authkit.Audience(svcs),",
             "old_line": null,
-            "new_line": 56
+            "new_line": 56,
+            "emph": {
+              "start": 13,
+              "end": 35
+            }
           },
           {
             "kind": "context",
@@ -917,25 +925,41 @@ export const DEMO_FILES: readonly WireFile[] = [
             "kind": "del",
             "text": "  readonly aud: string;",
             "old_line": 40,
-            "new_line": null
+            "new_line": null,
+            "emph": {
+              "start": 2,
+              "end": 23
+            }
           },
           {
             "kind": "del",
             "text": "  readonly scope: string;",
             "old_line": 41,
-            "new_line": null
+            "new_line": null,
+            "emph": {
+              "start": 11,
+              "end": 24
+            }
           },
           {
             "kind": "add",
             "text": "  // Both shapes reach the browser: tokens minted before this release carry a bare string.",
             "old_line": null,
-            "new_line": 40
+            "new_line": 40,
+            "emph": {
+              "start": 2,
+              "end": 90
+            }
           },
           {
             "kind": "add",
             "text": "  readonly aud: string | readonly string[];",
             "old_line": null,
-            "new_line": 41
+            "new_line": 41,
+            "emph": {
+              "start": 11,
+              "end": 42
+            }
           },
           {
             "kind": "context",
@@ -1052,7 +1076,11 @@ export const DEMO_FILES: readonly WireFile[] = [
             "kind": "add",
             "text": "\traw := mintFor(t, \"ledger\", \"catalog\")",
             "old_line": null,
-            "new_line": 141
+            "new_line": 141,
+            "emph": {
+              "start": 27,
+              "end": 38
+            }
           },
           {
             "kind": "context",
@@ -1298,13 +1326,21 @@ export const DEMO_FILES: readonly WireFile[] = [
             "kind": "del",
             "text": "# JWT claims",
             "old_line": 1,
-            "new_line": null
+            "new_line": null,
+            "emph": {
+              "start": 2,
+              "end": 5
+            }
           },
           {
             "kind": "add",
             "text": "# Token claims",
             "old_line": null,
-            "new_line": 1
+            "new_line": 1,
+            "emph": {
+              "start": 2,
+              "end": 7
+            }
           },
           {
             "kind": "context",
@@ -1322,13 +1358,21 @@ export const DEMO_FILES: readonly WireFile[] = [
             "kind": "del",
             "text": "(`iss`), and the service it is valid at (`aud`).",
             "old_line": 4,
-            "new_line": null
+            "new_line": null,
+            "emph": {
+              "start": 13,
+              "end": 16
+            }
           },
           {
             "kind": "add",
             "text": "(`iss`), and every service it is valid at (`aud`).",
             "old_line": null,
-            "new_line": 4
+            "new_line": 4,
+            "emph": {
+              "start": 13,
+              "end": 18
+            }
           },
           {
             "kind": "context",
@@ -1493,7 +1537,11 @@ export const DEMO_FILES: readonly WireFile[] = [
             "kind": "add",
             "text": "  aud: string[];",
             "old_line": null,
-            "new_line": 66
+            "new_line": 66,
+            "emph": {
+              "start": 13,
+              "end": 15
+            }
           },
           {
             "kind": "context",
@@ -1538,13 +1586,21 @@ export const DEMO_FILES: readonly WireFile[] = [
             "kind": "del",
             "text": "<h1>JWT claims</h1>",
             "old_line": 19,
-            "new_line": null
+            "new_line": null,
+            "emph": {
+              "start": 4,
+              "end": 7
+            }
           },
           {
             "kind": "add",
             "text": "<h1>Token claims</h1>",
             "old_line": null,
-            "new_line": 19
+            "new_line": 19,
+            "emph": {
+              "start": 4,
+              "end": 9
+            }
           },
           {
             "kind": "context",

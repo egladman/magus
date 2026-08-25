@@ -17,6 +17,13 @@
 // is not a line of either file and must never be counted as one.
 export type LineKind = "context" | "add" | "del" | "meta";
 
+// Span is a half-open [start, end) range of a line's text, in the UTF-16 code units a
+// JavaScript string is indexed by.
+export interface Span {
+  readonly start: number;
+  readonly end: number;
+}
+
 export interface DiffLine {
   readonly kind: LineKind;
   readonly text: string; // the content, WITHOUT the leading +/-/space marker
@@ -26,6 +33,14 @@ export interface DiffLine {
   // number them wrong the moment it skipped a row.
   readonly oldLine: number | null;
   readonly newLine: number | null;
+  // emph is WHICH PART of this line changed, for a line paired with its counterpart across a
+  // rewrite. Undefined on most lines, which have nothing to mark.
+  //
+  // Computed by the daemon, like the digest above it. This surface used to work it out and the
+  // terminal viewer worked out the same thing separately, agreeing only by hand-transcribed
+  // test vectors - so the same changed line could read as two different changes depending on
+  // where you opened it, and nothing would ever have said so.
+  readonly emph?: Span;
 }
 
 export interface Hunk {
@@ -75,6 +90,7 @@ interface WireRow {
   text: string;
   old_line: number | null;
   new_line: number | null;
+  emph?: Span;
 }
 
 interface WireHunk {
@@ -135,6 +151,7 @@ export function fromWire(files: readonly WireFile[] | null | undefined): DiffFil
         text: r.text,
         oldLine: r.old_line,
         newLine: r.new_line,
+        ...(r.emph === undefined ? {} : { emph: r.emph }),
       })),
     })),
   }));

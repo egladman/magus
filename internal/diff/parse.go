@@ -57,6 +57,13 @@ type Row struct {
 	Text    string `json:"text"`
 	OldLine *int   `json:"old_line"`
 	NewLine *int   `json:"new_line"`
+	// Emph is which PART of this line changed, for a row paired with its counterpart across a
+	// rewrite. Nil where there is nothing to mark, which is most rows.
+	//
+	// Offsets are UTF-16 code units, indexing Text - what a JavaScript string is indexed by,
+	// because the browser is this field's consumer. A Go caller slicing bytes converts with
+	// ByteSpan.
+	Emph *Span `json:"emph,omitempty"`
 }
 
 // Hunk is one @@ section: the header line, its body, and the content digest the viewed set
@@ -291,8 +298,102 @@ func (p *parser) closeHunk() {
 	// precedes the first @@, so Path is already settled by the time any hunk closes.
 	p.hunk.Digest = HunkDigest(p.identity(), p.raw)
 	p.hunk.Lines = p.raw
+	markEmphasis(p.hunk.Rows)
 	p.cur.Hunks = append(p.cur.Hunks, *p.hunk)
 	p.hunk, p.raw = nil, nil
+}
+
+// markEmphasis fills in each changed row's intra-line span.
+//
+// Computed HERE, once, and shipped, rather than by each surface at render time. The console
+// used to do its own and the terminal viewer did another, and the Go one carried a comment
+// saying the two "must agree exactly" with a manual re-transcription as the only mitigation -
+// "nothing else will notice" were its words. Emphasis is only presentational, so drift would
+// not corrupt anything; it would just mean the same changed line reads as two different
+// changes depending on where you opened it, and nobody would ever find out why.
+//
+// The pairing is a run of removed lines against the run of added lines that follows, matched
+// positionally and only when the two runs are the same length. An unequal run means lines were
+// added or removed rather than rewritten, and pairing across that boundary would invent a
+// correspondence the patch does not contain.
+func markEmphasis(rows []Row) {
+	var dels, adds []int
+	flush := func() {
+		for _, pair := range PairForEmphasis(dels, adds) {
+			before, after := Emphasize(rows[pair.Del].Text, rows[pair.Add].Text)
+			rows[pair.Del].Emph = utf16Span(rows[pair.Del].Text, before)
+			rows[pair.Add].Emph = utf16Span(rows[pair.Add].Text, after)
+		}
+		dels, adds = nil, nil
+	}
+	for i, r := range rows {
+		switch {
+		case r.Kind == KindDel && len(adds) == 0:
+			dels = append(dels, i)
+		case r.Kind == KindAdd && len(dels) > 0:
+			adds = append(adds, i)
+		default:
+			flush()
+			if r.Kind == KindDel {
+				dels = append(dels, i)
+			}
+		}
+	}
+	flush()
+}
+
+// RawLineEmphasis re-expresses a hunk's intra-line spans in the coordinates a terminal
+// renderer slices: byte offsets into the RAW line, +/- marker included. Indexed alongside
+// Hunk.Lines; an empty span means the line has nothing to mark.
+//
+// Two conversions, and each is a coordinate the other consumer does not want. Rows carry
+// UTF-16 offsets because the wire's reader is a browser, and they measure Text, which has no
+// marker on it. Both happen here so neither surface has to hold an opinion about how a span
+// travelled to it.
+func RawLineEmphasis(h Hunk) []Span {
+	if len(h.Rows) == 0 {
+		return nil
+	}
+	out := make([]Span, len(h.Rows))
+	for i, r := range h.Rows {
+		if r.Emph == nil {
+			continue
+		}
+		s := ByteSpan(r.Text, *r.Emph)
+		if s.Empty() {
+			continue
+		}
+		out[i] = Span{Start: s.Start + 1, End: s.End + 1}
+	}
+	return out
+}
+
+// utf16Span converts a byte span into the UTF-16 code units a browser indexes strings by, or
+// nil when there is nothing to mark.
+//
+// The conversion happens on THIS side because the wire's consumer is JavaScript, and because
+// Go is the side holding both the bytes and the runes. A browser handed byte offsets would
+// slice a line containing one accented character in the wrong place - and would do it only on
+// the lines nobody thinks to test.
+func utf16Span(text string, s Span) *Span {
+	if s.Empty() {
+		return nil
+	}
+	out := Span{Start: utf16Len(text[:s.Start]), End: utf16Len(text[:s.End])}
+	return &out
+}
+
+// utf16Len counts the UTF-16 code units in s. Anything outside the BMP takes two, which is
+// what a JavaScript string index counts and what a Go rune count would get wrong.
+func utf16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		n++
+		if r > 0xFFFF {
+			n++
+		}
+	}
+	return n
 }
 
 // identity settles which name the file goes by, which is what the sidebar lists, what an

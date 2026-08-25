@@ -31,6 +31,13 @@ type Hunk struct {
 	Header string
 	Lines  []string
 	Digest string
+	// Emph is, per line of Lines, which part of it changed - as byte offsets into the RAW
+	// line, marker included, because that is what the renderer slices. Empty or short is fine
+	// and means no emphasis, which is what a caller that does not compute it gets.
+	//
+	// Passed in rather than derived here, like Digest above and for the same reason: the
+	// parser works it out once and both surfaces read the one answer.
+	Emph []diff.Span
 }
 
 // File is one changed file. Facts are the annotation lines ALREADY RENDERED by the caller,
@@ -422,9 +429,12 @@ func (m *Model) rebuild() {
 				mark = "[x]"
 			}
 			m.rows = append(m.rows, Row{Kind: RowHunk, File: i, Hunk: hi, Text: mark + " " + h.Header})
-			emph := lineEmphasis(h.Lines)
 			for li, l := range h.Lines {
-				m.rows = append(m.rows, Row{Kind: RowLine, File: i, Hunk: hi, Text: l, Emph: emph[li]})
+				var emph diff.Span
+				if li < len(h.Emph) {
+					emph = h.Emph[li]
+				}
+				m.rows = append(m.rows, Row{Kind: RowLine, File: i, Hunk: hi, Text: l, Emph: emph})
 			}
 			m.rows = append(m.rows, m.talkRows(i, hi, h)...)
 		}
@@ -463,56 +473,6 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 			Text: "  > SUGGESTION: " + s.Reason})
 	}
 	return out
-}
-
-// lineEmphasis reports, per line of one hunk, which part of it changed.
-//
-// A line diff only says the line is different, which on a rename or a changed argument leaves
-// the reader to find the difference by eye across two nearly identical rows. This is what lets
-// the renderer draw the changed part harder than the rest.
-//
-// The pairing is the state machine console/src/console/diff/main.ts runs before it paints: each
-// run of removed lines against the run of added lines that follows it. The two surfaces have to
-// emphasize the same bytes, or one changeset reads as two. diff.PairForEmphasis is what refuses
-// a run whose halves are different lengths, so a rewrite is emphasized and an insertion is left
-// alone rather than paired with whatever line happens to sit above it.
-//
-// The spans returned index the RAW line, marker byte included, because that is what the renderer
-// slices. diff.Emphasize is fed the text AFTER the marker, so a '-' and a '+' are never
-// themselves counted as the difference between two lines.
-func lineEmphasis(lines []string) []diff.Span {
-	out := make([]diff.Span, len(lines))
-	var dels, adds []int
-	flush := func() {
-		for _, p := range diff.PairForEmphasis(dels, adds) {
-			before, after := diff.Emphasize(lines[p.Del][1:], lines[p.Add][1:])
-			out[p.Del], out[p.Add] = shiftPastMarker(before), shiftPastMarker(after)
-		}
-		dels, adds = nil, nil
-	}
-	for i, l := range lines {
-		switch {
-		case isDel(l) && len(adds) == 0:
-			dels = append(dels, i)
-		case isAdd(l) && len(dels) > 0:
-			adds = append(adds, i)
-		default:
-			flush()
-			if isDel(l) {
-				dels = append(dels, i)
-			}
-		}
-	}
-	flush()
-	return out
-}
-
-// shiftPastMarker moves a span computed on the text after the marker back onto the raw line.
-func shiftPastMarker(s diff.Span) diff.Span {
-	if s.Empty() {
-		return diff.Span{}
-	}
-	return diff.Span{Start: s.Start + 1, End: s.End + 1}
 }
 
 func isDel(line string) bool { return strings.HasPrefix(line, "-") }

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
 )
@@ -320,69 +321,31 @@ func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 	assert.False(t, m.Overview())
 }
 
-func TestEmphasisMarksOnlyThePairedRewrite(t *testing.T) {
+// The viewer no longer computes emphasis - the parser does, and hands it over in Hunk.Emph.
+// What is left to check here is that a span it was GIVEN survives into the row it belongs to,
+// including the "nothing to mark" case, since the slice may be short or absent entirely.
+//
+// The rule those numbers follow (which lines pair, and how a multi-byte prefix shifts the
+// offsets) is pinned where it now lives, in internal/diff's TestEmphasisMarksOnlyThePairedRewrite.
+func TestAGivenEmphasisSpanReachesItsRow(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name  string
-		lines []string
-		// want is the text each hunk line's span selects, in line order, "" for no emphasis.
-		want []string
-	}{
-		{"one changed argument is the only part emphasised",
-			[]string{" ctx", "-call(a, b)", "+call(a, c)"},
-			[]string{"", "b", "c"}},
-		{"a wholly different line has nothing to point at",
-			[]string{"-one", "+two"},
-			[]string{"", ""}},
-		{"runs of unequal length are not paired at all",
-			[]string{"-one", "+two", "+three"},
-			[]string{"", "", ""}},
-		{"an insertion has no partner to differ from",
-			[]string{" ctx", "+added"},
-			[]string{"", ""}},
-		{"a two-line rewrite pairs positionally",
-			[]string{"-let a = 1", "-let b = 2", "+let a = 9", "+let b = 8"},
-			[]string{"1", "2", "9", "8"}},
-		{"a second run pairs on its own",
-			[]string{"-call(a, b)", "+call(a, c)", " ctx", "-x := 1", "+x := 2"},
-			[]string{"b", "c", "", "1", "2"}},
-		{"spans are BYTES, so a multi-byte prefix does not shift what they select",
-			[]string{`-x = "` + "αβγ" + ` one"`, `+x = "` + "αβγ" + ` two"`},
-			[]string{"one", "two"}},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-				{Header: "@@ -1 +1 @@", Lines: tc.lines, Digest: "d0"},
-			}}}})
-			assert.Equal(t, tc.want, emphasisOf(m))
-		})
-	}
+	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{{
+		Header: "@@ -1 +1 @@",
+		Lines:  []string{" ctx", "-call(a, b)", "+call(a, c)"},
+		Emph:   []diff.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
+		Digest: "d0",
+	}}}}})
+	assert.Equal(t, []string{"", "b", "c"}, emphasisOf(m))
 }
 
-func TestEmphasisSpansAreByteOffsetsIntoTheRawLine(t *testing.T) {
+// A caller that hands over no spans at all renders every line plain rather than panicking on
+// an index. That is the honest degradation, and it is what a hunk built by hand gets.
+func TestNoEmphasisSliceIsNotAnIndexError(t *testing.T) {
 	t.Parallel()
-	// The renderer slices Text with these numbers, so a span counted in RUNES would not merely
-	// highlight the wrong word - it would cut a rune in half and hand the terminal invalid
-	// UTF-8. Three two-byte runes sit ahead of the change, so byte and rune offsets differ.
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{`-x = "` + "αβγ" + ` one"`}, Digest: "d0"},
+		{Header: "@@ -1 +1 @@", Lines: []string{"-one", "+two"}, Digest: "d0"},
 	}}}})
-	require.Len(t, m.Rows(), 3)
-	// One line has nobody to pair with, which is the run-length rule and not a byte question.
-	assert.True(t, m.Rows()[2].Emph.Empty())
-
-	m = New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{
-			`-x = "` + "αβγ" + ` one"`,
-			`+x = "` + "αβγ" + ` two"`,
-		}, Digest: "d0"},
-	}}}})
-	del := m.Rows()[2]
-	assert.Equal(t, 13, del.Emph.Start, "the marker plus five ASCII bytes plus six bytes of Greek")
-	assert.Equal(t, 16, del.Emph.End)
-	assert.Equal(t, "one", del.Text[del.Emph.Start:del.Emph.End])
+	assert.Equal(t, []string{"", ""}, emphasisOf(m))
 }
 
 func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
@@ -436,9 +399,12 @@ func TestNoColorSilencesTheWholeFrame(t *testing.T) {
 
 func TestColourDrawsTheChangedPartHarderThanItsLine(t *testing.T) {
 	t.Parallel()
-	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{" ctx", "-call(a, b)", "+call(a, c)"}, Digest: "d0"},
-	}}}})
+	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{{
+		Header: "@@ -1 +1 @@",
+		Lines:  []string{" ctx", "-call(a, b)", "+call(a, c)"},
+		Emph:   []diff.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
+		Digest: "d0",
+	}}}}})
 	m.Resize(5)
 	lines := strings.Split(Frame(m, true), "\n")
 	require.Len(t, lines, 6)

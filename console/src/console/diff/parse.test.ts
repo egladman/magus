@@ -115,3 +115,55 @@ test("countLines totals every hunk line plus one row per hunk header", () => {
   assert.equal(countLines(fromWire([wireFile()])), 3); // 2 lines + 1 header
   assert.equal(countLines([]), 0);
 });
+
+// Intra-line emphasis arrives on the wire. This surface used to compute it, and Go computed
+// the same thing separately for the terminal viewer - the two agreeing only by test vectors
+// somebody had transcribed by hand. The daemon works it out once now, exactly as it works out
+// the hunk digests, and what is left here is carrying the numbers through unchanged.
+test("emphasis rides the wire onto the line it marks", () => {
+  const [f] = fromWire([
+    wireFile({
+      hunks: [
+        {
+          header: "@@ -1,2 +1,2 @@",
+          digest: "abc123",
+          index: 0,
+          lines: ["-call(a, b)", "+call(a, c)"],
+          old_start: 1,
+          old_count: 2,
+          new_start: 1,
+          new_count: 2,
+          rows: [
+            {
+              kind: "del",
+              text: "call(a, b)",
+              old_line: 1,
+              new_line: null,
+              emph: { start: 8, end: 9 },
+            },
+            {
+              kind: "add",
+              text: "call(a, c)",
+              old_line: null,
+              new_line: 1,
+              emph: { start: 8, end: 9 },
+            },
+          ],
+        },
+      ],
+    }),
+  ]);
+  const [del, add] = f?.hunks[0]?.lines ?? [];
+  // The offsets index the line's TEXT, marker already stripped, in the UTF-16 units a
+  // JavaScript string slices by - so this is what the renderer will actually highlight.
+  assert.equal(del?.text.slice(del.emph?.start, del.emph?.end), "b");
+  assert.equal(add?.text.slice(add.emph?.start, add.emph?.end), "c");
+});
+
+// Most lines have nothing to mark, and Go omits the field entirely for them. The key is left
+// OFF rather than set to undefined, so a consumer spreading the object does not gain one.
+test("a line with nothing to mark carries no emphasis key", () => {
+  const [f] = fromWire([wireFile()]);
+  const [del] = f?.hunks[0]?.lines ?? [];
+  assert.equal("emph" in (del ?? {}), false);
+});

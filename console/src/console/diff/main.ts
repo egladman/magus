@@ -54,7 +54,6 @@ import {
   type ViewMode,
 } from "./rows";
 import { modeChange, order, visibleFiles, stats, riskChips, type OrderedChangeset } from "./order";
-import { emphasis, pairForEmphasis, type Span } from "./words";
 import { languageFor, tokenize, type Language } from "./syntax";
 import {
   fetchPatch,
@@ -179,38 +178,6 @@ function prefersReducedMotion(): boolean {
   return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
-// emphasisFor holds each changed line's intra-line span, computed once per rebuild. Keyed by
-// the line OBJECT: parse.ts freezes lines and the virtualizer renders them repeatedly from
-// arbitrary offsets, so recomputing per paint would redo the same work on every scroll frame.
-const emphasisFor = new WeakMap<DiffLine, Span>();
-
-// Cache word-level emphasis per immutable hunk.
-const emphasisMarked = new WeakSet<Hunk>();
-function markEmphasis(hunk: Hunk): void {
-  if (emphasisMarked.has(hunk)) return;
-  let dels: DiffLine[] = [];
-  let adds: DiffLine[] = [];
-  const flush = (): void => {
-    for (const [d, a] of pairForEmphasis(dels, adds)) {
-      const e = emphasis(d.text, a.text);
-      if (e.before) emphasisFor.set(d, e.before);
-      if (e.after) emphasisFor.set(a, e.after);
-    }
-    dels = [];
-    adds = [];
-  };
-  for (const line of hunk.lines) {
-    if (line.kind === "del" && adds.length === 0) dels.push(line);
-    else if (line.kind === "add" && dels.length > 0) adds.push(line);
-    else {
-      flush();
-      if (line.kind === "del") dels.push(line);
-    }
-  }
-  flush();
-  emphasisMarked.add(hunk);
-}
-
 // lineText renders a line's text with syntax color and intra-line emphasis.
 //
 // The two compose rather than compete: a syntax token owns the FOREGROUND, the emphasis range
@@ -223,7 +190,12 @@ function markEmphasis(hunk: Hunk): void {
 function lineText(line: DiffLine, lang: Language): HTMLElement {
   const el = h("span", "console-diff-row__text");
   const text = line.text || " ";
-  const span = emphasisFor.get(line);
+  // The daemon computed this, exactly as it computed the hunk digests. The browser used to
+  // work it out itself and Go worked out the same thing for the terminal viewer, with a
+  // comment on the Go side asking whoever edited the TypeScript to re-transcribe its test
+  // vectors by hand - so the same changed line could be highlighted two ways and nothing
+  // anywhere would notice.
+  const span = line.emph;
   const toks = tokenize(text, lang);
 
   if (toks.length === 0 && !span) {
@@ -609,7 +581,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
       return el;
     }
     if (row.kind === "line") {
-      markEmphasis(row.hunk);
       const el = h("div", "console-diff-row");
       el.dataset.kind = row.line.kind;
       const marker = h("span", "console-diff-row__marker", markerFor(row.line.kind));
@@ -620,15 +591,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       el.append(gutter(row.line.oldLine), gutter(row.line.newLine), marker, text);
       return el;
     }
-    markEmphasis(row.hunk);
     const el = h("div", "console-diff-row console-diff-row--pair");
     const lang = languageFor(row.file.path);
     el.append(side(row.left, "left", lang), side(row.right, "right", lang));
     return el;
   };
 
-  // Takes the DiffLine itself rather than a structural copy: intra-line emphasis is keyed by
-  // the line object, so a shape-compatible clone would silently lose it.
   const side = (line: DiffLine | null, which: "left" | "right", lang: Language): HTMLElement => {
     const cell = h("div", "console-diff-row__side");
     cell.dataset.side = which;

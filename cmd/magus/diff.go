@@ -566,6 +566,7 @@ func diffTUIFiles(rev types.Diff, parsed []diff.FileHunks) []difftui.File {
 		for _, h := range byPath[f.Path] {
 			file.Hunks = append(file.Hunks, difftui.Hunk{
 				Index: h.Index, Header: h.Header, Lines: h.Lines, Digest: h.Digest,
+				Emph: diff.RawLineEmphasis(h),
 			})
 		}
 		out = append(out, file)
