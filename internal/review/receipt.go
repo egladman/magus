@@ -16,6 +16,21 @@
 // forgeable kind the notes store already refused - and would read as accountability while
 // providing none. What a receipt asserts is exactly this: at this content, somebody said
 // read.
+//
+// # The count is never shown to a second person
+//
+// A standing refusal, in the same family as doctor's refusal to let any flag promote advice
+// to failure. There is no team view, no aggregate, no pull-request comment, and no field on
+// a receipt that would let one be attributed.
+//
+// The reasoning is not privacy, it is measurement. A read count a second person can see is a
+// performance metric, and a performance metric is met by whatever satisfies it most cheaply -
+// which here is stamping files unread. The measure would then destroy the thing it measures
+// while continuing to report healthy numbers, and everyone downstream would be worse off for
+// having believed it. Keeping the count private to the reader is what leaves it a bookmark:
+// useful because losing your place costs YOU, and worth nothing to anybody who did not read.
+//
+// TestReceiptCarriesNoIdentity pins the structural half of this.
 package review
 
 import (

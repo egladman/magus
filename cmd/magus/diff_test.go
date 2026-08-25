@@ -229,8 +229,9 @@ func preflightFixture() diffPreflight {
 			{Path: "internal/cache/signing.go", Line: 32, Until: "no store still serves ed25519 envelopes"},
 		},
 		Review: &preflightReview{
-			Files: 4, Read: 3, Stale: 1,
-			Unread: []string{"internal/cache/cache.go (read, then changed)"},
+			Files: 8, Read: 5,
+			Stale:  []string{"internal/cache/cache.go"},
+			Unread: []string{"types/diff.go", "std/magus.go"},
 		},
 	}
 }
@@ -269,10 +270,12 @@ func TestPreflightRendersEverySection(t *testing.T) {
 		"RATIONALE: 1 compat(until:) marker in files you changed - each names why the code stays",
 		"      internal/cache/signing.go:32 until no store still serves ed25519 envelopes",
 		"",
-		"REVIEW: 3 of 4 changed file(s) carry a read receipt; 1 were read and then edited",
-		"      internal/cache/cache.go (read, then changed)",
-		"      read them through: magus diff --tui",
-		"      or cover them at once, on the record: magus diff --ack --reason <why>",
+		"REVIEW: 1 file(s) changed after you read them",
+		"      internal/cache/cache.go",
+		"      2 file(s) you have not opened, widest blast radius first",
+		"        types/diff.go",
+		"        std/magus.go",
+		"      pick up where you left off: magus diff --tui",
 	}, preflightLines(preflightFixture()))
 }
 

@@ -81,8 +81,10 @@ func TestCollectReview(t *testing.T) {
 		got := collectReview(attach(t, root, cache, rev), nil, nil)
 		require.NotNil(t, got)
 		assert.Equal(t, 0, got.Read)
-		assert.Equal(t, 1, got.Stale)
-		assert.Contains(t, got.Unread[0], "read, then changed")
+		// Stale is its own list, not an annotated entry in the unopened one: it is a
+		// different finding and it leads the section.
+		assert.Equal(t, []string{"a.go"}, got.Stale)
+		assert.Empty(t, got.Unread)
 	})
 
 	// Reading a machine's restatement of an edit made elsewhere is not the review, which is
@@ -124,20 +126,60 @@ func TestPreflightReviewLines(t *testing.T) {
 		assert.Contains(t, lines[0], "unavailable")
 	})
 
-	t.Run("names the unread files and caps the list", func(t *testing.T) {
+	t.Run("names the unopened files and caps the list", func(t *testing.T) {
 		r := &preflightReview{Files: 30, Read: 0}
 		for i := range 30 {
-			r.Unread = append(r.Unread, string(rune('a'+i%26))+".go")
+			r.Unread = append(r.Unread, fmt.Sprintf("f%d.go", i))
 		}
 		lines := preflightReviewLines(r)
-		assert.Contains(t, lines[0], "0 of 30")
+		assert.Contains(t, lines[0], "30 file(s) you have not opened")
 		assert.Contains(t, lines[unreadShown+1], "and 20 more")
 	})
 
-	t.Run("stale is called out separately from never read", func(t *testing.T) {
-		lines := preflightReviewLines(&preflightReview{Files: 4, Read: 1, Stale: 2})
-		assert.Contains(t, lines[0], "1 of 4")
-		assert.Contains(t, lines[0], "2 were read and then edited")
+	// No ratio, anywhere. A count with a target is one that gets cleared rather than
+	// satisfied, and clearing it takes one keystroke and no reading.
+	t.Run("reports no read ratio", func(t *testing.T) {
+		lines := preflightReviewLines(&preflightReview{
+			Files: 40, Read: 12,
+			Stale:  []string{"internal/cache/key.go"},
+			Unread: []string{"a.go", "b.go"},
+		})
+		for _, l := range lines {
+			assert.NotContains(t, l, " of 40")
+			assert.NotContains(t, l, "12")
+		}
+	})
+
+	// Stale is the finding, so it leads whatever else the section holds: it is derived
+	// from content rather than from a claim, so no amount of stamping produces it.
+	t.Run("stale leads and is named", func(t *testing.T) {
+		lines := preflightReviewLines(&preflightReview{
+			Files: 4, Read: 1,
+			Stale:  []string{"internal/cache/key.go"},
+			Unread: []string{"a.go"},
+		})
+		assert.Contains(t, lines[0], "1 file(s) changed after you read them")
+		assert.Equal(t, "      internal/cache/key.go", lines[1])
+	})
+
+	// A small undisturbed change needs no reading plan, and printing one there is how a
+	// reader learns to skip the section before meeting a change big enough to need it.
+	t.Run("says nothing about a small undisturbed change", func(t *testing.T) {
+		assert.Nil(t, preflightReviewLines(&preflightReview{
+			Files: 3, Unread: []string{"a.go", "b.go", "c.go"},
+		}))
+	})
+
+	// ...but a small change where something moved under the reader is exactly when the
+	// section earns its line.
+	t.Run("a small change still reports stale", func(t *testing.T) {
+		lines := preflightReviewLines(&preflightReview{Files: 2, Stale: []string{"a.go"}})
+		require.NotEmpty(t, lines)
+		assert.Contains(t, lines[0], "changed after you read them")
+	})
+
+	t.Run("says nothing when everything has been read", func(t *testing.T) {
+		assert.Nil(t, preflightReviewLines(&preflightReview{Files: 30, Read: 30}))
 	})
 }
 
@@ -180,15 +222,17 @@ func TestCollectReviewSeparatesRequiredPaths(t *testing.T) {
 	assert.Len(t, got.Unread, 2)
 }
 
-// A bulk ack is reported, never merely required at the prompt: a count folding "read it"
-// together with "stamped forty files at once" is the number this section exists to stop
-// anyone believing.
+// A bulk cover is echoed so a file stamped in one keystroke does not read as one somebody
+// sat down with. It is a note the reader left themselves, not a toll they paid.
 func TestPreflightReviewLinesReportsBulkReasons(t *testing.T) {
 	lines := preflightReviewLines(&preflightReview{
-		Files: 4, Read: 4, Reasons: []string{"codemod output, spot-checked 3 of 40"},
+		Files: 8, Read: 4,
+		Unread:  []string{"a.go"},
+		Reasons: []string{"codemod output, spot-checked 3 of 40"},
 	})
-	assert.Contains(t, lines[1], "acknowledged in bulk")
-	assert.Contains(t, lines[1], "codemod output")
+	joined := strings.Join(lines, "\n")
+	assert.Contains(t, joined, "covered in bulk")
+	assert.Contains(t, joined, "codemod output")
 }
 
 func TestPreflightReviewLinesListsRequiredUncapped(t *testing.T) {
@@ -196,10 +240,24 @@ func TestPreflightReviewLinesListsRequiredUncapped(t *testing.T) {
 	for i := range unreadShown + 5 {
 		r.Required = append(r.Required, fmt.Sprintf("internal/secret/f%d.go", i))
 	}
+	r.Unread = append([]string{}, r.Required...)
 	lines := preflightReviewLines(r)
-	assert.Contains(t, lines[1], "15 unread in review_required paths")
-	// Uncapped, unlike the general unread list: the workspace said these cost something.
-	assert.Contains(t, lines[16], "internal/secret/f14.go")
+	assert.Contains(t, lines[0], "15 unopened in review_required paths")
+	// Uncapped, unlike the general list: the workspace said these cost something.
+	assert.Contains(t, lines[15], "internal/secret/f14.go")
+}
+
+// A path the workspace flagged is named once, under review_required, and not again in the
+// general list. Saying it twice reads as two findings.
+func TestPreflightReviewLinesDoesNotRepeatRequiredPaths(t *testing.T) {
+	lines := preflightReviewLines(&preflightReview{
+		Files:    8,
+		Required: []string{"internal/secret/value.go"},
+		Unread:   []string{"internal/secret/value.go", "a.go"},
+	})
+	joined := strings.Join(lines, "\n")
+	assert.Equal(t, 1, strings.Count(joined, "internal/secret/value.go"))
+	assert.Contains(t, joined, "1 file(s) you have not opened")
 }
 
 // stubReviewWorkspace is the narrow slice of the reader the matcher uses.

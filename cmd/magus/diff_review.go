@@ -11,19 +11,26 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// preflightReview is how much of this change somebody has said they read.
+// preflightReview is where a reader left off in this change.
 //
-// Read is the one property in the whole preflight report that magus cannot measure for you,
-// and the one most worth knowing: every other section describes what the change DOES, and
-// this describes whether a person weighed it. It is a report and never a gate - a review
-// somebody was forced through is not a review.
+// It is a BOOKMARK, not a score, and the difference decides the whole design. An earlier
+// version led with "N of M files carry a read receipt", which is a completion metric: it
+// has a target, and the cheapest way to reach the target is to stamp everything without
+// reading it. A count that can be satisfied by typing is worse than no count, because it
+// trains the reader to type something they do not mean.
+//
+// So no ratio is reported. What is reported is the two things a reader cannot produce
+// without reading: which files moved after they read them, and which they have not opened.
+// Both are answers to "where was I", and the test any addition here has to pass is whether
+// somebody would still want it if nobody else ever saw the result.
 type preflightReview struct {
-	Files int `json:"files"          yaml:"files"`
-	Read  int `json:"read"           yaml:"read"`
-	// Stale counts files that were acknowledged and then edited. They are called out
-	// separately from never-read ones because they are the more dangerous shape: somebody
-	// did look, which is exactly why nobody will look again.
-	Stale  int      `json:"stale"            yaml:"stale"`
+	Files int `json:"files" yaml:"files"`
+	Read  int `json:"read"  yaml:"read"`
+	// Stale are files read and then edited. They lead the section: the signal is derived
+	// from CONTENT rather than from a claim, so inattention cannot fake it, and it is the
+	// more dangerous shape anyway - somebody did look, which is exactly why nobody will
+	// look again.
+	Stale  []string `json:"stale,omitempty"  yaml:"stale,omitempty"`
 	Unread []string `json:"unread,omitempty" yaml:"unread,omitempty"`
 	// Required are unread files inside a project's declared review_required globs. Listed
 	// separately and in FULL rather than capped: the workspace said an unread change costs
@@ -35,9 +42,16 @@ type preflightReview struct {
 	Reasons []string `json:"reasons,omitempty" yaml:"reasons,omitempty"`
 }
 
-// unreadShown bounds the named list. The count is the finding; the names are a starting
-// point, and a hundred paths in a report nobody scrolls is the count told worse.
+// unreadShown bounds the never-opened list, which is context rather than the finding.
 const unreadShown = 10
+
+// reviewMinFiles is the changeset size below which the section says nothing at all.
+//
+// A four-file change needs no reading plan, and printing one there is how a reader learns
+// to skip this section before ever meeting a change big enough to need it. Nothing stale is
+// part of the condition: a small change where a file moved after you read it is exactly
+// when the section earns its line.
+const reviewMinFiles = 5
 
 // reviewRequiredMatcher reports whether a workspace-relative path sits inside any project's
 // declared review_required globs.
@@ -127,8 +141,7 @@ func collectReview(rev types.Diff, required func(string) bool, reasons []string)
 			continue
 		case types.DiffReadStale:
 			measured = true
-			out.Stale++
-			out.Unread = append(out.Unread, f.Path+" (read, then changed)")
+			out.Stale = append(out.Stale, f.Path)
 		case types.DiffReadUnread:
 			measured = true
 			out.Unread = append(out.Unread, f.Path)
@@ -167,49 +180,88 @@ func ackChangeset(root, cacheDir string, rev types.Diff, reason string, now time
 	return len(add), review.Record(cacheDir, add)
 }
 
-// preflightReviewLines renders the section, including its empty form.
+// preflightReviewLines renders the section, or nothing at all.
+//
+// Nil is a real answer here and the common one. A section that always prints is a section
+// people stop reading, and this one has nothing to say about a small change nobody has
+// disturbed since reading.
 func preflightReviewLines(r *preflightReview) []string {
 	if r == nil {
 		return []string{"REVIEW: read receipts unavailable; read a file through in `magus diff --tui` to earn one"}
 	}
-	if r.Files == 0 {
-		return []string{"REVIEW: nothing but generated output changed"}
+	// Silence, not a reassurance. "Everything here has been read" would be a claim the
+	// reader can produce by stamping rather than by reading, which is the sentence this
+	// section was rebuilt to stop printing.
+	if r.Files == 0 || (len(r.Stale) == 0 && (r.Files < reviewMinFiles || len(r.Unread) == 0)) {
+		return nil
 	}
-	head := fmt.Sprintf("REVIEW: %d of %d changed file(s) carry a read receipt", r.Read, r.Files)
-	if r.Stale > 0 {
-		head += fmt.Sprintf("; %d were read and then edited", r.Stale)
+
+	var out []string
+	// Stale leads, always, whatever else is in the section. It is the one finding here
+	// that no amount of stamping produces: the file moved after somebody read it.
+	if len(r.Stale) > 0 {
+		out = append(out, fmt.Sprintf("REVIEW: %d file(s) changed after you read them", len(r.Stale)))
+		for _, p := range r.Stale {
+			out = append(out, "      "+p)
+		}
 	}
-	out := []string{head}
-	for _, reason := range r.Reasons {
-		// A bulk ack is reported, not just required at the prompt. A count that folded
-		// "read it" together with "stamped forty files at once" would be the number this
-		// section exists to stop believing.
-		out = append(out, fmt.Sprintf("      some were acknowledged in bulk: %q", reason))
-	}
-	// The declared-critical files come first and uncapped. Everywhere else unread is
-	// context; here the workspace said it costs something.
+	// Then what the workspace itself said was worth reading, uncapped.
 	if len(r.Required) > 0 {
-		out = append(out, fmt.Sprintf("      %d unread in review_required paths:", len(r.Required)))
+		head := fmt.Sprintf("%d unopened in review_required paths:", len(r.Required))
+		if len(out) == 0 {
+			out = append(out, "REVIEW: "+head)
+		} else {
+			out = append(out, "      "+head)
+		}
 		for _, p := range r.Required {
 			out = append(out, "        "+p)
 		}
 	}
-	if len(r.Unread) == 0 {
-		return out
+	// Then the rest, as context and capped, in the order the reader would take them.
+	if rest := unreadRest(r); len(rest) > 0 {
+		head := fmt.Sprintf("%d file(s) you have not opened, widest blast radius first", len(rest))
+		if len(out) == 0 {
+			out = append(out, "REVIEW: "+head)
+		} else {
+			out = append(out, "      "+head)
+		}
+		shown := rest
+		if len(shown) > unreadShown {
+			shown = shown[:unreadShown]
+		}
+		for _, p := range shown {
+			out = append(out, "        "+p)
+		}
+		if len(rest) > len(shown) {
+			out = append(out, fmt.Sprintf("        and %d more", len(rest)-len(shown)))
+		}
 	}
-	shown := r.Unread
-	if len(shown) > unreadShown {
-		shown = shown[:unreadShown]
+	for _, reason := range r.Reasons {
+		// Echoed so a file covered by one keystroke does not read as one somebody sat
+		// down with. It is a note the reader left themselves, not a toll they paid.
+		out = append(out, fmt.Sprintf("      some were covered in bulk: %q", reason))
 	}
-	for _, p := range shown {
-		out = append(out, "      "+p)
+	if len(out) == 0 {
+		return nil
 	}
-	if len(r.Unread) > len(shown) {
-		out = append(out, fmt.Sprintf("      and %d more", len(r.Unread)-len(shown)))
+	return append(out, "      pick up where you left off: magus diff --tui")
+}
+
+// unreadRest is the never-opened files the section has not already named under
+// review_required, so no path appears twice.
+func unreadRest(r *preflightReview) []string {
+	if len(r.Required) == 0 {
+		return r.Unread
 	}
-	// The earned path is named first because it is the one worth trusting; the bulk stamp
-	// is named second with the reason it costs, so the cheaper option never looks free.
-	return append(out,
-		"      read them through: magus diff --tui",
-		"      or cover them at once, on the record: magus diff --ack --reason <why>")
+	named := make(map[string]bool, len(r.Required))
+	for _, p := range r.Required {
+		named[p] = true
+	}
+	var out []string
+	for _, p := range r.Unread {
+		if !named[p] {
+			out = append(out, p)
+		}
+	}
+	return out
 }

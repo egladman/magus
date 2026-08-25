@@ -1025,7 +1025,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --cost reports what carries no such record")
-	fs.StringVar(&f.Reason, FlagDiffReason, "", "Why one keystroke covers the whole changeset (required by --ack, and kept on the record)")
+	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
 	return &f
 }
 

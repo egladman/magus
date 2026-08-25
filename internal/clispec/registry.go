@@ -1359,17 +1359,23 @@ target IS a gate, and this flag must never read as one. Each section says when
 it could not measure something, so an empty one reads as "nobody looked"
 rather than as a clean bill of health.
 
---cost also reports how much of the change carries a read receipt, and a
-receipt is minted two ways. Stepping a file in --tui records one for it:
-the viewer knows where a reader got to, so that receipt is earned. --ack
-stamps the whole changeset at once and therefore requires --reason, which
-is kept and reported beside the count - claiming forty files in one
-keystroke is a claim worth signing.
+--cost also carries a REVIEW section, which is a bookmark rather than a
+score. It reports the two things a reader cannot produce without reading:
+files that changed AFTER they were read, and files never opened, widest
+blast radius first. It reports no ratio and stays silent on a small change
+nobody has disturbed - a count with a target is a count that gets cleared
+instead of satisfied.
 
 A receipt covers a file at its CURRENT content, so editing it afterwards
-voids the receipt. magus never infers one from an editor or a session: a
-measure satisfied by scrolling would launder skimming into review. --ack
-also refuses without a terminal, and agent hosts are denied it outright.`,
+voids the receipt. Stepping a file through in --tui earns one; --ack covers
+the changeset at once and takes an optional --reason kept with it. magus
+never infers a receipt from an editor or a session: a measure satisfied by
+scrolling would launder skimming into review. --ack refuses without a
+terminal, and agent hosts are denied it outright.
+
+The count is never shown to anyone but the reader. There is no team view and
+no pull-request comment, because a read measure a second person can see is a
+performance metric, and a performance metric gets gamed rather than met.`,
 	Usage: "magus diff [--generated] [--cost] [--tui] [--watch] [<patch-file>|-] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
@@ -1377,7 +1383,7 @@ also refuses without a terminal, and agent hosts are denied it outright.`,
 		{Name: "tui", Kind: FlagBool, Doc: "Read the changeset interactively, joined to the session the console and an agent share"},
 		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
 		{Name: "ack", Kind: FlagBool, Doc: "Record that you have read the changed files at their current content; --cost reports what carries no such record"},
-		{Name: "reason", Kind: FlagString, Doc: "Why one keystroke covers the whole changeset (required by --ack, and kept on the record)"},
+		{Name: "reason", Kind: FlagString, Doc: "An optional note kept with an --ack, for the next reader of the report"},
 	},
 	Examples: []Example{
 		{"Read what you are about to commit", "magus diff"},

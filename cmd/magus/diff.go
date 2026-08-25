@@ -64,15 +64,15 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if rf.Ack && (rf.Tui || rf.Watch) {
 		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
 	}
-	if rf.Ack && strings.TrimSpace(rf.Reason) == "" {
-		// One keystroke covering the whole changeset is the claim that needs saying out
-		// loud. Stepping the files in --tui earns a receipt per file and needs no reason;
-		// this is the other path, and the reason it carries is what a later reader weighs
-		// it by. Same shape as the acknowledged suppressions elsewhere in magus, where the
-		// exemption is free and the sentence explaining it is required.
-		return usagef("magus diff: --ack stamps every changed file at once, so it needs --reason " +
-			"(\"codemod output, spot-checked 3 of 40\"). To earn receipts file by file instead, read them in `magus diff --tui`")
-	}
+	// --reason is optional, deliberately. It was briefly required, on the reasoning that a
+	// bulk stamp should cost a sentence the way spells.allow_shadow does. The shapes look
+	// alike and behave oppositely: an allow_shadow entry is written a handful of times in a
+	// repository's life and stays meaningful, while a changeset ack is written daily and
+	// becomes a form field - at which point the requirement has only taught the reader to
+	// type something they do not mean.
+	//
+	// The two controls that actually hold are the ones nobody can satisfy by typing faster:
+	// the agent guard, and the terminal check below.
 	if rf.Ack && !isInteractiveTTY() {
 		// The agent guard denies --ack outright, but it fails OPEN where it is not wired,
 		// and a receipt minted by a script is precisely the laundering this refuses. Not a
@@ -264,7 +264,11 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		if err != nil {
 			return err
 		}
-		fmt.Printf("recorded %d read receipt(s) at the current content, reason %q; editing a file voids its receipt\n", n, reason)
+		msg := fmt.Sprintf("recorded %d read receipt(s) at the current content; editing a file voids its receipt", n)
+		if reason != "" {
+			msg = fmt.Sprintf("recorded %d read receipt(s), noted %q; editing a file voids its receipt", n, reason)
+		}
+		fmt.Println(msg)
 		return nil
 	}
 
@@ -1358,8 +1362,14 @@ func preflightLines(p diffPreflight) []string {
 		preflightRationaleLines(p.Rationale),
 		preflightReviewLines(p.Review),
 	}
-	for i, s := range sections {
-		if i > 0 {
+	for _, s := range sections {
+		// A section may render nothing - REVIEW says nothing about a small change nobody
+		// has disturbed. Skipping it here rather than emitting its blank separator is what
+		// keeps that silence from reading as a section that broke.
+		if len(s) == 0 {
+			continue
+		}
+		if len(out) > 2 {
 			out = append(out, "")
 		}
 		out = append(out, s...)
