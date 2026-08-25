@@ -31,12 +31,13 @@
                     <input id="log-filter" type="text" placeholder="Filter: status:fail  target:mm  <text>" aria-label="Filter the log" spellcheck="false" autocomplete="off" enterkeyhint="search">
                   </span>
                 </div>
-                <div class="pf-v6-c-input-group__item">
-                  <button id="log-filter-help" class="pf-v6-c-button pf-m-control console-log-filter__help" type="button" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">
-                    <span class="pf-v6-c-button__text" aria-hidden="true">?</span>
-                  </button>
-                </div>
               </div>
+            </div>
+            <!-- The shared help circle (console-render-help-glyph), not a control button welded to the
+                 field: the affordance is meant to be one identical glyph across every surface that has a
+                 query prompt, which is what the graph explorer's already is. -->
+            <div class="pf-v6-c-toolbar__item">
+              <button id="log-filter-help" class="console-render-help-glyph" type="button" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">?</button>
             </div>
 
             <!-- Responsive toggle-group: the secondary controls. wireToolbarOverflow() moves these
@@ -45,7 +46,7 @@
             <div class="pf-v6-c-toolbar__group pf-m-toggle-group pf-m-show-on-2xl pf-m-align-end-on-2xl" data-overflow-group="logbar">
               <div class="pf-v6-c-toolbar__toggle">
                 <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="More log controls" title="Show the view, time range, and clipboard/open controls">
-                  <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
+                  <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="8" r="2.6" fill="currentColor"/><circle cx="16" cy="16" r="2.6" fill="currentColor"/></svg></span>
                 </button>
               </div>
 

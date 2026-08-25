@@ -193,7 +193,7 @@ function build(host: HTMLElement, on: { onQuery: () => void; onRefresh: () => vo
   const query = document.createElement("input");
   query.type = "search";
   query.className = "pf-v6-c-text-input-group__text-input";
-  query.placeholder = "Filter runs - or click a facet";
+  query.placeholder = "Filter runs, or click a facet";
   query.setAttribute("aria-label", "Filter runs");
   query.spellcheck = false;
   query.autocomplete = "off";
@@ -213,7 +213,8 @@ function build(host: HTMLElement, on: { onQuery: () => void; onRefresh: () => vo
   main.append(textWrap);
   search.append(main);
 
-  const help = h("button", "pf-v6-c-button pf-m-control console-runs__help", "?");
+  // The shared help circle, identical to the graph explorer's and the log viewer's.
+  const help = h("button", "console-render-help-glyph console-runs__help", "?");
   help.setAttribute("type", "button");
   help.setAttribute("aria-label", "Filter syntax");
   help.title = FILTER_HELP;
@@ -451,7 +452,7 @@ function renderEmpty(
     card.append(h("h2", "console-runs__empty-title", "No runs kept yet"));
     card.append(
       note(
-        "Run a target and it shows up here - every run is kept, and you never need its ref to find " +
+        "Run a target and it shows up here. Every run is kept, and you never need its ref to find " +
           "it again. Try `magus run build` in this workspace, then Refresh.",
       ),
     );
