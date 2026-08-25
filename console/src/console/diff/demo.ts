@@ -397,6 +397,32 @@ export function applyDemoPublish(session: DiffSession): DiffSession {
   };
 }
 
+// applyDemoReply is the showcase's reply: the answer joins the thread it answers.
+//
+// Appended directly after the thread rather than at the end, because that is where a reply
+// belongs in a conversation, and a showcase that piled every answer at the bottom would teach
+// the reader a shape the real surface does not have.
+export function applyDemoReply(
+  review: ReviewInfo | null,
+  thread: string,
+  body: string,
+): ReviewInfo | null {
+  if (!review) return review;
+  const at = review.threads.findIndex((t) => t.id === thread);
+  if (at < 0) return review;
+  const answered = review.threads[at];
+  if (!answered) return review;
+  const threads = [...review.threads];
+  threads.splice(at + 1, 0, {
+    id: `${thread}-r`,
+    path: answered.path,
+    line: answered.line,
+    author: "you",
+    body,
+  });
+  return { ...review, threads };
+}
+
 // applyDemoOp is the showcase's stand-in for the daemon's session store: the reader's writes
 // land in memory instead of over HTTP.
 //

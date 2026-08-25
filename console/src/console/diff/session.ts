@@ -312,6 +312,29 @@ export async function publish(
   return (await res.json()) as DiffSession;
 }
 
+// reply answers one thread on the host's review.
+//
+// Throws like publish and for the same reason: it is a sentence a colleague is waiting for,
+// and a reader told it was sent when it never left will believe the conversation is finished.
+//
+// It returns nothing useful, deliberately. A reply belongs to the host's record, so the way to
+// see it is to re-read the review - which is also how the reader finds out what everyone else
+// said while they were typing.
+export async function reply(
+  host: string,
+  thread: string,
+  body: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`http://${host}/api/v1/diff/session`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ op: "reply", id: thread, body }),
+    signal,
+  });
+  if (!res.ok) throw new Error((await res.text()).trim() || `daemon answered ${res.status}`);
+}
+
 // HttpError carries the status so a caller can tell "no workspace yet" (503) from a real
 // failure and render the right empty state.
 export class HttpError extends Error {

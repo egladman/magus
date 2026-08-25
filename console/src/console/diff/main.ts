@@ -34,6 +34,7 @@ import {
 import {
   buildRows,
   byHunk,
+  commentKey,
   hunkRowIndexes,
   hunksRead,
   activeFileTarget,
@@ -63,6 +64,7 @@ import {
   fetchReviewSession,
   mutate,
   publish,
+  reply,
   HttpError,
   type DiffComment,
   type DiffSession,
@@ -70,7 +72,7 @@ import {
   type DiffTouch,
   type ReviewInfo,
 } from "./session";
-import { demoSession, demoReview, applyDemoPublish, applyDemoOp } from "./demo";
+import { demoSession, demoReview, applyDemoPublish, applyDemoReply, applyDemoOp } from "./demo";
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
@@ -1502,6 +1504,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
         box.append(r);
       }
     }
+    // Threads with nowhere in the stream to sit. They are READ here rather than merely
+    // counted: a chip saying "3 elsewhere" tells the reader something was said and withholds
+    // what, which is worse than not mentioning it - they now have to leave to find out.
+    const elsewhere = state.threads?.elsewhere ?? [];
+    if (elsewhere.length > 0) {
+      box.append(h("h3", "console-diff-overview__subtitle", "Said on the review, elsewhere"));
+      const why = h("p", "console-diff-overview__note");
+      why.textContent =
+        "These are on files this changeset does not touch. A review covers commits a working diff does not.";
+      box.append(why);
+      for (const t of elsewhere) {
+        const r = h("p", "console-diff-overview__note");
+        r.textContent = `${t.author} on ${t.path}:${t.line} - ${t.body}`;
+        box.append(r);
+      }
+    }
     box.append(
       h(
         "p",
@@ -1788,6 +1806,98 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   };
 
+  // replyHere answers the thread nearest the cursor, so a conversation can be finished without
+  // leaving for the browser.
+  //
+  // "Nearest" is the first thread rendered under the cursor's hunk, falling back to the file's.
+  // That is the same rule resolveHere uses, and it is the rule a reader already has in their
+  // head: the remark they can see.
+  const replyHere = (): void => {
+    const i = currentHunkRow();
+    const row = i === null ? undefined : state.rows[i];
+    if (row?.kind !== "hunk") return;
+    const key = commentKey(row.file.path, row.index);
+    const thread =
+      state.threads?.atHunk.get(key)?.[0] ?? state.threads?.atFile.get(row.file.path)?.[0];
+    if (!thread) {
+      flashPublishNotice("No thread here to answer. Press c to write a remark of your own.");
+      return;
+    }
+    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input input");
+    if (existing) {
+      existing.focus();
+      return;
+    }
+
+    const box = h("div", "console-diff-composer");
+    const where = h("span", "console-diff-composer__where");
+    // Who is being answered, not where. A reply goes to a PERSON, and naming the file again
+    // would repeat what the row above already says while omitting the part that matters.
+    where.textContent = `Reply to ${thread.author}`;
+    const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
+    const input = h("input", "pf-v6-c-form-control__text");
+    input.type = "text";
+    input.placeholder = "Enter to send, Esc to cancel.";
+    const close = (): void => {
+      box.remove();
+      scroll.focus();
+    };
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+        return;
+      }
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const body = input.value.trim();
+      if (!body) return;
+      input.disabled = true;
+      where.textContent = "Sending...";
+      void sendReply(thread.id, body).then((failure) => {
+        if (disposed) return;
+        if (!failure) {
+          close();
+          return;
+        }
+        // Held open with the words still in it, exactly as the send box is. A reply that did
+        // not leave has changed nothing, and retyping it would be a punishment for the forge.
+        input.disabled = false;
+        where.textContent = failure;
+        box.dataset.failed = "";
+        input.focus();
+      });
+    });
+    inputWrap.append(input);
+    box.append(where, inputWrap);
+    scroll.append(box);
+    input.focus();
+  };
+
+  // sendReply posts one reply and returns the failure to show, or "" when it left.
+  const sendReply = async (thread: string, body: string): Promise<string> => {
+    if (demo) {
+      // The showcase answers for real, into memory, so a reader trying it finds out what it
+      // does rather than meeting a dead key.
+      state.review = applyDemoReply(state.review, thread, body);
+      await rebuild();
+      return "";
+    }
+    const hp = host_();
+    if (!hp) return "Connect a daemon to reply.";
+    try {
+      await reply(hp, thread, body, controller.signal);
+      if (disposed) return "";
+      // Re-read rather than appending locally: the thread belongs to the host, and this is
+      // also how the reader finds out what else was said while they were typing.
+      await loadReview();
+      return "";
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
+
   // resolveHere closes the first unresolved comment on the hunk the cursor is in. Either party
   // may resolve - see the store - so this needs no author check.
   const resolveHere = (): void => {
@@ -1943,6 +2053,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       label: "Diff: send your drafts to the review",
       run: composePublish,
       key: "s",
+    },
+    {
+      id: "diff.thread.reply",
+      label: "Diff: reply to the thread here",
+      run: replyHere,
+      key: "a",
     },
     {
       id: "diff.context.peek",

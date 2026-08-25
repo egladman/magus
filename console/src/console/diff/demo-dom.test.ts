@@ -299,3 +299,68 @@ test("#demo answers a send with nothing drafted", async () => {
 
   dispose.deactivate();
 });
+
+// Replying is what makes this a conversation rather than a reader. The contract half existed
+// in the spell from the start and nothing called it; these pin the path from a key to a thread
+// that has an answer under it.
+test("#demo answers the thread under the cursor", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.thread.reply"));
+  const box = document.querySelector<HTMLElement>(".console-diff-composer");
+  assert.ok(box, "a thread on the first hunk has to be answerable");
+  // Who is being answered, not where: a reply goes to a person, and the row above already
+  // says which file.
+  assert.match(box?.textContent ?? "", /Reply to priya/);
+
+  const input = box?.querySelector<HTMLInputElement>("input");
+  assert.ok(input);
+  input.value = "one service. I will pin it in the docstring.";
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await settle();
+
+  assert.equal(document.querySelector(".console-diff-composer"), null, "the box closes");
+  const said = [...document.querySelectorAll('.console-diff-row[data-author="review"]')].map(
+    (el) => el.textContent,
+  );
+  assert.ok(
+    said.some((t) => t?.includes("I will pin it in the docstring")),
+    "the reply joins the thread it answers",
+  );
+  dispose.deactivate();
+});
+
+// A hunk nobody has remarked on must say so rather than opening an empty box addressed to
+// nobody.
+test("#demo says when there is no thread here to answer", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  // Step to a file the review has not been commented on, then ask to reply.
+  for (let i = 0; i < 4; i++) assert.ok(dispatchCommand("diff.file.next"));
+  dispatchCommand("diff.thread.reply");
+  assert.equal(document.querySelector(".console-diff-composer"), null);
+  assert.match(
+    document.querySelector(".console-diff-collaboration")?.textContent ?? "",
+    /No thread here to answer/,
+  );
+  dispose.deactivate();
+});
+
+// The threads with nowhere in the stream to sit are READ in the overview, not merely counted.
+// A chip saying "1 elsewhere" tells the reader something was said and withholds what, which
+// leaves them worse off than not mentioning it at all.
+test("#demo lets the elsewhere threads be read, not just counted", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.overview"));
+  const text = document.querySelector(".console-diff-overview")?.textContent ?? "";
+  assert.match(text, /Said on the review, elsewhere/);
+  assert.match(text, /scope-only tokens on the health path/);
+  dispose.deactivate();
+});

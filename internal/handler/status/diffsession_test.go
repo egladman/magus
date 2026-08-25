@@ -157,3 +157,39 @@ func TestReviewLookupWithoutAWorkspace(t *testing.T) {
 		t.Fatalf("want the workspace-less reason, got %#v", got)
 	}
 }
+
+// A reply is outward-facing, so it fails the way publish does rather than the way a cursor
+// sync does. A caller told the reply was sent when it never left believes the conversation is
+// finished, and the colleague waiting on it hears nothing.
+func TestReplyFailsLoudlyWithNoProvider(t *testing.T) {
+	root := t.TempDir()
+	store := diff.NewStore("")
+	h := NewDiffSessionHandler(store, fixedOrigin{branch: "feat/x"}, root, "", nil)
+	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
+
+	w := post(t, h, `{"op":"reply","id":"th1","body":"agreed"}`)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("want 502, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "no review provider wired") {
+		t.Fatalf("the reason must travel, got %q", w.Body.String())
+	}
+}
+
+// An empty reply is caught before a provider is consulted. "Nothing to say" is the caller's
+// mistake, not the host's, and reporting it as a bad gateway would send the reader looking at
+// their network.
+func TestAnEmptyReplyIsRefusedBeforeTheHostIsAsked(t *testing.T) {
+	root := t.TempDir()
+	store := diff.NewStore("")
+	h := NewDiffSessionHandler(store, fixedOrigin{branch: "feat/x"}, root, "", nil)
+	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
+
+	w := post(t, h, `{"op":"reply","id":"th1"}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "something to say") {
+		t.Fatalf("want the empty-body reason, got %q", w.Body.String())
+	}
+}

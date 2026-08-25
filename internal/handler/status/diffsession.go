@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/diff"
@@ -59,7 +60,7 @@ func NewDiffSessionHandler(sessions *diff.Store, origin originSource, root, cach
 // reviewSessionRequest is the wire shape. Op names the mutation; the rest are its arguments,
 // and which ones matter depends on Op.
 type reviewSessionRequest struct {
-	// Op is one of: cursor, viewed, comment, resolve, answer, publish.
+	// Op is one of: cursor, viewed, comment, resolve, answer, publish, reply.
 	Op string `json:"op"`
 	// cursor
 	Path string `json:"path,omitempty"`
@@ -76,7 +77,8 @@ type reviewSessionRequest struct {
 	// Line is the position an inline comment anchors to on the new side. A hunk index cannot
 	// serve: it means nothing outside the session that produced it.
 	Line int `json:"line,omitempty"`
-	// resolve / answer
+	// resolve / answer, and the THREAD for reply. One field because they are the same
+	// question - which one - and never asked together.
 	ID string `json:"id,omitempty"`
 }
 
@@ -108,16 +110,9 @@ func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionReque
 		return sess, nil
 	}
 
-	if h.origin == nil {
-		return nil, errors.New("this daemon has no workspace to publish from")
-	}
-	from := h.origin.ReviewOrigin(ctx)
-	at := bindings.OpenReview(ctx, from.Branch, from.Remote)
-	if !at.Open() {
-		// The reason travels: "no provider wired", "no pull request for this branch" and "the
-		// host was unreachable" are different sentences for the reader even though none is
-		// their fault, and a bare "cannot publish" would leave them guessing which.
-		return nil, errors.New(at.Reason)
+	at, err := h.openReview(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if _, err := bindings.PublishReview(ctx, at, req.Summary, drafts); err != nil {
 		return nil, err
@@ -126,6 +121,40 @@ func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionReque
 		sess = h.sessions.MarkPublished(h.root, d.ID, "")
 	}
 	return sess, nil
+}
+
+// reply answers one thread on the host's review.
+//
+// Loud like publish, and for the same reason: it is a sentence a colleague is waiting for.
+// It touches no session state at all - a reply belongs to the host's record, and a local copy
+// would be a second version of a conversation that already has one. The client re-reads the
+// review to see it, which is also how it finds out what everyone ELSE said meanwhile.
+func (h *DiffSessionHandler) reply(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
+	at, err := h.openReview(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := bindings.ReplyReview(ctx, at, req.ID, req.Body); err != nil {
+		return nil, err
+	}
+	return h.sessions.Get(h.root), nil
+}
+
+// openReview resolves the review both outward-facing ops need, or the reason there is none.
+//
+// The reason TRAVELS: "no provider wired", "no pull request for this branch" and "the host was
+// unreachable" are different sentences for the reader even though none is their fault, and a
+// bare "cannot publish" would leave them guessing which.
+func (h *DiffSessionHandler) openReview(ctx context.Context) (types.ReviewTarget, error) {
+	if h.origin == nil {
+		return types.ReviewTarget{}, errors.New("this daemon has no workspace to publish from")
+	}
+	from := h.origin.ReviewOrigin(ctx)
+	at := bindings.OpenReview(ctx, from.Branch, from.Remote)
+	if !at.Open() {
+		return types.ReviewTarget{}, errors.New(at.Reason)
+	}
+	return at, nil
 }
 
 func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
@@ -181,6 +210,23 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		sess, err = h.publish(r.Context(), req)
 		if err != nil {
 			http.Error(w, "publish: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+	case "reply":
+		// Checked HERE, so an incomplete request is a 400 and not a 502. "You sent nothing to
+		// say" and "the host refused" are different failures, and answering the first as a bad
+		// gateway sends the reader to look at their network for a mistake in their own call.
+		if req.ID == "" || strings.TrimSpace(req.Body) == "" {
+			http.Error(w, "reply: a reply needs a thread and something to say", http.StatusBadRequest)
+			return
+		}
+		// Outward-facing, so it fails the same way publish does. ID names a THREAD here rather
+		// than a local comment: the two id spaces never meet, because one belongs to the host
+		// and the other to this session.
+		var err error
+		sess, err = h.reply(r.Context(), req)
+		if err != nil {
+			http.Error(w, "reply: "+err.Error(), http.StatusBadGateway)
 			return
 		}
 	case "resolve":

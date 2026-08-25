@@ -77,6 +77,30 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, d
 	return intOf(m["count"]), nil
 }
 
+// ReplyReview answers one existing thread, so a conversation can be finished without leaving.
+//
+// Loud, like PublishReview and unlike the two read paths: a reply is a sentence a colleague is
+// waiting for, and a caller told it was sent when it was not will believe the conversation is
+// finished. A spell that answers false without erroring is reported as a refusal here rather
+// than passed off as success - the ONLY thing this function may not do is stay quiet.
+func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string) error {
+	drv, ok := reviewDriver()
+	if !ok {
+		return fmt.Errorf("no review provider wired; a magusfile selects one with magus\\review.provider(<spell>)")
+	}
+	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
+		Target: spells.ReplyReviewContract,
+		Params: map[string]any{"repo": at.Repo, "number": at.Number, "thread": thread, "body": body},
+	})
+	if err != nil {
+		return err
+	}
+	if sent, _ := resp.Data.(bool); !sent {
+		return fmt.Errorf("the host did not accept a reply to thread %s", thread)
+	}
+	return nil
+}
+
 // ReviewThreads reads the comment threads already on the review.
 //
 // Empty on every failure, for the reason OpenReview gives about itself: this is the one call
