@@ -71,7 +71,7 @@ func notesUsage() {
 	fmt.Fprintln(os.Stderr, "  get      show one note")
 	fmt.Fprintln(os.Stderr, "  edit     open one note in $VISUAL or $EDITOR (creates it if absent)")
 	fmt.Fprintln(os.Stderr, "  verify   check malformed notes and anchors that no longer resolve")
-	fmt.Fprintln(os.Stderr, "  capture  keep the running review session's comment thread as a note")
+	fmt.Fprintln(os.Stderr, "  capture  keep the review conversation, yours and the pull request's, as a note")
 	fmt.Fprintln(os.Stderr, "  promote  edit an agent-drafted memory record into a note of your own")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Set knowledge.notes.shared (in the repo, your team gets it) or knowledge.notes.private")
@@ -789,7 +789,10 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	if sess == nil {
 		return errors.New("magus notes capture: no review session to capture. Comments live in the running daemon, so this needs `magus server start` and a review already under way")
 	}
-	if len(sess.Comments) == 0 {
+	// The colleagues' half. Read separately and never required: a review with no forge behind
+	// it is the ordinary case, and the local conversation is worth keeping on its own.
+	threads := daemonReviewThreads(ctx)
+	if len(sess.Comments) == 0 && len(threads) == 0 {
 		return errors.New("magus notes capture: this review has no comments yet, and a transcript of an empty conversation is not worth a note")
 	}
 
@@ -818,7 +821,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	}
 	target := stores[0]
 
-	capture := captureFromSession(sess, title, tags)
+	capture := captureFromSession(sess, threads, title, tags)
 	noteName := name
 	if noteName == "" {
 		noteName = captureName(sess)
@@ -841,8 +844,11 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus notes capture: wrote %q, but it does not read back as a note: %w", noteName, err)
 	}
+	// Every remark, both halves. Counting only the local ones would understate a transcript
+	// whose most useful line came from somebody else.
+	said := len(sess.Comments) + len(threads)
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
-		len(sess.Comments), pluralSuffix(len(sess.Comments), "", "s"),
+		said, pluralSuffix(said, "", "s"),
 		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
 
 	// Fingerprint the anchored files, exactly as a written note is fingerprinted on save. It
@@ -867,31 +873,50 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 // captureFromSession maps a review session onto the store's source-agnostic capture shape.
 // The mapping lives here rather than in internal/notes so the store never has to know what a
 // diff is - and so a second source can be added without it learning.
-func captureFromSession(sess *types.DiffSession, title string, tags []string) store.Capture {
+//
+// threads are the remarks already on the host's review, and they are captured ALONGSIDE the
+// session's own. A transcript holding only your half of a conversation is not a transcript of
+// the conversation: the question a reader has months later is what was decided, and the answer
+// is nearly always in what somebody else said back.
+func captureFromSession(sess *types.DiffSession, threads []types.ReviewThread, title string, tags []string) store.Capture {
 	// Grouped by file, because that is how a reviewer looks for a thread later ("what did we
 	// say about key.go"). Comment order within a file is left alone: it is the order the
 	// conversation happened in, and sorting it would break the replies.
-	byPath := map[string][]types.DiffComment{}
+	byPath := map[string][]store.CaptureEntry{}
 	paths := []string{}
-	for _, c := range sess.Comments {
-		if _, seen := byPath[c.Path]; !seen {
-			paths = append(paths, c.Path)
+	add := func(path string, e store.CaptureEntry) {
+		if _, seen := byPath[path]; !seen {
+			paths = append(paths, path)
 		}
-		byPath[c.Path] = append(byPath[c.Path], c)
+		byPath[path] = append(byPath[path], e)
+	}
+	// The host's threads first, per file. What a colleague said usually came before the
+	// remark it provoked, and a transcript that opened with the reply reads backwards.
+	for _, t := range threads {
+		add(t.Path, store.CaptureEntry{
+			Subject: t.Path,
+			Locator: store.LineLocator(t.Line),
+			// The author the host reported, verbatim. Nothing here verifies it, and nothing
+			// should: a capture records who a conversation says spoke, and a store that
+			// second-guessed that would be making the authorship claim it exists to avoid.
+			Author: t.Author,
+			Body:   t.Body,
+		})
+	}
+	for _, c := range sess.Comments {
+		add(c.Path, store.CaptureEntry{
+			Subject:  c.Path,
+			Locator:  store.HunkLocator(c.Hunk),
+			Author:   commentAuthor(c),
+			Body:     c.Body,
+			Resolved: c.Resolved,
+		})
 	}
 	sort.Strings(paths)
 
 	entries := []store.CaptureEntry{}
 	for _, p := range paths {
-		for _, c := range byPath[p] {
-			entries = append(entries, store.CaptureEntry{
-				Subject:  c.Path,
-				Locator:  store.HunkLocator(c.Hunk),
-				Author:   commentAuthor(c),
-				Body:     c.Body,
-				Resolved: c.Resolved,
-			})
-		}
+		entries = append(entries, byPath[p]...)
 	}
 	return store.Capture{
 		Title: firstNonEmpty(title, "Review thread on "+firstNonEmpty(sess.Base, "the working tree")),
@@ -970,6 +995,41 @@ func daemonDiffSession(ctx context.Context) *types.DiffSession {
 		return nil
 	}
 	return &sess
+}
+
+// daemonReviewThreads reads the comment threads on the review this branch has open.
+//
+// Nil on every failure, and there are many ordinary ones: no daemon, no provider wired, no
+// pull request, a forge that did not answer. None of them is a reason to refuse a capture -
+// the local half of the conversation is still worth keeping - so the caller gets an empty
+// list and captures what it has.
+func daemonReviewThreads(ctx context.Context) []types.ReviewThread {
+	token, err := auth.Load()
+	if err != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+mcpAddrString()+"/api/v1/diff/review", nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var body struct {
+		Threads []types.ReviewThread `json:"threads"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil
+	}
+	return body.Threads
 }
 
 // tagList collects a repeatable --tag flag.

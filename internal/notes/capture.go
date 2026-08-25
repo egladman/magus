@@ -204,3 +204,17 @@ func HunkLocator(hunk int) string {
 	}
 	return "hunk " + strconv.Itoa(hunk)
 }
+
+// LineLocator renders a line number for a source that anchors by line, as a forge's inline
+// comment does.
+//
+// A SEPARATE spelling from HunkLocator, not a shared "position": a hunk index is a coordinate
+// in one patch and a line number is a coordinate in a file, and a heading that blurred them
+// would leave a later reader unable to tell which they were looking at - by which time the
+// patch is long gone and only one of the two still means anything.
+func LineLocator(line int) string {
+	if line <= 0 {
+		return ""
+	}
+	return "line " + strconv.Itoa(line)
+}
