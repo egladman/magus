@@ -529,3 +529,31 @@ func TestSecretGrantArgRejectsNoArguments(t *testing.T) {
 		})
 	}
 }
+
+// magus\review.provider is the fourth provider namespace, wired exactly as the other three:
+// a magusfile names WHERE its changes are discussed, and everything a review actually does is
+// a reserved name on the spell rather than a member here.
+func TestReviewProviderTakesASpellHandle(t *testing.T) {
+	t.Cleanup(func() { SetReviewProvider("") })
+	ns := buildReviewNS(t.Context(), nil)
+
+	handle := vm.NewMap()
+	handle.MapSet("name", vm.StrValue("github"))
+	require.NoError(t, callVoidDirect(t, requireDirect(t, ns, "provider"), handle))
+	assert.Equal(t, "github", ReviewProvider())
+
+	// A bare string is the mistake worth naming: it looks like it should work, and accepting
+	// it would select a provider that never resolves to a spell.
+	assert.Error(t, callVoidDirect(t, requireDirect(t, ns, "provider"), vm.StrValue("github")))
+	// A map that is not a spell handle carries no name to select by.
+	assert.Error(t, callVoidDirect(t, requireDirect(t, ns, "provider"), vm.NewMap()))
+}
+
+// No provider is the ORDINARY state, not a failure: a workspace that never wires one reviews
+// locally and publishes nowhere. Callers branch on this, so it must be distinguishable from a
+// provider that was selected and then failed.
+func TestNoReviewProviderIsEmptyRatherThanAnError(t *testing.T) {
+	t.Cleanup(func() { SetReviewProvider("") })
+	SetReviewProvider("")
+	assert.Equal(t, "", ReviewProvider())
+}

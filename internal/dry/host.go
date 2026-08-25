@@ -130,6 +130,13 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	ci.MapSet("provider", fn("magus.ci.provider", retNull))
 	m.MapSet("ci", ci)
 
+	// magus.review.<...>: selects the spell that connects this workspace to wherever its
+	// changes are discussed. Stubbed for the same reason as the two above - a magusfile calls
+	// it at top level, and the playground has no VM able to resolve a spell handle.
+	review := vm.NewMap()
+	review.MapSet("provider", fn("magus.review.provider", retNull))
+	m.MapSet("review", review)
+
 	// magus.secret.<...>: selects the secret provider spell and reads a credential
 	// through it in the real module. provider() stubs to a no-op like the two above.
 	//
