@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2376,
-  "edge_count": 6058,
+  "edge_count": 6059,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -32436,6 +32436,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/pr-advice.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/pr-advice.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/guides/integrations/pr-advice.md"
     },
     {

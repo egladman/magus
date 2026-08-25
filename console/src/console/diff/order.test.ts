@@ -229,14 +229,19 @@ test("a file covered by a receipt says so quietly", () => {
   assert.equal(chips[0]?.tone, "ok");
 });
 
-// Most files in most changesets are unread, so a chip there would sit on nearly every row and
-// teach the eye to skip the rail that carries public-surface and reach. An ABSENT state is a
-// different claim again - nobody checked - and must not render as unread either.
-test("unread and unmeasured show no chip at all", () => {
-  assert.deepEqual(
-    riskChips(ann("x.go", { read_state: "unread" })).map((c) => c.text),
-    [],
-  );
+// In a viewer the reader is working THROUGH a list, so an outstanding row says so - the same
+// job GitHub's per-file Viewed checkbox does. The terminal report names only the finding,
+// because there nobody is navigating.
+test("an unread file says so, quietly", () => {
+  const chips = riskChips(ann("x.go", { read_state: "unread" }));
+  assert.equal(chips[0]?.text, "unread");
+  assert.equal(chips[0]?.tone, "neutral");
+  assert.match(chips[0]?.title ?? "", /--ack/);
+});
+
+// An ABSENT state is a different claim: nobody checked. Rendering it as unread would turn
+// "unmeasured" into an accusation, which is the collapse the state constants exist to refuse.
+test("an unmeasured file shows no read chip at all", () => {
   assert.deepEqual(
     riskChips(ann("x.go", {})).map((c) => c.text),
     [],

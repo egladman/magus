@@ -129,14 +129,13 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   if (!a) return [];
   const chips: Chip[] = [];
 
-  // Read state leads, and only ever to say something happened. "stale" means the reader
-  // looked and then the file moved under them, which no amount of marking hunks produces and
-  // which nothing else here can tell them.
+  // Read state leads. In a viewer the reader is working THROUGH a list, so which rows are
+  // still outstanding is the navigation they came for - the same job GitHub's per-file Viewed
+  // checkbox does, and the reason all three states show here while the terminal report names
+  // only the finding.
   //
-  // "unread" and an absent state deliberately show NOTHING. Most files in most changesets are
-  // unread, so a chip there would sit on nearly every row and teach the eye to skip the rail
-  // that carries public-surface and reach. Absent additionally means nobody checked, which is
-  // not the same claim as unread.
+  // An ABSENT state still shows nothing, and that is not the same call: absent means nobody
+  // checked, and rendering it as unread would turn "unmeasured" into an accusation.
   if (a.read_state === "stale") {
     chips.push({
       text: "changed since read",
@@ -152,6 +151,14 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
       title:
         "A read receipt covers this file at its current content. " +
         "Editing it voids the receipt.",
+    });
+  } else if (a.read_state === "unread") {
+    chips.push({
+      text: "unread",
+      tone: "neutral",
+      title:
+        "Nobody has recorded reading this file. Read it through here, or record it " +
+        "from wherever you did read it with `magus diff --ack <path>`.",
     });
   }
 
