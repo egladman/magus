@@ -669,6 +669,34 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 	return tracked + untracked, nil
 }
 
+// ReviewOrigin reports the branch this tree is on and the remote it would be pushed to, for a
+// caller asking a provider which review is open.
+//
+// Never an error. A workspace with no VCS, a backend that cannot name a remote, a detached
+// HEAD: all of them yield an empty field, and every one is an ordinary state of a tree rather
+// than a failure. The caller's next question - "is a review open?" - has the same answer for
+// all of them, so making this fail would only move a branch nobody needs up a layer.
+//
+// The remote is read through the optional RemoteReporter capability rather than by shelling a
+// git command, so it works on every backend that implements one and degrades to empty on the
+// ones that do not.
+func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return types.ReviewOrigin{}
+	}
+	var out types.ReviewOrigin
+	if meta, err := res.VCS.Metadata(ctx, m.ws.Root); err == nil {
+		out.Branch = meta.Ref
+	}
+	if reporter, ok := res.VCS.(types.RemoteReporter); ok {
+		if remote, err := reporter.RemoteURL(ctx, m.ws.Root); err == nil {
+			out.Remote = remote
+		}
+	}
+	return out
+}
+
 // untrackedPatch synthesizes a unified patch for files the VCS does not track yet: every line
 // is an addition against /dev/null, which is exactly how git renders a new file.
 //

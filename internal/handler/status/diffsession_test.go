@@ -14,7 +14,7 @@ import (
 func TestDiffSessionHandler_GetReadsAttachedSessionWithoutMutatingIt(t *testing.T) {
 	root := t.TempDir()
 	store := diff.NewStore("")
-	h := NewDiffSessionHandler(store, root, "", nil)
+	h := NewDiffSessionHandler(store, fixedOrigin{branch: "feat/x"}, root, "", nil)
 
 	missing := httptest.NewRecorder()
 	h.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/api/v1/diff/session", nil))
@@ -53,11 +53,11 @@ func post(t *testing.T, h *DiffSessionHandler, body string) *httptest.ResponseRe
 func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 	root := t.TempDir()
 	store := diff.NewStore("")
-	h := NewDiffSessionHandler(store, root, "", nil)
+	h := NewDiffSessionHandler(store, fixedOrigin{branch: "feat/x"}, root, "", nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "why"}, types.DiffAuthorHuman)
 
-	w := post(t, h, `{"op":"publish","branch":"feat/x","remote":"git@github.com:acme/acme.git"}`)
+	w := post(t, h, `{"op":"publish"}`)
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("want 502, got %d: %s", w.Code, w.Body.String())
 	}
@@ -78,10 +78,10 @@ func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 func TestPublishingNothingIsNotAnError(t *testing.T) {
 	root := t.TempDir()
 	store := diff.NewStore("")
-	h := NewDiffSessionHandler(store, root, "", nil)
+	h := NewDiffSessionHandler(store, fixedOrigin{branch: "feat/x"}, root, "", nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
-	if w := post(t, h, `{"op":"publish","branch":"feat/x"}`); w.Code != http.StatusOK {
+	if w := post(t, h, `{"op":"publish"}`); w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
@@ -92,12 +92,12 @@ func TestPublishingNothingIsNotAnError(t *testing.T) {
 func TestAnAgentCommentIsNotPublishable(t *testing.T) {
 	root := t.TempDir()
 	store := diff.NewStore("")
-	h := NewDiffSessionHandler(store, root, "", nil)
+	h := NewDiffSessionHandler(store, fixedOrigin{branch: "feat/x"}, root, "", nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 2, Body: "agent"}, types.DiffAuthorAgent)
 
 	// Only an agent comment exists, so there is nothing to send and no provider is consulted.
-	if w := post(t, h, `{"op":"publish","branch":"feat/x"}`); w.Code != http.StatusOK {
+	if w := post(t, h, `{"op":"publish"}`); w.Code != http.StatusOK {
 		t.Fatalf("an agent draft must not be publishable, got %d: %s", w.Code, w.Body.String())
 	}
 }

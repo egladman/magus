@@ -29,16 +29,29 @@ import (
 type DiffSessionHandler struct {
 	handler.Base
 	sessions *diff.Store
+	origin   originSource
 	root     string
 	// cacheDir is where read receipts live. Empty disables minting, which is what a
 	// workspace-less daemon and this package's tests get.
 	cacheDir string
 }
 
+// originSource is the narrow contract publishing needs: where this tree's changes would be
+// discussed. Satisfied by *console.Service, matching the other source interfaces in this
+// package.
+//
+// The daemon answers this, never the client. A browser knows the paths it is reviewing and
+// nothing about remotes, and a client that supplied one could point a review at a repository
+// this workspace is not in.
+type originSource interface {
+	ReviewOrigin(ctx context.Context) types.ReviewOrigin
+}
+
 // NewDiffSessionHandler returns the paired-review handler. cacheDir may be empty, which
-// serves the session without recording read receipts.
-func NewDiffSessionHandler(sessions *diff.Store, root, cacheDir string, log *slog.Logger) *DiffSessionHandler {
-	h := &DiffSessionHandler{sessions: sessions, root: root, cacheDir: cacheDir}
+// serves the session without recording read receipts; origin may be nil, which serves
+// everything except publishing.
+func NewDiffSessionHandler(sessions *diff.Store, origin originSource, root, cacheDir string, log *slog.Logger) *DiffSessionHandler {
+	h := &DiffSessionHandler{sessions: sessions, origin: origin, root: root, cacheDir: cacheDir}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -57,11 +70,8 @@ type reviewSessionRequest struct {
 	// comment
 	Body   string `json:"body,omitempty"`
 	Anchor string `json:"anchor,omitempty"`
-	// publish: the branch and remote magus resolved, and the summary heading the review.
-	// Passed in rather than rediscovered so the spell never forms its own opinion of the
-	// working tree - see bindings.OpenReview.
-	Branch  string `json:"branch,omitempty"`
-	Remote  string `json:"remote,omitempty"`
+	// publish: the summary heading the review. The branch and remote are NOT here - the
+	// daemon resolves those itself, so a client cannot aim a review at another repository.
 	Summary string `json:"summary,omitempty"`
 	// Line is the position an inline comment anchors to on the new side. A hunk index cannot
 	// serve: it means nothing outside the session that produced it.
@@ -98,7 +108,11 @@ func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionReque
 		return sess, nil
 	}
 
-	at := bindings.OpenReview(ctx, req.Branch, req.Remote)
+	if h.origin == nil {
+		return nil, errors.New("this daemon has no workspace to publish from")
+	}
+	from := h.origin.ReviewOrigin(ctx)
+	at := bindings.OpenReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
 		// The reason travels: "no provider wired", "no pull request for this branch" and "the
 		// host was unreachable" are different sentences for the reader even though none is

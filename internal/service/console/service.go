@@ -311,6 +311,16 @@ func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, erro
 	return s.magus.WorkingDiff(ctx, paths)
 }
 
+// ReviewOrigin reports the branch and remote a provider needs to find the review open for this
+// tree. Empty on a workspace-less service, which is the same answer a tree with no remote
+// gives and needs no separate branch in any caller.
+func (s *Service) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
+	if s.magus == nil {
+		return types.ReviewOrigin{}
+	}
+	return s.magus.ReviewOrigin(ctx)
+}
+
 // Diff annotates a changed-path set: role, owning project, changed-symbol reach, coverage,
 // and the blast radius, ordered by what magus recommends reading first.
 //

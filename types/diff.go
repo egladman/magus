@@ -339,6 +339,22 @@ type DiffComment struct {
 	Line int `json:"line,omitempty" yaml:"line,omitempty"`
 }
 
+// ReviewOrigin is where a working tree's changes would be discussed: the movable name they
+// sit on, and the remote they would be pushed to.
+//
+// Two VCS facts, resolved by magus and handed to a provider spell rather than discovered by
+// it. A spell rederiving them would be a second opinion about the same working tree, and one
+// that only knows its own host's conventions where magus already speaks four backends.
+//
+// Either field may be empty, and that is ordinary rather than an error: a detached HEAD has no
+// branch, a tree with no remote has no remote, and a workspace with no VCS at all has neither.
+// A provider answers "no review" for all three, which is what the reader sees anyway when the
+// branch simply has no pull request open.
+type ReviewOrigin struct {
+	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
+	Remote string `json:"remote,omitempty" yaml:"remote,omitempty"`
+}
+
 // ReviewTarget is the review a branch has open, or the reason it has none.
 //
 // "No provider wired", "no pull request for this branch" and "the host was unreachable" are

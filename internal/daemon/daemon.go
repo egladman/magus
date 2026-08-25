@@ -279,7 +279,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 			diffRoot := opts.Magus.Root()
 			diffH := status.NewDiffHandler(svc, diffSessions, diffRoot, log)
-			diffSessionH := status.NewDiffSessionHandler(diffSessions, diffRoot, opts.Magus.CacheDir(), log)
+			diffSessionH := status.NewDiffSessionHandler(diffSessions, svc, diffRoot, opts.Magus.CacheDir(), log)
+			diffReviewH := status.NewDiffReviewHandler(svc, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 			runsH := viewer.NewRunsHandler(outputStore, log)
@@ -319,6 +320,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// CLI, which is what lets it stamp every write as human without trusting the
 			// payload - an agent reaches the session through MCP, never through here.
 			bridgeMux.Handle("/api/v1/diff/session", cors(diffSessionH))
+			// Which review this branch has open, and what colleagues have already said on it.
+			// Its own route because it crosses the network to a forge: a reader must never wait
+			// on somebody else's outage to see their own diff.
+			bridgeMux.Handle("/api/v1/diff/review", cors(diffReviewH))
 			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
 			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
