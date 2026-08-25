@@ -220,6 +220,18 @@ func ackChangeset(root, cacheDir string, rev types.Diff, reason string, now time
 // Nil is a real answer here and the common one. A section that always prints is a section
 // people stop reading, and this one has nothing to say about a small change nobody has
 // disturbed since reading.
+//
+// It STAYS in the impact report, though a review argued for moving it to the stepping surface
+// on the grounds that a report about what landing costs is the wrong home for what a reader
+// has read. That was fair when the viewer was a flag you opted into and this report was the
+// only surface most people saw. It stopped being fair twice over: the viewer is what opens at
+// a terminal now, so it is not a corner anything gets hidden in - and the viewer counts hunks
+// read but has no notion of STALE. "This changed after you read it" is the half of this
+// section worth having, and there is nowhere else it is said.
+//
+// The additive version of that review's point is still open and still good: teach the viewer
+// stale state, so a reader stepping through sees which files moved under them. That is worth
+// doing. It is not a reason to take the only telling of it out of the report first.
 func impactReviewLines(r *impactReview) []string {
 	if r == nil {
 		return []string{"REVIEW: read receipts unavailable; step a file through in `magus diff` to earn one"}
