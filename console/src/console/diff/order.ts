@@ -138,7 +138,7 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
       title:
         (api.length > 0 ? `Exported from the module: ${api.slice(0, 8).join(", ")}. ` : "") +
         (across.length > 0 ? `Also used by: ${across.join(", ")}. ` : "") +
-        "A change here is API surface - consider whether it needs a version bump.",
+        "A change here is API surface. Consider whether it needs a version bump.",
     });
   }
 

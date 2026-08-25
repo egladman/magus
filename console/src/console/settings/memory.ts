@@ -268,7 +268,7 @@ export function buildMemorySection(
       listEl.append(
         buildEmpty(
           "No memories yet",
-          "Agents record memories as they work. Each is a typed pointer into the codebase - a saved query, a node, an output ref - so there is nothing to write by hand here; use Add memory only to seed one.",
+          "Agents record memories as they work. Each is a typed pointer into the codebase (a saved query, a node, an output ref), so there is nothing to write by hand here; use Add memory only to seed one.",
         ),
       );
       return;
@@ -320,7 +320,7 @@ export function buildMemorySection(
   // This is the ONE place a free-text blob is correct - it is a snapshot, not a record.
   function buildCursorCard(content: string): HTMLElement {
     const card = h("div", "console-settings-memory__cursor");
-    card.append(h("h3", "console-settings-memory__title", "Resume - where you left off"));
+    card.append(h("h3", "console-settings-memory__title", "Resume where you left off"));
     const area = h("textarea");
     area.rows = 3;
     area.spellcheck = false;
@@ -414,7 +414,7 @@ export function buildMemorySection(
     const renderRefs = (): void => {
       refsBox.replaceChildren();
       refsBox.append(
-        h("label", "console-settings-memory__label", "Refs (the payload - at least one)"),
+        h("label", "console-settings-memory__label", "Refs (the payload, at least one)"),
       );
       drafts.forEach((d, i) =>
         refsBox.append(
@@ -439,7 +439,7 @@ export function buildMemorySection(
     const bodyArea = h("textarea");
     bodyArea.id = bodyId;
     bodyArea.rows = 2;
-    bodyArea.placeholder = "Caption - the why (decision/plan only)";
+    bodyArea.placeholder = "Caption: the why (decision/plan only)";
     bodyArea.value = rec?.body ?? "";
     const bodyLabel = h("label", "console-settings-memory__label", "Caption");
     bodyLabel.htmlFor = bodyId;

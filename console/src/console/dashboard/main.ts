@@ -414,7 +414,7 @@ function mountTiles(): void {
   appendSection(
     "runtime",
     "Runtime",
-    "Capacity, locks, and cache health - the constraints around that work.",
+    "Capacity, locks, and cache health: the constraints around that work.",
   );
   appendSection(
     "diagnostics",

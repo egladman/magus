@@ -431,7 +431,7 @@ export function insightSection(
   refresh.title = "Refetch the insight lenses now";
   refresh.addEventListener("click", () => {
     refresh.disabled = true;
-    refresh.textContent = "Refreshing…";
+    refresh.textContent = "Refreshing...";
     void onRefresh().finally(() => {
       refresh.disabled = false;
       refresh.textContent = "Refresh";

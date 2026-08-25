@@ -1103,7 +1103,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
         buildSection(
           "Access tokens",
           tokensSection.el,
-          "List and revoke the daemon's connector tokens and the active read-only share token. Minting stays a CLI-only operation - the console can never create a token.",
+          "List and revoke the daemon's connector tokens and the active read-only share token. Minting stays a CLI-only operation: the console can never create a token.",
         ),
       ),
     },
@@ -1114,7 +1114,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
         buildSection(
           "Agent memory",
           memorySection.el,
-          "View, edit, and prune the durable memory records agents write across sessions - typed pointers into the codebase, not free notes. Editing is the safety valve against the store growing unbounded.",
+          "View, edit, and prune the durable memory records agents write across sessions: typed pointers into the codebase, not free notes. Editing is the safety valve against the store growing unbounded.",
         ),
       ),
     },
