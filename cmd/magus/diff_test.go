@@ -801,3 +801,16 @@ func TestGitExternalDiffIsRefusedWithTheSettingThatWorks(t *testing.T) {
 	assert.Contains(t, err.Error(), "at most one patch argument")
 	assert.NotContains(t, err.Error(), "pager.diff")
 }
+
+// A VCS colorizes when it believes it is writing to a terminal, which is precisely the case
+// when magus is its pager - so the first patch a reader ever hands over through the wiring in
+// docs/guides/integrations/git.md is a colorized one. Its headers sit behind an escape
+// sequence and no longer begin a line, so nothing parses, and "no headers magus can read" is
+// true but sends them looking in the wrong place.
+func TestAColorizedPatchNamesColorAsTheCause(t *testing.T) {
+	colorized := "\x1b[0;1mdiff -r abc123 f.txt\x1b[0m\n" +
+		"\x1b[0;31;1m--- a/f.txt\x1b[0m\n" +
+		"\x1b[0;32;1m+++ b/f.txt\x1b[0m\n"
+	assert.Empty(t, changedPathsFromPatch(colorized), "escape sequences hide the headers")
+	assert.Contains(t, colorized, "\x1b[", "the detection this refusal keys on")
+}

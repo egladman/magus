@@ -294,27 +294,33 @@ This is not a git quirk. Every backend magus supports offers a diff-tool slot an
 pager, and in each of them the tool slot is the wrong shape for the same reason -
 measured against the installed versions:
 
-| backend   | diff-tool slot hands the tool                                                                         | pager hands the tool                   |
-| --------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| git       | seven arguments, once per file (`GIT_EXTERNAL_DIFF`), or two temp directories (`difftool --dir-diff`) | the whole unified diff on stdin        |
-| Mercurial | two directories - a temp snapshot and the working dir (`extdiff`)                                     | the whole unified diff on stdin        |
-| Sapling   | two file paths, once per file (`extdiff`)                                                             | the whole unified diff on stdin        |
-| Jujutsu   | two directories, `left` and `right` (`--tool`)                                                        | jj's own rendering, NOT a unified diff |
+| backend   | diff-tool slot hands the tool                                                                              | pager hands the tool                  |
+| --------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| git       | seven arguments, once per file (`GIT_EXTERNAL_DIFF`), or two temp directories (`difftool --dir-diff`)      | the whole unified diff on stdin       |
+| Mercurial | two directories - a temp snapshot and the working dir (`extdiff`)                                          | the whole unified diff on stdin       |
+| Sapling   | two file paths, once per file (`extdiff`)                                                                  | the whole unified diff on stdin       |
+| Jujutsu   | two directories, `$left` and `$right` (`ui.diff-formatter`, or `file-by-file` with `diff-invocation-mode`) | whatever `ui.diff-formatter` produced |
 
-So the pager is the portable answer for git, Mercurial, and Sapling:
+So the pager is the portable answer, and two settings make it work everywhere:
 
 ```sh
-hg config --edit    # [pager] pager = magus diff -
+hg config --edit    # [pager] pager = magus diff -   and   [color] mode = off
 sl config --user pager.pager 'magus diff -'
+jj config set --repo ui.diff-formatter ':git'
+jj config set --repo ui.pager '["magus", "diff", "-"]'
 ```
 
-Jujutsu is the exception, and its pager is the wrong hook: `jj` pages its own
-side-by-side rendering rather than a patch, so magus would be handed something that is
-not a diff at all. Pipe it the git format explicitly instead:
+Jujutsu needs the extra line because its default diff is a side-by-side rendering
+rather than a patch; `:git` makes `jj diff` emit the unified form its pager then hands
+over. With that set, jj behaves like the rest.
 
-```sh
-jj diff --git | magus diff -
-```
+**Turn color off for the diff being handed over.** A VCS colorizes when it believes it
+is writing to a terminal, and paging is exactly that case. A colorized patch has escape
+sequences in front of every header, so the headers no longer begin a line and nothing
+parses. magus refuses such a patch and names this as the cause rather than reporting an
+empty changeset, but the fix is upstream: `--color=never`, `hg --config color.mode=off`,
+or `jj --config ui.color=never`. git does not colorize into a pager by default and needs
+nothing.
 
 Every temp-directory variant above is refused for one reason: magus declines to run
 against a copy of a tree, because the verdict would describe a workspace nobody ships

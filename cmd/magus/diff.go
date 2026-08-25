@@ -305,6 +305,13 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	// adapter is active, and refusing there would turn "a backend spells its headers a third
 	// way" into a hard failure of the whole command - a worse bug than the one being fixed.
 	if len(paths) == 0 && src.kind != inputWorkingTree {
+		if strings.Contains(patch, "\x1b[") {
+			return fmt.Errorf("magus diff: %s is colorized, so its headers carry escape sequences "+
+				"and no longer begin a line. This is what a VCS emits when it thinks it is writing "+
+				"to a terminal, which is exactly the case when magus is its pager. Turn color off "+
+				"for the diff it hands over: `hg --config color.mode=off`, `jj --config ui.color=never`, "+
+				"or `--color=never` on any of them", src.label)
+		}
 		return fmt.Errorf("magus diff: %s has content but no file headers magus can read; "+
 			"it expects a unified diff (`diff --git a/x b/x`, or a `--- a/x` / `+++ b/x` pair)", src.label)
 	}
