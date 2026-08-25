@@ -420,10 +420,16 @@ async function loadFromURL(): Promise<void> {
   renderFilterChips();
   const filterEl = el("log-filter");
   if (filterEl) (filterEl as HTMLInputElement).value = q;
-  // The shared bare `#demo` fragment (wantsDemo, from lib/daemon - the same trigger the
+  // The shared BARE `#demo` fragment (wantsDemo, from lib/daemon - the same trigger the
   // dashboard and graph explorer use) enters the daemon-free showcase: a synthetic run
   // streams in with a live-filling waterfall.
-  if (wantsDemo(parseHash())) {
+  //
+  // Bare is the operative word. `#demo&inv=` names one run of the demo scenario, which is what the
+  // Runs surface mints for "Open the whole run" while the console is in demo mode, so it has to
+  // reach the inv branch below rather than being swallowed here. openInvocation has always known how
+  // to read a synthetic journal; returning first is what made that path unreachable from a URL.
+  const demo = wantsDemo(parseHash());
+  if (demo && !params.inv && !params.ref) {
     startDemo();
     return;
   }
@@ -469,10 +475,10 @@ async function loadFromURL(): Promise<void> {
   if (params.inv || params.ref) {
     const host = resolveDaemonHost(params) ?? "";
     const token = getLiveToken();
-    // demo is false unconditionally: the #demo branch returns at the top of this function, so a
-    // fragment reaching here is never the showcase.
-    if (params.inv) await openInvocation(params.inv, params.inv, false, host, token);
-    else await openRunOutput(params.ref, undefined, "", false, host, token);
+    // demo carries through: under #demo the ref names a run of the synthetic scenario, and reaching
+    // for a daemon for it would fail on a machine that has none - which is the whole point of demo.
+    if (params.inv) await openInvocation(params.inv, params.inv, demo, host, token);
+    else await openRunOutput(params.ref, undefined, "", demo, host, token);
     return;
   }
   // No static content requested: connect live if an explicit `#port=` link resolves. A static
