@@ -2,12 +2,14 @@ package status
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
@@ -44,7 +46,7 @@ func NewDiffSessionHandler(sessions *diff.Store, root, cacheDir string, log *slo
 // reviewSessionRequest is the wire shape. Op names the mutation; the rest are its arguments,
 // and which ones matter depends on Op.
 type reviewSessionRequest struct {
-	// Op is one of: cursor, viewed, comment, resolve, answer.
+	// Op is one of: cursor, viewed, comment, resolve, answer, publish.
 	Op string `json:"op"`
 	// cursor
 	Path string `json:"path,omitempty"`
@@ -55,8 +57,61 @@ type reviewSessionRequest struct {
 	// comment
 	Body   string `json:"body,omitempty"`
 	Anchor string `json:"anchor,omitempty"`
+	// publish: the branch and remote magus resolved, and the summary heading the review.
+	// Passed in rather than rediscovered so the spell never forms its own opinion of the
+	// working tree - see bindings.OpenReview.
+	Branch  string `json:"branch,omitempty"`
+	Remote  string `json:"remote,omitempty"`
+	Summary string `json:"summary,omitempty"`
+	// Line is the position an inline comment anchors to on the new side. A hunk index cannot
+	// serve: it means nothing outside the session that produced it.
+	Line int `json:"line,omitempty"`
 	// resolve / answer
 	ID string `json:"id,omitempty"`
+}
+
+// publish sends every unpublished human draft as one review and marks exactly the ones that
+// left. It is the only write on this route that can fail in a way the reader must hear about.
+//
+// UNPUBLISHED and HUMAN, both filtered here rather than trusted from the request: an agent
+// reaches this session through MCP and may draft, and a request naming ids would let a caller
+// re-send something already sent. The set is derived from the session, so there is nothing for
+// a caller to get wrong.
+//
+// Marked one at a time after the send, deliberately. A host that accepts four of five drafts
+// has still sent four, and a retry that re-posted them would put duplicates in a colleague's
+// inbox - the failure this whole path exists to avoid.
+func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
+	sess := h.sessions.Get(h.root)
+	if sess == nil {
+		return nil, errors.New("no review session attached")
+	}
+	drafts := make([]types.DiffComment, 0, len(sess.Comments))
+	for _, c := range sess.Comments {
+		if c.Author == types.DiffAuthorHuman && !c.Published {
+			drafts = append(drafts, c)
+		}
+	}
+	if len(drafts) == 0 {
+		// Not an error: a reader who publishes twice, or who has nothing drafted, gets the
+		// session back unchanged rather than a failure about a mistake they did not make.
+		return sess, nil
+	}
+
+	at := bindings.OpenReview(ctx, req.Branch, req.Remote)
+	if !at.Open() {
+		// The reason travels: "no provider wired", "no pull request for this branch" and "the
+		// host was unreachable" are different sentences for the reader even though none is
+		// their fault, and a bare "cannot publish" would leave them guessing which.
+		return nil, errors.New(at.Reason)
+	}
+	if _, err := bindings.PublishReview(ctx, at, req.Summary, drafts); err != nil {
+		return nil, err
+	}
+	for _, d := range drafts {
+		sess = h.sessions.MarkPublished(h.root, d.ID, "")
+	}
+	return sess, nil
 }
 
 func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
@@ -101,8 +156,19 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		h.mintReceipt(r.Context(), finished)
 	case "comment":
 		sess = h.sessions.AddComment(h.root, types.DiffComment{
-			Path: req.Path, Hunk: req.Hunk, Body: req.Body, Anchor: req.Anchor,
+			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body, Anchor: req.Anchor,
 		}, types.DiffAuthorHuman)
+	case "publish":
+		// The ONE op here that fails loudly. Every other write is bookkeeping the reader did
+		// not ask about, so the handler answers with the session and lets a stale cursor sort
+		// itself out. This one sends sentences to colleagues: reporting success it did not
+		// have would leave a reader believing their review landed when it never left.
+		var err error
+		sess, err = h.publish(r.Context(), req)
+		if err != nil {
+			http.Error(w, "publish: "+err.Error(), http.StatusBadGateway)
+			return
+		}
 	case "resolve":
 		sess = h.sessions.ResolveComment(h.root, req.ID, req.On)
 	case "answer":
