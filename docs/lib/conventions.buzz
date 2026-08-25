@@ -31,13 +31,14 @@ export fun parseConventions(md: str) > [Convention] {
             final title = lines[i].sub(3).trim();
             var j = i + 1;
             while (j < lines.len() and lines[j].trim() == "") { j = j + 1; }
-            var def = "";
+            final defLines: mut [str] = mut [<str>];
             while (j < lines.len() and lines[j].trim() != ""
                 and lines[j].startsWith("#") == false and lines[j].startsWith("```") == false) {
-                if (def == "") { def = lines[j].trim(); } else { def = def + " " + lines[j].trim(); }
+                defLines.append(lines[j].trim());
                 j = j + 1;
             }
-            items.append(Convention{ title = title, anchor = glossarySlug(title), def = cleanConventionDef(def) });
+            items.append(Convention{ title = title, anchor = glossarySlug(title),
+                def = cleanConventionDef(defLines.join(" ")) });
         }
         i = i + 1;
     }
@@ -99,43 +100,44 @@ export fun injectConventionHints(html: str, conventions: [Convention], relToConv
 // block by having no newline, so a multi-line code block is never hinted.
 fun injectFirstPlaceholderHint(html: str, hint: str) > str {
     if (hint == "") { return html; }
-    var scanned = "";
+    final scanned: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf("<code>");
     while (idx != null) {
         final afterOpen = rest.sub(idx + 6);            // 6 = len("<code>")
         final closeAt = afterOpen.indexOf("</code>");
-        if (closeAt == null) { return scanned + rest; }
+        if (closeAt == null) { return scanned.join("") + rest; }
         final inner = afterOpen.sub(0, len: closeAt);
         final consumedLen = idx + 6 + closeAt + 7;      // through </code> (7 = len("</code>"))
         if (inner.indexOf("\n") == null
             and inner.indexOf("&lt;") != null and inner.indexOf("&gt;") != null) {
-            return scanned + rest.sub(0, len: consumedLen) + hint + rest.sub(consumedLen);
+            return scanned.join("") + rest.sub(0, len: consumedLen) + hint + rest.sub(consumedLen);
         }
-        scanned = scanned + rest.sub(0, len: consumedLen);
+        scanned.append(rest.sub(0, len: consumedLen));
         rest = rest.sub(consumedLen);
         idx = rest.indexOf("<code>");
     }
-    return scanned + rest;
+    return scanned.join("") + rest;
 }
 
 // insertBeforeClose inserts `ins` just before the first `close` following each `open` marker.
 // Returns html unchanged when ins is "" (the section was not in the corpus).
 fun insertBeforeClose(html: str, open: str, close: str, ins: str) > str {
     if (ins == "") { return html; }
-    var buf = "";
+    final buf: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(open);
     while (idx != null) {
-        buf = buf + rest.sub(0, len: idx + open.len());
+        buf.append(rest.sub(0, len: idx + open.len()));
         rest = rest.sub(idx + open.len());
         final end = rest.indexOf(close);
-        if (end == null) { return buf + rest; }
-        buf = buf + rest.sub(0, len: end) + ins;
+        if (end == null) { return buf.join("") + rest; }
+        buf.append(rest.sub(0, len: end));
+        buf.append(ins);
         rest = rest.sub(end);
         idx = rest.indexOf(open);
     }
-    return buf + rest;
+    return buf.join("") + rest;
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +383,13 @@ test "parseConventions reads H2 sections, anchors, and a cleaned lead line" {
     assert\equal(cs[0].anchor, "admonitions", "goldmark anchor");
     assert\equal(cs[0].def, "Call-outs carry a colored accent per type", "lead line, trailing colon dropped");
     assert\equal(cs[1].def, "A diff block shows a change.", "backticks stripped");
+}
+
+test "a lead paragraph wrapped across source lines joins into one" {
+    // Every section on the real conventions page wraps its lead, so this is the common
+    // path, not an edge case.
+    final cs = parseConventions("## Footnotes\n\nA footnote marker\nwraps across source lines.\n");
+    assert\equal(cs[0].def, "A footnote marker wraps across source lines.", "joined on a single space");
 }
 
 test "injectConventionHints links an admonition title and a code caption" {
