@@ -24,6 +24,7 @@
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -472,12 +473,12 @@ func oneofRequired(od protoreflect.OneofDescriptor) bool {
 // code change here; only the free-form CEL rules, which have no fixed shape, get a fallback.
 func describeRules(m protoreflect.Message) []string {
 	var out []string
-	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+	rangeInFieldOrder(m, func(fd protoreflect.FieldDescriptor, v protoreflect.Value) {
 		name := string(fd.Name())
 		// required/ignore are handled by the caller (required) or are an internal
 		// evaluation hint a client has no use for (ignore).
 		if name == "required" || name == "ignore" {
-			return true
+			return
 		}
 		switch {
 		case fd.IsList():
@@ -491,9 +492,30 @@ func describeRules(m protoreflect.Message) []string {
 		default:
 			out = append(out, name+": "+formatScalar(fd, v))
 		}
-		return true
 	})
 	return out
+}
+
+// rangeInFieldOrder visits m's populated fields in field-number order. protoreflect's Range
+// is documented as visiting in an undefined order, so rendering straight from it made these
+// pages differ between runs for any field carrying two rules in one block ("int32.gte: 0;
+// int32.lte: 1000" one run, the reverse the next) and the docs drift gate caught the flip.
+// Field number is the .proto's own ordering, so this also renders rules in the order the
+// option declares them.
+func rangeInFieldOrder(m protoreflect.Message, fn func(protoreflect.FieldDescriptor, protoreflect.Value)) {
+	type field struct {
+		fd protoreflect.FieldDescriptor
+		v  protoreflect.Value
+	}
+	var fields []field
+	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		fields = append(fields, field{fd, v})
+		return true
+	})
+	slices.SortFunc(fields, func(x, y field) int { return cmp.Compare(x.fd.Number(), y.fd.Number()) })
+	for _, f := range fields {
+		fn(f.fd, f.v)
+	}
 }
 
 // describeSubRules renders a type-specific rule block (StringRules, Int32Rules, ...),
@@ -501,7 +523,7 @@ func describeRules(m protoreflect.Message) []string {
 // reads the same way the .proto option does.
 func describeSubRules(prefix string, m protoreflect.Message) []string {
 	var out []string
-	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+	rangeInFieldOrder(m, func(fd protoreflect.FieldDescriptor, v protoreflect.Value) {
 		name := prefix + "." + string(fd.Name())
 		switch {
 		case fd.IsList():
@@ -517,7 +539,6 @@ func describeSubRules(prefix string, m protoreflect.Message) []string {
 		default:
 			out = append(out, name+": "+formatScalar(fd, v))
 		}
-		return true
 	})
 	return out
 }
