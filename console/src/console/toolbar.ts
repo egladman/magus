@@ -24,6 +24,12 @@
 //     <div class="pf-v6-c-toolbar__expandable-content" data-overflow-panel="<token>"></div>
 //   </div>
 //
+// A toolbar may also carry FOLLOWER groups - `data-overflow-follows="<token>"` plus their own
+// pf-m-show-on-<bp> - which collapse into the SAME panel at a DIFFERENT width and have no toggle of
+// their own. That is how one bar keeps its primary switches on the row long after its secondary
+// actions have folded away, without growing a second kebab beside the first. Followers land at the
+// top of the panel, so a collapsed menu reads in the order the bar did.
+//
 // Everything in the toggle-group except the .pf-v6-c-toolbar__toggle is collapsible: this helper moves
 // that set between the toggle-group (inline, wide) and the expandable panel (dropdown, narrow). PF's
 // pf-m-show-on-<bp> utility governs the toggle-button + inline-item visibility at the breakpoint, so
@@ -109,8 +115,39 @@ function setupOne(group: HTMLElement): void {
   });
 }
 
+// setupFollower collapses one group into another group's panel at its own breakpoint. It owns no
+// toggle and no expanded state: the leader's kebab opens the panel both sets land in.
+function setupFollower(group: HTMLElement): void {
+  if (group.dataset.overflowWired) return;
+  const token = group.dataset.overflowFollows || "";
+  const panel = document.querySelector<HTMLElement>(`[data-overflow-panel="${token}"]`);
+  if (!panel) return;
+  group.dataset.overflowWired = "1";
+
+  // An empty marker holds the group's place on the bar, because moving it into the panel leaves
+  // nothing to put it back beside.
+  const home = document.createComment("overflow-follower");
+  group.before(home);
+
+  const mq = window.matchMedia(`(min-width: ${breakpointOf(group)})`);
+  let wasWide: boolean | null = null;
+  const apply = (): void => {
+    const wide = mq.matches;
+    if (wide === wasWide) return;
+    wasWide = wide;
+    // prepend, not append: the follower sits ahead of the leader's controls on the bar, and a menu
+    // that reordered them on collapse would read as a different set of controls.
+    if (wide) home.after(group);
+    else panel.prepend(group);
+  };
+  mq.addEventListener("change", apply);
+  window.addEventListener("resize", apply);
+  apply();
+}
+
 // wireToolbarOverflow finds every overflow toolbar under `root` and wires its collapse behavior. Safe
 // to call more than once (each group wires itself only once), so a surface can call it from activate().
 export function wireToolbarOverflow(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>("[data-overflow-group]").forEach(setupOne);
+  root.querySelectorAll<HTMLElement>("[data-overflow-follows]").forEach(setupFollower);
 }

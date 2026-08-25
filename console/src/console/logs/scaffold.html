@@ -40,6 +40,38 @@
               <button id="log-filter-help" class="console-render-help-glyph" type="button" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">?</button>
             </div>
 
+            <!-- The view switches leave the collapsing set: which view you are in is the control you
+                 reach for most, and the only thing on the bar that says what you are looking at, so it
+                 stays on the row down to md rather than folding away with the run-once actions at 2xl.
+                 A FOLLOWER (see toolbar.ts): below md it collapses into the same panel the kebab opens,
+                 so a phone still gets one menu rather than two. -->
+            <div class="pf-v6-c-toolbar__group pf-m-action-group-inline pf-m-show-on-md console-log-toolbar__modes"
+                 data-overflow-follows="logbar" aria-label="View mode">
+            <!-- Log|Timeline and Pretty|Raw are PF ToggleGroups (segmented controls). The log
+                 viewer JS reads/sets the selected option (data-mode + pf-m-selected); the group is
+                 disabled when the switch does not apply (timeline needs plottable timing; the
+                 pretty/raw split is meaningless in the waterfall). -->
+            <div class="pf-v6-c-toolbar__item">
+              <div class="pf-v6-c-toggle-group" id="timeline-mode" role="group" aria-label="Log or timeline view">
+                <div class="pf-v6-c-toggle-group__item">
+                  <button type="button" class="pf-v6-c-toggle-group__button pf-m-selected" data-mode="log" aria-pressed="true" title="Show the run as a scrolling log" disabled><span class="pf-v6-c-toggle-group__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg></span><span class="pf-v6-c-toggle-group__text">Log</span></button>
+                </div>
+                <div class="pf-v6-c-toggle-group__item">
+                  <button type="button" class="pf-v6-c-toggle-group__button" data-mode="timeline" aria-pressed="false" title="Show the invocation as a trace waterfall (targets and steps on a shared time axis)" disabled><span class="pf-v6-c-toggle-group__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="11" height="4" rx="1"/><rect x="7" y="14" width="13" height="4" rx="1"/></svg></span><span class="pf-v6-c-toggle-group__text">Timeline</span></button>
+                </div>
+              </div>
+            </div>
+            <div class="pf-v6-c-toolbar__item">
+              <div class="pf-v6-c-toggle-group" id="view-mode" role="group" aria-label="Pretty or raw view">
+                <div class="pf-v6-c-toggle-group__item">
+                  <button type="button" class="pf-v6-c-toggle-group__button pf-m-selected" data-mode="pretty" aria-pressed="true" title="The stylized structural view (folds, badges, line numbers)"><span class="pf-v6-c-toggle-group__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="16" y2="18"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/></svg></span><span class="pf-v6-c-toggle-group__text">Pretty</span></button>
+                </div>
+                <div class="pf-v6-c-toggle-group__item">
+                  <button type="button" class="pf-v6-c-toggle-group__button" data-mode="raw" aria-pressed="false" title="The exact captured text, flat"><span class="pf-v6-c-toggle-group__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5h16v2"/><line x1="12" y1="5" x2="12" y2="19"/><line x1="9" y1="19" x2="15" y2="19"/></svg></span><span class="pf-v6-c-toggle-group__text">Raw</span></button>
+                </div>
+              </div>
+            </div>
+            </div>
             <!-- Responsive toggle-group: the secondary controls. wireToolbarOverflow() moves these
                  between here (inline, 2xl+) and the data-overflow-panel="logbar" dropdown (below 2xl);
                  PF's pf-m-show-on-2xl shows the kebab / reveals them inline at the same breakpoint. -->
@@ -50,37 +82,13 @@
                 </button>
               </div>
 
-            <!-- View controls: Pause (toggle), the Log|Timeline and Pretty|Raw ToggleGroups, and
-                 Collapse all. Grouped so they wrap together, not mid-cluster. -->
-            <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="View">
+            <!-- The view ACTIONS, as against the view SWITCHES lifted out above: both are things you
+                 do once and then forget, so they fold away with the rest. -->
+            <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="View actions">
               <div class="pf-v6-c-toolbar__item">
                 <button id="pause-btn" class="pf-v6-c-button pf-m-secondary" type="button" aria-pressed="false" title="Pause auto-scroll to pin the view while the run streams" disabled>
                   <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Pause following</span>
                 </button>
-              </div>
-              <!-- Log|Timeline and Pretty|Raw are PF ToggleGroups (segmented controls). The log
-                   viewer JS reads/sets the selected option (data-mode + pf-m-selected); the group is
-                   disabled when the switch does not apply (timeline needs plottable timing; the
-                   pretty/raw split is meaningless in the waterfall). -->
-              <div class="pf-v6-c-toolbar__item">
-                <div class="pf-v6-c-toggle-group" id="timeline-mode" role="group" aria-label="Log or timeline view">
-                  <div class="pf-v6-c-toggle-group__item">
-                    <button type="button" class="pf-v6-c-toggle-group__button pf-m-selected" data-mode="log" aria-pressed="true" title="Show the run as a scrolling log" disabled><span class="pf-v6-c-toggle-group__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg></span><span class="pf-v6-c-toggle-group__text">Log</span></button>
-                  </div>
-                  <div class="pf-v6-c-toggle-group__item">
-                    <button type="button" class="pf-v6-c-toggle-group__button" data-mode="timeline" aria-pressed="false" title="Show the invocation as a trace waterfall (targets and steps on a shared time axis)" disabled><span class="pf-v6-c-toggle-group__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="11" height="4" rx="1"/><rect x="7" y="14" width="13" height="4" rx="1"/></svg></span><span class="pf-v6-c-toggle-group__text">Timeline</span></button>
-                  </div>
-                </div>
-              </div>
-              <div class="pf-v6-c-toolbar__item">
-                <div class="pf-v6-c-toggle-group" id="view-mode" role="group" aria-label="Pretty or raw view">
-                  <div class="pf-v6-c-toggle-group__item">
-                    <button type="button" class="pf-v6-c-toggle-group__button pf-m-selected" data-mode="pretty" aria-pressed="true" title="The stylized structural view (folds, badges, line numbers)"><span class="pf-v6-c-toggle-group__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="16" y2="18"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/></svg></span><span class="pf-v6-c-toggle-group__text">Pretty</span></button>
-                  </div>
-                  <div class="pf-v6-c-toggle-group__item">
-                    <button type="button" class="pf-v6-c-toggle-group__button" data-mode="raw" aria-pressed="false" title="The exact captured text, flat"><span class="pf-v6-c-toggle-group__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5h16v2"/><line x1="12" y1="5" x2="12" y2="19"/><line x1="9" y1="19" x2="15" y2="19"/></svg></span><span class="pf-v6-c-toggle-group__text">Raw</span></button>
-                  </div>
-                </div>
               </div>
               <div class="pf-v6-c-toolbar__item">
                 <button id="fold-all-btn" class="pf-v6-c-button pf-m-secondary" type="button" title="Collapse or expand every section" disabled>
