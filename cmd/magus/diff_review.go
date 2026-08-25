@@ -21,7 +21,7 @@ type preflightReview struct {
 	// Stale counts files that were acknowledged and then edited. They are called out
 	// separately from never-read ones because they are the more dangerous shape: somebody
 	// did look, which is exactly why nobody will look again.
-	Stale int      `json:"stale"          yaml:"stale"`
+	Stale  int      `json:"stale"          yaml:"stale"`
 	Unread []string `json:"unread,omitempty" yaml:"unread,omitempty"`
 }
 

@@ -39,34 +39,34 @@ type checkDef struct {
 // the boundary because everything below it depends on that load succeeding.
 var allChecks = []checkDef{
 	{
-		Name: "json-codec",
+		Name:     "json-codec",
 		Doc:      "which encoding/json implementation this binary was built against",
 		Evidence: types.EvidenceMeasured,
-		run:  func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkJSONCodec() },
+		run:      func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkJSONCodec() },
 	},
 	{
-		Name: "sockets",
+		Name:     "sockets",
 		Doc:      "live and leftover daemon sockets in the magus socket directory",
 		Evidence: types.EvidenceMeasured,
-		run:  func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkStaleSockets() },
+		run:      func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkStaleSockets() },
 	},
 	{
-		Name: "mcp-tokens",
+		Name:     "mcp-tokens",
 		Doc:      "the daemon's cli token and named connector tokens, and which are expiring",
 		Evidence: types.EvidenceMeasured,
-		run:  func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkMCPTokens() },
+		run:      func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkMCPTokens() },
 	},
 	{
-		Name: "terminal-capabilities",
+		Name:     "terminal-capabilities",
 		Doc:      "what the terminal in front of magus can render",
 		Evidence: types.EvidenceMeasured,
-		run:  func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkTerminal() },
+		run:      func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkTerminal() },
 	},
 	{
-		Name: "workspace",
+		Name:     "workspace",
 		Doc:      "the magusfile loads and its projects are discoverable",
 		Evidence: types.EvidenceMeasured,
-		run:  func(r *runner, projects []*types.Project) types.DoctorCheck { return r.checkWorkspace(projects) },
+		run:      func(r *runner, projects []*types.Project) types.DoctorCheck { return r.checkWorkspace(projects) },
 	},
 	{
 		Name:           "config-file",
@@ -358,7 +358,7 @@ var allChecks = []checkDef{
 		run:            (*runner).checkHasCharmTypos,
 	},
 	{
-		Name:           "tool-readiness",
+		Name: "tool-readiness",
 		// The one check whose evidence a FLAG changes: without --probe it repeats what
 		// the spells declare, and with it magus actually runs each gate. The check
 		// raises its own evidence to measured in that case.

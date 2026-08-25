@@ -60,8 +60,8 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 
 	if _, err := os.Stat(codeDocsRoot(root)); err != nil {
 		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorOK,
+			Name:     name,
+			Status:   types.DoctorOK,
 			Evidence: types.EvidenceUnknown,
 			Message:  "no docs" + codeDocsMarker + " tree; skipped (the MGS pages ship with magus's own sources)",
 		}
