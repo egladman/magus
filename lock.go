@@ -18,8 +18,8 @@ import (
 
 	"github.com/gofrs/flock"
 
+	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
@@ -471,15 +471,15 @@ func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
 // "another magus process", which turned a six-day-old orphaned `magus run serve` in a
 // deleted worktree into an investigation instead of one line of output.
 type processRecord struct {
-	PID     int    `json:"pid"`
-	Command string `json:"command"`
-	Dir     string `json:"dir"`
-	Started string `json:"started"`
+	PID     int       `record:"pid"`
+	Command string    `record:"command"`
+	Dir     string    `record:"dir"`
+	Started time.Time `record:"started,omitempty"`
 	// Inv is the invocation that took the lock. It is what makes a holder identifiable to
 	// a DESCENDANT of it - a pid cannot, since under the daemon the holder and the waiter
 	// share one. Empty for a subcommand with no invocation record (clean), and for a
 	// sidecar written by an older magus; a waiter then has nothing to match and waits.
-	Inv string `json:"inv,omitempty"`
+	Inv string `record:"invocation,omitempty"`
 }
 
 // The sidecar layout, in ONE place. HeldLocks previously re-derived these by hand
@@ -502,32 +502,29 @@ func (l *projectLocker) ownerPath(projectPath string) string {
 // swallowed: not being able to say who holds a lock must never fail a run that
 // already holds it.
 func (l *projectLocker) recordOwner(ctx context.Context, projectPath string) {
-	if data := selfRecord(ctx); data != nil {
-		_ = os.WriteFile(l.ownerPath(projectPath), data, 0o600)
-	}
+	_ = record.Write(l.ownerPath(projectPath), selfRecord(ctx))
 }
 
-// selfRecord marshals this invocation's identity, the payload both the owner and waiter
-// sidecars carry. Returns nil when it cannot be built, which every caller treats as
-// "skip the sidecar": failing to say who we are must never fail the run.
-func selfRecord(ctx context.Context) []byte {
+// selfRecord builds this invocation's identity, the payload both the owner and
+// waiter sidecars carry. Stored one file per field, so a stuck run is diagnosable
+// with cat alone:
+//
+//	$ cat .magus/locks/*/lock.owner/command
+//	magus run ci .
+func selfRecord(ctx context.Context) processRecord {
 	dir, _ := os.Getwd()
 	// This invocation's OWN id, never the ancestry's last element. Those look the same for
 	// a run - BeginInvocation appends its id there - and differ for every lock-taker that
 	// mints no invocation of its own: `magus clean` inherits an ancestry and appends
 	// nothing, so the tail is its PARENT's id, and stamping that on the lock would have a
 	// sibling nested run refuse a lock the parent does not hold.
-	data, err := json.Marshal(processRecord{
+	return processRecord{
 		PID:     os.Getpid(),
 		Command: strings.Join(os.Args, " "),
 		Dir:     dir,
-		Started: time.Now().Format(time.RFC3339),
+		Started: time.Now(),
 		Inv:     journal.InvocationIDFromContext(ctx),
-	})
-	if err != nil {
-		return nil
 	}
-	return data
 }
 
 // describeOwner renders the current holder for a wait message, or "" when there is
@@ -545,8 +542,8 @@ func (l *projectLocker) describeOwner(projectPath string) string {
 	if o.Command != "" {
 		desc += fmt.Sprintf(" (%s)", o.Command)
 	}
-	if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
-		desc += fmt.Sprintf(", running %s", time.Since(started).Round(time.Second))
+	if !o.Started.IsZero() {
+		desc += fmt.Sprintf(", running %s", time.Since(o.Started).Round(time.Second))
 	}
 	if o.Dir != "" {
 		desc += fmt.Sprintf(", in %s", o.Dir)
@@ -596,21 +593,17 @@ func (l *projectLocker) waiterPath(projectPath string) string {
 // asked by whoever is looking at a queue that is not moving. Best-effort, like the
 // owner record, and never load-bearing.
 func (l *projectLocker) recordWaiter(ctx context.Context, projectPath string) func() {
-	data := selfRecord(ctx)
-	if data == nil {
-		return func() {}
-	}
 	path := l.waiterPath(projectPath)
-	if os.WriteFile(path, data, 0o600) != nil {
+	if record.Write(path, selfRecord(ctx)) != nil {
 		return func() {}
 	}
-	return func() { _ = os.Remove(path) }
+	return func() { _ = record.Remove(path) }
 }
 
 // removeOwner clears the sidecar on release so a later reader never attributes a
 // lock to a process that has finished. Best-effort, like the write.
 func (l *projectLocker) removeOwner(projectPath string) {
-	_ = os.Remove(l.ownerPath(projectPath))
+	_ = record.Remove(l.ownerPath(projectPath))
 }
 
 // HeldLocks reports every per-project workspace lock currently held under cacheDir,
@@ -635,16 +628,15 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 	dir := filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot))
 	var out []types.StatusLock
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, lockFileName+ownerSuffix) {
+		// The sidecar is a DIRECTORY of single-value files, so this matches on the name
+		// and skips descending into it - its own field files must not be walked as if
+		// each were another sidecar.
+		if err != nil || !d.IsDir() || !strings.HasSuffix(path, lockFileName+ownerSuffix) {
 			return nil //nolint:nilerr // a walk error on one entry must not abort the report
 		}
-		data, rerr := os.ReadFile(path)
-		if rerr != nil {
-			return nil //nolint:nilerr // one unreadable sidecar must not abort the whole report
-		}
-		var o processRecord
-		if uerr := json.Unmarshal(data, &o); uerr != nil || o.PID == 0 {
-			return nil //nolint:nilerr // a malformed sidecar is skipped, not fatal to the report
+		o := readRecord(path)
+		if o.PID == 0 {
+			return fs.SkipDir // unreadable or malformed: skipped, not fatal to the report
 		}
 		rel, rerr := filepath.Rel(dir, filepath.Dir(path))
 		if rerr != nil {
@@ -667,9 +659,7 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 			StaleAfterSeconds: int(LockStaleAfter / time.Second),
 		}
 		lock.Waiters = readWaiters(filepath.Dir(path))
-		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
-			lock.AcquireTime = started
-		}
+		lock.AcquireTime = o.Started
 		out = append(out, lock)
 		return nil
 	})
@@ -681,15 +671,20 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 // trustworthy to read. The structured form both the stderr line and the sticky region
 // are built from, so neither has to parse the other's text.
 func (l *projectLocker) readOwner(projectPath string) processRecord {
-	data, err := os.ReadFile(l.ownerPath(projectPath))
-	if err != nil {
+	return readRecord(l.ownerPath(projectPath))
+}
+
+// readRecord decodes a sidecar, or returns a zeroed record when there is nothing
+// trustworthy to read. PID == 0 is what every caller already tests for "nothing to
+// say", so an absent, malformed, or unreadable sidecar collapse to one answer here -
+// which is safe only because these records are informational. The flock decides
+// exclusion; nothing branches on this being present.
+func readRecord(dir string) processRecord {
+	var rec processRecord
+	if err := record.Read(dir, &rec); err != nil {
 		return processRecord{}
 	}
-	var o processRecord
-	if uerr := json.Unmarshal(data, &o); uerr != nil {
-		return processRecord{}
-	}
-	return o
+	return rec
 }
 
 // lockIsHeld reports whether some process currently holds the flock at path.
@@ -727,27 +722,23 @@ func readWaiters(dir string) []types.StatusLockWaiter {
 	}
 	var out []types.StatusLockWaiter
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), lockFileName+waiterInfix) {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), lockFileName+waiterInfix) {
 			continue
 		}
-		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
-		if rerr != nil {
-			continue
-		}
-		var o processRecord
-		if json.Unmarshal(data, &o) != nil || o.PID == 0 {
+		o := readRecord(filepath.Join(dir, e.Name()))
+		if o.PID == 0 {
 			continue
 		}
 		w := types.StatusLockWaiter{PID: o.PID, Command: o.Command, Dir: o.Dir}
-		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
-			w.WaitTime = started
+		if !o.Started.IsZero() {
+			w.WaitTime = o.Started
 			// A waiter killed while blocked never runs its own cleanup, and nothing
 			// else collects these, so without an upper bound the directory grows
 			// forever and status reports phantom waiters. There is no flock behind a
 			// waiter marker to probe, so age is the only available signal: past a
 			// bound no honest wait reaches, treat it as debris and sweep it.
-			if time.Since(started) > staleWaiterAfter {
-				_ = os.Remove(filepath.Join(dir, e.Name()))
+			if time.Since(o.Started) > staleWaiterAfter {
+				_ = record.Remove(filepath.Join(dir, e.Name()))
 				continue
 			}
 		}

@@ -172,11 +172,23 @@ type Step struct {
 	// because they move independently; see config.CacheInclude.
 	IncludeOS   bool
 	IncludeArch bool
-	NoCache     bool   // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay  bool   // when true, never replay a hit (always run fn), but still snapshot on success - a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Exclusive   bool   // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
-	Slots       int    // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
-	Label       string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	NoCache     bool // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay  bool // when true, never replay a hit (always run fn), but still snapshot on success - a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	Exclusive   bool // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
+	Slots       int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	// MemoryMB is RunAll only: the declared peak memory this step will reach,
+	// including every target it composes, carried alongside the slot count Slots
+	// derives from the same figure. Slots throttle peers inside THIS process; the
+	// figure is what machine-wide admission arbitrates, and a slot count cannot be
+	// converted back into it (the conversion divides by a per-process budget). 0 means
+	// undeclared: no claim, no refusal. Never hashed.
+	MemoryMB int
+	// MemoryDeclaredBy is RunAll only: the target whose policy MemoryMB came from,
+	// which is not this step when the figure was inherited from a target it composes
+	// with ctx.needs. A refusal names it so the reader is sent to the magusfile line
+	// to change rather than to the target they typed. Never hashed.
+	MemoryDeclaredBy string
+	Label            string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output

@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2374,
-  "edge_count": 6050,
+  "node_count": 2376,
+  "edge_count": 6058,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -292,6 +292,14 @@
       "label": "MGS1029",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1029/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1030",
+      "kind": "diagnostic",
+      "label": "MGS1030",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1030/"
       }
     },
     {
@@ -1028,7 +1036,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "215",
+        "dir_files": "216",
         "dir_languages": "markdown"
       }
     },
@@ -1298,7 +1306,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "85",
+        "dir_files": "86",
         "dir_languages": "markdown"
       }
     },
@@ -1338,7 +1346,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "30",
+        "dir_files": "31",
         "dir_languages": "markdown"
       }
     },
@@ -4302,6 +4310,18 @@
         "section": "reference",
         "tags": "MGS1029,magusfile,sources,cache,globs",
         "title": "MGS1029: source glob reaches into a pruned directory"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1030.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1030.md",
+      "source": "docs/reference/codes/magusfile/MGS1030.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1030,memory_mb,doctor,memory,declarations,admission",
+        "title": "MGS1030: memory declaration disagrees with what was measured"
       }
     },
     {
@@ -17703,7 +17723,7 @@
       "id": "method:platform.memory_bytes",
       "kind": "method",
       "label": "platform.memory_bytes",
-      "doc": "The machine's total physical memory in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
+      "doc": "How much memory this process may commit, in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Narrowed by a container's memory ceiling where there is one, the way cpus() honors a CPU quota. Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0",
       "attrs": {
         "buzz": "platform\\memoryBytes() → int"
       }
@@ -24164,6 +24184,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1030.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1030.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -27189,6 +27217,14 @@
     {
       "source": "doc:README.md",
       "target": "doc:docs/concepts/telemetry.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
+      "target": "doc:docs/doctrine.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30380,6 +30416,14 @@
     },
     {
       "source": "doc:docs/doctrine.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/doctrine.md"
+    },
+    {
+      "source": "doc:docs/doctrine.md",
       "target": "doc:docs/scope.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31356,6 +31400,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
       "target": "doc:docs/guides/integrations/agents/any-host.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31465,6 +31517,14 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/any-host.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/any-host.md"
     },
     {
       "source": "doc:docs/guides/integrations/agents/any-host.md",
@@ -35401,6 +35461,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1029.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1030.md",
+      "target": "diagnostic:MGS1030",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1030.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1030.md",
+      "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1030.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1030.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1030.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",

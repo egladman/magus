@@ -20,7 +20,16 @@ hand-edit it.
   breaks: `git commit`/`git add`/`git stash`/`git reset` or reading a diff ->
   Skill(magus-vcs-hygiene); about to build/test/lint/generate -> Skill(magus-run);
   "what exists / depends on / uses X" -> Skill(magus-query); "how does magus
-  X work" -> Skill(magus-docs-lookup).
+  X work" -> Skill(magus-docs-lookup); creating a package, moving code between
+  packages, or deciding where new code belongs -> Skill(magus-architecture).
+
+  Treat this list as necessary and NOT sufficient. Measured 2026-08-24 over one
+  long session: the only skills that loaded on their own were the two a hook
+  demanded (a denied `git commit`, a blocked comment edit), and `magus-run` was
+  named right here and skipped anyway while `./magus run ...` was typed dozens of
+  times. A rule that lives only in prose is a rule with roughly even odds. If a
+  convention matters, give it an enforcement point. The new-directory advisory in
+  `cmd/magus/guard_sourcedir.go` is the worked example.
 
 ## Commands
 

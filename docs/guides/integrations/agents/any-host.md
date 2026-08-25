@@ -7,10 +7,17 @@ tags: [agents, guard, hooks, integration, template]
 # Any other host
 
 The four documented hosts are examples, not a fixed list. magus owns the guard
-rules and the verdict, not integration code per host: maintaining a codec for
-each one as the products keep changing would be a lot to carry for little gain.
-So the host-specific part is a template or a few lines of config you control,
-and adding a host is your edit rather than a new magus release.
+rules and the verdict, not integration code per host, so the host-specific part
+is a template or a few lines of config you control, and adding a host is your
+edit rather than a new magus release.
+
+That is a [standing decision](../../../doctrine.md#the-host-wiring-is-yours)
+rather than a gap waiting to be filled. A codec per host would cost us upkeep
+as the products change, and it would cost you more than it costs us: wiring you
+did not write is wiring you cannot repair on the afternoon your host changes
+its event shape, and this guard fails OPEN, so a hook that quietly stopped
+judging looks exactly like a session with nothing to deny. Read the template
+once and it is yours.
 
 Any host that can run a command and read its output fits.
 

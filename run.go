@@ -23,7 +23,6 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
-	"github.com/egladman/magus/internal/hostmem"
 	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
@@ -32,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -499,7 +499,13 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// understands. A target declaring memory_mb holds however many slots that memory
 	// is worth on THIS host, so an 8GB suite throttles peers on a 16GB runner and
 	// barely registers on a 64GB workstation, without the magusfile naming either.
-	step.Slots = slotsForPolicy(pol.Slots, pol.MemoryMB, m.limiter().Capacity(), m.hostTotalBytes())
+	// Both halves of admission read the SAME folded figure. Slots throttle peers
+	// inside this process (a wait); the claim arbitrates the host (a refusal). Feeding
+	// slots the target's own declaration while the claim used the chain's would let
+	// several composed steps take one slot each and a full claim each, so a single
+	// invocation refused itself over memory its own siblings held.
+	step.MemoryMB, step.MemoryDeclaredBy = m.chainMemoryMB(p, target)
+	step.Slots = slotsForPolicy(pol.Slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
 	return step
 }
 
@@ -890,18 +896,21 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		watchDone.Add(1)
 		go func() {
 			defer watchDone.Done()
-			hostmem.Watch(watchCtx, func(available, total int64) {
+			mem.Watch(watchCtx, func(r mem.Reading) {
 				heap := vm.ReadHeapStats()
 				var hot string
 				if sites, _ := vm.HeapHotSites(1); len(sites) > 0 {
 					hot = sites[0].Site
 				}
 				m.cache.LogMemoryPressure(ctx, cache.MemoryPressure{
-					AvailableBytes: available,
-					TotalBytes:     total,
-					BuzzObjects:    heap.Objects,
-					BuzzPeak:       heap.Peak,
-					BuzzHotSite:    hot,
+					AvailableBytes:  r.AvailableBytes,
+					TotalBytes:      r.TotalBytes,
+					SwapUsedBytes:   r.SwapUsedBytes,
+					SwapGrowthBytes: r.SwapGrowthBytes,
+					SwapTriggered:   r.SwapTriggered,
+					BuzzObjects:     heap.Objects,
+					BuzzPeak:        heap.Peak,
+					BuzzHotSite:     hot,
 				})
 			})
 		}()

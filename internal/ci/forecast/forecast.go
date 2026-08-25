@@ -8,7 +8,7 @@ import (
 	"math"
 	"slices"
 
-	"github.com/egladman/magus/internal/hostmem"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,7 +37,7 @@ type Forecaster struct {
 // Go build cache, node, and the toolchains all sit in the same memory, and the
 // measured peaks this is compared against are the projects alone. Three quarters
 // leaves that headroom without buying runners for work that would have fit.
-const usableMemoryFraction = 0.75
+const usableMemoryFraction = mem.UsableFraction
 
 // memoryBudget returns the byte budget for one shard: the explicit setting when
 // a caller pinned one, otherwise three quarters of the host's memory, otherwise
@@ -46,7 +46,12 @@ func (f Forecaster) memoryBudget() int64 {
 	if f.MemoryBudgetBytes > 0 {
 		return f.MemoryBudgetBytes
 	}
-	if total := hostmem.TotalBytes(context.Background()); total > 0 {
+	// Usable, so a planner running inside a memory-limited container plans for the
+	// class it is actually in. A ceiling is part of the machine class in a way
+	// transient free memory is not, which is the distinction TotalBytes's own doc
+	// draws. When the planner and the shards genuinely differ, MemoryBudgetBytes
+	// above is the explicit answer.
+	if total := mem.UsableBytes(context.Background()); total > 0 {
 		return int64(float64(total) * usableMemoryFraction)
 	}
 	return 0
@@ -120,11 +125,19 @@ func (f Forecaster) fitMemory(projects []*types.Project, durations []int64, n, l
 // fits reports whether every shard's predicted peak is within the budget.
 //
 // A shard's figure is the SUM of its projects, and the contrast with
-// types.PeakRSS - which takes a maximum - is not an inconsistency. That one
-// aggregates the processes WITHIN one target, which run in sequence, so the
-// high-water mark is whichever process peaked. This one aggregates the projects
-// within a shard, which magus schedules CONCURRENTLY up to its concurrency
-// budget, so their peaks can coincide and the runner has to hold all of them.
+// types.PeakRSS - which takes a maximum - is not an inconsistency at this level:
+// this one aggregates the projects within a shard, which magus schedules
+// CONCURRENTLY up to its concurrency budget, so their peaks can coincide and the
+// runner has to hold all of them.
+//
+// The per-project figures being summed are FLOORS, and this is the consumer that
+// pays when one is too low: a shard that fits on paper still takes its runner
+// down, which is the exact failure this packing exists to prevent. They used to be
+// much worse than floors - a target's processes were folded as a maximum on the
+// premise that they run in sequence, so a parallel suite whose real footprint was
+// 3GB recorded 1.2GB (see types/peakrss.go). That is fixed at the source now by
+// sampling the process tree, but history written before the fix still carries the
+// old figures, so treat a passing fit as necessary rather than sufficient.
 //
 // Summing is also what makes splitting work at all: the maximum of a shard's
 // projects does not fall when the shard is halved, so a max-based test could

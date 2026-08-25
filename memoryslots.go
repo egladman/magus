@@ -3,14 +3,31 @@ package magus
 import (
 	"context"
 
-	"github.com/egladman/magus/internal/hostmem"
+	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/types"
 )
 
-// hostTotalBytes is the machine's memory, read once. buildStep consults it per
-// target, and the answer cannot change while the process runs.
-func (m *Magus) hostTotalBytes() int64 {
-	m.hostMemOnce.Do(func() { m.hostMemBytes = hostmem.TotalBytes(context.Background()) })
+// hostUsableBytes is the memory this process may commit, read once. buildStep
+// consults it per target, and the answer cannot change while the process runs.
+//
+// Usable rather than total: in a memory-limited container the machine's own figure
+// is memory this build can never have, and both readers below size real work
+// against it.
+func (m *Magus) hostUsableBytes() int64 {
+	m.hostMemOnce.Do(func() { m.hostMemBytes = mem.UsableBytes(context.Background()) })
 	return m.hostMemBytes
+}
+
+// chainMemoryMB folds a target's ctx.needs chain into the figure both halves of
+// admission read. See types.ChainMemoryMB; this only supplies the workspace's
+// cross-project lookup.
+//
+// The claim is held for the whole step, including the phases that do not need it,
+// which is conservative in the direction the machine survives: the alternative is
+// admitting the chain and refusing it twenty minutes in, when the work already done
+// is wasted.
+func (m *Magus) chainMemoryMB(p *types.Project, target string) (mb int, declaredBy string) {
+	return types.ChainMemoryMB(p, target, m.Get)
 }
 
 // slotsForPolicy resolves a target's declared policy to the number of concurrency

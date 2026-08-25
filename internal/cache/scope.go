@@ -149,6 +149,15 @@ func (c *Cache) LogSummary(ctx context.Context, elapsed time.Duration) {
 type MemoryPressure struct {
 	AvailableBytes int64
 	TotalBytes     int64
+	// SwapUsedBytes and SwapGrowthBytes are the machine's swap and how much of it
+	// this run added. Growth is the attributable half: a machine up for weeks
+	// carries swap that predates the run, and reporting the level alone would
+	// blame this run for it. Both 0 where the platform cannot report swap.
+	SwapUsedBytes   int64
+	SwapGrowthBytes int64
+	// SwapTriggered reports that swap growth is why the watchdog spoke, as opposed to
+	// falling headroom. See mem.Reading.
+	SwapTriggered bool
 	// BuzzObjects and BuzzPeak are the script VM's heap counts. Its heap never
 	// frees, so a magusfile can consume the machine with no subprocess looking
 	// guilty; 0 means the caller did not measure.
@@ -172,6 +181,22 @@ func (c *Cache) LogMemoryPressure(ctx context.Context, p MemoryPressure) {
 	}
 	msg := fmt.Sprintf("memory headroom low: %dMB available of %dMB total; a target here is close to taking the machine down",
 		p.AvailableBytes>>20, p.TotalBytes>>20)
+
+	// Swap leads when swap growth is what the watchdog fired on, because on darwin it
+	// is the reading that moves: free, inactive and speculative pages do not fall
+	// while the compressor and the swap file absorb the pressure, so headroom can
+	// still look survivable on a machine that is already thrashing.
+	//
+	// Gated on the watchdog's own verdict rather than on the figure being non-zero. A
+	// headroom warning routinely carries a few megabytes of growth, and switching on
+	// that would replace the headroom sentence with one announcing 0MB paged out.
+	if p.SwapTriggered {
+		attrs = append(attrs,
+			slog.Int64("swap_used_mb", p.SwapUsedBytes>>20),
+			slog.Int64("swap_growth_mb", p.SwapGrowthBytes>>20))
+		msg = fmt.Sprintf("this run has pushed %dMB into swap (%dMB used in total, %dMB of %dMB memory available); paging is what makes a machine stop responding rather than a target fail",
+			p.SwapGrowthBytes>>20, p.SwapUsedBytes>>20, p.AvailableBytes>>20, p.TotalBytes>>20)
+	}
 
 	// Name what is running. The inflight registry already tracks this and already
 	// survives a SIGKILL, so a warning that made the reader guess was withholding
