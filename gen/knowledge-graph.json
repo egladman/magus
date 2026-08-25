@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2379,
-  "edge_count": 6068,
+  "node_count": 2392,
+  "edge_count": 6098,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1596,7 +1596,7 @@
       "label": "spells",
       "source": "spells",
       "attrs": {
-        "dir_files": "67",
+        "dir_files": "68",
         "dir_languages": "buzz,markdown"
       }
     },
@@ -1806,7 +1806,7 @@
       "label": "spells/github",
       "source": "spells/github",
       "attrs": {
-        "dir_files": "1",
+        "dir_files": "2",
         "dir_languages": "buzz"
       }
     },
@@ -1815,6 +1815,16 @@
       "kind": "dir",
       "label": "spells/github/actions",
       "source": "spells/github/actions",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "buzz"
+      }
+    },
+    {
+      "id": "dir:spells/github/review",
+      "kind": "dir",
+      "label": "spells/github/review",
+      "source": "spells/github/review",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "buzz"
@@ -7305,6 +7315,15 @@
       "kind": "file",
       "label": "spells/github/actions/spell.buzz",
       "source": "spells/github/actions/spell.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:spells/github/review/spell.buzz",
+      "kind": "file",
+      "label": "spells/github/review/spell.buzz",
+      "source": "spells/github/review/spell.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -14463,6 +14482,100 @@
       "label": "workflowEnv",
       "doc": "workflowEnv reads a secret the workflow injected. There is no other way in, so a miss is a workflow-file edit rather than anything this run could recover from - which is why the error is the snippet to paste rather than a status.",
       "source": "spells/github/actions/spell.buzz:353"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:getenv",
+      "kind": "function",
+      "label": "getenv",
+      "source": "spells/github/review/spell.buzz:45"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:has_token",
+      "kind": "function",
+      "label": "has_token",
+      "doc": "has_token reports presence WITHOUT resolving, so the guards below stay cheap and cannot prompt - the same split github/actions draws for the same reason. A reader opening a diff must never be asked for a credential by the act of looking.",
+      "source": "spells/github/review/spell.buzz:53"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:headers",
+      "kind": "function",
+      "label": "headers",
+      "source": "spells/github/review/spell.buzz:57"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:mgs_getName",
+      "kind": "function",
+      "label": "mgs_getName",
+      "source": "spells/github/review/spell.buzz:36",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:open_review",
+      "kind": "function",
+      "label": "open_review",
+      "doc": "open_review reports the pull request open for this branch, or an empty number when there is none. A branch with no pull request is the ORDINARY state - most branches, most of the time - so it is never an error and never a reason a diff fails to open.",
+      "source": "spells/github/review/spell.buzz:131",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:publish_review",
+      "kind": "function",
+      "label": "publish_review",
+      "doc": "publish_review sends a batch of drafts as ONE review.  A batch rather than a call per comment, which is the whole shape of self-review: you read, you accumulate remarks, and only then decide the set is worth sending. Publishing each as it is written would send the first thought before the fifth changed your mind about it.  Returns the review id and the drafts it accepted, so the caller can mark exactly those published. A partial result is a real answer here: GitHub rejects an inline comment whose line is no",
+      "source": "spells/github/review/spell.buzz:167",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:reply_review",
+      "kind": "function",
+      "label": "reply_review",
+      "doc": "reply_review answers one existing thread, so a conversation can be finished without leaving.",
+      "source": "spells/github/review/spell.buzz:221",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:reviewBody",
+      "kind": "function",
+      "label": "reviewBody",
+      "doc": "reviewBody assembles the payload GitHub's \"create a review\" endpoint takes.  COMMENT, never APPROVE or REQUEST_CHANGES: this publishes YOUR notes on YOUR change, and a self-review that approves itself is a lie the API is happy to tell. The event is fixed here rather than passed in so no caller can widen it later without reading this.  Each draft becomes one inline comment anchored to a path and a line. A draft carrying no line is dropped rather than promoted to a review-level remark: it would arrive detache",
+      "source": "spells/github/review/spell.buzz:106",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:review_threads",
+      "kind": "function",
+      "label": "review_threads",
+      "doc": "review_threads lists the inline comment threads already on the review, so a reader never leaves for the browser to find out what a colleague said.  This is the one function that makes magus depend on a host being reachable. Every failure returns an EMPTY list rather than throwing: a diff that will not open because GitHub is slow is a worse tool than one that shows the change and says nothing about the conversation.",
+      "source": "spells/github/review/spell.buzz:195",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:slug",
+      "kind": "function",
+      "label": "slug",
+      "doc": "slug turns a git remote URL into \"owner/name\", empty when it is not a GitHub remote.  Both spellings, because both are in daily use and a reader who cloned over SSH is not holding a different repository than one who cloned over HTTPS:  git@github.com:acme/acme.git https://github.com/acme/acme.git  Empty rather than an error for a non-GitHub remote: a workspace on another host that wired this spell by mistake should publish nothing, not fail to open a diff.",
+      "source": "spells/github/review/spell.buzz:75",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:token",
+      "kind": "function",
+      "label": "token",
+      "source": "spells/github/review/spell.buzz:55"
     },
     {
       "id": "function:spells/gitlab/ci/spell.buzz:annotate",
@@ -26470,12 +26583,28 @@
       "provenance": "spells/github/actions"
     },
     {
+      "source": "dir:spells/github",
+      "target": "dir:spells/github/review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review"
+    },
+    {
       "source": "dir:spells/github/actions",
       "target": "file:spells/github/actions/spell.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "dir:spells/github/review",
+      "target": "file:spells/github/review/spell.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
     },
     {
       "source": "dir:spells/gitlab",
@@ -55646,6 +55775,134 @@
       "provenance": "spells/github/actions/spell.buzz"
     },
     {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:getenv",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:mgs_getName",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:open_review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:publish_review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:reply_review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:reviewBody",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:review_threads",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:slug",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:token",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:assert",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:http",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:serialize",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
       "source": "file:spells/gitlab/ci/spell.buzz",
       "target": "function:spells/gitlab/ci/spell.buzz:annotate",
       "relation": "contains",
@@ -60636,6 +60893,102 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:has_token",
+      "target": "function:spells/github/review/spell.buzz:getenv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:headers",
+      "target": "function:spells/github/review/spell.buzz:token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:open_review",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:open_review",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:open_review",
+      "target": "function:spells/github/review/spell.buzz:slug",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:publish_review",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:publish_review",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:publish_review",
+      "target": "function:spells/github/review/spell.buzz:reviewBody",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:reply_review",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:reply_review",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:review_threads",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:review_threads",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
     },
     {
       "source": "function:spells/gitlab/ci/spell.buzz:enabled",

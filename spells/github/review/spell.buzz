@@ -1,0 +1,260 @@
+// GitHub review spell for magus: connects a workspace to the pull request its changes are
+// discussed on. Wire it in a magusfile:
+//
+//   import "spells/github/review" as github
+//   magus\review.provider(github)
+//
+// It carries the review contract (spells/review.go) - open_review, review_threads,
+// publish_review, reply_review - as a FOURTH contract on this vendor, beside the cache, CI and
+// secret ones spells/github/actions carries. magus knows nothing about GitHub: it calls four
+// reserved names and reads what comes back.
+//
+// A SEPARATE spell from github/actions rather than four more functions in it, because the two
+// run in different places. That one is inert outside a CI job by design - every op checks for
+// the Actions runtime token first. This one runs on a laptop, in the middle of a review, where
+// no Actions token exists and never will.
+//
+// HTTP directly, no `gh` binary. That is what github/actions already does for the Actions cache
+// (`import "http"`, a bearer token, no CLI), so it is this repository's established way of
+// talking to a vendor rather than a new one. It also means a review needs a token, not an
+// install.
+//
+// # What is NOT verified here
+//
+// The pure halves - building a review payload, reading a pull-request number out of a response,
+// deciding whether this workspace can publish at all - are covered by the tests at the bottom
+// and run with `magus buzz -t`. The HTTP calls are not, and cannot honestly be: verifying them
+// means posting a real review to a real pull request, which is not something a test may do to
+// somebody's repository. Treat the first real publish as the verification.
+
+import "assert";
+import "http";
+import "os";
+import "serialize";
+import "magus";
+
+export fun mgs_getName() > str { return "github-review"; }
+
+final API = "https://api.github.com";
+
+// TOKEN_REF is the reference this spell reads its credential by, resolved through whatever
+// secret provider the workspace wired. It is a REFERENCE, not a value: nothing here ever holds
+// a token that magus did not hand it, and nothing writes one anywhere.
+final TOKEN_REF = "GITHUB_TOKEN";
+
+fun getenv(name: str) > str {
+    final v = os\env(name);
+    return v ?? "";
+}
+
+// has_token reports presence WITHOUT resolving, so the guards below stay cheap and cannot
+// prompt - the same split github/actions draws for the same reason. A reader opening a diff
+// must never be asked for a credential by the act of looking.
+fun has_token() > bool { return getenv(TOKEN_REF) != ""; }
+
+fun token() > str !> any { return magus\secret.read(TOKEN_REF); }
+
+fun headers() > any !> any {
+    return mut {
+        "Authorization": "Bearer " + token(),
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    };
+}
+
+// slug turns a git remote URL into "owner/name", empty when it is not a GitHub remote.
+//
+// Both spellings, because both are in daily use and a reader who cloned over SSH is not
+// holding a different repository than one who cloned over HTTPS:
+//
+//   git@github.com:acme/acme.git
+//   https://github.com/acme/acme.git
+//
+// Empty rather than an error for a non-GitHub remote: a workspace on another host that wired
+// this spell by mistake should publish nothing, not fail to open a diff.
+export fun slug(remote: str) > str {
+    var s = remote;
+    if (s.startsWith("git@github.com:")) {
+        s = s.sub(15);
+    } else if (s.startsWith("https://github.com/")) {
+        s = s.sub(19);
+    } else if (s.startsWith("ssh://git@github.com/")) {
+        s = s.sub(21);
+    } else {
+        return "";
+    }
+    if (s.endsWith(".git")) {
+        s = s.sub(0, len: s.len() - 4);
+    }
+    // owner/name and nothing more. A trailing path segment means this is not a repository root.
+    final parts = s.split("/");
+    if (parts.len() != 2 or parts[0] == "" or parts[1] == "") {
+        return "";
+    }
+    return parts[0] + "/" + parts[1];
+}
+
+// reviewBody assembles the payload GitHub's "create a review" endpoint takes.
+//
+// COMMENT, never APPROVE or REQUEST_CHANGES: this publishes YOUR notes on YOUR change, and a
+// self-review that approves itself is a lie the API is happy to tell. The event is fixed here
+// rather than passed in so no caller can widen it later without reading this.
+//
+// Each draft becomes one inline comment anchored to a path and a line. A draft carrying no
+// line is dropped rather than promoted to a review-level remark: it would arrive detached from
+// the code it was written about, which is the one thing an inline comment is for.
+export fun reviewBody(summary: str, drafts: [any]) > any {
+    final comments = mut [<any>];
+    foreach (d in drafts) {
+        final path = "{d["path"] ?? ""}";
+        final line = d["line"] ?? 0;
+        if (path == "" or line == 0) {
+            continue;
+        }
+        comments.append({
+            "path": path,
+            "line": line,
+            "side": "RIGHT",
+            "body": "{d["body"] ?? ""}",
+        });
+    }
+    return {
+        "event": "COMMENT",
+        "body": summary,
+        "comments": comments,
+    };
+}
+
+// open_review reports the pull request open for this branch, or an empty number when there is
+// none. A branch with no pull request is the ORDINARY state - most branches, most of the time -
+// so it is never an error and never a reason a diff fails to open.
+export fun open_review(target: magus\Target, cb: fun(any)) > any !> any {
+    final io = {<str: any>};
+    cb(io);
+    if (!has_token()) {
+        return {"number": 0, "reason": "no credential"};
+    }
+    // The branch and the remote arrive from the CALLER rather than being discovered here.
+    // magus already knows both, through a VCS layer that speaks four backends, and a spell
+    // that re-derived them would be a second opinion about the same working tree - one that
+    // only knows git.
+    final repo = slug("{io["remote"] ?? ""}");
+    final branch = "{io["branch"] ?? ""}";
+    if (repo == "" or branch == "") {
+        return {"number": 0, "reason": "not a github remote"};
+    }
+    final url = API + "/repos/" + repo + "/pulls?head=" + repo.split("/")[0] + ":" + branch;
+    final res = http\get(url, headers: headers());
+    if (res["status"] != 200) {
+        return {"number": 0, "reason": "github: HTTP {res["status"]}"};
+    }
+    final list = serialize\jsonDecode(res["body"]);
+    if (list.len() == 0) {
+        return {"number": 0, "reason": "no pull request for this branch"};
+    }
+    return {"number": list[0].q("number").integerValue(), "repo": repo};
+}
+
+// publish_review sends a batch of drafts as ONE review.
+//
+// A batch rather than a call per comment, which is the whole shape of self-review: you read,
+// you accumulate remarks, and only then decide the set is worth sending. Publishing each as it
+// is written would send the first thought before the fifth changed your mind about it.
+//
+// Returns the review id and the drafts it accepted, so the caller can mark exactly those
+// published. A partial result is a real answer here: GitHub rejects an inline comment whose
+// line is not in the diff, and the rest of the review still lands.
+export fun publish_review(target: magus\Target, cb: fun(any)) > any !> any {
+    final io = {<str: any>};
+    cb(io);
+    if (!has_token()) {
+        throw "github-review: no credential; publishing needs {TOKEN_REF}";
+    }
+    final repo = "{io["repo"] ?? ""}";
+    final number = io["number"] ?? 0;
+    if (repo == "" or number == 0) {
+        throw "github-review: publish needs a repo and a pull-request number";
+    }
+    final drafts = io["drafts"] ?? [<any>];
+    final payload = reviewBody("{io["summary"] ?? ""}", drafts);
+    final url = API + "/repos/" + repo + "/pulls/{number}/reviews";
+    final res = http\post(url, serialize\jsonEncode(payload), headers: headers());
+    if (res["status"] != 200 and res["status"] != 201) {
+        throw "github-review: publish failed: HTTP {res["status"]}: {res["body"]}";
+    }
+    final decoded = serialize\jsonDecode(res["body"]);
+    return {"id": decoded.q("id").integerValue(), "count": payload["comments"].len()};
+}
+
+// review_threads lists the inline comment threads already on the review, so a reader never
+// leaves for the browser to find out what a colleague said.
+//
+// This is the one function that makes magus depend on a host being reachable. Every failure
+// returns an EMPTY list rather than throwing: a diff that will not open because GitHub is slow
+// is a worse tool than one that shows the change and says nothing about the conversation.
+export fun review_threads(target: magus\Target, cb: fun(any)) > [any] !> any {
+    final io = {<str: any>};
+    cb(io);
+    final repo = "{io["repo"] ?? ""}";
+    final number = io["number"] ?? 0;
+    if (!has_token() or repo == "" or number == 0) {
+        return [<any>];
+    }
+    final res = http\get(API + "/repos/" + repo + "/pulls/{number}/comments", headers: headers());
+    if (res["status"] != 200) {
+        return [<any>];
+    }
+    final threads = mut [<any>];
+    foreach (c in serialize\jsonDecode(res["body"])) {
+        threads.append({
+            "id": "{c.q("id").integerValue()}",
+            "path": c.q("path").stringValue(),
+            "line": c.q("line").integerValue(),
+            "author": c.q("user").q("login").stringValue(),
+            "body": c.q("body").stringValue(),
+        });
+    }
+    return threads;
+}
+
+// reply_review answers one existing thread, so a conversation can be finished without leaving.
+export fun reply_review(target: magus\Target, cb: fun(any)) > bool !> any {
+    final io = {<str: any>};
+    cb(io);
+    final repo = "{io["repo"] ?? ""}";
+    final number = io["number"] ?? 0;
+    final thread = "{io["thread"] ?? ""}";
+    if (!has_token() or repo == "" or number == 0 or thread == "") {
+        return false;
+    }
+    final url = API + "/repos/" + repo + "/pulls/{number}/comments/" + thread + "/replies";
+    final res = http\post(url, serialize\jsonEncode({"body": "{io["body"] ?? ""}"}), headers: headers());
+    return res["status"] == 200 or res["status"] == 201;
+}
+
+test "slug reads both remote spellings and rejects a foreign host" {
+    assert\equal(slug("git@github.com:acme/acme.git"), want: "acme/acme", message: "ssh scp-style");
+    assert\equal(slug("https://github.com/acme/acme.git"), want: "acme/acme", message: "https");
+    assert\equal(slug("https://github.com/acme/acme"), want: "acme/acme", message: "no .git suffix");
+    assert\equal(slug("ssh://git@github.com/acme/acme.git"), want: "acme/acme", message: "ssh url");
+    // A workspace on another host that wired this spell publishes nothing rather than failing.
+    assert\equal(slug("git@gitlab.com:acme/acme.git"), want: "", message: "not github");
+    assert\equal(slug(""), want: "", message: "no remote");
+}
+
+test "a review is always a COMMENT, never an approval of your own change" {
+    final body = reviewBody("self-review", [{"path": "a.go", "line": 3, "body": "why"}]);
+    assert\equal(body["event"], want: "COMMENT", message: "a self-review may not approve itself");
+    assert\equal(body["body"], want: "self-review", message: "summary rides along");
+}
+
+test "a draft with no line is dropped rather than detached from its code" {
+    final body = reviewBody("s", [
+        {"path": "a.go", "line": 3, "body": "anchored"},
+        {"path": "b.go", "body": "no line"},
+        {"path": "", "line": 9, "body": "no path"},
+    ]);
+    assert\equal(body["comments"].len(), want: 1, message: "only the anchored draft survives");
+    assert\equal(body["comments"][0]["path"], want: "a.go", message: "and it is the right one");
+    assert\equal(body["comments"][0]["side"], want: "RIGHT", message: "anchored to the new side");
+}
