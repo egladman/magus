@@ -29,9 +29,11 @@ import { emptyEl, setRefIdentity } from "./dom";
 import { tsMs } from "./waterfall";
 import { scheduleLiveRender, setLiveStatus } from "./live";
 import {
+  scenarioInvocations,
   scenarioRuns,
   INV_TEST_BREAK,
   INV_CI,
+  WORKSPACE_ROOT,
   type RunState,
   type ScenarioRun,
 } from "../demo-scenario";
@@ -67,7 +69,10 @@ interface PlacedRun {
 function buildJournal(
   placed: PlacedRun[],
   invId: string,
-  command: { verb: string; args: string[]; cwd: string; trigger: Trigger },
+  // The wire Command's own shape. It used to take {verb, args}, which are not fields of the proto
+  // message - create() dropped them, so every demo journal carried an EMPTY argv and the lineage
+  // line rendered as a bare "magus run" no matter which run it was.
+  command: { arguments: string[]; cwd: string; trigger: Trigger },
   scopeText: string,
 ): Journal {
   const base = Date.now();
@@ -163,9 +168,8 @@ function brokenTestJournal(): Journal {
     [{ run: test, start: 0 }],
     INV_TEST_BREAK,
     {
-      verb: "run",
-      args: ["test", "services/identity"],
-      cwd: "/Users/eli/Repos/acme",
+      arguments: ["run", "test", "services/identity"],
+      cwd: WORKSPACE_ROOT,
       trigger: Trigger.RUN,
     },
     "projects: services/identity (cwd)",
@@ -182,10 +186,43 @@ function ciSweepJournal(): Journal {
   return buildJournal(
     placed,
     INV_CI,
-    { verb: "affected", args: ["ci"], cwd: "/Users/eli/Repos/acme", trigger: Trigger.CI },
+    { arguments: ["affected", "ci"], cwd: WORKSPACE_ROOT, trigger: Trigger.CI },
     "projects: services/identity, apps/dashboard, libs/authkit, . (affected)",
   );
 }
+
+// demoJournal builds ONE invocation's journal from the shared scenario, for the run browser. The
+// daemon-free showcase has no /api/v1/run to read, and a browser whose rows do not open is a picture
+// of a feature rather than the feature - so the same buildJournal the streamed demo uses renders any
+// row the tree lists. Returns null for an id the scenario does not know.
+//
+// The targets cascade on a fixed 300ms stagger rather than replaying real scheduling: the scenario
+// records each run's duration, not when the engine started it, so any placement is a rendering
+// choice and a regular one reads as a waterfall instead of as noise.
+export function demoJournal(inv: string): Journal | null {
+  const now = Date.now();
+  const meta = scenarioInvocations(now).find((i) => i.inv === inv);
+  const runs = scenarioRuns(now).filter((r) => r.inv === inv);
+  if (!meta || !runs.length) return null;
+  return buildJournal(
+    runs.map((run, i) => ({ run, start: i * 300 })),
+    inv,
+    {
+      arguments: meta.arguments,
+      cwd: WORKSPACE_ROOT,
+      trigger: TRIGGERS[meta.trigger] ?? Trigger.RUN,
+    },
+    "projects: " + [...new Set(runs.map((r) => r.project))].join(", "),
+  );
+}
+
+// TRIGGERS maps the scenario's trigger vocabulary onto the wire enum.
+const TRIGGERS: Record<string, Trigger> = {
+  run: Trigger.RUN,
+  affected: Trigger.AFFECTED,
+  ci: Trigger.CI,
+  direct: Trigger.DIRECT,
+};
 
 // startDemo enters the showcase: it frames the axis from the failing-test Invocation, opens the
 // waterfall, streams that invocation's events in over a few seconds via the shared live buffer, and

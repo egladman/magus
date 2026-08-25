@@ -21,7 +21,7 @@ export function delegationTile(): Tile {
     why:
       "Declared work and anything that needs intervention. The letter mark on each row: D" +
       " declared, R running, OK pass, FAIL fail, NR no-return (nothing was ever reported back," +
-      " unlike fail - the one state that needs a human, since no one is coming to tell you" +
+      " unlike fail, the one state that needs a human, since no one is coming to tell you" +
       " about it).",
   });
   const summary = h("p", "console-dashboard-delegation__summary", "No active delegation.");

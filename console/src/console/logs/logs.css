@@ -103,7 +103,6 @@
 /* The "?" help control: a compact square addon that reads as one unit with the field. */
 /* Stretch the "?" control to the filter field's height so the input-group reads as one unit (PF's
    control button is a touch shorter than the form-control field otherwise). */
-.console-log-filter__help { min-width: 1.9rem; padding-inline: 0; font-weight: 700; align-self: stretch; }
 /* PF sets an explicit display:flex on .pf-v6-c-toolbar__group, which outranks the native [hidden]
    display:none, so the time-range group needs an id-scoped rule to actually collapse when hidden
    (it is shown only in timeline mode; render.ts toggles the attribute). */
@@ -419,8 +418,14 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
    to 580px inside a 1395px split. The run browser's leaves are short enough to stay under
    the cap, so the same rule looked correct in one surface while it was broken in the
    other. The tree scrolls, so the floor buys nothing. */
+/* The cap moved from 15rem when the run browser's rows became COMMAND LINES: "magus affected ci
+   --no-default-charms" needs width in a way "build" never did, and at 15rem nearly every row
+   ellipsed to its first two words. The percentage is what keeps the original property - the pane
+   the panel exists to navigate is not squeezed hardest on the narrowest window - so only windows
+   past ~1170px of content see the new cap at all. The activity index shares this frame and gets
+   the same room, which its own long labels want too. */
 .console-log-runs {
-  flex: 0 0 clamp(10rem, 24%, 15rem); display: flex; flex-direction: column;
+  flex: 0 0 clamp(10rem, 26%, 19rem); display: flex; flex-direction: column;
   min-height: 0; min-width: 0;
   border-right: 1px solid var(--pf-t--global--border--color--default);
   /* Chrome, so the chrome token - it sits directly against the navigation rail, and the two reading
@@ -461,6 +466,81 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-body__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 .console-log-runs__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 .console-log-runs__tree { flex: 1 1 auto; overflow: auto; padding: 0.35rem 0.2rem 0.6rem; }
+/* The browser's two controls, STACKED under the header rather than sharing its row. The aside is
+   10-15rem wide, and the size-modifier note at the top of this section applies here for the same
+   reason it applies to the view toolbar: PF's scales only disagree when two controls sit on one
+   line. Stacked, each can take the panel's own 0.78rem and they read as one family. */
+.console-log-runs__controls {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.3rem;
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+/* Both halves share the width evenly, so the toggle reads as a segmented control rather than as two
+   buttons that happen to touch. */
+.console-log-runs__modes { width: 100%; }
+.console-log-runs__modes .pf-v6-c-toggle-group__item { flex: 1 1 0; }
+.console-log-runs__modes .pf-v6-c-toggle-group__button {
+  width: 100%; justify-content: center;
+  padding-block: 0.2rem; padding-inline: 0.35rem;
+  font-size: 0.72rem;
+}
+/* Cluster rules in the toolbar. The row holds three jobs - change the view, scope the time,
+   act on the run - and without a rule between them they read as one long undifferentiated strip.
+   Collapsed into the overflow kebab the controls stack vertically, where a vertical rule is
+   meaningless, so the separators go with them. */
+/* Below 2xl this row holds exactly three things - the filter, the help circle, and the toggle that
+   opens everything else - and at 360px they come to 340px in a 336px line. Left to wrap, the browser
+   moved the toggle to a second row rather than shrinking the filter by 4px, and the filter then grew
+   into the slack it had just created. nowrap makes it shrink instead. Scoped BELOW 2xl on purpose:
+   at 2xl+ PF puts every control back on this row inline (pf-m-show-on-2xl, 90.625rem) and wrapping is
+   how that stays readable. */
+@media (width < 90.625rem) {
+  #log-bar-controls .pf-v6-c-toolbar__content-section { flex-wrap: nowrap; }
+  #log-bar-controls #log-filter-item { min-inline-size: 0; }
+}
+.console-log-toolbar__separator { display: flex; align-items: center; }
+/* PF's vertical divider takes `height: inherit`, so inside a shrink-to-fit flex item it resolves to
+   nothing and the rule never paints. Give it the height of the controls it stands between. */
+.console-log-toolbar__separator .pf-v6-c-divider { block-size: var(--console-control-block-size); }
+.pf-v6-c-toolbar__expandable-content .console-log-toolbar__separator { display: none; }
+/* Names the time-range select, which otherwise showed only its resting option ("Full run") and
+   read as an action nobody could name. */
+/* The label and its help circle sit on one baseline above the field. PF sizes a toolbar item's
+   direct children with flex-basis:100%, which turned the circle into a full-width ellipse; both
+   children here want their own width. */
+.console-log-toolbar__labelrow { display: flex; align-items: center; gap: 0.35rem; }
+.pf-v6-c-toolbar__item.console-log-toolbar__labelrow > * { flex: 0 0 auto; }
+.console-log-toolbar__label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-log-runs__filter {
+  font-size: 0.75rem;
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
+}
+/* How many top-level rows the tree is showing, beside the title. Subtle and tabular: it is a
+   readout, not a control, and it changes on every keystroke in the filter box. */
+.console-log-runs__count {
+  font-size: 0.7rem; font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle);
+  margin-right: 0.2rem;
+}
+.console-log-runs__count:empty { display: none; }
+/* The mixed dot: some of this branch's runs failed. Neither hue is honest on its own, so it reads
+   as the warning tone rather than picking a side. */
+.console-log-runs__dot[data-status="mixed"] { background: var(--console-status-warn); }
+/* A row's second line - an invocation's command, a target's duration. It has to stay one line and
+   truncate: a wrapped argv in a 12rem rail turns a scannable list into a wall. */
+.console-log-runs .pf-v6-c-tree-view__node-description {
+  font-size: 0.68rem; line-height: 1.35;
+  color: var(--pf-t--global--text--color--subtle);
+  font-family: var(--pf-t--global--font--family--mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 .console-log-runs__empty { margin: 0.5rem 0.7rem; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); line-height: 1.5; }
 /* A run leaf's outcome dot: green pass, red fail (the semantic status hues, reserved for status). */
 .console-log-runs__dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.45rem; border-radius: 50%; flex: 0 0 auto; background: var(--pf-t--global--text--color--subtle); }
@@ -484,8 +564,21 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 }
 .console-log-runs__reopen-badge:empty { display: none; }
 /* Keep the tree readable in the dense panel: the run leaves are mono (they read as data/timestamps). */
-.console-log-runs .pf-v6-c-tree-view__node-text { font-size: 0.78rem; }
+/* Both of a row's lines TRUNCATE rather than widen the panel, and min-width:0 is what makes that
+   binding. PF's __node-content is a flex column whose children default to min-width:auto, which
+   floors each at its MIN-CONTENT width - one long "project:target" label then sets the tree's width
+   and the whole aside scrolls sideways (measured: rows 779px wide inside a 240px panel). The full
+   text is on the row's title=, so nothing is lost by clipping. */
+.console-log-runs .pf-v6-c-tree-view__node-content { min-width: 0; }
+.console-log-runs .pf-v6-c-tree-view__node-text {
+  font-size: 0.78rem;
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .console-log-runs__tree .pf-v6-c-tree-view__list-item:not([aria-expanded]) .pf-v6-c-tree-view__node-text { font-family: var(--pf-t--global--font--family--mono); }
+/* A branch label is a NAME (a project, a target, a relative time), so it stays in the text face; only
+   the leaves are data. The rule above keys on "has no children", which the invocation rows break -
+   they are branches whose label is a timestamp - so they are exempted back explicitly. */
+.console-log-runs__tree .pf-v6-c-tree-view__list-item[aria-expanded] > .pf-v6-c-tree-view__content .pf-v6-c-tree-view__node-text { font-family: inherit; }
 
 /* Phone: an OPEN aside would squeeze the content pane to a useless sliver (a fixed 15rem beside a
    ~375px viewport), so overlay it over the scroll area instead - full height, above the content. The

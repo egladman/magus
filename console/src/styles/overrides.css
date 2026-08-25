@@ -137,6 +137,20 @@
    metaphor every reader already carries, and the glyph alone assumes it is. Own line-height: the
    button above still wants its icon at line-height 0, but that would squash this text to nothing. */
 #console-statusbar .console-shell-statusbar__panes-label { line-height: 1.35; white-space: nowrap; }
+/* The label is nowrap and overflow-visible, so a squeezed chip does not clip it - it spills. Measured
+   at 360px the chip flexed down to 33px around a 56px word, which then lay across the share button
+   beside it. Refusing to shrink keeps the pair the size of its content. */
+#console-statusbar .console-shell-statusbar__panes { flex: 0 0 auto; }
+/* Below ~26rem there is less bar than content even so, and the word is what goes: the glyph is the
+   live readout, the word only names it. The fill goes with it - it exists to bind the pair into one
+   pill, and there is no pair left - so the chip falls back to the tray's bare-glyph weight instead of
+   sitting there as a lone tinted square. Deliberately narrower than the 40rem stop the version uses:
+   the word earns its place on a normal phone and loses it only on a small one. */
+@media (max-width: 26rem) {
+  #console-statusbar .console-shell-statusbar__panes-label { display: none; }
+  #console-statusbar .console-shell-statusbar__panes,
+  #console-statusbar .console-shell-statusbar__panes:hover { background: none; }
+}
 
 /* Connection liveness item: a leading dot whose color IS the link/health state, read from the
  * console status tokens (theme-aware). Only the DOT carries the status color (via the

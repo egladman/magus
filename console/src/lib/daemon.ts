@@ -277,7 +277,7 @@ export async function probeDaemon(hostPort: string, timeoutMs = 3000): Promise<P
     return {
       ok: false,
       reason:
-        "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port - hostnames (including localhost) are not accepted.",
+        "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port. Hostnames, localhost included, are not accepted.",
     };
   }
   const url = "http://" + host + "/livez";

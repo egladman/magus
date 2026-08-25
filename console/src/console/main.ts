@@ -217,6 +217,11 @@ const SURFACES: Launchable[] = [
     label: "Activity",
     hint: "Everything that happened here, and what led to it",
   },
+  // Runs before Log Viewer, because it is the one you reach for FIRST: the viewer reads a run you
+  // already have, this finds the run. The pair is deliberate - browsing history and reading one
+  // run's output are different jobs, and the viewer's own side panel covers only "the next one"
+  // while you are already reading.
+  { pageId: "runs", label: "Runs", hint: "Every run this workspace kept, no ref needed" },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   { pageId: "diff", label: "Diff", hint: "Read what you have changed but not committed" },
@@ -247,7 +252,7 @@ const SURFACES: Launchable[] = [
 // (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
-const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff"];
+const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "runs"];
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
@@ -2302,6 +2307,14 @@ export function startConsole(
       title: "Diff",
       bundle: "diff/diff.js",
       css: "diff/diff.css",
+    }),
+  );
+  register(
+    moduleSurface({
+      id: "runs",
+      title: "Runs",
+      bundle: "runs/runs.js",
+      css: "runs/runs.css",
     }),
   );
   // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static

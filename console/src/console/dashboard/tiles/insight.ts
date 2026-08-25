@@ -30,6 +30,7 @@ import type {
 import { fmtCount } from "../state";
 import { SortableTable, type Column } from "./widgets";
 import { Card, h, helpGlyph, type Tile } from "./card";
+import { REFRESH, svgGlyph } from "../../../ui/glyph";
 
 const flag = (on: boolean, label: string): string => (on ? label : "-");
 // A signed integer for the trend delta so a rising project reads "+N" and a cooling one "-N".
@@ -426,15 +427,20 @@ export function insightSection(
   );
   const lastRan = h("span", "console-dashboard-insight__lastran");
   head.append(lastRan);
-  const refresh = h("button", "console-dashboard-insight__refresh", "Refresh");
+  const refresh = h("button", "console-dashboard-insight__refresh");
   refresh.type = "button";
   refresh.title = "Refetch the insight lenses now";
+  refresh.append(svgGlyph(REFRESH, 14));
+  // The label is its own node because the click handler swaps it: writing textContent on the button
+  // would take the mark with it, and it would not come back.
+  const refreshLabel = h("span", "", "Refresh");
+  refresh.append(refreshLabel);
   refresh.addEventListener("click", () => {
     refresh.disabled = true;
-    refresh.textContent = "Refreshing…";
+    refreshLabel.textContent = "Refreshing...";
     void onRefresh().finally(() => {
       refresh.disabled = false;
-      refresh.textContent = "Refresh";
+      refreshLabel.textContent = "Refresh";
     });
   });
   head.append(refresh);

@@ -938,7 +938,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const requestID = ++contextRequestID;
     context.hidden = false;
     contextTitle.textContent = file.path;
-    contextBody.textContent = "Loading surrounding code…";
+    contextBody.textContent = "Loading surrounding code...";
     if (focus) context.focus();
     const hp = host_();
     if (!hp) {

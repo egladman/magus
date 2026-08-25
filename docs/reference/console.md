@@ -57,6 +57,8 @@ Every route on the console's `/api/v1/` surface, enumerated:
 | `POST /api/v1/diff/session`        | The human's half of a paired review: cursor, viewed marks, comments                                                                |
 | `GET /api/v1/outputs`              | The run browser's tree: prior runs, newest first                                                                                   |
 | `GET /api/v1/output?ref=<ref>`     | One run's verbatim captured output, by [output reference](../concepts/cache/output-refs.md)                                        |
+| `GET /api/v1/runs`                 | The run browser's other axis: the retained invocation journals, newest first (`?limit=N`)                                          |
+| `GET /api/v1/run?inv=<id>`         | One past run's whole journal as a `magus.viewer.v1alpha1.Journal` (protobuf); `?ref=` addresses it by an output                    |
 | `GET /api/v1/plan`                 | The derived run plan: the target DAG the engine resolves, with each node's live state                                              |
 | `GET /api/v1/ledger`               | The delegation plan an agent [declared](../guides/integrations/agents/delegation.md); magus enforces none of it                    |
 | `GET /api/v1/attention`            | The attention queue: blocks waiting on a person, same shape as `magus session attention -o json`                                   |
@@ -85,8 +87,12 @@ agent cannot reach the human route, so it cannot post as the person.
 
 **The share subset is smaller on purpose.** `POST /api/v1/share` opens an
 on-demand, time-boxed LAN listener behind a fresh read-only token, so you can
-watch a run from a phone. It serves only `events`, `insight`, `outputs` and
-`output`, plus the activity, metrics, status and insight Connect reads. `graph`, `diff`,
+watch a run from a phone. It serves only `events`, `insight`, `outputs`,
+`output`, `runs` and `run`, plus the activity, metrics, status and insight Connect
+reads. The two run routes are in the set for the same reason the two output ones
+are: a past run's journal holds the captured output `output` already serves, plus
+the command that produced it - which a `magus query output --open` link has always
+carried in its fragment. `graph`, `diff`,
 `diff/patch`, `diff/session`, `plan`, `ledger`, `/mcp` and the job service are
 deliberately loopback-only: a working diff is unreviewed source, a plan names
 every target in the workspace, and a share link is a URL handed to a phone. A

@@ -316,7 +316,7 @@ maintenance jobs. See [reference/console.md](reference/console.md).
 
 ### Console app
 
-One of the console's applications (Log Viewer, Graph Explorer, Dashboard,
+One of the console's applications (Runs, Log Viewer, Graph Explorer, Dashboard,
 Activity Trail, Settings). "App" rather than "page" because one is never a
 document you navigate to: it is mounted into a tab, or into a pane beside
 another one. Each is single-instance - opening one you already have focuses it

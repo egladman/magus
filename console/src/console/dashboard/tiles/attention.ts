@@ -321,7 +321,7 @@ export function attentionTile(): Tile {
       "This headline reads the attention queue: blocks an agent raised that are waiting on a" +
         " person, the same queue `magus session attention` lists. Nothing closes a request but" +
         " you disposing of it. The failing/running/queued counts below are live run activity and" +
-        " do NOT feed this verdict - a failing target is not a request, and an empty queue over a" +
+        " do NOT feed this verdict. A failing target is not a request, and an empty queue over a" +
         " red build is both facts being true at once.",
       "this verdict",
     ),

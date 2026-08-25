@@ -15,11 +15,24 @@ import { must } from "../../lib/guards";
 import { fromBinary } from "@bufbuild/protobuf";
 import { JournalSchema } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
 import type { Journal } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
-import { parseHash, wantsDemo, getLiveToken, daemonAttach } from "../../lib/daemon";
-import { getDefaultHost } from "../../lib/settings";
-import { initRunBrowser, fetchRunOutput, type RunSummary } from "./runtree";
+import {
+  parseHash,
+  wantsDemo,
+  getLiveToken,
+  daemonAttach,
+  adoptDaemonOrigin,
+  resolveDaemonHost,
+} from "../../lib/daemon";
+import {
+  fetchRunJournal,
+  fetchRunOutput,
+  initRunBrowser,
+  tickRelativeTimes,
+  watchRuns,
+  type Selection,
+} from "./runtree";
 import { cancelLiveRender } from "./live";
-import { decodeFragmentBytes, viewerParams } from "./fragment";
+import { decodeFragmentBytes, setFragmentParam, viewerParams } from "./fragment";
 import { state, waterfallSource } from "./state";
 import {
   bodyEl,
@@ -36,7 +49,7 @@ import {
   setToggleGroup,
 } from "./dom";
 import { stripAnsi } from "../render/ansi";
-import { buildModel, buildModelMulti } from "./model";
+import { buildModel, buildModelMulti, cmdLabel } from "./model";
 import { render, updateTimelineControl } from "./render";
 import { applyTimeRange, clearFocus } from "./waterfall";
 import { applyFilterFromInput, renderFilterChips, setFilter } from "./filter";
@@ -44,7 +57,7 @@ import { clearMarks, runSearch, stepActiveMark } from "./search";
 import { graphAvailable, openInGraph, shareLink } from "./share";
 import { connectLive, setLiveVisible } from "./live";
 import { publishStatus } from "../status";
-import { startDemo, stopDemo } from "./demo";
+import { demoJournal, startDemo, stopDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { mountZoomControl, type ZoomControl } from "../zoomControl";
 import { wireToolbarOverflow } from "../toolbar";
@@ -72,6 +85,13 @@ export const docTitle = signal<string | null>(null);
 // which must survive - the shared state.filterParsed is seeded once in state.ts, so nothing later
 // clobbers it back to empty.
 function init(): void {
+  // Adopt the serving origin FIRST, because everything below that resolves a daemon depends on it.
+  // Each surface is its own esbuild bundle, so lib/daemon's "did we adopt this origin" flag is
+  // PER-BUNDLE state: the shell setting it does not make it true in here, and daemonAttach then
+  // returns null on a console served by that very daemon. The activity surface hit this and fixed
+  // it there; the viewer had the same hole, which is why its run browser read "No daemon connected"
+  // on a page the daemon itself was serving.
+  adoptDaemonOrigin();
   wireControls();
   wireCommands();
   wireZoom();
@@ -81,96 +101,193 @@ function init(): void {
 }
 
 // wireRunBrowser docks the run browser (runtree.ts) to the left of the viewer. It reads the daemon's
-// run list (or, in the #demo showcase, a synthetic set) and, on selection, loads that run's captured
-// output into this same viewer. Purely additive: with no reachable daemon and no demo the tree stays
+// run and output feeds (or, in the #demo showcase, a synthetic set) and, on selection, loads that run
+// into this same viewer. Purely additive: with no reachable daemon and no demo the tree stays
 // empty/hidden, so the #data/#src load and live-attach paths above are untouched.
+// runBrowser is the mounted browser's handle, kept module-level because the viewer names the body
+// header from whatever it has loaded and loadFromURL runs BEFORE the panel is mounted - a #inv= link
+// therefore settles its title before there is anything to write it to. bodyTitleText remembers it so
+// the mount can apply it.
+let runBrowser: { refresh: () => void; setBodyTitle: (t: string) => void } | null = null;
+let bodyTitleText = "";
+// The run panel's auto-refresh stream, split into "how to start one" and "the running one's stop".
+// Module-level like the rest of this surface's state, because the console re-activates this cached
+// module on every reopen and a stream left behind would outlive the panel it feeds.
+let startBrowserWatch: (() => () => void) | null = null;
+let stopBrowserWatch: (() => void) | null = null;
+
+// setBodyTitle names the run on screen in the body header, whether it arrived by click or by link.
+function setBodyTitle(text: string): void {
+  bodyTitleText = text;
+  runBrowser?.setBodyTitle(text);
+}
+
 function wireRunBrowser(): void {
   const scroll = el("log-scroll");
   if (!scroll) return;
   const demo = wantsDemo(parseHash());
-  const host = getDefaultHost();
+  // resolveDaemonHost, NOT getDefaultHost: the browser auto-connects, and the daemon it should
+  // reach is usually the one SERVING this page, which getDefaultHost cannot see (it only reads the
+  // address typed into Settings). On the daemon-origin console that read the panel as "No daemon
+  // connected" while the status bar beside it said "daemon ready" - so the browser was empty in
+  // exactly the setup it exists for.
+  const host = resolveDaemonHost(parseHash()) ?? "";
   const token = getLiveToken();
-  initRunBrowser({
+  runBrowser = initRunBrowser({
     scroll,
     host,
     token,
     demo,
-    nowMs: Date.now(),
-    onOpenRun: (run) => {
-      void openRun(run, demo, host, token);
+    nowMs: () => Date.now(),
+    onSelect: (sel) => {
+      void openSelection(sel, demo, host, token);
     },
   });
+  runBrowser.setBodyTitle(bodyTitleText);
+  // The panel keeps itself current while this surface is on screen, so a run finished in a terminal
+  // is already in the tree when the reader looks for it. setVisible tears the stream down for a
+  // backgrounded tab, and deactivate() catches the close.
+  // The stream and the clock are separate concerns: the labels age whether or not anything runs, so
+  // the ticker also covers the demo and an offline page, which never open a stream at all.
+  startBrowserWatch = () => {
+    const unwatch = watchRuns(host, token, () => runBrowser?.refresh());
+    const untick = tickRelativeTimes(scroll.parentElement ?? scroll);
+    return () => {
+      unwatch();
+      untick();
+    };
+  };
+  stopBrowserWatch?.();
+  stopBrowserWatch = startBrowserWatch();
 }
 
-// openRun loads one browsed run's captured output into the viewer. A demo run (or demo mode) renders a
-// synthetic sample so the showcase is self-contained; a real run fetches its verbatim bytes from the
-// daemon. Either way it flows through loadText, so the viewer renders it exactly like a pasted log.
-async function openRun(
-  run: RunSummary,
+// openSelection loads a browsed row into the viewer. An invocation opens its whole journal; a
+// target opens the SAME journal narrowed to that target, because one step's events only mean
+// something beside the run that scheduled them. Either way the structured path is tried first and
+// the verbatim blob is the fallback - see openRunOutput.
+async function openSelection(
+  sel: Selection,
   demo: boolean,
   host: string,
   token: string | null,
 ): Promise<void> {
   // A browsed run takes over the viewer, so end any in-progress #demo stream first - otherwise its
-  // interval keeps re-rendering the showcase waterfall over the run we just loaded. Drop back to the
-  // log view too: a stored run is verbatim text (no per-step timing to plot), so the timeline the demo
-  // left selected would otherwise render an empty/degenerate waterfall.
+  // interval keeps re-rendering the showcase over the run just loaded.
   stopDemo();
-  state.timeline = false;
-  setStatus("loading " + run.ref + "...");
-  if (demo || run.ref.startsWith("outdemo")) {
-    // Defer one frame so any render the #demo stream already scheduled (scheduleLiveRender, rAF) flushes
-    // FIRST - otherwise it would repaint the showcase over the run we just loaded. Real runs skip this
-    // (no demo stream races them).
-    requestAnimationFrame(() => loadText(demoRunText(run), run.ref));
+  if (sel.kind === "invocation") {
+    await openInvocation(sel.inv, sel.label, demo, host, token);
     return;
   }
-  const text = await fetchRunOutput(host, token, run.ref);
-  if (text == null) {
-    setStatus("could not load " + run.ref + " (it may have aged out)", true);
-    return;
-  }
-  loadText(text, run.ref);
+  await openRunOutput(sel.run.ref, sel.run.inv, sel.focus, demo, host, token);
 }
 
-// demoRunText synthesizes a short, representative captured-output blob for a demo run, so selecting a
-// leaf in the daemon-free showcase shows something plausible (a passing build, a failing test).
-function demoRunText(run: RunSummary): string {
-  const t = run.target.split(":")[0];
-  const head = "$ magus run " + t + " " + run.project + "\n";
-  if (run.failed) {
-    return (
-      head +
-      "==> " +
-      run.project +
-      ":" +
-      t +
-      "\n" +
-      (run.error ? run.error + "\n" : "one or more checks failed\n") +
-      "FAIL " +
-      run.project +
-      ":" +
-      t +
-      " (" +
-      Math.round(run.duration_ms) +
-      "ms)\n"
-    );
+// openInvocation renders one past run from its journal - the same structured path a `#data=` link
+// takes, so a browsed run gets per-target sections, exact statuses and the waterfall rather than the
+// heuristic parse a text blob gets. focus, when set, pre-narrows the filter to one target.
+async function openInvocation(
+  inv: string,
+  label: string,
+  demo: boolean,
+  host: string,
+  token: string | null,
+  focus?: string,
+): Promise<void> {
+  setStatus("loading " + label + "...");
+  if (demo) {
+    const journal = demoJournal(inv);
+    if (!journal) {
+      setStatus("no demo journal for " + label, true);
+      return;
+    }
+    // Defer one frame so any render the #demo stream already scheduled (scheduleLiveRender, rAF)
+    // flushes FIRST - otherwise it would repaint the showcase over the run just loaded.
+    requestAnimationFrame(() => showJournal(journal, inv, focus));
+    return;
   }
-  return (
-    head +
-    "==> " +
-    run.project +
-    ":" +
-    t +
-    "\n" +
-    "ok  " +
-    run.project +
-    ":" +
-    t +
-    " (" +
-    Math.round(run.duration_ms) +
-    "ms)\n"
-  );
+  if (!host) {
+    setStatus("no daemon connected; set a daemon address in Settings", true);
+    return;
+  }
+  const bytes = await fetchRunJournal(host, token, { inv });
+  if (!bytes) {
+    setStatus("could not load " + label + " (its journal may have aged out)", true);
+    return;
+  }
+  if (!renderJournalBytes(bytes, inv, focus)) {
+    setStatus("could not decode " + label, true);
+  }
+}
+
+// renderJournalBytes decodes a Journal protobuf and hands it to the same loader the #data path
+// uses. Returns false on an undecodable payload so the caller can report it rather than leaving a
+// half-loaded view. focus applies the target filter AFTER the load, so the chips render against
+// the sections the journal actually produced.
+function renderJournalBytes(bytes: Uint8Array, ref: string, focus?: string): boolean {
+  let journal: Journal | null = null;
+  try {
+    const j = fromBinary(JournalSchema, bytes);
+    if (j && j.events && j.events.length) journal = j;
+  } catch (_) {
+    journal = null;
+  }
+  if (!journal) return false;
+  showJournal(journal, ref, focus);
+  return true;
+}
+
+// showJournal loads a decoded journal and settles what a browsed run needs beyond the #data path:
+// the body header's name, the filter (pre-narrowed when one target was chosen), and the page's
+// address, so a reload reopens the run the reader was looking at rather than the empty state.
+function showJournal(journal: Journal, ref: string, focus?: string): void {
+  loadJournal(journal, ref);
+  // The command is taken from the JOURNAL rather than from the row that was clicked, so a run
+  // opened from a link is named the same as one opened from the tree.
+  setBodyTitle(cmdLabel(journal.invocation?.command) + (focus ? " - " + focus : ""));
+  const isInv = ref.startsWith("inv");
+  setFragmentParam(isInv ? "inv" : "ref", ref);
+  setFragmentParam(isInv ? "ref" : "inv", "");
+  const q = focus ? "target:" + focus : "";
+  setFilter(q);
+  renderFilterChips();
+  const filterEl = el("log-filter");
+  if (filterEl) (filterEl as HTMLInputElement).value = q;
+  if (focus) render();
+}
+
+// openRunOutput loads one browsed target. It asks the daemon for the RUN that produced the ref
+// first, because the journal carries structure the stored blob has thrown away (exec boundaries,
+// per-target results, timing the waterfall plots); journals rotate on a coarser cap than outputs,
+// so a ref whose run has aged out still opens as verbatim text.
+async function openRunOutput(
+  ref: string,
+  inv: string | undefined,
+  focus: string,
+  demo: boolean,
+  host: string,
+  token: string | null,
+): Promise<void> {
+  if (demo) {
+    await openInvocation(inv ?? "", ref, demo, host, token, focus);
+    return;
+  }
+  setStatus("loading " + ref + "...");
+  if (host) {
+    const bytes = await fetchRunJournal(host, token, { ref });
+    if (bytes && renderJournalBytes(bytes, ref, focus)) return;
+  }
+  // No journal: a stored blob is verbatim text with no per-step timing, so the waterfall the
+  // previous selection may have left showing would plot nothing.
+  state.timeline = false;
+  const text = await fetchRunOutput(host, token, ref);
+  if (text == null) {
+    setStatus("could not load " + ref + " (it may have aged out)", true);
+    return;
+  }
+  loadText(text, ref);
+  // No journal, so no command to name it by - the ref is all this blob knows about itself.
+  setBodyTitle(ref);
+  setFragmentParam("ref", ref);
+  setFragmentParam("inv", "");
 }
 
 // --- Zoom -------------------------------------------------------------------
@@ -303,10 +420,16 @@ async function loadFromURL(): Promise<void> {
   renderFilterChips();
   const filterEl = el("log-filter");
   if (filterEl) (filterEl as HTMLInputElement).value = q;
-  // The shared bare `#demo` fragment (wantsDemo, from lib/daemon - the same trigger the
+  // The shared BARE `#demo` fragment (wantsDemo, from lib/daemon - the same trigger the
   // dashboard and graph explorer use) enters the daemon-free showcase: a synthetic run
   // streams in with a live-filling waterfall.
-  if (wantsDemo(parseHash())) {
+  //
+  // Bare is the operative word. `#demo&inv=` names one run of the demo scenario, which is what the
+  // Runs surface mints for "Open the whole run" while the console is in demo mode, so it has to
+  // reach the inv branch below rather than being swallowed here. openInvocation has always known how
+  // to read a synthetic journal; returning first is what made that path unreachable from a URL.
+  const demo = wantsDemo(parseHash());
+  if (demo && !params.inv && !params.ref) {
     startDemo();
     return;
   }
@@ -344,10 +467,30 @@ async function loadFromURL(): Promise<void> {
     }
     return;
   }
-  // No static content requested: connect live if an explicit daemon attach resolves (a #port link, or
-  // the daemon-origin/shared console). A static #data/#src above always wins, so a live attach never
-  // clobbers a pasted or fetched log.
-  const attach = daemonAttach(parseHash());
+  // #inv= and a bare #ref= address a stored run in the LOCAL cache - what the run browser writes
+  // when a row is selected, so reopening the page lands back on the run the reader was reading.
+  // Both need the daemon, which is why they sit after the two offline paths: a `magus query output
+  // --open` link carries #ref= alongside its own #data= payload and returns above, so a ref reaching
+  // here is one this page wrote and the daemon can still resolve.
+  if (params.inv || params.ref) {
+    const host = resolveDaemonHost(params) ?? "";
+    const token = getLiveToken();
+    // demo carries through: under #demo the ref names a run of the synthetic scenario, and reaching
+    // for a daemon for it would fail on a machine that has none - which is the whole point of demo.
+    if (params.inv) await openInvocation(params.inv, params.inv, demo, host, token);
+    else await openRunOutput(params.ref, undefined, "", demo, host, token);
+    return;
+  }
+  // No static content requested: connect live if an explicit `#port=` link resolves. A static
+  // #data/#src above always wins, so a live attach never clobbers a pasted or fetched log.
+  //
+  // A #port LINK specifically, not any resolved daemon: connectLive streams from `/events`, which is
+  // the EPHEMERAL per-run server `magus run --open` spins up, and the daemon does not serve that
+  // route at all (its own SSE is /api/v1/events, a graph-change feed). Attaching to a daemon origin
+  // here therefore 404s and parks the surface on "disconnected" over an empty body - strictly worse
+  // than the empty state, which at least says how to load something.
+  const port = parseHash().port;
+  const attach = port === undefined ? null : daemonAttach(parseHash());
   if (attach) {
     connectLive(attach, params);
     return;
@@ -548,6 +691,8 @@ function wireControls(): void {
   // as the body text.
   const filterHelpBtn = el("log-filter-help");
   if (filterHelpBtn) attachHelpPopover(filterHelpBtn);
+  const rangeHelpBtn = el("time-range-help");
+  if (rangeHelpBtn) attachHelpPopover(rangeHelpBtn);
 
   // Filter box: debounced live-filter that narrows both views and syncs the #q= fragment.
   const filterEl = el("log-filter");
@@ -662,9 +807,16 @@ export function setVisible(visible: boolean): void {
   if (visible) {
     zoomCtl = mountZoomControl(zoomOpts());
     applyZoom();
+    // Resume the run panel's stream and catch up on what happened while this pane was backgrounded.
+    if (!stopBrowserWatch && startBrowserWatch) {
+      stopBrowserWatch = startBrowserWatch();
+      runBrowser?.refresh();
+    }
   } else {
     zoomCtl?.remove();
     zoomCtl = null;
+    stopBrowserWatch?.();
+    stopBrowserWatch = null;
   }
 }
 
@@ -683,6 +835,10 @@ export function deactivate(): void {
   // a stepper left behind would sit in the bar driving a surface nobody is looking at.
   zoomCtl?.remove();
   zoomCtl = null;
+  stopBrowserWatch?.();
+  stopBrowserWatch = null;
+  startBrowserWatch = null;
+  runBrowser = null;
   lifecycleAbort?.abort();
   lifecycleAbort = null;
 }

@@ -128,7 +128,7 @@ const EXAMPLES: Example[] = [
   {
     label: "One project's code",
     query: "project:console kind:function",
-    note: "Two terms AND together - both must match.",
+    note: "Two terms AND together. Both must match.",
   },
   {
     label: "Documentation",
@@ -153,7 +153,7 @@ const EXAMPLES: Example[] = [
   {
     label: "Undocumented spells",
     query: "kind:spell -relation:documents",
-    note: "Subtracting a RELATION finds absence - spells nothing documents.",
+    note: "Subtracting a RELATION finds absence: spells nothing documents.",
   },
 ];
 
@@ -453,8 +453,8 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       neg.type = "button";
       neg.setAttribute("aria-pressed", t.negated ? "true" : "false");
       neg.title = t.negated
-        ? "Excluding these - click to include"
-        : "Including these - click to exclude";
+        ? "Excluding these. Click to include"
+        : "Including these. Click to exclude";
       neg.append(h("span", "pf-v6-c-button__text", t.negated ? "not" : "is"));
       neg.addEventListener("click", () => {
         t.negated = !t.negated;

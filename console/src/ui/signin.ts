@@ -155,7 +155,7 @@ function ask(roots: readonly string[]): void {
   lede.textContent =
     "This daemon is serving " +
     roots.length +
-    " workspaces. Pick the one this window follows - runs and activity are filtered to it. Pool, cache and latency stay daemon-wide.";
+    " workspaces. Pick the one this window follows: runs and activity are filtered to it. Pool, cache and latency stay daemon-wide.";
   // Menu rows, not a stack of outlined buttons. Two choices rendered as two bordered cards read as two
   // things to STUDY rather than two things to pick, and at four or five they became a wall. Same PF
   // menu vocabulary as the title bar's own workspace control, so the place you first choose a

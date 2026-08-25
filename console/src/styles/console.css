@@ -95,6 +95,87 @@ body[data-console-app] button[aria-disabled="true"] {
   box-shadow: none;
   cursor: not-allowed;
 }
+/* The border-color above never painted. PF v6 draws a button's outline on an ::after overlay, not on
+   the element's own border, and its disabled rule hardcodes that overlay to transparent - so a
+   disabled PF button lost its outline entirely and read as a bare filled chip beside enabled buttons
+   that are outline-and-no-fill. Two opposite shapes in one row, and the inert one carried the
+   heavier one, which is why a toolbar of mostly-disabled actions stopped reading as buttons at all.
+   Restating the same muted border on the overlay is what makes the rule above true. */
+body[data-console-app] .pf-v6-c-button:disabled::after,
+body[data-console-app] .pf-v6-c-button[disabled]::after,
+body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
+  border-color: var(--pf-t--global--border--color--default);
+}
+
+/* --- Collapsed toolbar overflow panel (the shared [data-overflow-panel] the toolbar.ts kebab fills).
+   Each surface already stretches the controls INSIDE a group, but nothing stretched the groups
+   themselves: PF's expandable content is a grid whose children size to their content, so on a phone
+   the whole stack sat in a ~184px column centred in a 430px panel, with a third of the width dead on
+   each side. Stretch at every level so the menu is one full-width column. --- */
+/* The panel is the column the menu runs down: one track, full width. PF leaves an inline action group
+   justify-content:center over a max-content column, so stretching the items inside it still left the
+   whole stack in a 184px band centred in a 430px panel. */
+[data-overflow-panel] {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  justify-items: stretch;
+  /* A menu, not a sheet. Below PF's lg stop the panel goes full-bleed, which on a 900px window
+     stretched every control to the window: Open graph came out 409px wide and the range select 823px,
+     so a picker read as a text field somebody was meant to fill in. Capping the column keeps the
+     controls control-sized there, and costs nothing on a phone narrower than the cap. */
+  max-inline-size: 30rem;
+  /* Anchored to the END, so the menu drops from under the kebab that opened it. PF right-aligns it
+     itself above lg but pins it to the start below, where the panel was meant to be a full-bleed
+     sheet; capped to a menu width that left it opening 350px away from its own button. An auto
+     start margin does not fix an absolutely positioned box - only the inset does. */
+  inset-inline: auto 0;
+}
+/* Inside a group the short actions pair up rather than spending a row each: auto-fit over a 9rem
+   floor puts Copy beside Copy command and Open graph beside Fullscreen, and collapses to one column
+   on its own when the width stops fitting two, so there is no breakpoint to keep in step. */
+[data-overflow-panel] .pf-v6-c-toolbar__group {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--pf-t--global--spacer--sm);
+  justify-content: stretch;
+  justify-items: stretch;
+}
+/* Only the LEAF clusters flow. The outer action group holds two clusters and the rule between them,
+   so pairing at that level puts a cluster in each half and leaves the rule occupying a cell. */
+[data-overflow-panel] .pf-v6-c-toolbar__group.pf-m-action-group-inline {
+  /* 11rem, not 9: the floor has to clear the longest label plus its icon and padding, or the track
+     is narrower than the button's content and the label runs into the clipped edge ("Collapse
+     sections" ended 1px from it). */
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+/* A vertical rule has nothing to divide once the row is a column; hide the item, not just the rule,
+   or it keeps its cell. */
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(> .pf-v6-c-divider.pf-m-vertical) { display: none; }
+/* A segmented control, a field, and a field's label keep the whole row. Splitting a two-option toggle
+   across a column boundary reads as two unrelated buttons, and a select needs the width for its value. */
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(.pf-v6-c-toggle-group),
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(.pf-v6-c-form-control),
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(> label) {
+  grid-column: 1 / -1;
+}
+[data-overflow-panel] .pf-v6-c-toolbar__item { justify-self: stretch; }
+/* A segmented control splits its row evenly so the stack keeps one left and one right edge. */
+[data-overflow-panel] .pf-v6-c-toggle-group { display: flex; }
+[data-overflow-panel] .pf-v6-c-toggle-group__item { flex: 1 1 0; }
+[data-overflow-panel] .pf-v6-c-toggle-group__button {
+  inline-size: 100%;
+  justify-content: center;
+}
+/* A stacked menu reads down its left edge, so the icon+label pairs start there rather than each
+   floating in the middle of its own row. PF buttons centre by default. */
+[data-overflow-panel] .pf-v6-c-button { justify-content: flex-start; }
+/* A segmented control splits the row evenly rather than sitting at content width, so the stack has one
+   left edge and one right edge all the way down. */
+[data-overflow-panel] .pf-v6-c-toggle-group { display: flex; }
+[data-overflow-panel] .pf-v6-c-toggle-group__item { flex: 1 1 0; }
+[data-overflow-panel] .pf-v6-c-toggle-group__button {
+  inline-size: 100%;
+  justify-content: center;
+}
 
 /* The bottom status-bar FRAME (fixed rail + per-tab wrapper + clusters + the connection liveness
    dot) moved to overrides.css in the W2 shell rebuild - PatternFly has no status-bar component, so it
@@ -582,14 +663,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      Which inverts what the tabs themselves have to do: see the pf-m-current rules further down, where
      the INACTIVE tabs take the chrome fill and recede, rather than the active one taking white and
      advancing. Same logic, opposite assignment, because the ground moved out from under it.
-     NO border-bottom, and no baseline under the strip either - the inactive tabs already ARE one. Each
-     is filled to the chrome tone and reaches the bottom of the row, so the run of them draws a line
-     across it that the current tab breaks by being the page colour. Adding a real border under that
-     put a second grey immediately below each chip's own grey edge, and two adjacent bands of it read
-     as one doubled line rather than as a rule. The chips draw the edge; nothing else needs to.
+     A real baseline under the strip, in the same hairline the scope control uses between its caption
+     and its value, so the two meet perpendicularly at the right of the row.
+     This reverses an earlier call that the inactive tabs already draw that line by being filled to
+     the chrome tone down to the bottom of the row. They do - but only once there ARE inactive tabs,
+     and the state most people open the console in has exactly one. On that screen nothing drew the
+     edge and the strip bled into the page. The earlier objection (a border under a chip's own grey
+     reads as one doubled line) is answered by the chips stopping short of the row's bottom edge
+     below, which leaves the rule the only thing on that line.
      NO cast either. The bar used to throw --sm--bottom down over the content, which put the elevation
      on the wrong body - chrome that is meant to stay back was the thing lifted. */
   background: var(--pf-t--global--background--color--primary--default);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
