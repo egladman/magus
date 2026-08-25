@@ -1366,15 +1366,53 @@ func gitEnviron() []string {
 // the caller named. Use it instead of exec.CommandContext for every git invocation; the
 // caller still sets cmd.Dir or passes -C as before.
 func gitExec(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", uncolored("git", args)...)
 	cmd.Env = gitEnviron()
 	return cmd
+}
+
+// uncolored prepends the switch that stops a backend emitting ANSI, so magus never parses
+// output it has to strip first.
+//
+// Not defensive: a user with `color.ui = always` in their gitconfig - a common setting, since
+// it is how you keep color when piping to a pager - made `magus diff` list every UNTRACKED
+// file and silently drop every tracked one, at exit 0. The escape sequence lands in front of
+// the `diff --git` header, so the header stops beginning a line and no reader sees it. magus
+// synthesizes the untracked half itself, uncolored, which is why output still appeared and
+// the failure looked like a clean answer.
+//
+// hg, Sapling and jj all take a global `--color=never`. git is the exception: it has no such
+// top-level flag (only a per-subcommand `--color`, which not every subcommand accepts), so it
+// gets the config override, which covers diff, log and status alike.
+//
+// Environment variables are NOT an option here, measured against all four with color forced
+// on in repository config: NO_COLOR, HGPLAIN and TERM=dumb each failed to suppress it. An
+// explicit config value outranks every one of them, and an explicit flag is what outranks the
+// config. That is the whole reason this prepends a flag rather than scrubbing an env.
+//
+// The switch goes FIRST because each is a global option that must precede the subcommand.
+func uncolored(name string, args []string) []string {
+	switch name {
+	case "git":
+		return append([]string{"-c", "color.ui=false"}, args...)
+	case "hg", "sl", "jj":
+		return append([]string{"--color=never"}, args...)
+	default:
+		return args
+	}
+}
+
+// vcsExec builds a VCS subprocess with color already suppressed. Use it instead of
+// exec.CommandContext for every hg, Sapling, and jj invocation; git has gitExec, which also
+// scrubs the environment. The caller still sets cmd.Dir or passes the backend's -R/-C flag.
+func vcsExec(ctx context.Context, name string, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, name, uncolored(name, args)...)
 }
 
 // vcsOutput runs a VCS subcommand in dir and returns its trimmed stdout.
 // An empty dir uses the process working directory (the exec.Cmd.Dir convention).
 func vcsOutput(ctx context.Context, dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, uncolored(name, args)...)
 	cmd.Dir = dir
 	if name == "git" {
 		cmd.Env = gitEnviron()
@@ -1391,7 +1429,7 @@ func vcsOutput(ctx context.Context, dir, name string, args ...string) (string, e
 // the first is a space for an unstaged edit (" M path"); TrimSpace ate it on the first
 // line only, so exactly one path per status came back missing its first character.
 func vcsOutputRaw(ctx context.Context, dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, uncolored(name, args)...)
 	cmd.Dir = dir
 	if name == "git" {
 		cmd.Env = gitEnviron()

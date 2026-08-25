@@ -662,3 +662,26 @@ func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
 	assert.Contains(t, got, "uni/café.md", "tracked non-ASCII path came back quoted: %q", got)
 	assert.Contains(t, got, "uni/naïve.md", "untracked non-ASCII path came back quoted: %q", got)
 }
+
+// The switch is per-backend and the wrong one is silently useless, so each is pinned here
+// rather than left to the parity suite alone - that suite skips a backend whose binary is
+// absent, which is most CI machines for three of these four.
+//
+// git is the odd one out on purpose: it has no global --color flag (only a per-subcommand
+// one, which not every subcommand takes), so it gets the config override, which covers diff,
+// log and status alike. The other three accept --color=never before the subcommand.
+func TestUncoloredUsesEachBackendsOwnSwitch(t *testing.T) {
+	assert.Equal(t, []string{"-c", "color.ui=false", "diff", "-U1", "HEAD"},
+		uncolored("git", []string{"diff", "-U1", "HEAD"}))
+	for _, name := range []string{"hg", "sl", "jj"} {
+		assert.Equal(t, []string{"--color=never", "diff"}, uncolored(name, []string{"diff"}), name)
+	}
+	// The switch must PRECEDE the subcommand: all four treat it as a global option, and one
+	// placed after the subcommand is either rejected or silently scoped to it.
+	got := uncolored("hg", []string{"-R", "/repo", "log"})
+	assert.Equal(t, "--color=never", got[0])
+
+	// An unknown backend is passed through untouched rather than guessed at - inventing a
+	// flag for it would break every invocation instead of merely leaving color on.
+	assert.Equal(t, []string{"diff"}, uncolored("fossil", []string{"diff"}))
+}
