@@ -8,9 +8,15 @@
 //
 // State is split by lifetime, deliberately:
 //
-//   - COORDINATION (cursor, comments, suggestions) lives in memory for the daemon's life. It
-//     is about a conversation happening right now; outliving the conversation would resurrect
-//     stale suggestions into a review nobody is having.
+//   - COORDINATION (cursor, suggestions) lives in memory for the daemon's life. It is about a
+//     conversation happening right now; outliving the conversation would resurrect stale
+//     suggestions into a review nobody is having.
+//   - DRAFTS (comments a person wrote, not yet published) are persisted. They used to sit with
+//     coordination, and that was wrong about what they are: a self-review remark is not chatter
+//     about a live conversation, it is a sentence addressed to a teammate that has not been
+//     sent yet. Losing eight of them to a daemon restart is losing the work, not forgetting a
+//     detail. An AGENT's comment stays ephemeral - it belongs to the pairing session, and
+//     reviving it into a review nobody is having is the failure the rule above names.
 //   - PROGRESS (which hunks the human has read) is persisted, because it is the one piece
 //     whose whole value is surviving an interruption. It is keyed by CONTENT DIGEST, so the
 //     mark survives a rebase that did not touch the hunk - which is the failing of every
@@ -41,6 +47,8 @@ type Store struct {
 	sessions map[string]*types.DiffSession
 	// viewedPath is where the digest set is persisted, empty to disable persistence (tests).
 	viewedPath string
+	// draftsPath is where unpublished human comments are persisted, empty to disable.
+	draftsPath string
 	// hunks maps a root to the file each of its hunk digests belongs to, and to how many
 	// hunks each file has. It is what lets MarkViewed answer "did that finish a file", which
 	// a bare digest cannot.
@@ -68,6 +76,7 @@ func NewStore(stateDir string) *Store {
 	}
 	if stateDir != "" {
 		s.viewedPath = filepath.Join(stateDir, "review", "viewed.json")
+		s.draftsPath = filepath.Join(stateDir, "review", "drafts.json")
 	}
 	return s
 }
@@ -107,6 +116,10 @@ func (s *Store) Attach(root string, base string, rev types.Diff, asOf string) *t
 			Base:   base,
 			Cursor: types.DiffCursor{Hunk: -1},
 			Viewed: s.loadViewed(),
+			// Restored whole, including comments whose anchor is no longer in the changeset:
+			// the draft is the reader's work either way, and Anchor already carries what is
+			// needed to say the code under it moved.
+			Comments: s.loadDrafts(),
 		}
 		s.sessions[root] = sess
 	}
@@ -242,18 +255,20 @@ func (s *Store) completedBy(root, digest string, viewed []string) string {
 // arrived on - never from the request body - which is what stops an agent posting as the
 // human. See types.DiffAuthor.
 func (s *Store) AddComment(root string, c types.DiffComment, author types.DiffAuthor) *types.DiffSession {
-	return s.mutate(root, func(sess *types.DiffSession) {
+	out := s.mutate(root, func(sess *types.DiffSession) {
 		c.Author = author
 		c.ID = fmt.Sprintf("c%d", len(sess.Comments)+1)
 		sess.Comments = append(sess.Comments, c)
 	})
+	s.persistDrafts(root)
+	return out
 }
 
 // ResolveComment marks a comment resolved. Either party may resolve: a human closing an
 // agent's point and an agent closing its own after fixing it are both normal, and requiring
 // the author to do it would strand comments whose author has gone away.
 func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffSession {
-	return s.mutate(root, func(sess *types.DiffSession) {
+	out := s.mutate(root, func(sess *types.DiffSession) {
 		for i := range sess.Comments {
 			if sess.Comments[i].ID == id {
 				sess.Comments[i].Resolved = resolved
@@ -261,6 +276,26 @@ func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffSessio
 			}
 		}
 	})
+	s.persistDrafts(root)
+	return out
+}
+
+// MarkPublished records that a draft has left the machine and what the host called it.
+//
+// One comment at a time even though publishing is a batch: a partial failure mid-batch has to
+// leave the sent ones marked, or a retry double-posts every comment that did get through.
+func (s *Store) MarkPublished(root, id, remoteID string) *types.DiffSession {
+	out := s.mutate(root, func(sess *types.DiffSession) {
+		for i := range sess.Comments {
+			if sess.Comments[i].ID == id {
+				sess.Comments[i].Published = true
+				sess.Comments[i].RemoteID = remoteID
+				return
+			}
+		}
+	})
+	s.persistDrafts(root)
+	return out
 }
 
 // Suggest enqueues an agent's request for attention. It does NOT move the cursor, and that
@@ -316,6 +351,69 @@ func clone(s *types.DiffSession) *types.DiffSession {
 	out.Comments = slices.Clone(s.Comments)
 	out.Suggestions = slices.Clone(s.Suggestions)
 	return &out
+}
+
+// persistDrafts writes this root's unpublished HUMAN comments.
+//
+// Called after a mutation rather than inside it: mutate holds the lock, and a disk write under
+// a mutex that every read also takes would make one slow filesystem stall every reader.
+func (s *Store) persistDrafts(root string) {
+	s.mu.Lock()
+	sess, ok := s.sessions[root]
+	var keep []types.DiffComment
+	if ok {
+		for _, c := range sess.Comments {
+			// An agent's remark belongs to the pairing session and dies with it. A published
+			// one lives on the host now, and re-sending it from a restored draft would post it
+			// twice.
+			if c.Author == types.DiffAuthorHuman && !c.Published {
+				keep = append(keep, c)
+			}
+		}
+	}
+	s.mu.Unlock()
+	if !ok {
+		return
+	}
+	s.saveDrafts(keep)
+}
+
+// loadDrafts reads the persisted drafts, empty on any failure - for the reason loadViewed
+// gives, and more so here: refusing to open a review because a draft file is corrupt would
+// take the changeset away along with the remarks.
+func (s *Store) loadDrafts() []types.DiffComment {
+	if s.draftsPath == "" {
+		return nil
+	}
+	b, err := os.ReadFile(s.draftsPath)
+	if err != nil {
+		return nil
+	}
+	var out []types.DiffComment
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+// saveDrafts persists the drafts, best-effort, via the same temp-and-rename saveViewed uses so
+// a crash mid-write cannot leave a half-file where the drafts were.
+func (s *Store) saveDrafts(drafts []types.DiffComment) {
+	if s.draftsPath == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(s.draftsPath), 0o755); err != nil {
+		return
+	}
+	b, err := json.Marshal(drafts)
+	if err != nil {
+		return
+	}
+	tmp := s.draftsPath + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, s.draftsPath)
 }
 
 // loadViewed reads the persisted digest set. Every failure yields an empty set rather than an

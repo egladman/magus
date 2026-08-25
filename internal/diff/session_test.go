@@ -263,3 +263,60 @@ func TestContentAtIsTakenWhenTracked(t *testing.T) {
 	assert.Equal(t, "as-the-reader-saw-it", s.ContentAt("/w", "a.go"))
 	assert.Empty(t, s.ContentAt("/w", "never-tracked.go"))
 }
+
+// A self-review remark is a sentence addressed to a teammate that has not been sent yet.
+// Losing eight of them to a daemon restart is losing the work, which is what happened while
+// comments sat with the coordination state.
+func TestHumanDraftsSurviveARestart(t *testing.T) {
+	dir := t.TempDir()
+	const root = "/ws"
+
+	first := NewStore(dir)
+	first.Attach(root, "main", types.Diff{}, "asof1")
+	first.AddComment(root, types.DiffComment{
+		Path: "a.go", Hunk: 0, Body: "this is the bit reviewers always ask about", Anchor: "d1",
+	}, types.DiffAuthorHuman)
+	first.AddComment(root, types.DiffComment{
+		Path: "b.go", Hunk: 2, Body: "agent noise from the pairing session",
+	}, types.DiffAuthorAgent)
+
+	// A new Store over the same state directory IS the restart.
+	second := NewStore(dir)
+	sess := second.Attach(root, "main", types.Diff{}, "asof2")
+	require.Len(t, sess.Comments, 1, "exactly the human draft should come back")
+	assert.Equal(t, "a.go", sess.Comments[0].Path)
+	assert.Equal(t, "this is the bit reviewers always ask about", sess.Comments[0].Body)
+	// The anchor rides along, so the surface can still say the code under it moved.
+	assert.Equal(t, "d1", sess.Comments[0].Anchor)
+	assert.False(t, sess.Comments[0].Published)
+}
+
+// A published comment lives on the host, where a teammate may already have replied. Restoring
+// it as a draft would offer to send it a second time.
+func TestAPublishedCommentIsNotRestoredAsADraft(t *testing.T) {
+	dir := t.TempDir()
+	const root = "/ws"
+
+	first := NewStore(dir)
+	first.Attach(root, "main", types.Diff{}, "asof1")
+	first.AddComment(root, types.DiffComment{Path: "a.go", Body: "sent"}, types.DiffAuthorHuman)
+	first.AddComment(root, types.DiffComment{Path: "b.go", Body: "still mine"}, types.DiffAuthorHuman)
+	first.MarkPublished(root, "c1", "PRRC_123")
+
+	second := NewStore(dir)
+	sess := second.Attach(root, "main", types.Diff{}, "asof2")
+	bodies := make([]string, 0, len(sess.Comments))
+	for _, c := range sess.Comments {
+		bodies = append(bodies, c.Body)
+	}
+	assert.Equal(t, []string{"still mine"}, bodies)
+}
+
+// Persistence is off with no state directory, which is what a test and a workspace-less daemon
+// get. It must degrade to memory rather than to a panic or a write into the working directory.
+func TestDraftsAreMemoryOnlyWithoutAStateDir(t *testing.T) {
+	s := NewStore("")
+	s.Attach("/ws", "main", types.Diff{}, "a")
+	s.AddComment("/ws", types.DiffComment{Path: "a.go", Body: "x"}, types.DiffAuthorHuman)
+	assert.Len(t, NewStore("").Attach("/ws", "main", types.Diff{}, "a").Comments, 0)
+}

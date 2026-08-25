@@ -320,6 +320,15 @@ type DiffComment struct {
 	// that the code under it has since changed rather than silently pointing at moved text.
 	Anchor   string `json:"anchor,omitempty" yaml:"anchor,omitempty"`
 	Resolved bool   `json:"resolved" yaml:"resolved"`
+
+	// Published records that this remark has left the machine, and RemoteID is what the host
+	// called it. Both are empty for a draft, which is every comment until someone publishes.
+	//
+	// A published comment is no longer editable here: it exists somewhere a teammate may have
+	// already replied to, and a local edit that silently diverged from what they are reading
+	// would be worse than no edit at all.
+	Published bool   `json:"published,omitempty" yaml:"published,omitempty"`
+	RemoteID  string `json:"remote_id,omitempty" yaml:"remote_id,omitempty"`
 }
 
 // DiffSuggestion is an agent asking for the human's attention somewhere.
