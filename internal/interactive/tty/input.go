@@ -149,9 +149,11 @@ func mouseTrackFor() string {
 // is safe on every exit path. Unlike DECSTBM these sequences do not move the
 // cursor, so they need no save/restore bracket.
 //
-// No-op when w is not a terminal, so callers do not branch.
+// No-op when w cannot render escapes at all, so callers do not branch. TERM=dumb never had
+// tracking enabled - Input refuses to open there - so there is nothing to disable, and
+// writing it anyway puts literal garbage on a terminal that declares it understands none.
 func ResetMouseTracking(w io.Writer, p Probe) error {
-	if !IsTerminalWriter(w, p) {
+	if !CanRender(w, p) {
 		return nil
 	}
 	_, err := io.WriteString(w, mouseTrackOff)

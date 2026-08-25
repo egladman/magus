@@ -771,10 +771,14 @@ func ClipBytes(msg string, nBytes int) string {
 // shell to draw its prompt over the help text. Hence the save/restore bracket,
 // taken and released inside one write, per the register rule in [region].
 //
-// No-op when w is not a terminal, so callers do not have to branch.
+// No-op when w cannot render escapes at all, so callers do not have to branch.
+//
+// Gated on CanRender rather than on a bare descriptor check, which is what its own doc
+// asks for: this MOVES the cursor, and TERM=dumb is a real terminal that renders the
+// sequence as literal garbage. Nothing is lost by skipping it there - no component that
+// reserves rows will run under TERM=dumb either, so there is no margin left to reset.
 func ResetScrollMargins(w io.Writer, p Probe) error {
-	fd, ok := Fd(w)
-	if !ok || !p.IsTerminal(fd) {
+	if !CanRender(w, p) {
 		return nil
 	}
 	_, err := io.WriteString(w, cursorSave+decstbmReset+cursorRestore)
