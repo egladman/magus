@@ -95,6 +95,17 @@ body[data-console-app] button[aria-disabled="true"] {
   box-shadow: none;
   cursor: not-allowed;
 }
+/* The border-color above never painted. PF v6 draws a button's outline on an ::after overlay, not on
+   the element's own border, and its disabled rule hardcodes that overlay to transparent - so a
+   disabled PF button lost its outline entirely and read as a bare filled chip beside enabled buttons
+   that are outline-and-no-fill. Two opposite shapes in one row, and the inert one carried the
+   heavier one, which is why a toolbar of mostly-disabled actions stopped reading as buttons at all.
+   Restating the same muted border on the overlay is what makes the rule above true. */
+body[data-console-app] .pf-v6-c-button:disabled::after,
+body[data-console-app] .pf-v6-c-button[disabled]::after,
+body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
+  border-color: var(--pf-t--global--border--color--default);
+}
 
 /* The bottom status-bar FRAME (fixed rail + per-tab wrapper + clusters + the connection liveness
    dot) moved to overrides.css in the W2 shell rebuild - PatternFly has no status-bar component, so it
