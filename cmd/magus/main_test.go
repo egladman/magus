@@ -201,3 +201,60 @@ func TestExitCodeOf(t *testing.T) {
 	assert.Equal(t, 1, exitCodeOf(errors.Join(errors.New("go exited 1"), nil)))
 	assert.Equal(t, exitUsage, exitCodeOf(usagef("no such target")))
 }
+
+// TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do
+// anything.
+//
+// Every subcommand's own parser prints usage and returns before it loads a workspace, but
+// the pre-dispatch preload runs FIRST - so `magus diff -h` opened the workspace, and opening
+// one refreshes the VCS merge-driver registration, which writes the tracked .gitattributes
+// and a git config entry naming the running binary. A persona doing nothing but reading help
+// left a dangling registration pointing at a throwaway binary path.
+func TestUsageNeedsNoWorkspace(t *testing.T) {
+	for _, sub := range []string{"diff", "run", "affected", "describe", "ls", "doctor", "graph"} {
+		for _, help := range []string{"-h", "--help", "help"} {
+			got := resolveProfile(sub, []string{help})
+			if got.needsWorkspace {
+				t.Errorf("resolveProfile(%q, [%q]) loads a workspace; reading help must write nothing", sub, help)
+			}
+			// The config tier stays: usage text reads it, and reading magus.yaml writes
+			// nothing.
+			if !got.needsConfig {
+				t.Errorf("resolveProfile(%q, [%q]) skips config; usage text reads it", sub, help)
+			}
+		}
+	}
+
+	// A help flag AFTER a positional is still a help request: `magus diff --cost -h`.
+	if resolveProfile("diff", []string{"--cost", "-h"}).needsWorkspace {
+		t.Error("a trailing help flag must still skip the workspace")
+	}
+	// ...but a real invocation is unaffected.
+	if !resolveProfile("diff", []string{"--cost"}).needsWorkspace {
+		t.Error("a real diff still needs the workspace")
+	}
+}
+
+func TestWantsUsage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"bare help flag", []string{"-h"}, true},
+		{"long form", []string{"--help"}, true},
+		{"help subverb", []string{"help"}, true},
+		{"after a flag", []string{"--cost", "-h"}, true},
+		{"no args is not a help request", nil, false},
+		{"a real invocation", []string{"--cost"}, false},
+		// Past "--" the tokens belong to a forwarded tool: this asks the test binary for
+		// help, not magus.
+		{"after a passthrough marker", []string{"go::go-test", ".", "--", "-h"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := wantsUsage(tc.args); got != tc.want {
+				t.Fatalf("wantsUsage(%v) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}

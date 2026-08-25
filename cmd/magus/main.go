@@ -195,6 +195,27 @@ func isUsageOnlyInvocation(subArgs []string) bool {
 	return false
 }
 
+// wantsUsage reports whether a subcommand's args ask for its help text.
+//
+// Distinct from isUsageOnlyInvocation, which additionally treats NO arguments as a usage
+// request. That is right for run and affected, whose first positional is required, and wrong
+// for everything else: bare `magus diff` is a real invocation.
+//
+// Scanning stops at "--", past which the tokens belong to a forwarded tool: a run that
+// forwards `-h` after the marker is asking the test binary for help, not magus.
+func wantsUsage(subArgs []string) bool {
+	for _, a := range subArgs {
+		if a == "--" {
+			return false
+		}
+		switch a {
+		case "-h", "--help", "help":
+			return true
+		}
+	}
+	return false
+}
+
 // hasDetachFlag reports whether argv carries --detach, in every spelling the flag
 // package accepts. Scanning stops at "--", past which the tokens belong to a forwarded
 // tool rather than to magus.
@@ -232,6 +253,18 @@ func isForensicAffected(subArgs []string) bool {
 
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
+	// Asking a command what it does must not do anything. Every subcommand's own parser
+	// already prints usage and returns before it loads a workspace, but the preload here
+	// runs FIRST - so `magus diff -h` opened the workspace, and opening one refreshes the
+	// VCS merge-driver registration, which WRITES the tracked .gitattributes and a git
+	// config entry naming the running binary. A persona doing nothing but reading help
+	// found a dangling registration pointing at a throwaway path.
+	//
+	// The config tier stays: usage text reads it (daemonDefaultAddr in `server start -h`),
+	// and reading magus.yaml writes nothing.
+	if wantsUsage(subArgs) {
+		return dispatchProfile{needsConfig: true}
+	}
 	switch sub {
 	case "help", "version":
 		// Neither reads a workspace or a config: one prints text compiled into the
