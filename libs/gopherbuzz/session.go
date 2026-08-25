@@ -757,22 +757,32 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 // a parse error, which has no code). Severity's zero value is SeverityError, matching
 // every diagnostic before this field existed (a parse error has no Severity set either,
 // so it reads as an error, correctly). Msg/Line/Col/Code/Severity mirror the unexported
-// checker typeError; keep the two shapes in sync if either gains a field.
+// checker typeError; keep the two shapes in sync if either gains a field. File does not:
+// a Session is handed source text, never a path, so only a caller can fill it in.
 type Diagnostic struct {
 	Line, Col int
 	Code      diagnostics.Code
 	Msg       string
 	Severity  Severity
+	// File is the path this diagnostic is reported against. A caller that knows one
+	// should set it: a warning naming only "line 37:66" sends its reader grepping the
+	// tree for which file aired it.
+	File string
 }
 
 // String renders d the same shape typeError.Error() renders a hard error in -
 // "[CODE] buzz: line L:C: <severity: >msg", plus a "see: <url>" line when Code is
 // set - so a warning a caller prints reads consistently with the errors this
-// package already produces.
+// package already produces. With File set the position becomes "<file>:L:C", the
+// shape an editor and every other compiler already know how to jump to.
 func (d Diagnostic) String() string {
-	msg := fmt.Sprintf("buzz: line %d:%d: %s", d.Line, d.Col, d.Msg)
+	at := fmt.Sprintf("line %d:%d", d.Line, d.Col)
+	if d.File != "" {
+		at = fmt.Sprintf("%s:%d:%d", d.File, d.Line, d.Col)
+	}
+	msg := fmt.Sprintf("buzz: %s: %s", at, d.Msg)
 	if d.Severity == SeverityWarning {
-		msg = fmt.Sprintf("buzz: line %d:%d: warning: %s", d.Line, d.Col, d.Msg)
+		msg = fmt.Sprintf("buzz: %s: warning: %s", at, d.Msg)
 	}
 	if d.Code == "" {
 		return msg

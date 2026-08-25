@@ -67,6 +67,16 @@ func TestDiagnostic_String_MatchesErrorRenderStyle(t *testing.T) {
 	assert.Contains(t, line, "[BZZ3001]")
 	assert.Contains(t, line, "warning:")
 	assert.Contains(t, line, "see: https://")
+	assert.Contains(t, line, "buzz: line 1:1:", "with no File, the position renders as it always has")
+}
+
+// TestDiagnostic_String_NamesTheFileWhenSet covers the reason File exists: "line 37:66"
+// alone leaves a reader grepping the tree for which file aired the warning. The rendered
+// shape is <file>:<line>:<col>, which editors already jump to.
+func TestDiagnostic_String_NamesTheFileWhenSet(t *testing.T) {
+	d := Diagnostic{Line: 37, Col: 66, Msg: "something", Severity: SeverityWarning, File: "docs/lib/conventions.buzz"}
+
+	assert.Equal(t, "buzz: docs/lib/conventions.buzz:37:66: warning: something", d.String())
 }
 
 // TestSession_Warnings_ReplSuppressed confirms a REPL session (WithREPL) still

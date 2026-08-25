@@ -212,6 +212,7 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 	// thing a reader wants told, not left to read as an advisor with nothing to say.
 	var warnings []string
 	for _, w := range sess.Warnings() {
+		w.File = file
 		warnings = append(warnings, w.String())
 	}
 
