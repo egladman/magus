@@ -158,6 +158,37 @@ func collectReview(rev types.Diff, required func(string) bool, reasons []string)
 	return out
 }
 
+// scopeAck narrows a changeset to the paths the caller named, so a reader can record the
+// three files they just read in their editor without claiming the other thirty.
+//
+// An unnamed path is an ERROR rather than a silent no-op. The whole value of a receipt is
+// that it names something real; a typo that quietly acknowledged nothing would leave the
+// reader believing they had recorded work they had not.
+func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
+	if len(paths) == 0 {
+		return rev, nil
+	}
+	inChange := make(map[string]bool, len(rev.Files))
+	for _, f := range rev.Files {
+		inChange[f.Path] = true
+	}
+	want := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(p)), "./")
+		if !inChange[clean] {
+			return types.Diff{}, usagef("magus diff --ack: %q is not a changed file in this changeset; `magus diff -o name` lists them", p)
+		}
+		want[clean] = true
+	}
+	out := types.Diff{Base: rev.Base}
+	for _, f := range rev.Files {
+		if want[f.Path] {
+			out.Files = append(out.Files, f)
+		}
+	}
+	return out, nil
+}
+
 // ackChangeset records a receipt for every non-generated changed file at its current
 // content, carrying the reason the caller gave for covering them all at once.
 func ackChangeset(root, cacheDir string, rev types.Diff, reason string, now time.Time) (int, error) {
@@ -244,7 +275,12 @@ func preflightReviewLines(r *preflightReview) []string {
 	if len(out) == 0 {
 		return nil
 	}
-	return append(out, "      pick up where you left off: magus diff --tui")
+	// Both doors, because the reader's editor is not magus's business: naming only the
+	// viewer told anyone who reviews in vim or magit that their only option was the
+	// blanket ack.
+	return append(out,
+		"      record what you read, wherever you read it: magus diff --ack <path>...",
+		"      or step through them here: magus diff --tui")
 }
 
 // unreadRest is the never-opened files the section has not already named under

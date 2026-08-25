@@ -34,6 +34,8 @@
 package review
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"os"
@@ -43,9 +45,12 @@ import (
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/types"
 )
+
+// digestLen keeps 16 hex characters, 64 bits: collision-free for a per-workspace store and
+// short enough to read in a JSON file by eye.
+const digestLen = 16
 
 // receiptFile is where the store lives, under the cache dir rather than in the tree.
 //
@@ -168,12 +173,21 @@ func States(root, cacheDir string, paths []string) (map[string]string, error) {
 	return out, nil
 }
 
-// DigestFile fingerprints a file's current content.
+// DigestFile fingerprints a file's current content, BYTE FOR BYTE.
 //
-// It reuses the notes store's Digest so a receipt and a note anchor mean the same thing by
-// "this content changed": whitespace-insensitive, token-sensitive. Two fingerprint
-// conventions in one tool would eventually disagree about the same edit, and the reader
-// would have no way to tell which one to believe.
+// Deliberately not the notes store's Digest, which normalizes whitespace away. The two
+// answer different questions and the difference is not stylistic:
+//
+//   - A note asks "does this prose still describe this code?" Reformatting does not change
+//     the answer, so a fingerprint that fired on gofmt would produce false drift, and false
+//     drift gets ignored - which is worse than no gate.
+//   - A receipt asks "did a person see these bytes?" In Python, YAML, and a Makefile,
+//     whitespace IS the change. A whitespace-insensitive receipt attests to content the
+//     reader never saw, which is the one failure this whole feature exists to prevent.
+//
+// The cost is real and accepted: a formatter run after a read voids the receipts it
+// touched. That is correct. If the formatter rewrote the file after you read it, the file
+// you are committing is not the file you read.
 //
 // An unreadable file returns "", which Covers treats as covering nothing.
 func DigestFile(abs string) string {
@@ -181,5 +195,6 @@ func DigestFile(abs string) string {
 	if err != nil {
 		return ""
 	}
-	return notes.Digest(strings.Split(string(b), "\n"))
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])[:digestLen]
 }

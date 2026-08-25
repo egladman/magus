@@ -46,6 +46,18 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// With --ack the positionals are PATHS, not a patch. Reading happens in whatever the
+	// reader already uses - vim, magit, a pager, an IDE - and magus has no business
+	// requiring its own viewer to record that it happened. Without this the only door open
+	// to somebody who reviews in their editor is the blanket ack, which is the one path
+	// this feature least wants to be the default.
+	//
+	// Safe to overload because --ack already refuses a patch source: a receipt fingerprints
+	// the working tree, and a patch describes files that may not be there.
+	var ackPaths []string
+	if rf.Ack {
+		ackPaths, rest = rest, nil
+	}
 	src, err := diffInputFromArgs(rest)
 	if err != nil {
 		return err
@@ -104,7 +116,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, rf.Cost) }
+	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, rf.Cost, ackPaths) }
 	if rf.Watch {
 		return watchDiff(ctx, m, render)
 	}
@@ -230,7 +242,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, stri
 // preflight is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, rootOverride string, preflight bool) error {
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, rootOverride string, preflight bool, ackPaths []string) error {
 	patch, base, err := src.readPatch(ctx, m)
 	if err != nil {
 		return err
@@ -260,7 +272,11 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	}
 	if rf.Ack {
 		reason := strings.TrimSpace(rf.Reason)
-		n, err := ackChangeset(m.Root(), m.CacheDir(), rev, reason, time.Now())
+		scoped, err := scopeAck(rev, ackPaths)
+		if err != nil {
+			return err
+		}
+		n, err := ackChangeset(m.Root(), m.CacheDir(), scoped, reason, time.Now())
 		if err != nil {
 			return err
 		}
@@ -820,6 +836,7 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 
 func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "Usage: magus diff [--generated] [--cost] [flags]")
+	fmt.Fprintln(w, "       magus diff --ack [<changed-path>...]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
 	fmt.Fprintln(w, "It takes no ref: the subject is always the uncommitted tree.")
@@ -840,6 +857,12 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Public surface, coverage, churn, and the agent trail are CONTEXT printed")
 	fmt.Fprintln(w, "beside each file. None of them is a sort key.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "--ack records that you have read files, at the content they hold now, so")
+	fmt.Fprintln(w, "--cost can tell you what changed after you read it. Name the paths you read")
+	fmt.Fprintln(w, "to record just those - read them in whatever editor or pager you already")
+	fmt.Fprintln(w, "use - or pass none to cover the whole changeset. Stepping a file through in")
+	fmt.Fprintln(w, "--tui records it too. Editing a file afterwards voids its receipt.")
 	fmt.Fprintln(w, "")
 	// State the cutoff rather than leaving a missing rank ambiguous.
 	fmt.Fprintf(w, "A hotspot rank is shown only inside the workspace's top %d. A file that reports\n", types.NotableRankCutoff)

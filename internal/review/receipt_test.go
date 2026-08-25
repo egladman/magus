@@ -91,13 +91,34 @@ func TestDigestFile(t *testing.T) {
 	first := DigestFile(path)
 	assert.NotEmpty(t, first)
 
-	// Reindenting is free, the same trade the notes store makes: a fingerprint that fires
-	// on reformatting produces false staleness, and false staleness gets ignored.
-	require.NoError(t, os.WriteFile(path, []byte("package a\n\n\tfunc   F() {}\n"), 0o644))
-	assert.Equal(t, first, DigestFile(path))
-
 	require.NoError(t, os.WriteFile(path, []byte("package a\n\nfunc G() {}\n"), 0o644))
 	assert.NotEqual(t, first, DigestFile(path))
 
 	assert.Empty(t, DigestFile(filepath.Join(dir, "gone.go")))
+}
+
+// TestDigestFileIsByteExact is the property a receipt turns on, and it is the opposite of
+// what the notes store wants.
+//
+// A note asks whether prose still describes code, so reformatting must not fire. A receipt
+// asks whether a person saw these bytes - and in Python, YAML, or a Makefile, whitespace IS
+// the change. An earlier version reused the notes digest and a receipt survived every one
+// of the edits below, attesting to content nobody had seen.
+func TestDigestFileIsByteExact(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.py")
+	write := func(body string) string {
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+		return DigestFile(path)
+	}
+
+	base := write("def f():\n    return 1\n")
+	for name, body := range map[string]string{
+		"a trailing newline":      "def f():\n    return 1\n\n",
+		"a trailing space":        "def f():\n    return 1 \n",
+		"a changed indent":        "def f():\n        return 1\n",
+		"a tab instead of spaces": "def f():\n\treturn 1\n",
+	} {
+		assert.NotEqual(t, base, write(body), "%s must void the receipt", name)
+	}
 }

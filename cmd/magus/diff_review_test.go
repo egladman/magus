@@ -267,3 +267,41 @@ type stubReviewWorkspace struct {
 }
 
 func (s *stubReviewWorkspace) All() []*types.Project { return s.projects }
+
+// TestScopeAck is the editor-freedom path: a reader who read three files in vim records
+// those three, without claiming the other thirty and without opening magus's viewer.
+func TestScopeAck(t *testing.T) {
+	rev := types.Diff{Files: []types.DiffFile{
+		{Path: "a.go", Role: types.DiffRoleSource},
+		{Path: "b.go", Role: types.DiffRoleSource},
+		{Path: "c.go", Role: types.DiffRoleSource},
+	}}
+
+	t.Run("no paths covers the whole changeset", func(t *testing.T) {
+		got, err := scopeAck(rev, nil)
+		require.NoError(t, err)
+		assert.Len(t, got.Files, 3)
+	})
+
+	t.Run("named paths narrow it", func(t *testing.T) {
+		got, err := scopeAck(rev, []string{"a.go", "c.go"})
+		require.NoError(t, err)
+		require.Len(t, got.Files, 2)
+		assert.Equal(t, "a.go", got.Files[0].Path)
+		assert.Equal(t, "c.go", got.Files[1].Path)
+	})
+
+	t.Run("a leading ./ still matches", func(t *testing.T) {
+		got, err := scopeAck(rev, []string{"./a.go"})
+		require.NoError(t, err)
+		require.Len(t, got.Files, 1)
+	})
+
+	// A typo that quietly acknowledged nothing would leave the reader believing they had
+	// recorded work they had not.
+	t.Run("a path outside the changeset is an error, not a no-op", func(t *testing.T) {
+		_, err := scopeAck(rev, []string{"a.go", "nope.go"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not a changed file")
+	})
+}

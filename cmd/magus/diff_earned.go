@@ -28,7 +28,16 @@ type earnedSync struct {
 	fileOf  map[string]string
 	hunksOf map[string]int
 	viewed  map[string]bool
-	now     func() time.Time
+	// live are the hunks marked in THIS session, as opposed to seeded from the store.
+	//
+	// A file earns a receipt only if at least one of its hunks was marked here. The stored
+	// viewed set is a plain unauthenticated JSON file whose hunk digests are computable
+	// from `magus diff` output, so anything with write access can forge a complete reading;
+	// without this, opening the viewer once would launder that forgery into durable
+	// receipts. Requiring a live mark keeps the seed doing its real job - resuming a
+	// reading across sittings - while making it worth nothing on its own.
+	live map[string]bool
+	now  func() time.Time
 }
 
 // newEarnedSync wraps sync with receipt minting, seeded with the marks the session already
@@ -41,6 +50,7 @@ func newEarnedSync(inner diffSync, root, cacheDir string, files []difftui.File, 
 		fileOf:   map[string]string{},
 		hunksOf:  map[string]int{},
 		viewed:   map[string]bool{},
+		live:     map[string]bool{},
 		now:      time.Now,
 	}
 	for _, f := range files {
@@ -64,6 +74,9 @@ func newEarnedSync(inner diffSync, root, cacheDir string, files []difftui.File, 
 // reader's progress exactly as before.
 func (e *earnedSync) SetViewed(digest string, on bool) {
 	e.viewed[digest] = on
+	if on {
+		e.live[e.fileOf[digest]] = true
+	}
 	e.diffSync.SetViewed(digest, on)
 }
 
@@ -79,6 +92,9 @@ func (e *earnedSync) close() {
 
 	var add []review.Receipt
 	for path, total := range e.hunksOf {
+		if !e.live[path] {
+			continue
+		}
 		marked := 0
 		for digest, file := range e.fileOf {
 			if file == path && e.viewed[digest] {

@@ -275,7 +275,8 @@ func TestPreflightRendersEverySection(t *testing.T) {
 		"      2 file(s) you have not opened, widest blast radius first",
 		"        types/diff.go",
 		"        std/magus.go",
-		"      pick up where you left off: magus diff --tui",
+		"      record what you read, wherever you read it: magus diff --ack <path>...",
+		"      or step through them here: magus diff --tui",
 	}, preflightLines(preflightFixture()))
 }
 
