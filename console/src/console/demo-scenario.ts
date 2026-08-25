@@ -1,11 +1,11 @@
 import { must } from "../lib/guards";
 // demo-scenario.ts - the ONE fabricated workspace every console surface's demo derives from.
 //
-// The console has four daemon-free showcases (logs waterfall, recent-runs tree, activity trail,
-// dashboard) that each used to invent their own disjoint fixture. A reader who opened two of them
-// side by side saw contradictions - a Linux-kernel build in the log viewer, unrelated runs in the
-// tree, a third cast of MCP calls in the activity trail. This module is the single source of truth
-// those surfaces now share: one plausible product monorepo ("acme") and one scripted three-hour
+// The console's daemon-free showcases (logs waterfall, recent-runs tree, activity trail, dashboard,
+// diff, notes) each used to invent their own disjoint fixture. A reader who opened two of them side
+// by side saw contradictions - a Linux-kernel build in the log viewer, unrelated runs in the tree, a
+// third cast of MCP calls in the activity trail, and notes about magus's own cache in a workspace
+// called acme. This module is the single source of truth those surfaces now share: one plausible product monorepo ("acme") and one scripted three-hour
 // timeline of runs, MCP calls, a background job, a sandbox denial, and VCS insight, so the surfaces
 // corroborate each other the way a real workspace would.
 //

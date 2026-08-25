@@ -65,9 +65,13 @@ test("the changeset exercises the states that produce no hunks", () => {
   assert.equal(script?.newMode, "100755");
 });
 
-// Every hand-written @@ header states a line count. parsePatch does not check them, so a header
-// that has drifted from its body is invisible until a reader notices the gutter numbers are
-// wrong - which is exactly the kind of detail the showcase is read closely for.
+// Every hand-written @@ header states a line count. Nothing in the reader verifies them - Go
+// parses the body and takes the header's word for the numbers - so a header that has drifted
+// from its body is invisible until a reader notices the gutter numbers are wrong, which is
+// exactly the kind of detail the showcase is read closely for.
+//
+// It has caught two now: a hand-counted header, and the SCRIPT written to stop hand-counting
+// them, which read the trailing newline as a context line.
 test("every hunk header's counts match the lines under it", () => {
   const wrong: string[] = [];
   for (const f of files) {
