@@ -39,6 +39,18 @@ type bashGuardVerdict struct {
 // case.
 const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 
+// guardChainedRunRe matches a second `magus run` on the same line.
+//
+// Targets COMPOSE through ctx.needs, so a chain is usually one invocation that already did
+// the whole thing: in this workspace `lint` needs `format` needs `generate`, which makes
+// `magus run generate . ; magus run format . ; magus run lint .` three workspace loads to
+// produce what the third one produces alone.
+//
+// It matches the SHAPE rather than parsed commands because the mistake is the chaining, and
+// every spelling of it - ; && || - is the same mistake.
+var guardChainedRunRe = regexp.MustCompile(
+	cmdPos + `(?:\./)?magus\s+run\s[^;&|]*[;&|]+\s*(?:\./)?magus\s+run\s`)
+
 // guardToolMatch is one command spell operation Magus can run on the caller's
 // behalf. It is derived from the registered spell catalog, never a hand-kept
 // list in the guard: adding a spell operation automatically teaches the hook
@@ -493,6 +505,13 @@ const (
 	denyStageAll = "Classify the dirty tree first: `magus describe file $(git diff --name-only)`. Then stage only the reviewed paths with `git add -- <paths>`, and confirm the selection with `git diff --cached --stat` before committing.\n" +
 		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. There is deliberately no `magus vcs` wrapper; load the magus-vcs-hygiene skill if not already loaded."
 
+	// An ADVISORY, not a deny: two genuinely independent targets in one line is real work
+	// (`magus run build api ; magus run test docs`), and only the dependency graph knows
+	// which case this is. What the guard can see is that the chain is worth questioning.
+	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `magus run lint .` alone runs all three in order.\n" +
+		"Check what a target already pulls in before chaining: `magus run <target> <project> --dry-run` prints the plan without executing it.\n" +
+		"Each extra invocation reloads the workspace and re-evaluates every magusfile to redo work the previous one did. And `magus run` takes one TARGET and many PROJECTS (`magus run build api web`), so two targets never belong in one call either."
+
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
 	// correction is the flag that returns that thing, not the prohibition.
@@ -602,6 +621,11 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Deny: denyScriptedRewrite}
 	}
 	var advisory bashGuardVerdict
+	// Held rather than returned, like the git advisories below: a deny found later on the
+	// same line outranks it.
+	if guardChainedRunRe.MatchString(command) {
+		advisory = bashGuardVerdict{Context: adviseChainedRun}
+	}
 	cmds, parsed := parseGuardCommands(command)
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {

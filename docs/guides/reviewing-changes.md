@@ -81,9 +81,9 @@ it outright.
 
 ## Stepping through it in the terminal
 
-```sh
-magus diff --tui
-```
+At a terminal, `magus diff` opens the viewer - the same annotations, plus navigation and a
+way to mark what you have read. Nothing is hidden behind a keypress: the file lines and
+their evidence render there exactly as they do in the report.
 
 `]` and `[` walk hunks, `}` and `{` walk files, `v` marks a hunk read, `.` folds the
 generated files back in, `esc` returns to the overview, and `q` leaves. Stepping every hunk
@@ -91,6 +91,21 @@ of a file earns that file a receipt without a separate `--ack`.
 
 The viewer joins the same session the console's Diff surface and an agent share, so a hunk
 marked in one is marked in the others.
+
+It stands aside wherever it cannot draw - no terminal, `-o json`, `--watch`, a patch
+argument, `--impact` - and the report prints instead. That is not a refusal and needs no
+flag, so a script or an agent is unaffected by the default. To read the report at a
+terminal anyway:
+
+```sh
+magus diff --no-tui
+```
+
+Or make it the standing preference:
+
+```sh
+magus config set key=diff.tui,value=false
+```
 
 ## Reading a patch you did not produce
 

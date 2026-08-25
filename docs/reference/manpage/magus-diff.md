@@ -11,7 +11,7 @@ Read the working tree's changes in the order they deserve attention
 
 ## Synopsis
 
-**magus** diff [--generated] [--impact] [--tui] [--watch] [\<patch-file\>|-] [flags]
+**magus** diff [--generated] [--impact] [--no-tui] [--watch] [\<patch-file\>|-] [flags]
 
 ## Description
 
@@ -25,6 +25,17 @@ depend on. This orders by what a change can BREAK.
 Generated files - declared target outputs - are folded away by default. Reading
 one is reading a machine's restatement of a change made somewhere else, so the
 source edit is the review. Pass --generated to see them anyway.
+
+At a terminal this opens an interactive viewer: the same annotations, plus
+navigation and a way to mark what you have read. It is the same report either
+way - the viewer renders the identical annotation lines - so nothing is hidden
+behind a keypress, and ] and [ walk hunks while q leaves.
+
+The viewer stands aside on its own wherever it cannot draw: no terminal, -o json,
+--watch, a patch argument, or --impact. Those are not refusals, they are the
+report printing instead, so a script or an agent needs no flag. --no-tui is for
+a person who wants the report at a terminal anyway, and
+"magus config set key=diff.tui,value=false" makes that the standing preference.
 
 Each file carries the evidence behind its rank: how many files reference the
 widest changed symbol it defines, whether any of those referents cross a project
@@ -56,7 +67,7 @@ nobody has disturbed - a count with a target is a count that gets cleared
 instead of satisfied.
 
 A receipt covers a file at its CURRENT content, so editing it afterwards
-voids the receipt. Stepping a file through in --tui earns one; --ack covers
+voids the receipt. Stepping a file through in the viewer earns one; --ack covers
 the changeset at once and takes an optional --reason kept with it. magus
 never infers a receipt from an editor or a session: a measure satisfied by
 scrolling would launder skimming into review. --ack refuses without a
@@ -77,11 +88,11 @@ performance metric, and a performance metric gets gamed rather than met.
 **--impact**
 : Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors
 
+**--no-tui**
+: Print the report instead of opening the interactive viewer
+
 **--reason** *string*
 : An optional note kept with an --ack, for the next reader of the report
-
-**--tui**
-: Read the changeset interactively, joined to the session the console and an agent share
 
 **--watch**
 : Re-read and re-render whenever the working tree changes
@@ -95,7 +106,7 @@ performance metric, and a performance metric gets gamed rather than met.
 : The changeset could not be read - an unreadable patch file, or stdin, or a working tree the VCS would not report on.
 
 **2**
-: Misuse: more than one patch argument, an argument that is neither a readable patch nor -, or a flag combination that cannot hold (--tui with --watch, with a patch argument, or with -o json). --tui at a non-interactive terminal also exits 2, since the request cannot be served as asked.
+: Misuse: more than one patch argument, or an argument that is neither a readable patch nor -. The viewer never causes this: where it cannot draw - no terminal, -o json, --watch, a patch argument, --impact - it stands aside and the report prints instead.
 
 ## Examples
 
@@ -117,10 +128,10 @@ magus diff --generated
 magus diff --impact
 ```
 
-*Navigate it hunk by hunk and mark what you have read*
+*Print the report instead of opening the viewer*
 
 ```sh
-magus diff --tui
+magus diff --no-tui
 ```
 
 *Machine-readable, for a script or a Buzz advisor*

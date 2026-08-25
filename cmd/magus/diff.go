@@ -74,7 +74,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// tree happens to hold - an acknowledgement of something nobody read.
 		return usagef("magus diff: --ack fingerprints the working tree, so it cannot be combined with %s", src.label)
 	}
-	if rf.Ack && (rf.Tui || rf.Watch) {
+	if rf.Ack && rf.Watch {
 		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
 	}
 	// --reason is optional, deliberately. It was briefly required, on the reasoning that a
@@ -96,13 +96,6 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "magus: diff --ack records that a person read this, so it needs an interactive terminal")
 		return errSilent{exitCode: 2}
 	}
-	if rf.Impact && rf.Tui {
-		// Refused rather than ignored. The viewer has nowhere to put a report, so accepting the
-		// flag would answer the question with a page that never mentions it - and a flag that
-		// silently does nothing is the failure this command's refusal matrix exists to prevent.
-		return usagef("magus diff: --impact is a report and --tui is a viewport, so they cannot be combined; run `magus diff --impact` for the report")
-	}
-
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -111,16 +104,14 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		Reads:  isInteractiveTTY(),
 		Paints: tty.IsTerminalWriter(os.Stdout, tty.SystemProbe),
 	}
-	if err := diffTUIRefusal(rf, src, opts.Format, term); err != nil {
-		return err
-	}
 
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
 	}
+	tui := wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
 
-	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, rf.Impact, ackPaths) }
+	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, tui, rf.Impact, ackPaths) }
 	if rf.Watch {
 		return watchDiff(ctx, m, render)
 	}
@@ -217,36 +208,36 @@ type diffTUITerm struct {
 // ok reports whether the viewer can have this terminal.
 func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
 
-// diffTUIRefusal reports why --tui cannot run under these flags, or nil when it can.
+// wantsTUI decides whether this invocation opens the viewer.
 //
-// Every refusal is LOUD and names plain `magus diff` as the way to get the same answer,
-// because each of these combinations has a reading that looks like it should work and a
-// silent one that would be a lie: a patch file has no working tree to coordinate a session
-// over, a watch loop and a keypress loop both own the same terminal, and -o json asked for
-// a machine-readable answer that a viewport cannot give.
+// The viewer is the DEFAULT at a terminal, so every condition below is a quiet FALLBACK rather
+// than a refusal - and that is the whole difference between this and the refusal matrix it
+// replaced. While the flag was opt-in, asking for the viewer somewhere it cannot draw was a
+// mistake worth naming, and each of these was a usage error. Now nobody asked for it: a script
+// running `magus diff -o json`, a patch file, a watch loop, are all ordinary invocations that
+// must not begin erroring because a default changed. The report prints and nothing is said.
 //
-// It takes the terminal as an ARGUMENT rather than probing it, which is what makes the
-// refusal matrix testable without a pty.
-func diffTUIRefusal(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm) error {
-	if !rf.Tui {
-		return nil
+// --no-tui is the one explicit answer, and it wins over the config the way a flag always does.
+//
+// It takes the terminal as an ARGUMENT rather than probing it, which is what makes this
+// testable without a pty.
+func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm, enabled bool) bool {
+	switch {
+	case rf.NoTui, !enabled:
+		return false
+	// Both of these END in output the viewer has nowhere to put - a receipt count, and a report.
+	// They are requests for an answer rather than for somewhere to read.
+	case rf.Ack, rf.Impact:
+		return false
+	// The viewer reads the working tree and drives the terminal itself, so a patch argument and
+	// a watch loop are each somebody else's job.
+	case src.kind != inputWorkingTree, rf.Watch:
+		return false
+	case format != outputText:
+		return false
+	default:
+		return term.ok()
 	}
-	if src.kind != inputWorkingTree {
-		return usagef("magus diff: --tui reads the working tree, so it cannot be combined with %s", src.label)
-	}
-	if rf.Watch {
-		return usagef("magus diff: --tui and --watch both drive the terminal, so they cannot be combined")
-	}
-	if format != outputText {
-		return usagef("magus diff: --tui draws at a terminal, so it cannot be combined with -o %s", format)
-	}
-	if !term.ok() {
-		// Not a usage error: the flags are fine and the terminal is not, so say which one and
-		// name the command that works here.
-		fmt.Fprintln(os.Stderr, "magus: diff --tui requires an interactive terminal; use `magus diff` instead")
-		return errSilent{exitCode: 2}
-	}
-	return nil
 }
 
 // readPatch returns the unified patch for this input.
@@ -275,7 +266,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, stri
 // impact is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, rootOverride string, impact bool, ackPaths []string) error {
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, rootOverride string, tui, impact bool, ackPaths []string) error {
 	patch, base, err := src.readPatch(ctx, m)
 	if err != nil {
 		return err
@@ -315,7 +306,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		return fmt.Errorf("magus diff: %s has content but no file headers magus can read; "+
 			"it expects a unified diff (`diff --git a/x b/x`, or a `--- a/x` / `+++ b/x` pair)", src.label)
 	}
-	if rf.Tui {
+	if tui {
 		return runDiffTUI(ctx, m, patch, base, paths, rf.Generated)
 	}
 	rev, err := annotateDiff(ctx, m, paths, base)
@@ -925,7 +916,7 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "--impact can tell you what changed after you read it. Name the paths you read")
 	fmt.Fprintln(w, "to record just those - read them in whatever editor or pager you already")
 	fmt.Fprintln(w, "use - or pass none to cover the whole changeset. Stepping a file through in")
-	fmt.Fprintln(w, "--tui records it too. Editing a file afterwards voids its receipt.")
+	fmt.Fprintln(w, "the viewer records it too. Editing a file afterwards voids its receipt.")
 	fmt.Fprintln(w, "")
 	// State the cutoff rather than leaving a missing rank ambiguous.
 	fmt.Fprintf(w, "A hotspot rank is shown only inside the workspace's top %d. A file that reports\n", types.NotableRankCutoff)
@@ -934,8 +925,11 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --generated   include the folded declared outputs")
-	fmt.Fprintln(w, "  --tui         read it interactively, joined to the session the console")
-	fmt.Fprintln(w, "                and an agent share: ] and [ walk hunks, v marks one read")
+	fmt.Fprintln(w, "  --no-tui      print the report instead of opening the viewer. At a")
+	fmt.Fprintln(w, "                terminal the viewer opens by default, joined to the session")
+	fmt.Fprintln(w, "                the console and an agent share: ] and [ walk hunks, v marks")
+	fmt.Fprintln(w, "                one read, q leaves. Anywhere it cannot draw it stands aside")
+	fmt.Fprintln(w, "                on its own, so a script needs no flag.")
 	fmt.Fprintln(w, "  --impact      append the blast radius of landing this: which projects")
 	fmt.Fprintln(w, "                rebuild, who owns them, an estimate from recorded run times,")
 	fmt.Fprintln(w, "                what the advisors say, and which notes anchor what you")
@@ -1116,8 +1110,8 @@ func diffNextStepLines(readable int) []string {
 	// too, but that is only readable by someone already inside.
 	return []string{
 		"",
-		"read it interactively:  magus diff --tui   (q leaves it)",
-		"the blast radius:       magus diff --impact",
+		"the blast radius:  magus diff --impact",
+		"just the report:   magus diff --no-tui",
 	}
 }
 

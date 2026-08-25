@@ -607,6 +607,13 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 
+// DiffTUIEnabled reports whether `magus diff` may open its viewer, per workspace config.
+//
+// One question rather than an exported Config accessor: the caller needs this answer, not the
+// whole configuration, and a broad getter is how a command ends up branching on settings that
+// were never meant to reach it.
+func (m *Magus) DiffTUIEnabled() bool { return m.cfg.Diff.TuiEnabled() }
+
 // WorkingDiff returns the working tree's uncommitted changes as the backend's own unified
 // diff, scoped to paths when non-empty and repository-wide otherwise. Empty when the tree
 // is clean.

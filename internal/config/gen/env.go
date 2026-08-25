@@ -263,6 +263,10 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Secret.Unattended = d
 		}
 	}
+	if v := getenv("MAGUS_DIFF_TUI"); v != "" {
+		b := parseBoolEnv(v, cfg.Diff.Tui != nil && *cfg.Diff.Tui)
+		cfg.Diff.Tui = &b
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Concurrency = n

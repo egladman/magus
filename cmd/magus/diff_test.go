@@ -19,119 +19,128 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// TestDiffTUIRefusalMatrix pins every way --tui can be asked for something it cannot do.
+// The viewer is the DEFAULT at a terminal, so this table is about FALLBACK rather than
+// refusal, and that distinction is the whole point of it.
 //
-// Each of these has a plausible reading that would "work" and produce a lie: a viewport over
-// a patch file coordinating a session about a working tree nobody is editing, two loops
-// fighting for one terminal, or -o json answered with a picture. A refusal that names the
-// conflicting flag is the whole point, so the message is asserted, not just the failure.
-func TestDiffTUIRefusalMatrix(t *testing.T) {
+// Each row used to be a usage error, correctly: the flag was opt-in, so asking for the viewer
+// somewhere it cannot draw was a mistake worth naming. Now nobody asked. A script running
+// `magus diff -o json`, a patch file, a watch loop are ordinary invocations, and any one of
+// them erroring because a default changed would be the worst kind of regression - it breaks
+// callers that were never using the feature.
+//
+// The terminal is an ARGUMENT rather than a probe, which is what makes this testable with no pty.
+func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 	workingTree := diffInput{kind: inputWorkingTree, label: "the working tree"}
 	stdin := diffInput{kind: inputStdin, label: "a patch on stdin"}
 	patchFile := diffInput{kind: inputFile, path: "x.patch", label: "the patch in x.patch"}
-	// The viewer needs BOTH descriptors, which is why the gate carries them separately: it
-	// reads stdin and paints stdout.
 	atTerminal := diffTUITerm{Reads: true, Paints: true}
 
 	tests := []struct {
-		name       string
-		flags      gen.DiffFlags
-		src        diffInput
-		format     Format
-		term       diffTUITerm
-		wantMsg    string
-		wantStderr string
+		name    string
+		flags   gen.DiffFlags
+		src     diffInput
+		format  Format
+		term    diffTUITerm
+		enabled bool
+		want    bool
 	}{
 		{
-			name:   "without --tui nothing here is refused",
-			flags:  gen.DiffFlags{Watch: true},
-			src:    stdin,
-			format: outputJSON,
+			name:    "a person at a terminal gets the viewer",
+			src:     workingTree,
+			format:  outputText,
+			term:    atTerminal,
+			enabled: true,
+			want:    true,
 		},
 		{
-			name:   "--tui at a terminal over the working tree runs",
-			flags:  gen.DiffFlags{Tui: true},
+			name:    "--generated composes: it only sets the initial fold",
+			flags:   gen.DiffFlags{Generated: true},
+			src:     workingTree,
+			format:  outputText,
+			term:    atTerminal,
+			enabled: true,
+			want:    true,
+		},
+		{
+			name:    "--no-tui is the one explicit answer",
+			flags:   gen.DiffFlags{NoTui: true},
+			src:     workingTree,
+			format:  outputText,
+			term:    atTerminal,
+			enabled: true,
+		},
+		{
+			name:   "config can turn it off for every run",
 			src:    workingTree,
 			format: outputText,
 			term:   atTerminal,
 		},
 		{
-			name:   "--generated composes: it only sets the initial fold",
-			flags:  gen.DiffFlags{Tui: true, Generated: true},
-			src:    workingTree,
-			format: outputText,
-			term:   atTerminal,
-		},
-		{
-			name:    "a patch file has no working tree to coordinate over",
-			flags:   gen.DiffFlags{Tui: true},
+			name:    "a patch file has no working tree to coordinate a session over",
 			src:     patchFile,
 			format:  outputText,
 			term:    atTerminal,
-			wantMsg: "--tui reads the working tree, so it cannot be combined with the patch in x.patch",
+			enabled: true,
 		},
 		{
-			name:    "stdin, same reason and named the same way",
-			flags:   gen.DiffFlags{Tui: true},
+			name:    "stdin, same reason - this is the git-pager path",
 			src:     stdin,
 			format:  outputText,
 			term:    atTerminal,
-			wantMsg: "--tui reads the working tree, so it cannot be combined with a patch on stdin",
+			enabled: true,
 		},
 		{
-			name:    "--watch and --tui both own the terminal",
-			flags:   gen.DiffFlags{Tui: true, Watch: true},
+			name:    "--watch drives the terminal itself",
+			flags:   gen.DiffFlags{Watch: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
-			wantMsg: "--tui and --watch both drive the terminal",
+			enabled: true,
 		},
 		{
-			name:    "a machine-readable format cannot be answered with a viewport",
-			flags:   gen.DiffFlags{Tui: true},
+			name:    "a machine-readable format is a script, and scripts get the report",
 			src:     workingTree,
 			format:  outputJSON,
 			term:    atTerminal,
-			wantMsg: "cannot be combined with -o json",
+			enabled: true,
 		},
 		{
-			name:       "no terminal names the command that works here",
-			flags:      gen.DiffFlags{Tui: true},
-			src:        workingTree,
-			format:     outputText,
-			wantStderr: "magus: diff --tui requires an interactive terminal; use `magus diff` instead\n",
+			name:    "--impact asked for a report, which the viewer has nowhere to put",
+			flags:   gen.DiffFlags{Impact: true},
+			src:     workingTree,
+			format:  outputText,
+			term:    atTerminal,
+			enabled: true,
 		},
 		{
-			// `magus diff --tui > file`. Every flag is fine and stdin is still a keyboard, so
-			// the stdout probe is the only thing that can refuse this.
-			name:       "a redirected stdout is refused here, not deep inside the viewer",
-			flags:      gen.DiffFlags{Tui: true},
-			src:        workingTree,
-			format:     outputText,
-			term:       diffTUITerm{Reads: true},
-			wantStderr: "magus: diff --tui requires an interactive terminal; use `magus diff` instead\n",
+			name:    "--ack records and returns",
+			flags:   gen.DiffFlags{Ack: true},
+			src:     workingTree,
+			format:  outputText,
+			term:    atTerminal,
+			enabled: true,
+		},
+		{
+			name:    "no terminal at all: CI, an agent, a pipe",
+			src:     workingTree,
+			format:  outputText,
+			enabled: true,
+		},
+		{
+			// `magus diff > file`. stdin is still a keyboard, so the stdout probe is the only
+			// thing that can catch this one.
+			name:    "a redirected stdout is caught here, not deep inside the viewer",
+			src:     workingTree,
+			format:  outputText,
+			term:    diffTUITerm{Reads: true},
+			enabled: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			flags := tc.flags
-			var err error
-			stderr := captureStderr(t, func() {
-				err = diffTUIRefusal(&flags, tc.src, tc.format, tc.term)
-			})
-			assert.Equal(t, tc.wantStderr, stderr)
-			if tc.wantMsg == "" && tc.wantStderr == "" {
-				require.NoError(t, err)
-				return
-			}
-			require.Error(t, err)
-			// Both refusal shapes exit 2: nothing was attempted, so this is a misuse rather
-			// than a failure of the work.
-			assert.Equal(t, exitUsage, exitCodeOf(err))
-			if tc.wantMsg != "" {
-				assert.Contains(t, err.Error(), tc.wantMsg)
-			}
+			assert.Equal(t, tc.want, wantsTUI(&flags, tc.src, tc.format, tc.term, tc.enabled))
 		})
 	}
 }
@@ -290,7 +299,7 @@ func TestImpactRendersEverySection(t *testing.T) {
 		"        types/diff.go",
 		"        std/magus.go",
 		"      record what you read, wherever you read it: magus diff --ack <path>...",
-		"      or step through them here: magus diff --tui",
+		"      or step through them here: magus diff",
 	}, impactLines(impactFixture()))
 }
 
@@ -318,7 +327,7 @@ func TestImpactEmptyFormsSayNobodyLooked(t *testing.T) {
 		"",
 		"RATIONALE: no compat(until:) marker in the files you changed",
 		"",
-		"REVIEW: read receipts unavailable; read a file through in `magus diff --tui` to earn one",
+		"REVIEW: read receipts unavailable; step a file through in `magus diff` to earn one",
 	}, lines)
 
 	// The one number that must never appear: a reach nobody has ever timed is not free.
@@ -762,18 +771,20 @@ func TestDiffBridgeSendAfterCloseIsSafe(t *testing.T) {
 	}
 }
 
-// TestDiffNextStepLinesTeachTheWorkflow pins the pointers at the end of the default report.
+// TestDiffNextStepLinesTeachTheWorkflow pins the pointers at the end of the report.
 //
-// That report is the funnel mouth - the surface everybody runs - and it used to name the
-// console and nothing else, so `--tui` and `--impact` existed only in `-h` prose and the man
-// page. The best teaching in the product sat furthest from the entrance.
+// This report is what a reader meets when the viewer stood aside - piped, redirected, in CI,
+// or asked for with --no-tui - and it is the surface with the most readers. It used to name
+// the console and nothing else, so every other way of reading a changeset existed only in
+// `-h` prose and the man page: the best teaching in the product sat furthest from the door.
+//
+// It no longer teaches --tui, because there is no such flag to teach: at a terminal the
+// viewer is what already happened.
 func TestDiffNextStepLinesTeachTheWorkflow(t *testing.T) {
 	got := strings.Join(diffNextStepLines(3), "\n")
-	assert.Contains(t, got, "magus diff --tui")
 	assert.Contains(t, got, "magus diff --impact")
-	// The exit, named with the entrance: --tui takes over the screen, and an invitation into
-	// a full-screen mode that does not say how to leave gets declined once and never retaken.
-	assert.Contains(t, got, "q leaves it")
+	assert.Contains(t, got, "magus diff --no-tui")
+	assert.NotContains(t, got, "--tui ", "there is no opt-in flag left to name")
 
 	// Nothing to read is nothing to suggest: a clean tree or an all-generated changeset has
 	// no reading to offer, and a pointer there suggests doing nothing.

@@ -49,6 +49,12 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `daemon.socket` | `MAGUS_DAEMON_SOCKET` | `--daemon-socket` | string |
 | `daemon.workspaces` | `MAGUS_DAEMON_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |
 
+## diff
+
+| Config key | Environment variable | Flag | Type |
+|------------|----------------------|------|------|
+| `diff.tui` | `MAGUS_DIFF_TUI` | _(env only)_ | bool _(env only)_ |
+
 ## general
 
 | Config key | Environment variable | Flag | Type |

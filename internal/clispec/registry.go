@@ -1338,6 +1338,17 @@ Generated files - declared target outputs - are folded away by default. Reading
 one is reading a machine's restatement of a change made somewhere else, so the
 source edit is the review. Pass --generated to see them anyway.
 
+At a terminal this opens an interactive viewer: the same annotations, plus
+navigation and a way to mark what you have read. It is the same report either
+way - the viewer renders the identical annotation lines - so nothing is hidden
+behind a keypress, and ] and [ walk hunks while q leaves.
+
+The viewer stands aside on its own wherever it cannot draw: no terminal, -o json,
+--watch, a patch argument, or --impact. Those are not refusals, they are the
+report printing instead, so a script or an agent needs no flag. --no-tui is for
+a person who wants the report at a terminal anyway, and
+"magus config set key=diff.tui,value=false" makes that the standing preference.
+
 Each file carries the evidence behind its rank: how many files reference the
 widest changed symbol it defines, whether any of those referents cross a project
 boundary or the module boundary (which is the question a version bump turns on),
@@ -1368,7 +1379,7 @@ nobody has disturbed - a count with a target is a count that gets cleared
 instead of satisfied.
 
 A receipt covers a file at its CURRENT content, so editing it afterwards
-voids the receipt. Stepping a file through in --tui earns one; --ack covers
+voids the receipt. Stepping a file through in the viewer earns one; --ack covers
 the changeset at once and takes an optional --reason kept with it. magus
 never infers a receipt from an editor or a session: a measure satisfied by
 scrolling would launder skimming into review. --ack refuses without a
@@ -1377,11 +1388,11 @@ terminal, and agent hosts are denied it outright.
 The count is never shown to anyone but the reader. There is no team view and
 no pull-request comment, because a read measure a second person can see is a
 performance metric, and a performance metric gets gamed rather than met.`,
-	Usage: "magus diff [--generated] [--impact] [--tui] [--watch] [<patch-file>|-] [flags]",
+	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [<patch-file>|-] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
 		{Name: "impact", Kind: FlagBool, Doc: "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors"},
-		{Name: "tui", Kind: FlagBool, Doc: "Read the changeset interactively, joined to the session the console and an agent share"},
+		{Name: "no-tui", Kind: FlagBool, Doc: "Print the report instead of opening the interactive viewer"},
 		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
 		{Name: "ack", Kind: FlagBool, Doc: "Record that you have read the changed files at their current content; --impact reports what carries no such record"},
 		{Name: "reason", Kind: FlagString, Doc: "An optional note kept with an --ack, for the next reader of the report"},
@@ -1390,7 +1401,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{"Read what you are about to commit", "magus diff"},
 		{"Include the generated files too", "magus diff --generated"},
 		{"Everything to know before landing it", "magus diff --impact"},
-		{"Navigate it hunk by hunk and mark what you have read", "magus diff --tui"},
+		{"Print the report instead of opening the viewer", "magus diff --no-tui"},
 		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
 	},
 	// Documented because git trained everyone to expect the opposite: there is no
@@ -1399,7 +1410,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 	ExitStatus: []ExitCode{
 		{0, "The changeset was read and rendered. This is the status whether or not anything changed: unlike git diff --exit-code, a non-empty changeset is not a failure, and no flag makes it one."},
 		{1, "The changeset could not be read - an unreadable patch file, or stdin, or a working tree the VCS would not report on."},
-		{2, "Misuse: more than one patch argument, an argument that is neither a readable patch nor -, or a flag combination that cannot hold (--tui with --watch, with a patch argument, or with -o json). --tui at a non-interactive terminal also exits 2, since the request cannot be served as asked."},
+		{2, "Misuse: more than one patch argument, or an argument that is neither a readable patch nor -. The viewer never causes this: where it cannot draw - no terminal, -o json, --watch, a patch argument, --impact - it stands aside and the report prints instead."},
 	},
 }
 

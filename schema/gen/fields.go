@@ -469,6 +469,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on. Default 10s.",
 	},
 	{
+		GoPath:   "Diff.Tui",
+		YamlPath: "diff.tui",
+		EnvVar:   "MAGUS_DIFF_TUI",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindBoolPtr,
+		Usage:    "MAGUS_DIFF_TUI: Tui opens the interactive viewer when the terminal can draw it. nil = default true.",
+	},
+	{
 		GoPath:   "Concurrency",
 		YamlPath: "concurrency",
 		EnvVar:   "MAGUS_CONCURRENCY",

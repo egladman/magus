@@ -145,10 +145,10 @@ const (
 	FlagDiffGenerated = "generated"
 	// diff: --impact
 	FlagDiffImpact = "impact"
+	// diff: --no-tui
+	FlagDiffNoTui = "no-tui"
 	// diff: --reason
 	FlagDiffReason = "reason"
-	// diff: --tui
-	FlagDiffTui = "tui"
 	// diff: --watch
 	FlagDiffWatch = "watch"
 	// doctor: --fix
@@ -1011,7 +1011,7 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 type DiffFlags struct {
 	Generated bool   // --generated
 	Impact    bool   // --impact
-	Tui       bool   // --tui
+	NoTui     bool   // --no-tui
 	Watch     bool   // --watch
 	Ack       bool   // --ack
 	Reason    string // --reason
@@ -1022,7 +1022,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	var f DiffFlags
 	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
 	fs.BoolVar(&f.Impact, FlagDiffImpact, false, "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
-	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
+	fs.BoolVar(&f.NoTui, FlagDiffNoTui, false, "Print the report instead of opening the interactive viewer")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
 	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")

@@ -866,3 +866,32 @@ func TestGuardAllowsReadingTheReport(t *testing.T) {
 		assert.Empty(t, evaluateBashGuard(cmd).Deny, "unexpected deny for %q", cmd)
 	}
 }
+
+// The pattern this caught was mine, run perhaps twenty times in one session: format, then
+// lint, then generate, as separate invocations. `lint` needs `format` needs `generate`, so
+// the last one alone does all three - every earlier call was a workspace reload to redo work
+// the next call redid anyway.
+//
+// An advisory rather than a deny: two independent targets on one line is real work, and only
+// the dependency graph knows which case a given chain is.
+func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
+	chained := []string{
+		"./magus run format . --silent; ./magus run lint . --silent",
+		"magus run generate . && magus run lint .",
+		"./magus run generate . --silent; ./magus run format . --silent; ./magus run lint . --silent",
+	}
+	for _, cmd := range chained {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny, "a chain is questionable, not forbidden: %s", cmd)
+		assert.Contains(t, v.Context, "compose through ctx.needs", cmd)
+	}
+
+	// One invocation is the shape being taught, and must stay silent.
+	for _, cmd := range []string{
+		"./magus run lint . --silent",
+		"magus run build api web/studio",
+		"echo 'magus run format . ; magus run lint .'",
+	} {
+		assert.Empty(t, evaluateBashGuard(cmd).Context, "should not fire: %s", cmd)
+	}
+}

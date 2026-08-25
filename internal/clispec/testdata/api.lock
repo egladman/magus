@@ -20,6 +20,7 @@ config daemon.maintenance.sync_graph
 config daemon.socket
 config daemon.workspaces
 config default_charms
+config diff.tui
 config dry_run
 config graph.depth
 config graph.direction
@@ -111,8 +112,8 @@ flag clean/cache
 flag diff/ack
 flag diff/generated
 flag diff/impact
+flag diff/no-tui
 flag diff/reason
-flag diff/tui
 flag diff/watch
 flag doctor/fix
 flag doctor/list

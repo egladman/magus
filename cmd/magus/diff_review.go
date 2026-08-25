@@ -222,7 +222,7 @@ func ackChangeset(root, cacheDir string, rev types.Diff, reason string, now time
 // disturbed since reading.
 func impactReviewLines(r *impactReview) []string {
 	if r == nil {
-		return []string{"REVIEW: read receipts unavailable; read a file through in `magus diff --tui` to earn one"}
+		return []string{"REVIEW: read receipts unavailable; step a file through in `magus diff` to earn one"}
 	}
 	// Silence, not a reassurance. "Everything here has been read" would be a claim the
 	// reader can produce by stamping rather than by reading, which is the sentence this
@@ -284,7 +284,7 @@ func impactReviewLines(r *impactReview) []string {
 	// blanket ack.
 	return append(out,
 		"      record what you read, wherever you read it: magus diff --ack <path>...",
-		"      or step through them here: magus diff --tui")
+		"      or step through them here: magus diff")
 }
 
 // unreadRest is the never-opened files the section has not already named under

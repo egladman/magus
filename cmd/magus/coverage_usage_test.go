@@ -51,7 +51,7 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		{
 			name:  "diff",
 			print: func() { diffUsage(os.Stderr) },
-			want:  []string{"Usage: magus diff", "--generated", "--tui", "magus graph build"},
+			want:  []string{"Usage: magus diff", "--generated", "--no-tui", "magus graph build"},
 		},
 		{
 			name:  "graph",

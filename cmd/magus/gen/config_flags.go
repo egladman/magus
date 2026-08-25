@@ -76,6 +76,7 @@ var ConfigFlags = []ConfigFlag{
 	{"knowledge-notes-private", "MAGUS_KNOWLEDGE_NOTES_PRIVATE", "string"},
 	{"secret-interactive-timeout", "MAGUS_SECRET_INTERACTIVE_TIMEOUT", "duration"},
 	{"secret-unattended-timeout", "MAGUS_SECRET_UNATTENDED_TIMEOUT", "duration"},
+	{"", "MAGUS_DIFF_TUI", "boolptr"},
 	{"concurrency", "MAGUS_CONCURRENCY", "int"},
 	{"max-failures", "MAGUS_MAX_FAILURES", "int"},
 	{"target-timeout", "MAGUS_TARGET_TIMEOUT", "duration"},
