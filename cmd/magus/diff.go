@@ -1002,11 +1002,13 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 		}
 	}
 
-	// The same changeset in the console's Diff surface. Interactive-only: the token rides
-	// the URL fragment (see printJobWatchHint), so it must never land in a captured log.
+	// The same changeset in the console's Diff surface. The link carries no token (see
+	// printJobWatchHint), so the terminal check is no longer a secrecy measure - it is an
+	// invitation to go look at something, and a pipe is not a person. Keeping it means
+	// `magus diff > file` stays data.
 	if tty.IsTerminalWriter(os.Stdout, tty.SystemProbe) {
 		if u := consoleDiffURL(); u != "" {
-			fmt.Printf("\nopen in console: %s\n", u)
+			fmt.Printf("\nopen in console: %s\n%s\n", u, authHint)
 		}
 	}
 	return nil

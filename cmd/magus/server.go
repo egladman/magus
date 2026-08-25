@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/clihint"
@@ -407,17 +406,24 @@ func serverJob(ctx context.Context, args []string) error {
 	return nil
 }
 
-// printJobWatchHint prints a link to watch jobs in the console dashboard, but ONLY when w is an
-// interactive terminal. The link carries the daemon host and bearer token in its fragment (live
-// mode), so it must never reach a non-interactive caller - notably the VCS refresh hook, which
-// runs `server job sync-graph` on every history change and would otherwise write the token into
-// hook logs. Best-effort: a disabled console or an unreadable token means no hint.
+// printJobWatchHint prints a link to watch jobs in the console dashboard.
+//
+// The link is UNAUTHENTICATED and the token stays one shell substitution away, which is the
+// same call liveExplorerLink already made and for the same reason: a fragment is never
+// transmitted on the document GET, so embedding the token read as safe, but the line is
+// still a credential written to stdout - and stdout is scrollback, a captured run log, a
+// termcast, and the context of whatever agent ran the command. This repository has already
+// rotated tokens that escaped that way.
+//
+// The terminal check stays, but it is no longer a secrecy measure - it is that this line
+// invites somebody to go look at something, and the VCS refresh hook is not somebody. A
+// suggestion nobody can act on is noise in a log.
 func printJobWatchHint(w *os.File) {
 	if !tty.IsTerminalWriter(w, tty.SystemProbe) {
 		return
 	}
 	if u := consoleWatchURL(); u != "" {
-		fmt.Fprintf(w, "magus: watch it in the console dashboard: %s\n", u)
+		fmt.Fprintf(w, "magus: watch it in the console dashboard: %s\n%s\n", u, authHint)
 	}
 }
 
@@ -425,32 +431,26 @@ func printJobWatchHint(w *os.File) {
 // daemon from its own loopback origin (http://<host>/console/dashboard/): the browser
 // loads the page and connects back to this daemon over that one loopback origin and shows
 // the running pool, where a submitted job appears and deep-links to its live log. Returns
-// "" when the console is disabled or no token can be loaded. The token rides the fragment,
-// so callers must gate on an interactive terminal (see printJobWatchHint).
+// "" when the console is disabled.
+//
+// It NEVER embeds the bearer token - see printJobWatchHint - so it also no longer depends on
+// a token being loadable. It used to return "" when auth.Load failed, which meant a reader
+// with no token yet was shown nothing at all rather than the URL plus the command that mints
+// one.
 func consoleWatchURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	token, err := auth.Load()
-	if err != nil || token == "" {
-		return ""
-	}
-	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "dashboard", Token: token})
+	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "dashboard"})
 }
 
-// consoleDiffURL builds the console Diff surface URL for the working changeset, with the
-// same degrade as consoleWatchURL: "" when the console is disabled or no token loads, so
-// a caller never prints a dead link. The token rides the fragment, so callers must gate
-// on an interactive terminal (see printJobWatchHint).
+// consoleDiffURL builds the console Diff surface URL for the working changeset, with the same
+// degrade as consoleWatchURL: "" when the console is disabled, and never a token in the link.
 func consoleDiffURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	token, err := auth.Load()
-	if err != nil || token == "" {
-		return ""
-	}
-	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "diff", Token: token})
+	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "diff"})
 }
 
 func serverJobUsage() {
