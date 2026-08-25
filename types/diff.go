@@ -329,6 +329,42 @@ type DiffComment struct {
 	// would be worse than no edit at all.
 	Published bool   `json:"published,omitempty" yaml:"published,omitempty"`
 	RemoteID  string `json:"remote_id,omitempty" yaml:"remote_id,omitempty"`
+
+	// Line is the position in the file's NEW side, which is what a host anchors an inline
+	// comment to. Hunk cannot serve: it is an index into this changeset's hunks, a coordinate
+	// that means nothing outside the session that produced it.
+	//
+	// Zero means the writer did not pin one, and a publisher drops such a comment rather than
+	// guessing. A remark that lands on the wrong line is worse than one that never left.
+	Line int `json:"line,omitempty" yaml:"line,omitempty"`
+}
+
+// ReviewTarget is the review a branch has open, or the reason it has none.
+//
+// "No provider wired", "no pull request for this branch" and "the host was unreachable" are
+// all a zero Number with a Reason, deliberately. None is a thing the reader did wrong, and a
+// surface that renders them differently would be inventing a distinction its user does not
+// have - what they can do next is identical in all three.
+type ReviewTarget struct {
+	Number int    `json:"number" yaml:"number"`
+	Repo   string `json:"repo,omitempty" yaml:"repo,omitempty"`
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
+}
+
+// Open reports whether there is a review to publish to or read from.
+func (r ReviewTarget) Open() bool { return r.Number != 0 }
+
+// ReviewThread is one comment already on the review, written by anybody.
+//
+// Read-only here. A thread belongs to the host, which is the record every participant sees;
+// magus renders it so a reader never leaves to find out what a colleague said, and replies
+// through the provider rather than editing a local copy that would silently diverge.
+type ReviewThread struct {
+	ID     string `json:"id" yaml:"id"`
+	Path   string `json:"path" yaml:"path"`
+	Line   int    `json:"line" yaml:"line"`
+	Author string `json:"author" yaml:"author"`
+	Body   string `json:"body" yaml:"body"`
 }
 
 // DiffSuggestion is an agent asking for the human's attention somewhere.
