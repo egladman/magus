@@ -122,6 +122,9 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
   justify-items: stretch;
 }
 [data-overflow-panel] .pf-v6-c-toolbar__item { justify-self: stretch; }
+/* A stacked menu reads down its left edge, so the icon+label pairs start there rather than each
+   floating in the middle of its own row. PF buttons centre by default. */
+[data-overflow-panel] .pf-v6-c-button { justify-content: flex-start; }
 /* A segmented control splits the row evenly rather than sitting at content width, so the stack has one
    left edge and one right edge all the way down. */
 [data-overflow-panel] .pf-v6-c-toggle-group { display: flex; }
