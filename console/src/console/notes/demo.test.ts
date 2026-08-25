@@ -64,6 +64,38 @@ test("a note flagged as behind says how far behind", () => {
 
 test("body resolves by name and is empty for an unknown one", () => {
   const { body } = demoNotes();
-  assert.match(body("two-caches-and-why-they-pair"), /force-push/);
+  assert.match(body("verification-asserts-on-audience"), /audience/);
   assert.equal(body("no-such-note"), "");
+});
+
+// The sample notes belong to ACME, the workspace every other showcase inhabits, and to the same
+// change those surfaces are showing. They did not before: they were notes about magus's own cache
+// and lockfile, so a reader who clicked from Diff to Notes met a different fictional company one
+// tab over. Each surface was coherent and the product was not.
+//
+// Pinned by ANCHORS rather than by prose, because an anchor is what the reader can follow: a note
+// anchored to libs/authkit is one they can carry to the Graph Explorer and find.
+test("the sample notes inhabit the same workspace as every other showcase", () => {
+  const { notes } = demoNotes();
+  const targets = notes.flatMap((n) => n.anchors.map((a) => a.target));
+
+  // The story's shared library and its two downstream consumers, by the names the Diff surface,
+  // the run tree and the activity trail all use.
+  assert.ok(
+    targets.includes("libs/authkit"),
+    "no note anchors to the library the whole story turns on",
+  );
+  for (const needle of ["identity/token/Verify()", "dashboard/session/parseClaims()"]) {
+    assert.ok(
+      targets.some((t) => t.includes(needle)),
+      `no note anchors to ${needle}, so the blast radius has no written rationale`,
+    );
+  }
+
+  // Nothing may name magus's own internals: that is the tell that a note drifted back out of the
+  // fictional workspace and into the repository the reader is standing in. mise.toml is not on
+  // this list - a pinned toolchain is a file acme would have too, and the private note anchoring
+  // to it is about acme's postgres, not magus's.
+  const foreign = targets.filter((t) => /^(m )?(cache|sandbox)\b|internal\/lock/.test(t));
+  assert.deepEqual(foreign, [], "these anchor into magus itself rather than into acme");
 });

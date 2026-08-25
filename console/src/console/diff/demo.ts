@@ -13,7 +13,9 @@
 // services/identity:test run, and the apps/dashboard typecheck diagnostics at
 // src/api/session.ts:42 are all THIS diff, seen from the other side - so a reader who opens
 // two surfaces finds the same names, files and reasons in both. The churn and reach numbers
-// below are the same figures scenarioInsight reports for those paths, for the same reason.
+// below are the same figures scenarioInsight reports for those paths, and demo.test.ts asserts
+// that rather than trusting this sentence - a reader who compares the Insight surface with this
+// one and finds different numbers has caught the showcase lying.
 //
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.

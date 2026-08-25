@@ -4,6 +4,7 @@ import { demoSession, applyDemoOp } from "./demo";
 import { fromWire } from "./parse";
 import { DEMO_FILES } from "./gen/demo";
 import { order, stats, visibleFiles } from "./order";
+import { scenarioInsight, STORY_FILES } from "../demo-scenario";
 import { buildRows, byHunk } from "./rows";
 
 // demo.patch is data a person edits by hand, so what is pinned here is the ways it can go
@@ -159,4 +160,35 @@ test("applyDemoOp resolves a comment and answers a suggestion", () => {
   const sg1 = (skipped.suggestions ?? []).find((s) => s.id === "sg1");
   assert.equal(sg1?.declined, true);
   assert.equal(sg1?.accepted, false);
+});
+
+// The annotations here restate figures that demo-scenario.ts also publishes, and until now the
+// only thing keeping them equal was a comment saying they were. That is the arrangement this
+// session spent its day removing everywhere else: a stated invariant with nothing enforcing it.
+//
+// It matters because the two are shown side by side. The Insight surface reports libs/authkit as
+// the workspace's top hotspot with 46 commits across 2 authors; the Diff surface annotates the
+// same file in the same session. A reader who compares them and finds different numbers has
+// caught the showcase lying, and will reasonably assume the product does too.
+test("the diff annotations agree with the figures every other surface reports", () => {
+  const insight = scenarioInsight(Date.now());
+  const claims = insight.hotspots.find((h) => h.name === STORY_FILES.CLAIMS);
+  assert.ok(claims, "the scenario no longer ranks the file the story turns on");
+
+  const annotated = files.find((f) => f.path === STORY_FILES.CLAIMS);
+  assert.ok(annotated, "the changeset no longer carries the file the story turns on");
+
+  const note = (session.diff.files ?? []).find((a) => a.path === STORY_FILES.CLAIMS);
+  assert.ok(note, "the annotations no longer cover the file the story turns on");
+  assert.equal(note.churn?.commits, claims.churn, "churn disagrees with the Insight surface");
+  assert.equal(
+    note.churn?.authors,
+    claims.authors,
+    "author count disagrees with the Insight surface",
+  );
+  assert.equal(
+    note.reach,
+    claims.blastRadius,
+    "reach disagrees with the blast radius the Insight surface reports",
+  );
 });
