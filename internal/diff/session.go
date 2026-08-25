@@ -41,14 +41,27 @@ type Store struct {
 	sessions map[string]*types.DiffSession
 	// viewedPath is where the digest set is persisted, empty to disable persistence (tests).
 	viewedPath string
-	nextID     int
+	// hunks maps a root to the file each of its hunk digests belongs to, and to how many
+	// hunks each file has. It is what lets MarkViewed answer "did that finish a file", which
+	// a bare digest cannot.
+	//
+	// Server-side only, deliberately off the wire: the console computes these digests itself
+	// from the patch it fetched, so sending the mapping back would be shipping a large map
+	// nobody reads. Populated by TrackHunks at attach, where the patch is already in hand.
+	hunks  map[string]map[string]string
+	counts map[string]map[string]int
+	nextID int
 }
 
 // NewStore returns a session store persisting viewed state under stateDir. An empty stateDir
 // keeps everything in memory, which is what a test wants and what a workspace-less daemon
 // gets.
 func NewStore(stateDir string) *Store {
-	s := &Store{sessions: map[string]*types.DiffSession{}}
+	s := &Store{
+		sessions: map[string]*types.DiffSession{},
+		hunks:    map[string]map[string]string{},
+		counts:   map[string]map[string]int{},
+	}
 	if stateDir != "" {
 		s.viewedPath = filepath.Join(stateDir, "review", "viewed.json")
 	}
@@ -101,6 +114,28 @@ func (s *Store) Attach(root string, base string, rev types.Diff, asOf string) *t
 	return clone(sess)
 }
 
+// TrackHunks records which file each hunk digest belongs to, so a later MarkViewed can say
+// whether the mark finished a file.
+//
+// Called at attach, where the patch has already been read for the snapshot id. Replaces the
+// previous mapping wholesale: the changeset it describes has just been recomputed, and a
+// digest from the old one no longer names anything a reader can mark.
+func (s *Store) TrackHunks(root string, files []FileHunks) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	byDigest := make(map[string]string)
+	counts := make(map[string]int)
+	for _, f := range files {
+		for _, h := range f.Hunks {
+			byDigest[h.Digest] = f.Path
+			counts[f.Path]++
+		}
+	}
+	s.hunks[root] = byDigest
+	s.counts[root] = counts
+}
+
 // Get returns the session for root, or nil when none is attached.
 func (s *Store) Get(root string) *types.DiffSession {
 	s.mu.Lock()
@@ -122,8 +157,15 @@ func (s *Store) SetCursor(root string, c types.DiffCursor) *types.DiffSession {
 }
 
 // MarkViewed adds or removes a hunk digest from the human's progress set and persists it.
-func (s *Store) MarkViewed(root, digest string, viewed bool) *types.DiffSession {
-	return s.mutate(root, func(sess *types.DiffSession) {
+//
+// finished names the file this mark just completed, empty when it completed none. That is
+// what a caller mints a read receipt from, and the reason it is reported HERE rather than
+// computed by the caller: a mark arriving on this route is live by construction - a person
+// pressed something - which is the property a receipt rests on. The persisted viewed set is
+// an unauthenticated file, so a file that merely LOOKS complete after a reload must never
+// mint one on its own.
+func (s *Store) MarkViewed(root, digest string, viewed bool) (sess *types.DiffSession, finished string) {
+	sess = s.mutate(root, func(sess *types.DiffSession) {
 		i := slices.Index(sess.Viewed, digest)
 		switch {
 		case viewed && i < 0:
@@ -134,7 +176,38 @@ func (s *Store) MarkViewed(root, digest string, viewed bool) *types.DiffSession 
 			return
 		}
 		s.saveViewed(sess.Viewed)
+		if viewed {
+			finished = s.completedBy(root, digest, sess.Viewed)
+		}
 	})
+	return sess, finished
+}
+
+// completedBy reports the file digest belongs to when every one of that file's hunks is now
+// marked, and "" otherwise. Callers hold the lock.
+//
+// An untracked digest completes nothing rather than completing a file of one hunk: it means
+// the patch moved under the session, and guessing there would mint a receipt for a file the
+// reader never finished.
+func (s *Store) completedBy(root, digest string, viewed []string) string {
+	path, ok := s.hunks[root][digest]
+	if !ok {
+		return ""
+	}
+	total := s.counts[root][path]
+	if total == 0 {
+		return ""
+	}
+	marked := 0
+	for _, d := range viewed {
+		if s.hunks[root][d] == path {
+			marked++
+		}
+	}
+	if marked < total {
+		return ""
+	}
+	return path
 }
 
 // AddComment attaches a remark. author is stamped by the CALLER from the transport the write

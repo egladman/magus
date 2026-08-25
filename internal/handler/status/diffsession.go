@@ -1,12 +1,16 @@
 package status
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
+	"path/filepath"
+	"time"
 
 	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 )
 
@@ -25,11 +29,15 @@ type DiffSessionHandler struct {
 	handler.Base
 	sessions *diff.Store
 	root     string
+	// cacheDir is where read receipts live. Empty disables minting, which is what a
+	// workspace-less daemon and this package's tests get.
+	cacheDir string
 }
 
-// NewDiffSessionHandler returns the paired-review handler.
-func NewDiffSessionHandler(sessions *diff.Store, root string, log *slog.Logger) *DiffSessionHandler {
-	h := &DiffSessionHandler{sessions: sessions, root: root}
+// NewDiffSessionHandler returns the paired-review handler. cacheDir may be empty, which
+// serves the session without recording read receipts.
+func NewDiffSessionHandler(sessions *diff.Store, root, cacheDir string, log *slog.Logger) *DiffSessionHandler {
+	h := &DiffSessionHandler{sessions: sessions, root: root, cacheDir: cacheDir}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -81,7 +89,17 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "cursor":
 		sess = h.sessions.SetCursor(h.root, types.DiffCursor{Path: req.Path, Hunk: req.Hunk})
 	case "viewed":
-		sess = h.sessions.MarkViewed(h.root, req.Digest, req.On)
+		var finished string
+		sess, finished = h.sessions.MarkViewed(h.root, req.Digest, req.On)
+		// Finishing a file in the console earns a read receipt, exactly as stepping its last
+		// hunk in `magus diff --tui` does. One rule, two surfaces: the reader chooses where
+		// to read and magus does not care which they picked.
+		//
+		// Only a mark arriving HERE mints one. This route is the human's - the MCP surface
+		// has no way to write it, by design - and the persisted viewed set is an
+		// unauthenticated file, so a session that merely LOOKS complete after a reload must
+		// never produce a receipt on its own.
+		h.mintReceipt(r.Context(), finished)
 	case "comment":
 		sess = h.sessions.AddComment(h.root, types.DiffComment{
 			Path: req.Path, Hunk: req.Hunk, Body: req.Body, Anchor: req.Anchor,
@@ -101,4 +119,24 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, sess)
+}
+
+// mintReceipt records that a person read path, at the content it holds right now.
+//
+// Best-effort and silent: this is a side effect of reading, and a reader who just finished a
+// file should not meet an error about bookkeeping on their next keypress. A path that cannot
+// be fingerprinted - deleted since the patch was read - records nothing rather than recording
+// a receipt against no content.
+func (h *DiffSessionHandler) mintReceipt(ctx context.Context, path string) {
+	if path == "" || h.cacheDir == "" || h.root == "" {
+		return
+	}
+	digest := review.DigestFile(filepath.Join(h.root, filepath.FromSlash(path)))
+	if digest == "" {
+		return
+	}
+	if err := review.Record(h.cacheDir, []review.Receipt{{Path: path, Digest: digest, At: time.Now()}}); err != nil {
+		slog.DebugContext(ctx, "diff session: could not record a read receipt",
+			slog.String("path", path), slog.String("error", err.Error()))
+	}
 }

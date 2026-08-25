@@ -92,6 +92,11 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 		asOf := ""
 		if patch, perr := h.src.WorkingDiff(r.Context(), nil); perr == nil {
 			asOf = diff.PatchDigest(patch)
+			// The same read also gives the hunk-to-file mapping, which is the only thing
+			// that lets a later viewed mark say it FINISHED a file rather than just landing
+			// somewhere. The console computes these digests itself, so the daemon otherwise
+			// sees opaque strings.
+			h.sessions.TrackHunks(h.root, diff.ParseHunks(patch))
 		}
 		writeJSON(w, h.sessions.Attach(h.root, out.Base, out, asOf))
 		return

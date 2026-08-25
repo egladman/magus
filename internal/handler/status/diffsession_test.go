@@ -13,7 +13,7 @@ import (
 func TestDiffSessionHandler_GetReadsAttachedSessionWithoutMutatingIt(t *testing.T) {
 	root := t.TempDir()
 	store := diff.NewStore("")
-	h := NewDiffSessionHandler(store, root, nil)
+	h := NewDiffSessionHandler(store, root, "", nil)
 
 	missing := httptest.NewRecorder()
 	h.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/api/v1/diff/session", nil))

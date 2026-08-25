@@ -70,9 +70,9 @@ func TestMarkViewedTogglesAndDeduplicates(t *testing.T) {
 	s := NewStore("")
 	s.Attach("/w", "working", types.Diff{}, "")
 	s.MarkViewed("/w", "d1", true)
-	got := s.MarkViewed("/w", "d1", true)
+	got, _ := s.MarkViewed("/w", "d1", true)
 	assert.Equal(t, []string{"d1"}, got.Viewed, "marking twice must not duplicate")
-	got = s.MarkViewed("/w", "d1", false)
+	got, _ = s.MarkViewed("/w", "d1", false)
 	assert.Empty(t, got.Viewed)
 }
 
@@ -163,7 +163,8 @@ func TestMutatingAnUnattachedRootYieldsNil(t *testing.T) {
 	s := NewStore("")
 	assert.Nil(t, s.Get("/nope"))
 	assert.Nil(t, s.SetCursor("/nope", types.DiffCursor{}))
-	assert.Nil(t, s.MarkViewed("/nope", "d", true))
+	unattached, _ := s.MarkViewed("/nope", "d", true)
+	assert.Nil(t, unattached)
 	assert.Nil(t, s.Suggest("/nope", types.DiffSuggestion{}))
 }
 
@@ -171,7 +172,7 @@ func TestMutatingAnUnattachedRootYieldsNil(t *testing.T) {
 func TestReturnedSessionsAreCopies(t *testing.T) {
 	s := NewStore("")
 	s.Attach("/w", "working", types.Diff{}, "")
-	got := s.MarkViewed("/w", "d1", true)
+	got, _ := s.MarkViewed("/w", "d1", true)
 	got.Viewed[0] = "tampered"
 	fresh := s.Get("/w")
 	assert.Equal(t, []string{"d1"}, fresh.Viewed)
@@ -182,4 +183,56 @@ func mkdirAllWrite(path, body string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(body), 0o644)
+}
+
+// TestMarkViewedReportsTheFileItFinished is what lets the console earn a read receipt the
+// same way `magus diff --tui` does: a mark is just a digest, and only the store knows which
+// file it belongs to and whether that file is now complete.
+func TestMarkViewedReportsTheFileItFinished(t *testing.T) {
+	s := NewStore("")
+	s.Attach("/w", "working", types.Diff{}, "")
+	s.TrackHunks("/w", []FileHunks{
+		{Path: "a.go", Hunks: []Hunk{{Digest: "a1"}, {Digest: "a2"}}},
+		{Path: "b.go", Hunks: []Hunk{{Digest: "b1"}}},
+	})
+
+	// A file with more hunks left is not finished.
+	_, finished := s.MarkViewed("/w", "a1", true)
+	assert.Empty(t, finished, "a.go still has an unread hunk")
+
+	_, finished = s.MarkViewed("/w", "a2", true)
+	assert.Equal(t, "a.go", finished, "the last hunk finishes the file")
+
+	// A one-hunk file finishes on its only mark.
+	_, finished = s.MarkViewed("/w", "b1", true)
+	assert.Equal(t, "b.go", finished)
+
+	// Unmarking finishes nothing: it is the reader taking a claim BACK.
+	_, finished = s.MarkViewed("/w", "b1", false)
+	assert.Empty(t, finished)
+}
+
+// A digest the store cannot place completes nothing. It means the patch moved under the
+// session, and guessing there would mint a receipt for a file the reader never finished.
+func TestMarkViewedFinishesNothingForAnUntrackedDigest(t *testing.T) {
+	s := NewStore("")
+	s.Attach("/w", "working", types.Diff{}, "")
+
+	_, finished := s.MarkViewed("/w", "stranger", true)
+	assert.Empty(t, finished, "no hunk mapping was tracked, so nothing can be complete")
+}
+
+// Re-attaching replaces the mapping rather than merging into it: the changeset was just
+// recomputed, so a digest from the previous one names nothing a reader can still mark.
+func TestTrackHunksReplacesThePreviousMapping(t *testing.T) {
+	s := NewStore("")
+	s.Attach("/w", "working", types.Diff{}, "")
+	s.TrackHunks("/w", []FileHunks{{Path: "old.go", Hunks: []Hunk{{Digest: "x1"}}}})
+	s.TrackHunks("/w", []FileHunks{{Path: "new.go", Hunks: []Hunk{{Digest: "y1"}}}})
+
+	_, finished := s.MarkViewed("/w", "x1", true)
+	assert.Empty(t, finished, "a digest from the superseded changeset finishes nothing")
+
+	_, finished = s.MarkViewed("/w", "y1", true)
+	assert.Equal(t, "new.go", finished)
 }
