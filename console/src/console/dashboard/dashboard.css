@@ -1824,6 +1824,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default); color: var(--console-status-running); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.35rem;
 }
 .console-dashboard-insight__refresh:hover { color: var(--console-status-running); border-color: var(--console-status-running); background: color-mix(in srgb, var(--console-status-running) 8%, var(--pf-t--global--background--color--secondary--default)); }
 

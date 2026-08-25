@@ -43,6 +43,7 @@ import {
   wantsDemo,
 } from "../../lib/daemon";
 import { attachHelpPopover } from "../../ui/help-popover";
+import { REFRESH, svgGlyph } from "../../ui/glyph";
 import { h } from "../view";
 import type { SurfaceInstance } from "../standalone";
 
@@ -221,8 +222,11 @@ function build(host: HTMLElement, on: { onQuery: () => void; onRefresh: () => vo
   attachHelpPopover(help);
 
   const count = h("span", "console-runs__count");
-  const refresh = h("button", "pf-v6-c-button pf-m-plain console-runs__refresh", "Refresh");
+  const refresh = h("button", "pf-v6-c-button pf-m-secondary console-runs__refresh");
   refresh.setAttribute("type", "button");
+  const refreshIcon = h("span", "pf-v6-c-button__icon pf-m-start");
+  refreshIcon.append(svgGlyph(REFRESH, 14));
+  refresh.append(refreshIcon, h("span", "pf-v6-c-button__text", "Refresh"));
   refresh.addEventListener("click", on.onRefresh);
   bar.append(search, help, count, refresh);
 

@@ -17,6 +17,7 @@ import { must } from "../../lib/guards";
 // runindex.ts, which has no DOM dependency and carries the unit tests.
 
 import { authHeaders, fetchSSE } from "../../lib/daemon";
+import { REFRESH } from "../../ui/glyph";
 import { persisted } from "../../lib/persist";
 import { scenarioInvocations, scenarioRuns } from "../demo-scenario";
 import {
@@ -516,7 +517,12 @@ export function renderRunTree(
 
 // iconButton builds a small plain PF button carrying one inline-SVG glyph (refresh, hide), matching
 // the viewer's icon-button idiom without pulling a component. paths are <path>/<polyline> d-strings.
-function iconButton(id: string, label: string, title: string, paths: string[]): HTMLButtonElement {
+function iconButton(
+  id: string,
+  label: string,
+  title: string,
+  paths: readonly string[],
+): HTMLButtonElement {
   const b = document.createElement("button");
   if (id) b.id = id;
   b.type = "button";
@@ -598,10 +604,7 @@ export function mountCollapsiblePanel(opts: {
   const title = document.createElement("span");
   title.className = "console-log-runs__title";
   title.textContent = opts.title;
-  const refreshBtn = iconButton("", "Refresh", "Refresh", [
-    "M21 12a9 9 0 1 1-2.64-6.36",
-    "M21 3v6h-6",
-  ]);
+  const refreshBtn = iconButton("", "Refresh", "Refresh", REFRESH);
   const hideBtn = iconButton("", "Hide the panel", "Hide the panel", ["M15 18l-6-6 6-6"]);
   head.append(title, refreshBtn, hideBtn);
 
