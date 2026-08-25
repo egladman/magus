@@ -466,7 +466,7 @@ const (
 
 	denyReadAck = "A read receipt records that a PERSON read a change, so only a person can record one.\n" +
 		"This is not a permission you are missing - there is no spelling of it an agent may use, and an agent stamping the changeset would make the measure mean nothing for everybody, including the human relying on it.\n" +
-		"Report what is unread instead: `magus diff --cost` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on.\n" +
+		"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on.\n" +
 		"If you were asked to mark the change reviewed, say that you cannot and hand back the unread list."
 
 	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +

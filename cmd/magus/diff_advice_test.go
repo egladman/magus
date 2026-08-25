@@ -267,7 +267,7 @@ func TestLocalModeReadsAStaleBaseWithoutFetching(t *testing.T) {
 	}
 	// The advisor saw the driver's base rather than a pull request's. Saying that the base
 	// went unfetched is the DRIVER's line, once for the whole set - see
-	// TestPreflightBaseSeparatesOldFromAbsent - so no section carries the disclaimer.
+	// TestImpactBaseSeparatesOldFromAbsent - so no section carries the disclaimer.
 	if body := sections[0].Body; body != "main" {
 		t.Errorf("Body = %q, want the local base the driver supplied", body)
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 // anchorHit is one note anchor that names something in the changeset, shaped for the
-// preflight report rather than for the store.
+// impact report rather than for the store.
 type anchorHit struct {
 	Note   string           `json:"note"            yaml:"note"`
 	Title  string           `json:"title,omitempty" yaml:"title,omitempty"`
@@ -20,10 +20,10 @@ type anchorHit struct {
 	Drift string `json:"drift,omitempty" yaml:"drift,omitempty"`
 }
 
-// preflightAnchors joins every note anchor against the changeset. A knowledge graph that will
+// impactAnchors joins every note anchor against the changeset. A knowledge graph that will
 // not load costs the drift column and nothing else: notes.ResolveAnchors takes a nil resolver
 // and grades every anchor ungraded, so the section still answers WHAT is anchored.
-func preflightAnchors(ctx context.Context, root string, files, symbols []string) []anchorHit {
+func impactAnchors(ctx context.Context, root string, files, symbols []string) []anchorHit {
 	stores, err := notesStores(root, "")
 	if err != nil {
 		return nil

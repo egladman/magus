@@ -305,7 +305,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 }
 
 // review_required names where an unread change actually costs something, so `magus diff
-// --cost` can single those paths out and stay quiet everywhere else.
+// --impact` can single those paths out and stay quiet everywhere else.
 //
 // This pins the PARSER, which is the half that had no test: the matcher and the report both
 // had coverage while nothing asserted that declaring the key in a magusfile reaches

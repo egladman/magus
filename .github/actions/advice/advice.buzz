@@ -89,7 +89,7 @@ export fun env(name: str) > str {
 // a network round trip and a write to refs/remotes/ are both wrong there - a report is not
 // allowed to change the repository it is reporting on. It reads whatever origin/<base> the
 // clone already has, which may be days old. Saying so is the DRIVER's job, not an advisor's:
-// the caveat is identical under every section, so `magus diff --cost` states the base and its
+// the caveat is identical under every section, so `magus diff --impact` states the base and its
 // age once for the whole set (preflightAdvisorBaseLine) rather than ten times.
 //
 // refspec selects the explicit "+refs/heads/<base>:refs/remotes/origin/<base>" form and
@@ -134,7 +134,7 @@ export fun diffRange(base: str, head: str) > str !> any {
     // A base this clone cannot resolve is ordinary locally - nothing ever fetched it - and
     // the three-dot form is what to hand back, not an error. It then fails inside the
     // advisor's own git call exactly as it always has, every caller already tolerates that
-    // failure, and `magus diff --cost` prints a BASE line saying the ref is missing. One
+    // failure, and `magus diff --impact` prints a BASE line saying the ref is missing. One
     // failure, one place, one explanation.
     if (!merged.ok) { return "origin/" + base + "..." + head; }
     return merged.stdout.trim();

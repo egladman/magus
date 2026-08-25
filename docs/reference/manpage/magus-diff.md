@@ -11,7 +11,7 @@ Read the working tree's changes in the order they deserve attention
 
 ## Synopsis
 
-**magus** diff [--generated] [--cost] [--tui] [--watch] [\<patch-file\>|-] [flags]
+**magus** diff [--generated] [--impact] [--tui] [--watch] [\<patch-file\>|-] [flags]
 
 ## Description
 
@@ -37,17 +37,18 @@ model - it reports who can see the thing you changed and lets you decide.
 The console's Diff surface reads the same annotations over the same session,
 and an agent can join that session through the magus_diff MCP tool.
 
---cost appends what landing the change costs: which projects rebuild and
-which were merely edited, who has been changing them, an estimate of the
+--impact appends the blast radius of landing the change: which projects rebuild
+and which were merely edited, who has been changing them, an estimate of the
 rebuild from recorded run durations, what the workspace's advisors say, and
-which human-authored notes anchor a file or symbol you touched. It is context
-and never a verdict - nothing is gated on it and the exit code is unchanged;
-the name is not "preflight" because in this workspace's magusfiles a preflight
-target IS a gate, and this flag must never read as one. Each section says when
-it could not measure something, so an empty one reads as "nobody looked"
-rather than as a clean bill of health.
+which human-authored notes anchor a file or symbol you touched. It is the same
+question magus affected --impact answers, asked of a changeset instead of a
+target. It is context and never a verdict - nothing is gated on it and the exit
+code is unchanged; neither the flag nor the section it prints says "preflight",
+because in this workspace's magusfiles a preflight target IS a gate and this
+must never read as one. Each section says when it could not measure something,
+so an empty one reads as "nobody looked" rather than as a clean bill of health.
 
---cost also carries a REVIEW section, which is a bookmark rather than a
+--impact also carries a REVIEW section, which is a bookmark rather than a
 score. It reports the two things a reader cannot produce without reading:
 files that changed AFTER they were read, and files never opened, widest
 blast radius first. It reports no ratio and stays silent on a small change
@@ -68,13 +69,13 @@ performance metric, and a performance metric gets gamed rather than met.
 ## Options
 
 **--ack**
-: Record that you have read the changed files at their current content; --cost reports what carries no such record
-
-**--cost**
-: Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors
+: Record that you have read the changed files at their current content; --impact reports what carries no such record
 
 **--generated**
 : Include declared target outputs, which are folded away by default
+
+**--impact**
+: Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors
 
 **--reason** *string*
 : An optional note kept with an --ack, for the next reader of the report
@@ -113,7 +114,7 @@ magus diff --generated
 *Everything to know before landing it*
 
 ```sh
-magus diff --cost
+magus diff --impact
 ```
 
 *Navigate it hunk by hunk and mark what you have read*

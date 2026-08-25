@@ -82,7 +82,7 @@ REPORTS every undeclared path instead of sweeping it in{{if .Full}}, which is th
 genuinely a new source file. Staging specific paths by hand stays fine; the long
 form below is what it automates, and what to fall back to.
 
-Read the change before you stage it. `magus diff --cost` orders the uncommitted
+Read the change before you stage it. `magus diff --impact` orders the uncommitted
 changeset by what it can BREAK rather than alphabetically, folds the generated
 files away, and appends what landing it costs: which projects rebuild, who has been
 changing them, an estimate from recorded run times, what the workspace's advisors

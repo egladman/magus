@@ -5,8 +5,8 @@ description: "Safe git operations in a magus workspace (any repo with magusfile.
 tags: [agents, skills, magus-vcs-hygiene]
 aliases:
   - reference/skills/magus-vcs
-skill_full_bytes: 8104
-skill_simple_bytes: 5975
+skill_full_bytes: 8106
+skill_simple_bytes: 5977
 ---
 
 # magus-vcs-hygiene
@@ -32,7 +32,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `43` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `f5ec6d457981` |
+| `skill-content` | `96db0c2c44d2` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -121,7 +121,7 @@ REPORTS every undeclared path instead of sweeping it in, which is the one thing
 genuinely a new source file. Staging specific paths by hand stays fine; the long
 form below is what it automates, and what to fall back to.
 
-Read the change before you stage it. `magus diff --cost` orders the uncommitted
+Read the change before you stage it. `magus diff --impact` orders the uncommitted
 changeset by what it can BREAK rather than alphabetically, folds the generated
 files away, and appends what landing it costs: which projects rebuild, who has been
 changing them, an estimate from recorded run times, what the workspace's advisors
@@ -261,7 +261,7 @@ REPORTS every undeclared path instead of sweeping it in. Pass `--untracked` when
 genuinely a new source file. Staging specific paths by hand stays fine; the long
 form below is what it automates, and what to fall back to.
 
-Read the change before you stage it. `magus diff --cost` orders the uncommitted
+Read the change before you stage it. `magus diff --impact` orders the uncommitted
 changeset by what it can BREAK rather than alphabetically, folds the generated
 files away, and appends what landing it costs: which projects rebuild, who has been
 changing them, an estimate from recorded run times, what the workspace's advisors

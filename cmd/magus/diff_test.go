@@ -194,25 +194,25 @@ func TestDiffCountsLineIsWhatTheReaderIsLeftWith(t *testing.T) {
 		"with nothing generated there is no clause either way")
 }
 
-// preflightFixture is a changeset every lens had something to say about: the populated case
+// impactFixture is a changeset every lens had something to say about: the populated case
 // each section's render is pinned against.
-func preflightFixture() diffPreflight {
-	return diffPreflight{
-		Reach: &preflightReach{
+func impactFixture() diffImpact {
+	return diffImpact{
+		Reach: &impactReach{
 			Seeds:    1,
 			Rebuilds: 2,
-			Projects: []preflightProject{
+			Projects: []impactProject{
 				{Path: "root", Seed: true, Files: 3},
 				{Path: "docs"},
 			},
 		},
-		Ownership: []preflightOwner{
+		Ownership: []impactOwner{
 			{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4},
 			{Project: "docs", Primary: "bob", PrimaryShare: 100, Authors: 1, BusFactor1: true},
 		},
-		Cost: &preflightCost{
+		Cost: &impactCost{
 			TotalMs: 260_000,
-			Projects: []preflightCostProject{
+			Projects: []impactCostProject{
 				{Project: "root", Target: "ci", Ms: 200_000, Samples: 18, HitRate: 0.4},
 				{Project: "docs", Target: "test", Ms: 60_000, Samples: 1},
 			},
@@ -229,7 +229,7 @@ func preflightFixture() diffPreflight {
 		AdvisorNotes: []string{"could not run: doctor.buzz: main() returned 1"},
 		// Relative to now, not a fixed date: the rendered age is computed at read time, so a
 		// literal tip would make the expected line drift by a day every day.
-		AdvisorBase: &preflightAdvisorBase{
+		AdvisorBase: &impactAdvisorBase{
 			Ref: "origin/main",
 			Tip: time.Now().Add(-50 * time.Hour).Format(time.RFC3339),
 		},
@@ -240,7 +240,7 @@ func preflightFixture() diffPreflight {
 		Rationale: []rationaleHit{
 			{Path: "internal/cache/signing.go", Line: 32, Until: "no store still serves ed25519 envelopes"},
 		},
-		Review: &preflightReview{
+		Review: &impactReview{
 			Files: 8, Read: 5,
 			Stale:  []string{"internal/cache/cache.go"},
 			Unread: []string{"types/diff.go", "std/magus.go"},
@@ -248,14 +248,14 @@ func preflightFixture() diffPreflight {
 	}
 }
 
-// TestPreflightRendersEverySection pins the five sections a disposer reads before landing.
+// TestImpactRendersEverySection pins the five sections a disposer reads before landing.
 //
 // Asserted line by line rather than by substring: these sentences are the whole product of
 // this surface, and a section that silently stopped rendering its list would still pass a
 // header-only check.
-func TestPreflightRendersEverySection(t *testing.T) {
+func TestImpactRendersEverySection(t *testing.T) {
 	assert.Equal(t, []string{
-		"PREFLIGHT - what landing this costs, and who else it touches",
+		"IMPACT - the blast radius of landing this",
 		"",
 		"REACH: 1 project edited, 2 projects rebuild",
 		"      root - edited, 3 files",
@@ -291,26 +291,26 @@ func TestPreflightRendersEverySection(t *testing.T) {
 		"        std/magus.go",
 		"      record what you read, wherever you read it: magus diff --ack <path>...",
 		"      or step through them here: magus diff --tui",
-	}, preflightLines(preflightFixture()))
+	}, impactLines(impactFixture()))
 }
 
-// TestPreflightEmptyFormsSayNobodyLooked is the half that matters.
+// TestImpactEmptyFormsSayNobodyLooked is the half that matters.
 //
 // Every one of these sections is empty for two completely different reasons - nothing found,
 // or nothing measured - and only one of them is good news. A silent section, or a cost of
 // zero, would report an unmeasured workspace as a cheap safe change.
-func TestPreflightEmptyFormsSayNobodyLooked(t *testing.T) {
-	lines := preflightLines(diffPreflight{})
+func TestImpactEmptyFormsSayNobodyLooked(t *testing.T) {
+	lines := impactLines(diffImpact{})
 
 	assert.Equal(t, []string{
-		"PREFLIGHT - what landing this costs, and who else it touches",
+		"IMPACT - the blast radius of landing this",
 		"",
 		"REACH: no project contains a changed file, so nothing rebuilds",
 		"",
 		"OWNERSHIP: no commit history in the window, so no owner is named",
 		"",
 		"COST: no run history yet, so there is nothing to estimate from",
-		"      Run `magus affected ci` once and the next preflight can price this.",
+		"      Run `magus affected ci` once and the next impact can price this.",
 		"",
 		"ADVISORS: nothing to report",
 		"",
@@ -325,11 +325,11 @@ func TestPreflightEmptyFormsSayNobodyLooked(t *testing.T) {
 	assert.NotContains(t, strings.Join(lines, "\n"), "~0s")
 }
 
-// TestPreflightCountsFindingsNotSections pins the headline against the retraction shape every
+// TestImpactCountsFindingsNotSections pins the headline against the retraction shape every
 // real run produces: eleven advisors publish, one has something to say, and ten publish an
 // empty body to withdraw whatever they said last time.
-func TestPreflightCountsFindingsNotSections(t *testing.T) {
-	lines := preflightAdvisorLines([]adviceSection{
+func TestImpactCountsFindingsNotSections(t *testing.T) {
+	lines := impactAdvisorLines([]adviceSection{
 		{Name: "unclaimed", Title: "Files no project claims"},
 		{Name: "conformance", Title: "A target name diverges", Body: "rename it\n"},
 		{Name: "skip-cache", Title: "A target opted out of the cache"},
@@ -343,40 +343,40 @@ func TestPreflightCountsFindingsNotSections(t *testing.T) {
 	}, lines)
 }
 
-// TestPreflightBaseSeparatesOldFromAbsent pins the distinction the line exists for.
+// TestImpactBaseSeparatesOldFromAbsent pins the distinction the line exists for.
 //
 // A base nobody fetched and a base that is merely stale produce the same silent advisors, and
 // only one of them is a finding about the code. Collapsing them would make an unfetched clone
 // read as a clean review.
-func TestPreflightBaseSeparatesOldFromAbsent(t *testing.T) {
-	stale := preflightAdvisorBaseLine(&preflightAdvisorBase{
+func TestImpactBaseSeparatesOldFromAbsent(t *testing.T) {
+	stale := impactAdvisorBaseLine(&impactAdvisorBase{
 		Ref: "origin/main",
 		Tip: time.Now().Add(-9 * 24 * time.Hour).Format(time.RFC3339),
 	})
 	assert.Contains(t, stale, "tip 9 days old")
 	assert.Contains(t, stale, "`git fetch origin main`")
 
-	absent := preflightAdvisorBaseLine(&preflightAdvisorBase{Ref: "origin/main"})
+	absent := impactAdvisorBaseLine(&impactAdvisorBase{Ref: "origin/main"})
 	assert.Contains(t, absent, "is not in this clone")
 	assert.NotContains(t, absent, "tip ")
 
 	// Nil is neither: a backend that cannot date a revision has not measured the base, and
 	// inventing "fresh" for it is the one answer that would mislead.
-	assert.Empty(t, preflightAdvisorBaseLine(nil))
+	assert.Empty(t, impactAdvisorBaseLine(nil))
 }
 
-// TestPreflightBaseQualifiesAnEmptyAdvisorSet is the case the caveat matters most in: no
+// TestImpactBaseQualifiesAnEmptyAdvisorSet is the case the caveat matters most in: no
 // findings against a week-old base is not the same news as no findings against today's.
-func TestPreflightBaseQualifiesAnEmptyAdvisorSet(t *testing.T) {
-	lines := preflightAdvisorLines(nil, nil, &preflightAdvisorBase{Ref: "origin/main"})
+func TestImpactBaseQualifiesAnEmptyAdvisorSet(t *testing.T) {
+	lines := impactAdvisorLines(nil, nil, &impactAdvisorBase{Ref: "origin/main"})
 	require.Len(t, lines, 2)
 	assert.Contains(t, lines[0], "origin/main")
 	assert.Equal(t, "ADVISORS: nothing to report", lines[1])
 }
 
-// TestPreflightAgeKeepsOneUnit pins the rounding. A reader is deciding whether to fetch, and
+// TestImpactAgeKeepsOneUnit pins the rounding. A reader is deciding whether to fetch, and
 // the order of magnitude is the whole decision.
-func TestPreflightAgeKeepsOneUnit(t *testing.T) {
+func TestImpactAgeKeepsOneUnit(t *testing.T) {
 	for _, tc := range []struct {
 		d    time.Duration
 		want string
@@ -387,29 +387,29 @@ func TestPreflightAgeKeepsOneUnit(t *testing.T) {
 		{25 * time.Hour, "1 day"},
 		{50 * time.Hour, "2 days"},
 	} {
-		assert.Equal(t, tc.want, preflightAge(tc.d), tc.d.String())
+		assert.Equal(t, tc.want, impactAge(tc.d), tc.d.String())
 	}
 }
 
-// TestPreflightListsReportWhatTheyLeftOff guards the bound on every section list. A reach of
+// TestImpactListsReportWhatTheyLeftOff guards the bound on every section list. A reach of
 // sixty projects is a real answer and an unreadable one, and a list that stops without saying
 // so reads as the whole answer.
-func TestPreflightListsReportWhatTheyLeftOff(t *testing.T) {
-	r := &preflightReach{Seeds: 1, Rebuilds: 14}
+func TestImpactListsReportWhatTheyLeftOff(t *testing.T) {
+	r := &impactReach{Seeds: 1, Rebuilds: 14}
 	for i := 0; i < 14; i++ {
-		r.Projects = append(r.Projects, preflightProject{Path: fmt.Sprintf("p%d", i)})
+		r.Projects = append(r.Projects, impactProject{Path: fmt.Sprintf("p%d", i)})
 	}
-	lines := preflightReachLines(r)
-	require.Len(t, lines, 1+preflightListCap+1)
+	lines := impactReachLines(r)
+	require.Len(t, lines, 1+impactListCap+1)
 	assert.Equal(t, "      and 4 more", lines[len(lines)-1])
 }
 
-// TestPrintDiffTextWithoutPreflightIsUnchanged is the additive guarantee.
+// TestPrintDiffTextWithoutImpactIsUnchanged is the additive guarantee.
 //
 // There is no golden file for this surface, so the whole report is spelled out here: any
-// preflight line leaking into the default rendering fails this, and so does a stray blank
+// impact line leaking into the default rendering fails this, and so does a stray blank
 // line, which a substring check for the section headers would not catch.
-func TestPrintDiffTextWithoutPreflightIsUnchanged(t *testing.T) {
+func TestPrintDiffTextWithoutImpactIsUnchanged(t *testing.T) {
 	reach := 12
 	rev := types.Diff{
 		Files: []types.DiffFile{
@@ -436,46 +436,46 @@ func TestPrintDiffTextWithoutPreflightIsUnchanged(t *testing.T) {
 		"or ask why one is folded with `magus describe file <path>`.\n", out)
 
 	// Named separately from the byte comparison so a failure says WHICH promise broke.
-	for _, header := range []string{"PREFLIGHT", "REACH:", "OWNERSHIP:", "COST:", "ADVISORS:", "ANCHORS:"} {
+	for _, header := range []string{"IMPACT", "REACH:", "OWNERSHIP:", "COST:", "ADVISORS:", "ANCHORS:"} {
 		assert.NotContains(t, out, header)
 	}
 }
 
-// TestPrintDiffTextAppendsPreflightAboveTheConsoleLink pins where the report lands: after the
+// TestPrintDiffTextAppendsImpactAboveTheConsoleLink pins where the report lands: after the
 // file list, so the ordering of everything a reader already knows how to scan is untouched.
-func TestPrintDiffTextAppendsPreflightAboveTheConsoleLink(t *testing.T) {
+func TestPrintDiffTextAppendsImpactAboveTheConsoleLink(t *testing.T) {
 	rev := types.Diff{Files: []types.DiffFile{{Path: "a.go", Role: types.DiffRoleSource}}}
-	pre := preflightFixture()
+	pre := impactFixture()
 
 	out := captureStdout(t, func() {
 		require.NoError(t, printDiffText(rev, false, func(p string) string { return p }, &pre))
 	})
 
 	assert.True(t, strings.HasPrefix(out, "1 files to read\n"), "the counts line still opens the report")
-	assert.Contains(t, out, "\nPREFLIGHT - what landing this costs, and who else it touches\n")
-	assert.Less(t, strings.Index(out, "  a.go"), strings.Index(out, "PREFLIGHT"),
-		"the changeset is what a reader came for; the preflight follows it")
+	assert.Contains(t, out, "\nIMPACT - the blast radius of landing this\n")
+	assert.Less(t, strings.Index(out, "  a.go"), strings.Index(out, "IMPACT"),
+		"the changeset is what a reader came for; the impact follows it")
 }
 
-// TestPreflightCostRefusesToPriceAnUnmeasuredReach pins the one number this section must never
+// TestImpactCostRefusesToPriceAnUnmeasuredReach pins the one number this section must never
 // print.
 //
 // forecast always answers PredictDuration - it falls back to a workspace percentile and then to
 // a compiled-in constant - so a total is computable for a workspace nobody has ever timed. That
 // total is a fabrication wearing a duration, and quoting it would teach a reader to trust every
 // later one.
-func TestPreflightCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
+func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 	affected := []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go"}}, {Path: "docs"}}
 
 	t.Run("no history at all", func(t *testing.T) {
-		assert.Nil(t, preflightCostOf(&forecast.History{}, affected))
+		assert.Nil(t, impactCostOf(&forecast.History{}, affected))
 	})
 
 	t.Run("a project below the sample floor is not a measurement", func(t *testing.T) {
 		h := &forecast.History{Projects: map[string]map[string]forecast.Stats{
-			"root": {"ci": {P75Ms: 90_000, Samples: preflightMinSamples - 1}},
+			"root": {"ci": {P75Ms: 90_000, Samples: impactMinSamples - 1}},
 		}}
-		assert.Nil(t, preflightCostOf(h, affected))
+		assert.Nil(t, impactCostOf(h, affected))
 	})
 
 	t.Run("only the measured projects are counted, and the rest are not guessed at", func(t *testing.T) {
@@ -483,7 +483,7 @@ func TestPreflightCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 			"root": {"ci": {P75Ms: 90_000, Samples: 12}},
 			"docs": {"lint": {P75Ms: 5_000, Samples: 40}},
 		}}
-		c := preflightCostOf(h, affected)
+		c := impactCostOf(h, affected)
 		require.NotNil(t, c)
 		require.Len(t, c.Projects, 1, "docs declares no ci or test target the history has timed")
 		assert.Equal(t, "root", c.Projects[0].Project)
@@ -499,16 +499,16 @@ func TestPreflightCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 				"test": {P75Ms: 30_000, Samples: 99},
 			},
 		}}
-		c := preflightCostOf(h, affected)
+		c := impactCostOf(h, affected)
 		require.NotNil(t, c)
 		assert.Equal(t, "ci", c.Projects[0].Target)
 	})
 }
 
-// TestPreflightOwnersJoinOnlyTheReach pins both halves of the join: a project outside the
+// TestImpactOwnersJoinOnlyTheReach pins both halves of the join: a project outside the
 // blast radius is not this changeset's problem, and a project the lens cannot name an owner
 // for is dropped rather than listed with a blank one, which reads as a lookup that failed.
-func TestPreflightOwnersJoinOnlyTheReach(t *testing.T) {
+func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
 	own := types.OwnershipOutput{Projects: []types.OwnershipEntry{
 		{Path: "root", Primary: "alice", PrimaryShare: 72, Authors: 4},
 		{Path: "unrelated", Primary: "carol", PrimaryShare: 51, Authors: 9},
@@ -516,26 +516,26 @@ func TestPreflightOwnersJoinOnlyTheReach(t *testing.T) {
 	}}
 	affected := []types.ImpactProject{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
 
-	got := preflightOwnersOf(own, affected)
+	got := impactOwnersOf(own, affected)
 	require.Len(t, got, 1)
 	assert.Equal(t, "root", got[0].Project)
 	assert.Equal(t, "alice", got[0].Primary)
 }
 
-// TestPreflightReachRendersWhatTheDiffAlreadyKnew guards against the reach section growing its
+// TestImpactReachRendersWhatTheDiffAlreadyKnew guards against the reach section growing its
 // own idea of the blast radius: types.Diff has carried these two fields all along and this
 // section only prints them.
-func TestPreflightReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
-	assert.Nil(t, preflightReachOf(types.Diff{}), "an empty closure is a state, not a lookup failure")
+func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
+	assert.Nil(t, impactReachOf(types.Diff{}), "an empty closure is a state, not a lookup failure")
 
-	r := preflightReachOf(types.Diff{
+	r := impactReachOf(types.Diff{
 		SeedProjects:     []string{"root"},
 		AffectedProjects: []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
 	})
 	require.NotNil(t, r)
 	assert.Equal(t, 1, r.Seeds)
 	assert.Equal(t, 2, r.Rebuilds)
-	assert.Equal(t, []preflightProject{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}}, r.Projects)
+	assert.Equal(t, []impactProject{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}}, r.Projects)
 }
 
 // TestDiffSymbolIDsAreWhatASymbolAnchorNames pins the second half of the anchors query. A note
@@ -765,12 +765,12 @@ func TestDiffBridgeSendAfterCloseIsSafe(t *testing.T) {
 // TestDiffNextStepLinesTeachTheWorkflow pins the pointers at the end of the default report.
 //
 // That report is the funnel mouth - the surface everybody runs - and it used to name the
-// console and nothing else, so `--tui` and `--cost` existed only in `-h` prose and the man
+// console and nothing else, so `--tui` and `--impact` existed only in `-h` prose and the man
 // page. The best teaching in the product sat furthest from the entrance.
 func TestDiffNextStepLinesTeachTheWorkflow(t *testing.T) {
 	got := strings.Join(diffNextStepLines(3), "\n")
 	assert.Contains(t, got, "magus diff --tui")
-	assert.Contains(t, got, "magus diff --cost")
+	assert.Contains(t, got, "magus diff --impact")
 	// The exit, named with the entrance: --tui takes over the screen, and an invitation into
 	// a full-screen mode that does not say how to leave gets declined once and never retaken.
 	assert.Contains(t, got, "q leaves it")

@@ -369,7 +369,7 @@ As delegations finish:
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
-6. Read the integrated changeset with `magus diff --cost` before landing it: what
+6. Read the integrated changeset with `magus diff --impact` before landing it: what
    the fleet's combined edit reaches, who else has been changing it, an estimate of
    the rebuild from recorded run times, what the advisors say, and any note anchored
    to a file it touched. Context, never a verdict{{if .Full}} - nothing gates on it and

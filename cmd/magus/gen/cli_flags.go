@@ -141,10 +141,10 @@ const (
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
 	// diff: --ack
 	FlagDiffAck = "ack"
-	// diff: --cost
-	FlagDiffCost = "cost"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
+	// diff: --impact
+	FlagDiffImpact = "impact"
 	// diff: --reason
 	FlagDiffReason = "reason"
 	// diff: --tui
@@ -1010,7 +1010,7 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 // DiffFlags are the flags declared for `magus diff`.
 type DiffFlags struct {
 	Generated bool   // --generated
-	Cost      bool   // --cost
+	Impact    bool   // --impact
 	Tui       bool   // --tui
 	Watch     bool   // --watch
 	Ack       bool   // --ack
@@ -1021,10 +1021,10 @@ type DiffFlags struct {
 func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	var f DiffFlags
 	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
-	fs.BoolVar(&f.Cost, FlagDiffCost, false, "Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
+	fs.BoolVar(&f.Impact, FlagDiffImpact, false, "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
 	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
-	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --cost reports what carries no such record")
+	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
 	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
 	return &f
 }

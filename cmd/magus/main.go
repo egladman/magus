@@ -209,7 +209,7 @@ func wantsUsage(subArgs []string) bool {
 			return false
 		}
 		// -h and --help are unambiguous: no subcommand takes either as a positional, so
-		// they mean help wherever they sit. `magus diff --cost -h` is the case worth
+		// they mean help wherever they sit. `magus diff --impact -h` is the case worth
 		// catching.
 		if a == "-h" || a == "--help" {
 			return true

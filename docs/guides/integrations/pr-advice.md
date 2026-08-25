@@ -13,7 +13,7 @@ finding stops being true.
 
 None of it blocks a merge. The checks do that.
 
-The same advisors run at the keyboard - `magus diff --cost`, before you push. See
+The same advisors run at the keyboard - `magus diff --impact`, before you push. See
 [Before the push](#before-the-push-the-same-advisors-locally).
 
 ## Turning it off
@@ -61,11 +61,11 @@ what was muted and by whom.
 
 ## Before the push: the same advisors, locally
 
-The advisors are not pull-request-only. `magus diff --cost` runs the read-only ones
+The advisors are not pull-request-only. `magus diff --impact` runs the read-only ones
 against your working tree, in process, before you push:
 
 ```sh
-magus diff --cost
+magus diff --impact
 ```
 
 Same scripts, same graph, same wording - the difference is where the answers go. In CI

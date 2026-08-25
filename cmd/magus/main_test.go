@@ -225,12 +225,12 @@ func TestUsageNeedsNoWorkspace(t *testing.T) {
 		}
 	}
 
-	// A help flag AFTER a positional is still a help request: `magus diff --cost -h`.
-	if resolveProfile("diff", []string{"--cost", "-h"}).needsWorkspace {
+	// A help flag AFTER a positional is still a help request: `magus diff --impact -h`.
+	if resolveProfile("diff", []string{"--impact", "-h"}).needsWorkspace {
 		t.Error("a trailing help flag must still skip the workspace")
 	}
 	// ...but a real invocation is unaffected.
-	if !resolveProfile("diff", []string{"--cost"}).needsWorkspace {
+	if !resolveProfile("diff", []string{"--impact"}).needsWorkspace {
 		t.Error("a real diff still needs the workspace")
 	}
 }
@@ -244,9 +244,9 @@ func TestWantsUsage(t *testing.T) {
 		{"bare help flag", []string{"-h"}, true},
 		{"long form", []string{"--help"}, true},
 		{"help subverb", []string{"help"}, true},
-		{"after a flag", []string{"--cost", "-h"}, true},
+		{"after a flag", []string{"--impact", "-h"}, true},
 		{"no args is not a help request", nil, false},
-		{"a real invocation", []string{"--cost"}, false},
+		{"a real invocation", []string{"--impact"}, false},
 		// Past "--" the tokens belong to a forwarded tool: this asks the test binary for
 		// help, not magus.
 		{"after a passthrough marker", []string{"go::go-test", ".", "--", "-h"}, false},

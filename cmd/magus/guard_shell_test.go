@@ -844,7 +844,7 @@ func TestGuardDeniesReadAck(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
 		`magus diff ` + "--ack",
-		`./magus diff --cost ` + "--ack",
+		`./magus diff --impact ` + "--ack",
 		`cd /tmp && magus diff ` + "--ack" + ` --reason x`,
 	} {
 		v := evaluateBashGuard(cmd)
@@ -860,7 +860,7 @@ func TestGuardDeniesReadAck(t *testing.T) {
 func TestGuardAllowsReadingTheReport(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
-		`magus diff --cost`,
+		`magus diff --impact`,
 		`magus diff -o json`,
 	} {
 		assert.Empty(t, evaluateBashGuard(cmd).Deny, "unexpected deny for %q", cmd)

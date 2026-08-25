@@ -45,7 +45,7 @@ import (
 // teaches ledger register, MAGUS_DELEGATION enrollment and the guard's
 // deny/advise split, attention events for a blocked worker, and the session
 // audit of what a delegation ran; both it and magus-vcs-hygiene read
-// `magus diff --cost` before landing.
+// `magus diff --impact` before landing.
 // 43: the session CLI family (`magus session`, `session attention`, `session
 // dispose`, `session hook`, `session notify`) replaces the sessions/attention/
 // notify/hook top-level verbs in the skill text; there are no compat aliases.

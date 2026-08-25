@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// preflightReview is where a reader left off in this change.
+// impactReview is where a reader left off in this change.
 //
 // It is a BOOKMARK, not a score, and the difference decides the whole design. An earlier
 // version led with "N of M files carry a read receipt", which is a completion metric: it
@@ -23,7 +23,7 @@ import (
 // without reading: which files moved after they read them, and which they have not opened.
 // Both are answers to "where was I", and the test any addition here has to pass is whether
 // somebody would still want it if nobody else ever saw the result.
-type preflightReview struct {
+type impactReview struct {
 	Files int `json:"files" yaml:"files"`
 	Read  int `json:"read"  yaml:"read"`
 	// Stale are files read and then edited. They lead the section: the signal is derived
@@ -126,8 +126,8 @@ func bulkReasons(cacheDir string, rev types.Diff) []string {
 //
 // Generated files are excluded: reading a machine's restatement of an edit made elsewhere
 // is not the review, the same reason the file list folds them away by default.
-func collectReview(rev types.Diff, required func(string) bool, reasons []string) *preflightReview {
-	out := &preflightReview{Reasons: reasons}
+func collectReview(rev types.Diff, required func(string) bool, reasons []string) *impactReview {
+	out := &impactReview{Reasons: reasons}
 	measured := false
 	for _, f := range rev.Files {
 		if f.Generated() {
@@ -215,12 +215,12 @@ func ackChangeset(root, cacheDir string, rev types.Diff, reason string, now time
 	return len(add), review.Record(cacheDir, add)
 }
 
-// preflightReviewLines renders the section, or nothing at all.
+// impactReviewLines renders the section, or nothing at all.
 //
 // Nil is a real answer here and the common one. A section that always prints is a section
 // people stop reading, and this one has nothing to say about a small change nobody has
 // disturbed since reading.
-func preflightReviewLines(r *preflightReview) []string {
+func impactReviewLines(r *impactReview) []string {
 	if r == nil {
 		return []string{"REVIEW: read receipts unavailable; read a file through in `magus diff --tui` to earn one"}
 	}
@@ -289,7 +289,7 @@ func preflightReviewLines(r *preflightReview) []string {
 
 // unreadRest is the never-opened files the section has not already named under
 // review_required, so no path appears twice.
-func unreadRest(r *preflightReview) []string {
+func unreadRest(r *impactReview) []string {
 	if len(r.Required) == 0 {
 		return r.Unread
 	}
