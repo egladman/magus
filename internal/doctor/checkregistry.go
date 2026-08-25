@@ -98,6 +98,13 @@ var allChecks = []checkDef{
 		run:            (*runner).checkMemoryDeclarations,
 	},
 	{
+		Name:           "unexplained-hotspots",
+		Doc:            "whether the files this workspace edits hardest are explained by any note",
+		Evidence:       types.EvidenceInferred,
+		NeedsWorkspace: true,
+		run:            (*runner).checkUnexplainedHotspots,
+	},
+	{
 		Name:           "cache-yield",
 		Doc:            "targets running uncached without declaring skip_cache and a reason",
 		Evidence:       types.EvidenceMeasured,

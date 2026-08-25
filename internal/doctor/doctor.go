@@ -45,10 +45,11 @@ type LoadedWorkspace struct {
 }
 
 type options struct {
-	cfg        config.Config
-	daemonInfo *DaemonInfo
-	probe      bool
-	skills     *agent.Catalog
+	cfg          config.Config
+	daemonInfo   *DaemonInfo
+	probe        bool
+	skills       *agent.Catalog
+	explanations *Explanations
 }
 
 // Option configures a [Run] call.
@@ -66,6 +67,15 @@ func WithDaemonInfo(d DaemonInfo) Option { return func(o *options) { o.daemonInf
 // against this binary. The sources are embedded in the CLI, so a caller without them (the
 // SDK, this package's tests) passes nothing and the check reports itself skipped.
 func WithSkillCatalog(c *agent.Catalog) Option { return func(o *options) { o.skills = c } }
+
+// WithExplanations supplies what the workspace's notes store covers, so the hotspot check
+// can ask whether the hardest-worked code is explained anywhere.
+//
+// A caller that cannot resolve the store passes nothing, and the check reports itself
+// unknown rather than reporting the code unexplained. Those are different claims: the
+// notes store is resolved by the CLI, so the SDK and this package's tests have no way to
+// tell an empty store from an unreadable one.
+func WithExplanations(e Explanations) Option { return func(o *options) { o.explanations = &e } }
 
 // WithProbe RUNS each declared readiness probe rather than only listing it.
 //

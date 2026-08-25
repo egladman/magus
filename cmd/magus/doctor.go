@@ -66,6 +66,9 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 	if probe {
 		dopts = append(dopts, doctor.WithProbe())
 	}
+	if exp, ok := doctorExplanations(root); ok {
+		dopts = append(dopts, doctor.WithExplanations(exp))
+	}
 	out := doctor.Run(ctx, root, ws, wsErr, dopts...)
 
 	if err := emitDoctor(opts, out); err != nil {
