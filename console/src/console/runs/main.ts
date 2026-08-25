@@ -421,8 +421,16 @@ function facts(rows: [string, string, string, number?][]): HTMLElement {
   return dl;
 }
 
-function note(text: string): HTMLElement {
-  return h("p", "console-runs__note", text);
+function note(...parts: (string | Node)[]): HTMLElement {
+  const p = h("p", "console-runs__note");
+  p.append(...parts);
+  return p;
+}
+
+// cmd is a command named inside a sentence. An element rather than backticks in the string, because
+// backticks in a DOM text node are just backticks on screen.
+function cmd(text: string): HTMLElement {
+  return h("code", "console-runs__cmd", text);
 }
 
 // renderEmpty distinguishes the four ways this list can be empty, because only one of them is the
@@ -439,8 +447,9 @@ function renderEmpty(
     card.append(h("h2", "console-runs__empty-title", "No daemon connected"));
     card.append(
       note(
-        "This page reads the runs your local daemon has kept. Start it with `magus server start`, " +
-          "or set a daemon address in Settings.",
+        "This page reads the runs your local daemon has kept. Start it with ",
+        cmd("magus server start"),
+        ", or set a daemon address in Settings.",
       ),
     );
   } else if (!s.loaded) {
@@ -457,7 +466,9 @@ function renderEmpty(
     card.append(
       note(
         "Run a target and it shows up here. Every run is kept, and you never need its ref to find " +
-          "it again. Try `magus run build` in this workspace, then Refresh.",
+          "it again. Try ",
+        cmd("magus run build"),
+        " in this workspace, then Refresh.",
       ),
     );
   }
