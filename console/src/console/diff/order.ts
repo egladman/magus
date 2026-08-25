@@ -19,6 +19,20 @@
 // falls back to the patch's own, which is exactly the plain diff viewer it started as.
 
 import type { DiffFile } from "./parse";
+
+// modeChange names a file-mode change, or null when there is nothing to say.
+//
+// A mode change carries NO hunks, so a row without this is a filename and a churn count with
+// nothing explaining why the file is in the changeset - which reads as the surface having
+// dropped something. A script gaining +x is a real reviewable event.
+//
+// Here rather than inline in the renderer so it can be pinned: the row it belongs to is inside
+// a virtualized list, where a DOM test can only see whatever happens to be on screen.
+export function modeChange(file: DiffFile): string | null {
+  const { oldMode, newMode } = file;
+  if (oldMode === undefined || newMode === undefined || oldMode === newMode) return null;
+  return `mode ${oldMode} -> ${newMode}`;
+}
 import type { DiffAnnotation, DiffSession } from "./session";
 
 export interface OrderedFile {

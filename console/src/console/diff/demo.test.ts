@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { demoSession, applyDemoOp } from "./demo";
 import { fromWire } from "./parse";
 import { DEMO_FILES } from "./gen/demo";
-import { order, stats, visibleFiles } from "./order";
+import { modeChange, order, stats, visibleFiles } from "./order";
 import { scenarioInsight, STORY_FILES } from "../demo-scenario";
 import { buildRows, byHunk } from "./rows";
 
@@ -214,5 +214,27 @@ test("the diff annotations agree with the figures every other surface reports", 
     note.reach,
     claims.blastRadius,
     "reach disagrees with the blast radius the Insight surface reports",
+  );
+});
+
+// A mode change carries NO hunks, so its row is a filename and a churn count unless the
+// surface says why the file is there - which reads as the surface having dropped something.
+// Found by rendering the demo: the binary file beside it already said "binary" and this one
+// said nothing at all.
+//
+// Pinned here rather than in a DOM test because the row lives in a virtualized list, where a
+// DOM test only sees what happens to be on screen - it reported the file "missing from the
+// changeset" when it was simply below the fold.
+test("a mode change is named, since it has no hunks to speak for it", () => {
+  const script = files.find((f) => f.path === "tools/migrate/backfill.sh");
+  assert.ok(script, "the changeset no longer carries a mode-only change");
+  assert.deepEqual(script.hunks, [], "a mode change has nothing to render as a diff");
+  assert.equal(modeChange(script), "mode 100644 -> 100755");
+
+  // Every other file must stay quiet: a chip on a row that did not change mode is noise.
+  const noisy = files.filter((f) => f.path !== script.path && modeChange(f) !== null);
+  assert.deepEqual(
+    noisy.map((f) => f.path),
+    [],
   );
 });

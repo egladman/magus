@@ -49,7 +49,7 @@ import {
   type Row,
   type ViewMode,
 } from "./rows";
-import { order, visibleFiles, stats, riskChips, type OrderedChangeset } from "./order";
+import { modeChange, order, visibleFiles, stats, riskChips, type OrderedChangeset } from "./order";
 import { emphasis, pairForEmphasis, type Span } from "./words";
 import { languageFor, tokenize, type Language } from "./syntax";
 import {
@@ -492,6 +492,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
     el.append(name);
 
     if (file.binary) el.append(label("binary", "pf-m-grey", "No text diff to show"));
+    // A mode change produces no hunks either, and without this the row is a filename and a
+    // churn count with nothing to say why it is in the changeset - the reader is left to
+    // assume the surface dropped something. A script gaining +x is a real reviewable event.
+    const mode = modeChange(file);
+    if (mode !== null) {
+      el.append(
+        label(
+          mode,
+          "pf-m-grey",
+          file.newMode === "100755" ? "Now executable" : "File mode changed",
+        ),
+      );
+    }
     if (file.additions > 0) el.append(label(`+${file.additions}`, "pf-m-green"));
     if (file.deletions > 0) el.append(label(`-${file.deletions}`, "pf-m-red"));
 
