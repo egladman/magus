@@ -303,3 +303,49 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 		assert.ErrorContains(t, err, `tools["go"].below must be a string version`)
 	})
 }
+
+// review_required names where an unread change actually costs something, so `magus diff
+// --cost` can single those paths out and stay quiet everywhere else.
+//
+// This pins the PARSER, which is the half that had no test: the matcher and the report both
+// had coverage while nothing asserted that declaring the key in a magusfile reaches
+// Project.ReviewRequired at all. A persona run declared it and reported no effect, and
+// though that run turned out to be against a tree without the feature, the gap it pointed
+// at was real.
+func TestParseBuzzProjectOpts_ReviewRequired(t *testing.T) {
+	t.Run("globs are recorded in order", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("review_required", vm.ListValue([]vm.Value{
+			vm.StrValue("internal/secret/**"), vm.StrValue("internal/cache/key.go"),
+		}))
+
+		p := applyOpts(t, opts)
+		assert.Equal(t, []string{"internal/secret/**", "internal/cache/key.go"}, p.ReviewRequired)
+	})
+
+	t.Run("undeclared leaves it empty", func(t *testing.T) {
+		assert.Empty(t, applyOpts(t, vm.NewMap()).ReviewRequired)
+	})
+
+	// An empty list is a declaration that says nothing, and accepting it would leave the
+	// author believing they had marked paths that magus will never single out.
+	for _, tc := range []struct {
+		name string
+		vals []string
+	}{
+		{"an empty list names nothing", nil},
+		{"a list of blanks names nothing", []string{"", "   "}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			items := make([]vm.Value, 0, len(tc.vals))
+			for _, v := range tc.vals {
+				items = append(items, vm.StrValue(v))
+			}
+			opts := vm.NewMap()
+			opts.MapSet("review_required", vm.ListValue(items))
+
+			_, err := parseBuzzProjectOpts(context.Background(), opts)
+			assert.ErrorContains(t, err, `"review_required" needs at least one glob`)
+		})
+	}
+}
