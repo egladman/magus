@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2376,
-  "edge_count": 6060,
+  "node_count": 2377,
+  "edge_count": 6064,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -996,7 +996,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "18",
+        "dir_files": "19",
         "dir_languages": "markdown"
       }
     },
@@ -3171,6 +3171,18 @@
         "section": "guides",
         "tags": "release,versioning,tags,go-modules,workflow",
         "title": "Releasing"
+      }
+    },
+    {
+      "id": "doc:docs/guides/reviewing-changes.md",
+      "kind": "doc",
+      "label": "docs/guides/reviewing-changes.md",
+      "source": "docs/guides/reviewing-changes.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "diff,review,read-receipts,impact,blast-radius,tui,ack,patch",
+        "title": "Reviewing your changes"
       }
     },
     {
@@ -22944,6 +22956,14 @@
     },
     {
       "source": "dir:docs/guides",
+      "target": "doc:docs/guides/reviewing-changes.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/reviewing-changes.md"
+    },
+    {
+      "source": "dir:docs/guides",
       "target": "doc:docs/guides/testing.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -32216,6 +32236,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/git.md",
+      "target": "doc:docs/guides/reviewing-changes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/git.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/git.md",
       "target": "doc:docs/reference/manpage/magus-diff.md",
       "relation": "references",
       "confidence": "inferred",
@@ -32661,6 +32689,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/quickstart.md"
+    },
+    {
+      "source": "doc:docs/guides/reviewing-changes.md",
+      "target": "doc:docs/guides/integrations/git.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/reviewing-changes.md"
+    },
+    {
+      "source": "doc:docs/guides/reviewing-changes.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/reviewing-changes.md"
     },
     {
       "source": "doc:docs/guides/tips.md",

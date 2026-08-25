@@ -248,6 +248,8 @@ or a generator is not deterministic. Name such a path explicitly to stage it any
 `magus diff` reads a changeset the way this repository's conventions rank it: declared
 outputs folded away, the rest ordered by what they can break. Nothing about that
 requires leaving git.
+[Reviewing your changes](../reviewing-changes.md) covers what it reports; this section is
+only how to reach it without typing a magus command.
 
 Wire it as git's pager for `diff`, and plain `git diff` renders through magus:
 
