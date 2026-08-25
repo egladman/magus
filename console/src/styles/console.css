@@ -124,7 +124,11 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
      so a picker read as a text field somebody was meant to fill in. Capping the column keeps the
      controls control-sized there, and costs nothing on a phone narrower than the cap. */
   max-inline-size: 30rem;
-  margin-inline-start: auto;
+  /* Anchored to the END, so the menu drops from under the kebab that opened it. PF right-aligns it
+     itself above lg but pins it to the start below, where the panel was meant to be a full-bleed
+     sheet; capped to a menu width that left it opening 350px away from its own button. An auto
+     start margin does not fix an absolutely positioned box - only the inset does. */
+  inset-inline: auto 0;
 }
 /* Inside a group the short actions pair up rather than spending a row each: auto-fit over a 9rem
    floor puts Copy beside Copy command and Open graph beside Fullscreen, and collapses to one column
