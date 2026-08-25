@@ -1776,6 +1776,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   .console-launcher-card:hover .console-launcher-card__icon [data-motion="press"] { animation: console-launcher-press 0.45s var(--console-ease, ease); }
 }
 @keyframes console-launcher-press { 40% { transform: translateY(1px); } }
+/* The stopwatch hand sweeps one full turn. transform-box is view-box, not the fill-box the other
+   inner-element motions use: the hand's own bounding box is the line from the dial center to its
+   tip, so a fill-box origin would spin it about its own midpoint and the hand would orbit rather
+   than sweep. view-box lets the origin be named in viewBox units - the dial's center. */
+@media (hover: hover) {
+  .console-launcher-card:hover .console-launcher-card__icon [data-motion="sweep"] { animation: console-launcher-sweep 0.85s var(--console-ease, ease); transform-box: view-box; transform-origin: 12px 13.5px; }
+}
+@keyframes console-launcher-sweep { to { transform: rotate(360deg); } }
 
 /* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay
    (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives
