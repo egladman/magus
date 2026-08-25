@@ -1088,6 +1088,7 @@ type diffPreflight struct {
 	// an empty advisor list reads as "they all passed" only when it is one.
 	AdvisorNotes []string         `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
 	Anchors      []anchorHit      `json:"anchors,omitempty"       yaml:"anchors,omitempty"`
+	Rationale    []rationaleHit   `json:"rationale,omitempty"     yaml:"rationale,omitempty"`
 	Review       *preflightReview `json:"review,omitempty"        yaml:"review,omitempty"`
 }
 
@@ -1182,6 +1183,7 @@ func collectPreflight(ctx context.Context, m *magus.Magus, rootOverride string, 
 	// the override they were first handed, so the anchors' graph load must spell the root
 	// exactly as diffCmd's own load did.
 	p.Anchors = preflightAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
+	p.Rationale = collectRationale(m.Root(), rev)
 	p.Review = collectReview(m.Root(), m.CacheDir(), rev)
 	return p
 }
@@ -1321,6 +1323,7 @@ func preflightLines(p diffPreflight) []string {
 		preflightCostLines(p.Cost),
 		preflightAdvisorLines(p.Advisors, p.AdvisorNotes),
 		preflightAnchorLines(p.Anchors),
+		preflightRationaleLines(p.Rationale),
 		preflightReviewLines(p.Review),
 	}
 	for i, s := range sections {
