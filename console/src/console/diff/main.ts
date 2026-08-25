@@ -1215,6 +1215,23 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // set: the chip read "12/8" and the green complete state fired on a coincidence, not on the
     // stream actually being read. hunksRead (rows.ts) counts the intersection instead - see it for
     // the undercount tradeoff that fix makes.
+    // Files that moved after they were read. Shown only when there are some, and shown as a
+    // COUNT of a thing that happened rather than as a fraction of a thing to finish: the
+    // hunks-read chip below is this sitting's navigation state, which is a bookmark; this is a
+    // finding, and it is the one the reader cannot get by scrolling because those files look
+    // finished. Its absence is also the answer to "is there anything left to pick up".
+    const stale = state.changeset.primary.filter(
+      (o) => o.annotation?.read_state === "stale",
+    ).length;
+    if (stale > 0) {
+      chips.push(
+        label(
+          `${stale} changed since read`,
+          "pf-m-red",
+          "You read these and they changed afterwards. Press g to go to the first one.",
+        ),
+      );
+    }
     const read = hunksRead(state.hunks, state.digestByRow, state.viewed);
     chips.push(
       label(
@@ -1455,6 +1472,30 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (i !== null) scrollToRow(i);
   };
 
+  // resume jumps to the first file that still wants attention: one that changed after it was
+  // read, or failing that one nobody has read.
+  //
+  // Stale first, always. A file the reader already looked at and that then moved under them is
+  // the one thing here they cannot discover by scrolling - it looks finished. Ordinary unread
+  // files are the fallback because the stream is already ordered by consequence, so the first
+  // one is the most consequential.
+  //
+  // Nothing to resume moves nothing. That state means the reader is done, and the toolbar
+  // already says so by NOT carrying the "changed since read" chip - so a message here would be
+  // a second copy of an answer the page is already giving.
+  const resume = (): void => {
+    for (const want of ["stale", "unread"] as const) {
+      for (const i of state.fileRows) {
+        const row = state.rows[i];
+        if (row?.kind !== "file") continue;
+        if (annotationFor(row.file.path)?.read_state === want) {
+          scrollToRow(i);
+          return;
+        }
+      }
+    }
+  };
+
   // toggleViewed marks the hunk the cursor is in. It is the READER's claim, which is why no
   // agent surface can make it.
   const toggleViewed = async (): Promise<void> => {
@@ -1626,6 +1667,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       label: "Diff: mark hunk read",
       run: () => void toggleViewed(),
       key: "v",
+    },
+    {
+      id: "diff.resume",
+      label: "Diff: go to the first file that changed since you read it",
+      run: () => resume(),
+      key: "g",
     },
     {
       id: "diff.generated.toggle",

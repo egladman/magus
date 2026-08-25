@@ -129,6 +129,32 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   if (!a) return [];
   const chips: Chip[] = [];
 
+  // Read state leads, and only ever to say something happened. "stale" means the reader
+  // looked and then the file moved under them, which no amount of marking hunks produces and
+  // which nothing else here can tell them.
+  //
+  // "unread" and an absent state deliberately show NOTHING. Most files in most changesets are
+  // unread, so a chip there would sit on nearly every row and teach the eye to skip the rail
+  // that carries public-surface and reach. Absent additionally means nobody checked, which is
+  // not the same claim as unread.
+  if (a.read_state === "stale") {
+    chips.push({
+      text: "changed since read",
+      tone: "danger",
+      title:
+        "You recorded reading this file, and its content changed afterwards. " +
+        "The version you read is not the version you are about to land.",
+    });
+  } else if (a.read_state === "read") {
+    chips.push({
+      text: "read",
+      tone: "ok",
+      title:
+        "A read receipt covers this file at its current content. " +
+        "Editing it voids the receipt.",
+    });
+  }
+
   if (a.surface === "public") {
     const api = (a.symbols ?? []).filter((s) => s.module_api).map((s) => s.label ?? s.id);
     const across = [...new Set((a.symbols ?? []).flatMap((s) => s.external_projects ?? []))];

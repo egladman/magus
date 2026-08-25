@@ -213,3 +213,32 @@ test("unmeasured coverage renders no coverage chip", () => {
   );
   assert.equal(chips.filter((c) => c.text.includes("covered")).length, 0);
 });
+
+// Read state is a FINDING, not a progress bar. "stale" is the one nothing else can tell the
+// reader: those files look finished, so they are the ones a scroll will skip.
+test("a file that changed after it was read leads its chips", () => {
+  const chips = riskChips(ann("x.go", { read_state: "stale", surface: "public" }));
+  assert.equal(chips[0]?.text, "changed since read");
+  assert.equal(chips[0]?.tone, "danger");
+  assert.match(chips[0]?.title ?? "", /not the version you are about to land/);
+});
+
+test("a file covered by a receipt says so quietly", () => {
+  const chips = riskChips(ann("x.go", { read_state: "read" }));
+  assert.equal(chips[0]?.text, "read");
+  assert.equal(chips[0]?.tone, "ok");
+});
+
+// Most files in most changesets are unread, so a chip there would sit on nearly every row and
+// teach the eye to skip the rail that carries public-surface and reach. An ABSENT state is a
+// different claim again - nobody checked - and must not render as unread either.
+test("unread and unmeasured show no chip at all", () => {
+  assert.deepEqual(
+    riskChips(ann("x.go", { read_state: "unread" })).map((c) => c.text),
+    [],
+  );
+  assert.deepEqual(
+    riskChips(ann("x.go", {})).map((c) => c.text),
+    [],
+  );
+});

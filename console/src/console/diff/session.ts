@@ -64,7 +64,18 @@ export interface DiffAnnotation {
   readonly surface: ReviewSurface;
   readonly churn?: DiffChurn;
   readonly touches?: readonly DiffTouch[];
+  // read_state is whether a person recorded reading this file at the content it holds NOW,
+  // across sessions - distinct from the session's own viewed marks, which are this sitting's
+  // navigation state and reset with the changeset.
+  //
+  // Absent means nobody checked, which must never render as "unread": those are opposite
+  // claims and only one of them accuses. See types.DiffReadState.
+  readonly read_state?: ReviewReadState;
 }
+
+// ReviewReadState mirrors the DiffReadState constants. "stale" is the one worth surfacing
+// hardest: the reader looked, and then the file moved under them.
+export type ReviewReadState = "read" | "unread" | "stale";
 
 export interface Diff {
   readonly base: string;
