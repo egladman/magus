@@ -83,7 +83,14 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
     const keymap = deps.keymap();
     const groups = new Map<string, { label: string; chord: string }[]>();
     for (const cmd of deps.commands()) {
-      const chord = formatChord(keymap[cmd.id] ?? "", deps.mac);
+      // A surface-local key WINS over a keymap entry for the same id, which is the opposite
+      // of what it looks like it should do.
+      //
+      // The surface dispatches these itself, from its own table, and never consults the
+      // keymap - so a keymap entry for one of them changes nothing. Preferring the keymap
+      // here would print a chord that does not work, which is worse than printing nothing:
+      // this sheet's whole job is to say what will happen when you press something.
+      const chord = (cmd.key ?? "") || formatChord(keymap[cmd.id] ?? "", deps.mac);
       if (chord === "") continue;
       const group = cmd.group || "General";
       let list = groups.get(group);

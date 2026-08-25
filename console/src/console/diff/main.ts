@@ -1759,8 +1759,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
       key: "Escape",
     },
   ];
+  // c.key travels with the registration so the cheat sheet shows it. One declaration drives
+  // dispatch and display both, which is what stops the two drifting - a rebinding that
+  // updated only the handler would otherwise leave the sheet teaching the old key.
   for (const c of COMMANDS)
-    registerCommand({ id: c.id, label: c.label, group: "Diff", run: c.run });
+    registerCommand({ id: c.id, label: c.label, group: "Diff", run: c.run, key: c.key });
 
   // Built one at a time rather than from an array, because `new Map(pairs)` keeps the LAST
   // pair for a duplicate key and says nothing. A second command claiming a bound key then
