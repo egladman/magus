@@ -259,7 +259,7 @@ export function scenarioRuns(now: number): ScenarioRun[] {
       trigger: "mcp",
       state: "failed",
       ...at(92, 4200),
-      error: "2 tests failed in internal/token: TestVerifyExpiredToken, TestVerifyAudienceMismatch",
+      error: "2 tests failed in internal/token: TestVerifyAudienceMismatch, TestVerifyExpiredToken",
       execs: ["go build ./...", "go test -race -count=1 ./..."],
       stdout:
         "ok  \t" +
@@ -269,10 +269,10 @@ export function scenarioRuns(now: number): ScenarioRun[] {
         GOMOD +
         "/services/identity/internal/store\t1.021s",
       stderr:
+        "--- FAIL: TestVerifyAudienceMismatch (0.01s)\n" +
+        '    verify_test.go:143: claims.Audience = "", want "identity"\n' +
         "--- FAIL: TestVerifyExpiredToken (0.02s)\n" +
         "    verify_test.go:118: Verify(expired) error = <nil>, want token: expired\n" +
-        "--- FAIL: TestVerifyAudienceMismatch (0.01s)\n" +
-        '    verify_test.go:143: claims.Audience = "", want "acme-dashboard"\n' +
         "FAIL\t" +
         GOMOD +
         "/services/identity/internal/token\t0.412s\n" +
@@ -501,8 +501,8 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
       error: "services/identity:test failed: 2 assertions",
       preview:
         "[fail] services/identity test (ran, 4.2s)\n" +
-        "--- FAIL: TestVerifyExpiredToken (0.02s)\n" +
-        "    verify_test.go:118: Verify(expired) error = <nil>, want token: expired",
+        "--- FAIL: TestVerifyAudienceMismatch (0.01s)\n" +
+        '    verify_test.go:143: claims.Audience = "", want "identity"',
       workspace: WORKSPACE,
     },
     {
