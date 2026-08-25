@@ -320,3 +320,31 @@ func TestDraftsAreMemoryOnlyWithoutAStateDir(t *testing.T) {
 	s.AddComment("/ws", types.DiffComment{Path: "a.go", Body: "x"}, types.DiffAuthorHuman)
 	assert.Len(t, NewStore("").Attach("/ws", "main", types.Diff{}, "a").Comments, 0)
 }
+
+// Ids come from the highest existing number, not the count, because a restored set has GAPS:
+// publishing a draft takes it out of the file, so a count-based id reuses a number a live
+// comment already answers to. Resolving one would then resolve the other.
+func TestACommentIDIsNeverReusedAfterAGap(t *testing.T) {
+	dir := t.TempDir()
+	const root = "/ws"
+
+	first := NewStore(dir)
+	first.Attach(root, "main", types.Diff{}, "a")
+	for _, body := range []string{"one", "two", "three"} {
+		first.AddComment(root, types.DiffComment{Path: "a.go", Body: body}, types.DiffAuthorHuman)
+	}
+	// The middle one leaves the file, which is what makes the set sparse.
+	first.MarkPublished(root, "c2", "PRRC_2")
+
+	second := NewStore(dir)
+	second.Attach(root, "main", types.Diff{}, "b")
+	sess := second.AddComment(root, types.DiffComment{Path: "b.go", Body: "four"}, types.DiffAuthorHuman)
+
+	seen := map[string]string{}
+	for _, c := range sess.Comments {
+		_, dup := seen[c.ID]
+		assert.False(t, dup, "id %s is held by both %q and %q", c.ID, seen[c.ID], c.Body)
+		seen[c.ID] = c.Body
+	}
+	assert.Equal(t, "c4", sess.Comments[len(sess.Comments)-1].ID, "the next id clears the gap")
+}

@@ -257,11 +257,29 @@ func (s *Store) completedBy(root, digest string, viewed []string) string {
 func (s *Store) AddComment(root string, c types.DiffComment, author types.DiffAuthor) *types.DiffSession {
 	out := s.mutate(root, func(sess *types.DiffSession) {
 		c.Author = author
-		c.ID = fmt.Sprintf("c%d", len(sess.Comments)+1)
+		c.ID = nextCommentID(sess.Comments)
 		sess.Comments = append(sess.Comments, c)
 	})
 	s.persistDrafts(root)
 	return out
+}
+
+// nextCommentID picks an id no live comment already holds.
+//
+// From the HIGHEST existing number rather than the count, which is what it used to be. The
+// count only worked while comments were append-only and died with the daemon. Now that drafts
+// are restored and published ones leave the file, the set has gaps: restore c1, c2, c3,
+// publish c2, restart, and the count is 2 - so the next comment is called c3 as well, and two
+// different remarks answer to one id. Resolving one would resolve the other.
+func nextCommentID(existing []types.DiffComment) string {
+	high := 0
+	for _, c := range existing {
+		var n int
+		if _, err := fmt.Sscanf(c.ID, "c%d", &n); err == nil && n > high {
+			high = n
+		}
+	}
+	return fmt.Sprintf("c%d", high+1)
 }
 
 // ResolveComment marks a comment resolved. Either party may resolve: a human closing an
