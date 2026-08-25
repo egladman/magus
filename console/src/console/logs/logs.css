@@ -485,7 +485,28 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   padding-block: 0.2rem; padding-inline: 0.35rem;
   font-size: 0.72rem;
 }
-.console-log-runs__filter { font-size: 0.75rem; min-height: 0; padding-block: 0.22rem; }
+/* Cluster rules in the toolbar. The row holds three jobs - change the view, scope the time,
+   act on the run - and without a rule between them they read as one long undifferentiated strip.
+   Collapsed into the overflow kebab the controls stack vertically, where a vertical rule is
+   meaningless, so the separators go with them. */
+.console-log-toolbar__separator { display: flex; align-items: center; }
+/* PF's vertical divider takes `height: inherit`, so inside a shrink-to-fit flex item it resolves to
+   nothing and the rule never paints. Give it the height of the controls it stands between. */
+.console-log-toolbar__separator .pf-v6-c-divider { block-size: var(--console-control-block-size); }
+.pf-v6-c-toolbar__expandable-content .console-log-toolbar__separator { display: none; }
+/* Names the time-range select, which otherwise showed only its resting option ("Full run") and
+   read as an action nobody could name. */
+.console-log-toolbar__label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-log-runs__filter {
+  font-size: 0.75rem;
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
+}
 /* How many top-level rows the tree is showing, beside the title. Subtle and tabular: it is a
    readout, not a control, and it changes on every keystroke in the filter box. */
 .console-log-runs__count {

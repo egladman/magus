@@ -689,6 +689,10 @@ function mountBrowserControls(
 ): { mode: () => BrowseMode; query: () => string } {
   const bar = document.createElement("div");
   bar.className = "console-log-runs__controls";
+  // The rail's two controls sit directly above a dense tree, so they take the compact tier of the
+  // shared control height rather than each picking its own - and with it the coarse-pointer floor,
+  // which is what makes them touchable on a phone.
+  bar.dataset.controlSize = "compact";
 
   const group = document.createElement("div");
   group.className = "pf-v6-c-toggle-group console-log-runs__modes";
@@ -728,9 +732,14 @@ function mountBrowserControls(
     group.append(item);
   }
 
+  // pf-v6-c-form-control is the class for the WRAPPER, not for the input: form-control.css makes it
+  // a display:grid box and styles the field through it. Put on the input itself, PF's own input
+  // reset never applies and the field keeps the UA default `border: 2px inset` bevel.
+  const searchWrap = document.createElement("span");
+  searchWrap.className = "pf-v6-c-form-control console-log-runs__filter";
   const search = document.createElement("input");
   search.type = "search";
-  search.className = "pf-v6-c-form-control console-log-runs__filter";
+  search.className = "pf-v6-c-form-control__text";
   search.placeholder = "Filter runs";
   // The keys are the same shape the log filter uses, so a reader learns one grammar for the
   // surface; the placeholder stays short and the syntax lives in the tooltip.
@@ -751,7 +760,8 @@ function mountBrowserControls(
     }
   });
 
-  bar.append(group, search);
+  searchWrap.append(search);
+  bar.append(group, searchWrap);
   panel.head.insertAdjacentElement("afterend", bar);
   return {
     mode: () => mode,
