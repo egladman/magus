@@ -107,6 +107,30 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
   border-color: var(--pf-t--global--border--color--default);
 }
 
+/* --- Collapsed toolbar overflow panel (the shared [data-overflow-panel] the toolbar.ts kebab fills).
+   Each surface already stretches the controls INSIDE a group, but nothing stretched the groups
+   themselves: PF's expandable content is a grid whose children size to their content, so on a phone
+   the whole stack sat in a ~184px column centred in a 430px panel, with a third of the width dead on
+   each side. Stretch at every level so the menu is one full-width column. --- */
+[data-overflow-panel],
+[data-overflow-panel] .pf-v6-c-toolbar__group {
+  /* The TRACK, not just the items in it: PF leaves an inline action group justify-content:center over
+     a max-content column, so stretching the items inside a 184px track still left it centred in a
+     430px panel. A 1fr column is what makes the column the panel's width. */
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  justify-items: stretch;
+}
+[data-overflow-panel] .pf-v6-c-toolbar__item { justify-self: stretch; }
+/* A segmented control splits the row evenly rather than sitting at content width, so the stack has one
+   left edge and one right edge all the way down. */
+[data-overflow-panel] .pf-v6-c-toggle-group { display: flex; }
+[data-overflow-panel] .pf-v6-c-toggle-group__item { flex: 1 1 0; }
+[data-overflow-panel] .pf-v6-c-toggle-group__button {
+  inline-size: 100%;
+  justify-content: center;
+}
+
 /* The bottom status-bar FRAME (fixed rail + per-tab wrapper + clusters + the connection liveness
    dot) moved to overrides.css in the W2 shell rebuild - PatternFly has no status-bar component, so it
    is the audited escape hatch. The discrete chips (#offline-badge) are PF Labels now
@@ -593,14 +617,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      Which inverts what the tabs themselves have to do: see the pf-m-current rules further down, where
      the INACTIVE tabs take the chrome fill and recede, rather than the active one taking white and
      advancing. Same logic, opposite assignment, because the ground moved out from under it.
-     NO border-bottom, and no baseline under the strip either - the inactive tabs already ARE one. Each
-     is filled to the chrome tone and reaches the bottom of the row, so the run of them draws a line
-     across it that the current tab breaks by being the page colour. Adding a real border under that
-     put a second grey immediately below each chip's own grey edge, and two adjacent bands of it read
-     as one doubled line rather than as a rule. The chips draw the edge; nothing else needs to.
+     A real baseline under the strip, in the same hairline the scope control uses between its caption
+     and its value, so the two meet perpendicularly at the right of the row.
+     This reverses an earlier call that the inactive tabs already draw that line by being filled to
+     the chrome tone down to the bottom of the row. They do - but only once there ARE inactive tabs,
+     and the state most people open the console in has exactly one. On that screen nothing drew the
+     edge and the strip bled into the page. The earlier objection (a border under a chip's own grey
+     reads as one doubled line) is answered by the chips stopping short of the row's bottom edge
+     below, which leaves the rule the only thing on that line.
      NO cast either. The bar used to throw --sm--bottom down over the content, which put the elevation
      on the wrong body - chrome that is meant to stay back was the thing lifted. */
   background: var(--pf-t--global--background--color--primary--default);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
