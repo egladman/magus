@@ -46,8 +46,8 @@ func TestValueMasksEveryRenderingPath(t *testing.T) {
 	t.Run("json", func(t *testing.T) {
 		// The path that defeated the redacting handler: a value whose fmt form looks
 		// clean while its marshalled form carries the credential. Through magus's own
-		// shared JSON package, which is what actually marshals in production - and which
-		// TestProductionCodeUsesSharedJSON requires over encoding/json.
+		// shared JSON package, which is what the binary actually marshals with - and
+		// which TestNoDirectEncodingJSONImport requires over encoding/json.
 		b, err := json.Marshal(struct {
 			Token Value `json:"Token"`
 		}{v})
