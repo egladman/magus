@@ -50,7 +50,10 @@ type Store struct {
 	// nobody reads. Populated by TrackHunks at attach, where the patch is already in hand.
 	hunks  map[string]map[string]string
 	counts map[string]map[string]int
-	nextID int
+	// content is each tracked file's fingerprint as of the last TrackHunks - the bytes the
+	// reader is looking at, which is what a receipt must attest to.
+	content map[string]map[string]string
+	nextID  int
 }
 
 // NewStore returns a session store persisting viewed state under stateDir. An empty stateDir
@@ -61,6 +64,7 @@ func NewStore(stateDir string) *Store {
 		sessions: map[string]*types.DiffSession{},
 		hunks:    map[string]map[string]string{},
 		counts:   map[string]map[string]int{},
+		content:  map[string]map[string]string{},
 	}
 	if stateDir != "" {
 		s.viewedPath = filepath.Join(stateDir, "review", "viewed.json")
@@ -120,20 +124,44 @@ func (s *Store) Attach(root string, base string, rev types.Diff, asOf string) *t
 // Called at attach, where the patch has already been read for the snapshot id. Replaces the
 // previous mapping wholesale: the changeset it describes has just been recomputed, and a
 // digest from the old one no longer names anything a reader can mark.
-func (s *Store) TrackHunks(root string, files []FileHunks) {
+// digestAt fingerprints each file's content as it is now, supplied by the caller because the
+// hashing convention lives outside this package.
+func (s *Store) TrackHunks(root string, files []FileHunks, digestAt func(path string) string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	byDigest := make(map[string]string)
 	counts := make(map[string]int)
+	content := make(map[string]string)
 	for _, f := range files {
 		for _, h := range f.Hunks {
+			// DISTINCT digests. Two byte-identical hunks in one file share a digest -
+			// HunkDigest is path plus body - so counting occurrences would set a total the
+			// marked set can never reach, and that file could never be finished.
+			if _, seen := byDigest[h.Digest]; seen {
+				continue
+			}
 			byDigest[h.Digest] = f.Path
 			counts[f.Path]++
+		}
+		if digestAt != nil {
+			if _, ok := content[f.Path]; !ok {
+				content[f.Path] = digestAt(f.Path)
+			}
 		}
 	}
 	s.hunks[root] = byDigest
 	s.counts[root] = counts
+	s.content[root] = content
+}
+
+// ContentAt is the fingerprint file had when this session's changeset was tracked, empty when
+// the file was not tracked or could not be read. A caller mints a receipt from THIS rather
+// than from the file's current bytes, so the receipt attests to what the reader saw.
+func (s *Store) ContentAt(root, path string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.content[root][path]
 }
 
 // Get returns the session for root, or nil when none is attached.

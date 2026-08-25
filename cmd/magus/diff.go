@@ -347,7 +347,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, paths []string, base stri
 	// Which of these files somebody has recorded reading. Best-effort like every other
 	// overlay: an unreadable store leaves every file DiffReadUnknown, which renders as
 	// unmeasured rather than as unread.
-	if states, serr := review.States(m.Root(), m.CacheDir(), paths); serr == nil {
+	if states, serr := review.ReadStates(m.Root(), m.CacheDir(), paths); serr == nil {
 		rev.AttachReadState(states)
 	}
 	return rev, nil

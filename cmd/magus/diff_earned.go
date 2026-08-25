@@ -25,9 +25,21 @@ type earnedSync struct {
 	// fileOf maps a hunk digest to the file it belongs to, and hunksOf counts how many a
 	// file has. A receipt is per FILE, so a file is earned only once every hunk it
 	// contributes is marked - reading four hunks of six is not reading the file.
-	fileOf  map[string]string
+	fileOf map[string]string
+	// hunksOf counts DISTINCT hunk digests per file. Two byte-identical hunks in one file
+	// share a digest - HunkDigest is path plus body - so counting occurrences would set a
+	// total the marked set can never reach, and that file could never be finished.
 	hunksOf map[string]int
-	viewed  map[string]bool
+	// digestAt is each file's content fingerprint as it was when the reader started, taken
+	// once here rather than at mint time.
+	//
+	// A receipt must attest to the bytes somebody SAW. Fingerprinting at close instead would
+	// stamp whatever the file holds by then - and the advertised scenario for this whole
+	// surface is a paired review where an agent edits while the human reads, so the file
+	// moving mid-session is the expected case, not a corner. Minting the content they read
+	// means the next report correctly calls it stale.
+	digestAt map[string]string
+	viewed   map[string]bool
 	// live are the hunks marked in THIS session, as opposed to seeded from the store.
 	//
 	// A file earns a receipt only if at least one of its hunks was marked here. The stored
@@ -49,6 +61,7 @@ func newEarnedSync(inner diffSync, root, cacheDir string, files []difftui.File, 
 		cacheDir: cacheDir,
 		fileOf:   map[string]string{},
 		hunksOf:  map[string]int{},
+		digestAt: map[string]string{},
 		viewed:   map[string]bool{},
 		live:     map[string]bool{},
 		now:      time.Now,
@@ -60,8 +73,14 @@ func newEarnedSync(inner diffSync, root, cacheDir string, files []difftui.File, 
 			continue
 		}
 		for _, h := range f.Hunks {
+			if _, seen := e.fileOf[h.Digest]; seen {
+				continue // an identical hunk repeated in one file is one mark, not two
+			}
 			e.fileOf[h.Digest] = f.Path
 			e.hunksOf[f.Path]++
+		}
+		if _, ok := e.digestAt[f.Path]; !ok {
+			e.digestAt[f.Path] = review.DigestFile(filepath.Join(root, filepath.FromSlash(f.Path)))
 		}
 	}
 	for _, d := range seen {
@@ -74,8 +93,11 @@ func newEarnedSync(inner diffSync, root, cacheDir string, files []difftui.File, 
 // reader's progress exactly as before.
 func (e *earnedSync) SetViewed(digest string, on bool) {
 	e.viewed[digest] = on
-	if on {
-		e.live[e.fileOf[digest]] = true
+	// Comma-ok rather than a bare lookup: an untracked digest would otherwise record a live
+	// mark against the empty path, which no file can ever match but which leaves a map
+	// entry that reads as a bug to whoever finds it next.
+	if path, ok := e.fileOf[digest]; ok && on {
+		e.live[path] = true
 	}
 	e.diffSync.SetViewed(digest, on)
 }
@@ -104,7 +126,8 @@ func (e *earnedSync) close() {
 		if marked < total {
 			continue
 		}
-		content := review.DigestFile(filepath.Join(e.root, filepath.FromSlash(path)))
+		// The content as it was when the reading STARTED, not as it is now. See digestAt.
+		content := e.digestAt[path]
 		if content == "" {
 			continue
 		}

@@ -348,7 +348,7 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 	// Which of these files somebody has recorded reading, from the same store `magus diff
 	// --ack` writes. The console gets it because "how much of this has anyone read" is a
 	// question a review surface should answer without the reader dropping to a terminal.
-	if states, serr := review.States(s.magus.Root(), s.magus.CacheDir(), paths); serr == nil {
+	if states, serr := review.ReadStates(s.magus.Root(), s.magus.CacheDir(), paths); serr == nil {
 		rev.AttachReadState(states)
 	}
 	return rev, nil

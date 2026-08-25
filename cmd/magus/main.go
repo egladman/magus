@@ -204,12 +204,21 @@ func isUsageOnlyInvocation(subArgs []string) bool {
 // Scanning stops at "--", past which the tokens belong to a forwarded tool: a run that
 // forwards `-h` after the marker is asking the test binary for help, not magus.
 func wantsUsage(subArgs []string) bool {
-	for _, a := range subArgs {
+	for i, a := range subArgs {
 		if a == "--" {
 			return false
 		}
-		switch a {
-		case "-h", "--help", "help":
+		// -h and --help are unambiguous: no subcommand takes either as a positional, so
+		// they mean help wherever they sit. `magus diff --cost -h` is the case worth
+		// catching.
+		if a == "-h" || a == "--help" {
+			return true
+		}
+		// The bare word is only a help request in the FIRST position. Elsewhere it is
+		// ordinary data - `magus memory get help` fetches an entry named help, and
+		// `magus notes show help` shows a note. Treating those as usage would skip the
+		// workspace preload for a real invocation.
+		if a == "help" && i == 0 {
 			return true
 		}
 	}

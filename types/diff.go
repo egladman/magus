@@ -30,7 +30,10 @@ const (
 	DiffRoleUnclaimed = "unclaimed"
 )
 
-// DiffReadState is whether anybody recorded reading this file AT the content it holds now.
+// The DiffRead constants say whether anybody recorded reading a file AT the content it holds
+// now. Untyped strings, matching the older DiffRole and DiffSurface constants beside them
+// rather than the newer types.Evidence: DiffFile.ReadState is one more string field on a
+// struct whose peers are all strings, and typing this one alone would make the odd one out.
 //
 // It is the one fact in a review that no analysis can supply. Every other annotation here
 // describes what a change DOES; this describes whether a person weighed it, which is the
@@ -500,23 +503,6 @@ func (r Diff) AttachReplay(byPath map[string][]DiffTouch) {
 // and an unmeasured file has made no promise. Ranking the two together is what let an
 // unindexed workspace render pure path order while the header still claimed a ranking - see
 // Ranked, which is how a caller is supposed to notice.
-// readRank orders the read states by how much a reader still owes the file.
-//
-// DiffReadUnknown ranks with read rather than with unread, deliberately. Unknown means
-// nobody checked, and sorting an unmeasured workspace's whole changeset to the top would
-// dress "no receipt store" up as "you have read none of this" - the same collapse the
-// state constants refuse everywhere else.
-func readRank(state string) int {
-	switch state {
-	case DiffReadStale:
-		return 0
-	case DiffReadUnread:
-		return 1
-	default:
-		return 2
-	}
-}
-
 func (r Diff) SortForReading() {
 	rank := func(f DiffFile) int {
 		switch f.Role {
@@ -580,6 +566,23 @@ func (r Diff) SortForReading() {
 		}
 		return 0
 	})
+}
+
+// readRank orders the read states by how much a reader still owes the file.
+//
+// DiffReadUnknown ranks with read rather than with unread, deliberately. Unknown means nobody
+// checked, and sorting an unmeasured workspace's whole changeset to the top would dress "no
+// receipt store" up as "you have read none of this" - the same collapse the state constants
+// refuse everywhere else.
+func readRank(state string) int {
+	switch state {
+	case DiffReadStale:
+		return 0
+	case DiffReadUnread:
+		return 1
+	default:
+		return 2
+	}
 }
 
 // Ranked reports whether the ordering had a ranking key to work with at all.

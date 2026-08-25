@@ -142,6 +142,10 @@ func collectReview(rev types.Diff, required func(string) bool, reasons []string)
 		case types.DiffReadStale:
 			measured = true
 			out.Stale = append(out.Stale, f.Path)
+			// Not also Required: the section already names it under "changed after you
+			// read them", and listing it again as "unopened" would both contradict itself
+			// and print one path as two findings.
+			continue
 		case types.DiffReadUnread:
 			measured = true
 			out.Unread = append(out.Unread, f.Path)

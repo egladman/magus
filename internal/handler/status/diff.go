@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
@@ -96,7 +97,14 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 			// that lets a later viewed mark say it FINISHED a file rather than just landing
 			// somewhere. The console computes these digests itself, so the daemon otherwise
 			// sees opaque strings.
-			h.sessions.TrackHunks(h.root, diff.ParseHunks(patch))
+			// Fingerprints each changed file HERE, at the content the reader is about to
+			// look at, so a receipt minted later attests to what they saw rather than to
+			// whatever the file holds by then. The advertised scenario is a paired review
+			// where an agent edits while the human reads, so the file moving mid-session
+			// is the expected case.
+			h.sessions.TrackHunks(h.root, diff.ParseHunks(patch), func(p string) string {
+				return review.DigestFile(filepath.Join(h.root, filepath.FromSlash(p)))
+			})
 		}
 		writeJSON(w, h.sessions.Attach(h.root, out.Base, out, asOf))
 		return

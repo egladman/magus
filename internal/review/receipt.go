@@ -146,10 +146,33 @@ func Record(cacheDir string, add []Receipt) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(dst, append(b, '\n'), 0o644)
+	// Written to a temp file and renamed, because this store has two writers by design: the
+	// daemon mints from a console keypress while the CLI mints from `--ack` or a closing
+	// viewer, in another process. A truncating write interrupted between those leaves a
+	// half-written JSON array, and Load treats a corrupt store as an EMPTY one - so a crash
+	// would silently discard every receipt rather than failing loudly.
+	//
+	// Rename is atomic within a directory, so a reader sees the old file or the new one. It
+	// does not make the read-modify-write atomic: two writers can still interleave and the
+	// later one wins, losing the other's receipts. That is a known and accepted limit -
+	// losing a receipt costs a re-read, and the alternative is a lock file in a path this
+	// package would then have to reap.
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".receipts-*.json")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // no-op once the rename below succeeds
+	if _, err := tmp.Write(append(b, '\n')); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), dst)
 }
 
-// States reports each path's types.DiffReadState against the recorded receipts.
+// ReadStates reports each path's types.DiffReadState against the recorded receipts.
 //
 // One definition, because the CLI's preflight report and the console's review surface must
 // agree on what "read" means - two callers deciding for themselves is how one surface comes
@@ -157,7 +180,7 @@ func Record(cacheDir string, add []Receipt) error {
 //
 // A path that cannot be read on disk is left out entirely rather than called unread: a
 // deleted file is not something anyone failed to review.
-func States(root, cacheDir string, paths []string) (map[string]string, error) {
+func ReadStates(root, cacheDir string, paths []string) (map[string]string, error) {
 	store, err := Load(cacheDir)
 	if err != nil {
 		return nil, err

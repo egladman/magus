@@ -39,7 +39,7 @@ func reviewFixture(t *testing.T, files map[string]string, roles map[string]strin
 // tests exercise the join the CLI and the console both go through rather than a second one.
 func attach(t *testing.T, root, cache string, rev types.Diff) types.Diff {
 	t.Helper()
-	states, err := review.States(root, cache, diffPaths(rev))
+	states, err := review.ReadStates(root, cache, diffPaths(rev))
 	require.NoError(t, err)
 	rev.AttachReadState(states)
 	return rev

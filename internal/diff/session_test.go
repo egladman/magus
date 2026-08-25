@@ -194,7 +194,7 @@ func TestMarkViewedReportsTheFileItFinished(t *testing.T) {
 	s.TrackHunks("/w", []FileHunks{
 		{Path: "a.go", Hunks: []Hunk{{Digest: "a1"}, {Digest: "a2"}}},
 		{Path: "b.go", Hunks: []Hunk{{Digest: "b1"}}},
-	})
+	}, func(p string) string { return "content-of-" + p })
 
 	// A file with more hunks left is not finished.
 	_, finished := s.MarkViewed("/w", "a1", true)
@@ -227,12 +227,39 @@ func TestMarkViewedFinishesNothingForAnUntrackedDigest(t *testing.T) {
 func TestTrackHunksReplacesThePreviousMapping(t *testing.T) {
 	s := NewStore("")
 	s.Attach("/w", "working", types.Diff{}, "")
-	s.TrackHunks("/w", []FileHunks{{Path: "old.go", Hunks: []Hunk{{Digest: "x1"}}}})
-	s.TrackHunks("/w", []FileHunks{{Path: "new.go", Hunks: []Hunk{{Digest: "y1"}}}})
+	digest := func(p string) string { return "content-of-" + p }
+	s.TrackHunks("/w", []FileHunks{{Path: "old.go", Hunks: []Hunk{{Digest: "x1"}}}}, digest)
+	s.TrackHunks("/w", []FileHunks{{Path: "new.go", Hunks: []Hunk{{Digest: "y1"}}}}, digest)
 
 	_, finished := s.MarkViewed("/w", "x1", true)
 	assert.Empty(t, finished, "a digest from the superseded changeset finishes nothing")
 
 	_, finished = s.MarkViewed("/w", "y1", true)
 	assert.Equal(t, "new.go", finished)
+}
+
+// A file whose hunks are byte-identical shares ONE digest, so counting occurrences would set
+// a total the marked set can never reach and that file could never be finished.
+func TestTrackHunksCountsDistinctDigests(t *testing.T) {
+	s := NewStore("")
+	s.Attach("/w", "working", types.Diff{}, "")
+	s.TrackHunks("/w", []FileHunks{
+		{Path: "a.go", Hunks: []Hunk{{Digest: "same"}, {Digest: "same"}}},
+	}, func(p string) string { return "content" })
+
+	_, finished := s.MarkViewed("/w", "same", true)
+	assert.Equal(t, "a.go", finished, "one distinct digest is the whole file")
+}
+
+// A receipt must attest to the bytes the reader SAW. The content is fingerprinted when the
+// changeset is tracked, so an agent editing the file mid-review cannot get its own edit
+// stamped as read - the next report calls it stale instead.
+func TestContentAtIsTakenWhenTracked(t *testing.T) {
+	s := NewStore("")
+	s.Attach("/w", "working", types.Diff{}, "")
+	s.TrackHunks("/w", []FileHunks{{Path: "a.go", Hunks: []Hunk{{Digest: "h1"}}}},
+		func(p string) string { return "as-the-reader-saw-it" })
+
+	assert.Equal(t, "as-the-reader-saw-it", s.ContentAt("/w", "a.go"))
+	assert.Empty(t, s.ContentAt("/w", "never-tracked.go"))
 }

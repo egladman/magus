@@ -1228,7 +1228,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         label(
           `${stale} changed since read`,
           "pf-m-red",
-          "You read these and they changed afterwards. Press g to go to the first one.",
+          "You read these and they changed afterwards. Press u to go to the first one.",
         ),
       );
     }
@@ -1670,9 +1670,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
     },
     {
       id: "diff.resume",
-      label: "Diff: go to the first file that changed since you read it",
+      label: "Diff: go to the first file that needs reading",
       run: () => resume(),
-      key: "g",
+      key: "u",
     },
     {
       id: "diff.generated.toggle",
@@ -1748,7 +1748,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
   for (const c of COMMANDS)
     registerCommand({ id: c.id, label: c.label, group: "Diff", run: c.run });
 
-  const byKey = new Map(COMMANDS.filter((c) => c.key).map((c) => [c.key as string, c.run]));
+  // Built one at a time rather than from an array, because `new Map(pairs)` keeps the LAST
+  // pair for a duplicate key and says nothing. A second command claiming a bound key then
+  // becomes silently unreachable, and any string that told a reader to press it points at
+  // whatever won - which is how a "press g" tooltip came to accept an agent's suggestion.
+  const byKey = new Map<string, () => void>();
+  for (const c of COMMANDS) {
+    if (!c.key) continue;
+    if (byKey.has(c.key)) throw new Error(`diff: two commands claim the "${c.key}" key: ${c.id}`);
+    byKey.set(c.key, c.run);
+  }
   scroll.addEventListener(
     "keydown",
     (e) => {

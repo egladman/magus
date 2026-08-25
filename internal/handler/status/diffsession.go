@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/egladman/magus/internal/diff"
@@ -131,12 +130,16 @@ func (h *DiffSessionHandler) mintReceipt(ctx context.Context, path string) {
 	if path == "" || h.cacheDir == "" || h.root == "" {
 		return
 	}
-	digest := review.DigestFile(filepath.Join(h.root, filepath.FromSlash(path)))
+	// The content as of when this changeset was tracked, not as of now: a receipt attests to
+	// the bytes the reader saw, and in a paired review an agent may have edited the file
+	// while they were reading it. Minting the current bytes would stamp somebody else's edit
+	// as read and defeat the staleness it exists to detect.
+	digest := h.sessions.ContentAt(h.root, path)
 	if digest == "" {
 		return
 	}
 	if err := review.Record(h.cacheDir, []review.Receipt{{Path: path, Digest: digest, At: time.Now()}}); err != nil {
-		slog.DebugContext(ctx, "diff session: could not record a read receipt",
+		h.Log.DebugContext(ctx, "diff session: could not record a read receipt",
 			slog.String("path", path), slog.String("error", err.Error()))
 	}
 }
