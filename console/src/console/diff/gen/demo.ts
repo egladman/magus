@@ -10,35 +10,36 @@ export const DEMO_FILES: readonly WireFile[] = [
     "path": "libs/authkit/claims.go",
     "old_path": "libs/authkit/claims.go",
     "status": "modified",
-    "additions": 10,
-    "deletions": 5,
+    "additions": 11,
+    "deletions": 2,
     "binary": false,
     "hunks": [
       {
         "index": 0,
-        "header": "@@ -14,10 +14,12 @@ type Claims struct {",
+        "header": "@@ -14,10 +14,14 @@ type Claims struct {",
         "lines": [
           " \t// Subject is the account the token was minted for.",
           " \tSubject string `json:\"sub\"`",
           " \t// Issuer is the authority that signed it.",
           " \tIssuer string `json:\"iss\"`",
-          "-\t// Scope is the space-separated permission list.",
-          "-\tScope string `json:\"scope\"`",
+          "-\t// Audience is the service this token was minted for.",
           "-\tAudience string `json:\"aud\"`",
-          "+\t// Audience is every service this token may be presented to. Asserted on",
-          "+\t// verify, never logged: it names the systems the holder can reach.",
-          "+\tAudience []string `json:\"aud\"`",
-          "+\t// IssuedAt is when the authority signed the token, in epoch seconds.",
-          "+\tIssuedAt int64 `json:\"iat\"`",
-          " \t// ExpiresAt is when the token stops verifying.",
-          " \tExpiresAt int64 `json:\"exp\"`",
-          " }"
+          "+\t// Audience lists every service this token is valid at. The gateway mints one token",
+          "+\t// accepted by identity and ledger both, which a single value cannot express.",
+          "+\tAudience Audience `json:\"aud\"`",
+          "+\t// Scope stays for one release so tools/migrate can drain the old mint path.",
+          "+\t// Remove it once no unexpired token carries one.",
+          "+\tScope string `json:\"scope,omitempty\"`",
+          " \t// IssuedAt is when it was minted.",
+          " \tIssuedAt time.Time `json:\"iat\"`",
+          " \t// ExpiresAt is when it stops being accepted.",
+          " \tExpiresAt time.Time `json:\"exp\"`"
         ],
-        "digest": "536ffa60cd47f7d5",
+        "digest": "b37e02cf14e28e57",
         "old_start": 14,
         "old_count": 10,
         "new_start": 14,
-        "new_count": 12,
+        "new_count": 14,
         "rows": [
           {
             "kind": "context",
@@ -66,422 +67,179 @@ export const DEMO_FILES: readonly WireFile[] = [
           },
           {
             "kind": "del",
-            "text": "\t// Scope is the space-separated permission list.",
+            "text": "\t// Audience is the service this token was minted for.",
             "old_line": 18,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "\tScope string `json:\"scope\"`",
+            "text": "\tAudience string `json:\"aud\"`",
             "old_line": 19,
             "new_line": null
           },
           {
-            "kind": "del",
-            "text": "\tAudience string `json:\"aud\"`",
-            "old_line": 20,
-            "new_line": null
-          },
-          {
             "kind": "add",
-            "text": "\t// Audience is every service this token may be presented to. Asserted on",
+            "text": "\t// Audience lists every service this token is valid at. The gateway mints one token",
             "old_line": null,
             "new_line": 18
           },
           {
             "kind": "add",
-            "text": "\t// verify, never logged: it names the systems the holder can reach.",
+            "text": "\t// accepted by identity and ledger both, which a single value cannot express.",
             "old_line": null,
             "new_line": 19
           },
           {
             "kind": "add",
-            "text": "\tAudience []string `json:\"aud\"`",
+            "text": "\tAudience Audience `json:\"aud\"`",
             "old_line": null,
             "new_line": 20
           },
           {
             "kind": "add",
-            "text": "\t// IssuedAt is when the authority signed the token, in epoch seconds.",
+            "text": "\t// Scope stays for one release so tools/migrate can drain the old mint path.",
             "old_line": null,
             "new_line": 21
           },
           {
             "kind": "add",
-            "text": "\tIssuedAt int64 `json:\"iat\"`",
+            "text": "\t// Remove it once no unexpired token carries one.",
             "old_line": null,
             "new_line": 22
           },
           {
-            "kind": "context",
-            "text": "\t// ExpiresAt is when the token stops verifying.",
-            "old_line": 21,
+            "kind": "add",
+            "text": "\tScope string `json:\"scope,omitempty\"`",
+            "old_line": null,
             "new_line": 23
           },
           {
             "kind": "context",
-            "text": "\tExpiresAt int64 `json:\"exp\"`",
-            "old_line": 22,
+            "text": "\t// IssuedAt is when it was minted.",
+            "old_line": 20,
             "new_line": 24
           },
           {
             "kind": "context",
-            "text": "}",
-            "old_line": 23,
+            "text": "\tIssuedAt time.Time `json:\"iat\"`",
+            "old_line": 21,
             "new_line": 25
+          },
+          {
+            "kind": "context",
+            "text": "\t// ExpiresAt is when it stops being accepted.",
+            "old_line": 22,
+            "new_line": 26
+          },
+          {
+            "kind": "context",
+            "text": "\tExpiresAt time.Time `json:\"exp\"`",
+            "old_line": 23,
+            "new_line": 27
           }
         ]
       },
       {
         "index": 1,
-        "header": "@@ -41,8 +43,11 @@ func (c Claims) Valid(now time.Time) error {",
+        "header": "@@ -41,8 +45,13 @@ func (c Claims) Valid(now time.Time) error {",
         "lines": [
           " \tif c.Subject == \"\" {",
-          " \t\treturn ErrNoSubject",
+          " \t\treturn fmt.Errorf(\"authkit: claims carry no subject\")",
           " \t}",
-          "-\tif c.ExpiresAt < now.Unix() {",
-          "-\t\treturn errors.New(\"token: expired\")",
-          "+\tif c.ExpiresAt <= now.Unix() {",
-          "+\t\treturn ErrExpired",
-          " \t}",
+          "+\t// An empty audience used to mean \"valid anywhere\", which is the failure you find in an",
+          "+\t// incident review rather than in a test. It is now a refusal at the type boundary.",
           "+\tif len(c.Audience) == 0 {",
-          "+\t\treturn ErrNoAudience",
+          "+\t\treturn fmt.Errorf(\"authkit: claims carry no audience\")",
           "+\t}",
+          " \tif now.After(c.ExpiresAt) {",
+          " \t\treturn fmt.Errorf(\"authkit: token expired at %s\", c.ExpiresAt.Format(time.RFC3339))",
+          " \t}",
           " \treturn nil",
           " }"
         ],
-        "digest": "30d4547928bf52cf",
+        "digest": "4d8ba946cd1b5cbb",
         "old_start": 41,
         "old_count": 8,
-        "new_start": 43,
-        "new_count": 11,
+        "new_start": 45,
+        "new_count": 13,
         "rows": [
           {
             "kind": "context",
             "text": "\tif c.Subject == \"\" {",
             "old_line": 41,
-            "new_line": 43
+            "new_line": 45
           },
           {
             "kind": "context",
-            "text": "\t\treturn ErrNoSubject",
+            "text": "\t\treturn fmt.Errorf(\"authkit: claims carry no subject\")",
             "old_line": 42,
-            "new_line": 44
+            "new_line": 46
           },
           {
             "kind": "context",
             "text": "\t}",
             "old_line": 43,
-            "new_line": 45
-          },
-          {
-            "kind": "del",
-            "text": "\tif c.ExpiresAt < now.Unix() {",
-            "old_line": 44,
-            "new_line": null
-          },
-          {
-            "kind": "del",
-            "text": "\t\treturn errors.New(\"token: expired\")",
-            "old_line": 45,
-            "new_line": null
-          },
-          {
-            "kind": "add",
-            "text": "\tif c.ExpiresAt <= now.Unix() {",
-            "old_line": null,
-            "new_line": 46
-          },
-          {
-            "kind": "add",
-            "text": "\t\treturn ErrExpired",
-            "old_line": null,
             "new_line": 47
           },
           {
-            "kind": "context",
-            "text": "\t}",
-            "old_line": 46,
+            "kind": "add",
+            "text": "\t// An empty audience used to mean \"valid anywhere\", which is the failure you find in an",
+            "old_line": null,
             "new_line": 48
           },
           {
             "kind": "add",
-            "text": "\tif len(c.Audience) == 0 {",
+            "text": "\t// incident review rather than in a test. It is now a refusal at the type boundary.",
             "old_line": null,
             "new_line": 49
           },
           {
             "kind": "add",
-            "text": "\t\treturn ErrNoAudience",
+            "text": "\tif len(c.Audience) == 0 {",
             "old_line": null,
             "new_line": 50
           },
           {
             "kind": "add",
-            "text": "\t}",
+            "text": "\t\treturn fmt.Errorf(\"authkit: claims carry no audience\")",
             "old_line": null,
             "new_line": 51
+          },
+          {
+            "kind": "add",
+            "text": "\t}",
+            "old_line": null,
+            "new_line": 52
+          },
+          {
+            "kind": "context",
+            "text": "\tif now.After(c.ExpiresAt) {",
+            "old_line": 44,
+            "new_line": 53
+          },
+          {
+            "kind": "context",
+            "text": "\t\treturn fmt.Errorf(\"authkit: token expired at %s\", c.ExpiresAt.Format(time.RFC3339))",
+            "old_line": 45,
+            "new_line": 54
+          },
+          {
+            "kind": "context",
+            "text": "\t}",
+            "old_line": 46,
+            "new_line": 55
           },
           {
             "kind": "context",
             "text": "\treturn nil",
             "old_line": 47,
-            "new_line": 52
+            "new_line": 56
           },
           {
             "kind": "context",
             "text": "}",
             "old_line": 48,
-            "new_line": 53
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "path": "services/identity/internal/token/verify.go",
-    "old_path": "services/identity/internal/token/verify.go",
-    "status": "modified",
-    "additions": 7,
-    "deletions": 2,
-    "binary": false,
-    "hunks": [
-      {
-        "index": 0,
-        "header": "@@ -28,12 +28,17 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*authkit.Claims, error) {",
-        "lines": [
-          " \tclaims, err := v.keys.Decode(ctx, raw)",
-          " \tif err != nil {",
-          " \t\treturn nil, fmt.Errorf(\"token: decode: %w\", err)",
-          " \t}",
-          "-\tif claims.Scope == \"\" {",
-          "-\t\treturn nil, errors.New(\"token: no scope\")",
-          "+\tif !slices.Contains(claims.Audience, v.audience) {",
-          "+\t\t// The audience is the whole point of the claim: a token minted for the",
-          "+\t\t// admin app must not verify here just because the signature checks out.",
-          "+\t\treturn nil, fmt.Errorf(\"token: audience %q not accepted\", v.audience)",
-          " \t}",
-          " \tif err := claims.Valid(v.now()); err != nil {",
-          " \t\treturn nil, err",
-          " \t}",
-          "+\tif claims.IssuedAt > v.now().Add(leeway).Unix() {",
-          "+\t\treturn nil, ErrFromTheFuture",
-          "+\t}",
-          " \treturn claims, nil",
-          " }"
-        ],
-        "digest": "7039acf44c253e19",
-        "old_start": 28,
-        "old_count": 12,
-        "new_start": 28,
-        "new_count": 17,
-        "rows": [
-          {
-            "kind": "context",
-            "text": "\tclaims, err := v.keys.Decode(ctx, raw)",
-            "old_line": 28,
-            "new_line": 28
-          },
-          {
-            "kind": "context",
-            "text": "\tif err != nil {",
-            "old_line": 29,
-            "new_line": 29
-          },
-          {
-            "kind": "context",
-            "text": "\t\treturn nil, fmt.Errorf(\"token: decode: %w\", err)",
-            "old_line": 30,
-            "new_line": 30
-          },
-          {
-            "kind": "context",
-            "text": "\t}",
-            "old_line": 31,
-            "new_line": 31
-          },
-          {
-            "kind": "del",
-            "text": "\tif claims.Scope == \"\" {",
-            "old_line": 32,
-            "new_line": null
-          },
-          {
-            "kind": "del",
-            "text": "\t\treturn nil, errors.New(\"token: no scope\")",
-            "old_line": 33,
-            "new_line": null
-          },
-          {
-            "kind": "add",
-            "text": "\tif !slices.Contains(claims.Audience, v.audience) {",
-            "old_line": null,
-            "new_line": 32
-          },
-          {
-            "kind": "add",
-            "text": "\t\t// The audience is the whole point of the claim: a token minted for the",
-            "old_line": null,
-            "new_line": 33
-          },
-          {
-            "kind": "add",
-            "text": "\t\t// admin app must not verify here just because the signature checks out.",
-            "old_line": null,
-            "new_line": 34
-          },
-          {
-            "kind": "add",
-            "text": "\t\treturn nil, fmt.Errorf(\"token: audience %q not accepted\", v.audience)",
-            "old_line": null,
-            "new_line": 35
-          },
-          {
-            "kind": "context",
-            "text": "\t}",
-            "old_line": 34,
-            "new_line": 36
-          },
-          {
-            "kind": "context",
-            "text": "\tif err := claims.Valid(v.now()); err != nil {",
-            "old_line": 35,
-            "new_line": 37
-          },
-          {
-            "kind": "context",
-            "text": "\t\treturn nil, err",
-            "old_line": 36,
-            "new_line": 38
-          },
-          {
-            "kind": "context",
-            "text": "\t}",
-            "old_line": 37,
-            "new_line": 39
-          },
-          {
-            "kind": "add",
-            "text": "\tif claims.IssuedAt > v.now().Add(leeway).Unix() {",
-            "old_line": null,
-            "new_line": 40
-          },
-          {
-            "kind": "add",
-            "text": "\t\treturn nil, ErrFromTheFuture",
-            "old_line": null,
-            "new_line": 41
-          },
-          {
-            "kind": "add",
-            "text": "\t}",
-            "old_line": null,
-            "new_line": 42
-          },
-          {
-            "kind": "context",
-            "text": "\treturn claims, nil",
-            "old_line": 38,
-            "new_line": 43
-          },
-          {
-            "kind": "context",
-            "text": "}",
-            "old_line": 39,
-            "new_line": 44
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "path": "apps/dashboard/src/api/session.ts",
-    "old_path": "apps/dashboard/src/api/session.ts",
-    "status": "modified",
-    "additions": 3,
-    "deletions": 2,
-    "binary": false,
-    "hunks": [
-      {
-        "index": 0,
-        "header": "@@ -38,7 +38,8 @@ export interface SessionClaims {",
-        "lines": [
-          "   readonly subject: string;",
-          "-  readonly scope: string;",
-          "+  readonly audience: readonly string[];",
-          "+  readonly issuedAt: number;",
-          "   readonly expiresAt: number;",
-          " }",
-          " export function canReach(claims: SessionClaims, service: string): boolean {",
-          "-  return claims.scope.split(\" \").includes(service);",
-          "+  return claims.audience.includes(service);",
-          " }"
-        ],
-        "digest": "f6362a1dd1706393",
-        "old_start": 38,
-        "old_count": 7,
-        "new_start": 38,
-        "new_count": 8,
-        "rows": [
-          {
-            "kind": "context",
-            "text": "  readonly subject: string;",
-            "old_line": 38,
-            "new_line": 38
-          },
-          {
-            "kind": "del",
-            "text": "  readonly scope: string;",
-            "old_line": 39,
-            "new_line": null
-          },
-          {
-            "kind": "add",
-            "text": "  readonly audience: readonly string[];",
-            "old_line": null,
-            "new_line": 39
-          },
-          {
-            "kind": "add",
-            "text": "  readonly issuedAt: number;",
-            "old_line": null,
-            "new_line": 40
-          },
-          {
-            "kind": "context",
-            "text": "  readonly expiresAt: number;",
-            "old_line": 40,
-            "new_line": 41
-          },
-          {
-            "kind": "context",
-            "text": "}",
-            "old_line": 41,
-            "new_line": 42
-          },
-          {
-            "kind": "context",
-            "text": "export function canReach(claims: SessionClaims, service: string): boolean {",
-            "old_line": 42,
-            "new_line": 43
-          },
-          {
-            "kind": "del",
-            "text": "  return claims.scope.split(\" \").includes(service);",
-            "old_line": 43,
-            "new_line": null
-          },
-          {
-            "kind": "add",
-            "text": "  return claims.audience.includes(service);",
-            "old_line": null,
-            "new_line": 44
-          },
-          {
-            "kind": "context",
-            "text": "}",
-            "old_line": 44,
-            "new_line": 45
+            "new_line": 57
           }
         ]
       }
@@ -491,34 +249,53 @@ export const DEMO_FILES: readonly WireFile[] = [
     "path": "libs/authkit/audience.go",
     "old_path": "libs/authkit/audience.go",
     "status": "added",
-    "additions": 13,
+    "additions": 32,
     "deletions": 0,
     "binary": false,
     "new_mode": "100644",
     "hunks": [
       {
         "index": 0,
-        "header": "@@ -0,0 +1,13 @@",
+        "header": "@@ -0,0 +1,32 @@",
         "lines": [
           "+package authkit",
           "+",
-          "+// Audiences is the set a verifier accepts. Ordered, so a token minted for two",
-          "+// services verifies the same way whichever one reads it first.",
-          "+type Audiences []string",
+          "+import \"slices\"",
           "+",
-          "+// Accepts reports whether aud names a service in the set.",
-          "+func (a Audiences) Accepts(aud string) bool {",
-          "+\treturn slices.Contains(a, aud)",
+          "+// Audience is every service a token is valid at.",
+          "+//",
+          "+// A named slice rather than []string so the JSON shape is decided in one place: a single",
+          "+// audience still marshals as a bare string, which is what RFC 7519 permits and what every",
+          "+// token already in flight carries.",
+          "+type Audience []string",
+          "+",
+          "+// Contains reports whether the token names svc. Verification asserts membership rather than",
+          "+// equality - a token minted for two services is valid at both.",
+          "+func (a Audience) Contains(svc string) bool {",
+          "+\treturn slices.Contains(a, svc)",
           "+}",
           "+",
-          "+// ErrNoAudience is what Claims.Valid returns for a token carrying no audience.",
-          "+var ErrNoAudience = errors.New(\"token: no audience\")"
+          "+// UnmarshalJSON accepts both the bare string every existing token carries and the array new",
+          "+// ones do. Dropping the string form would invalidate every unexpired token at once.",
+          "+func (a *Audience) UnmarshalJSON(b []byte) error {",
+          "+\tvar one string",
+          "+\tif err := json.Unmarshal(b, &one); err == nil {",
+          "+\t\t*a = Audience{one}",
+          "+\t\treturn nil",
+          "+\t}",
+          "+\tvar many []string",
+          "+\tif err := json.Unmarshal(b, &many); err != nil {",
+          "+\t\treturn fmt.Errorf(\"authkit: audience is neither a string nor an array: %w\", err)",
+          "+\t}",
+          "+\t*a = many",
+          "+\treturn nil",
+          "+}"
         ],
-        "digest": "3382dc51ecc01125",
+        "digest": "e0b0bf3c2861df43",
         "old_start": 0,
         "old_count": 0,
         "new_start": 1,
-        "new_count": 13,
+        "new_count": 32,
         "rows": [
           {
             "kind": "add",
@@ -534,49 +311,49 @@ export const DEMO_FILES: readonly WireFile[] = [
           },
           {
             "kind": "add",
-            "text": "// Audiences is the set a verifier accepts. Ordered, so a token minted for two",
+            "text": "import \"slices\"",
             "old_line": null,
             "new_line": 3
           },
           {
             "kind": "add",
-            "text": "// services verifies the same way whichever one reads it first.",
+            "text": "",
             "old_line": null,
             "new_line": 4
           },
           {
             "kind": "add",
-            "text": "type Audiences []string",
+            "text": "// Audience is every service a token is valid at.",
             "old_line": null,
             "new_line": 5
           },
           {
             "kind": "add",
-            "text": "",
+            "text": "//",
             "old_line": null,
             "new_line": 6
           },
           {
             "kind": "add",
-            "text": "// Accepts reports whether aud names a service in the set.",
+            "text": "// A named slice rather than []string so the JSON shape is decided in one place: a single",
             "old_line": null,
             "new_line": 7
           },
           {
             "kind": "add",
-            "text": "func (a Audiences) Accepts(aud string) bool {",
+            "text": "// audience still marshals as a bare string, which is what RFC 7519 permits and what every",
             "old_line": null,
             "new_line": 8
           },
           {
             "kind": "add",
-            "text": "\treturn slices.Contains(a, aud)",
+            "text": "// token already in flight carries.",
             "old_line": null,
             "new_line": 9
           },
           {
             "kind": "add",
-            "text": "}",
+            "text": "type Audience []string",
             "old_line": null,
             "new_line": 10
           },
@@ -588,15 +365,394 @@ export const DEMO_FILES: readonly WireFile[] = [
           },
           {
             "kind": "add",
-            "text": "// ErrNoAudience is what Claims.Valid returns for a token carrying no audience.",
+            "text": "// Contains reports whether the token names svc. Verification asserts membership rather than",
             "old_line": null,
             "new_line": 12
           },
           {
             "kind": "add",
-            "text": "var ErrNoAudience = errors.New(\"token: no audience\")",
+            "text": "// equality - a token minted for two services is valid at both.",
             "old_line": null,
             "new_line": 13
+          },
+          {
+            "kind": "add",
+            "text": "func (a Audience) Contains(svc string) bool {",
+            "old_line": null,
+            "new_line": 14
+          },
+          {
+            "kind": "add",
+            "text": "\treturn slices.Contains(a, svc)",
+            "old_line": null,
+            "new_line": 15
+          },
+          {
+            "kind": "add",
+            "text": "}",
+            "old_line": null,
+            "new_line": 16
+          },
+          {
+            "kind": "add",
+            "text": "",
+            "old_line": null,
+            "new_line": 17
+          },
+          {
+            "kind": "add",
+            "text": "// UnmarshalJSON accepts both the bare string every existing token carries and the array new",
+            "old_line": null,
+            "new_line": 18
+          },
+          {
+            "kind": "add",
+            "text": "// ones do. Dropping the string form would invalidate every unexpired token at once.",
+            "old_line": null,
+            "new_line": 19
+          },
+          {
+            "kind": "add",
+            "text": "func (a *Audience) UnmarshalJSON(b []byte) error {",
+            "old_line": null,
+            "new_line": 20
+          },
+          {
+            "kind": "add",
+            "text": "\tvar one string",
+            "old_line": null,
+            "new_line": 21
+          },
+          {
+            "kind": "add",
+            "text": "\tif err := json.Unmarshal(b, &one); err == nil {",
+            "old_line": null,
+            "new_line": 22
+          },
+          {
+            "kind": "add",
+            "text": "\t\t*a = Audience{one}",
+            "old_line": null,
+            "new_line": 23
+          },
+          {
+            "kind": "add",
+            "text": "\t\treturn nil",
+            "old_line": null,
+            "new_line": 24
+          },
+          {
+            "kind": "add",
+            "text": "\t}",
+            "old_line": null,
+            "new_line": 25
+          },
+          {
+            "kind": "add",
+            "text": "\tvar many []string",
+            "old_line": null,
+            "new_line": 26
+          },
+          {
+            "kind": "add",
+            "text": "\tif err := json.Unmarshal(b, &many); err != nil {",
+            "old_line": null,
+            "new_line": 27
+          },
+          {
+            "kind": "add",
+            "text": "\t\treturn fmt.Errorf(\"authkit: audience is neither a string nor an array: %w\", err)",
+            "old_line": null,
+            "new_line": 28
+          },
+          {
+            "kind": "add",
+            "text": "\t}",
+            "old_line": null,
+            "new_line": 29
+          },
+          {
+            "kind": "add",
+            "text": "\t*a = many",
+            "old_line": null,
+            "new_line": 30
+          },
+          {
+            "kind": "add",
+            "text": "\treturn nil",
+            "old_line": null,
+            "new_line": 31
+          },
+          {
+            "kind": "add",
+            "text": "}",
+            "old_line": null,
+            "new_line": 32
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "libs/authkit/testdata/claims.golden",
+    "old_path": "libs/authkit/testdata/claims.golden",
+    "status": "modified",
+    "additions": 0,
+    "deletions": 0,
+    "binary": true,
+    "hunks": null
+  },
+  {
+    "path": "services/identity/internal/token/verify.go",
+    "old_path": "services/identity/internal/token/verify.go",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 2,
+    "binary": false,
+    "hunks": [
+      {
+        "index": 0,
+        "header": "@@ -28,11 +28,13 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*authkit.Claims, error) {",
+        "lines": [
+          " \tif err := claims.Valid(v.clock.Now()); err != nil {",
+          " \t\treturn nil, fmt.Errorf(\"token: %w\", err)",
+          " \t}",
+          "-\tif claims.Audience != v.service {",
+          "-\t\treturn nil, fmt.Errorf(\"token: minted for %q, not %q\", claims.Audience, v.service)",
+          "+\t// Membership, not equality: the gateway mints one token this service and the ledger",
+          "+\t// both accept, and an equality check rejects it at whichever one is not listed first.",
+          "+\tif !claims.Audience.Contains(v.service) {",
+          "+\t\treturn nil, fmt.Errorf(\"token: minted for %v, not %q\", claims.Audience, v.service)",
+          " \t}",
+          " \tif v.revoked.Has(claims.ID) {",
+          " \t\treturn nil, ErrRevoked",
+          " \t}",
+          " \treturn &claims, nil",
+          " }"
+        ],
+        "digest": "0bddf636c50ede5a",
+        "old_start": 28,
+        "old_count": 11,
+        "new_start": 28,
+        "new_count": 13,
+        "rows": [
+          {
+            "kind": "context",
+            "text": "\tif err := claims.Valid(v.clock.Now()); err != nil {",
+            "old_line": 28,
+            "new_line": 28
+          },
+          {
+            "kind": "context",
+            "text": "\t\treturn nil, fmt.Errorf(\"token: %w\", err)",
+            "old_line": 29,
+            "new_line": 29
+          },
+          {
+            "kind": "context",
+            "text": "\t}",
+            "old_line": 30,
+            "new_line": 30
+          },
+          {
+            "kind": "del",
+            "text": "\tif claims.Audience != v.service {",
+            "old_line": 31,
+            "new_line": null
+          },
+          {
+            "kind": "del",
+            "text": "\t\treturn nil, fmt.Errorf(\"token: minted for %q, not %q\", claims.Audience, v.service)",
+            "old_line": 32,
+            "new_line": null
+          },
+          {
+            "kind": "add",
+            "text": "\t// Membership, not equality: the gateway mints one token this service and the ledger",
+            "old_line": null,
+            "new_line": 31
+          },
+          {
+            "kind": "add",
+            "text": "\t// both accept, and an equality check rejects it at whichever one is not listed first.",
+            "old_line": null,
+            "new_line": 32
+          },
+          {
+            "kind": "add",
+            "text": "\tif !claims.Audience.Contains(v.service) {",
+            "old_line": null,
+            "new_line": 33
+          },
+          {
+            "kind": "add",
+            "text": "\t\treturn nil, fmt.Errorf(\"token: minted for %v, not %q\", claims.Audience, v.service)",
+            "old_line": null,
+            "new_line": 34
+          },
+          {
+            "kind": "context",
+            "text": "\t}",
+            "old_line": 33,
+            "new_line": 35
+          },
+          {
+            "kind": "context",
+            "text": "\tif v.revoked.Has(claims.ID) {",
+            "old_line": 34,
+            "new_line": 36
+          },
+          {
+            "kind": "context",
+            "text": "\t\treturn nil, ErrRevoked",
+            "old_line": 35,
+            "new_line": 37
+          },
+          {
+            "kind": "context",
+            "text": "\t}",
+            "old_line": 36,
+            "new_line": 38
+          },
+          {
+            "kind": "context",
+            "text": "\treturn &claims, nil",
+            "old_line": 37,
+            "new_line": 39
+          },
+          {
+            "kind": "context",
+            "text": "}",
+            "old_line": 38,
+            "new_line": 40
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "services/gateway/internal/mint/token.go",
+    "old_path": "services/gateway/internal/mint/token.go",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 5,
+    "binary": false,
+    "hunks": [
+      {
+        "index": 0,
+        "header": "@@ -52,14 +52,10 @@ func (m *Minter) For(ctx context.Context, sub string, svcs []string) (string, error) {",
+        "lines": [
+          " \tnow := m.clock.Now()",
+          " \tclaims := authkit.Claims{",
+          " \t\tSubject:   sub,",
+          " \t\tIssuer:    m.issuer,",
+          "-\t\tAudience:  svcs[0],",
+          "+\t\tAudience:  authkit.Audience(svcs),",
+          " \t\tIssuedAt:  now,",
+          " \t\tExpiresAt: now.Add(m.ttl),",
+          " \t}",
+          "-\t// Callers passing more than one service got the first and no warning.",
+          "-\tif len(svcs) > 1 {",
+          "-\t\tm.log.WarnContext(ctx, \"mint: extra audiences dropped\", \"dropped\", svcs[1:])",
+          "-\t}",
+          " \treturn m.sign(claims)",
+          " }"
+        ],
+        "digest": "4a2be2935abacb67",
+        "old_start": 52,
+        "old_count": 14,
+        "new_start": 52,
+        "new_count": 10,
+        "rows": [
+          {
+            "kind": "context",
+            "text": "\tnow := m.clock.Now()",
+            "old_line": 52,
+            "new_line": 52
+          },
+          {
+            "kind": "context",
+            "text": "\tclaims := authkit.Claims{",
+            "old_line": 53,
+            "new_line": 53
+          },
+          {
+            "kind": "context",
+            "text": "\t\tSubject:   sub,",
+            "old_line": 54,
+            "new_line": 54
+          },
+          {
+            "kind": "context",
+            "text": "\t\tIssuer:    m.issuer,",
+            "old_line": 55,
+            "new_line": 55
+          },
+          {
+            "kind": "del",
+            "text": "\t\tAudience:  svcs[0],",
+            "old_line": 56,
+            "new_line": null
+          },
+          {
+            "kind": "add",
+            "text": "\t\tAudience:  authkit.Audience(svcs),",
+            "old_line": null,
+            "new_line": 56
+          },
+          {
+            "kind": "context",
+            "text": "\t\tIssuedAt:  now,",
+            "old_line": 57,
+            "new_line": 57
+          },
+          {
+            "kind": "context",
+            "text": "\t\tExpiresAt: now.Add(m.ttl),",
+            "old_line": 58,
+            "new_line": 58
+          },
+          {
+            "kind": "context",
+            "text": "\t}",
+            "old_line": 59,
+            "new_line": 59
+          },
+          {
+            "kind": "del",
+            "text": "\t// Callers passing more than one service got the first and no warning.",
+            "old_line": 60,
+            "new_line": null
+          },
+          {
+            "kind": "del",
+            "text": "\tif len(svcs) > 1 {",
+            "old_line": 61,
+            "new_line": null
+          },
+          {
+            "kind": "del",
+            "text": "\t\tm.log.WarnContext(ctx, \"mint: extra audiences dropped\", \"dropped\", svcs[1:])",
+            "old_line": 62,
+            "new_line": null
+          },
+          {
+            "kind": "del",
+            "text": "\t}",
+            "old_line": 63,
+            "new_line": null
+          },
+          {
+            "kind": "context",
+            "text": "\treturn m.sign(claims)",
+            "old_line": 64,
+            "new_line": 60
+          },
+          {
+            "kind": "context",
+            "text": "}",
+            "old_line": 65,
+            "new_line": 61
           }
         ]
       }
@@ -617,19 +773,19 @@ export const DEMO_FILES: readonly WireFile[] = [
         "lines": [
           "-package token",
           "-",
-          "-// legacyAudience read the audience out of the scope string, which is where it",
-          "-// lived before authkit.Claims carried one. Nothing mints scope-encoded",
-          "-// audiences any more.",
-          "-func legacyAudience(scope string) string {",
-          "-\tfor _, s := range strings.Fields(scope) {",
-          "-\t\tif strings.HasPrefix(s, \"aud:\") {",
-          "-\t\t\treturn strings.TrimPrefix(s, \"aud:\")",
-          "-\t\t}",
+          "-// LegacyAudience read the audience out of the issuer when the claim was absent.",
+          "-//",
+          "-// It dates from before the gateway set an audience at all, and every token it was written",
+          "-// for expired years ago. The only caller left was Verify, which no longer needs it: an",
+          "-// absent audience is now refused by Claims.Valid rather than guessed at here.",
+          "-func LegacyAudience(issuer string) string {",
+          "-\tif i := strings.LastIndex(issuer, \"/\"); i >= 0 {",
+          "-\t\treturn issuer[i+1:]",
           "-\t}",
-          "-\treturn \"\"",
+          "-\treturn issuer",
           "-}"
         ],
-        "digest": "3e3960590e9055a9",
+        "digest": "c61807beecdf6ea1",
         "old_start": 1,
         "old_count": 13,
         "new_start": 0,
@@ -649,49 +805,49 @@ export const DEMO_FILES: readonly WireFile[] = [
           },
           {
             "kind": "del",
-            "text": "// legacyAudience read the audience out of the scope string, which is where it",
+            "text": "// LegacyAudience read the audience out of the issuer when the claim was absent.",
             "old_line": 3,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "// lived before authkit.Claims carried one. Nothing mints scope-encoded",
+            "text": "//",
             "old_line": 4,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "// audiences any more.",
+            "text": "// It dates from before the gateway set an audience at all, and every token it was written",
             "old_line": 5,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "func legacyAudience(scope string) string {",
+            "text": "// for expired years ago. The only caller left was Verify, which no longer needs it: an",
             "old_line": 6,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "\tfor _, s := range strings.Fields(scope) {",
+            "text": "// absent audience is now refused by Claims.Valid rather than guessed at here.",
             "old_line": 7,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "\t\tif strings.HasPrefix(s, \"aud:\") {",
+            "text": "func LegacyAudience(issuer string) string {",
             "old_line": 8,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "\t\t\treturn strings.TrimPrefix(s, \"aud:\")",
+            "text": "\tif i := strings.LastIndex(issuer, \"/\"); i >= 0 {",
             "old_line": 9,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "\t\t}",
+            "text": "\t\treturn issuer[i+1:]",
             "old_line": 10,
             "new_line": null
           },
@@ -703,7 +859,7 @@ export const DEMO_FILES: readonly WireFile[] = [
           },
           {
             "kind": "del",
-            "text": "\treturn \"\"",
+            "text": "\treturn issuer",
             "old_line": 12,
             "new_line": null
           },
@@ -718,205 +874,436 @@ export const DEMO_FILES: readonly WireFile[] = [
     ]
   },
   {
-    "path": "services/identity/internal/token/verify_test.go",
-    "old_path": "services/identity/internal/token/verify_test.go",
+    "path": "apps/dashboard/src/api/session.ts",
+    "old_path": "apps/dashboard/src/api/session.ts",
     "status": "modified",
-    "additions": 11,
-    "deletions": 4,
+    "additions": 4,
+    "deletions": 3,
     "binary": false,
     "hunks": [
       {
         "index": 0,
-        "header": "@@ -140,9 +140,16 @@ func TestVerifyAudienceMismatch(t *testing.T) {",
+        "header": "@@ -38,7 +38,7 @@ export interface SessionClaims {",
         "lines": [
-          " \tv := newTestVerifier(t, \"acme-dashboard\")",
-          " \tclaims, err := v.Verify(t.Context(), mint(t, \"acme-admin\"))",
-          "-\tif err != nil {",
-          "-\t\tt.Fatalf(\"Verify(admin token) error = %v, want nil\", err)",
-          "+\tif !errors.Is(err, token.ErrAudience) {",
-          "+\t\tt.Fatalf(\"Verify(admin token) error = %v, want %v\", err, token.ErrAudience)",
-          " \t}",
-          "-\tif claims.Audience != \"acme-dashboard\" {",
-          "-\t\tt.Fatalf(\"claims.Audience = %q, want %q\", claims.Audience, \"acme-dashboard\")",
-          "+\tif claims != nil {",
-          "+\t\tt.Fatalf(\"Verify(admin token) claims = %v, want nil\", claims)",
-          " \t}",
-          " }",
-          "+",
-          "+func TestVerifyFromTheFuture(t *testing.T) {",
-          "+\tv := newTestVerifier(t, \"acme-dashboard\")",
-          "+\tif _, err := v.Verify(t.Context(), mintAt(t, \"acme-dashboard\", future)); err == nil {",
-          "+\t\tt.Fatal(\"Verify(future token) error = nil, want token: issued in the future\")",
-          "+\t}",
-          "+}"
+          "   readonly sub: string;",
+          "   readonly iss: string;",
+          "-  readonly aud: string;",
+          "-  readonly scope: string;",
+          "+  // Both shapes reach the browser: tokens minted before this release carry a bare string.",
+          "+  readonly aud: string | readonly string[];",
+          "   readonly iat: number;",
+          "   readonly exp: number;",
+          " }"
         ],
-        "digest": "5c14f0ad74994836",
-        "old_start": 140,
-        "old_count": 9,
-        "new_start": 140,
-        "new_count": 16,
+        "digest": "39426332b18dee3a",
+        "old_start": 38,
+        "old_count": 7,
+        "new_start": 38,
+        "new_count": 7,
         "rows": [
           {
             "kind": "context",
-            "text": "\tv := newTestVerifier(t, \"acme-dashboard\")",
-            "old_line": 140,
-            "new_line": 140
+            "text": "  readonly sub: string;",
+            "old_line": 38,
+            "new_line": 38
           },
           {
             "kind": "context",
-            "text": "\tclaims, err := v.Verify(t.Context(), mint(t, \"acme-admin\"))",
-            "old_line": 141,
-            "new_line": 141
+            "text": "  readonly iss: string;",
+            "old_line": 39,
+            "new_line": 39
           },
           {
             "kind": "del",
-            "text": "\tif err != nil {",
-            "old_line": 142,
+            "text": "  readonly aud: string;",
+            "old_line": 40,
             "new_line": null
           },
           {
             "kind": "del",
-            "text": "\t\tt.Fatalf(\"Verify(admin token) error = %v, want nil\", err)",
-            "old_line": 143,
+            "text": "  readonly scope: string;",
+            "old_line": 41,
             "new_line": null
           },
           {
             "kind": "add",
-            "text": "\tif !errors.Is(err, token.ErrAudience) {",
+            "text": "  // Both shapes reach the browser: tokens minted before this release carry a bare string.",
             "old_line": null,
-            "new_line": 142
+            "new_line": 40
           },
           {
             "kind": "add",
-            "text": "\t\tt.Fatalf(\"Verify(admin token) error = %v, want %v\", err, token.ErrAudience)",
+            "text": "  readonly aud: string | readonly string[];",
             "old_line": null,
-            "new_line": 143
+            "new_line": 41
           },
           {
             "kind": "context",
-            "text": "\t}",
-            "old_line": 144,
-            "new_line": 144
-          },
-          {
-            "kind": "del",
-            "text": "\tif claims.Audience != \"acme-dashboard\" {",
-            "old_line": 145,
-            "new_line": null
-          },
-          {
-            "kind": "del",
-            "text": "\t\tt.Fatalf(\"claims.Audience = %q, want %q\", claims.Audience, \"acme-dashboard\")",
-            "old_line": 146,
-            "new_line": null
-          },
-          {
-            "kind": "add",
-            "text": "\tif claims != nil {",
-            "old_line": null,
-            "new_line": 145
-          },
-          {
-            "kind": "add",
-            "text": "\t\tt.Fatalf(\"Verify(admin token) claims = %v, want nil\", claims)",
-            "old_line": null,
-            "new_line": 146
+            "text": "  readonly iat: number;",
+            "old_line": 42,
+            "new_line": 42
           },
           {
             "kind": "context",
-            "text": "\t}",
-            "old_line": 147,
-            "new_line": 147
+            "text": "  readonly exp: number;",
+            "old_line": 43,
+            "new_line": 43
           },
           {
             "kind": "context",
             "text": "}",
-            "old_line": 148,
-            "new_line": 148
+            "old_line": 44,
+            "new_line": 44
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "header": "@@ -61,2 +61,3 @@ export function canReach(claims: SessionClaims, service: string): boolean {",
+        "lines": [
+          "-  return claims.scope.split(\" \").includes(service);",
+          "+  const aud = typeof claims.aud === \"string\" ? [claims.aud] : claims.aud;",
+          "+  return aud.includes(service);",
+          " }"
+        ],
+        "digest": "dce2968b6033f375",
+        "old_start": 61,
+        "old_count": 2,
+        "new_start": 61,
+        "new_count": 3,
+        "rows": [
+          {
+            "kind": "del",
+            "text": "  return claims.scope.split(\" \").includes(service);",
+            "old_line": 61,
+            "new_line": null
           },
           {
             "kind": "add",
-            "text": "",
+            "text": "  const aud = typeof claims.aud === \"string\" ? [claims.aud] : claims.aud;",
             "old_line": null,
-            "new_line": 149
+            "new_line": 61
           },
           {
             "kind": "add",
-            "text": "func TestVerifyFromTheFuture(t *testing.T) {",
+            "text": "  return aud.includes(service);",
             "old_line": null,
-            "new_line": 150
+            "new_line": 62
           },
           {
-            "kind": "add",
-            "text": "\tv := newTestVerifier(t, \"acme-dashboard\")",
-            "old_line": null,
-            "new_line": 151
-          },
-          {
-            "kind": "add",
-            "text": "\tif _, err := v.Verify(t.Context(), mintAt(t, \"acme-dashboard\", future)); err == nil {",
-            "old_line": null,
-            "new_line": 152
-          },
-          {
-            "kind": "add",
-            "text": "\t\tt.Fatal(\"Verify(future token) error = nil, want token: issued in the future\")",
-            "old_line": null,
-            "new_line": 153
-          },
-          {
-            "kind": "add",
-            "text": "\t}",
-            "old_line": null,
-            "new_line": 154
-          },
-          {
-            "kind": "add",
+            "kind": "context",
             "text": "}",
-            "old_line": null,
-            "new_line": 155
+            "old_line": 62,
+            "new_line": 63
           }
         ]
       }
     ]
   },
   {
-    "path": "docs/auth/tokens.md",
-    "old_path": "docs/auth/jwt.md",
-    "status": "renamed",
-    "additions": 5,
-    "deletions": 4,
+    "path": "services/identity/internal/token/verify_test.go",
+    "old_path": "services/identity/internal/token/verify_test.go",
+    "status": "modified",
+    "additions": 11,
+    "deletions": 2,
     "binary": false,
     "hunks": [
       {
         "index": 0,
-        "header": "@@ -1,9 +1,10 @@",
+        "header": "@@ -140,6 +140,15 @@ func TestVerifyAudienceMismatch(t *testing.T) {",
         "lines": [
-          " # Tokens",
-          " ",
-          "-A token carries a subject, an issuer, a scope and an expiry. The scope is a",
-          "-space-separated permission list, and every service reads it to decide what a",
-          "-caller may do.",
-          "+A token carries a subject, an issuer, an audience and an expiry. The audience",
-          "+names every service the token may be presented to, and a service not named in",
-          "+it must refuse the token even when the signature verifies.",
-          " ",
-          " ## Verifying",
-          " ",
-          "-Call `authkit.Claims.Valid` and then check the scope yourself.",
-          "+Call `authkit.Claims.Valid`, then check the audience with `Audiences.Accepts`.",
-          "+A token carrying no audience at all is refused by `Valid` - see `ErrNoAudience`."
+          " \tv := newVerifier(t, \"identity\")",
+          "-\traw := mintFor(t, \"ledger\")",
+          "+\traw := mintFor(t, \"ledger\", \"catalog\")",
+          " \t_, err := v.Verify(t.Context(), raw)",
+          " \trequire.Error(t, err)",
+          "-\tassert.Contains(t, err.Error(), `minted for \"ledger\"`)",
+          "+\tassert.Contains(t, err.Error(), \"minted for [ledger catalog]\")",
+          "+}",
+          "+",
+          "+// The case the equality check got wrong: a token naming this service SECOND is still ours.",
+          "+func TestVerifyAcceptsATokenMintedForSeveralServices(t *testing.T) {",
+          "+\tv := newVerifier(t, \"identity\")",
+          "+\traw := mintFor(t, \"ledger\", \"identity\")",
+          "+\tclaims, err := v.Verify(t.Context(), raw)",
+          "+\trequire.NoError(t, err)",
+          "+\tassert.True(t, claims.Audience.Contains(\"identity\"))",
+          " }"
         ],
-        "digest": "05547ea663e6bc96",
-        "old_start": 1,
-        "old_count": 9,
-        "new_start": 1,
-        "new_count": 10,
+        "digest": "9dfd002e5ebfa4c0",
+        "old_start": 140,
+        "old_count": 6,
+        "new_start": 140,
+        "new_count": 15,
         "rows": [
           {
             "kind": "context",
-            "text": "# Tokens",
+            "text": "\tv := newVerifier(t, \"identity\")",
+            "old_line": 140,
+            "new_line": 140
+          },
+          {
+            "kind": "del",
+            "text": "\traw := mintFor(t, \"ledger\")",
+            "old_line": 141,
+            "new_line": null
+          },
+          {
+            "kind": "add",
+            "text": "\traw := mintFor(t, \"ledger\", \"catalog\")",
+            "old_line": null,
+            "new_line": 141
+          },
+          {
+            "kind": "context",
+            "text": "\t_, err := v.Verify(t.Context(), raw)",
+            "old_line": 142,
+            "new_line": 142
+          },
+          {
+            "kind": "context",
+            "text": "\trequire.Error(t, err)",
+            "old_line": 143,
+            "new_line": 143
+          },
+          {
+            "kind": "del",
+            "text": "\tassert.Contains(t, err.Error(), `minted for \"ledger\"`)",
+            "old_line": 144,
+            "new_line": null
+          },
+          {
+            "kind": "add",
+            "text": "\tassert.Contains(t, err.Error(), \"minted for [ledger catalog]\")",
+            "old_line": null,
+            "new_line": 144
+          },
+          {
+            "kind": "add",
+            "text": "}",
+            "old_line": null,
+            "new_line": 145
+          },
+          {
+            "kind": "add",
+            "text": "",
+            "old_line": null,
+            "new_line": 146
+          },
+          {
+            "kind": "add",
+            "text": "// The case the equality check got wrong: a token naming this service SECOND is still ours.",
+            "old_line": null,
+            "new_line": 147
+          },
+          {
+            "kind": "add",
+            "text": "func TestVerifyAcceptsATokenMintedForSeveralServices(t *testing.T) {",
+            "old_line": null,
+            "new_line": 148
+          },
+          {
+            "kind": "add",
+            "text": "\tv := newVerifier(t, \"identity\")",
+            "old_line": null,
+            "new_line": 149
+          },
+          {
+            "kind": "add",
+            "text": "\traw := mintFor(t, \"ledger\", \"identity\")",
+            "old_line": null,
+            "new_line": 150
+          },
+          {
+            "kind": "add",
+            "text": "\tclaims, err := v.Verify(t.Context(), raw)",
+            "old_line": null,
+            "new_line": 151
+          },
+          {
+            "kind": "add",
+            "text": "\trequire.NoError(t, err)",
+            "old_line": null,
+            "new_line": 152
+          },
+          {
+            "kind": "add",
+            "text": "\tassert.True(t, claims.Audience.Contains(\"identity\"))",
+            "old_line": null,
+            "new_line": 153
+          },
+          {
+            "kind": "context",
+            "text": "}",
+            "old_line": 145,
+            "new_line": 154
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "services/gateway/internal/mint/token_test.go",
+    "old_path": "services/gateway/internal/mint/token_test.go",
+    "status": "added",
+    "additions": 12,
+    "deletions": 0,
+    "binary": false,
+    "new_mode": "100644",
+    "hunks": [
+      {
+        "index": 0,
+        "header": "@@ -0,0 +1,12 @@",
+        "lines": [
+          "+package mint",
+          "+",
+          "+// Pins the behavior the dropped warning used to paper over: every service the caller named",
+          "+// reaches the token, in the order it was given.",
+          "+func TestForKeepsEveryAudience(t *testing.T) {",
+          "+\tm := newMinter(t)",
+          "+\traw, err := m.For(t.Context(), \"u-1029\", []string{\"identity\", \"ledger\"})",
+          "+\trequire.NoError(t, err)",
+          "+",
+          "+\tclaims := parse(t, raw)",
+          "+\tassert.Equal(t, authkit.Audience{\"identity\", \"ledger\"}, claims.Audience)",
+          "+}"
+        ],
+        "digest": "83cb0786a8b3a40a",
+        "old_start": 0,
+        "old_count": 0,
+        "new_start": 1,
+        "new_count": 12,
+        "rows": [
+          {
+            "kind": "add",
+            "text": "package mint",
+            "old_line": null,
+            "new_line": 1
+          },
+          {
+            "kind": "add",
+            "text": "",
+            "old_line": null,
+            "new_line": 2
+          },
+          {
+            "kind": "add",
+            "text": "// Pins the behavior the dropped warning used to paper over: every service the caller named",
+            "old_line": null,
+            "new_line": 3
+          },
+          {
+            "kind": "add",
+            "text": "// reaches the token, in the order it was given.",
+            "old_line": null,
+            "new_line": 4
+          },
+          {
+            "kind": "add",
+            "text": "func TestForKeepsEveryAudience(t *testing.T) {",
+            "old_line": null,
+            "new_line": 5
+          },
+          {
+            "kind": "add",
+            "text": "\tm := newMinter(t)",
+            "old_line": null,
+            "new_line": 6
+          },
+          {
+            "kind": "add",
+            "text": "\traw, err := m.For(t.Context(), \"u-1029\", []string{\"identity\", \"ledger\"})",
+            "old_line": null,
+            "new_line": 7
+          },
+          {
+            "kind": "add",
+            "text": "\trequire.NoError(t, err)",
+            "old_line": null,
+            "new_line": 8
+          },
+          {
+            "kind": "add",
+            "text": "",
+            "old_line": null,
+            "new_line": 9
+          },
+          {
+            "kind": "add",
+            "text": "\tclaims := parse(t, raw)",
+            "old_line": null,
+            "new_line": 10
+          },
+          {
+            "kind": "add",
+            "text": "\tassert.Equal(t, authkit.Audience{\"identity\", \"ledger\"}, claims.Audience)",
+            "old_line": null,
+            "new_line": 11
+          },
+          {
+            "kind": "add",
+            "text": "}",
+            "old_line": null,
+            "new_line": 12
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "tools/migrate/backfill.sh",
+    "old_path": "tools/migrate/backfill.sh",
+    "status": "modified",
+    "additions": 0,
+    "deletions": 0,
+    "binary": false,
+    "old_mode": "100644",
+    "new_mode": "100755",
+    "hunks": null
+  },
+  {
+    "path": "docs/auth/tokens.md",
+    "old_path": "docs/auth/jwt.md",
+    "status": "renamed",
+    "additions": 6,
+    "deletions": 3,
+    "binary": false,
+    "hunks": [
+      {
+        "index": 0,
+        "header": "@@ -1,8 +1,11 @@",
+        "lines": [
+          "-# JWT claims",
+          "+# Token claims",
+          " ",
+          " A token names the account it was minted for (`sub`), the authority that signed it",
+          "-(`iss`), and the service it is valid at (`aud`).",
+          "+(`iss`), and every service it is valid at (`aud`).",
+          " ",
+          "-`aud` is a single service. A client needing two calls the mint endpoint twice.",
+          "+`aud` is a list. One token can name several services, and verification asserts that the",
+          "+service reading it is among them - so a client needing two no longer mints two tokens.",
+          "+",
+          "+Tokens minted before this release carry `aud` as a bare string. Both shapes are accepted.",
+          " ",
+          " See [rotation](rotation.md) for how signing keys are rolled."
+        ],
+        "digest": "5788aef3ee45d9d4",
+        "old_start": 1,
+        "old_count": 8,
+        "new_start": 1,
+        "new_count": 11,
+        "rows": [
+          {
+            "kind": "del",
+            "text": "# JWT claims",
             "old_line": 1,
+            "new_line": null
+          },
+          {
+            "kind": "add",
+            "text": "# Token claims",
+            "old_line": null,
             "new_line": 1
           },
           {
@@ -926,76 +1313,70 @@ export const DEMO_FILES: readonly WireFile[] = [
             "new_line": 2
           },
           {
-            "kind": "del",
-            "text": "A token carries a subject, an issuer, a scope and an expiry. The scope is a",
+            "kind": "context",
+            "text": "A token names the account it was minted for (`sub`), the authority that signed it",
             "old_line": 3,
-            "new_line": null
+            "new_line": 3
           },
           {
             "kind": "del",
-            "text": "space-separated permission list, and every service reads it to decide what a",
+            "text": "(`iss`), and the service it is valid at (`aud`).",
             "old_line": 4,
             "new_line": null
           },
           {
-            "kind": "del",
-            "text": "caller may do.",
-            "old_line": 5,
-            "new_line": null
-          },
-          {
             "kind": "add",
-            "text": "A token carries a subject, an issuer, an audience and an expiry. The audience",
-            "old_line": null,
-            "new_line": 3
-          },
-          {
-            "kind": "add",
-            "text": "names every service the token may be presented to, and a service not named in",
+            "text": "(`iss`), and every service it is valid at (`aud`).",
             "old_line": null,
             "new_line": 4
           },
           {
-            "kind": "add",
-            "text": "it must refuse the token even when the signature verifies.",
-            "old_line": null,
+            "kind": "context",
+            "text": "",
+            "old_line": 5,
             "new_line": 5
           },
           {
-            "kind": "context",
-            "text": "",
-            "old_line": 6,
-            "new_line": 6
-          },
-          {
-            "kind": "context",
-            "text": "## Verifying",
-            "old_line": 7,
-            "new_line": 7
-          },
-          {
-            "kind": "context",
-            "text": "",
-            "old_line": 8,
-            "new_line": 8
-          },
-          {
             "kind": "del",
-            "text": "Call `authkit.Claims.Valid` and then check the scope yourself.",
-            "old_line": 9,
+            "text": "`aud` is a single service. A client needing two calls the mint endpoint twice.",
+            "old_line": 6,
             "new_line": null
           },
           {
             "kind": "add",
-            "text": "Call `authkit.Claims.Valid`, then check the audience with `Audiences.Accepts`.",
+            "text": "`aud` is a list. One token can name several services, and verification asserts that the",
+            "old_line": null,
+            "new_line": 6
+          },
+          {
+            "kind": "add",
+            "text": "service reading it is among them - so a client needing two no longer mints two tokens.",
+            "old_line": null,
+            "new_line": 7
+          },
+          {
+            "kind": "add",
+            "text": "",
+            "old_line": null,
+            "new_line": 8
+          },
+          {
+            "kind": "add",
+            "text": "Tokens minted before this release carry `aud` as a bare string. Both shapes are accepted.",
             "old_line": null,
             "new_line": 9
           },
           {
-            "kind": "add",
-            "text": "A token carrying no audience at all is refused by `Valid` - see `ErrNoAudience`.",
-            "old_line": null,
+            "kind": "context",
+            "text": "",
+            "old_line": 7,
             "new_line": 10
+          },
+          {
+            "kind": "context",
+            "text": "See [rotation](rotation.md) for how signing keys are rolled.",
+            "old_line": 8,
+            "new_line": 11
           }
         ]
       }
@@ -1005,76 +1386,62 @@ export const DEMO_FILES: readonly WireFile[] = [
     "path": "libs/protocol/gen/token_pb.go",
     "old_path": "libs/protocol/gen/token_pb.go",
     "status": "modified",
-    "additions": 2,
-    "deletions": 1,
+    "additions": 1,
+    "deletions": 0,
     "binary": false,
     "hunks": [
       {
         "index": 0,
-        "header": "@@ -211,6 +211,7 @@ func (x *Token) GetClaims() *Claims {",
+        "header": "@@ -211,5 +211,6 @@ func (x *Token) GetClaims() *Claims {",
         "lines": [
-          " type Claims struct {",
-          " \tstate         protoimpl.MessageState",
-          " \tSubject       string   `protobuf:\"bytes,1,opt,name=subject,proto3\" json:\"subject,omitempty\"`",
-          "-\tScope         string   `protobuf:\"bytes,2,opt,name=scope,proto3\" json:\"scope,omitempty\"`",
-          "+\tAudience      []string `protobuf:\"bytes,2,rep,name=audience,proto3\" json:\"audience,omitempty\"`",
-          "+\tIssuedAt      int64    `protobuf:\"varint,3,opt,name=issued_at,json=issuedAt,proto3\" json:\"issued_at,omitempty\"`",
-          " \tExpiresAt     int64    `protobuf:\"varint,4,opt,name=expires_at,json=expiresAt,proto3\" json:\"expires_at,omitempty\"`",
+          " \tif x != nil {",
+          " \t\treturn x.Claims",
+          " \t}",
+          "+\t// regenerated from proto/auth/v1/token.proto",
+          " \treturn nil",
           " }"
         ],
-        "digest": "43065bab7091a97e",
+        "digest": "231219345d503b07",
         "old_start": 211,
-        "old_count": 6,
+        "old_count": 5,
         "new_start": 211,
-        "new_count": 7,
+        "new_count": 6,
         "rows": [
           {
             "kind": "context",
-            "text": "type Claims struct {",
+            "text": "\tif x != nil {",
             "old_line": 211,
             "new_line": 211
           },
           {
             "kind": "context",
-            "text": "\tstate         protoimpl.MessageState",
+            "text": "\t\treturn x.Claims",
             "old_line": 212,
             "new_line": 212
           },
           {
             "kind": "context",
-            "text": "\tSubject       string   `protobuf:\"bytes,1,opt,name=subject,proto3\" json:\"subject,omitempty\"`",
+            "text": "\t}",
             "old_line": 213,
             "new_line": 213
           },
           {
-            "kind": "del",
-            "text": "\tScope         string   `protobuf:\"bytes,2,opt,name=scope,proto3\" json:\"scope,omitempty\"`",
-            "old_line": 214,
-            "new_line": null
-          },
-          {
             "kind": "add",
-            "text": "\tAudience      []string `protobuf:\"bytes,2,rep,name=audience,proto3\" json:\"audience,omitempty\"`",
+            "text": "\t// regenerated from proto/auth/v1/token.proto",
             "old_line": null,
             "new_line": 214
           },
           {
-            "kind": "add",
-            "text": "\tIssuedAt      int64    `protobuf:\"varint,3,opt,name=issued_at,json=issuedAt,proto3\" json:\"issued_at,omitempty\"`",
-            "old_line": null,
+            "kind": "context",
+            "text": "\treturn nil",
+            "old_line": 214,
             "new_line": 215
           },
           {
             "kind": "context",
-            "text": "\tExpiresAt     int64    `protobuf:\"varint,4,opt,name=expires_at,json=expiresAt,proto3\" json:\"expires_at,omitempty\"`",
+            "text": "}",
             "old_line": 215,
             "new_line": 216
-          },
-          {
-            "kind": "context",
-            "text": "}",
-            "old_line": 216,
-            "new_line": 217
           }
         ]
       }
@@ -1084,69 +1451,55 @@ export const DEMO_FILES: readonly WireFile[] = [
     "path": "apps/dashboard/src/gen/session_pb.ts",
     "old_path": "apps/dashboard/src/gen/session_pb.ts",
     "status": "modified",
-    "additions": 2,
+    "additions": 1,
     "deletions": 1,
     "binary": false,
     "hunks": [
       {
         "index": 0,
-        "header": "@@ -64,5 +64,6 @@",
+        "header": "@@ -64,4 +64,4 @@",
         "lines": [
-          "   fields: [",
-          "     { no: 1, name: \"subject\", kind: \"scalar\", T: 9 },",
-          "-    { no: 2, name: \"scope\", kind: \"scalar\", T: 9 },",
-          "+    { no: 2, name: \"audience\", kind: \"scalar\", T: 9, repeated: true },",
-          "+    { no: 3, name: \"issued_at\", kind: \"scalar\", T: 3 },",
-          "     { no: 4, name: \"expires_at\", kind: \"scalar\", T: 3 },",
-          "   ],"
+          "   sub: string;",
+          "   iss: string;",
+          "-  aud: string;",
+          "+  aud: string[];",
+          " }"
         ],
-        "digest": "84191db6281463c1",
+        "digest": "11bce61378e571b4",
         "old_start": 64,
-        "old_count": 5,
+        "old_count": 4,
         "new_start": 64,
-        "new_count": 6,
+        "new_count": 4,
         "rows": [
           {
             "kind": "context",
-            "text": "  fields: [",
+            "text": "  sub: string;",
             "old_line": 64,
             "new_line": 64
           },
           {
             "kind": "context",
-            "text": "    { no: 1, name: \"subject\", kind: \"scalar\", T: 9 },",
+            "text": "  iss: string;",
             "old_line": 65,
             "new_line": 65
           },
           {
             "kind": "del",
-            "text": "    { no: 2, name: \"scope\", kind: \"scalar\", T: 9 },",
+            "text": "  aud: string;",
             "old_line": 66,
             "new_line": null
           },
           {
             "kind": "add",
-            "text": "    { no: 2, name: \"audience\", kind: \"scalar\", T: 9, repeated: true },",
+            "text": "  aud: string[];",
             "old_line": null,
             "new_line": 66
           },
           {
-            "kind": "add",
-            "text": "    { no: 3, name: \"issued_at\", kind: \"scalar\", T: 3 },",
-            "old_line": null,
-            "new_line": 67
-          },
-          {
             "kind": "context",
-            "text": "    { no: 4, name: \"expires_at\", kind: \"scalar\", T: 3 },",
+            "text": "}",
             "old_line": 67,
-            "new_line": 68
-          },
-          {
-            "kind": "context",
-            "text": "  ],",
-            "old_line": 68,
-            "new_line": 69
+            "new_line": 67
           }
         ]
       }
@@ -1164,12 +1517,12 @@ export const DEMO_FILES: readonly WireFile[] = [
         "index": 0,
         "header": "@@ -18,3 +18,3 @@",
         "lines": [
-          "   <h1>Tokens</h1>",
-          "-  <p>A token carries a subject, an issuer, a scope and an expiry.</p>",
-          "+  <p>A token carries a subject, an issuer, an audience and an expiry.</p>",
-          "   <h2>Verifying</h2>"
+          " <article>",
+          "-<h1>JWT claims</h1>",
+          "+<h1>Token claims</h1>",
+          " </article>"
         ],
-        "digest": "6df4d5f131204c88",
+        "digest": "2411f8caef74012d",
         "old_start": 18,
         "old_count": 3,
         "new_start": 18,
@@ -1177,25 +1530,25 @@ export const DEMO_FILES: readonly WireFile[] = [
         "rows": [
           {
             "kind": "context",
-            "text": "  <h1>Tokens</h1>",
+            "text": "<article>",
             "old_line": 18,
             "new_line": 18
           },
           {
             "kind": "del",
-            "text": "  <p>A token carries a subject, an issuer, a scope and an expiry.</p>",
+            "text": "<h1>JWT claims</h1>",
             "old_line": 19,
             "new_line": null
           },
           {
             "kind": "add",
-            "text": "  <p>A token carries a subject, an issuer, an audience and an expiry.</p>",
+            "text": "<h1>Token claims</h1>",
             "old_line": null,
             "new_line": 19
           },
           {
             "kind": "context",
-            "text": "  <h2>Verifying</h2>",
+            "text": "</article>",
             "old_line": 20,
             "new_line": 20
           }

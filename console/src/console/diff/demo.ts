@@ -174,6 +174,52 @@ export function demoSession(): DiffSession {
           reach: 0,
         },
         {
+          // The third consumer the reach numbers above have always named and the changeset
+          // never contained: Claims lists services/gateway among its external projects, so a
+          // contract change that left the gateway untouched was a blast radius contradicting
+          // its own annotation.
+          path: "services/gateway/internal/mint/token.go",
+          project: "services/gateway",
+          role: "source",
+          hint: HINT_SOURCE,
+          surface: "internal",
+          reach: 9,
+          churn: { commits: 12, authors: 3, score: 1284 },
+          touches: [{ host: AGENT.host, session: AGENT.session }],
+        },
+        {
+          path: "services/gateway/internal/mint/token_test.go",
+          project: "services/gateway",
+          role: "source",
+          hint: HINT_SOURCE,
+          surface: "internal",
+          reach: 0,
+        },
+        {
+          // A BINARY file: no hunks, and the surface has to say so rather than render an empty
+          // diff, which reads as "nothing changed". A golden fixture regenerated because the
+          // type it captures moved is the most ordinary way one appears in a review.
+          path: "libs/authkit/testdata/claims.golden",
+          project: "libs/authkit",
+          role: "source",
+          hint: HINT_SOURCE,
+          surface: "internal",
+          reach: 0,
+          churn: { commits: 4, authors: 2, score: 96 },
+        },
+        {
+          // A MODE change and nothing else: no hunks either, for a different reason. A script
+          // becoming executable is a real reviewable event that renders as an empty entry
+          // unless the surface reads the mode.
+          path: "tools/migrate/backfill.sh",
+          project: "tools/migrate",
+          role: "source",
+          hint: HINT_SOURCE,
+          surface: "internal",
+          reach: 0,
+          churn: { commits: 2, authors: 1, score: 18 },
+        },
+        {
           path: "services/identity/internal/token/legacy_audience.go",
           project: "services/identity",
           role: "source",

@@ -2,191 +2,248 @@ diff --git a/libs/authkit/claims.go b/libs/authkit/claims.go
 index 4c1d9a2..a77f30e 100644
 --- a/libs/authkit/claims.go
 +++ b/libs/authkit/claims.go
-@@ -14,10 +14,12 @@ type Claims struct {
+@@ -14,10 +14,14 @@ type Claims struct {
  	// Subject is the account the token was minted for.
  	Subject string `json:"sub"`
  	// Issuer is the authority that signed it.
  	Issuer string `json:"iss"`
--	// Scope is the space-separated permission list.
--	Scope string `json:"scope"`
+-	// Audience is the service this token was minted for.
 -	Audience string `json:"aud"`
-+	// Audience is every service this token may be presented to. Asserted on
-+	// verify, never logged: it names the systems the holder can reach.
-+	Audience []string `json:"aud"`
-+	// IssuedAt is when the authority signed the token, in epoch seconds.
-+	IssuedAt int64 `json:"iat"`
- 	// ExpiresAt is when the token stops verifying.
- 	ExpiresAt int64 `json:"exp"`
- }
-@@ -41,8 +43,11 @@ func (c Claims) Valid(now time.Time) error {
++	// Audience lists every service this token is valid at. The gateway mints one token
++	// accepted by identity and ledger both, which a single value cannot express.
++	Audience Audience `json:"aud"`
++	// Scope stays for one release so tools/migrate can drain the old mint path.
++	// Remove it once no unexpired token carries one.
++	Scope string `json:"scope,omitempty"`
+ 	// IssuedAt is when it was minted.
+ 	IssuedAt time.Time `json:"iat"`
+ 	// ExpiresAt is when it stops being accepted.
+ 	ExpiresAt time.Time `json:"exp"`
+@@ -41,8 +45,13 @@ func (c Claims) Valid(now time.Time) error {
  	if c.Subject == "" {
- 		return ErrNoSubject
+ 		return fmt.Errorf("authkit: claims carry no subject")
  	}
--	if c.ExpiresAt < now.Unix() {
--		return errors.New("token: expired")
-+	if c.ExpiresAt <= now.Unix() {
-+		return ErrExpired
- 	}
++	// An empty audience used to mean "valid anywhere", which is the failure you find in an
++	// incident review rather than in a test. It is now a refusal at the type boundary.
 +	if len(c.Audience) == 0 {
-+		return ErrNoAudience
++		return fmt.Errorf("authkit: claims carry no audience")
 +	}
+ 	if now.After(c.ExpiresAt) {
+ 		return fmt.Errorf("authkit: token expired at %s", c.ExpiresAt.Format(time.RFC3339))
+ 	}
  	return nil
- }
-diff --git a/services/identity/internal/token/verify.go b/services/identity/internal/token/verify.go
-index 9b0c145..2e83aa7 100644
---- a/services/identity/internal/token/verify.go
-+++ b/services/identity/internal/token/verify.go
-@@ -28,12 +28,17 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*authkit.Claims, error) {
- 	claims, err := v.keys.Decode(ctx, raw)
- 	if err != nil {
- 		return nil, fmt.Errorf("token: decode: %w", err)
- 	}
--	if claims.Scope == "" {
--		return nil, errors.New("token: no scope")
-+	if !slices.Contains(claims.Audience, v.audience) {
-+		// The audience is the whole point of the claim: a token minted for the
-+		// admin app must not verify here just because the signature checks out.
-+		return nil, fmt.Errorf("token: audience %q not accepted", v.audience)
- 	}
- 	if err := claims.Valid(v.now()); err != nil {
- 		return nil, err
- 	}
-+	if claims.IssuedAt > v.now().Add(leeway).Unix() {
-+		return nil, ErrFromTheFuture
-+	}
- 	return claims, nil
- }
-diff --git a/apps/dashboard/src/api/session.ts b/apps/dashboard/src/api/session.ts
-index 0d5f7b1..c4a9e33 100644
---- a/apps/dashboard/src/api/session.ts
-+++ b/apps/dashboard/src/api/session.ts
-@@ -38,7 +38,8 @@ export interface SessionClaims {
-   readonly subject: string;
--  readonly scope: string;
-+  readonly audience: readonly string[];
-+  readonly issuedAt: number;
-   readonly expiresAt: number;
- }
- export function canReach(claims: SessionClaims, service: string): boolean {
--  return claims.scope.split(" ").includes(service);
-+  return claims.audience.includes(service);
  }
 diff --git a/libs/authkit/audience.go b/libs/authkit/audience.go
 new file mode 100644
-index 0000000..5f1b2c9
+index 0000000..b31c8d5
 --- /dev/null
 +++ b/libs/authkit/audience.go
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,32 @@
 +package authkit
 +
-+// Audiences is the set a verifier accepts. Ordered, so a token minted for two
-+// services verifies the same way whichever one reads it first.
-+type Audiences []string
++import "slices"
 +
-+// Accepts reports whether aud names a service in the set.
-+func (a Audiences) Accepts(aud string) bool {
-+	return slices.Contains(a, aud)
++// Audience is every service a token is valid at.
++//
++// A named slice rather than []string so the JSON shape is decided in one place: a single
++// audience still marshals as a bare string, which is what RFC 7519 permits and what every
++// token already in flight carries.
++type Audience []string
++
++// Contains reports whether the token names svc. Verification asserts membership rather than
++// equality - a token minted for two services is valid at both.
++func (a Audience) Contains(svc string) bool {
++	return slices.Contains(a, svc)
 +}
 +
-+// ErrNoAudience is what Claims.Valid returns for a token carrying no audience.
-+var ErrNoAudience = errors.New("token: no audience")
++// UnmarshalJSON accepts both the bare string every existing token carries and the array new
++// ones do. Dropping the string form would invalidate every unexpired token at once.
++func (a *Audience) UnmarshalJSON(b []byte) error {
++	var one string
++	if err := json.Unmarshal(b, &one); err == nil {
++		*a = Audience{one}
++		return nil
++	}
++	var many []string
++	if err := json.Unmarshal(b, &many); err != nil {
++		return fmt.Errorf("authkit: audience is neither a string nor an array: %w", err)
++	}
++	*a = many
++	return nil
++}
+diff --git a/libs/authkit/testdata/claims.golden b/libs/authkit/testdata/claims.golden
+index 8a1f0c3..2d9e4b7 100644
+Binary files a/libs/authkit/testdata/claims.golden and b/libs/authkit/testdata/claims.golden differ
+diff --git a/services/identity/internal/token/verify.go b/services/identity/internal/token/verify.go
+index 7b2e441..1d90ca8 100644
+--- a/services/identity/internal/token/verify.go
++++ b/services/identity/internal/token/verify.go
+@@ -28,11 +28,13 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*authkit.Claims, error) {
+ 	if err := claims.Valid(v.clock.Now()); err != nil {
+ 		return nil, fmt.Errorf("token: %w", err)
+ 	}
+-	if claims.Audience != v.service {
+-		return nil, fmt.Errorf("token: minted for %q, not %q", claims.Audience, v.service)
++	// Membership, not equality: the gateway mints one token this service and the ledger
++	// both accept, and an equality check rejects it at whichever one is not listed first.
++	if !claims.Audience.Contains(v.service) {
++		return nil, fmt.Errorf("token: minted for %v, not %q", claims.Audience, v.service)
+ 	}
+ 	if v.revoked.Has(claims.ID) {
+ 		return nil, ErrRevoked
+ 	}
+ 	return &claims, nil
+ }
+diff --git a/services/gateway/internal/mint/token.go b/services/gateway/internal/mint/token.go
+index 3c7d012..e58ab94 100644
+--- a/services/gateway/internal/mint/token.go
++++ b/services/gateway/internal/mint/token.go
+@@ -52,14 +52,10 @@ func (m *Minter) For(ctx context.Context, sub string, svcs []string) (string, error) {
+ 	now := m.clock.Now()
+ 	claims := authkit.Claims{
+ 		Subject:   sub,
+ 		Issuer:    m.issuer,
+-		Audience:  svcs[0],
++		Audience:  authkit.Audience(svcs),
+ 		IssuedAt:  now,
+ 		ExpiresAt: now.Add(m.ttl),
+ 	}
+-	// Callers passing more than one service got the first and no warning.
+-	if len(svcs) > 1 {
+-		m.log.WarnContext(ctx, "mint: extra audiences dropped", "dropped", svcs[1:])
+-	}
+ 	return m.sign(claims)
+ }
 diff --git a/services/identity/internal/token/legacy_audience.go b/services/identity/internal/token/legacy_audience.go
 deleted file mode 100644
-index 8ad0f21..0000000
+index 5e0b7a1..0000000
 --- a/services/identity/internal/token/legacy_audience.go
 +++ /dev/null
 @@ -1,13 +0,0 @@
 -package token
 -
--// legacyAudience read the audience out of the scope string, which is where it
--// lived before authkit.Claims carried one. Nothing mints scope-encoded
--// audiences any more.
--func legacyAudience(scope string) string {
--	for _, s := range strings.Fields(scope) {
--		if strings.HasPrefix(s, "aud:") {
--			return strings.TrimPrefix(s, "aud:")
--		}
+-// LegacyAudience read the audience out of the issuer when the claim was absent.
+-//
+-// It dates from before the gateway set an audience at all, and every token it was written
+-// for expired years ago. The only caller left was Verify, which no longer needs it: an
+-// absent audience is now refused by Claims.Valid rather than guessed at here.
+-func LegacyAudience(issuer string) string {
+-	if i := strings.LastIndex(issuer, "/"); i >= 0 {
+-		return issuer[i+1:]
 -	}
--	return ""
+-	return issuer
 -}
+diff --git a/apps/dashboard/src/api/session.ts b/apps/dashboard/src/api/session.ts
+index 9f3b1a7..c2e88d4 100644
+--- a/apps/dashboard/src/api/session.ts
++++ b/apps/dashboard/src/api/session.ts
+@@ -38,7 +38,7 @@ export interface SessionClaims {
+   readonly sub: string;
+   readonly iss: string;
+-  readonly aud: string;
+-  readonly scope: string;
++  // Both shapes reach the browser: tokens minted before this release carry a bare string.
++  readonly aud: string | readonly string[];
+   readonly iat: number;
+   readonly exp: number;
+ }
+@@ -61,2 +61,3 @@ export function canReach(claims: SessionClaims, service: string): boolean {
+-  return claims.scope.split(" ").includes(service);
++  const aud = typeof claims.aud === "string" ? [claims.aud] : claims.aud;
++  return aud.includes(service);
+ }
 diff --git a/services/identity/internal/token/verify_test.go b/services/identity/internal/token/verify_test.go
-index 71c0aa8..b9d4e51 100644
+index 2a91f04..7c3e5b8 100644
 --- a/services/identity/internal/token/verify_test.go
 +++ b/services/identity/internal/token/verify_test.go
-@@ -140,9 +140,16 @@ func TestVerifyAudienceMismatch(t *testing.T) {
- 	v := newTestVerifier(t, "acme-dashboard")
- 	claims, err := v.Verify(t.Context(), mint(t, "acme-admin"))
--	if err != nil {
--		t.Fatalf("Verify(admin token) error = %v, want nil", err)
-+	if !errors.Is(err, token.ErrAudience) {
-+		t.Fatalf("Verify(admin token) error = %v, want %v", err, token.ErrAudience)
- 	}
--	if claims.Audience != "acme-dashboard" {
--		t.Fatalf("claims.Audience = %q, want %q", claims.Audience, "acme-dashboard")
-+	if claims != nil {
-+		t.Fatalf("Verify(admin token) claims = %v, want nil", claims)
- 	}
- }
-+
-+func TestVerifyFromTheFuture(t *testing.T) {
-+	v := newTestVerifier(t, "acme-dashboard")
-+	if _, err := v.Verify(t.Context(), mintAt(t, "acme-dashboard", future)); err == nil {
-+		t.Fatal("Verify(future token) error = nil, want token: issued in the future")
-+	}
+@@ -140,6 +140,15 @@ func TestVerifyAudienceMismatch(t *testing.T) {
+ 	v := newVerifier(t, "identity")
+-	raw := mintFor(t, "ledger")
++	raw := mintFor(t, "ledger", "catalog")
+ 	_, err := v.Verify(t.Context(), raw)
+ 	require.Error(t, err)
+-	assert.Contains(t, err.Error(), `minted for "ledger"`)
++	assert.Contains(t, err.Error(), "minted for [ledger catalog]")
 +}
++
++// The case the equality check got wrong: a token naming this service SECOND is still ours.
++func TestVerifyAcceptsATokenMintedForSeveralServices(t *testing.T) {
++	v := newVerifier(t, "identity")
++	raw := mintFor(t, "ledger", "identity")
++	claims, err := v.Verify(t.Context(), raw)
++	require.NoError(t, err)
++	assert.True(t, claims.Audience.Contains("identity"))
+ }
+diff --git a/services/gateway/internal/mint/token_test.go b/services/gateway/internal/mint/token_test.go
+new file mode 100644
+index 0000000..4b8e1c9
+--- /dev/null
++++ b/services/gateway/internal/mint/token_test.go
+@@ -0,0 +1,12 @@
++package mint
++
++// Pins the behavior the dropped warning used to paper over: every service the caller named
++// reaches the token, in the order it was given.
++func TestForKeepsEveryAudience(t *testing.T) {
++	m := newMinter(t)
++	raw, err := m.For(t.Context(), "u-1029", []string{"identity", "ledger"})
++	require.NoError(t, err)
++
++	claims := parse(t, raw)
++	assert.Equal(t, authkit.Audience{"identity", "ledger"}, claims.Audience)
++}
+diff --git a/tools/migrate/backfill.sh b/tools/migrate/backfill.sh
+old mode 100644
+new mode 100755
 diff --git a/docs/auth/jwt.md b/docs/auth/tokens.md
-similarity index 74%
+similarity index 71%
 rename from docs/auth/jwt.md
 rename to docs/auth/tokens.md
-index 2c9e004..6b1f8ad 100644
+index 6d4a2b8..0e51f93 100644
 --- a/docs/auth/jwt.md
 +++ b/docs/auth/tokens.md
-@@ -1,9 +1,10 @@
- # Tokens
+@@ -1,8 +1,11 @@
+-# JWT claims
++# Token claims
  
--A token carries a subject, an issuer, a scope and an expiry. The scope is a
--space-separated permission list, and every service reads it to decide what a
--caller may do.
-+A token carries a subject, an issuer, an audience and an expiry. The audience
-+names every service the token may be presented to, and a service not named in
-+it must refuse the token even when the signature verifies.
+ A token names the account it was minted for (`sub`), the authority that signed it
+-(`iss`), and the service it is valid at (`aud`).
++(`iss`), and every service it is valid at (`aud`).
  
- ## Verifying
+-`aud` is a single service. A client needing two calls the mint endpoint twice.
++`aud` is a list. One token can name several services, and verification asserts that the
++service reading it is among them - so a client needing two no longer mints two tokens.
++
++Tokens minted before this release carry `aud` as a bare string. Both shapes are accepted.
  
--Call `authkit.Claims.Valid` and then check the scope yourself.
-+Call `authkit.Claims.Valid`, then check the audience with `Audiences.Accepts`.
-+A token carrying no audience at all is refused by `Valid` - see `ErrNoAudience`.
+ See [rotation](rotation.md) for how signing keys are rolled.
 diff --git a/libs/protocol/gen/token_pb.go b/libs/protocol/gen/token_pb.go
-index 33ab901..cd7e412 100644
+index 1a4f7c9..8b2e0d3 100644
 --- a/libs/protocol/gen/token_pb.go
 +++ b/libs/protocol/gen/token_pb.go
-@@ -211,6 +211,7 @@ func (x *Token) GetClaims() *Claims {
- type Claims struct {
- 	state         protoimpl.MessageState
- 	Subject       string   `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
--	Scope         string   `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-+	Audience      []string `protobuf:"bytes,2,rep,name=audience,proto3" json:"audience,omitempty"`
-+	IssuedAt      int64    `protobuf:"varint,3,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
- 	ExpiresAt     int64    `protobuf:"varint,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+@@ -211,5 +211,6 @@ func (x *Token) GetClaims() *Claims {
+ 	if x != nil {
+ 		return x.Claims
+ 	}
++	// regenerated from proto/auth/v1/token.proto
+ 	return nil
  }
 diff --git a/apps/dashboard/src/gen/session_pb.ts b/apps/dashboard/src/gen/session_pb.ts
-index a71ff30..e0c4b18 100644
+index 7c1b90a..3f2ea45 100644
 --- a/apps/dashboard/src/gen/session_pb.ts
 +++ b/apps/dashboard/src/gen/session_pb.ts
-@@ -64,5 +64,6 @@
-   fields: [
-     { no: 1, name: "subject", kind: "scalar", T: 9 },
--    { no: 2, name: "scope", kind: "scalar", T: 9 },
-+    { no: 2, name: "audience", kind: "scalar", T: 9, repeated: true },
-+    { no: 3, name: "issued_at", kind: "scalar", T: 3 },
-     { no: 4, name: "expires_at", kind: "scalar", T: 3 },
-   ],
+@@ -64,4 +64,4 @@
+   sub: string;
+   iss: string;
+-  aud: string;
++  aud: string[];
+ }
 diff --git a/docs/gen/auth/tokens.html b/docs/gen/auth/tokens.html
-index 5504e1b..9c2f7a6 100644
+index 2e8f471..9d03c6a 100644
 --- a/docs/gen/auth/tokens.html
 +++ b/docs/gen/auth/tokens.html
 @@ -18,3 +18,3 @@
-   <h1>Tokens</h1>
--  <p>A token carries a subject, an issuer, a scope and an expiry.</p>
-+  <p>A token carries a subject, an issuer, an audience and an expiry.</p>
-   <h2>Verifying</h2>
+ <article>
+-<h1>JWT claims</h1>
++<h1>Token claims</h1>
+ </article>

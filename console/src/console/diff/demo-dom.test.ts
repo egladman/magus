@@ -53,7 +53,7 @@ test("#demo renders the changeset with no daemon", async () => {
   const text = [...document.querySelectorAll(".console-diff-row__text")].map(
     (el) => el.textContent,
   );
-  assert.ok(text.some((t) => t?.includes("Audience []string")));
+  assert.ok(text.some((t) => t?.includes("Audience Audience")));
 
   dispose.deactivate();
 });
@@ -63,7 +63,7 @@ test("#demo lists the primary files in the sidebar and folds the generated group
   const dispose = activate(document.body);
   await settle();
 
-  assert.equal(document.querySelectorAll(".console-diff-sidebar__item").length, 7);
+  assert.equal(document.querySelectorAll(".console-diff-sidebar__item").length, 11);
   assert.equal(document.querySelector(".console-diff-sidebar__group")?.textContent, "3 generated");
 
   const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
@@ -73,7 +73,7 @@ test("#demo lists the primary files in the sidebar and folds the generated group
   // the shell's connection pill, the one place every surface says it. A second badge here made
   // the diff the only surface announcing demo twice, in a style nothing else uses.
   assert.ok(!chips.includes("demo data"), "demo state belongs to the connection pill, not a chip");
-  assert.ok(chips.includes("7 files"));
+  assert.ok(chips.includes("11 files"));
   assert.ok(chips.includes("1 public surface"));
   assert.ok(chips.includes("1 untested"));
   // The ranking key is present in the fixture, so the surface must NOT be wearing the

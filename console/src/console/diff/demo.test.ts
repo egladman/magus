@@ -23,11 +23,15 @@ test("the generated changeset holds the files the showcase claims", () => {
     files.map((f) => f.path),
     [
       "libs/authkit/claims.go",
-      "services/identity/internal/token/verify.go",
-      "apps/dashboard/src/api/session.ts",
       "libs/authkit/audience.go",
+      "libs/authkit/testdata/claims.golden",
+      "services/identity/internal/token/verify.go",
+      "services/gateway/internal/mint/token.go",
       "services/identity/internal/token/legacy_audience.go",
+      "apps/dashboard/src/api/session.ts",
       "services/identity/internal/token/verify_test.go",
+      "services/gateway/internal/mint/token_test.go",
+      "tools/migrate/backfill.sh",
       "docs/auth/tokens.md",
       "libs/protocol/gen/token_pb.go",
       "apps/dashboard/src/gen/session_pb.ts",
@@ -43,6 +47,22 @@ test("the generated changeset holds the files the showcase claims", () => {
   const doc = byPath.get("docs/auth/tokens.md");
   assert.equal(doc?.status, "renamed");
   assert.equal(doc?.oldPath, "docs/auth/jwt.md");
+});
+
+// The two files that carry NO hunks, for two different reasons. Both render as an empty entry
+// unless the surface reads why they are empty, and "nothing changed" is false in both cases.
+test("the changeset exercises the states that produce no hunks", () => {
+  const byPath = new Map(files.map((f) => [f.path, f]));
+
+  const golden = byPath.get("libs/authkit/testdata/claims.golden");
+  assert.equal(golden?.binary, true, "a binary file the surface must name as binary");
+  assert.deepEqual(golden?.hunks, []);
+
+  const script = byPath.get("tools/migrate/backfill.sh");
+  assert.equal(script?.binary, false, "a mode change is not a binary payload");
+  assert.deepEqual(script?.hunks, []);
+  assert.equal(script?.oldMode, "100644");
+  assert.equal(script?.newMode, "100755");
 });
 
 // Every hand-written @@ header states a line count. parsePatch does not check them, so a header
@@ -96,7 +116,7 @@ test("the demo changeset folds its generated files and leads with the widest one
   );
   assert.equal(cs.primary[0]?.file.path, "libs/authkit/claims.go");
   const s = stats(cs);
-  assert.equal(s.files, 7);
+  assert.equal(s.files, 11);
   assert.equal(s.generated, 3);
   assert.equal(s.publicSurface, 1);
   assert.equal(s.untested, 1);
@@ -123,9 +143,9 @@ test("demo mode builds rows from the demo payload", () => {
   );
   // A story row for each file the trail says an agent wrote, and a comment row under each
   // annotated hunk - both are rows, which is what makes them scroll with the code.
-  assert.equal(rows.filter((r) => r.kind === "story").length, 3);
+  assert.equal(rows.filter((r) => r.kind === "story").length, 4);
   assert.equal(rows.filter((r) => r.kind === "comment").length, 3);
-  assert.ok(rows.some((r) => r.kind === "line" && r.line.text.includes("Audience []string")));
+  assert.ok(rows.some((r) => r.kind === "line" && r.line.text.includes("Audience Audience")));
 });
 
 test("the ranking key is present, so the surface may claim an order", () => {
