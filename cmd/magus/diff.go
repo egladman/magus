@@ -54,6 +54,15 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// either on every tree change would re-render identical output forever.
 		return usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
 	}
+	if rf.Ack && src.kind != inputWorkingTree {
+		// A receipt fingerprints the file on disk, and a patch describes files that may
+		// not be there. Accepting it would record receipts against whatever the working
+		// tree happens to hold - an acknowledgement of something nobody read.
+		return usagef("magus diff: --ack fingerprints the working tree, so it cannot be combined with %s", src.label)
+	}
+	if rf.Ack && (rf.Tui || rf.Watch) {
+		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
+	}
 	if rf.Cost && rf.Tui {
 		// Refused rather than ignored. The viewer has nowhere to put a report, so accepting the
 		// flag would answer the question with a page that never mentions it - and a flag that
@@ -232,6 +241,15 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	if err != nil {
 		return err
 	}
+	if rf.Ack {
+		n, err := ackChangeset(m.Root(), m.CacheDir(), rev, time.Now())
+		if err != nil {
+			return err
+		}
+		fmt.Printf("recorded %d read receipt(s) at the current content; editing a file voids its receipt\n", n)
+		return nil
+	}
+
 	var pre *diffPreflight
 	if preflight {
 		p := collectPreflight(ctx, m, rootOverride, rev)
@@ -1068,8 +1086,9 @@ type diffPreflight struct {
 	Advisors  []adviceSection  `json:"advisors,omitempty"  yaml:"advisors,omitempty"`
 	// AdvisorNotes names each advisor that could not run. Surfaced rather than swallowed, so
 	// an empty advisor list reads as "they all passed" only when it is one.
-	AdvisorNotes []string    `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
-	Anchors      []anchorHit `json:"anchors,omitempty"       yaml:"anchors,omitempty"`
+	AdvisorNotes []string         `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
+	Anchors      []anchorHit      `json:"anchors,omitempty"       yaml:"anchors,omitempty"`
+	Review       *preflightReview `json:"review,omitempty"        yaml:"review,omitempty"`
 }
 
 // preflightReach is the blast radius: what was edited, and what rebuilds because of it.
@@ -1163,6 +1182,7 @@ func collectPreflight(ctx context.Context, m *magus.Magus, rootOverride string, 
 	// the override they were first handed, so the anchors' graph load must spell the root
 	// exactly as diffCmd's own load did.
 	p.Anchors = preflightAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
+	p.Review = collectReview(m.Root(), m.CacheDir(), rev)
 	return p
 }
 
@@ -1301,6 +1321,7 @@ func preflightLines(p diffPreflight) []string {
 		preflightCostLines(p.Cost),
 		preflightAdvisorLines(p.Advisors, p.AdvisorNotes),
 		preflightAnchorLines(p.Anchors),
+		preflightReviewLines(p.Review),
 	}
 	for i, s := range sections {
 		if i > 0 {

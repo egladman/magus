@@ -139,6 +139,8 @@ const (
 	FlagDescribeTargetInputs = "inputs"
 	// describe target: --no-default-charms
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
+	// diff: --ack
+	FlagDiffAck = "ack"
 	// diff: --cost
 	FlagDiffCost = "cost"
 	// diff: --generated
@@ -1009,6 +1011,7 @@ type DiffFlags struct {
 	Cost      bool // --cost
 	Tui       bool // --tui
 	Watch     bool // --watch
+	Ack       bool // --ack
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
@@ -1018,6 +1021,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.BoolVar(&f.Cost, FlagDiffCost, false, "Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
 	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
+	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --cost reports what carries no such record")
 	return &f
 }
 

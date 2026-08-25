@@ -225,6 +225,10 @@ func preflightFixture() diffPreflight {
 			{Note: "cache-invalidation-pairs", Kind: "file", Target: "internal/cache/cache.go"},
 			{Note: "secret-value-type", Kind: "symbol", Target: "m types/Secret#", Drift: "drifted-anchor"},
 		},
+		Review: &preflightReview{
+			Files: 4, Read: 3, Stale: 1,
+			Unread: []string{"internal/cache/cache.go (read, then changed)"},
+		},
 	}
 }
 
@@ -258,6 +262,10 @@ func TestPreflightRendersEverySection(t *testing.T) {
 		"ANCHORS: 2 notes anchored to what you changed",
 		"      note cache-invalidation-pairs anchors file:internal/cache/cache.go",
 		"      note secret-value-type anchors symbol:m types/Secret# [drifted-anchor]",
+		"",
+		"REVIEW: 3 of 4 changed file(s) carry a read receipt; 1 were read and then edited",
+		"      internal/cache/cache.go (read, then changed)",
+		"      record what you have read: magus diff --ack",
 	}, preflightLines(preflightFixture()))
 }
 
@@ -282,6 +290,8 @@ func TestPreflightEmptyFormsSayNobodyLooked(t *testing.T) {
 		"ADVISORS: nothing to report",
 		"",
 		"ANCHORS: no note anchors a changed file or symbol",
+		"",
+		"REVIEW: read receipts unavailable; run `magus diff --ack` to start recording them",
 	}, lines)
 
 	// The one number that must never appear: a reach nobody has ever timed is not free.

@@ -108,6 +108,7 @@ flag buzz/no-autoload
 flag buzz/t
 flag buzz/test
 flag clean/cache
+flag diff/ack
 flag diff/cost
 flag diff/generated
 flag diff/tui
