@@ -159,6 +159,9 @@ func diffInputFromArgs(rest []string) (diffInput, error) {
 		return diffInput{kind: inputWorkingTree, label: "the working tree"}, nil
 	}
 	if len(rest) > 1 {
+		if err := gitExternalDiffRefusal(rest); err != nil {
+			return diffInput{}, err
+		}
 		return diffInput{}, usagef("magus diff: takes at most one patch argument, got %d", len(rest))
 	}
 	arg := rest[0]
@@ -171,6 +174,32 @@ func diffInputFromArgs(rest []string) (diffInput, error) {
 	return diffInput{}, usagef("magus diff: %q is neither a readable patch file nor `-`. "+
 		"diff reads the working tree and takes no ref; for a committed range use `git diff %s`, "+
 		"and pipe a patch in with `git diff %s | magus diff -`", arg, arg, arg)
+}
+
+// gitExternalDiffRefusal names the mistake when magus has been wired as GIT_EXTERNAL_DIFF or
+// diff.external, and points at the git-native setting that does work.
+//
+// git calls an external diff once PER FILE with seven arguments, because the contract is for a
+// program that renders one file's diff. Almost everything magus has to say is a property of the
+// whole changeset - which projects rebuild, who owns them, what it costs, what to read first -
+// so honoring that contract would mean printing the report once per file or not at all.
+//
+// git's pager is the same integration without the mismatch: it hands over the entire diff on
+// stdin, exactly once, which is an input `magus diff -` already takes. So this refuses, and
+// says which line to put in the config instead. Landing here means someone tried, which makes
+// it the one moment they will read the answer.
+//
+// GIT_DIFF_PATH_TOTAL is the signal rather than the argument count alone: git sets it on every
+// external-diff call, and seven positionals are otherwise just a typo.
+func gitExternalDiffRefusal(rest []string) error {
+	if len(rest) != 7 || os.Getenv("GIT_DIFF_PATH_TOTAL") == "" {
+		return nil
+	}
+	return usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
+		"magus reports on a whole changeset, so it cannot answer per file. "+
+		"Use git's pager instead, which hands over the entire diff at once: "+
+		"`git config pager.diff 'magus diff -'` - then plain `git diff` renders through magus, "+
+		"and `git --no-pager diff` still gets you the raw patch", rest[0])
 }
 
 // diffTUITerm is the terminal the viewer was handed, split by descriptor, because the viewer

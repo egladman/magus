@@ -779,3 +779,25 @@ func TestDiffNextStepLinesTeachTheWorkflow(t *testing.T) {
 	// no reading to offer, and a pointer there suggests doing nothing.
 	assert.Nil(t, diffNextStepLines(0))
 }
+
+// Wiring magus as GIT_EXTERNAL_DIFF used to dead-end on "takes at most one patch argument, got
+// 7" - accurate, and useless to the person who just tried the integration. The refusal has to
+// name the working setting, because reaching it means they are configuring git right now.
+func TestGitExternalDiffIsRefusedWithTheSettingThatWorks(t *testing.T) {
+	t.Setenv("GIT_DIFF_PATH_TOTAL", "2")
+	seven := []string{"f.txt", "/tmp/blob/f.txt", "abc", "100644", "f.txt", "def", "100644"}
+
+	_, err := diffInputFromArgs(seven)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pager.diff")
+	assert.Contains(t, err.Error(), "magus diff -")
+	assert.Contains(t, err.Error(), "f.txt", "the file git was asking about")
+
+	// Seven positionals with no git around are an ordinary typo, and the generic refusal is
+	// the honest answer there: inventing a git explanation would send them to the wrong page.
+	t.Setenv("GIT_DIFF_PATH_TOTAL", "")
+	_, err = diffInputFromArgs(seven)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at most one patch argument")
+	assert.NotContains(t, err.Error(), "pager.diff")
+}

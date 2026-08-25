@@ -153,3 +153,54 @@ func TestALoneDashLineStaysInsideItsHunk(t *testing.T) {
 	require.Len(t, files, 1)
 	assert.Equal(t, []string{"--- not a header, just removed text", "+kept"}, files[0].Hunks[0].Lines)
 }
+
+// Mercurial emits `diff -r <rev> <path>` and no `diff --git` line, so a reader keyed on git's
+// header saw ZERO files in its output. The untracked half of the same working diff IS
+// synthesized with git headers and did parse, which is what made the failure so quiet:
+// `magus diff` on an hg tree listed the new files and silently dropped every tracked
+// modification, at exit 0.
+//
+// Only Mercurial. Measured against the installed backends: Sapling's `sl diff` already emits
+// git headers, and vcs/jj.go passes --git explicitly, so those two were never affected.
+//
+// Captured from hg 7.2.3 via `hg diff -U 1`, the exact call vcs/hg.go makes.
+const hgPatch = "diff -r b3b854cfd6db f.txt\n" +
+	"--- a/f.txt\tTue Aug 25 12:21:53 2026 -0400\n" +
+	"+++ b/f.txt\tTue Aug 25 12:22:08 2026 -0400\n" +
+	"@@ -1,2 +1,2 @@\n" +
+	" a\n" +
+	"-b\n" +
+	"+B\n" +
+	"diff -r b3b854cfd6db g.txt\n" +
+	"--- a/g.txt\tTue Aug 25 12:21:53 2026 -0400\n" +
+	"+++ b/g.txt\tTue Aug 25 12:22:08 2026 -0400\n" +
+	"@@ -1,2 +1,2 @@\n" +
+	"-c\n" +
+	"+C\n" +
+	" d\n"
+
+func TestMercurialDialectParses(t *testing.T) {
+	files := ParseHunks(hgPatch)
+	require.Len(t, files, 2)
+	assert.Equal(t, "f.txt", files[0].Path)
+	assert.Equal(t, "g.txt", files[1].Path)
+	require.Len(t, files[1].Hunks, 1)
+	assert.Equal(t, []string{"-c", "+C", " d"}, files[1].Hunks[0].Lines)
+}
+
+// The tracked and untracked halves of one working diff can speak different dialects, because
+// magus synthesizes the untracked half with git headers whatever the backend is. Both halves
+// have to survive the same pass or the composed patch is worse than either alone.
+func TestAPatchMixingBothDialectsKeepsEveryFile(t *testing.T) {
+	mixed := hgPatch +
+		"diff --git a/new.txt b/new.txt\n" +
+		"new file mode 100644\n" +
+		"--- /dev/null\n" +
+		"+++ b/new.txt\n" +
+		"@@ -0,0 +1,1 @@\n" +
+		"+fresh\n"
+	files := ParseHunks(mixed)
+	require.Len(t, files, 3)
+	assert.Equal(t, []string{"f.txt", "g.txt", "new.txt"},
+		[]string{files[0].Path, files[1].Path, files[2].Path})
+}

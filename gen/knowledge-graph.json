@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2376,
-  "edge_count": 6059,
+  "edge_count": 6060,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -32213,6 +32213,14 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/git.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/git.md"
     },
     {
       "source": "doc:docs/guides/integrations/git.md",
