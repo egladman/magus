@@ -488,6 +488,16 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
    act on the run - and without a rule between them they read as one long undifferentiated strip.
    Collapsed into the overflow kebab the controls stack vertically, where a vertical rule is
    meaningless, so the separators go with them. */
+/* Below 2xl this row holds exactly three things - the filter, the help circle, and the toggle that
+   opens everything else - and at 360px they come to 340px in a 336px line. Left to wrap, the browser
+   moved the toggle to a second row rather than shrinking the filter by 4px, and the filter then grew
+   into the slack it had just created. nowrap makes it shrink instead. Scoped BELOW 2xl on purpose:
+   at 2xl+ PF puts every control back on this row inline (pf-m-show-on-2xl, 90.625rem) and wrapping is
+   how that stays readable. */
+@media (width < 90.625rem) {
+  #log-bar-controls .pf-v6-c-toolbar__content-section { flex-wrap: nowrap; }
+  #log-bar-controls #log-filter-item { min-inline-size: 0; }
+}
 .console-log-toolbar__separator { display: flex; align-items: center; }
 /* PF's vertical divider takes `height: inherit`, so inside a shrink-to-fit flex item it resolves to
    nothing and the rule never paints. Give it the height of the controls it stands between. */

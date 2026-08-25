@@ -112,16 +112,46 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
    themselves: PF's expandable content is a grid whose children size to their content, so on a phone
    the whole stack sat in a ~184px column centred in a 430px panel, with a third of the width dead on
    each side. Stretch at every level so the menu is one full-width column. --- */
-[data-overflow-panel],
-[data-overflow-panel] .pf-v6-c-toolbar__group {
-  /* The TRACK, not just the items in it: PF leaves an inline action group justify-content:center over
-     a max-content column, so stretching the items inside a 184px track still left it centred in a
-     430px panel. A 1fr column is what makes the column the panel's width. */
+/* The panel is the column the menu runs down: one track, full width. PF leaves an inline action group
+   justify-content:center over a max-content column, so stretching the items inside it still left the
+   whole stack in a 184px band centred in a 430px panel. */
+[data-overflow-panel] {
   grid-template-columns: minmax(0, 1fr);
   justify-content: stretch;
   justify-items: stretch;
 }
+/* Inside a group the short actions pair up rather than spending a row each: auto-fit over a 9rem
+   floor puts Copy beside Copy command and Open graph beside Fullscreen, and collapses to one column
+   on its own when the width stops fitting two, so there is no breakpoint to keep in step. */
+[data-overflow-panel] .pf-v6-c-toolbar__group {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--pf-t--global--spacer--sm);
+  justify-content: stretch;
+  justify-items: stretch;
+}
+/* Only the LEAF clusters flow. The outer action group holds two clusters and the rule between them,
+   so pairing at that level puts a cluster in each half and leaves the rule occupying a cell. */
+[data-overflow-panel] .pf-v6-c-toolbar__group.pf-m-action-group-inline {
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+/* A vertical rule has nothing to divide once the row is a column; hide the item, not just the rule,
+   or it keeps its cell. */
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(> .pf-v6-c-divider.pf-m-vertical) { display: none; }
+/* A segmented control, a field, and a field's label keep the whole row. Splitting a two-option toggle
+   across a column boundary reads as two unrelated buttons, and a select needs the width for its value. */
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(.pf-v6-c-toggle-group),
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(.pf-v6-c-form-control),
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(> label) {
+  grid-column: 1 / -1;
+}
 [data-overflow-panel] .pf-v6-c-toolbar__item { justify-self: stretch; }
+/* A segmented control splits its row evenly so the stack keeps one left and one right edge. */
+[data-overflow-panel] .pf-v6-c-toggle-group { display: flex; }
+[data-overflow-panel] .pf-v6-c-toggle-group__item { flex: 1 1 0; }
+[data-overflow-panel] .pf-v6-c-toggle-group__button {
+  inline-size: 100%;
+  justify-content: center;
+}
 /* A stacked menu reads down its left edge, so the icon+label pairs start there rather than each
    floating in the middle of its own row. PF buttons centre by default. */
 [data-overflow-panel] .pf-v6-c-button { justify-content: flex-start; }
