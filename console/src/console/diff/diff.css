@@ -351,6 +351,34 @@
 /* Sized to its content rather than growing: a progress line that claims the whole row pushes the
  * control beside it onto a second one, and a mode whose point is less chrome cannot spend an
  * extra toolbar row saying so. */
+/* The merged notice: a full-bleed strip under the toolbar with the severity carried by a
+ * coloured left rule, which is this console's inline-notice shape everywhere else. Informational
+ * rather than a warning - nothing is wrong, there is just something worth keeping. */
+.console-diff-merged {
+  display: flex;
+  gap: var(--pf-t--global--spacer--md);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--md);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-start: 3px solid var(--console-accent);
+}
+
+.console-diff-merged__text {
+  min-width: 0;
+}
+
+.console-diff-merged__dismiss {
+  flex: 0 0 auto;
+  color: var(--pf-t--global--text--color--subtle);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .console-diff-progress {
   display: flex;
   flex: 0 1 auto;

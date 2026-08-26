@@ -64,6 +64,7 @@ import {
   mutate,
   publish,
   reply,
+  mergedNotice,
   HttpError,
   type DiffComment,
   type DiffSession,
@@ -263,6 +264,10 @@ function gutter(n: number | null): HTMLElement {
 export function activate(host: HTMLElement): SurfaceInstance {
   const controller = new AbortController();
   let disposed = false;
+  // Dismissing the merged notice holds for this session only. It is not persisted: the surface
+  // is reopened per branch, and a preference remembered across them would silence the offer on a
+  // review the reader has not seen yet.
+  let mergedSeen = false;
 
   // The daemon-free showcase, on the fragment every other surface reads. Derived ONCE, here,
   // rather than per fetch: a console served BY a daemon would otherwise answer host_() with a
@@ -500,7 +505,23 @@ export function activate(host: HTMLElement): SurfaceInstance {
   emptyContent.append(emptyTitle, emptyBodyWrap);
   empty.append(emptyContent);
 
-  main.append(toolbar, context, rail, viewport, overview, empty);
+  // The end of a review, offered once. A merged pull request is where a conversation stops being
+  // live and starts being the only record of why the code is the way it is, and that record is
+  // on somebody else's website. This does not write the note - notes are human-authored by
+  // construction - it names the command that does.
+  const merged = h("div", "console-diff-merged");
+  merged.hidden = true;
+  merged.setAttribute("role", "status");
+  const mergedText = h("span", "console-diff-merged__text");
+  const mergedDismiss = h("button", "console-diff-merged__dismiss", "dismiss");
+  mergedDismiss.type = "button";
+  mergedDismiss.addEventListener("click", () => {
+    mergedSeen = true;
+    merged.hidden = true;
+  });
+  merged.append(mergedText, mergedDismiss);
+
+  main.append(toolbar, merged, context, rail, viewport, overview, empty);
   root.append(sidebar, reopenBtn, main);
   // Below the shell's 48rem inversion the index starts COLLAPSED, whatever is stored. Its column
   // floor is 180px, so on a 375px phone it took 48% of the screen and left the hunk stream 194px to
@@ -1400,6 +1421,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
     collaborationNotice.textContent = transientNotice || collaboration.notice;
     statsEl.replaceChildren(...chips);
     renderProgress();
+    renderMerged();
+  };
+
+  const renderMerged = (): void => {
+    const said = (state.review?.threads.length ?? 0) + (state.session?.comments?.length ?? 0);
+    const text = mergedSeen ? "" : mergedNotice(state.review, said);
+    merged.hidden = text === "";
+    mergedText.textContent = text;
   };
 
   // renderProgress draws where the pass is. Only in focus mode: the dense view already answers

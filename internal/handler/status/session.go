@@ -634,7 +634,10 @@ type diffReviewResponse struct {
 	// anything leaves. An Enterprise appliance and github.com are the same feature and very
 	// different destinations, and the reader is the only one who can tell whether the one on
 	// screen is the one they meant.
-	Host    string               `json:"host,omitempty"`
+	Host string `json:"host,omitempty"`
+	// State is what the host says became of the review: "open", "merged" or "closed". Empty when
+	// the provider does not answer, which reads as open.
+	State   string               `json:"state,omitempty"`
 	Reason  string               `json:"reason,omitempty"`
 	Threads []types.ReviewThread `json:"threads"`
 }
@@ -672,6 +675,7 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	out := diffReviewResponse{
 		ID:      at.ID,
 		Repo:    at.Repo,
+		State:   at.State,
 		Reason:  at.Reason,
 		Threads: []types.ReviewThread{},
 	}
