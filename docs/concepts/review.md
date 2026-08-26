@@ -229,6 +229,52 @@ neither an ancestor of the base nor patch-equivalent to what landed; a workspace
 squash-merges would never see its own merges. A provider answers `state` on `find_review`, and a
 provider that does not answer reads as open.
 
+## Does it still pass
+
+The toolbar carries one run control, for the project of the file you are reading. Press it and
+magus runs that project's `test` target here, on the machine the code is on.
+
+This is the one review capability that has no provider behind it, and so no capability gap: it
+asks the local workspace rather than a host, and behaves identically on GitHub, GitLab, git, hg,
+or no forge at all. It is also the thing a forge structurally cannot offer, because a forge does
+not know your build.
+
+Three things keep it honest:
+
+- **It runs what the magusfile declares, and nothing else.** The console names a target and a
+  project, never a command. The daemon admits the run only if that project declares that target,
+  so a browser-reachable button is strictly less capable than a terminal.
+- **A verdict is about a TREE STATE.** Edit anything and the answer greys out and says
+  `passed - since edited`, because a green tick over code you have since changed is a wrong
+  answer delivered confidently. A cache hit is not stale, though: magus keys the cache on the
+  target's sources, so a replayed verdict is a true statement about the tree it was computed
+  from.
+- **A run already in flight is joined, not duplicated.** If your own terminal is running the same
+  target, the control says it is running rather than appearing to have started it.
+
+There is one button, not one per file. The question is asked about one place at a time, and a
+control on every file heading would answer it n times in a column.
+
+## Handing the change to your own model
+
+```sh
+magus diff --prompt
+```
+
+prints a review prompt to paste into whichever model you use. `--prompt --impact` adds the
+rationale behind each instruction, for a reader deciding whether to trust it.
+
+magus assembles it and stops. Nothing calls a model, holds a key, or sends anything anywhere -
+the clipboard is the airgap, and it is what keeps the review something you wrote. The prompt asks
+for findings, and says so out loud: file, line, what is wrong. It does not ask for review prose,
+because generated text is the wrong thing to put in front of the colleague who asked.
+
+What it carries is the part no model can work out from a diff: the reading order magus ranked,
+which projects rebuild as a result, what could NOT be measured, and which other branches are
+changing the same files. What it does NOT carry is the durable half of a review briefing - it
+names the magus skills you already have rather than pasting copies of them, because a copy drifts
+from the installed one and spends your context on text your tools already loaded.
+
 ## What magus will not do
 
 - **An agent cannot publish.** An agent pairing over MCP reads the review's threads and may
