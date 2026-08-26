@@ -509,9 +509,9 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 			// browser to find out. Best-effort and read through the daemon, which is where the
 			// provider lives - with no daemon, or no review, this is empty and the viewer is
 			// exactly what it was before.
-			Threads: daemonReviewThreads(ctx),
-			Unfolded:    showGenerated,
-			Link:        pathLinker(m.Root()),
+			Threads:  diffReviewThreads(ctx),
+			Unfolded: showGenerated,
+			Link:     pathLinker(m.Root()),
 		},
 		Sync: sync,
 		// Called at quit rather than computed here, so the line reports the fold the reader
@@ -577,6 +577,18 @@ func diffTUIFiles(rev types.Diff, parsed []diff.FileHunks) []difftui.File {
 		out = append(out, file)
 	}
 	return out
+}
+
+// diffReviewThreads is the viewer's half of the review read: the threads, without the reason a
+// partial read carries.
+//
+// The reason is dropped HERE and not in the reader, because this caller has nowhere to put it:
+// the viewer takes over the terminal immediately, so a line printed before it opens is gone
+// before anyone reads it. `magus notes capture` keeps the reason, because a transcript is an
+// artifact nobody re-checks and an incomplete one has to say so.
+func diffReviewThreads(ctx context.Context) []types.ReviewThread {
+	threads, _ := daemonReviewThreads(ctx)
+	return threads
 }
 
 // diffSync is a difftui.Sync with a shutdown. The two implementations get their writes out

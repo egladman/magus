@@ -791,7 +791,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	}
 	// The colleagues' half. Read separately and never required: a review with no forge behind
 	// it is the ordinary case, and the local conversation is worth keeping on its own.
-	threads := daemonReviewThreads(ctx)
+	threads, partial := daemonReviewThreads(ctx)
 	if len(sess.Comments) == 0 && len(threads) == 0 {
 		return errors.New("magus notes capture: this review has no comments yet, and a transcript of an empty conversation is not worth a note")
 	}
@@ -850,6 +850,12 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
 		said, pluralSuffix(said, "", "s"),
 		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
+	// Said out loud, because a transcript is exactly the artifact nobody re-checks. A capture
+	// that quietly omitted part of the review would be discovered, if ever, by the person who
+	// went looking for what a colleague said and concluded they had said nothing.
+	if partial != "" {
+		fmt.Printf("Part of the review could not be read, so this transcript is incomplete: %s\n", partial)
+	}
 
 	// Fingerprint the anchored files, exactly as a written note is fingerprinted on save. It
 	// matters MORE here: a transcript is about code as it stood during one review, so the
@@ -997,39 +1003,50 @@ func daemonDiffSession(ctx context.Context) *types.DiffSession {
 	return &sess
 }
 
-// daemonReviewThreads reads the comment threads on the review this branch has open.
+// daemonReviewThreads reads the comment threads on the review this branch has open, and the
+// reason the read was incomplete when there is one.
 //
-// Nil on every failure, and there are many ordinary ones: no daemon, no provider wired, no
-// pull request, a forge that did not answer. None of them is a reason to refuse a capture -
-// the local half of the conversation is still worth keeping - so the caller gets an empty
-// list and captures what it has.
-func daemonReviewThreads(ctx context.Context) []types.ReviewThread {
+// Empty on every failure, and there are many ordinary ones: no daemon, no provider wired, no
+// pull request, a forge that did not answer. None of them is a reason to refuse a capture - the
+// local half of the conversation is still worth keeping - so the caller captures what it has.
+//
+// The reason is separate from the emptiness, and only non-empty when magus READ the review and
+// could not understand part of it. That is the one case a caller must not pass over quietly: a
+// transcript silently missing a colleague's remark is worse than no transcript.
+func daemonReviewThreads(ctx context.Context) ([]types.ReviewThread, string) {
 	token, err := auth.Load()
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+mcpAddrString()+"/api/v1/diff/review", nil)
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		return nil, ""
 	}
 	var body struct {
+		ID      string               `json:"id"`
 		Threads []types.ReviewThread `json:"threads"`
+		Reason  string               `json:"reason"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil
+		return nil, ""
 	}
-	return body.Threads
+	if body.ID == "" {
+		// No review open. The reason names which ordinary situation that is, and none of them
+		// is worth a line during a capture - there is simply no second half.
+		return nil, ""
+	}
+	return body.Threads, body.Reason
 }
 
 // tagList collects a repeatable --tag flag.

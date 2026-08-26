@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -41,10 +42,13 @@ type diffTool struct {
 	src diffSource
 }
 
-// diffSource is the recompute half: the same pair the console's routes read.
+// diffSource is the recompute half: the same trio the console's routes read.
 type diffSource interface {
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
+	// ReviewOrigin says where this tree's changes are discussed, so the threads on that review
+	// can be read. Satisfied by the same *console.Service as the other two.
+	ReviewOrigin(ctx context.Context) types.ReviewOrigin
 }
 
 // diffState is what op=state returns: the session, plus the change it describes.
@@ -64,6 +68,15 @@ type diffState struct {
 	// Recomputed reports that the tree had moved since the session was attached and this
 	// answer is freshly computed rather than replayed.
 	Recomputed bool `json:"recomputed,omitempty"`
+	// Threads are the remarks already on the host's review, each placed on the hunk holding
+	// its line (or -1). An agent pairing on a change should know what a reviewer has already
+	// asked for - otherwise it re-raises a point somebody settled yesterday, or works on
+	// something the review has moved past.
+	//
+	// READ-ONLY here, deliberately: an agent may draft a comment into the session, which a
+	// person then sends, and nothing on this surface can put words on a review under the
+	// person's name.
+	Threads []types.ReviewThread `json:"threads,omitempty"`
 }
 
 // diffSummary is op=state's projection=summary shape: the session's identity plus counts,
@@ -99,6 +112,9 @@ type diffConversation struct {
 	Viewed      []string               `json:"viewed,omitempty"`
 	Comments    []types.DiffComment    `json:"comments,omitempty"`
 	Suggestions []types.DiffSuggestion `json:"suggestions,omitempty"`
+	// The conversation is not only the local half. A projection called "conversation" that
+	// omitted what a reviewer said would be the surface's worst possible lie.
+	Threads []types.ReviewThread `json:"threads,omitempty"`
 }
 
 // diffPatch is op=state's projection=patch shape: the unified diff and its addressable hunks,
@@ -148,6 +164,7 @@ func projectDiffState(st diffState, projection string) (any, error) {
 			Viewed:      st.Viewed,
 			Comments:    st.Comments,
 			Suggestions: st.Suggestions,
+			Threads:     st.Threads,
 		}, nil
 	case "patch":
 		return diffPatch{
@@ -288,7 +305,27 @@ func (t *diffTool) state(ctx context.Context, sess *types.DiffSession) (diffStat
 		st.DiffSession = t.sessions.Attach(t.root, rev.Base, rev, now)
 		st.Recomputed = true
 	}
+	st.Threads = t.reviewThreads(ctx, st.Hunks)
 	return st, nil
+}
+
+// reviewThreads reads what colleagues have already said, placed onto this changeset's hunks.
+//
+// Silent on every failure, unlike the console's route: there is no reader here to show a reason
+// to, and an agent that could not reach a forge is in exactly the position it was in before
+// this existed. What it must never do is fail the whole state call - the changeset is the
+// thing the agent asked for.
+func (t *diffTool) reviewThreads(ctx context.Context, hunks []diff.FileHunks) []types.ReviewThread {
+	from := t.src.ReviewOrigin(ctx)
+	at := bindings.OpenReview(ctx, from.Branch, from.Remote)
+	if !at.Open() {
+		return nil
+	}
+	// The error is dropped and the threads are not: ReviewThreads returns everything it could
+	// read alongside it, and a malformed remark is no reason to hide the rest of a conversation
+	// from the agent working on it.
+	threads, _ := bindings.ReviewThreads(ctx, at)
+	return diff.PlaceThreads(hunks, threads)
 }
 
 // validateAnchor refuses a coordinate the changeset does not contain.

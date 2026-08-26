@@ -514,8 +514,9 @@ func threadRows(t types.ReviewThread, file, row int) []Row {
 	if who == "" {
 		who = "review"
 	}
-	var out []Row
-	for j, line := range strings.Split(t.Body, "\n") {
+	lines := strings.Split(t.Body, "\n")
+	out := make([]Row, 0, len(lines))
+	for j, line := range lines {
 		text := "  | " + line
 		if j == 0 {
 			text = fmt.Sprintf("  | %s, on the review: %s", who, line)

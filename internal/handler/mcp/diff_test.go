@@ -32,6 +32,12 @@ type fakeDiffSrc struct {
 
 func (f *fakeDiffSrc) WorkingDiff(context.Context, []string) (string, error) { return f.patch, nil }
 
+// No branch and no remote, so no provider is consulted and the tool reports no threads. That
+// is the ordinary state of most workspaces and is what these tests exercise around.
+func (f *fakeDiffSrc) ReviewOrigin(context.Context) types.ReviewOrigin {
+	return types.ReviewOrigin{}
+}
+
 func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error) {
 	f.calls++
 	files := make([]types.DiffFile, 0, len(paths))

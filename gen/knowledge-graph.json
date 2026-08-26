@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2394,
-  "edge_count": 6106,
+  "node_count": 2395,
+  "edge_count": 6113,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -906,7 +906,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "47",
+        "dir_files": "48",
         "dir_languages": "markdown"
       }
     },
@@ -2537,6 +2537,18 @@
         "section": "concepts",
         "tags": "operations,ops,hierarchy,spells,targets,ci,work-model,execution",
         "title": "Operations"
+      }
+    },
+    {
+      "id": "doc:docs/concepts/review.md",
+      "kind": "doc",
+      "label": "docs/concepts/review.md",
+      "source": "docs/concepts/review.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "review,diff,pull-request,merge-request,provider,threads,github,enterprise,notes",
+        "title": "Review"
       }
     },
     {
@@ -22713,6 +22725,14 @@
     },
     {
       "source": "dir:docs/concepts",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "dir:docs/concepts",
       "target": "doc:docs/concepts/sandbox.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -29040,6 +29060,38 @@
       "provenance": "docs/concepts/operations.md"
     },
     {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/guides/authoring-spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
       "source": "doc:docs/concepts/sandbox.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -30705,6 +30757,14 @@
     },
     {
       "source": "doc:docs/documentation.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
       "target": "doc:docs/concepts/sandbox.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31298,6 +31358,14 @@
     {
       "source": "doc:docs/guides/authoring-spells.md",
       "target": "doc:docs/concepts/operations.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/authoring-spells.md"
+    },
+    {
+      "source": "doc:docs/guides/authoring-spells.md",
+      "target": "doc:docs/concepts/review.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
