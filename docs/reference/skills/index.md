@@ -18,7 +18,7 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
 | [magus-architecture-review](magus-architecture-review.md) | 6322 | 5123 | 18% | Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. |
 | [magus-buzz-review](magus-buzz-review.md) | 20279 | 15155 | 25% | Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. |
 | [magus-buzz-write](magus-buzz-write.md) | 8174 | 6776 | 17% | Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. |
-| [magus-change-summary](magus-change-summary.md) | 6211 | 4715 | 24% | Summarize what changed in a magus workspace, write it up, or answer a granular diff question. |
+| [magus-change-summary](magus-change-summary.md) | 7051 | 5385 | 23% | Summarize what changed in a magus workspace, write it up, or answer a granular diff question. |
 | [magus-commit-composition](magus-commit-composition.md) | 4448 | 3840 | 13% | Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths. |
 | [magus-context-audit](magus-context-audit.md) | 5573 | 4065 | 27% | Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. |
 | [magus-delegate-multi-agent](magus-delegate-multi-agent.md) | 21445 | 16018 | 25% | Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the delegations cannot collide, bound fan-out depth, and match each delegation's model to the work it needs. |
@@ -29,4 +29,4 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
 | [magus-sdk](magus-sdk.md) | 13317 | 12880 | 3% | Help a Go developer consume magus as a library (import "github.com/egladman/magus") instead of shelling out to the CLI, and audit whether the SDK actually serves them. |
 | [magus-vcs-hygiene](magus-vcs-hygiene.md) | 8106 | 5977 | 26% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
 | [magus-workspace-rules](magus-workspace-rules.md) | 5435 | 4391 | 19% | Adapt magus's installed agent surface to THIS workspace without breaking it. |
-| **all 14** | **129588** | **101858** | **21%** | |
+| **all 14** | **130428** | **102528** | **21%** | |

@@ -66,6 +66,15 @@ blast radius first. It reports no ratio and stays silent on a small change
 nobody has disturbed - a count with a target is a count that gets cleared
 instead of satisfied.
 
+--prompt prints a review prompt for you to paste into whichever model you
+use, and magus stops there: it calls no model, holds no key, and sends
+nothing. It is the same refusal magus agent makes about your AGENTS.md -
+magus generates the text and a person carries it across, because a tool that
+crossed the boundary itself would leave bytes you did not write and cannot
+audit. It asks for findings rather than review prose; the words your
+colleague reads should be yours. Add --impact for the rationale behind each
+instruction.
+
 A receipt covers a file at its CURRENT content, so editing it afterwards
 voids the receipt. Stepping a file through in the viewer earns one; --ack covers
 the changeset at once and takes an optional --reason kept with it. magus

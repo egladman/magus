@@ -144,3 +144,20 @@ now" from three pieces:
 WRONG: re-reviewing a whole branch because nobody recorded where the last
 review stopped.
 CORRECT: checkpoint at review time, pipe the delta later.
+
+## Hand a change to a second reader
+
+`magus diff --prompt` prints a review prompt for a person to paste into
+whichever model they use; `--prompt --impact` adds the rationale behind each
+instruction. It carries the reading order, which projects rebuild, what could
+NOT be measured, and which other branches touch the same files{{if .Full}} - the
+context a model cannot work out from a diff alone{{end}}.
+
+magus assembles it and stops: it calls no model and sends nothing{{if .Full}},
+which is what keeps the resulting review something the human wrote rather than
+something generated in their name{{end}}. The prompt asks for FINDINGS - file,
+line, what is wrong - never for review prose to paste at a colleague.
+
+Do not reconstruct that context by hand into a prompt of your own. It names the
+installed skills rather than restating them, and a hand-built copy drifts from
+both.
