@@ -175,11 +175,20 @@ out - the one errand this whole surface exists to save you.
 ## After it merges
 
 A merged pull request is where a review stops being live and becomes the only record of why the
-code is the way it is - and that record is on somebody else's website. So when the diff surface
-opens on a review the host says has landed, it offers once to keep the conversation:
+code is the way it is - and that record is on somebody else's website. So when the host says a
+review you took part in has landed, magus offers once to keep the conversation:
 
 > This review merged on acme/acme, and its 3 remarks live only on the host. Run
 > `magus notes capture` to keep the conversation in your knowledge graph.
+
+It arrives two ways, and neither interrupts you. Open the diff on a merged review and it is a
+strip under the toolbar. Merge while you are elsewhere in the console and it is recorded in the
+notification panel, silently: a merge changes nothing you were relying on, so it is worth keeping
+and not worth ringing a bell for.
+
+That second one asks the host on a slow clock and only for a branch you actually reviewed -
+opening a review is what opts it in. magus does not go asking a forge about branches you never
+looked at.
 
 **Only when there was a conversation.** A pull request nobody remarked on has nothing worth
 preserving, and a prompt that fires on every merge is one you learn to dismiss without reading -
