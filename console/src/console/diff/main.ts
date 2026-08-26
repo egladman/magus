@@ -1600,6 +1600,50 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // page, cannot show WHICH hunk is being annotated, and gives an agent's reader no way to see
   // the code they are remarking on while they type. The composer sits in the stream for the
   // same reason the comments do.
+  // composerField builds the input every composer here shares.
+  //
+  // Enter is a NEWLINE. A remark worth writing is often a paragraph and a code fence, and a
+  // field where Enter commits cannot hold either - the reader loses the thought at the first
+  // line break. Committing takes a deliberate act instead: the chord, or the button beside it.
+  //
+  // Both, not one. A chord alone is invisible to whoever has not read the docs, and a button
+  // alone makes a keyboard pass reach for the mouse once per remark.
+  const composerField = (opts: {
+    placeholder: string;
+    action: string;
+    onCommit: (value: string) => void;
+    onCancel: () => void;
+  }): { wrap: HTMLElement; field: HTMLTextAreaElement; commit: HTMLButtonElement } => {
+    const wrap = h("span", "console-diff-composer__input");
+    const control = h("span", "pf-v6-c-form-control");
+    const field = h("textarea", "pf-v6-c-form-control__text");
+    field.rows = 3;
+    field.placeholder = opts.placeholder;
+    const commit = h("button", "pf-v6-c-button pf-m-primary console-diff-composer__send");
+    commit.type = "button";
+    commit.textContent = opts.action;
+    // macOS reaches for Cmd where everything else reaches for Ctrl, and a label naming the wrong
+    // one is worse than none: it teaches a chord that does nothing.
+    commit.title = `${navigator.userAgent.includes("Mac") ? "Cmd" : "Ctrl"}+Enter`;
+    field.addEventListener("keydown", (e) => {
+      // Stopped here so the surface's own single-letter keys do not fire while typing - a bare
+      // "v" in a remark must be the letter v.
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        opts.onCancel();
+        return;
+      }
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      opts.onCommit(field.value.trim());
+    });
+    commit.addEventListener("click", () => opts.onCommit(field.value.trim()));
+    control.append(field);
+    wrap.append(control, commit);
+    return { wrap, field, commit };
+  };
+
   const composeComment = (): void => {
     if (!canCollaborate()) {
       flashCollaborationNotice();
@@ -1611,7 +1655,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (!row || row.kind !== "hunk") return;
 
     // One composer at a time; a second press re-focuses rather than stacking boxes.
-    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input input");
+    const existing = scroll.querySelector<HTMLTextAreaElement>(
+      ".console-diff-composer__input textarea",
+    );
     if (existing) {
       existing.focus();
       return;
@@ -1620,43 +1666,31 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const box = h("div", "console-diff-composer");
     const where = h("span", "console-diff-composer__where");
     where.textContent = `${row.file.path} hunk ${row.index + 1}`;
-    const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
-    const input = h("input", "pf-v6-c-form-control__text");
-    input.type = "text";
-    input.placeholder =
-      "Say what is wrong, or what you had to work out. Enter to post, Esc to cancel.";
     const close = (): void => {
       box.remove();
       scroll.focus();
     };
-    input.addEventListener("keydown", (e) => {
-      // Stopped here so the surface's own single-letter keys do not fire while typing - a
-      // bare "v" in a comment must be the letter v.
-      e.stopPropagation();
-      if (e.key === "Escape") {
-        e.preventDefault();
+    const { wrap: inputWrap, field } = composerField({
+      placeholder: "Say what is wrong, or what you had to work out. Esc cancels.",
+      action: "Stage draft",
+      onCancel: close,
+      onCommit: (body) => {
         close();
-        return;
-      }
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      const body = input.value.trim();
-      close();
-      if (!body) return;
-      sync({
-        op: "comment",
-        path: row.file.path,
-        hunk: row.index,
-        line: anchorLine(row.hunk),
-        body,
-      });
+        if (!body) return;
+        sync({
+          op: "comment",
+          path: row.file.path,
+          hunk: row.index,
+          line: anchorLine(row.hunk),
+          body,
+        });
+      },
     });
-    inputWrap.append(input);
     box.append(where, inputWrap);
     // Pinned rather than inserted into the virtualized window: the window is replaced wholesale
     // on every scroll frame, so a composer living in it would be destroyed mid-sentence.
     scroll.append(box);
-    input.focus();
+    field.focus();
   };
 
   // loadReview asks which review is open and what has already been said on it, then re-lays the
@@ -1703,7 +1737,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
       );
       return;
     }
-    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input input");
+    const existing = scroll.querySelector<HTMLTextAreaElement>(
+      ".console-diff-composer__input textarea",
+    );
     if (existing) {
       existing.focus();
       return;
@@ -1744,54 +1780,51 @@ export function activate(host: HTMLElement): SurfaceInstance {
       item.append(drop);
       listing.append(item);
     }
-    const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
-    const input = h("input", "pf-v6-c-form-control__text");
-    input.type = "text";
-    input.placeholder = "One line about the pass as a whole. Enter to send, Esc to cancel.";
     const close = (): void => {
       box.remove();
       scroll.focus();
     };
-    input.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape") {
-        e.preventDefault();
-        close();
-        return;
-      }
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      const summary = input.value.trim();
-      input.disabled = true;
-      where.textContent = "Sending...";
-      const heldBack = pending.filter((d) => !d.line).length;
-      void sendDrafts(summary).then((failure) => {
-        if (disposed) return;
-        if (!failure) {
-          close();
-          // A send that could not carry everything must SAY so. The remarks with no line stay
-          // drafts and go nowhere, and a reader told only "sent" would believe the whole pass
-          // reached their colleague.
-          if (heldBack > 0) {
-            flashPublishNotice(
-              `Sent, but ${heldBack} ${heldBack === 1 ? "remark has" : "remarks have"} no line to anchor to and stayed a draft.`,
-            );
+    const {
+      wrap: inputWrap,
+      field,
+      commit,
+    } = composerField({
+      placeholder: "One line about the pass as a whole. Optional. Esc cancels.",
+      action: `Send to ${state.review.host ?? "the review host"}`,
+      onCancel: close,
+      onCommit: (summary) => {
+        field.disabled = true;
+        commit.disabled = true;
+        where.textContent = "Sending...";
+        const heldBack = pending.filter((d) => !d.line).length;
+        void sendDrafts(summary).then((failure) => {
+          if (disposed) return;
+          if (!failure) {
+            close();
+            // A send that could not carry everything must SAY so. The remarks with no line stay
+            // drafts and go nowhere, and a reader told only "sent" would believe the whole pass
+            // reached their colleague.
+            if (heldBack > 0) {
+              flashPublishNotice(
+                `Sent, but ${heldBack} ${heldBack === 1 ? "remark has" : "remarks have"} no line to anchor to and stayed a draft.`,
+              );
+            }
+            return;
           }
-          return;
-        }
-        // The box STAYS OPEN on failure, holding what the reader typed. A send that failed
-        // has changed nothing, so the next thing they do is try again - and retyping the
-        // summary would be a punishment for the forge being down.
-        input.disabled = false;
-        where.textContent = failure;
-        box.dataset.failed = "";
-        input.focus();
-      });
+          // The box STAYS OPEN on failure, holding what the reader typed. A send that failed
+          // has changed nothing, so the next thing they do is try again - and retyping the
+          // summary would be a punishment for the forge being down.
+          field.disabled = false;
+          commit.disabled = false;
+          where.textContent = failure;
+          box.dataset.failed = "";
+          field.focus();
+        });
+      },
     });
-    inputWrap.append(input);
     box.append(where, warn, listing, inputWrap);
     scroll.append(box);
-    input.focus();
+    field.focus();
   };
 
   // sendDrafts publishes and returns the failure to show, or "" when the batch left.
@@ -1840,7 +1873,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
       flashPublishNotice("No thread here to answer. Press c to write a remark of your own.");
       return;
     }
-    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input input");
+    const existing = scroll.querySelector<HTMLTextAreaElement>(
+      ".console-diff-composer__input textarea",
+    );
     if (existing) {
       existing.focus();
       return;
@@ -1857,47 +1892,44 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const warn = h(
       "span",
       "console-diff-composer__network",
-      `Posts over the network to ${state.review?.host ?? "the review host"} when you press Enter.`,
+      `Posts over the network to ${state.review?.host ?? "the review host"} when you send it.`,
     );
-    const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
-    const input = h("input", "pf-v6-c-form-control__text");
-    input.type = "text";
-    input.placeholder = "Enter to send, Esc to cancel.";
     const close = (): void => {
       box.remove();
       scroll.focus();
     };
-    input.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape") {
-        e.preventDefault();
-        close();
-        return;
-      }
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      const body = input.value.trim();
-      if (!body) return;
-      input.disabled = true;
-      where.textContent = "Sending...";
-      void sendReply(thread.id, body).then((failure) => {
-        if (disposed) return;
-        if (!failure) {
-          close();
-          return;
-        }
-        // Held open with the words still in it, exactly as the send box is. A reply that did
-        // not leave has changed nothing, and retyping it would be a punishment for the forge.
-        input.disabled = false;
-        where.textContent = failure;
-        box.dataset.failed = "";
-        input.focus();
-      });
+    const {
+      wrap: inputWrap,
+      field,
+      commit,
+    } = composerField({
+      placeholder: "Esc cancels.",
+      action: "Send reply",
+      onCancel: close,
+      onCommit: (body) => {
+        if (!body) return;
+        field.disabled = true;
+        commit.disabled = true;
+        where.textContent = "Sending...";
+        void sendReply(thread.id, body).then((failure) => {
+          if (disposed) return;
+          if (!failure) {
+            close();
+            return;
+          }
+          // Held open with the words still in it, exactly as the send box is. A reply that did
+          // not leave has changed nothing, and retyping it would be a punishment for the forge.
+          field.disabled = false;
+          commit.disabled = false;
+          where.textContent = failure;
+          box.dataset.failed = "";
+          field.focus();
+        });
+      },
     });
-    inputWrap.append(input);
     box.append(where, warn, inputWrap);
     scroll.append(box);
-    input.focus();
+    field.focus();
   };
 
   // sendReply posts one reply and returns the failure to show, or "" when it left.

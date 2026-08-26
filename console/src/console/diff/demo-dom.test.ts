@@ -264,10 +264,12 @@ test("#demo shows the batch before it sends it, and sending clears the drafts", 
   // line and a draft that cannot be placed has to be visible as such before the send.
   assert.match(box?.textContent ?? "", /libs\/authkit\/claims\.go:22/);
 
-  const input = box?.querySelector<HTMLInputElement>("input");
-  assert.ok(input);
-  input.value = "self-review pass";
-  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  const field = box?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  field.value = "self-review pass";
+  // A bare Enter is a newline here, so the send takes the chord. The next test pins that a bare
+  // Enter sends nothing.
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
   await settle();
 
   assert.equal(document.querySelector(".console-diff-composer--batch"), null, "the box closes");
@@ -282,6 +284,36 @@ test("#demo shows the batch before it sends it, and sending clears the drafts", 
   dispose.deactivate();
 });
 
+// The reason the field is a textarea at all. A remark is often a paragraph and a code fence, and
+// a field where Enter commits cannot hold either. Both halves are pinned here: a bare Enter must
+// not send, and the chord must not be the only thing that does - a send only a chord can reach is
+// a send whoever has not read the docs cannot make.
+test("#demo does not send on a bare Enter, and sends from the button", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  const box = document.querySelector<HTMLElement>(".console-diff-composer--batch");
+  const field = box?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  field.value = "first line";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await settle();
+  assert.ok(
+    document.querySelector(".console-diff-composer--batch"),
+    "a bare Enter leaves the box open with the remark still in it",
+  );
+
+  const send = box?.querySelector<HTMLButtonElement>(".console-diff-composer__send");
+  assert.ok(send, "the chord cannot be the only way to send");
+  send.click();
+  await settle();
+  assert.equal(document.querySelector(".console-diff-composer--batch"), null, "the button sends");
+
+  dispose.deactivate();
+});
+
 // Pressing send with nothing drafted must say so. The alternative is a key that appears broken:
 // the reader presses it, no box opens, and nothing anywhere explains why.
 test("#demo answers a send with nothing drafted", async () => {
@@ -290,10 +322,12 @@ test("#demo answers a send with nothing drafted", async () => {
   await settle();
 
   assert.ok(dispatchCommand("diff.publish"));
-  const input = document.querySelector<HTMLInputElement>(".console-diff-composer--batch input");
-  assert.ok(input);
-  input.value = "";
-  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  const field = document.querySelector<HTMLTextAreaElement>(
+    ".console-diff-composer--batch textarea",
+  );
+  assert.ok(field);
+  field.value = "";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
   await settle();
 
   assert.ok(dispatchCommand("diff.publish"));
@@ -321,10 +355,10 @@ test("#demo answers the thread under the cursor", async () => {
   // says which file.
   assert.match(box?.textContent ?? "", /Reply to priya/);
 
-  const input = box?.querySelector<HTMLInputElement>("input");
-  assert.ok(input);
-  input.value = "one service. I will pin it in the docstring.";
-  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  const field = box?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  field.value = "one service. I will pin it in the docstring.";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
   await settle();
 
   assert.equal(document.querySelector(".console-diff-composer"), null, "the box closes");

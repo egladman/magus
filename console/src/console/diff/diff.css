@@ -868,12 +868,29 @@
   white-space: nowrap;
 }
 
+/* The field and the button that commits it sit on one row, the button pinned to the bottom of a
+ * textarea that grows: the commit control has to stay where the eye last left it as the remark
+ * gets longer. */
 .console-diff-composer__input {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--pf-t--global--spacer--sm);
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.console-diff-composer__input .pf-v6-c-form-control {
   flex: 1 1 auto;
   min-width: 0;
 }
+
 .console-diff-composer__input .pf-v6-c-form-control__text {
   font: inherit;
+  resize: vertical;
+}
+
+.console-diff-composer__send {
+  flex: 0 0 auto;
 }
 
 /* The story: who wrote this file and what they were reading when they did. Sits under the file
