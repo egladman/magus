@@ -282,3 +282,22 @@ func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
 	_, ok := resp.Data.(*types.DiffSession)
 	assert.True(t, ok, "comment always returns the full session regardless of projection")
 }
+
+// An agent's words must never become a REPLY to a person.
+//
+// This is the sharpest form of "agents draft, humans send": a remark on a hunk is addressed to
+// whoever reads the review, but a reply is addressed to the colleague who asked, by name, and
+// receiving a wall of generated text where you asked a question is how the human half of a review
+// dies. The protection is structural rather than advisory - there is simply no agent-reachable op
+// that produces one - and this pins it, because the failure mode of a missing test here is a
+// future op named "reply" that nobody notices has crossed the line.
+//
+// publish is refused for the same reason it is refused everywhere else: an agent cannot make
+// anything leave the machine.
+func TestNoAgentReachableOpSpeaksToAPerson(t *testing.T) {
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
+	for _, op := range []string{"reply", "publish", "approve"} {
+		_, err := invoke(t, tool, map[string]any{"op": op, "id": "t1", "body": "on it"})
+		require.Error(t, err, "op %q must not be reachable from the agent surface", op)
+	}
+}

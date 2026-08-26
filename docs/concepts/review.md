@@ -208,6 +208,11 @@ provider that does not answer reads as open.
 - **An agent cannot publish.** An agent pairing over MCP reads the review's threads and may
   draft a comment into the shared session. You send it. magus stamps authorship from the
   transport a write arrived on rather than from the payload, so nothing can claim to be you.
+- **An agent cannot reply to a person.** A remark is addressed to whoever reads the review; a
+  reply is addressed to the colleague who asked, by name. There is no agent-reachable op that
+  produces one - replying lives on the human route alone - so an answer to your colleague is
+  something you wrote. Receiving generated text where you asked a question is how the human half
+  of a review dies, and this is the one place magus spends a refusal to prevent it.
 - **A self-review is always a `COMMENT`.** The API would accept your change approving itself;
   magus does not offer it.
 - **A draft with no line never moves to a line magus guessed.** The send box marks those
