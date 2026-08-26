@@ -52,12 +52,12 @@ import "spells/github/review" as ghReview;
 magus\review.provider(ghReview);
 ```
 
-| Op               | Answers                                                      |
-| ---------------- | ------------------------------------------------------------ |
-| `find_review`    | which review this branch has, and whether it has merged      |
-| `review_threads` | the remarks already on it                                    |
-| `publish_review` | send a batch of drafts as one review                         |
-| `reply_review`   | answer one thread                                            |
+| Op               | Answers                                                 |
+| ---------------- | ------------------------------------------------------- |
+| `find_review`    | which review this branch has, and whether it has merged |
+| `review_threads` | the remarks already on it                               |
+| `publish_review` | send a batch of drafts as one review                    |
+| `reply_review`   | answer one thread                                       |
 
 A spell may implement a **subset**. A host with no comment API can still take a review body,
 so a missing op means that provider lacks the capability, not that the spell is broken. See
