@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,4 +48,41 @@ func TestFileFactsAbsent(t *testing.T) {
 	g.AddNode(types.KnowledgeNode{ID: fileID("bare.go"), Kind: types.KindFile, Label: "bare.go"})
 	require.Equal(t, FileFacts{}, g.FileFacts("bare.go"))
 	require.Equal(t, FileFacts{}, g.FileFacts("missing.go"))
+}
+
+func TestSymbolAt(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: fileID("a.go"), Kind: types.KindFile, Label: "a.go"})
+	g.AddNode(types.KnowledgeNode{
+		ID: symbolID("a.Foo"), Kind: types.KindSymbol, Label: "Foo", Source: "a.go:10",
+		Attrs: map[string]string{AttrDefEndLine: "20"},
+	})
+	// Bar's indexer emitted no enclosing range, which several do not.
+	g.AddNode(types.KnowledgeNode{ID: symbolID("a.Bar"), Kind: types.KindSymbol, Label: "Bar", Source: "a.go:30"})
+	g.AddEdge(types.KnowledgeEdge{Source: fileID("a.go"), Target: symbolID("a.Foo"), Relation: types.RelationDefines})
+	g.AddEdge(types.KnowledgeEdge{Source: fileID("a.go"), Target: symbolID("a.Bar"), Relation: types.RelationDefines})
+
+	t.Run("a line inside a symbol names it and its span", func(t *testing.T) {
+		assert.Equal(t, SymbolSpan{ID: symbolID("a.Foo"), Label: "Foo", StartLine: 10, EndLine: 20},
+			g.SymbolAt("a.go", 15))
+	})
+
+	t.Run("the nearest preceding definition wins", func(t *testing.T) {
+		// 35 is past Foo's known end and after Bar's start: Bar, not Foo.
+		assert.Equal(t, symbolID("a.Bar"), g.SymbolAt("a.go", 35).ID)
+	})
+
+	t.Run("a missing end line is zero rather than guessed", func(t *testing.T) {
+		got := g.SymbolAt("a.go", 31)
+		assert.Equal(t, symbolID("a.Bar"), got.ID)
+		assert.Zero(t, got.EndLine, "an extent magus does not know must not be invented")
+	})
+
+	t.Run("above every definition is the zero value", func(t *testing.T) {
+		assert.Zero(t, g.SymbolAt("a.go", 1))
+	})
+
+	t.Run("a file with no ingested symbols is the zero value", func(t *testing.T) {
+		assert.Zero(t, g.SymbolAt("missing.go", 10))
+	})
 }
