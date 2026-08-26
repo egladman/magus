@@ -130,6 +130,10 @@ export interface ReviewInfo {
   // hash, and a numeric field would have made those providers unwritable for no gain.
   readonly id: string;
   readonly repo?: string;
+  // host is where publishing would send to. Named in the UI before anything leaves, because an
+  // Enterprise appliance and github.com are the same feature and very different destinations,
+  // and the reader is the only one who can tell whether the one on screen is the one they meant.
+  readonly host?: string;
   readonly reason?: string;
   readonly threads: readonly ReviewThread[];
 }
@@ -241,6 +245,7 @@ export type SessionOp =
   | { op: "cursor"; path: string; hunk: number }
   | { op: "viewed"; digest: string; on: boolean }
   | { op: "comment"; path: string; hunk: number; line?: number; body: string; anchor?: string }
+  | { op: "discard"; id: string }
   | { op: "resolve"; id: string; on: boolean }
   | { op: "answer"; id: string; on: boolean };
 

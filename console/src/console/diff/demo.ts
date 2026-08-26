@@ -350,6 +350,7 @@ export function demoReview(): ReviewInfo {
   return {
     id: "482",
     repo: "acme/acme",
+    host: "github.com",
     threads: [
       {
         id: "th1",
@@ -475,6 +476,15 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
         ],
       };
     }
+    case "discard":
+      // Only an unsent remark of the reader's own leaves, matching the store: a published one
+      // cannot be unsaid by deleting the local copy, and an agent's is not theirs to remove.
+      return {
+        ...session,
+        comments: (session.comments ?? []).filter(
+          (c) => !(c.id === op.id && c.author === "human" && !c.published),
+        ),
+      };
     case "resolve":
       return {
         ...session,

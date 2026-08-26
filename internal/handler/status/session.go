@@ -552,6 +552,11 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "reply: "+err.Error(), http.StatusBadGateway)
 			return
 		}
+	case "discard":
+		// Local, and the only op that removes anything. It refuses a published remark in the
+		// store, so backing out of a draft can never be confused with unsaying something a
+		// colleague has already read.
+		sess = h.Sessions.DiscardDraft(h.Root, req.ID)
 	case "resolve":
 		sess = h.Sessions.ResolveComment(h.Root, req.ID, req.On)
 	case "answer":
@@ -638,10 +643,35 @@ func (h *DiffReviewHandler) place(ctx context.Context, threads []types.ReviewThr
 // it, and a null would make every caller write the same guard for a state that means exactly
 // what an empty list means.
 type diffReviewResponse struct {
-	ID      string               `json:"id"`
-	Repo    string               `json:"repo,omitempty"`
+	ID   string `json:"id"`
+	Repo string `json:"repo,omitempty"`
+	// Host is where publishing would send to, named so a surface can say it out loud before
+	// anything leaves. An Enterprise appliance and github.com are the same feature and very
+	// different destinations, and the reader is the only one who can tell whether the one on
+	// screen is the one they meant.
+	Host    string               `json:"host,omitempty"`
 	Reason  string               `json:"reason,omitempty"`
 	Threads []types.ReviewThread `json:"threads"`
+}
+
+// remoteHost reduces a git remote URL to the host a reader would recognize. Empty when it is
+// not a URL this understands - a surface then names the repo alone rather than guessing.
+func remoteHost(remote string) string {
+	s := remote
+	for _, prefix := range []string{"https://", "http://", "ssh://"} {
+		s = strings.TrimPrefix(s, prefix)
+	}
+	if at := strings.Index(s, "@"); at >= 0 {
+		s = s[at+1:]
+	}
+	s = strings.TrimSuffix(s, ".git")
+	if cut := strings.IndexAny(s, ":/"); cut >= 0 {
+		s = s[:cut]
+	}
+	if !strings.Contains(s, ".") {
+		return ""
+	}
+	return s
 }
 
 func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
@@ -659,6 +689,9 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		Repo:    at.Repo,
 		Reason:  at.Reason,
 		Threads: []types.ReviewThread{},
+	}
+	if at.Open() && h.workspace != nil {
+		out.Host = remoteHost(h.workspace.ReviewOrigin(r.Context()).Remote)
 	}
 	if at.Open() {
 		threads, err := bindings.ReviewThreads(r.Context(), at)

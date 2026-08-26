@@ -1144,6 +1144,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const reviewLabel = (info: ReviewInfo): string =>
     /^\d+$/.test(info.id) ? `#${info.id}` : info.id;
 
+  // destination is the whole address a write would go to, for the sentence shown before one
+  // leaves: repo and review, so "send" never means "somewhere you would have to guess".
+  const destination = (info: ReviewInfo): string =>
+    info.repo ? `${info.repo} ${reviewLabel(info)}` : reviewLabel(info);
+
   // reviewChips says where this pass is going and what is waiting for it.
   //
   // Nothing at all until the lookup lands, and nothing when no review is open. A branch with no
@@ -1706,16 +1711,37 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
     const box = h("div", "console-diff-composer console-diff-composer--batch");
     const where = h("span", "console-diff-composer__where");
-    where.textContent = `Send ${pending.length} ${pending.length === 1 ? "remark" : "remarks"} to ${reviewLabel(state.review)}`;
+    where.textContent = `Send ${pending.length} ${pending.length === 1 ? "remark" : "remarks"} to ${destination(state.review)}`;
+    // The network, said out loud. Everything else on this surface is local, so the one act that
+    // leaves the machine must not look like the others - and it names the HOST, because an
+    // appliance and github.com are the same feature and different destinations.
+    const warn = h(
+      "span",
+      "console-diff-composer__network",
+      `Posts over the network to ${state.review.host ?? "the review host"}. Nothing has left this machine yet.`,
+    );
     const listing = h("ul", "console-diff-composer__batch");
     for (const d of pending) {
       const item = h("li");
       const at = h("span", "console-diff-composer__at", `${d.path}:${d.line ?? "?"}`);
-      // A draft with no line is one no host can place, so the publisher drops it rather than
-      // guessing. Said here, before the send, rather than discovered afterwards as a remark
-      // that quietly never arrived.
+      // A draft with no line is one no host can place, so it is held back rather than guessed
+      // at. Said here, before the send, rather than discovered afterwards as a remark that
+      // quietly never arrived.
       if (!d.line) item.dataset.unplaceable = "";
       item.append(at, h("span", "console-diff-composer__body", d.body));
+      // Backing out is part of the transaction: a staged remark you have changed your mind
+      // about should not have to be sent to get rid of it.
+      const drop = h("button", "console-diff-composer__drop", "discard") as HTMLButtonElement;
+      drop.type = "button";
+      drop.title = "Remove this draft. It has not been sent.";
+      drop.addEventListener("click", () => {
+        void sync({ op: "discard", id: d.id }).then(() => {
+          if (disposed) return;
+          close();
+          composePublish();
+        });
+      });
+      item.append(drop);
       listing.append(item);
     }
     const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
@@ -1754,7 +1780,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       });
     });
     inputWrap.append(input);
-    box.append(where, listing, inputWrap);
+    box.append(where, warn, listing, inputWrap);
     scroll.append(box);
     input.focus();
   };
@@ -1811,11 +1837,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
       return;
     }
 
-    const box = h("div", "console-diff-composer");
+    const box = h("div", "console-diff-composer console-diff-composer--batch");
     const where = h("span", "console-diff-composer__where");
-    // Who is being answered, not where. A reply goes to a PERSON, and naming the file again
-    // would repeat what the row above already says while omitting the part that matters.
-    where.textContent = `Reply to ${thread.author}`;
+    // Who is being answered, and where it lands. A reply goes to a PERSON, but it is also the
+    // second act on this surface that leaves the machine, so it names the destination for the
+    // same reason the send box does.
+    where.textContent = state.review
+      ? `Reply to ${thread.author} on ${destination(state.review)}`
+      : `Reply to ${thread.author}`;
+    const warn = h(
+      "span",
+      "console-diff-composer__network",
+      `Posts over the network to ${state.review?.host ?? "the review host"} when you press Enter.`,
+    );
     const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
     const input = h("input", "pf-v6-c-form-control__text");
     input.type = "text";
@@ -1852,7 +1886,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       });
     });
     inputWrap.append(input);
-    box.append(where, inputWrap);
+    box.append(where, warn, inputWrap);
     scroll.append(box);
     input.focus();
   };

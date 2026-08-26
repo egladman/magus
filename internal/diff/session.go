@@ -298,6 +298,26 @@ func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffSessio
 	return out
 }
 
+// DiscardDraft removes a remark that has not been sent, so a reader can back out of one the
+// way they can back out of a staged setting.
+//
+// UNPUBLISHED and HUMAN only. A published remark exists somewhere a colleague may already have
+// replied to, and deleting the local copy would not unsay it - it would only hide it from the
+// person who wrote it. An agent's remark is not the reader's to delete.
+func (s *Store) DiscardDraft(root, id string) *types.DiffSession {
+	out := s.mutate(root, func(sess *types.DiffSession) {
+		for i, c := range sess.Comments {
+			if c.ID != id || c.Published || c.Author != types.DiffAuthorHuman {
+				continue
+			}
+			sess.Comments = append(sess.Comments[:i], sess.Comments[i+1:]...)
+			return
+		}
+	})
+	s.persistDrafts(root)
+	return out
+}
+
 // MarkPublished records that a draft has left the machine.
 //
 // One comment at a time even though publishing is a batch, because the caller decides which

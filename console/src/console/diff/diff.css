@@ -1162,3 +1162,27 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The one line on this surface that says a write leaves the machine. Everything else here is
+ * local, so the act that is not must not look like the others. */
+.console-diff-composer__network {
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--status--warning--default);
+}
+
+/* Backing out of a staged remark. Quiet, because discarding is not the action the box is for -
+ * it is the way out of one draft, not the way out of the pass. */
+.console-diff-composer__drop {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--pf-t--global--text--color--subtle);
+  text-decoration: underline;
+}
+
+.console-diff-composer__drop:hover {
+  color: var(--pf-t--global--text--color--status--danger--default);
+}

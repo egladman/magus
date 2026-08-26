@@ -253,7 +253,13 @@ test("#demo shows the batch before it sends it, and sending clears the drafts", 
   assert.ok(dispatchCommand("diff.publish"));
   const box = document.querySelector<HTMLElement>(".console-diff-composer--batch");
   assert.ok(box, "publishing has to show what is about to leave");
-  assert.match(box?.textContent ?? "", /Send 1 remark to #482/);
+  // The whole address, not just the review: repo and number, so "send" never means somewhere
+  // the reader would have to guess.
+  assert.match(box?.textContent ?? "", /Send 1 remark to acme\/acme #482/);
+  // And the network, said out loud. Everything else on this surface is local; the one act that
+  // leaves the machine names the host it leaves for, before it leaves.
+  assert.match(box?.textContent ?? "", /Posts over the network to github\.com/);
+  assert.match(box?.textContent ?? "", /Nothing has left this machine yet/);
   // The listing names WHERE each remark lands, because a host anchors an inline comment to a
   // line and a draft that cannot be placed has to be visible as such before the send.
   assert.match(box?.textContent ?? "", /libs\/authkit\/claims\.go:22/);
@@ -362,5 +368,42 @@ test("#demo lets the elsewhere threads be read, not just counted", async () => {
   const text = document.querySelector(".console-diff-overview")?.textContent ?? "";
   assert.match(text, /Said on the review, elsewhere/);
   assert.match(text, /scope-only tokens on the health path/);
+  dispose.deactivate();
+});
+
+// Staging is only half a transaction: a remark you have changed your mind about must not have
+// to be SENT to get rid of it. Discarding is local and reaches no network at all.
+test("#demo lets a staged remark be discarded without sending it", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  const drop = document.querySelector<HTMLButtonElement>(".console-diff-composer__drop");
+  assert.ok(drop, "every staged remark offers a way out");
+  drop.click();
+  await settle();
+
+  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
+    (el) => el.textContent,
+  );
+  assert.ok(
+    !chips.some((c) => c?.endsWith("draft") || c?.endsWith("drafts")),
+    `the discarded remark is gone, got ${chips.join(", ")}`,
+  );
+});
+
+// The reply is the second act that leaves the machine, and it names its destination for the
+// same reason the send box does.
+test("#demo names the network destination before a reply is sent", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.thread.reply"));
+  const box = document.querySelector<HTMLElement>(".console-diff-composer");
+  assert.match(box?.textContent ?? "", /Reply to priya on acme\/acme #482/);
+  assert.match(box?.textContent ?? "", /Posts over the network to github\.com/);
+
   dispose.deactivate();
 });

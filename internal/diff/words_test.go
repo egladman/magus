@@ -79,3 +79,42 @@ func TestPairForEmphasisIsPositionalAndOnlyWithinAnEqualRun(t *testing.T) {
 	assert.Nil(t, PairForEmphasis([]int{0}, []int{1, 2}))
 	assert.Nil(t, PairForEmphasis([]int{}, []int{}))
 }
+
+// ByteSpan converts the UTF-16 offsets a row carries back into the bytes a Go renderer slices
+// with. The conversions are what make one computed emphasis serve both a browser and a
+// terminal, so the boundaries matter more than the middle.
+func TestByteSpanConvertsUTF16OffsetsBackToBytes(t *testing.T) {
+	// Three two-byte runes ahead of the change, so byte and UTF-16 offsets differ.
+	const text = `x = "` + "αβγ" + ` one"`
+
+	got := ByteSpan(text, Span{Start: 9, End: 12})
+	assert.Equal(t, "one", text[got.Start:got.End], "the span must select the same word it did in UTF-16")
+
+	// A span reaching the very end converts rather than falling off it.
+	end := ByteSpan(text, Span{Start: 9, End: 13})
+	assert.Equal(t, `one"`, text[end.Start:end.End])
+}
+
+// An empty or reversed span marks nothing, and must not be turned into one that marks
+// something: these numbers travelled, and a renderer must not slice on a guess.
+func TestByteSpanRefusesASpanThatMarksNothing(t *testing.T) {
+	assert.True(t, ByteSpan("hello", Span{}).Empty())
+	assert.True(t, ByteSpan("hello", Span{Start: 3, End: 3}).Empty())
+	assert.True(t, ByteSpan("hello", Span{Start: 4, End: 2}).Empty())
+}
+
+// Out of range yields an empty span rather than a panic or a slice past the end. The offsets
+// come from a wire field, so a renderer must survive one that does not fit the text it has.
+func TestByteSpanSurvivesOffsetsThatDoNotFitTheText(t *testing.T) {
+	assert.True(t, ByteSpan("hi", Span{Start: 40, End: 50}).Empty())
+	assert.NotPanics(t, func() { ByteSpan("", Span{Start: 1, End: 2}) })
+}
+
+// ASCII is the common case and must round-trip exactly: there, UTF-16 units and bytes agree,
+// so a conversion that quietly shifted by one would be invisible in every test but this one.
+func TestByteSpanIsIdentityForASCII(t *testing.T) {
+	const text = "call(a, b)"
+	got := ByteSpan(text, Span{Start: 8, End: 9})
+	assert.Equal(t, Span{Start: 8, End: 9}, got)
+	assert.Equal(t, "b", text[got.Start:got.End])
+}
