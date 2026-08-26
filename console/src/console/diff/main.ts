@@ -1185,7 +1185,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         label(
           `${elsewhere} elsewhere`,
           undefined,
-          "Comments on the review, on files this changeset does not touch",
+          "Comments on the review, on files this view is not showing",
         ),
       );
     }
@@ -1499,7 +1499,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       box.append(h("h3", "console-diff-overview__subtitle", "Said on the review, elsewhere"));
       const why = h("p", "console-diff-overview__note");
       why.textContent =
-        "These are on files this changeset does not touch. A review covers commits a working diff does not.";
+        "These are on files this view is not showing, whether folded away or outside the changeset. A review covers commits a working diff does not.";
       box.append(why);
       for (const t of elsewhere) {
         const r = h("p", "console-diff-overview__note");

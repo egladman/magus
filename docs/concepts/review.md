@@ -54,7 +54,7 @@ magus\review.provider(ghReview);
 
 | Op               | Answers                                                      |
 | ---------------- | ------------------------------------------------------------ |
-| `open_review`    | which review this branch has open, or the reason it has none |
+| `find_review`    | which review this branch has open, or the reason it has none |
 | `review_threads` | the remarks already on it                                    |
 | `publish_review` | send a batch of drafts as one review                         |
 | `reply_review`   | answer one thread                                            |
@@ -90,29 +90,48 @@ you want both.
 
 In the console's Diff surface:
 
-| Key | Does                                        |
-| --- | ------------------------------------------- |
-| `c` | write a remark on the hunk under the cursor |
-| `a` | answer the thread under the cursor          |
-| `s` | read the batch of drafts, then send it      |
+| Key   | Does                                        |
+| ----- | ------------------------------------------- |
+| `c`   | write a remark on the hunk under the cursor |
+| `a`   | answer the thread under the cursor          |
+| `r`   | resolve the comment under the cursor        |
+| `s`   | read the batch of drafts, then send it      |
+| `Esc` | the changeset overview                      |
 
-`s` lists the drafts and asks for a summary before anything leaves. You often change your mind
-about the first remark by the time you write the fifth, which is why they wait.
+`s` lists the drafts and offers a summary line before anything leaves. You often change your
+mind about the first remark by the time you write the fifth, which is why they wait. The
+summary is optional; the list of what is about to go is not.
 
-`magus diff`'s terminal viewer renders the same threads under the same hunks. It cannot
-publish, and no command carries a `--publish` flag: you send with the batch in front of you or
-you do not send.
+![The Diff surface with the send box open: a heading reading "Send 1 remark to acme/acme #482", a line saying the post goes over the network to github.com and that nothing has left this machine yet, the one draft listed with its file, line and text beside a discard link, and a summary field](../../assets/screenshots/console-diff-send.png)
+
+The box names the repository, the review and the host before you commit to any of them, and
+says plainly that nothing has gone yet. A remark you have changed your mind about is discarded
+from this list.
+
+`magus diff`'s terminal viewer renders those threads under the same hunks, re-placed against
+the patch it is showing. It cannot publish, and no review command carries a `--publish` flag:
+you send with the batch in front of you or you do not send.
 
 ### Where a remark lands
 
 A colleague anchors a thread to a line of the **review**, which is not the changeset in front
 of you. Your working tree moves after they write, and a pull request covers commits a working
-diff does not. So each thread lands in one of three places, and magus never drops one:
+diff does not. So each thread lands in one of three places, and the console drops none of them:
 
 - on the hunk holding its line;
 - under the file heading, when this changeset no longer contains that line;
-- listed as **elsewhere** (press `Esc` for the overview), when the file is not in this
-  changeset at all.
+- listed as **elsewhere** (press `Esc` for the overview), when the file is not on screen at
+  all - either outside this changeset, or folded away, as a generated file is by default.
+
+The third bucket is keyed on what the surface is showing rather than on what the changeset
+holds, because a thread rendered nowhere and a thread on a folded file look identical to the
+reader: absent. The terminal viewer has no elsewhere list, so it shows the first two.
+
+![The changeset overview: counts for what is to read, folded away, public surface and untested, a reading order, and a section headed "Said on the review, elsewhere" carrying one colleague's remark in full](../../assets/screenshots/console-diff-overview.png)
+
+The overview reads those remarks out rather than counting them. A chip saying "1 elsewhere"
+tells you something was said and withholds what, which leaves you to open a browser to find
+out - the one errand this whole surface exists to save you.
 
 ## What magus will not do
 
