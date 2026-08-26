@@ -45,6 +45,46 @@ const REPLACEMENT = [
   "",
 ].join("\n");
 
+const TWO_HUNKS = [
+  "diff --git a/x.ts b/x.ts",
+  "--- a/x.ts",
+  "+++ b/x.ts",
+  "@@ -1,2 +1,2 @@",
+  " first",
+  "+added in the first",
+  "@@ -40,2 +40,2 @@",
+  " second",
+  "+added in the second",
+  "",
+].join("\n");
+
+// A hunk is keyed by its OWN index, never by where it happens to sit in the array it was handed
+// in. Anything that shows a subset of a file - a focus view, a filter - renumbers the slice
+// otherwise, and a remark written on hunk 1 is then looked up under hunk 0 and rendered against
+// the wrong code. Go states this at internal/diff/parse.go's PlaceThreads and keeps Hunk.Index
+// for it; this is the browser's half of the same rule.
+test("a hunk carries its own index, so a sliced file does not renumber its remarks", () => {
+  const file = at(patchFixture(TWO_HUNKS), 0, "file");
+  const second = at(file.hunks, 1, "hunk");
+  assert.equal(second.index, 1, "the fixture has to carry the index the daemon sends");
+
+  const onSecond = {
+    id: "c1",
+    path: file.path,
+    hunk: 1,
+    line: 41,
+    body: "about the second hunk",
+    author: "human" as const,
+    published: false,
+    resolved: false,
+  };
+  const rows = buildRows([{ ...file, hunks: [second] }], "unified", byHunk([onSecond]));
+
+  const said = rows.filter((r): r is Extract<Row, { kind: "comment" }> => r.kind === "comment");
+  assert.equal(said.length, 1, "the remark on hunk 1 travels with hunk 1");
+  assert.equal(at(said, 0, "comment").comment.body, "about the second hunk");
+});
+
 test("unified rows are one per line, with a file and a hunk heading", () => {
   const rows = buildRows(patchFixture(REPLACEMENT), "unified");
   assert.deepEqual(

@@ -57,6 +57,7 @@ export function patchFixture(patch: string): DiffFile[] {
     if (!cur || !head) return;
     cur.hunks.push({
       digest: "",
+      index: cur.hunks.length,
       header: head.header,
       oldStart: head.o,
       oldCount: head.oc,

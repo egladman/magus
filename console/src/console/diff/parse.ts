@@ -50,6 +50,14 @@ export interface Hunk {
   // round-trip - a context line whose producer dropped the trailing space arrives as "" and
   // would be rebuilt as " ", yielding a different digest for the same hunk.
   readonly digest: string;
+  // index is this hunk's position in ITS FILE, as the daemon numbered it - not its position in
+  // whatever array a caller is holding. Comments and threads are keyed by it, so a view that
+  // renders a SUBSET of a file's hunks still looks up the right remarks; keying by array
+  // position instead means a slice starting at hunk 1 reads hunk 0's remarks onto it, silently.
+  //
+  // Go keeps the same field for the same reason, and says so at PlaceThreads in
+  // internal/diff/parse.go. This is the browser's half of that rule.
+  readonly index: number;
   readonly header: string; // the raw @@ line, including any trailing section heading
   readonly oldStart: number;
   readonly oldCount: number;
@@ -104,11 +112,14 @@ interface WireSpan {
 interface WireHunk {
   header: string;
   digest: string;
-  // index and lines are on the wire but unused here. They are what the MCP surface reads - an
-  // agent addresses a hunk by index and needs its raw text - and they are declared rather than
-  // omitted because TypeScript rejects an object literal carrying a property the type does not
-  // know, which is what the generated showcase fixture is. `lines` is the body with its +/-
-  // markers intact; `rows` below is the same body parsed, and rendering reads that.
+  // index is what an agent addresses a hunk by over MCP, and what keys a remark to its hunk
+  // here; see Hunk.index above for why the array position will not do.
+  //
+  // lines is on the wire and unused here: it is the body with its +/- markers intact, which the
+  // MCP surface needs and rendering does not - `rows` below is the same body parsed, and that is
+  // what is drawn. It is declared rather than omitted because TypeScript rejects an object
+  // literal carrying a property the type does not know, which is what the generated showcase
+  // fixture is.
   index: number;
   lines: string[] | null;
   old_start: number;
@@ -150,6 +161,7 @@ export function fromWire(files: readonly WireFile[] | null | undefined): DiffFil
     hunks: (f.hunks ?? []).map((h) => ({
       header: h.header,
       digest: h.digest,
+      index: h.index,
       oldStart: h.old_start,
       oldCount: h.old_count,
       newStart: h.new_start,

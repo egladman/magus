@@ -155,7 +155,11 @@ export function buildRows(
     for (const touch of touches?.get(file.path) ?? []) {
       rows.push({ kind: "story", file, touch });
     }
-    file.hunks.forEach((hunk, index) => {
+    // The hunk's OWN index, never its position in the array handed in. A caller rendering a
+    // subset of a file passes a shorter list, and keying by position would look that slice's
+    // remarks up under the wrong hunk - a remark against code nobody wrote it about.
+    for (const hunk of file.hunks) {
+      const index = hunk.index;
       rows.push({ kind: "hunk", file, hunk, index });
       // The host's threads first, then this session's own remarks. What a colleague already
       // said is context for what you are about to write, not a footnote to it.
@@ -167,7 +171,7 @@ export function buildRows(
       }
       if (mode === "split") pushSplit(rows, file, hunk);
       else for (const line of hunk.lines) rows.push({ kind: "line", file, hunk, line });
-    });
+    }
   }
   return rows;
 }
