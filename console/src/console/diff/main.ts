@@ -63,6 +63,7 @@ import {
   fetchReview,
   fetchReviewSession,
   fetchBranches,
+  runTarget,
   mutate,
   publish,
   reply,
@@ -158,6 +159,28 @@ interface State {
   overview: boolean;
   phase: Phase;
   collaboration: CollaborationState;
+  // verdicts maps a project to what its test target last decided, plus the changeset digest that
+  // was on screen when the answer arrived.
+  //
+  // The digest is the honest half. magus keys its cache on a target's sources, so a verdict -
+  // replayed or freshly run - is a true statement about the tree it was computed from, and the
+  // only way it becomes a lie is the tree moving afterwards. Holding the digest lets the surface
+  // say "passed, for code you have since edited" instead of a green tick over changed code, which
+  // is a wrong answer delivered confidently.
+  verdicts: Map<string, Verdict>;
+}
+
+// Verdict is one project's last run of its test target, as the surface knows it.
+interface Verdict {
+  readonly state: "running" | "passed" | "failed" | "unknown";
+  readonly error?: string;
+  readonly durationMs?: number;
+  // asOf is the changeset digest that was on screen when this landed. A verdict whose asOf is not
+  // the current digest describes code the reader has moved past.
+  readonly asOf: string;
+  // undeclared names the gap when the project declares no test target, so "we did not run it" is
+  // never rendered as "it did not pass".
+  readonly undeclared?: string;
 }
 
 const STATUS_COPY: Record<FileStatus, { short: string; modifier: string }> = {
@@ -328,6 +351,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     overview: false,
     phase: "loading",
     collaboration: demo ? "live" : "unavailable",
+    verdicts: new Map(),
   };
 
   // --- scaffold -------------------------------------------------------------
@@ -450,7 +474,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
   focusButton.type = "button";
   focusButton.addEventListener("click", () => setFocus(!state.focus));
 
-  toolbar.append(statsEl, collaborationNotice, progressEl, focusButton, keysEl);
+  // ONE run control, for the project of the file in view - not one per file heading. The question
+  // a reader asks is "does the thing I am looking at still pass", and they ask it about one place
+  // at a time; a button on every heading would answer the same question n times in a column and
+  // turn the surface into a control panel.
+  const verdictButton = h(
+    "button",
+    "pf-v6-c-button pf-m-link console-diff-toolbar__verdict",
+  ) as HTMLButtonElement;
+  verdictButton.type = "button";
+  verdictButton.hidden = true;
+  verdictButton.addEventListener("click", () => void startRun());
+
+  toolbar.append(statsEl, collaborationNotice, progressEl, verdictButton, focusButton, keysEl);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
   context.hidden = true;
@@ -1480,6 +1516,123 @@ export function activate(host: HTMLElement): SurfaceInstance {
     mergedText.textContent = text;
   };
 
+  // The target an inline run asks for. Hard-coded to the canonical test target rather than
+  // offered as a picker: the reader is asking one question - does this still pass - and a menu of
+  // every declared target turns that into a decision they did not want to make. A project that
+  // declares no `test` comes back undeclared, and the surface says so.
+  const RUN_TARGET = "test";
+
+  // currentProject is the project of the file the reader is on, which is what the one run control
+  // is about. Focus mode has an exact answer; the dense view uses the file at the cursor, and
+  // falls back to the first changed file so the control is never blank on arrival.
+  // treeState identifies the code a verdict is about: the patch digest the daemon computed for
+  // the working tree, the same one the context lookup pins its reads to. It moves the moment the
+  // reader edits anything, which is exactly when a verdict stops describing what is on screen.
+  const treeState = (): string => state.session?.as_of ?? "";
+
+  const currentProject = (): string => {
+    const path = state.focus ? state.focusAt?.path : (state.files[state.cursor]?.path ?? "");
+    const primary =
+      state.changeset.primary.find((o) => o.file.path === path) ?? state.changeset.primary[0];
+    return primary?.annotation?.project ?? "";
+  };
+
+  // renderVerdict draws the one run control: what the project in view last decided, and whether
+  // that answer still describes the code on screen.
+  //
+  // A verdict computed against a different changeset digest is shown as STALE rather than hidden
+  // or silently reused. Hiding it loses the reader's own work; reusing it is the confident wrong
+  // answer this surface exists not to give.
+  const renderVerdict = (): void => {
+    const project = currentProject();
+    if (!project || demo) {
+      verdictButton.hidden = true;
+      return;
+    }
+    verdictButton.hidden = false;
+    const v = state.verdicts.get(project);
+    const stale = v !== undefined && v.asOf !== treeState();
+    verdictButton.disabled = v?.state === "running";
+    verdictButton.dataset.state = stale ? "stale" : (v?.state ?? "unknown");
+    if (v?.undeclared) {
+      // A gap in what the workspace declares, not a failure. Said plainly, because "no tests ran"
+      // rendered as silence reads as "nothing to worry about".
+      verdictButton.textContent = `${project}: no ${RUN_TARGET} target`;
+      verdictButton.title = v.undeclared;
+      verdictButton.disabled = true;
+      return;
+    }
+    const secs = v?.durationMs ? ` ${(v.durationMs / 1000).toFixed(1)}s` : "";
+    switch (v?.state) {
+      case "running":
+        verdictButton.textContent = `Testing ${project}...`;
+        verdictButton.title = `magus run ${RUN_TARGET} ${project} is in flight`;
+        break;
+      case "passed":
+        verdictButton.textContent = stale
+          ? `${project} passed - since edited`
+          : `${project} passed${secs}`;
+        verdictButton.title = stale
+          ? "This verdict is about the changeset as it was, not as it is now. Run again."
+          : "Run again";
+        break;
+      case "failed":
+        verdictButton.textContent = stale
+          ? `${project} failed - since edited`
+          : `${project} failed`;
+        verdictButton.title = v.error || "Run again";
+        break;
+      default:
+        verdictButton.textContent = `Test ${project}`;
+        verdictButton.title = `Run ${RUN_TARGET} for ${project} on this machine`;
+    }
+  };
+
+  // startRun submits the project in view, then polls until it settles.
+  //
+  // The daemon coalesces, so pressing this while the reader's own terminal is already running the
+  // same target joins that run rather than starting a second - and the reply says which happened,
+  // which is why the surface can show "Testing..." without ever having to claim it started it.
+  const startRun = async (): Promise<void> => {
+    const project = currentProject();
+    const hp = host_();
+    if (!project || demo || !hp) return;
+    const asOf = treeState();
+    state.verdicts.set(project, { state: "running", asOf });
+    renderVerdict();
+    const first = await runTarget(hp, RUN_TARGET, project, true, controller.signal);
+    if (first.undeclared) {
+      state.verdicts.set(project, { state: "unknown", asOf, undeclared: first.undeclared });
+      renderVerdict();
+      return;
+    }
+    await pollRun(project, asOf);
+  };
+
+  // pollRun watches one run to completion. Polling rather than streaming: the verdict is a single
+  // bit arriving once, and a socket per surface to deliver it would cost more than it saves.
+  const pollRun = async (project: string, asOf: string): Promise<void> => {
+    // Bounded so a run that never reports back leaves the control usable rather than stuck on
+    // "Testing..." forever. At 1.5s that is ten minutes, past any test run worth watching inline.
+    for (let i = 0; i < 400; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const hp = host_();
+      if (controller.signal.aborted || !hp) return;
+      const v = await runTarget(hp, RUN_TARGET, project, false, controller.signal);
+      if (v.state === "running") continue;
+      state.verdicts.set(project, {
+        state: v.state,
+        error: v.error,
+        durationMs: v.duration_ms,
+        asOf,
+      });
+      renderVerdict();
+      return;
+    }
+    state.verdicts.delete(project);
+    renderVerdict();
+  };
+
   // renderProgress draws where the pass is. Only in focus mode: the dense view already answers
   // this with its "n/m hunks read" chip, and two counts of the same thing in one row is how a
   // reader stops believing either.
@@ -1490,6 +1643,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       : "Read one hunk at a time (f)";
     progressEl.hidden = !state.focus;
     statsEl.hidden = state.focus;
+    renderVerdict();
     if (!state.focus) return;
     const total = state.pairs.length;
     const read = readCount();

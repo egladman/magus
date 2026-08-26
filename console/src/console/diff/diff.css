@@ -419,6 +419,30 @@
   flex: 0 0 auto;
 }
 
+.console-diff-toolbar__verdict {
+  flex: 0 0 auto;
+}
+
+/* Colour is the glance; the words beside it are what actually says which state this is. The
+ * button never renders as a bare coloured dot, so a reader who cannot separate the two hues still
+ * reads "passed" or "failed" - the same non-colour channel rule the +/- markers follow. */
+.console-diff-toolbar__verdict[data-state="passed"] {
+  color: var(--pf-t--global--text--color--status--success--default);
+}
+
+.console-diff-toolbar__verdict[data-state="failed"] {
+  color: var(--pf-t--global--text--color--status--danger--default);
+}
+
+/* Stale is deliberately the SUBTLE colour rather than a third status hue. A verdict about code
+ * the reader has since edited is not a warning about the code - it is an answer that has stopped
+ * applying, and it should recede rather than compete with the two that still mean something. */
+.console-diff-toolbar__verdict[data-state="stale"] {
+  color: var(--pf-t--global--text--color--subtle);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
 .console-diff-toolbar__keys {
   display: flex;
   gap: var(--pf-t--global--spacer--md);

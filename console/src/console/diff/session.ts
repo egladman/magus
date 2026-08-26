@@ -382,6 +382,59 @@ export interface BranchChange {
 // is touching these files", which is reassurance; a backend that has not implemented the lookup
 // is a gap in magus. Collapsing both into emptiness tells the reader the first when the truth is
 // the second, and a marker whose absence cannot be trusted is worth nothing.
+// RunVerdict is what /api/v1/diff/run answers with, for both the submit and the poll.
+export interface RunVerdict {
+  readonly state: "running" | "passed" | "failed" | "unknown";
+  readonly started?: boolean;
+  readonly finished_ms?: number;
+  readonly duration_ms?: number;
+  readonly error?: string;
+  readonly undeclared?: string;
+  readonly available?: readonly string[];
+}
+
+// runTarget asks the local workspace to run one declared target for one project, or - with
+// start=false - just reports what the last run of it decided.
+//
+// This is the one review capability with no provider or backend behind it: it asks the machine
+// the code is on, so it behaves identically on GitHub, GitLab, git, hg, or no forge at all. The
+// daemon refuses any target the magusfile does not declare for that project, which is what keeps
+// a browser-reachable button from being able to name arbitrary work.
+//
+// A transport failure reports "unknown" rather than "failed": the run did not fail, the question
+// did, and rendering those the same way puts a red mark on code nobody judged.
+export async function runTarget(
+  host: string,
+  target: string,
+  project: string,
+  start: boolean,
+  signal: AbortSignal,
+): Promise<RunVerdict> {
+  try {
+    const url = `http://${host}/api/v1/diff/run`;
+    const res = start
+      ? await fetch(url, {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ target, project }),
+          signal,
+        })
+      : await fetch(
+          `${url}?target=${encodeURIComponent(target)}&project=${encodeURIComponent(project)}`,
+          { headers: authHeaders(), signal },
+        );
+    if (!res.ok) return { state: "unknown" };
+    const body = (await res.json()) as RunVerdict;
+    const state = body?.state;
+    if (state !== "running" && state !== "passed" && state !== "failed") {
+      return { state: "unknown", undeclared: body?.undeclared, available: body?.available };
+    }
+    return body;
+  } catch {
+    return { state: "unknown" };
+  }
+}
+
 export async function fetchBranches(
   host: string,
   signal: AbortSignal,
