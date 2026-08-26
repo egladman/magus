@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/interp/bindings"
@@ -42,7 +43,11 @@ type diffTool struct {
 	src diffSource
 }
 
-// diffSource is the recompute half: the same trio the console's routes read.
+// reviewLookupTimeout bounds the two forge calls op=state makes. An agent asked for the
+// changeset; it must not wait on a stranger's outage to get one.
+const reviewLookupTimeout = 5 * time.Second
+
+// diffSource is what this tool reads from the workspace, satisfied by *console.Service.
 type diffSource interface {
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
@@ -311,11 +316,12 @@ func (t *diffTool) state(ctx context.Context, sess *types.DiffSession) (diffStat
 
 // reviewThreads reads what colleagues have already said, placed onto this changeset's hunks.
 //
-// Silent on every failure, unlike the console's route: there is no reader here to show a reason
-// to, and an agent that could not reach a forge is in exactly the position it was in before
-// this existed. What it must never do is fail the whole state call - the changeset is the
-// thing the agent asked for.
+// Silent on failure and bounded by its own deadline. The changeset is what the agent asked
+// for, and holding it behind somebody else's forge is the reason the console gave this a
+// separate route.
 func (t *diffTool) reviewThreads(ctx context.Context, hunks []diff.FileHunks) []types.ReviewThread {
+	ctx, cancel := context.WithTimeout(ctx, reviewLookupTimeout)
+	defer cancel()
 	from := t.src.ReviewOrigin(ctx)
 	at := bindings.OpenReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {

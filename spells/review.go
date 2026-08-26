@@ -26,7 +26,7 @@ package spells
 //
 // # Why reading is separate from publishing
 //
-// ThreadsContract exists so a reader never leaves for the browser to find out what a colleague
+// ReviewThreadsContract exists so a reader never leaves for the browser to find out what a colleague
 // said. It is the one contract function that makes magus depend on a host being reachable, so
 // it is deliberately its own name: a workspace with no credential, or no pull request open,
 // still publishes nothing and reads nothing, and every other surface works exactly as before.
@@ -35,14 +35,18 @@ const (
 	// A branch with no pull request is the ordinary state, not an error.
 	OpenReviewContract = "open_review"
 
-	// ThreadsContract lists the comment threads already on that review, so they can be read
-	// and replied to without leaving.
-	ThreadsContract = "review_threads"
+	// ReviewThreadsContract lists the comment threads already on that review, so they can be
+	// read and replied to without leaving. It returns a list of records; nothing at all means
+	// no threads, and is not an error.
+	ReviewThreadsContract = "review_threads"
 
 	// PublishReviewContract sends a batch of drafts as one review.
 	PublishReviewContract = "publish_review"
 
-	// ReplyReviewContract answers one existing thread.
+	// ReplyReviewContract answers one existing thread. It returns a BOOL: true when the host
+	// took the reply. Stated because a spell that answered with anything else is read as a
+	// refusal, and a refusal reported after the reply already posted is how the same sentence
+	// reaches a colleague twice.
 	ReplyReviewContract = "reply_review"
 )
 

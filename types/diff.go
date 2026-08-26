@@ -321,14 +321,17 @@ type DiffComment struct {
 	Anchor   string `json:"anchor,omitempty" yaml:"anchor,omitempty"`
 	Resolved bool   `json:"resolved" yaml:"resolved"`
 
-	// Published records that this remark has left the machine, and RemoteID is what the host
-	// called it. Both are empty for a draft, which is every comment until someone publishes.
+	// Published records that this remark has left the machine. False for a draft, which is
+	// every comment until someone publishes.
 	//
 	// A published comment is no longer editable here: it exists somewhere a teammate may have
 	// already replied to, and a local edit that silently diverged from what they are reading
 	// would be worse than no edit at all.
-	Published bool   `json:"published,omitempty" yaml:"published,omitempty"`
-	RemoteID  string `json:"remote_id,omitempty" yaml:"remote_id,omitempty"`
+	//
+	// What the HOST called it is deliberately not recorded. A review posts as one request and
+	// its per-comment ids come back in a shape no provider is obliged to return, so a field
+	// for them would have been a field nothing fills.
+	Published bool `json:"published,omitempty" yaml:"published,omitempty"`
 
 	// Line is the position in the file's NEW side, which is what a host anchors an inline
 	// comment to. Hunk cannot serve: it is an index into this changeset's hunks, a coordinate

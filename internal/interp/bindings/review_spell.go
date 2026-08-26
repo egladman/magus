@@ -2,12 +2,19 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
+
+// errNoReviewProvider is what both outward-facing calls refuse with. One sentence, in one
+// place, because the two are the same situation and a reader who meets it from publish and
+// again from reply must not be left wondering whether they are different problems.
+var errNoReviewProvider = errors.New(
+	"no review provider wired; a magusfile selects one with magus\\review.provider(<spell>)")
 
 // OpenReview asks the selected spell which review is open for a branch.
 //
@@ -71,10 +78,10 @@ func decodeReviewTarget(data any) (types.ReviewTarget, error) {
 // An error here is REAL and propagates, unlike the read paths. Publishing is the one thing in
 // this file that changes something a colleague can see, so a caller must never be told it
 // happened when it did not.
-func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, drafts []types.DiffComment) (int, error) {
+func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, drafts []types.DiffComment) error {
 	drv, ok := reviewDriver()
 	if !ok {
-		return 0, fmt.Errorf("no review provider wired; a magusfile selects one with magus\\review.provider(<spell>)")
+		return errNoReviewProvider
 	}
 	rows := make([]any, 0, len(drafts))
 	for _, d := range drafts {
@@ -87,21 +94,20 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, d
 			"body": d.Body,
 		})
 	}
-	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
+	_, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.PublishReviewContract,
 		Params: map[string]any{
 			"repo": at.Repo, "id": at.ID, "summary": summary, "drafts": rows,
 		},
 	})
 	if err != nil {
-		return 0, err
+		return err
 	}
-	where := "review provider: " + spells.PublishReviewContract
-	m, ok := resp.Data.(map[string]any)
-	if !ok {
-		return 0, fmt.Errorf("%s returned %T, want a record", where, resp.Data)
-	}
-	return intField(m, "count", where)
+	// The answer is not read. A review posts as ONE request, so reaching here means the host
+	// took the batch, and a per-draft count could only ever restate the length of what was
+	// sent - which the caller already has. See the handler's publish for why every draft in
+	// the batch is one the provider could actually place.
+	return nil
 }
 
 // ReplyReview answers one existing thread, so a conversation can be finished without leaving.
@@ -113,7 +119,7 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, d
 func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string) error {
 	drv, ok := reviewDriver()
 	if !ok {
-		return fmt.Errorf("no review provider wired; a magusfile selects one with magus\\review.provider(<spell>)")
+		return errNoReviewProvider
 	}
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.ReplyReviewContract,
@@ -144,7 +150,7 @@ func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewTh
 		return nil, nil
 	}
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
-		Target: spells.ThreadsContract,
+		Target: spells.ReviewThreadsContract,
 		Params: map[string]any{"repo": at.Repo, "id": at.ID},
 	})
 	if err != nil {
@@ -154,7 +160,13 @@ func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewTh
 		// about the conversation. A MALFORMED answer is different and is reported below.
 		return nil, nil
 	}
-	where := "review provider: " + spells.ThreadsContract
+	where := "review provider: " + spells.ReviewThreadsContract
+	if resp.Data == nil {
+		// Absent reads as the zero value, not as an error - the posture spell_decode.go states
+		// for this whole layer. A spell whose review has no threads returns nothing, and
+		// calling that malformed would put a provider bug on the screen for an empty review.
+		return nil, nil
+	}
 	rows, ok := resp.Data.([]any)
 	if !ok {
 		return nil, fmt.Errorf("%s returned %T, want a list", where, resp.Data)
@@ -175,7 +187,10 @@ func decodeReviewThread(row any, where string) (types.ReviewThread, error) {
 	if !ok {
 		return types.ReviewThread{}, fmt.Errorf("%s is %T, want a record", where, row)
 	}
-	var t types.ReviewThread
+	// UNPLACED until something places it. The zero value is a valid hunk index, so leaving it
+	// would render every thread against the first hunk of its file - the wrong code, stated
+	// confidently - on any path that does not reach diff.PlaceThreads.
+	t := types.ReviewThread{Hunk: -1}
 	var err error
 	if t.ID, err = strField(m, "id", where); err != nil {
 		return types.ReviewThread{}, err

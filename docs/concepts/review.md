@@ -52,8 +52,8 @@ import "spells/github/review" as ghReview;
 magus\review.provider(ghReview);
 ```
 
-| Op               | Answers                                                     |
-| ---------------- | ----------------------------------------------------------- |
+| Op               | Answers                                                      |
+| ---------------- | ------------------------------------------------------------ |
 | `open_review`    | which review this branch has open, or the reason it has none |
 | `review_threads` | the remarks already on it                                    |
 | `publish_review` | send a batch of drafts as one review                         |
@@ -90,8 +90,8 @@ you want both.
 
 In the console's Diff surface:
 
-| Key | Does                                       |
-| --- | ------------------------------------------ |
+| Key | Does                                        |
+| --- | ------------------------------------------- |
 | `c` | write a remark on the hunk under the cursor |
 | `a` | answer the thread under the cursor          |
 | `s` | read the batch of drafts, then send it      |

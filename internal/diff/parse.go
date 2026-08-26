@@ -530,9 +530,12 @@ func PlaceThreads(files []FileHunks, threads []types.ReviewThread) []types.Revie
 	out := make([]types.ReviewThread, 0, len(threads))
 	for _, t := range threads {
 		t.Hunk = -1
-		for i, h := range byPath[t.Path] {
+		for _, h := range byPath[t.Path] {
 			if t.Line >= h.NewStart && t.Line < h.NewStart+h.NewCount {
-				t.Hunk = i
+				// Hunk.Index, not the slice position. They agree while a caller passes every
+				// hunk of a file, and Index exists precisely so one that filters cannot
+				// silently renumber what a thread is anchored to.
+				t.Hunk = h.Index
 				break
 			}
 		}

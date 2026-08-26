@@ -301,7 +301,7 @@ func TestAPublishedCommentIsNotRestoredAsADraft(t *testing.T) {
 	first.Attach(root, "main", types.Diff{}, "asof1")
 	first.AddComment(root, types.DiffComment{Path: "a.go", Body: "sent"}, types.DiffAuthorHuman)
 	first.AddComment(root, types.DiffComment{Path: "b.go", Body: "still mine"}, types.DiffAuthorHuman)
-	first.MarkPublished(root, "c1", "PRRC_123")
+	first.MarkPublished(root, "c1")
 
 	second := NewStore(dir)
 	sess := second.Attach(root, "main", types.Diff{}, "asof2")
@@ -334,7 +334,7 @@ func TestACommentIDIsNeverReusedAfterAGap(t *testing.T) {
 		first.AddComment(root, types.DiffComment{Path: "a.go", Body: body}, types.DiffAuthorHuman)
 	}
 	// The middle one leaves the file, which is what makes the set sparse.
-	first.MarkPublished(root, "c2", "PRRC_2")
+	first.MarkPublished(root, "c2")
 
 	second := NewStore(dir)
 	second.Attach(root, "main", types.Diff{}, "b")

@@ -298,16 +298,16 @@ func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffSessio
 	return out
 }
 
-// MarkPublished records that a draft has left the machine and what the host called it.
+// MarkPublished records that a draft has left the machine.
 //
-// One comment at a time even though publishing is a batch: a partial failure mid-batch has to
-// leave the sent ones marked, or a retry double-posts every comment that did get through.
-func (s *Store) MarkPublished(root, id, remoteID string) *types.DiffSession {
+// One comment at a time even though publishing is a batch, because the caller decides which
+// ones count as sent - see the handler's publish, which keeps a draft no provider could anchor
+// out of the batch entirely rather than marking it here.
+func (s *Store) MarkPublished(root, id string) *types.DiffSession {
 	out := s.mutate(root, func(sess *types.DiffSession) {
 		for i := range sess.Comments {
 			if sess.Comments[i].ID == id {
 				sess.Comments[i].Published = true
-				sess.Comments[i].RemoteID = remoteID
 				return
 			}
 		}
