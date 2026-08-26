@@ -146,7 +146,7 @@ The box names the repository, the review and the host before you commit to any o
 says plainly that nothing has gone yet. A remark you have changed your mind about is discarded
 from this list.
 
-`magus diff`'s terminal viewer renders those threads under the same hunks, re-placed against
+`magus diff`'s terminal viewer renders the same threads under the same hunks, re-placed against
 the patch it is showing. It cannot publish, and no review command carries a `--publish` flag:
 you send with the batch in front of you or you do not send.
 
@@ -163,7 +163,8 @@ diff does not. So each thread lands in one of three places, and the console drop
 
 The third bucket is keyed on what the surface is showing rather than on what the changeset
 holds, because a thread rendered nowhere and a thread on a folded file look identical to the
-reader: absent. The terminal viewer has no elsewhere list, so it shows the first two.
+reader: absent. `magus diff`'s viewer lists the same third bucket at the end of the changeset,
+so neither surface drops one.
 
 ![The changeset overview: counts for what is to read, folded away, public surface and untested, a reading order, and a section headed "Said on the review, elsewhere" carrying one colleague's remark in full](../../assets/screenshots/console-diff-overview.png)
 

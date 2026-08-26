@@ -12,7 +12,9 @@
 package difftui
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/diff"
@@ -425,6 +427,10 @@ func (m *Model) setCursor(file, hunk int) {
 // visible goes through here, so there is one definition of the picture.
 func (m *Model) rebuild() {
 	m.rows = m.rows[:0]
+	// The paths this pass actually draws a body for. A folded file is NOT one of them: its hunks
+	// are stood in for by a single row, so a remark anchored inside it has nowhere to sit here
+	// either.
+	shown := make(map[string]bool, len(m.files))
 	for i := range m.files {
 		f := &m.files[i]
 		if i > 0 {
@@ -438,6 +444,7 @@ func (m *Model) rebuild() {
 					n, plural(n, "hunk", "hunks"))})
 			continue
 		}
+		shown[f.Path] = true
 		for _, fact := range f.Facts {
 			m.rows = append(m.rows, Row{Kind: RowFact, File: i, Hunk: -1, Text: "  " + fact})
 		}
@@ -463,8 +470,56 @@ func (m *Model) rebuild() {
 			m.rows = append(m.rows, m.talkRows(i, hi, h)...)
 		}
 	}
+	m.rows = append(m.rows, m.elsewhereRows(shown)...)
 	m.locate()
 	m.follow()
+}
+
+// elsewhereRows are the remarks this pass has nowhere to put: on a file the changeset does not
+// contain, or on one folded away.
+//
+// Listed rather than dropped, which is the whole rule the placement follows - "your colleague
+// said nothing" is the one thing a review surface must never say by accident. A pull request
+// covers commits a working diff does not, so a thread landing outside it is ordinary rather than
+// exceptional, and until this existed the terminal viewer discarded every one of them in silence
+// while the console listed them.
+//
+// Sorted, because they are gathered from maps and an unsorted read would reorder the tail of the
+// changeset between frames.
+func (m *Model) elsewhereRows(shown map[string]bool) []Row {
+	var out []types.ReviewThread
+	for path, ts := range m.unplaced {
+		if !shown[path] {
+			out = append(out, ts...)
+		}
+	}
+	for k, ts := range m.threads {
+		if !shown[k.path] {
+			out = append(out, ts...)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	slices.SortFunc(out, func(a, b types.ReviewThread) int {
+		if c := strings.Compare(a.Path, b.Path); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.Line, b.Line); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	rows := []Row{
+		{Kind: RowBlank, File: -1, Hunk: -1},
+		{Kind: RowFile, File: -1, Hunk: -1, Text: fmt.Sprintf("said on the review, elsewhere (%d)", len(out))},
+	}
+	for _, t := range out {
+		rows = append(rows, Row{Kind: RowFact, File: -1, Hunk: -1,
+			Text: fmt.Sprintf("  %s:%d", t.Path, t.Line)})
+		rows = append(rows, threadRows(t, -1, -1)...)
+	}
+	return rows
 }
 
 // talkRows are the comments and pending suggestions anchored to one hunk.

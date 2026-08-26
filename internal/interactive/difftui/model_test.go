@@ -555,6 +555,44 @@ func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
 	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "moved away"))
 }
 
+// A pull request covers commits a working diff does not, so a colleague's remark can land on a
+// file this changeset never touches. The console lists those; the viewer used to read m.unplaced
+// only INSIDE its per-file loop, so a thread on a path it was not drawing reached no row at all
+// and was discarded in silence - the one thing a review surface must never do.
+func TestAThreadOutsideTheChangesetIsListedRatherThanDropped(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
+		Threads: []types.ReviewThread{
+			{ID: "t1", Path: "elsewhere.go", Line: 12, Hunk: -1, Author: "priya", Body: "on another file"},
+		},
+	})
+
+	text := everyRowText(m)
+	assert.NotEqual(t, -1, indexOfSubstring(text, "on another file"))
+	assert.NotEqual(t, -1, indexOfSubstring(text, "said on the review, elsewhere"))
+	// Named, so the reader knows where to go and is not left with a remark about nothing.
+	assert.NotEqual(t, -1, indexOfSubstring(text, "elsewhere.go:12"))
+}
+
+// A folded file draws one stand-in row instead of its hunks, so a remark anchored inside it has
+// nowhere to sit either - and it was dropped for the same reason, one loop deeper.
+func TestAThreadOnAFoldedFileIsListedRatherThanDropped(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{
+			Path:      "gen/api.go",
+			Generated: true,
+			Hunks:     []Hunk{{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-x", "+y"}, Digest: "d0"}},
+		}},
+		Threads: []types.ReviewThread{
+			{ID: "t1", Path: "gen/api.go", Line: 3, Hunk: 0, Author: "marcus", Body: "regenerate this"},
+		},
+	})
+
+	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "regenerate this"))
+}
+
 // everyRowText is the visible text of every row, for asserting on order and presence. Named
 // away from render.go's rowText, which renders ONE row and is the package's real one.
 func everyRowText(m *Model) []string {
