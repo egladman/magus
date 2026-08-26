@@ -663,7 +663,10 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// tell them apart.
 	threads, err := bindings.ReviewThreads(ctx, at)
 	if err != nil {
-		return nil
+		// Not the job's failure to report: a forge that could not be reached is a fact about the
+		// network, and raising it would mark this job failed on the trail every fifteen minutes
+		// for as long as the reader is offline. The next tick asks again.
+		return nil //nolint:nilerr // an unreachable forge is a retry, not a job failure
 	}
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,

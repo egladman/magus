@@ -2005,6 +2005,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (disposed) return;
     state.review = info;
     await rebuild();
+    // Now that they are ON SCREEN, say so. The daemon marks nothing as it answers - it cannot
+    // know this fetch was rendered rather than aborted, refreshed away, or raced by a second
+    // tab - so the watermark moves here, after the conversation has actually been drawn.
+    const shown = info.threads.filter((t) => t.new).map((t) => t.id);
+    if (shown.length > 0) void sync({ op: "seen", ids: shown });
   };
 
   // loadBranches asks what else is changing these files, after the patch is on screen.

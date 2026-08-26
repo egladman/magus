@@ -702,3 +702,39 @@ func TestDiffBranchesWithNoWorkspaceIsAnEmptyArray(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"branches":[]`)
 }
+
+// Serving the conversation is not the same as the reader seeing it. The lookup marks threads new
+// by READING the watermark and must never advance it: an aborted fetch, a refresh mid-flight or a
+// second tab would otherwise consume the marks - and the notification with them, since the job
+// that raises it compares against the same watermark. The surface says when it has drawn them,
+// through the session's `seen` op.
+func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
+	withReviewProvider(t, []any{
+		map[string]any{"id": "t1", "path": "a.go", "line": 1, "body": "first", "author": "priya"},
+	})
+	root := t.TempDir()
+	store := diff.NewStore(t.TempDir())
+	store.Attach(root, "", types.Diff{}, "")
+
+	h := NewDiffReviewHandler(fakeReview{}, nil)
+	h.Sessions, h.Root = store, root
+
+	// Twice, as a reader who refreshed would. Both answers must still say new.
+	for attempt := range 2 {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
+		var got diffReviewResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+		require.Len(t, got.Threads, 1)
+		assert.True(t, got.Threads[0].New, "attempt %d: serving must not consume the mark", attempt)
+	}
+
+	// Only the reader's claim moves it, and then the thread stops being new.
+	store.MarkThreadsSeen(root, []string{"t1"})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
+	var after diffReviewResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &after))
+	require.Len(t, after.Threads, 1)
+	assert.False(t, after.Threads[0].New, "once the reader has seen it, it is not new again")
+}

@@ -449,6 +449,12 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
   switch (op.op) {
     case "cursor":
       return { ...session, cursor: { path: op.path, hunk: op.hunk } };
+    case "seen": {
+      // The showcase has no watermark to keep - demoReview() rebuilds the conversation on every
+      // load - so this records nothing. It is handled rather than defaulted so the switch stays
+      // exhaustive and a future op cannot fall through it silently.
+      return session;
+    }
     case "viewed": {
       const viewed = new Set(session.viewed ?? []);
       if (op.on) viewed.add(op.digest);

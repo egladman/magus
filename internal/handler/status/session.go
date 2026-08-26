@@ -358,7 +358,7 @@ func NewDiffSessionHandler(opts DiffSessionOptions, log *slog.Logger) *DiffSessi
 // reviewSessionRequest is the wire shape. Op names the mutation; the rest are its arguments,
 // and which ones matter depends on Op.
 type reviewSessionRequest struct {
-	// Op is one of: cursor, viewed, comment, discard, resolve, answer, publish, reply.
+	// Op is one of: cursor, viewed, comment, discard, resolve, answer, publish, reply, seen.
 	Op string `json:"op"`
 	// cursor
 	Path string `json:"path,omitempty"`
@@ -378,6 +378,13 @@ type reviewSessionRequest struct {
 	// resolve / answer, and the THREAD for reply. One field because they are the same
 	// question - which one - and never asked together.
 	ID string `json:"id,omitempty"`
+	// seen: the review threads the surface has just put in front of the reader.
+	//
+	// The CLIENT says this, rather than the review lookup assuming it. Serving a response is not
+	// the same as rendering one - an aborted fetch, a refresh mid-flight or a second tab would
+	// otherwise consume the watermark and eat the "new" marks, and with them the notification,
+	// which compares against the same watermark.
+	IDs []string `json:"ids,omitempty"`
 }
 
 // publish sends the human's unsent drafts as one review.
@@ -513,6 +520,12 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		sess = h.Sessions.AddComment(h.Root, types.DiffComment{
 			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body, Anchor: req.Anchor,
 		}, types.DiffAuthorHuman)
+	case "seen":
+		// The reader's claim that these threads were put in front of them, which is the ONLY
+		// thing that advances the watermark. It arrives on this route because it is the human's
+		// half of the session - an agent reaching the session over MCP cannot make it, exactly
+		// as it cannot mark a hunk read.
+		sess = h.Sessions.MarkThreadsSeen(h.Root, req.IDs)
 	case "publish":
 		// publish and reply fail loudly; every other op is bookkeeping nobody asked about.
 		// These two put sentences in front of colleagues, and a reader told a send succeeded
@@ -702,13 +715,13 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-// markNew flags the threads the reader has not had on screen before, then records that they now
-// have. Serving the conversation IS having seen it, which is why the watermark moves here rather
-// than on a separate acknowledgement the reader would have to make.
+// markNew flags the threads the reader has not had on screen before. It READS the watermark and
+// never moves it.
 //
-// A thread stays marked for the response that first carried it and not afterwards, so the marker
-// answers "what arrived since last time" rather than "what is recent" - the second decays into
-// noise, and a reader learns to ignore a badge that is always on.
+// Serving a response is not rendering one. Advancing here meant an aborted fetch, a refresh
+// mid-flight, or a second tab silently consumed the marks - and the notification with them, since
+// the job that raises it compares against this same watermark. The surface says when it has shown
+// them, through the session's `seen` op; until it does, the same threads keep arriving marked.
 func (h *DiffReviewHandler) markNew(threads []types.ReviewThread) {
 	if h.Sessions == nil || len(threads) == 0 {
 		return
@@ -730,7 +743,6 @@ func (h *DiffReviewHandler) markNew(threads []types.ReviewThread) {
 			threads[i].New = true
 		}
 	}
-	h.Sessions.MarkThreadsSeen(h.Root, unseen)
 }
 
 func (h *DiffReviewHandler) lookup(ctx context.Context) types.ReviewTarget {

@@ -247,13 +247,25 @@ export async function fetchReviewSession(host: string, signal: AbortSignal): Pro
 // ReviewAuthorHuman by the daemon because it arrives on this route; an agent reaches the
 // session through MCP and is stamped there. Authorship is decided by transport, never by
 // payload, so nothing here needs to (or can) assert who is writing.
+// SeenOp is the reader's claim that these threads have been put in front of them, and it is the
+// only thing that advances the watermark deciding what counts as new.
+//
+// The client says it because only the client knows. The review lookup used to advance the mark as
+// it composed the response, so an aborted fetch, a refresh mid-flight or a second tab consumed the
+// badges - and the notification with them, since it compares against the same watermark.
+export interface SeenOp {
+  readonly op: "seen";
+  readonly ids: readonly string[];
+}
+
 export type SessionOp =
   | { op: "cursor"; path: string; hunk: number }
   | { op: "viewed"; digest: string; on: boolean }
   | { op: "comment"; path: string; hunk: number; line?: number; body: string; anchor?: string }
   | { op: "discard"; id: string }
   | { op: "resolve"; id: string; on: boolean }
-  | { op: "answer"; id: string; on: boolean };
+  | { op: "answer"; id: string; on: boolean }
+  | SeenOp;
 
 // mutate applies one op and returns the updated session.
 //
