@@ -1349,6 +1349,19 @@ report printing instead, so a script or an agent needs no flag. --no-tui is for
 a person who wants the report at a terminal anyway, and
 "magus config set key=diff.tui,value=false" makes that the standing preference.
 
+--rev reads a committed range as base...head rather than the working tree, which
+is how you review a branch: a colleague's, or the one your own agent just
+finished. It is the half a working-tree diff cannot reach, and it keeps the
+viewer, the navigation and the marks, because a revision is a tree state magus
+can address rather than a patch somebody handed it. Three dots: the answer is
+what head added since it diverged, never what the base gained meanwhile.
+
+A receipt earned against a range attests to the blob at that revision, so it
+survives the working tree moving underneath and does not follow the branch when
+somebody force-pushes it. That is the whole difference from a working-tree
+receipt, and it is why --ack takes --rev where it refuses a patch: magus can name
+what a range receipt covers, and cannot name what a patch on stdin covers.
+
 Each file carries the evidence behind its rank: how many files reference the
 widest changed symbol it defines, whether any of those referents cross a project
 boundary or the module boundary (which is the question a version bump turns on),
@@ -1397,7 +1410,7 @@ terminal, and agent hosts are denied it outright.
 The count is never shown to anyone but the reader. There is no team view and
 no pull-request comment, because a read measure a second person can see is a
 performance metric, and a performance metric gets gamed rather than met.`,
-	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [<patch-file>|-] [flags]",
+	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [--rev <base>...<head>] [<patch-file>|-] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
 		{Name: "impact", Kind: FlagBool, Doc: "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors"},
@@ -1406,9 +1419,11 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "ack", Kind: FlagBool, Doc: "Record that you have read the changed files at their current content; --impact reports what carries no such record"},
 		{Name: "reason", Kind: FlagString, Doc: "An optional note kept with an --ack, for the next reader of the report"},
 		{Name: "prompt", Kind: FlagBool, Doc: "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction"},
+		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
 	},
 	Examples: []Example{
 		{"Read what you are about to commit", "magus diff"},
+		{"Review a branch somebody else pushed", "magus diff --rev main...feat/audience"},
 		{"Include the generated files too", "magus diff --generated"},
 		{"Everything to know before landing it", "magus diff --impact"},
 		{"Print the report instead of opening the viewer", "magus diff --no-tui"},

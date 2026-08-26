@@ -70,6 +70,14 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if rf.Rev != "" {
+		if src.kind != inputWorkingTree {
+			return usagef("magus diff: --rev names the changeset, so it cannot be combined with %s", src.label)
+		}
+		if src, err = revRangeFromFlag(rf.Rev); err != nil {
+			return err
+		}
+	}
 	if rf.Watch && src.kind != inputWorkingTree {
 		// stdin is consumed once and a patch file is a snapshot someone handed us; re-reading
 		// either on every tree change would re-render identical output forever.
@@ -129,13 +137,51 @@ const (
 	inputWorkingTree diffInputKind = iota
 	inputStdin
 	inputFile
+	inputRevRange
 )
 
 // diffInput names a patch source and how to describe it to the reader.
 type diffInput struct {
 	kind  diffInputKind
 	path  string // for inputFile
+	base  string // for inputRevRange
+	head  string // for inputRevRange
 	label string
+}
+
+// addressable reports whether magus can name what this source contains well enough to record a
+// reading of it.
+//
+// The working tree and a revision range are both tree states magus can re-derive and re-digest; a
+// patch on stdin and a patch in a file are bytes somebody handed over, describing files that may
+// not exist here at all. That is the line --ack has always drawn - it was just spelled "is this the
+// working tree" back when the working tree was the only addressable source.
+func (in diffInput) addressable() bool {
+	return in.kind == inputWorkingTree || in.kind == inputRevRange
+}
+
+// revRangeFromFlag resolves --rev, which is written base...head the way git and the branch-overlap
+// reader already spell a symmetric difference.
+//
+// Two dots are REFUSED rather than quietly accepted as three. They are a different question - what
+// head has that base has, including everything base gained meanwhile - and a reviewer who typed the
+// git spelling out of habit would get a diff padded with commits the branch author never wrote.
+func revRangeFromFlag(rev string) (diffInput, error) {
+	base, head, ok := strings.Cut(rev, "...")
+	if !ok {
+		if b, _, two := strings.Cut(rev, ".."); two {
+			return diffInput{}, usagef("magus diff: --rev takes base...head with three dots, got %q. "+
+				"Three dots is what head added since it diverged; two dots would also count everything "+
+				"%s gained meanwhile, which the branch author did not write", rev, b)
+		}
+		return diffInput{}, usagef("magus diff: --rev takes a range written base...head, got %q", rev)
+	}
+	if base == "" || head == "" {
+		return diffInput{}, usagef("magus diff: --rev needs both ends, got %q. "+
+			"magus does not fill in a default: which branch you are comparing against is the "+
+			"question, not a detail", rev)
+	}
+	return diffInput{kind: inputRevRange, base: base, head: head, label: "the range " + rev}, nil
 }
 
 // diffInputFromArgs resolves the one optional positional.
@@ -231,9 +277,10 @@ func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm,
 	// prompt to copy. They are requests for an answer rather than for somewhere to read.
 	case rf.Ack, rf.Impact, rf.Prompt:
 		return false
-	// The viewer reads the working tree and drives the terminal itself, so a patch argument and
-	// a watch loop are each somebody else's job.
-	case src.kind != inputWorkingTree, rf.Watch:
+	// A patch somebody handed us is bytes about files that may not be here, and a watch loop
+	// drives the terminal itself. A revision range is neither: it is a tree state magus can
+	// address, which is the whole reason the viewer opens over one.
+	case !src.addressable(), rf.Watch:
 		return false
 	case format != outputText:
 		return false
@@ -257,6 +304,15 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, stri
 			return "", "", fmt.Errorf("magus diff: %w", err)
 		}
 		return string(b), in.path, nil
+	case inputRevRange:
+		// The base is the HEAD side, not the range: it names what the reader is looking at, and
+		// every downstream consumer of it - the session key, the receipt, the report heading -
+		// is asking "which tree state is this", never "how did you ask for it".
+		p, err := m.RangeDiff(ctx, in.base, in.head)
+		if err != nil {
+			return "", "", fmt.Errorf("magus diff: %w", err)
+		}
+		return p, in.head, nil
 	default:
 		p, err := m.WorkingDiff(ctx, nil)
 		return p, "working", err
@@ -294,10 +350,11 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	// read" at exit 0 is the worst available answer: a reader checking whether they had
 	// anything left to review is told no, and believes it.
 	//
-	// Scoped to a patch the caller handed us. The working tree's patch comes from whichever VCS
-	// adapter is active, and refusing there would turn "a backend spells its headers a third
-	// way" into a hard failure of the whole command - a worse bug than the one being fixed.
-	if len(paths) == 0 && src.kind != inputWorkingTree {
+	// Scoped to a patch the caller handed us. A working tree's patch and a revision range's both
+	// come from whichever VCS adapter is active, and refusing there would turn "a backend spells
+	// its headers a third way" into a hard failure of the whole command - a worse bug than the
+	// one being fixed.
+	if len(paths) == 0 && !src.addressable() {
 		if strings.Contains(patch, "\x1b[") {
 			return fmt.Errorf("magus diff: %s is colorized, so its headers carry escape sequences "+
 				"and no longer begin a line. This is what a VCS emits when it thinks it is writing "+

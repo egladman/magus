@@ -40,6 +40,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 	workingTree := diffInput{kind: inputWorkingTree, label: "the working tree"}
 	stdin := diffInput{kind: inputStdin, label: "a patch on stdin"}
 	patchFile := diffInput{kind: inputFile, path: "x.patch", label: "the patch in x.patch"}
+	revRange := diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}
 	atTerminal := diffTUITerm{Reads: true, Paints: true}
 
 	tests := []struct {
@@ -63,6 +64,17 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 			name:    "--generated composes: it only sets the initial fold",
 			flags:   gen.DiffFlags{Generated: true},
 			src:     workingTree,
+			format:  outputText,
+			term:    atTerminal,
+			enabled: true,
+			want:    true,
+		},
+		{
+			// The whole point of --rev. A range is a tree state magus can address, so it keeps the
+			// viewer where a handed-over patch cannot; without this the branch review that --rev
+			// exists for would degrade to the one-shot report it was built to replace.
+			name:    "a revision range keeps the viewer",
+			src:     revRange,
 			format:  outputText,
 			term:    atTerminal,
 			enabled: true,
@@ -2111,4 +2123,53 @@ func TestReviewPromptHintIsSilentWhenAlreadyAsked(t *testing.T) {
 	hintReviewPrompt(&out, changeset(promptHintFiles+50), &gen.DiffFlags{Prompt: true})
 
 	assert.Empty(t, out.String())
+}
+
+func TestRevRangeFromFlag(t *testing.T) {
+	t.Run("base...head is the accepted spelling", func(t *testing.T) {
+		in, err := revRangeFromFlag("main...feat/audience")
+
+		require.NoError(t, err)
+		assert.Equal(t, diffInput{
+			kind:  inputRevRange,
+			base:  "main",
+			head:  "feat/audience",
+			label: "the range main...feat/audience",
+		}, in)
+	})
+
+	// The positive case above is what keeps this honest: every refusal below would also pass
+	// against a parser that rejected everything, and then --rev would be unusable while green.
+	t.Run("two dots are refused rather than read as three", func(t *testing.T) {
+		_, err := revRangeFromFlag("main..feat/audience")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "three dots")
+		assert.Contains(t, err.Error(), "the branch author did not write")
+	})
+
+	t.Run("a missing end is refused rather than defaulted", func(t *testing.T) {
+		for _, rev := range []string{"main...", "...feat/audience"} {
+			_, err := revRangeFromFlag(rev)
+
+			require.Error(t, err, rev)
+			assert.Contains(t, err.Error(), "needs both ends", rev)
+		}
+	})
+
+	t.Run("a bare ref is refused, because it names one end of two", func(t *testing.T) {
+		_, err := revRangeFromFlag("feat/audience")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "base...head")
+	})
+}
+
+func TestAddressableSeparatesTreeStatesFromHandedOverPatches(t *testing.T) {
+	// The distinction --ack and the viewer both turn on: magus can re-derive and re-digest a
+	// tree state, and cannot say what a patch on stdin describes.
+	assert.True(t, diffInput{kind: inputWorkingTree}.addressable())
+	assert.True(t, diffInput{kind: inputRevRange}.addressable())
+	assert.False(t, diffInput{kind: inputStdin}.addressable())
+	assert.False(t, diffInput{kind: inputFile}.addressable())
 }

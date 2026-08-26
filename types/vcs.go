@@ -448,6 +448,26 @@ type BranchChangeReporter interface {
 	BranchChanges(ctx context.Context, dir, base string, limit int) ([]BranchChange, error)
 }
 
+// RangeDiffReporter is an optional capability for VCSDriver implementations that can produce the
+// unified diff of a committed revision range, which is the half of review DirtyDiff cannot reach.
+//
+// Callers type-assert for it and degrade gracefully. Degrading here means REFUSING, not answering
+// empty: a working tree with no changes is a real clean answer, but a range magus cannot diff is a
+// gap, and rendering a gap as an empty changeset would report a colleague's branch as untouched.
+type RangeDiffReporter interface {
+	// RangeDiff returns the unified diff from base to head, both backend-native revision names.
+	//
+	// Symmetric difference, not a two-dot comparison: the answer is what head added since it
+	// diverged, never what base gained meanwhile. A reviewer asking about a branch is asking what
+	// its author did, and two-dot would charge them for every commit that landed on the base while
+	// they were not looking.
+	//
+	// Reads what the repository already has and never fetches, matching BranchChanges. An
+	// unresolvable revision is an error rather than an empty diff, because the two read identically
+	// to a caller and only one of them means "nothing changed".
+	RangeDiff(ctx context.Context, dir, base, head string) (string, error)
+}
+
 // ConflictKind classifies why a path is unresolved in an in-progress merge.
 type ConflictKind string
 

@@ -181,6 +181,36 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 	return out, nil
 }
 
+// RangeDiff returns the unified diff of what head added since it diverged from base.
+//
+// Three dots, so the answer is the symmetric difference and never charges the reader for commits
+// that landed on base while the branch was open. That is the same form BranchChanges uses, and for
+// the same reason: both questions are about somebody's branch, not about how far the base has moved.
+//
+// A non-existent revision is reported rather than swallowed. BranchChanges skips a ref whose diff
+// fails because it holds many and the rest are still true; here the range IS the request, and a
+// caller handed "" would read it as a branch that changed nothing.
+func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string) (string, error) {
+	if err := checkRef(base); err != nil {
+		return "", err
+	}
+	if err := checkRef(head); err != nil {
+		return "", err
+	}
+	// core.quotePath=false for the reason ChangedFiles and BranchChanges set it: a non-ASCII path
+	// otherwise arrives C-quoted and matches no source glob.
+	//
+	// Histogram rather than the default myers because this patch is what remarks anchor into: myers
+	// reports a moved function as a delete plus an unrelated insert, while histogram anchors on
+	// lines unique to both sides and keeps the move legible as a move.
+	out, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false",
+		"diff", "--histogram", base+"..."+head)
+	if err != nil {
+		return "", fmt.Errorf("git diff %s...%s: %w", base, head, err)
+	}
+	return out, nil
+}
+
 // recoverMergeBase fetches history until base and HEAD share an ancestor in a shallow
 // clone, returning that merge base, or "" when it cannot get one.
 //

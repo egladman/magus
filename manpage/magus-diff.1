@@ -3,7 +3,7 @@
 magus\-diff \- Read the working tree's changes in the order they deserve attention
 .SH SYNOPSIS
 .B magus
-.RI "diff [\-\-generated] [\-\-impact] [\-\-no\-tui] [\-\-watch] [<patch\-file>|\-] [flags]"
+.RI "diff [\-\-generated] [\-\-impact] [\-\-no\-tui] [\-\-watch] [\-\-rev <base>...<head>] [<patch\-file>|\-] [flags]"
 .SH DESCRIPTION
 Read the working tree's uncommitted changes, annotated and ordered.
 .PP
@@ -26,6 +26,19 @@ The viewer stands aside on its own wherever it cannot draw: no terminal, \-o jso
 report printing instead, so a script or an agent needs no flag. \-\-no\-tui is for
 a person who wants the report at a terminal anyway, and
 "magus config set key=diff.tui,value=false" makes that the standing preference.
+.PP
+\-\-rev reads a committed range as base...head rather than the working tree, which
+is how you review a branch: a colleague's, or the one your own agent just
+finished. It is the half a working\-tree diff cannot reach, and it keeps the
+viewer, the navigation and the marks, because a revision is a tree state magus
+can address rather than a patch somebody handed it. Three dots: the answer is
+what head added since it diverged, never what the base gained meanwhile.
+.PP
+A receipt earned against a range attests to the blob at that revision, so it
+survives the working tree moving underneath and does not follow the branch when
+somebody force\-pushes it. That is the whole difference from a working\-tree
+receipt, and it is why \-\-ack takes \-\-rev where it refuses a patch: magus can name
+what a range receipt covers, and cannot name what a patch on stdin covers.
 .PP
 Each file carries the evidence behind its rank: how many files reference the
 widest changed symbol it defines, whether any of those referents cross a project
@@ -96,6 +109,9 @@ Print a review prompt to paste into your own LLM: the context magus has, never a
 \fB\-\-reason\fR \fIstring\fR
 An optional note kept with an \-\-ack, for the next reader of the report
 .TP
+\fB\-\-rev\fR \fIstring\fR
+Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work
+.TP
 \fB\-\-watch\fR
 Re\-read and re\-render whenever the working tree changes
 .RE
@@ -116,6 +132,12 @@ Misuse: more than one patch argument, or an argument that is neither a readable 
 .PP
 .EX
 magus diff
+.EE
+.PP
+\fIReview a branch somebody else pushed\fR
+.PP
+.EX
+magus diff --rev main...feat/audience
 .EE
 .PP
 \fIInclude the generated files too\fR

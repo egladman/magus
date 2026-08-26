@@ -223,6 +223,37 @@ func (v jjVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 	return out, nil
 }
 
+// RangeDiff returns the unified diff from base to head.
+//
+// Implemented here and not only for git because jj is probed FIRST in the builtin list, so a
+// colocated repository resolves to this backend: a git-only range diff would report the capability
+// missing to exactly the users who have both.
+//
+// --git for the reason DirtyDiff passes it: the review surface parses a unified body, and jj's
+// native format is not one. From the workspace root for the reason ChangedFiles and DirtyDiff are,
+// which is that the a/ and b/ headers otherwise name paths relative to a subdirectory nobody is
+// standing in.
+//
+// jj has no three-dot spelling and needs none: --from is the merge base of the two revisions
+// already, which is the symmetric difference git's three dots have to ask for.
+func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string) (string, error) {
+	if err := checkRef(base); err != nil {
+		return "", err
+	}
+	if err := checkRef(head); err != nil {
+		return "", err
+	}
+	root, _, err := repoPathPrefix(ctx, v, dir)
+	if err != nil {
+		return "", err
+	}
+	out, err := vcsOutputRaw(ctx, root, "jj", "diff", "--git", "--from", base, "--to", head)
+	if err != nil {
+		return "", fmt.Errorf("jj diff --from %s --to %s: %w", base, head, err)
+	}
+	return out, nil
+}
+
 // ConflictResolver for jj. The mapping is NOT a transliteration of the git one, because
 // jj's conflict model differs at the root: an operation never pauses. `jj rebase` and a
 // merge both complete, recording conflicts INSIDE the resulting commit, and the working

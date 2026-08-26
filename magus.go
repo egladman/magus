@@ -710,6 +710,37 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 	return out, nil
 }
 
+// RangeDiff returns the unified diff of what head added since it diverged from base: the
+// COMMITTED half of review, which is a colleague's branch or your own agent's finished work.
+//
+// The counterpart to WorkingDiff, and separate from it on purpose. A range names two revisions and
+// the working tree names none, so folding them into one signature would make the common case carry
+// arguments it never uses - the reason WorkingDiff's doc gives for not answering both.
+//
+// A gap is REFUSED rather than answered empty, which is the opposite of BranchChanges. There,
+// silence and "nothing competes" are both true-ish and the caller can tell them apart by getting
+// nothing at all. Here an empty string reads as "this branch changed nothing", and reporting a
+// colleague's work as untouched is the one wrong answer this surface must never give.
+func (m *Magus) RangeDiff(ctx context.Context, base, head string) (string, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil {
+		return "", fmt.Errorf("resolving the version control backend: %w", err)
+	}
+	if res.VCS == nil {
+		return "", fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing,
+				"this workspace has version control disabled, so there is no revision range to read"),
+			types.ErrVCSUnsupported)
+	}
+	reporter, ok := res.VCS.(types.RangeDiffReporter)
+	if !ok {
+		return "", fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not diff a revision range", res.Name),
+			types.ErrVCSUnsupported)
+	}
+	return reporter.RangeDiff(ctx, m.ws.Root, base, head)
+}
+
 // ReviewOrigin reports the branch this tree is on and the remote it would be pushed to, for a
 // caller asking a provider which review is open.
 //
