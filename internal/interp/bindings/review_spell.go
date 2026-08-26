@@ -23,9 +23,8 @@ var errNoReviewProvider = errors.New(
 // because none of them is a thing the reader did wrong, and a diff that refuses to open
 // because a review lookup failed would be a worse tool than one that shows the change.
 //
-// The branch and remote are passed IN rather than discovered by the spell. magus already knows
-// both through a VCS layer that speaks four backends; a spell rederiving them would be a
-// second opinion about the same working tree, and one that only knows one host's conventions.
+// The branch and remote are passed IN rather than discovered by the spell; see
+// types.ReviewOrigin for why.
 func OpenReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 	drv, ok := reviewDriver()
 	if !ok {

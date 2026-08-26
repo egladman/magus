@@ -171,6 +171,9 @@ func (s *Store) TrackHunks(root string, files []FileHunks, digestAt func(path st
 // ContentAt is the fingerprint file had when this session's changeset was tracked, empty when
 // the file was not tracked or could not be read. A caller mints a receipt from THIS rather
 // than from the file's current bytes, so the receipt attests to what the reader saw.
+//
+// The advertised scenario for this surface is a paired review where an agent edits while the
+// human reads, so a file moving mid-session is the expected case rather than a corner.
 func (s *Store) ContentAt(root, path string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -266,11 +269,10 @@ func (s *Store) AddComment(root string, c types.DiffComment, author types.DiffAu
 
 // nextCommentID picks an id no live comment already holds.
 //
-// From the HIGHEST existing number rather than the count, which is what it used to be. The
-// count only worked while comments were append-only and died with the daemon. Now that drafts
-// are restored and published ones leave the file, the set has gaps: restore c1, c2, c3,
-// publish c2, restart, and the count is 2 - so the next comment is called c3 as well, and two
-// different remarks answer to one id. Resolving one would resolve the other.
+// From the HIGHEST existing number, never the count. Drafts are restored across restarts and
+// published ones leave the file, so the set has gaps: hold c1, c2, c3, publish c2, restart, and
+// a count would name the next comment c3 as well. Two remarks would answer to one id, and
+// resolving either would resolve both.
 func nextCommentID(existing []types.DiffComment) string {
 	high := 0
 	for _, c := range existing {

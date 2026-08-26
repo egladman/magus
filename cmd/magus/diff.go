@@ -82,15 +82,13 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if rf.Ack && rf.Watch {
 		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
 	}
-	// --reason is optional, deliberately. It was briefly required, on the reasoning that a
-	// bulk stamp should cost a sentence the way spells.allow_shadow does. The shapes look
-	// alike and behave oppositely: an allow_shadow entry is written a handful of times in a
-	// repository's life and stays meaningful, while a changeset ack is written daily and
-	// becomes a form field - at which point the requirement has only taught the reader to
-	// type something they do not mean.
+	// --reason is optional, deliberately. Requiring a sentence the way spells.allow_shadow does
+	// would not hold here: an allow_shadow entry is written a handful of times in a repository's
+	// life, while a changeset ack is written daily and becomes a form field - teaching the
+	// reader to type something they do not mean.
 	//
-	// The two controls that actually hold are the ones nobody can satisfy by typing faster:
-	// the agent guard, and the terminal check below.
+	// The two controls that hold are the ones nobody can satisfy by typing faster: the agent
+	// guard, and the terminal check below.
 	if rf.Ack && !isInteractiveTTY() {
 		// The agent guard denies --ack outright, but it fails OPEN where it is not wired,
 		// and a receipt minted by a script is precisely the laundering this refuses. Not a
@@ -203,10 +201,9 @@ type diffTUITerm struct {
 	// Reads is the shared interactive gate every stepping surface asks for: stdin and stderr
 	// are both terminals.
 	Reads bool
-	// Paints is stdout, which the viewer draws the changeset on. Reads never looks at it, and
-	// `magus diff > file` is what fell through the gap: stdin is still a keyboard, so nothing
-	// else catches a redirected stdout, and tty.OpenInput used to refuse with a bare error
-	// naming none of this. Now it is one of the conditions the viewer stands aside on.
+	// Paints is stdout, which the viewer draws the changeset on. It is a separate condition
+	// because `magus diff > file` leaves stdin a keyboard, so Reads alone would let the viewer
+	// try to draw into a file.
 	Paints bool
 }
 
@@ -216,11 +213,9 @@ func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
 // wantsTUI decides whether this invocation opens the viewer.
 //
 // The viewer is the DEFAULT at a terminal, so every condition below is a quiet FALLBACK rather
-// than a refusal - and that is the whole difference between this and the refusal matrix it
-// replaced. While the flag was opt-in, asking for the viewer somewhere it cannot draw was a
-// mistake worth naming, and each of these was a usage error. Now nobody asked for it: a script
-// running `magus diff -o json`, a patch file, a watch loop, are all ordinary invocations that
-// must not begin erroring because a default changed. The report prints and nothing is said.
+// than a refusal. Nobody asked for the viewer: a script running `magus diff -o json`, a patch
+// file, a watch loop are all ordinary invocations, and erroring at them would punish a caller
+// for a default they never chose. The report prints and nothing is said.
 //
 // --no-tui is the one explicit answer, and it wins over the config the way a flag always does.
 //
@@ -1079,26 +1074,13 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 		}
 	}
 
-	// What to do NEXT, which this report used to leave entirely unsaid.
-	//
-	// It named only the console, so the one surface everybody runs advertised a different
-	// program and never its own review workflow: `--tui` and `--impact` appear in `-h` prose
-	// and in the man page, and nowhere a reader of this output would meet them. The best
-	// teaching magus has - the REVIEW section, the viewer's key footer - sat furthest from
-	// the entrance, and the entrance taught nothing.
-	//
-	// Two lines, at a terminal only, and only when there is something to read: a reader who
-	// already knows loses two lines, and a reader who does not gets the whole workflow.
+	// What to do next, and where to see the same changeset. Both are for a person: the console
+	// link carries no token (see printJobWatchHint), so the terminal check is an invitation
+	// rather than a secrecy measure, and it keeps `magus diff > file` as data.
 	if tty.IsTerminalWriter(os.Stdout, tty.SystemProbe) {
 		for _, line := range diffNextStepLines(len(primary)) {
 			fmt.Println(line)
 		}
-	}
-	// The same changeset in the console's Diff surface. The link carries no token (see
-	// printJobWatchHint), so the terminal check is no longer a secrecy measure - it is an
-	// invitation to go look at something, and a pipe is not a person. Keeping it means
-	// `magus diff > file` stays data.
-	if tty.IsTerminalWriter(os.Stdout, tty.SystemProbe) {
 		if u := consoleDiffURL(); u != "" {
 			fmt.Printf("open in console: %s\n%s\n", u, authHint)
 		}
@@ -1108,11 +1090,8 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 
 // diffNextStepLines names what a reader can do with the changeset they were just shown.
 //
-// This report used to end without saying. It named the console and nothing else, so the one
-// surface everybody runs advertised a different program and never its own review workflow -
-// `--tui` and `--impact` lived in `-h` prose and the man page, nowhere a reader of this output
-// would meet them. The best teaching magus has, the REVIEW section and the viewer's key
-// footer, sat furthest from the entrance while the entrance taught nothing.
+// This output is where most people meet magus's review workflow, so `--tui` and `--impact` are
+// named here rather than only in `-h` prose and the man page.
 //
 // Nothing when nothing was listed: a clean tree or an all-generated changeset has no reading
 // to offer, and a suggestion there is a suggestion to do nothing.
@@ -1120,9 +1099,8 @@ func diffNextStepLines(readable int) []string {
 	if readable == 0 {
 		return nil
 	}
-	// No entrance to name any more: at a terminal the viewer already opened, so what this
-	// report needs to teach is the two ways OUT of it - the report itself, and the impact
-	// question the viewer has nowhere to put.
+	// At a terminal the viewer has already opened, so what is left to teach is the two ways out
+	// of it: this report, and the impact question the viewer has nowhere to put.
 	return []string{
 		"",
 		"the blast radius:  magus diff --impact",
@@ -1843,18 +1821,15 @@ type earnedSync struct {
 	// file has. A receipt is per FILE, so a file is earned only once every hunk it
 	// contributes is marked - reading four hunks of six is not reading the file.
 	fileOf map[string]string
-	// hunksOf counts DISTINCT hunk digests per file. Two byte-identical hunks in one file
-	// share a digest - HunkDigest is path plus body - so counting occurrences would set a
-	// total the marked set can never reach, and that file could never be finished.
+	// hunksOf counts DISTINCT hunk digests per file, for the reason diff.Store.TrackHunks
+	// gives: counting occurrences sets a total the marked set can never reach.
 	hunksOf map[string]int
 	// digestAt is each file's content fingerprint as it was when the reader started, taken
 	// once here rather than at mint time.
 	//
-	// A receipt must attest to the bytes somebody SAW. Fingerprinting at close instead would
-	// stamp whatever the file holds by then - and the advertised scenario for this whole
-	// surface is a paired review where an agent edits while the human reads, so the file
-	// moving mid-session is the expected case, not a corner. Minting the content they read
-	// means the next report correctly calls it stale.
+	// A receipt must attest to the bytes somebody SAW; fingerprinting at close would stamp
+	// whatever the file holds by then, and the next report would not call it stale. See
+	// diff.Store.ContentAt.
 	digestAt map[string]string
 	viewed   map[string]bool
 	// live are the hunks marked in THIS session, as opposed to seeded from the store.
@@ -1970,9 +1945,9 @@ func (e *earnedSync) finished() []review.Receipt {
 // CONDITION, which is the half a reader needs: what would have to become true before the
 // code below may go.
 //
-// The trailing space is not what keeps this constant out of its own report - it cannot be,
-// since the constant contains the space too and so matches itself. inAComment is what does
-// that, by requiring the marker to sit in a comment rather than in a string literal.
+// inAComment is what keeps this constant out of its own report, by requiring the marker to sit
+// in a comment rather than in a string literal. The trailing space cannot do it: the constant
+// contains the space too, so it matches itself.
 const compatMarker = "compat(until: "
 
 // rationaleHit is one deliberate decision recorded beside code this change touches.
@@ -1993,10 +1968,8 @@ const rationaleShown = 8
 //
 // Notes cover the decisions somebody wrote a note about, which is the small minority. This
 // covers the ones recorded where they are actually kept: in a comment beside the code, under
-// the marker this repository's conventions require. An audit once ranked three of its
-// findings as work when each was a choice explained two lines above the thing it flagged,
-// and nothing put that explanation in front of the reader at the moment they proposed to
-// undo it.
+// the marker this repository's conventions require. Without this, a reader proposing to undo a
+// decision never meets the explanation sitting two lines above the thing they are changing.
 //
 // FILE-level, not hunk-level, and the wording says so. Deciding whether a marker sits inside
 // a changed region needs the hunk ranges, and a marker fifty lines from your edit still
@@ -2191,13 +2164,10 @@ func collectAdvice(ctx context.Context, dir string, files []string, base string)
 			// BZZ3001 above a crash is usually the explanation for it.
 			//
 			// ONLY when it crashed. These are lint diagnostics about the advisor's own
-			// source - magus's shipped scripts, not the reader's change - and an advisor
-			// that ran fine has told the reader nothing by emitting them. Four personas
-			// independently hit the version that printed them unconditionally: a one-line
-			// docs fix drew ~40 lines of BZZ3001/BZZ3002 about `merge-conflict.buzz` and
-			// `doctor.buzz`, and the drive-by contributor named it the moment they nearly
-			// closed the laptop, assuming they had broken something. Lint about magus's
-			// own sources belongs in magus's own lint run.
+			// source - magus's shipped scripts, not the reader's change - so printing them
+			// unconditionally buries a one-line docs fix under tens of lines about magus's
+			// own files, which reads as "you broke something". That lint belongs in magus's
+			// own lint run.
 			for _, w := range warnings {
 				notes = append(notes, fmt.Sprintf("%s: %s", file, w))
 			}
@@ -2351,10 +2321,9 @@ func parseAdviceSections(out string) []adviceSection {
 type impactReview struct {
 	Files int `json:"files" yaml:"files"`
 	Read  int `json:"read"  yaml:"read"`
-	// Stale are files read and then edited. They lead the section: the signal is derived
-	// from CONTENT rather than from a claim, so inattention cannot fake it, and it is the
-	// more dangerous shape anyway - somebody did look, which is exactly why nobody will
-	// look again.
+	// Stale are files read and then edited. They lead the section: the signal is derived from
+	// CONTENT rather than from a claim, so inattention cannot fake it. See types.DiffReadStale
+	// for why it outranks unread.
 	Stale  []string `json:"stale,omitempty"  yaml:"stale,omitempty"`
 	Unread []string `json:"unread,omitempty" yaml:"unread,omitempty"`
 	// Required are unread files inside a project's declared review_required globs. Listed
@@ -2546,17 +2515,12 @@ func ackChangeset(root, cacheDir string, rev types.Diff, reason string, now time
 // people stop reading, and this one has nothing to say about a small change nobody has
 // disturbed since reading.
 //
-// It STAYS in the impact report, though a review argued for moving it to the stepping surface
-// on the grounds that a report about what landing costs is the wrong home for what a reader
-// has read. That was fair when the viewer was a flag you opted into and this report was the
-// only surface most people saw. It stopped being fair twice over: the viewer is what opens at
-// a terminal now, so it is not a corner anything gets hidden in - and the viewer counts hunks
-// read but has no notion of STALE. "This changed after you read it" is the half of this
-// section worth having, and there is nowhere else it is said.
+// It belongs in the impact report rather than the viewer because the viewer counts hunks read
+// and has no notion of STALE. "This changed after you read it" is the half worth having, and
+// this is the only place it is said.
 //
-// The additive version of that review's point is still open and still good: teach the viewer
-// stale state, so a reader stepping through sees which files moved under them. That is worth
-// doing. It is not a reason to take the only telling of it out of the report first.
+// TODO: teach the viewer stale state, so a reader stepping through sees which files moved
+// under them. That is additive - it is not a reason to drop the only telling of it here.
 func impactReviewLines(r *impactReview) []string {
 	if r == nil {
 		return []string{"REVIEW: read receipts unavailable; step a file through in `magus diff` to earn one"}

@@ -98,10 +98,8 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 			// somewhere.
 			//
 			// Fingerprints each changed file HERE, at the content the reader is about to
-			// look at, so a receipt minted later attests to what they saw rather than to
-			// whatever the file holds by then. The advertised scenario is a paired review
-			// where an agent edits while the human reads, so the file moving mid-session
-			// is the expected case.
+			// look at, so a receipt minted later attests to what they saw. See
+			// Store.ContentAt for why the file moving mid-session is the expected case.
 			h.sessions.TrackHunks(h.root, diff.ParseHunks(patch), func(p string) string {
 				return review.DigestFile(filepath.Join(h.root, filepath.FromSlash(p)))
 			})
@@ -116,20 +114,8 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 // patch, for the console's review surface.
 //
 // The changeset ships PARSED, and the raw patch travels beside it for a caller that wants the
-// interchange format itself.
-//
-// This route used to send text only, on the reasoning that a unified patch is what every
-// backend and every forge emits, so one reader in the browser would serve both this route and
-// a pull-request patch fetched from a provider later. What it actually bought was two readers
-// - one here, one in TypeScript - and they drifted: the browser learned Mercurial's headerless
-// dialect and POSIX's tab-delimited timestamps and this side did not, so `magus diff` reported
-// an empty changeset on an hg tree while the console rendered it correctly.
-//
-// Drift was never going to stay cosmetic, because a hunk's DIGEST is its identity: it is what
-// a read receipt is keyed by and what lets a mark made in the console be seen by the CLI and
-// by an agent. Two implementations computing that independently is a shared session that can
-// disagree with itself. The provider case the old split was defending is served by handing
-// that patch to the same parser, which is one reader either way.
+// interchange format itself. Parsing here rather than in the browser is what keeps one reader
+// in the product - see internal/diff/parse.go for why a second one must not be written.
 //
 // Optional `path` query parameters scope the diff, repeated once per path. Absent, the whole
 // repository is diffed. A service with no workspace yields 503, not 500 - the same posture
@@ -277,7 +263,7 @@ func NewPatchHandler(src patchSource, log *slog.Logger) *PatchHandler {
 // a console that cannot tell those apart renders "no changes" over a bug.
 type diffResponse struct {
 	// Files is the changeset already parsed. The console renders from this and does not read
-	// Patch at all; see the note on PatchHandler for why the parse moved here.
+	// Patch at all; see PatchHandler for why the daemon parses rather than the browser.
 	Files []diff.File `json:"files"`
 	// Patch is the same changeset as raw text, kept for a caller that wants the interchange
 	// format itself - a script piping it onward, or a reader diffing it against another tool's.
@@ -519,10 +505,9 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		// hunk in the terminal viewer does. One rule, two surfaces: the reader chooses where
 		// to read and magus does not care which they picked.
 		//
-		// Only a mark arriving HERE mints one. This route is the human's - the MCP surface
-		// has no way to write it, by design - and the persisted viewed set is an
-		// unauthenticated file, so a session that merely LOOKS complete after a reload must
-		// never produce a receipt on its own.
+		// Only a mark arriving HERE mints one. This route is the human's, and the MCP surface
+		// has no way to write it; see Store.MarkViewed for why a restored session must not
+		// mint on its own.
 		h.mintReceipt(r.Context(), finished)
 	case "comment":
 		sess = h.Sessions.AddComment(h.Root, types.DiffComment{

@@ -620,9 +620,8 @@ func (r Diff) SortForReading() {
 		if a.Reach != nil && b.Reach != nil && *a.Reach != *b.Reach {
 			return *b.Reach - *a.Reach // widest reach first
 		}
-		// Among files of equal consequence, the ones nobody has read come first, and a
-		// file read and then edited comes first of all - somebody looked, which is exactly
-		// why nobody will look again.
+		// Among files of equal consequence, the ones nobody has read come first, and a file
+		// read and then edited comes first of all - see DiffReadStale.
 		//
 		// A TIEBREAK, never a reordering: reach still decides whenever it is known,
 		// because a widely-referenced file you have read is still likelier to break things

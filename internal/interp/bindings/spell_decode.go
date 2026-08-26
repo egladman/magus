@@ -7,8 +7,7 @@ import "fmt"
 // A spell returns a dynamically typed map, so something has to turn `any` into a Go field, and
 // the posture that turn takes is a decision rather than a detail. It is made once here so the
 // contracts that decode records - workspace and review - make it the same way, rather than each
-// growing its own coercion helpers. Review's did, and silently zeroed, which is the mistake
-// below.
+// growing its own coercion helpers.
 //
 // The other two contracts do NOT belong here, and moving them in would be a regression rather
 // than consistency. The secret contract returns ONE value, refuses an empty or wrong-shaped
@@ -20,9 +19,8 @@ import "fmt"
 // The posture is: a field of the wrong type NAMES ITSELF. Not a panic, because a spell is user
 // code and a bug in it must not take magus down; and emphatically not a zero value, because a
 // silent zero is a wrong answer wearing a right answer's clothes. A mistyped project path
-// becomes a silently wrong cache key. A mistyped pull-request number becomes "no pull request
-// for this branch", which sends the reader to look at their branch when the fault is in their
-// spell. Both were the same mistake, and only the first was ever caught.
+// becomes a silently wrong cache key. A mistyped review id becomes "no pull request for this
+// branch", which sends the reader to look at their branch when the fault is in their spell.
 //
 // Absent and null read as the ZERO VALUE, not as an error. A Buzz object carries every declared
 // field, so "declared nothing" and "did not declare" are the same statement and must decode to
