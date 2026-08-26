@@ -83,11 +83,14 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// either on every tree change would re-render identical output forever.
 		return usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
 	}
-	if rf.Ack && src.kind != inputWorkingTree {
-		// A receipt fingerprints the file on disk, and a patch describes files that may
-		// not be there. Accepting it would record receipts against whatever the working
+	if rf.Ack && !src.addressable() {
+		// A receipt fingerprints content magus can name, and a patch describes files that may
+		// not be here at all. Accepting one would record receipts against whatever the working
 		// tree happens to hold - an acknowledgement of something nobody read.
-		return usagef("magus diff: --ack fingerprints the working tree, so it cannot be combined with %s", src.label)
+		//
+		// A revision range IS nameable, so it is admitted: its receipts fingerprint the file at
+		// that revision, never the reader's own checkout.
+		return usagef("magus diff: --ack fingerprints content magus can address, so it cannot be combined with %s", src.label)
 	}
 	if rf.Ack && rf.Watch {
 		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
@@ -365,10 +368,13 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		return fmt.Errorf("magus diff: %s has content but no file headers magus can read; "+
 			"it expects a unified diff (`diff --git a/x b/x`, or a `--- a/x` / `+++ b/x` pair)", src.label)
 	}
+	// Resolved once: every receipt this command mints or reports on must agree about which
+	// tree it is talking about, and a second resolve is a second chance to disagree.
+	content := contentOf(ctx, m, src)
 	if tui {
-		return runDiffTUI(ctx, m, patch, base, paths, rf.Generated)
+		return runDiffTUI(ctx, m, content, patch, base, paths, rf.Generated)
 	}
-	rev, err := annotateDiff(ctx, m, paths, base)
+	rev, err := annotateDiff(ctx, m, content, paths, base)
 	if err != nil {
 		return err
 	}
@@ -378,7 +384,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		if err != nil {
 			return err
 		}
-		n, err := ackChangeset(m.Root(), m.CacheDir(), scoped, reason, time.Now())
+		n, err := ackChangeset(content, m.CacheDir(), scoped, reason, time.Now())
 		if err != nil {
 			return err
 		}
@@ -472,7 +478,7 @@ const branchOverlapLimit = 20
 // One definition, because the TUI and the one-shot renderer must show the same facts - two
 // callers folding on their own overlays is how "the console said 12 files reference this and
 // the CLI said nothing" happens.
-func annotateDiff(ctx context.Context, m *magus.Magus, paths []string, base string) (types.Diff, error) {
+func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base string) (types.Diff, error) {
 	rev, err := m.Diff(ctx, paths)
 	if err != nil {
 		return types.Diff{}, err
@@ -496,7 +502,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, paths []string, base stri
 	// Which of these files somebody has recorded reading. Best-effort like every other
 	// overlay: an unreadable store leaves every file DiffReadUnknown, which renders as
 	// unmeasured rather than as unread.
-	if states, serr := review.ReadStates(m.Root(), m.CacheDir(), paths); serr == nil {
+	if states, serr := review.ReadStates(m.CacheDir(), paths, content.digest); serr == nil {
 		rev.AttachReadState(states)
 	}
 	return rev, nil
@@ -589,15 +595,15 @@ func pathLinker(root string) func(string) string {
 // shared the COMPUTATION with the console and the MCP surface; what it did not share was the
 // coordination - where the reader is, what they have read, what an agent has asked them to
 // look at. Reading a diff is not a report you print once, it is a place you are IN.
-func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths []string, showGenerated bool) error {
-	rev, sess, sync, err := attachDiffSession(ctx, m, patch, base, paths)
+func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string, showGenerated bool) error {
+	rev, sess, sync, err := attachDiffSession(ctx, m, content, patch, base, paths)
 	if err != nil {
 		return err
 	}
 	files := diffTUIFiles(rev, session.ParseHunks(patch))
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
 	// always explicit; this is what makes them outlive the session.
-	earned := newEarnedSync(sync, m.Root(), m.CacheDir(), files, sess.Viewed)
+	earned := newEarnedSync(sync, content, m.CacheDir(), files, sess.Viewed)
 	sync = earned
 	// Closed here rather than inside the viewer: how a Sync gets its writes out - inline, or over a
 	// goroutine that has to be drained - is this file's business, and the viewer stays ignorant
@@ -652,12 +658,12 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the daemon's own store would have written.
-func attachDiffSession(ctx context.Context, m *magus.Magus, patch, base string, paths []string) (types.Diff, *types.DiffSession, diffSync, error) {
+func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string) (types.Diff, *types.DiffSession, diffSync, error) {
 	asOf := session.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
 	}
-	rev, err := annotateDiff(ctx, m, paths, base)
+	rev, err := annotateDiff(ctx, m, content, paths, base)
 	if err != nil {
 		return types.Diff{}, nil, nil, err
 	}
@@ -1926,6 +1932,8 @@ func impactAnchors(ctx context.Context, root string, files, symbols []string) []
 // lifetimes, and the viewer must keep knowing about neither.
 type earnedSync struct {
 	diffSync
+	// content is where a receipt's bytes come from, and what its Source records.
+	content        reviewedContent
 	root, cacheDir string
 	// fileOf maps a hunk digest to the file it belongs to, and hunksOf counts how many a
 	// file has. A receipt is per FILE, so a file is earned only once every hunk it
@@ -1956,10 +1964,11 @@ type earnedSync struct {
 
 // newEarnedSync wraps sync with receipt minting, seeded with the marks the session already
 // carried so a reader who finishes a file across two sittings still earns it.
-func newEarnedSync(inner diffSync, root, cacheDir string, files []diff.File, seen []string) *earnedSync {
+func newEarnedSync(inner diffSync, content reviewedContent, cacheDir string, files []diff.File, seen []string) *earnedSync {
 	e := &earnedSync{
 		diffSync: inner,
-		root:     root,
+		content:  content,
+		root:     content.root,
 		cacheDir: cacheDir,
 		fileOf:   map[string]string{},
 		hunksOf:  map[string]int{},
@@ -1982,7 +1991,7 @@ func newEarnedSync(inner diffSync, root, cacheDir string, files []diff.File, see
 			e.hunksOf[f.Path]++
 		}
 		if _, ok := e.digestAt[f.Path]; !ok {
-			e.digestAt[f.Path] = review.DigestFile(filepath.Join(root, filepath.FromSlash(f.Path)))
+			e.digestAt[f.Path] = content.digest(f.Path)
 		}
 	}
 	for _, d := range seen {
@@ -2045,7 +2054,7 @@ func (e *earnedSync) finished() []review.Receipt {
 		if content == "" {
 			continue
 		}
-		add = append(add, review.Receipt{Path: path, Digest: content, At: e.now()})
+		add = append(add, review.Receipt{Path: path, Digest: content, At: e.now(), Source: e.content.at})
 	}
 	return add
 }
@@ -2597,21 +2606,76 @@ func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
 	return out, nil
 }
 
-// ackChangeset records a receipt for every non-generated changed file at its current
-// content, carrying the reason the caller gave for covering them all at once.
-func ackChangeset(root, cacheDir string, rev types.Diff, reason string, now time.Time) (int, error) {
+// reviewedContent resolves the bytes a receipt attests to, for whichever changeset source is
+// being read.
+//
+// It exists because getting this wrong is silent and severe. Every receipt was minted from the
+// WORKING TREE, which is correct for a working-tree review and a lie for a range one: it would
+// stamp a colleague's file as read at the content of your own checkout, and Covers would then
+// agree forever. Making the source an explicit value means a new minting site has to say which
+// tree it means rather than inheriting the wrong default.
+type reviewedContent struct {
+	root string
+	// at is zero for the working tree, and otherwise the revision the content is read from.
+	at   types.VCSCheckpoint
+	read func(rev, path string) (string, error)
+}
+
+// digest fingerprints one path, or returns "" where there is nothing to attest to.
+//
+// "" is the answer for a file that is absent - deleted in the working tree, or not present at the
+// revision. Recording a receipt against it would satisfy Covers for every unreadable file forever.
+func (c reviewedContent) digest(path string) string {
+	if c.at.Revision == "" {
+		return review.DigestFile(filepath.Join(c.root, filepath.FromSlash(path)))
+	}
+	body, err := c.read(c.at.Revision, path)
+	if err != nil {
+		return ""
+	}
+	return review.Digest([]byte(body))
+}
+
+// contentOf says which tree a receipt minted for this source should attest to.
+//
+// A source magus cannot address yields the working tree, which is what every caller did before
+// this existed. That is safe only because the two gates that mint receipts - --ack and the viewer
+// - both refuse an unaddressable source outright, so the fallback is unreachable rather than
+// merely unlikely. If either ever accepts a patch on stdin, this has to refuse instead.
+func contentOf(ctx context.Context, m *magus.Magus, src diffInput) reviewedContent {
+	c := reviewedContent{
+		root: m.Root(),
+		read: func(rev, path string) (string, error) { return m.FileAt(ctx, rev, path) },
+	}
+	if src.kind != inputRevRange {
+		return c
+	}
+	// A range magus cannot resolve leaves at zero, and the caller then digests the working tree
+	// for a review of somebody else's branch. Refused rather than degraded: --ack has already
+	// checked the range resolves, so reaching here means the repository moved mid-command.
+	at, err := m.RevisionCheckpoint(ctx, src.head)
+	if err != nil {
+		return c
+	}
+	c.at = at
+	return c
+}
+
+// ackChangeset records a receipt for every non-generated changed file at the content the reader
+// was shown, carrying the reason the caller gave for covering them all at once.
+func ackChangeset(content reviewedContent, cacheDir string, rev types.Diff, reason string, now time.Time) (int, error) {
 	var add []review.Receipt
 	for _, f := range rev.Files {
 		if f.Generated() {
 			continue
 		}
-		digest := review.DigestFile(filepath.Join(root, filepath.FromSlash(f.Path)))
+		digest := content.digest(f.Path)
 		if digest == "" {
-			// A deleted file has no content anyone can have read. Recording a receipt
-			// against "" would then satisfy Covers for every unreadable file forever.
 			continue
 		}
-		add = append(add, review.Receipt{Path: f.Path, Digest: digest, At: now, Reason: reason})
+		add = append(add, review.Receipt{
+			Path: f.Path, Digest: digest, At: now, Source: content.at, Reason: reason,
+		})
 	}
 	if len(add) == 0 {
 		return 0, nil

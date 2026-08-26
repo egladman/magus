@@ -877,7 +877,7 @@ func tuiFile(path string, generated bool, digests ...string) diff.File {
 func TestEarnedSyncMintsWhenEveryHunkIsMarked(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	inner := &recordingSync{}
-	e := newEarnedSync(inner, root, cache, []diff.File{tuiFile("a.go", false, "h1", "h2")}, nil)
+	e := newEarnedSync(inner, reviewedContent{root: root}, cache, []diff.File{tuiFile("a.go", false, "h1", "h2")}, nil)
 
 	e.SetViewed("h1", true)
 	e.close()
@@ -885,7 +885,7 @@ func TestEarnedSyncMintsWhenEveryHunkIsMarked(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, store, "one of two hunks read is not a file read")
 
-	e = newEarnedSync(&recordingSync{}, root, cache, []diff.File{tuiFile("a.go", false, "h1", "h2")}, nil)
+	e = newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []diff.File{tuiFile("a.go", false, "h1", "h2")}, nil)
 	e.SetViewed("h1", true)
 	e.SetViewed("h2", true)
 	e.close()
@@ -901,7 +901,7 @@ func TestEarnedSyncMintsWhenEveryHunkIsMarked(t *testing.T) {
 func TestEarnedSyncRefusesToMintFromASeededSetAlone(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	// Every hunk already "read", exactly as a forged store would present them.
-	e := newEarnedSync(&recordingSync{}, root, cache,
+	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache,
 		[]diff.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1", "h2"})
 	e.close()
 
@@ -914,7 +914,7 @@ func TestEarnedSyncRefusesToMintFromASeededSetAlone(t *testing.T) {
 // earns it on the mark that completes it.
 func TestEarnedSyncLetsASeededSetFinishALiveReading(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
-	e := newEarnedSync(&recordingSync{}, root, cache,
+	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache,
 		[]diff.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1"})
 
 	e.SetViewed("h2", true)
@@ -930,7 +930,7 @@ func TestEarnedSyncLetsASeededSetFinishALiveReading(t *testing.T) {
 // the file list folds generated output away by default too.
 func TestEarnedSyncIgnoresGeneratedFiles(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"gen.json": "{}\n"})
-	e := newEarnedSync(&recordingSync{}, root, cache, []diff.File{tuiFile("gen.json", true, "g1")}, nil)
+	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []diff.File{tuiFile("gen.json", true, "g1")}, nil)
 
 	e.SetViewed("g1", true)
 	e.close()
@@ -945,7 +945,7 @@ func TestEarnedSyncIgnoresGeneratedFiles(t *testing.T) {
 func TestEarnedSyncForwardsEveryMarkAndClosesTheInnerSync(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	inner := &recordingSync{}
-	e := newEarnedSync(inner, root, cache, []diff.File{tuiFile("a.go", false, "h1")}, nil)
+	e := newEarnedSync(inner, reviewedContent{root: root}, cache, []diff.File{tuiFile("a.go", false, "h1")}, nil)
 
 	e.SetViewed("h1", true)
 	e.SetViewed("unknown-digest", true)
@@ -959,7 +959,7 @@ func TestEarnedSyncForwardsEveryMarkAndClosesTheInnerSync(t *testing.T) {
 // content, which Covers would then satisfy for every unreadable file forever.
 func TestEarnedSyncMintsNothingForAFileItCannotRead(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
-	e := newEarnedSync(&recordingSync{}, root, cache, []diff.File{tuiFile("gone.go", false, "h1")}, nil)
+	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []diff.File{tuiFile("gone.go", false, "h1")}, nil)
 	e.now = func() time.Time { return time.Unix(0, 0) }
 
 	e.SetViewed("h1", true)
@@ -1540,7 +1540,7 @@ func reviewFixture(t *testing.T, files map[string]string, roles map[string]strin
 // tests exercise the join the CLI and the console both go through rather than a second one.
 func attach(t *testing.T, root, cache string, rev types.Diff) types.Diff {
 	t.Helper()
-	states, err := review.ReadStates(root, cache, diffPaths(rev))
+	states, err := review.ReadStates(cache, diffPaths(rev), reviewedContent{root: root}.digest)
 	require.NoError(t, err)
 	rev.AttachReadState(states)
 	return rev
@@ -1560,7 +1560,7 @@ func TestCollectReview(t *testing.T) {
 	t.Run("acknowledging then re-reading reports it read", func(t *testing.T) {
 		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n"}, nil)
 
-		n, err := ackChangeset(root, cache, rev, "spot-checked", time.Now())
+		n, err := ackChangeset(reviewedContent{root: root}, cache, rev, "spot-checked", time.Now())
 		require.NoError(t, err)
 		assert.Equal(t, 1, n)
 
@@ -1574,7 +1574,7 @@ func TestCollectReview(t *testing.T) {
 	// not leave the change looking reviewed.
 	t.Run("editing after acknowledging goes stale, not read", func(t *testing.T) {
 		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n\nfunc F() {}\n"}, nil)
-		_, err := ackChangeset(root, cache, rev, "spot-checked", time.Now())
+		_, err := ackChangeset(reviewedContent{root: root}, cache, rev, "spot-checked", time.Now())
 		require.NoError(t, err)
 
 		require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nfunc G() {}\n"), 0o644))
@@ -1599,7 +1599,7 @@ func TestCollectReview(t *testing.T) {
 		require.NotNil(t, got)
 		assert.Equal(t, 1, got.Files)
 
-		n, err := ackChangeset(root, cache, rev, "spot-checked", time.Now())
+		n, err := ackChangeset(reviewedContent{root: root}, cache, rev, "spot-checked", time.Now())
 		require.NoError(t, err)
 		assert.Equal(t, 1, n)
 	})
@@ -1610,7 +1610,7 @@ func TestCollectReview(t *testing.T) {
 		root, cache := t.TempDir(), t.TempDir()
 		rev := types.Diff{Files: []types.DiffFile{{Path: "gone.go", Role: types.DiffRoleSource}}}
 
-		n, err := ackChangeset(root, cache, rev, "spot-checked", time.Now())
+		n, err := ackChangeset(reviewedContent{root: root}, cache, rev, "spot-checked", time.Now())
 		require.NoError(t, err)
 		assert.Equal(t, 0, n)
 
@@ -2172,4 +2172,44 @@ func TestAddressableSeparatesTreeStatesFromHandedOverPatches(t *testing.T) {
 	assert.True(t, diffInput{kind: inputRevRange}.addressable())
 	assert.False(t, diffInput{kind: inputStdin}.addressable())
 	assert.False(t, diffInput{kind: inputFile}.addressable())
+}
+
+// TestReviewedContentDigestsTheRevisionNotTheCheckout is the one that matters for --rev.
+//
+// The bug it exists to catch is silent and permanent: minting a receipt for a colleague's branch
+// from the reader's own working tree stamps content nobody read, and Covers then agrees with it
+// forever. Both halves are asserted, because a digest function that returned "" for everything
+// would pass the negative half alone.
+func TestReviewedContentDigestsTheRevisionNotTheCheckout(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("what my checkout holds\n"), 0o644))
+
+	atRevision := reviewedContent{
+		root: root,
+		at:   types.VCSCheckpoint{Revision: "cafe1234", Branch: "feat/audience", VCS: "git"},
+		read: func(rev, path string) (string, error) {
+			assert.Equal(t, "cafe1234", rev, "the resolved id is what gets read, never the branch name")
+			assert.Equal(t, "a.go", path)
+			return "what the branch holds\n", nil
+		},
+	}
+
+	assert.Equal(t, review.Digest([]byte("what the branch holds\n")), atRevision.digest("a.go"))
+	assert.NotEqual(t, review.DigestFile(filepath.Join(root, "a.go")), atRevision.digest("a.go"),
+		"a range receipt must not fingerprint the reader's own checkout")
+
+	// The working tree is still the working tree when no revision is named.
+	assert.Equal(t, review.DigestFile(filepath.Join(root, "a.go")), reviewedContent{root: root}.digest("a.go"))
+}
+
+// A file absent at the revision has nothing anyone can have read, and must not become a receipt
+// against "" - which Covers would otherwise satisfy for every unreadable file forever.
+func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
+	c := reviewedContent{
+		root: t.TempDir(),
+		at:   types.VCSCheckpoint{Revision: "cafe1234"},
+		read: func(string, string) (string, error) { return "", fmt.Errorf("path does not exist at that revision") },
+	}
+
+	assert.Empty(t, c.digest("gone.go"))
 }

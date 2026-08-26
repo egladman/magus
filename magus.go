@@ -741,6 +741,50 @@ func (m *Magus) RangeDiff(ctx context.Context, base, head string) (string, error
 	return reporter.RangeDiff(ctx, m.ws.Root, base, head)
 }
 
+// RevisionCheckpoint resolves a revision expression to the checkpoint that names it.
+//
+// The point is Revision: a movable name resolves to the full id it currently points at, so a
+// caller recording what it read records something that still means the same thing after somebody
+// pushes to that branch. Dirty and PatchDigest stay zero, because a committed revision is not a
+// working tree and reporting it as clean-or-dirty would be answering a question nobody asked.
+func (m *Magus) RevisionCheckpoint(ctx context.Context, rev string) (types.VCSCheckpoint, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return types.VCSCheckpoint{}, fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing,
+				"this workspace has version control disabled, so %q names no revision", rev),
+			types.ErrVCSUnsupported)
+	}
+	commit, err := res.VCS.FindCommit(ctx, m.ws.Root, rev)
+	if err != nil {
+		return types.VCSCheckpoint{}, fmt.Errorf("resolving %q: %w", rev, err)
+	}
+	return types.VCSCheckpoint{Revision: commit.ID, Branch: rev, VCS: res.Name}, nil
+}
+
+// FileAt returns a repo-relative path's content at a revision.
+//
+// A path absent at that revision is an error and not empty content, which is RevisionFileReader's
+// own contract: the two are indistinguishable to a caller, and only one of them means the file was
+// empty. Callers digesting for a receipt must treat the error as "nothing to attest to" rather
+// than hashing "".
+func (m *Magus) FileAt(ctx context.Context, rev, path string) (string, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return "", fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing,
+				"this workspace has version control disabled, so there is no revision to read %s at", path),
+			types.ErrVCSUnsupported)
+	}
+	reader, ok := res.VCS.(types.RevisionFileReader)
+	if !ok {
+		return "", fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not read a file at a revision", res.Name),
+			types.ErrVCSUnsupported)
+	}
+	return reader.ReadFileAt(ctx, m.ws.Root, rev, path)
+}
+
 // ReviewOrigin reports the branch this tree is on and the remote it would be pushed to, for a
 // caller asking a provider which review is open.
 //

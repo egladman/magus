@@ -68,6 +68,20 @@ type Receipt struct {
 	// path, which is the one way this could actively mislead.
 	Digest string    `json:"digest"`
 	At     time.Time `json:"at"`
+	// Source names where the content came from, zero for the working tree.
+	//
+	// types.VCSCheckpoint rather than the revision expression the reader typed, and the
+	// difference is not cosmetic: "feat/audience" is a MOVABLE name, so a receipt holding it
+	// would still read as covering that branch after somebody pushed to it. Checkpoint.Revision
+	// is documented as the full resolved id meant to be fed back to a VCS, which is the only
+	// spelling that still means the same thing tomorrow. Checkpoint.VCS records whose revision
+	// syntax it is written in, since the backends do not share one.
+	//
+	// PROVENANCE ONLY. Covers never reads it, because the digest is already the identity - the
+	// package's whole assertion is "at this content, somebody said read", and content is content
+	// whether it arrived from a checkout or a branch. What Source buys is a later reader being
+	// able to tell "I read this on Alice's branch" from "I read this in my tree".
+	Source types.VCSCheckpoint `json:"source,omitzero"`
 	// Reason is why one keystroke covered this file, set only by a bulk `--ack` and empty
 	// for a receipt earned by stepping the file in the viewer.
 	//
@@ -78,6 +92,12 @@ type Receipt struct {
 }
 
 // Store is every receipt in a workspace, keyed by path.
+//
+// One receipt per path, so the newest acknowledgement of a file replaces the last. That bounds the
+// store to the size of the tree rather than to everything anybody ever read, and it costs a
+// bookmark whenever the same path is read at two contents - reviewing a colleague's version of a
+// file you have also edited voids the receipt on your own. The loss is in the safe direction: it
+// reports a file you did read as unread, never the reverse.
 type Store map[string]Receipt
 
 // Load reads the store. A missing file is an empty store, not an error: nobody having
@@ -178,16 +198,19 @@ func Record(cacheDir string, add []Receipt) error {
 // agree on what "read" means - two callers deciding for themselves is how one surface comes
 // to call a file reviewed while the other calls it stale.
 //
-// A path that cannot be read on disk is left out entirely rather than called unread: a
+// A path whose content cannot be resolved is left out entirely rather than called unread: a
 // deleted file is not something anyone failed to review.
-func ReadStates(root, cacheDir string, paths []string) (map[string]string, error) {
+// digest resolves each path's content, and is what makes this answer the right question for a
+// changeset that is not the working tree: a range review compares against the file at that
+// revision, where reading the reader's own checkout would report every file unread.
+func ReadStates(cacheDir string, paths []string, digestOf func(path string) string) (map[string]string, error) {
 	store, err := Load(cacheDir)
 	if err != nil {
 		return nil, err
 	}
 	out := make(map[string]string, len(paths))
 	for _, p := range paths {
-		digest := DigestFile(filepath.Join(root, filepath.FromSlash(p)))
+		digest := digestOf(p)
 		if digest == "" {
 			continue
 		}
@@ -225,6 +248,16 @@ func DigestFile(abs string) string {
 	if err != nil {
 		return ""
 	}
-	sum := sha256.Sum256(b)
+	return Digest(b)
+}
+
+// Digest fingerprints content that did not come from disk: a file read at a revision.
+//
+// The same function DigestFile ends in, so a receipt earned reading a branch and one earned
+// reading the working tree are comparable. Two hashes here would mean a file whose content is
+// identical either way reported as unread when the reader switched surfaces, which is exactly the
+// bookkeeping error the digest exists to prevent.
+func Digest(content []byte) string {
+	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:])[:digestLen]
 }

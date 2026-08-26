@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // TestReceiptCarriesNoIdentity pins the standing refusal in the package doc: a receipt names
@@ -26,8 +28,20 @@ func TestReceiptCarriesNoIdentity(t *testing.T) {
 	for i := range rt.NumField() {
 		fields = append(fields, rt.Field(i).Name)
 	}
-	assert.Equal(t, []string{"Path", "Digest", "At", "Reason"}, fields,
+	assert.Equal(t, []string{"Path", "Digest", "At", "Source", "Reason"}, fields,
 		"a receipt names no reader; see the package doc before adding a field")
+
+	// Source is a type this package does not own, so the list above stops being sufficient:
+	// a person added to VCSCheckpoint for some unrelated caller would arrive here silently
+	// and hand the store the attributable field the package doc spent itself refusing.
+	// Argued for and admitted because a checkpoint answers "which revision", never "whose".
+	var checkpoint []string
+	ct := reflect.TypeOf(types.VCSCheckpoint{})
+	for i := range ct.NumField() {
+		checkpoint = append(checkpoint, ct.Field(i).Name)
+	}
+	assert.Equal(t, []string{"Revision", "Branch", "Dirty", "PatchDigest", "VCS"}, checkpoint,
+		"a receipt embeds this: it must keep naming a revision and never a person")
 }
 
 func TestLoadMissingStoreIsEmptyNotAnError(t *testing.T) {
