@@ -98,11 +98,28 @@ In the console's Diff surface:
 | `s`   | read the batch of drafts, then send it      |
 | `Esc` | the changeset overview                      |
 
+### Writing one
+
+A remark is markdown, and the box you write it in is a real one: **Enter is a line break**, so a
+paragraph, a list or a fenced block all survive being typed. Committing takes a deliberate act -
+Cmd or Ctrl with Enter, or the button beside the field - because a field where Enter commits
+cannot hold a remark worth writing, and because sending is not something to do by reflex.
+
+**Write** and **Preview** sit above the field. What a remark looks like rendered is what your
+colleague will read, and until you can see it here you are typing blind: a fence reads as three
+backticks, a list as a row of hyphens. Threads render the same way, so a colleague's markdown
+arrives as markdown rather than as its own syntax.
+
+Remote images are not fetched. A markdown image renders as its alt text, because an image in a
+remark is a request your browser would make to a host you did not choose.
+
+### Sending the batch
+
 `s` lists the drafts and offers a summary line before anything leaves. You often change your
 mind about the first remark by the time you write the fifth, which is why they wait. The
 summary is optional; the list of what is about to go is not.
 
-![The Diff surface with the send box open: a heading reading "Send 1 remark to acme/acme #482", a line saying the post goes over the network to github.com and that nothing has left this machine yet, the one draft listed with its file, line and text beside a discard link, and a summary field](../../assets/screenshots/console-diff-send.png)
+![The Diff surface with the send box open: a heading reading "Send 1 remark to acme/acme #482", a line saying the post goes over the network to github.com and that nothing has left this machine yet, the one draft listed with its file, line and text beside a discard link, and a summary field with Write and Preview tabs above it and a send button beside it](../../assets/screenshots/console-diff-send.png)
 
 The box names the repository, the review and the host before you commit to any of them, and
 says plainly that nothing has gone yet. A remark you have changed your mind about is discarded
