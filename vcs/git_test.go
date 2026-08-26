@@ -685,3 +685,64 @@ func TestUncoloredUsesEachBackendsOwnSwitch(t *testing.T) {
 	// flag for it would break every invocation instead of merely leaving color on.
 	assert.Equal(t, []string{"diff"}, uncolored("fossil", []string{"diff"}))
 }
+
+// BranchChanges answers the question the console asks to warn a reader that a file in front of
+// them is also being edited elsewhere. The remote-tracking refs are built by hand rather than by
+// cloning: what matters is that the ref exists under refs/remotes, not how it got there.
+func TestBranchChangesReportsOtherRemoteBranches(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
+	gitRun(t, repo, "branch", "-M", "main")
+
+	// Two colleagues' branches, each touching one file, recorded where a fetch would put them.
+	gitRun(t, repo, "checkout", "-q", "-b", "theirs")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // theirs\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "theirs")
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/theirs", "theirs")
+
+	gitRun(t, repo, "checkout", "-q", "-b", "other", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "b.go"), []byte("package b // other\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "other")
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/other", "other")
+
+	// The reader's own branch, which must NOT come back as competition with itself.
+	gitRun(t, repo, "checkout", "-q", "-b", "mine", "main")
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/mine", "mine")
+
+	got, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 10)
+	require.NoError(t, err)
+
+	byRef := map[string][]string{}
+	for _, b := range got {
+		byRef[b.Ref] = b.Paths
+	}
+	assert.Equal(t, []string{"a.go"}, byRef["theirs"])
+	assert.Equal(t, []string{"b.go"}, byRef["other"])
+	assert.NotContains(t, byRef, "mine", "the reader's own branch is not competition")
+	// The remote prefix is stripped: a reader names the branch, not the ref.
+	assert.NotContains(t, byRef, "origin/theirs")
+}
+
+// The cap belongs to the backend so git can apply it to the ref listing and no diff is ever run
+// for a branch that was going to be discarded.
+func TestBranchChangesHonorsTheLimit(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n"})
+	gitRun(t, repo, "branch", "-M", "main")
+	for _, name := range []string{"one", "two", "three"} {
+		gitRun(t, repo, "checkout", "-q", "-b", name, "main")
+		require.NoError(t, os.WriteFile(filepath.Join(repo, name+".go"), []byte("package "+name+"\n"), 0o644))
+		gitRun(t, repo, "add", "-A")
+		gitRun(t, repo, "commit", "-qm", name)
+		gitRun(t, repo, "update-ref", "refs/remotes/origin/"+name, name)
+	}
+	gitRun(t, repo, "checkout", "-q", "main")
+
+	got, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 2)
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+
+	none, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 0)
+	require.NoError(t, err)
+	assert.Empty(t, none, "a limit of zero asks for nothing and must fork nothing")
+}

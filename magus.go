@@ -669,6 +669,33 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 	return tracked + untracked, nil
 }
 
+// BranchChanges reports what other remote-tracking branches are changing, so a reader can be told
+// that a file in front of them is also being edited elsewhere.
+//
+// Empty rather than an error whenever the answer cannot be had - no VCS, a backend without the
+// capability, a repository with no other branches. The three are the same to the reader, and a
+// surface that has nothing to say about competition should say nothing. That is also why a
+// backend lacking BranchChangeReporter must not be reported as "nothing competes": those are
+// different facts, and the caller can only tell them apart by getting nothing at all here.
+//
+// Read through the optional capability rather than by shelling a git command, for the reason
+// ReviewOrigin reads the remote that way: the backend is asked, never its name.
+func (m *Magus) BranchChanges(ctx context.Context, limit int) []types.BranchChange {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return nil
+	}
+	reporter, ok := res.VCS.(types.BranchChangeReporter)
+	if !ok {
+		return nil
+	}
+	out, err := reporter.BranchChanges(ctx, m.ws.Root, res.Base, limit)
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
 // ReviewOrigin reports the branch this tree is on and the remote it would be pushed to, for a
 // caller asking a provider which review is open.
 //

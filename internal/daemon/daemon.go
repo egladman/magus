@@ -287,6 +287,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 			diffSessionH := status.NewDiffSessionHandler(diffOpts, log)
 			diffReviewH := status.NewDiffReviewHandler(svc, log)
+			diffBranchesH := status.NewDiffBranchesHandler(svc, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 			runsH := viewer.NewRunsHandler(outputStore, log)
@@ -330,6 +331,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Its own route because it crosses the network to a forge: a reader must never wait
 			// on somebody else's outage to see their own diff.
 			bridgeMux.Handle("/api/v1/diff/review", cors(diffReviewH))
+			// The other branches changing these files. Its own route because it forks per branch:
+			// a reader must not wait on it to see their own diff, and it reads only what has
+			// already been fetched rather than going to the network for more.
+			bridgeMux.Handle("/api/v1/diff/branches", cors(diffBranchesH))
 			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
 			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.

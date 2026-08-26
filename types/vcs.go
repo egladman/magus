@@ -420,6 +420,34 @@ type ChurnReporter interface {
 	ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
 }
 
+// BranchChange is one other line of work and the repo-relative paths it changes.
+type BranchChange struct {
+	// Ref is the branch as a reader would name it, with any remote-tracking prefix removed:
+	// "feat/audience", not "refs/remotes/origin/feat/audience".
+	Ref   string   `json:"ref"`
+	Paths []string `json:"paths"`
+}
+
+// BranchChangeReporter is an optional capability for VCSDriver implementations that can report
+// what OTHER branches are changing, so a reader can be told a file in front of them is also being
+// edited elsewhere before the merge conflict tells them.
+//
+// Callers type-assert for it and degrade gracefully. Degrading here means saying NOTHING rather
+// than "no branch competes": a backend that cannot answer and a repository where nothing overlaps
+// are different facts, and only one of them is reassuring.
+type BranchChangeReporter interface {
+	// BranchChanges returns up to limit branches other than the current one, most recently
+	// updated first, each with the paths it changes relative to base.
+	//
+	// Remote-tracking refs only. It answers "what is somebody else doing", and it reads what is
+	// already fetched rather than fetching: the answer is as fresh as the reader's last fetch,
+	// which a caller has to say out loud rather than implying it is live.
+	//
+	// limit is the backend's to apply, not the caller's to trim afterwards, so a backend can push
+	// it down to the ref listing and never materialise a diff it was going to discard.
+	BranchChanges(ctx context.Context, dir, base string, limit int) ([]BranchChange, error)
+}
+
 // ConflictKind classifies why a path is unresolved in an in-progress merge.
 type ConflictKind string
 

@@ -666,3 +666,39 @@ func TestDiscardRemovesOnlyAnUnsentHumanDraft(t *testing.T) {
 	assert.True(t, left["theirs"], "an agent's remark is not the reader's to remove")
 	assert.True(t, left["sent"], "a published remark cannot be unsaid by deleting it here")
 }
+
+// fakeBranchSource answers the branch lookup without a repository.
+type fakeBranchSource struct {
+	limit int
+	out   []types.BranchChange
+}
+
+func (f *fakeBranchSource) BranchChanges(_ context.Context, limit int) []types.BranchChange {
+	f.limit = limit
+	return f.out
+}
+
+func TestDiffBranchesServesTheOverlapAndPassesTheCap(t *testing.T) {
+	src := &fakeBranchSource{out: []types.BranchChange{{Ref: "theirs", Paths: []string{"a.go"}}}}
+	rec := httptest.NewRecorder()
+	NewDiffBranchesHandler(src, nil).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/branches", nil))
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var got diffBranchesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, []types.BranchChange{{Ref: "theirs", Paths: []string{"a.go"}}}, got.Branches)
+	// The cap reaches the backend rather than being applied after the forks were already paid.
+	assert.Equal(t, branchLimit, src.limit)
+}
+
+// A daemon with no workspace answers an empty ARRAY, never null: a client iterates the field, and
+// a null would make every caller guard a state that means what empty already means.
+func TestDiffBranchesWithNoWorkspaceIsAnEmptyArray(t *testing.T) {
+	rec := httptest.NewRecorder()
+	NewDiffBranchesHandler(nil, nil).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/branches", nil))
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"branches":[]`)
+}

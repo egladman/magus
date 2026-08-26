@@ -100,6 +100,74 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 	return append(files, splitLines([]byte(untracked))...), nil
 }
 
+// BranchChanges reports what OTHER remote-tracking branches are changing, most recently updated
+// first, so a reader can be told the file in front of them is also being edited elsewhere.
+//
+// Remote-tracking refs only, and it does NOT fetch. The answer is exactly as fresh as the reader's
+// last fetch - going and getting more would be a network act nobody asked for, on a path that
+// exists to annotate a diff. A caller has to say "as of your last fetch" rather than implying the
+// answer is live.
+//
+// One fork lists the refs and one more diffs each of them, so the cost is limit+1 forks and the
+// cap belongs here rather than in the caller: git applies it to the ref listing and no diff is
+// ever run for a branch that was going to be discarded. The three-dot form computes the merge base
+// internally, which is what keeps it to one fork per branch rather than two.
+func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) ([]types.BranchChange, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	if err := checkRef(base); err != nil {
+		return nil, err
+	}
+	// One over the cap, because the reader's OWN branch is usually among the most recent and is
+	// dropped below - asking for exactly limit would quietly return one fewer than asked.
+	refs, err := vcsOutput(ctx, dir, "git", "for-each-ref",
+		"--sort=-committerdate", "--count", strconv.Itoa(limit+1),
+		"--format=%(refname:short)", "refs/remotes/")
+	if err != nil {
+		return nil, fmt.Errorf("git for-each-ref: %w", err)
+	}
+	mine, err := vcsOutput(ctx, dir, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse: %w", err)
+	}
+	out := make([]types.BranchChange, 0, limit)
+	for _, ref := range splitLines([]byte(refs)) {
+		if len(out) == limit {
+			break
+		}
+		// origin/HEAD is a symbolic pointer at the default branch, so it duplicates whatever it
+		// aims at and names no line of work of its own.
+		short := strings.TrimPrefix(ref, "origin/")
+		if _, _, hasRemote := strings.Cut(ref, "/"); !hasRemote || strings.HasSuffix(ref, "/HEAD") {
+			continue
+		}
+		if short == strings.TrimSpace(mine) {
+			continue
+		}
+		if err := checkRef(ref); err != nil {
+			// A ref git itself listed, so this is not the caller-supplied case checkRef exists
+			// for - but a name that cannot be passed safely is skipped rather than trusted.
+			continue
+		}
+		// core.quotePath=false for the reason ChangedFiles sets it: a non-ASCII path otherwise
+		// arrives C-quoted, matches no source glob, and the overlap silently never reports.
+		paths, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false",
+			"diff", "--name-only", base+"..."+ref)
+		if err != nil {
+			// One unreachable branch is not a reason to report none: a ref can vanish between
+			// the listing and the diff, and the rest of the answer is still true.
+			continue
+		}
+		lines := splitLines([]byte(paths))
+		if len(lines) == 0 {
+			continue
+		}
+		out = append(out, types.BranchChange{Ref: short, Paths: lines})
+	}
+	return out, nil
+}
+
 // recoverMergeBase fetches history until base and HEAD share an ancestor in a shallow
 // clone, returning that merge base, or "" when it cannot get one.
 //

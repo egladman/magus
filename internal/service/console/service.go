@@ -321,6 +321,16 @@ func (s *Service) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 	return s.magus.ReviewOrigin(ctx)
 }
 
+// BranchChanges reports what other remote-tracking branches are changing, so a reader can be
+// told a file in front of them is being edited elsewhere too. None on a workspace-less service,
+// which reads the same as a backend that cannot answer: nothing is claimed either way.
+func (s *Service) BranchChanges(ctx context.Context, limit int) []types.BranchChange {
+	if s.magus == nil {
+		return nil
+	}
+	return s.magus.BranchChanges(ctx, limit)
+}
+
 // Diff annotates a changed-path set: role, owning project, changed-symbol reach, coverage,
 // and the blast radius, ordered by what magus recommends reading first.
 //

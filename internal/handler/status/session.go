@@ -702,3 +702,60 @@ func (h *DiffReviewHandler) lookup(ctx context.Context) types.ReviewTarget {
 	from := h.workspace.ReviewOrigin(ctx)
 	return bindings.FindReview(ctx, from.Branch, from.Remote)
 }
+
+// branchSource is the workspace half a branch lookup needs: what other lines of work are
+// changing. Narrow on purpose, so a test can answer it without a repository.
+type branchSource interface {
+	BranchChanges(ctx context.Context, limit int) []types.BranchChange
+}
+
+// DiffBranchesHandler serves GET /api/v1/diff/branches: the other branches changing the files
+// this changeset changes, so a reader learns about a collision before the merge does.
+//
+// Its own route rather than a field on the changeset, for the reason the review lookup has one:
+// it costs a fork per branch, and the patch has to paint before anything that forks is allowed
+// to hold it up. This ARRIVES, like the conversation does.
+//
+// It reads what has already been fetched and never fetches. The answer is therefore as fresh as
+// the reader's last fetch and no fresher, which the surface says out loud rather than implying
+// it is live.
+type DiffBranchesHandler struct {
+	handler.Base
+	workspace branchSource
+}
+
+// branchLimit caps how many branches are examined, and so how many forks one request costs.
+// Production `magus affected ci` spends about 31 forks in total, so a bound here is not
+// decoration - an unbounded version would make a diff surface the most expensive thing in the
+// daemon on a repository with a hundred stale branches.
+const branchLimit = 20
+
+// NewDiffBranchesHandler returns the branch-overlap handler. A nil workspace reports none, which
+// is what a daemon with no workspace has.
+func NewDiffBranchesHandler(workspace branchSource, log *slog.Logger) *DiffBranchesHandler {
+	h := &DiffBranchesHandler{workspace: workspace}
+	h.Base = handler.New(h.serve, log)
+	return h
+}
+
+// diffBranchesResponse is the wire shape. Branches is always an array, never null: a client
+// iterates it, and a null would make every caller guard a state that means what empty means.
+type diffBranchesResponse struct {
+	Branches []types.BranchChange `json:"branches"`
+}
+
+func (h *DiffBranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	out := diffBranchesResponse{Branches: []types.BranchChange{}}
+	if h.workspace != nil {
+		out.Branches = append(out.Branches, h.workspace.BranchChanges(r.Context(), branchLimit)...)
+	}
+	writeJSON(w, out)
+}
