@@ -682,7 +682,12 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 // ReviewOrigin reads the remote that way: the backend is asked, never its name.
 func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchChange, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
-	if err != nil || res.VCS == nil {
+	if err != nil {
+		return nil, fmt.Errorf("resolving the version control backend: %w", err)
+	}
+	if res.VCS == nil {
+		// Version control disabled for this workspace. There are genuinely no other branches, so
+		// this is an empty answer rather than a gap - the distinction the error below exists for.
 		return nil, nil
 	}
 	reporter, ok := res.VCS.(types.BranchChangeReporter)
