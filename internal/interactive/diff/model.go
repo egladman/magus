@@ -1,4 +1,4 @@
-// Package difftui is the terminal client of the shared diff session: the same changeset
+// Package diff is the terminal client of the shared diff session: the same changeset
 // the console's Diff surface renders and an agent joins over MCP, read with a keyboard.
 //
 // The CLI already shared the review COMPUTATION; what it did not share was the
@@ -9,7 +9,7 @@
 // The model in this file owns navigation, the generated fold, the viewed set and the
 // viewport window, and it touches no terminal at all: rows in, rows out. render.go turns
 // it into a frame and run.go feeds it keys, so the state machine is testable without a pty.
-package difftui
+package diff
 
 import (
 	"cmp"
@@ -17,7 +17,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/diff"
+	session "github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/types"
 )
 
@@ -26,7 +26,7 @@ import (
 // so the CLI and the console mark the same hunk.
 type Hunk struct {
 	// Index is the hunk's position in the PATCH, which is the coordinate a comment and a
-	// suggestion are anchored by (see diff.Hunk.Index). Carried rather than taken from the
+	// suggestion are anchored by (see session.Hunk.Index). Carried rather than taken from the
 	// position in Hunks, so a caller that ever hands over a subset cannot silently renumber
 	// every anchor in the file.
 	Index  int
@@ -39,7 +39,7 @@ type Hunk struct {
 	//
 	// Passed in rather than derived here, like Digest above and for the same reason: the
 	// parser works it out once and both surfaces read the one answer.
-	Emph []diff.Span
+	Emph []session.Span
 }
 
 // File is one changed file. Facts are the annotation lines ALREADY RENDERED by the caller,
@@ -62,7 +62,7 @@ type Input struct {
 	Comments    []types.DiffComment
 	Suggestions []types.DiffSuggestion
 	// Threads are the remarks already on the host's review, with Hunk resolved by
-	// diff.PlaceThreads. A thread whose line this changeset does not contain (Hunk < 0) renders
+	// session.PlaceThreads. A thread whose line this changeset does not contain (Hunk < 0) renders
 	// under the file heading rather than being dropped: a colleague said it, and a viewer that
 	// silently withheld it would be telling the reader nobody had.
 	Threads []types.ReviewThread
@@ -104,7 +104,7 @@ type Row struct {
 	// Emph is which PART of Text changed, in BYTES of Text, on a RowLine that could be paired
 	// with its counterpart. The zero span means there is nothing to draw harder than the rest -
 	// the line has no partner, or the whole of it changed and the row color already says so.
-	Emph diff.Span
+	Emph session.Span
 }
 
 // Model is the navigation, fold and progress state machine.
@@ -461,7 +461,7 @@ func (m *Model) rebuild() {
 			}
 			m.rows = append(m.rows, Row{Kind: RowHunk, File: i, Hunk: hi, Text: mark + " " + h.Header})
 			for li, l := range h.Lines {
-				var emph diff.Span
+				var emph session.Span
 				if li < len(h.Emph) {
 					emph = h.Emph[li]
 				}

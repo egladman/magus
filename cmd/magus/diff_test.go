@@ -19,8 +19,8 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
-	"github.com/egladman/magus/internal/diff"
-	"github.com/egladman/magus/internal/interactive/difftui"
+	session "github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/interactive/diff"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
@@ -172,7 +172,7 @@ func TestDiffTUIFilesJoinKeepsTheAnnotationOrder(t *testing.T) {
 		"@@ -9 +9 @@\n" +
 		"+func G() {}\n"
 
-	files := diffTUIFiles(rev, diff.ParseHunks(patch))
+	files := diffTUIFiles(rev, session.ParseHunks(patch))
 	require.Len(t, files, 2)
 	assert.Equal(t, "core.go", files[0].Path)
 	assert.False(t, files[0].Generated)
@@ -845,7 +845,7 @@ func (r *recordingSync) SetCursor(types.DiffCursor)       {}
 func (r *recordingSync) SetViewed(digest string, on bool) { r.marks = append(r.marks, digest) }
 func (r *recordingSync) close()                           { r.closed = true }
 
-func earnedFixture(t *testing.T, files map[string]string) (root, cache string, tui []difftui.File) {
+func earnedFixture(t *testing.T, files map[string]string) (root, cache string, tui []diff.File) {
 	t.Helper()
 	root, cache = t.TempDir(), t.TempDir()
 	for path, body := range files {
@@ -854,10 +854,10 @@ func earnedFixture(t *testing.T, files map[string]string) (root, cache string, t
 	return root, cache, tui
 }
 
-func tuiFile(path string, generated bool, digests ...string) difftui.File {
-	f := difftui.File{Path: path, Generated: generated}
+func tuiFile(path string, generated bool, digests ...string) diff.File {
+	f := diff.File{Path: path, Generated: generated}
 	for _, d := range digests {
-		f.Hunks = append(f.Hunks, difftui.Hunk{Digest: d})
+		f.Hunks = append(f.Hunks, diff.Hunk{Digest: d})
 	}
 	return f
 }
@@ -865,7 +865,7 @@ func tuiFile(path string, generated bool, digests ...string) difftui.File {
 func TestEarnedSyncMintsWhenEveryHunkIsMarked(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	inner := &recordingSync{}
-	e := newEarnedSync(inner, root, cache, []difftui.File{tuiFile("a.go", false, "h1", "h2")}, nil)
+	e := newEarnedSync(inner, root, cache, []diff.File{tuiFile("a.go", false, "h1", "h2")}, nil)
 
 	e.SetViewed("h1", true)
 	e.close()
@@ -873,7 +873,7 @@ func TestEarnedSyncMintsWhenEveryHunkIsMarked(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, store, "one of two hunks read is not a file read")
 
-	e = newEarnedSync(&recordingSync{}, root, cache, []difftui.File{tuiFile("a.go", false, "h1", "h2")}, nil)
+	e = newEarnedSync(&recordingSync{}, root, cache, []diff.File{tuiFile("a.go", false, "h1", "h2")}, nil)
 	e.SetViewed("h1", true)
 	e.SetViewed("h2", true)
 	e.close()
@@ -890,7 +890,7 @@ func TestEarnedSyncRefusesToMintFromASeededSetAlone(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	// Every hunk already "read", exactly as a forged store would present them.
 	e := newEarnedSync(&recordingSync{}, root, cache,
-		[]difftui.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1", "h2"})
+		[]diff.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1", "h2"})
 	e.close()
 
 	store, err := review.Load(cache)
@@ -903,7 +903,7 @@ func TestEarnedSyncRefusesToMintFromASeededSetAlone(t *testing.T) {
 func TestEarnedSyncLetsASeededSetFinishALiveReading(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	e := newEarnedSync(&recordingSync{}, root, cache,
-		[]difftui.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1"})
+		[]diff.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1"})
 
 	e.SetViewed("h2", true)
 	e.close()
@@ -918,7 +918,7 @@ func TestEarnedSyncLetsASeededSetFinishALiveReading(t *testing.T) {
 // the file list folds generated output away by default too.
 func TestEarnedSyncIgnoresGeneratedFiles(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"gen.json": "{}\n"})
-	e := newEarnedSync(&recordingSync{}, root, cache, []difftui.File{tuiFile("gen.json", true, "g1")}, nil)
+	e := newEarnedSync(&recordingSync{}, root, cache, []diff.File{tuiFile("gen.json", true, "g1")}, nil)
 
 	e.SetViewed("g1", true)
 	e.close()
@@ -933,7 +933,7 @@ func TestEarnedSyncIgnoresGeneratedFiles(t *testing.T) {
 func TestEarnedSyncForwardsEveryMarkAndClosesTheInnerSync(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	inner := &recordingSync{}
-	e := newEarnedSync(inner, root, cache, []difftui.File{tuiFile("a.go", false, "h1")}, nil)
+	e := newEarnedSync(inner, root, cache, []diff.File{tuiFile("a.go", false, "h1")}, nil)
 
 	e.SetViewed("h1", true)
 	e.SetViewed("unknown-digest", true)
@@ -947,7 +947,7 @@ func TestEarnedSyncForwardsEveryMarkAndClosesTheInnerSync(t *testing.T) {
 // content, which Covers would then satisfy for every unreadable file forever.
 func TestEarnedSyncMintsNothingForAFileItCannotRead(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
-	e := newEarnedSync(&recordingSync{}, root, cache, []difftui.File{tuiFile("gone.go", false, "h1")}, nil)
+	e := newEarnedSync(&recordingSync{}, root, cache, []diff.File{tuiFile("gone.go", false, "h1")}, nil)
 	e.now = func() time.Time { return time.Unix(0, 0) }
 
 	e.SetViewed("h1", true)
@@ -2077,4 +2077,38 @@ func TestPathLinkerLeavesPipedOutputBare(t *testing.T) {
 // replay is empty and the map is nil rather than an empty map that renders as a column.
 func TestDiffTouchesWithoutATrail(t *testing.T) {
 	assert.Nil(t, diffTouches(t.TempDir(), t.TempDir(), []string{"a.go"}))
+}
+
+// changeset returns a diff of n files, for exercising the hint's threshold.
+func changeset(n int) types.Diff {
+	rev := types.Diff{Base: "main"}
+	for i := range n {
+		rev.Files = append(rev.Files, types.DiffFile{Path: strings.Repeat("a", i+1) + ".go"})
+	}
+	return rev
+}
+
+// TestReviewPromptHintFiresOnlyOnALargeChangeset. A flag nobody knows about is a feature
+// nobody has, which is why the hint exists - but one printed on every diff is one the reader
+// stops seeing by the third time, which is exactly when it starts to matter. Both halves are
+// the feature, so both are pinned.
+func TestReviewPromptHintFiresOnlyOnALargeChangeset(t *testing.T) {
+	var small, large strings.Builder
+	hintReviewPrompt(&small, changeset(promptHintFiles-1), &gen.DiffFlags{})
+	hintReviewPrompt(&large, changeset(promptHintFiles), &gen.DiffFlags{})
+
+	assert.Empty(t, small.String(), "an ordinary changeset gets no hint")
+	assert.Contains(t, large.String(), "--prompt")
+	// The refusal travels with the offer: a reader must not have to wonder whether pressing
+	// this sends their code somewhere.
+	assert.Contains(t, large.String(), "calls no model and sends nothing")
+}
+
+// TestReviewPromptHintIsSilentWhenAlreadyAsked: suggesting a flag the reader just passed is
+// how a surface teaches people to ignore its hints.
+func TestReviewPromptHintIsSilentWhenAlreadyAsked(t *testing.T) {
+	var out strings.Builder
+	hintReviewPrompt(&out, changeset(promptHintFiles+50), &gen.DiffFlags{Prompt: true})
+
+	assert.Empty(t, out.String())
 }

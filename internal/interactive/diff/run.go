@@ -1,4 +1,4 @@
-package difftui
+package diff
 
 import (
 	"context"

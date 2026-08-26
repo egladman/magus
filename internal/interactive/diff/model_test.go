@@ -1,4 +1,4 @@
-package difftui
+package diff
 
 import (
 	"io"
@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/diff"
+	session "github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
 )
@@ -332,7 +332,7 @@ func TestAGivenEmphasisSpanReachesItsRow(t *testing.T) {
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{{
 		Header: "@@ -1 +1 @@",
 		Lines:  []string{" ctx", "-call(a, b)", "+call(a, c)"},
-		Emph:   []diff.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
+		Emph:   []session.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
 		Digest: "d0",
 	}}}}})
 	assert.Equal(t, []string{"", "b", "c"}, emphasisOf(m))
@@ -402,7 +402,7 @@ func TestColourDrawsTheChangedPartHarderThanItsLine(t *testing.T) {
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{{
 		Header: "@@ -1 +1 @@",
 		Lines:  []string{" ctx", "-call(a, b)", "+call(a, c)"},
-		Emph:   []diff.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
+		Emph:   []session.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
 		Digest: "d0",
 	}}}}})
 	m.Resize(5)
@@ -467,7 +467,7 @@ type termWriter struct{ io.Writer }
 
 func (termWriter) Fd() uintptr { return 1 }
 
-// sgrPattern matches the only escape difftui emits. A hyperlink would need more, and the
+// sgrPattern matches the only escape this package emits. A hyperlink would need more, and the
 // fixtures here deliberately carry no Link for that reason.
 var sgrPattern = regexp.MustCompile("\x1b\\[[0-9;]*m")
 

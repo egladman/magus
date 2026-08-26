@@ -21,9 +21,10 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/ci/forecast"
-	"github.com/egladman/magus/internal/diff"
+	session "github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/file/watch"
-	"github.com/egladman/magus/internal/interactive/difftui"
+	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/diff"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
@@ -377,7 +378,31 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		}
 		return nil
 	}
+	hintReviewPrompt(os.Stderr, rev, rf)
 	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
+}
+
+// promptHintFiles is the changeset size above which reading alone stops being the whole job. Set
+// where a reader plausibly wants a second pass rather than at a number that fires on every commit:
+// a hint printed every time is one nobody sees by the third time, which is exactly when it starts
+// to matter.
+const promptHintFiles = 10
+
+// hintReviewPrompt mentions `--prompt` on a changeset big enough to want a second reader.
+//
+// It exists because a flag nobody knows about is a feature nobody has. `agent install` settled the
+// same question the same way - it prints the managed AGENTS.md block only when the reader's file
+// is missing it or carrying a stale one - and this is that discipline applied to the other place
+// magus hands a person text to carry somewhere itself refuses to go.
+//
+// stderr, so a piped or redirected report is unchanged, and only where hints are enabled at all.
+func hintReviewPrompt(w io.Writer, rev types.Diff, rf *gen.DiffFlags) {
+	if rf.Prompt || !interactive.HintsEnabled() || len(rev.Files) < promptHintFiles {
+		return
+	}
+	interactive.Emit(w, fmt.Sprintf(
+		"%d changed files: `magus diff --prompt` prints a review prompt to paste into your own model - the reading order, what rebuilds, and what could not be measured. It calls no model and sends nothing",
+		len(rev.Files)))
 }
 
 // branchOverlapLimit caps how many branches the prompt's overlap lookup examines, and so how many
@@ -512,12 +537,12 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 	if err != nil {
 		return err
 	}
-	files := diffTUIFiles(rev, diff.ParseHunks(patch))
+	files := diffTUIFiles(rev, session.ParseHunks(patch))
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
 	// always explicit; this is what makes them outlive the session.
 	earned := newEarnedSync(sync, m.Root(), m.CacheDir(), files, sess.Viewed)
 	sync = earned
-	// Closed here rather than inside difftui: how a Sync gets its writes out - inline, or over a
+	// Closed here rather than inside the viewer: how a Sync gets its writes out - inline, or over a
 	// goroutine that has to be drained - is this file's business, and the viewer stays ignorant
 	// of it. Deferred before Run, so it also runs on the interrupts Run RETURNS from: `q`,
 	// Ctrl-C read as a key, a cancelled context. A raw SIGINT unwinds nothing, and the reader
@@ -528,12 +553,12 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
 	threads, _ := daemonReviewThreads(ctx)
-	threads = diff.PlaceThreads(diff.ParseHunks(patch), threads)
-	return difftui.Run(ctx, difftui.Options{
+	threads = session.PlaceThreads(session.ParseHunks(patch), threads)
+	return diff.Run(ctx, diff.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
 		Probe: tty.SystemProbe,
-		Input: difftui.Input{
+		Input: diff.Input{
 			Files:       files,
 			Unranked:    !rev.Ranked(),
 			Viewed:      sess.Viewed,
@@ -571,7 +596,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the daemon's own store would have written.
 func attachDiffSession(ctx context.Context, m *magus.Magus, patch, base string, paths []string) (types.Diff, *types.DiffSession, diffSync, error) {
-	asOf := diff.PatchDigest(patch)
+	asOf := session.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
 	}
@@ -583,7 +608,7 @@ func attachDiffSession(ctx context.Context, m *magus.Magus, patch, base string, 
 	// because there is no daemon: with one running it owns this file, and two writers would
 	// each persist their own idea of the whole set. Attach is what loads the marks a previous
 	// session left AND what makes MarkViewed below have a session to write to.
-	store := diff.NewStore(m.CacheDir())
+	store := session.NewStore(m.CacheDir())
 	sess := store.Attach(m.Root(), base, rev, asOf)
 	return rev, sess, diffStoreSync{store: store, root: m.Root()}, nil
 }
@@ -593,18 +618,18 @@ func attachDiffSession(ctx context.Context, m *magus.Magus, patch, base string, 
 //
 // The annotation order is authoritative and is never recomputed here - types.Diff.
 // SortForReading is the single definition of review order.
-func diffTUIFiles(rev types.Diff, parsed []diff.FileHunks) []difftui.File {
-	byPath := make(map[string][]diff.Hunk, len(parsed))
+func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []diff.File {
+	byPath := make(map[string][]session.Hunk, len(parsed))
 	for _, f := range parsed {
 		byPath[f.Path] = f.Hunks
 	}
-	out := make([]difftui.File, 0, len(rev.Files))
+	out := make([]diff.File, 0, len(rev.Files))
 	for _, f := range rev.Files {
-		file := difftui.File{Path: f.Path, Generated: f.Generated(), Facts: diffFileFacts(f)}
+		file := diff.File{Path: f.Path, Generated: f.Generated(), Facts: diffFileFacts(f)}
 		for _, h := range byPath[f.Path] {
-			file.Hunks = append(file.Hunks, difftui.Hunk{
+			file.Hunks = append(file.Hunks, diff.Hunk{
 				Index: h.Index, Header: h.Header, Lines: h.Lines, Digest: h.Digest,
-				Emph: diff.RawLineEmphasis(h),
+				Emph: session.RawLineEmphasis(h),
 			})
 		}
 		out = append(out, file)
@@ -612,18 +637,18 @@ func diffTUIFiles(rev types.Diff, parsed []diff.FileHunks) []difftui.File {
 	return out
 }
 
-// diffSync is a difftui.Sync with a shutdown. The two implementations get their writes out
+// diffSync is a diff.Sync with a shutdown. The two implementations get their writes out
 // differently - one to a local file, one over a goroutine that has to be drained - and the
 // viewer must not have to know which it was handed.
 type diffSync interface {
-	difftui.Sync
+	diff.Sync
 	close()
 }
 
 // diffStoreSync persists the reader's progress with no daemon in the picture. There is no
 // cursor to publish: nobody is listening.
 type diffStoreSync struct {
-	store *diff.Store
+	store *session.Store
 	root  string
 }
 
@@ -776,7 +801,7 @@ func (b *diffBridge) SetViewed(digest string, on bool) {
 }
 
 // queueCursor hands the newest cursor to the sender, evicting the OLDEST when the queue is
-// full. It never blocks: the key loop is what calls it, and difftui.Sync promises best-effort
+// full. It never blocks: the key loop is what calls it, and diff.Sync promises best-effort
 // delivery precisely so a slow daemon costs the reader nothing.
 //
 // A plain non-blocking send drops the ARRIVING op instead, which keeps exactly the positions
@@ -1775,7 +1800,7 @@ func impactDuration(ms int64) string {
 func changedPathsFromPatch(patch string) []string {
 	var out []string
 	seen := map[string]bool{}
-	for _, f := range diff.ParseHunks(patch) {
+	for _, f := range session.ParseHunks(patch) {
 		if f.Path != "" && !seen[f.Path] {
 			seen[f.Path] = true
 			out = append(out, f.Path)
@@ -1849,7 +1874,7 @@ type earnedSync struct {
 	// file has. A receipt is per FILE, so a file is earned only once every hunk it
 	// contributes is marked - reading four hunks of six is not reading the file.
 	fileOf map[string]string
-	// hunksOf counts DISTINCT hunk digests per file, for the reason diff.Store.TrackHunks
+	// hunksOf counts DISTINCT hunk digests per file, for the reason session.Store.TrackHunks
 	// gives: counting occurrences sets a total the marked set can never reach.
 	hunksOf map[string]int
 	// digestAt is each file's content fingerprint as it was when the reader started, taken
@@ -1857,7 +1882,7 @@ type earnedSync struct {
 	//
 	// A receipt must attest to the bytes somebody SAW; fingerprinting at close would stamp
 	// whatever the file holds by then, and the next report would not call it stale. See
-	// diff.Store.ContentAt.
+	// session.Store.ContentAt.
 	digestAt map[string]string
 	viewed   map[string]bool
 	// live are the hunks marked in THIS session, as opposed to seeded from the store.
@@ -1874,7 +1899,7 @@ type earnedSync struct {
 
 // newEarnedSync wraps sync with receipt minting, seeded with the marks the session already
 // carried so a reader who finishes a file across two sittings still earns it.
-func newEarnedSync(inner diffSync, root, cacheDir string, files []difftui.File, seen []string) *earnedSync {
+func newEarnedSync(inner diffSync, root, cacheDir string, files []diff.File, seen []string) *earnedSync {
 	e := &earnedSync{
 		diffSync: inner,
 		root:     root,
