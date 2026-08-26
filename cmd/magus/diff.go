@@ -464,7 +464,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		}
 		return nil
 	}
-	hintSinceLastReview(os.Stderr, m.CacheDir(), rev, src)
+	hintSinceLastReview(os.Stderr, rev, src)
 	hintReviewPrompt(os.Stderr, rev, rf)
 	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
 }
@@ -484,15 +484,11 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 // Silent unless there is a genuine earlier pass to subtract: no receipts, receipts from a
 // working-tree review that names no revision, or an earlier pass at the revision already in front
 // of them all print nothing.
-func hintSinceLastReview(w io.Writer, cacheDir string, rev types.Diff, src diffInput) {
+func hintSinceLastReview(w io.Writer, rev types.Diff, src diffInput) {
 	if !interactive.HintsEnabled() || src.kind != inputRevRange {
 		return
 	}
-	store, err := review.Load(cacheDir)
-	if err != nil {
-		return
-	}
-	at, covered := store.ReviewedAt(diffPaths(rev))
+	at, covered := rev.Reviewed.At, rev.Reviewed.Files
 	if covered == 0 || at.Revision == src.base {
 		return
 	}
@@ -568,6 +564,12 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 	// unmeasured rather than as unread.
 	if states, serr := review.ReadStates(m.CacheDir(), paths, content.digest); serr == nil {
 		rev.AttachReadState(states)
+	}
+	// Where the reader left off. Attached HERE rather than computed at the point it is rendered,
+	// so the terminal, the console and `-o json` are reading one answer instead of three lookups
+	// that can disagree - the same rule that moved the parser and the thread placement inward.
+	if store, serr := review.Load(m.CacheDir()); serr == nil {
+		rev.AttachReviewed(store.ReviewedAt(paths))
 	}
 	return rev, nil
 }
@@ -752,7 +754,14 @@ func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []diff.File {
 	}
 	out := make([]diff.File, 0, len(rev.Files))
 	for _, f := range rev.Files {
-		file := diff.File{Path: f.Path, Generated: f.Generated(), Facts: diffFileFacts(f)}
+		// Settled is READ-AND-UNMOVED, never merely read: DiffReadStale means a receipt exists at
+		// DIFFERENT content, which is the file that most needs a second look rather than the least.
+		file := diff.File{
+			Path:      f.Path,
+			Settled:   f.ReadState == types.DiffReadRead,
+			Generated: f.Generated(),
+			Facts:     diffFileFacts(f),
+		}
 		for _, h := range byPath[f.Path] {
 			file.Hunks = append(file.Hunks, diff.Hunk{
 				Index: h.Index, Header: h.Header, Lines: h.Lines, Digest: h.Digest,

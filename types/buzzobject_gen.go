@@ -490,6 +490,23 @@ func (v DiffFile) BuzzObject() BuzzObject {
 	}
 }
 
+func (v DiffReviewed) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"at":    v.At.BuzzObject(),
+		"files": v.Files,
+	}
+}
+
+func (v VCSCheckpoint) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"revision":    v.Revision,
+		"branch":      v.Branch,
+		"dirty":       v.Dirty,
+		"patchDigest": v.PatchDigest,
+		"vcs":         v.VCS,
+	}
+}
+
 func (v Diff) BuzzObject() BuzzObject {
 	itemsFiles := make([]any, len(v.Files))
 	for indexFiles := range v.Files {
@@ -505,6 +522,7 @@ func (v Diff) BuzzObject() BuzzObject {
 		"seedProjects":     v.SeedProjects,
 		"affectedProjects": itemsAffectedProjects,
 		"notes":            v.Notes,
+		"reviewed":         v.Reviewed.BuzzObject(),
 	}
 }
 

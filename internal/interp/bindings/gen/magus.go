@@ -911,6 +911,23 @@ func buzzValueMagusDiffFile(v types.DiffFile) vm.Value {
 	return out
 }
 
+func buzzValueMagusVCSCheckpoint(v types.VCSCheckpoint) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("revision", vm.StrValue(v.Revision))
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	out.MapSet("dirty", vm.BoolValue(v.Dirty))
+	out.MapSet("patchDigest", vm.StrValue(v.PatchDigest))
+	out.MapSet("vcs", vm.StrValue(v.VCS))
+	return out
+}
+
+func buzzValueMagusDiffReviewed(v types.DiffReviewed) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("at", buzzValueMagusVCSCheckpoint(v.At))
+	out.MapSet("files", vm.IntValue(int64(v.Files)))
+	return out
+}
+
 func buzzValueMagusDiff(v types.Diff) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
@@ -934,6 +951,7 @@ func buzzValueMagusDiff(v types.Diff) vm.Value {
 		itemsNotes[indexNotes] = vm.StrValue(v.Notes[indexNotes])
 	}
 	out.MapSet("notes", vm.ListValue(itemsNotes))
+	out.MapSet("reviewed", buzzValueMagusDiffReviewed(v.Reviewed))
 	return out
 }
 

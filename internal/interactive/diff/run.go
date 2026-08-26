@@ -144,6 +144,10 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 			}
 		case '.':
 			m.ToggleGenerated()
+		case 'n':
+			// n for what is NEW to this reader: the files a receipt does not already cover at
+			// their current content. Folded by default, so the second pass opens on the work.
+			m.ToggleSettled()
 		}
 	case tty.KeyCtrlC, tty.KeyCtrlD:
 		return true

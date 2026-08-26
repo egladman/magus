@@ -270,6 +270,25 @@ type Diff struct {
 	// coverage run). They are surfaced rather than swallowed: a reader who sees no reach
 	// numbers must be able to tell "nothing depends on this" from "nothing was measured".
 	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
+	// Reviewed is the earlier pass this reader already made over these files, when there was one.
+	Reviewed DiffReviewed `json:"reviewed,omitzero" yaml:"reviewed,omitzero"`
+}
+
+// DiffReviewed is what a reader already got through on an earlier pass over this changeset.
+//
+// A CHANGESET-level fact rather than a per-file one, because it answers a question about the
+// reader's history rather than about any file: "where did I leave off". The per-file half is
+// DiffFile.ReadState, and the two are not redundant - ReadState says whether THIS file still
+// matches what was read, and this says which revision to diff from to see everything that moved.
+//
+// The zero value means there is no earlier pass to subtract: nobody has reviewed these files, or
+// the reviewing was done against a working tree, which has no revision to name. Neither is
+// "nothing changed", and a surface must not render it as reassurance.
+type DiffReviewed struct {
+	// At is the revision the reader last got through, oldest where receipts disagree.
+	At VCSCheckpoint `json:"at,omitzero" yaml:"at,omitzero"`
+	// Files is how many of this changeset's files that revision covers.
+	Files int `json:"files,omitempty" yaml:"files,omitempty"`
 }
 
 // DiffAuthor says which kind of client produced a comment or a suggestion.
@@ -741,6 +760,14 @@ func (r Diff) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 	// of the order it is supposed to drive. SortForReading is idempotent, so re-running it is
 	// the cheap way to keep ONE definition of review order rather than a second one here.
 	r.SortForReading()
+}
+
+// AttachReviewed records the earlier pass a reader made over these files.
+//
+// A pointer receiver, unlike its neighbours: this writes a field on the Diff itself rather than on
+// the elements of a slice it holds, and a value receiver would drop it silently.
+func (r *Diff) AttachReviewed(at VCSCheckpoint, files int) {
+	r.Reviewed = DiffReviewed{At: at, Files: files}
 }
 
 // AttachReadState folds recorded read receipts onto the review, in place.

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { order, visibleFiles, stats, riskChips } from "./order";
+import { order, visibleFiles, settled, stats, riskChips } from "./order";
 import type { DiffFile } from "./parse";
 import type { DiffAnnotation, DiffSession } from "./session";
 
@@ -245,5 +245,42 @@ test("an unmeasured file shows no read chip at all", () => {
   assert.deepEqual(
     riskChips(ann("x.go", {})).map((c) => c.text),
     [],
+  );
+});
+
+// settled is spelled the same way in the terminal viewer (diff.File.Settled), against the same
+// read_state the daemon computes once. TestSettledFilesFoldByDefault is its counterpart there.
+test("settled is read-and-unmoved, never merely read", () => {
+  assert.equal(settled(file("a.ts"), ann("a.ts", { read_state: "read" })), true);
+  // The control that keeps the fold honest: stale is read, then EDITED, which is the file that
+  // most needs a second look rather than the least.
+  assert.equal(settled(file("a.ts"), ann("a.ts", { read_state: "stale" })), false);
+  assert.equal(settled(file("a.ts"), ann("a.ts", { read_state: "unread" })), false);
+  assert.equal(settled(file("a.ts"), undefined), false);
+});
+
+test("a generated file stays with the generated group", () => {
+  // Both apply to a read generated file; claiming it here would take it out of the group whose
+  // control the reader would actually reach for.
+  const gen = { ...file("gen.ts"), generated: true } as DiffFile;
+  assert.equal(settled(gen, ann("gen.ts", { read_state: "read" })), false);
+});
+
+test("already-reviewed files fold by default, and show on request", () => {
+  const cs = order(
+    [file("read.ts"), file("moved.ts")],
+    session([
+      ann("read.ts", { read_state: "read" }),
+      ann("moved.ts", { read_state: "stale" }),
+    ]),
+  );
+
+  assert.deepEqual(
+    visibleFiles(cs, false, false).map((f) => f.path),
+    ["moved.ts"],
+  );
+  assert.deepEqual(
+    visibleFiles(cs, false, true).map((f) => f.path),
+    ["read.ts", "moved.ts"],
   );
 });

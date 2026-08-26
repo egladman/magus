@@ -46,7 +46,15 @@ type Hunk struct {
 // because `magus diff` owns that vocabulary and two renderings of "12 files reference its
 // widest changed symbol" would drift.
 type File struct {
-	Path      string
+	Path string
+	// Settled is a file a receipt covers at exactly its current content: read, and unmoved since.
+	//
+	// Folded by default for the same reason Generated is - it is not what the reader is here for -
+	// but for a different reason, so it is a separate flag and a separate key. A generated file is
+	// a machine's restatement of an edit made elsewhere; a settled file is one this reader already
+	// weighed. Conflating them would fold a colleague's unreviewed generated file and a reader's
+	// own finished work under one word.
+	Settled   bool
 	Generated bool
 	Facts     []string
 	Hunks     []Hunk
@@ -114,9 +122,11 @@ type Model struct {
 	unranked bool
 
 	unfolded bool
-	viewed   map[string]bool
-	comments map[hunkRef][]types.DiffComment
-	suggests map[hunkRef][]types.DiffSuggestion
+	// unsettled shows the already-reviewed files that are folded away by default.
+	unsettled bool
+	viewed    map[string]bool
+	comments  map[hunkRef][]types.DiffComment
+	suggests  map[hunkRef][]types.DiffSuggestion
 	// threads is the host's remarks by hunk; unplaced holds, per path, the ones whose line this
 	// changeset does not contain.
 	threads  map[hunkRef][]types.ReviewThread
@@ -209,6 +219,9 @@ func (m *Model) Unranked() bool { return m.unranked }
 
 // Unfolded reports whether generated files are showing their hunks.
 func (m *Model) Unfolded() bool { return m.unfolded }
+
+// Unsettled reports whether already-reviewed files are being shown.
+func (m *Model) Unsettled() bool { return m.unsettled }
 
 // Overview reports whether the file-list overview is open.
 func (m *Model) Overview() bool { return m.overview }
@@ -328,6 +341,23 @@ func (m *Model) ToggleViewed() (change ViewedChange, ok bool) {
 // Viewed reports whether a digest is marked read.
 func (m *Model) Viewed(digest string) bool { return m.viewed[digest] }
 
+// ToggleSettled folds or unfolds every already-reviewed file at once.
+//
+// This is what makes a second pass cost only the second pass. A reviewer who asked for changes
+// comes back to a changeset where most files are exactly what they already read, and nothing
+// distinguishes those from the ones that moved - so they re-read everything, find the same things,
+// and learn that re-reviewing is not worth doing carefully.
+//
+// Folded by DEFAULT, and the count is always stated, because a hidden file nobody was told about
+// is the one failure this surface cannot have.
+func (m *Model) ToggleSettled() {
+	m.unsettled = !m.unsettled
+	if len(m.files) > 0 && !m.expanded(m.file) {
+		m.hunk = -1
+	}
+	m.rebuild()
+}
+
 // ToggleGenerated folds or unfolds every generated file at once, and recomputes the rows.
 // A cursor sitting inside a file that just folded retreats to its heading rather than
 // pointing at a row that no longer exists.
@@ -398,12 +428,27 @@ func (m *Model) OverviewRows() []OverviewRow {
 	return out
 }
 
+// foldReason says WHY a file is folded, because the two reasons send the reader to different
+// places: a generated file's source edit is elsewhere, and a settled file has already been read.
+//
+// Generated wins where both apply. A generated file is not worth reading whether or not this
+// reader got to it, so its reason is the more useful of the two.
+func foldReason(f *File) string {
+	if f.Generated {
+		return "a target rewrites this, so the source edit is what to read"
+	}
+	return "you read this already and it has not changed since; press n to show it"
+}
+
 // expanded reports whether file i shows its hunks.
 func (m *Model) expanded(i int) bool {
 	if i < 0 || i >= len(m.files) {
 		return false
 	}
-	return !m.files[i].Generated || m.unfolded
+	if m.files[i].Generated && !m.unfolded {
+		return false
+	}
+	return !m.files[i].Settled || m.unsettled
 }
 
 // readCount is how many of a file's hunks are marked read.
@@ -440,8 +485,7 @@ func (m *Model) rebuild() {
 		if !m.expanded(i) {
 			n := len(f.Hunks)
 			m.rows = append(m.rows, Row{Kind: RowFold, File: i, Hunk: -1,
-				Text: fmt.Sprintf("  %d %s folded - a target rewrites this, so the source edit is what to read",
-					n, plural(n, "hunk", "hunks"))})
+				Text: fmt.Sprintf("  %d %s folded - %s", n, plural(n, "hunk", "hunks"), foldReason(f))})
 			continue
 		}
 		shown[f.Path] = true

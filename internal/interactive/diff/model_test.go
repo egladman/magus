@@ -611,3 +611,56 @@ func indexOfSubstring(rows []string, want string) int {
 	}
 	return -1
 }
+
+// TestSettledFilesFoldByDefault is what makes a second pass cost only the second pass: a reviewer
+// who asked for changes comes back to a changeset that is mostly what they already read, and
+// nothing distinguished that from what moved.
+func TestSettledFilesFoldByDefault(t *testing.T) {
+	m := New(Input{Files: []File{
+		{Path: "read.go", Settled: true, Hunks: []Hunk{{Digest: "h1", Lines: []string{" ALREADY-WEIGHED"}}}},
+		{Path: "moved.go", Hunks: []Hunk{{Digest: "h2", Lines: []string{" NEEDS-A-SECOND-LOOK"}}}},
+	}})
+
+	body := allRowText(m)
+	assert.NotContains(t, body, "ALREADY-WEIGHED", "a file already read at this content is not what the reader is here for")
+	assert.Contains(t, body, "NEEDS-A-SECOND-LOOK", "a file that moved is exactly what they came back for")
+	assert.Contains(t, body, "you read this already and it has not changed since",
+		"a folded file must say why, and how to see it")
+
+	// n reveals them, and says nothing is hidden any more.
+	m.ToggleSettled()
+	assert.Contains(t, allRowText(m), "ALREADY-WEIGHED")
+	assert.True(t, m.Unsettled())
+}
+
+// The control that keeps the fold honest. DiffReadStale - read, then EDITED - is the file that
+// most needs a second look, and folding it would hide the change from the one person who would
+// otherwise have caught it.
+func TestAStaleFileIsNeverFolded(t *testing.T) {
+	// Settled is set only from DiffReadRead; a stale or unread file arrives with it false.
+	m := New(Input{Files: []File{
+		{Path: "stale.go", Settled: false, Hunks: []Hunk{{Digest: "h1", Lines: []string{" changed since you read it"}}}},
+	}})
+
+	assert.Contains(t, allRowText(m), "changed since you read it")
+}
+
+// Generated wins where both apply: a generated file is not worth reading whether or not this
+// reader got to it, so its reason is the more useful of the two.
+func TestAGeneratedAndSettledFileNamesTheGeneratedReason(t *testing.T) {
+	m := New(Input{Files: []File{
+		{Path: "gen.go", Settled: true, Generated: true, Hunks: []Hunk{{Digest: "h1", Lines: []string{" x"}}}},
+	}})
+
+	assert.Contains(t, allRowText(m), "a target rewrites this")
+}
+
+// allRowText joins every visible row, for assertions about what a reader can and cannot see.
+func allRowText(m *Model) string {
+	var b strings.Builder
+	for _, r := range m.Rows() {
+		b.WriteString(r.Text)
+		b.WriteString("\n")
+	}
+	return b.String()
+}

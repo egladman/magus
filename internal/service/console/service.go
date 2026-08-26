@@ -386,6 +386,12 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 	if states, serr := review.ReadStates(s.magus.CacheDir(), paths, digest); serr == nil {
 		rev.AttachReadState(states)
 	}
+	// Where the reader left off, from the same receipts. It ships to the console for the reason
+	// the read states do: a surface that can show what moved since the last pass and one that
+	// cannot are not two clients of one review, and the terminal already had it.
+	if store, serr := review.Load(s.magus.CacheDir()); serr == nil {
+		rev.AttachReviewed(store.ReviewedAt(paths))
+	}
 	return rev, nil
 }
 

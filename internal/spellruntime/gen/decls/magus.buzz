@@ -163,12 +163,26 @@ export object DiffFile {
     reach: int? = null,
 }
 
+export object VCSCheckpoint {
+    revision: str = "",
+    branch: str = "",
+    dirty: bool = false,
+    patchDigest: str = "",
+    vcs: str = "",
+}
+
+export object DiffReviewed {
+    at: VCSCheckpoint = VCSCheckpoint{},
+    files: int = 0,
+}
+
 export object Diff {
     base: str = "",
     files: [DiffFile] = [],
     seedProjects: [str] = [],
     affectedProjects: [ImpactProject] = [],
     notes: [str] = [],
+    reviewed: DiffReviewed = DiffReviewed{},
 }
 
 export object DoctorCheck {

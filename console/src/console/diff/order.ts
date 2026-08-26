@@ -83,10 +83,33 @@ export function order(files: readonly DiffFile[], session: DiffSession | null): 
   return { primary, generated };
 }
 
-// visibleFiles is the file list the stream renders: primary always, plus the generated group
-// only when the reader has expanded it.
-export function visibleFiles(cs: OrderedChangeset, showGenerated: boolean): DiffFile[] {
-  const out = cs.primary.map((o) => o.file);
+// settled is a file a receipt covers at exactly its current content: read, and unmoved since.
+//
+// READ-AND-UNMOVED, never merely read. "stale" means a receipt exists at DIFFERENT content, which
+// is the file that most needs a second look rather than the least, and folding it would hide the
+// change from the one person who would otherwise have caught it.
+//
+// The predicate is spelled the same way in the terminal viewer (diff.File.Settled), against the
+// same read_state the daemon computes once. The STATE is shared; only the folding is per surface.
+export function settled(file: DiffFile, annotation: DiffAnnotation | undefined): boolean {
+  return annotation?.read_state === "read" && !file.generated;
+}
+
+// visibleFiles is the file list the stream renders: primary always, plus the generated group and
+// the already-reviewed group only when the reader has expanded them.
+//
+// Settled files fold by default for the reason generated ones do - they are not what the reader is
+// here for - but for a different reason, so they are a separate group and a separate control. It
+// is what makes a second pass cost only the second pass: a reviewer who asked for changes comes
+// back to a changeset that is mostly what they already read.
+export function visibleFiles(
+  cs: OrderedChangeset,
+  showGenerated: boolean,
+  showSettled = true,
+): DiffFile[] {
+  const out = cs.primary
+    .filter((o) => showSettled || !settled(o.file, o.annotation))
+    .map((o) => o.file);
   if (showGenerated) out.push(...cs.generated.map((o) => o.file));
   return out;
 }

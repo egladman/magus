@@ -2237,25 +2237,22 @@ func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 
 // TestHintSinceLastReview covers the thing that makes a second pass cost only the second pass, and
 // the three silences that keep it from being noise.
+//
+// It drives Diff.Reviewed rather than seeding a receipt store, because that field is the one answer
+// every surface reads: the console gets it over the wire and the terminal gets it here, and a hint
+// that re-derived it would be the second lookup this join exists to prevent.
 func TestHintSinceLastReview(t *testing.T) {
 	t.Setenv("MAGUS_HINTS", "1")
-	rev := types.Diff{Files: []types.DiffFile{{Path: "a.go"}, {Path: "b.go"}}}
 	rangeSrc := diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}
-
-	reviewed := func(t *testing.T, source types.VCSCheckpoint) string {
-		t.Helper()
-		cache := t.TempDir()
-		require.NoError(t, review.Record(cache, []review.Receipt{
-			{Path: "a.go", Digest: "a1", At: time.Now(), Source: source},
-		}))
-		return cache
+	changeset := func(at types.VCSCheckpoint, files int) types.Diff {
+		rev := types.Diff{Files: []types.DiffFile{{Path: "a.go"}, {Path: "b.go"}}}
+		rev.AttachReviewed(at, files)
+		return rev
 	}
 
 	t.Run("an earlier pass names the revision and the command", func(t *testing.T) {
-		cache := reviewed(t, types.VCSCheckpoint{Revision: "0123456789abcdef0123", VCS: "git"})
-
 		var out strings.Builder
-		hintSinceLastReview(&out, cache, rev, rangeSrc)
+		hintSinceLastReview(&out, changeset(types.VCSCheckpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
 
 		got := out.String()
 		assert.Contains(t, got, "you last reviewed 1 of these 2 files")
@@ -2265,34 +2262,20 @@ func TestHintSinceLastReview(t *testing.T) {
 
 	t.Run("nothing to subtract prints nothing", func(t *testing.T) {
 		var out strings.Builder
-		hintSinceLastReview(&out, t.TempDir(), rev, rangeSrc)
+		hintSinceLastReview(&out, changeset(types.VCSCheckpoint{}, 0), rangeSrc)
 		assert.Empty(t, out.String(), "a first pass has no earlier one")
 	})
 
-	t.Run("a working-tree receipt names no revision, so there is nothing to diff from", func(t *testing.T) {
-		cache := reviewed(t, types.VCSCheckpoint{})
-
-		var out strings.Builder
-		hintSinceLastReview(&out, cache, rev, rangeSrc)
-
-		assert.Empty(t, out.String())
-	})
-
 	t.Run("already looking at the reviewed revision prints nothing", func(t *testing.T) {
-		cache := reviewed(t, types.VCSCheckpoint{Revision: "main", VCS: "git"})
-
 		var out strings.Builder
-		hintSinceLastReview(&out, cache, rev, rangeSrc)
-
+		hintSinceLastReview(&out, changeset(types.VCSCheckpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
 		assert.Empty(t, out.String(), "the reader is already seeing exactly the delta")
 	})
 
 	t.Run("a working-tree review has no earlier revision to name", func(t *testing.T) {
-		cache := reviewed(t, types.VCSCheckpoint{Revision: "0123456789abcdef0123"})
-
 		var out strings.Builder
-		hintSinceLastReview(&out, cache, rev, diffInput{kind: inputWorkingTree, label: "the working tree"})
-
+		hintSinceLastReview(&out, changeset(types.VCSCheckpoint{Revision: "0123456789abcdef0123"}, 1),
+			diffInput{kind: inputWorkingTree, label: "the working tree"})
 		assert.Empty(t, out.String())
 	})
 }
