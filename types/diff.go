@@ -378,10 +378,25 @@ type ReviewTarget struct {
 	// GitLab. Never parsed here.
 	Repo   string `json:"repo,omitempty" yaml:"repo,omitempty"`
 	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
+	// State is what the host says has become of the review: "open", "merged" or "closed".
+	//
+	// EMPTY reads as open, so a provider that does not answer this keeps working unchanged and
+	// the subset rule holds - a spell declares nothing to opt out.
+	//
+	// It is asked of the provider rather than worked out from git because a squash merge leaves
+	// no trace git can follow: the branch is rewritten into one new commit, so its tip is never
+	// an ancestor of the base and it is not patch-equivalent to what landed either. A repository
+	// that squash-merges would simply never notice its own merges.
+	State string `json:"state,omitempty" yaml:"state,omitempty"`
 }
 
-// Open reports whether there is a review to publish to or read from.
+// Open reports whether there is a review to publish to or read from AT ALL. It is about
+// existence, not about State: a merged review is still one whose conversation can be read, and
+// Open stays true for it.
 func (r ReviewTarget) Open() bool { return r.ID != "" }
+
+// Merged reports whether the host says this review has landed.
+func (r ReviewTarget) Merged() bool { return r.State == "merged" }
 
 // ReviewThread is one comment already on the review, written by anybody.
 //

@@ -140,6 +140,25 @@ func TestPublishReviewCarriesTheDraftsAndFailsLoudly(t *testing.T) {
 	assert.Equal(t, map[string]any{"path": "a.go", "line": 4, "body": "why"}, sent[0])
 }
 
+// State is optional, and a spell that says nothing about it reads as open - which is what keeps
+// a provider written before the field existed working unchanged. Merged is separate from Open on
+// purpose: a review that landed still has a conversation worth reading.
+func TestFindReviewCarriesTheStateAndTreatsSilenceAsOpen(t *testing.T) {
+	withReviewSpell(t, func(string) (any, error) {
+		return map[string]any{"id": "482", "repo": "acme/acme", "state": "merged"}, nil
+	})
+	merged := FindReview(context.Background(), "feat/x", "")
+	assert.True(t, merged.Open(), "a merged review is still readable")
+	assert.True(t, merged.Merged())
+
+	withReviewSpell(t, func(string) (any, error) {
+		return map[string]any{"id": "9", "repo": "acme/acme"}, nil
+	})
+	quiet := FindReview(context.Background(), "feat/x", "")
+	assert.True(t, quiet.Open())
+	assert.False(t, quiet.Merged(), "silence about state is not a claim that it merged")
+}
+
 // A spell that exports no publish_review answers nil without failing, which the handler reads as
 // "the host took the batch": it marks every draft published, and publish only ever considers
 // unpublished drafts, so the remarks can never go again. A capability the provider lacks has to

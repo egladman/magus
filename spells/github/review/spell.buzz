@@ -220,18 +220,37 @@ export fun find_review(target: magus\Target, cb: fun(any)) > any !> any {
     if (repo == "" or branch == "") {
         return {"id": "", "reason": "not a {apiHost(base)} remote"};
     }
-    final url = base + "/repos/" + repo + "/pulls?head=" + repo.split("/")[0] + ":" + branch;
+    final head = repo.split("/")[0] + ":" + branch;
+    final url = base + "/repos/" + repo + "/pulls?head=" + head;
     final res = http\get(url, headers: headers());
     if (res["status"] != 200) {
         return {"id": "", "reason": "github: HTTP {res["status"]}"};
     }
     final list = serialize\jsonDecode(res["body"]);
-    if (list.len() == 0) {
+    if (list.len() > 0) {
+        // Rendered as a string: magus treats a review id as opaque so a provider whose changes are
+        // named by a hash stays writable. GitHub's is a number and reads as one either way.
+        return {"id": "{list[0].q("number").integerValue()}", "repo": repo, "state": "open"};
+    }
+    // Nothing OPEN for this branch, which is what the query above asks for and all magus needed
+    // until a merge became worth noticing. Ask again without that filter before reporting none:
+    // a branch whose pull request just landed is the ordinary end of a review, not the absence
+    // of one, and the reader is owed the difference.
+    final all = http\get(url + "&state=closed&sort=updated&direction=desc", headers: headers());
+    if (all["status"] != 200) {
         return {"id": "", "reason": "no pull request for this branch"};
     }
-    // Rendered as a string: magus treats a review id as opaque so a provider whose changes are
-    // named by a hash stays writable. GitHub's is a number and reads as one either way.
-    return {"id": "{list[0].q("number").integerValue()}", "repo": repo};
+    final closed = serialize\jsonDecode(all["body"]);
+    if (closed.len() == 0) {
+        return {"id": "", "reason": "no pull request for this branch"};
+    }
+    // merged_at rather than state: GitHub says "closed" for a pull request that landed and for
+    // one that was abandoned, and those are opposite outcomes to whoever wrote the review.
+    var state = "closed";
+    if ("{closed[0].q("merged_at").stringValue()}" != "") {
+        state = "merged";
+    }
+    return {"id": "{closed[0].q("number").integerValue()}", "repo": repo, "state": state};
 }
 
 // publish_review sends a batch of drafts as ONE review.

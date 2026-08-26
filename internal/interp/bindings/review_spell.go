@@ -65,6 +65,9 @@ func decodeReviewTarget(data any) (types.ReviewTarget, error) {
 	if at.Reason, err = strField(m, "reason", where); err != nil {
 		return types.ReviewTarget{}, err
 	}
+	if at.State, err = strField(m, "state", where); err != nil {
+		return types.ReviewTarget{}, err
+	}
 	return at, nil
 }
 

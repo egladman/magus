@@ -40,6 +40,12 @@ const (
 	//
 	// A lookup, never a creation: no name here opens a review, and `find` says so to the next
 	// spell author, who would otherwise read `open` as the verb and implement one.
+	//
+	// It may also report `state` - "open", "merged" or "closed". Answering it is optional and an
+	// empty answer reads as open. magus asks rather than working it out from git because a squash
+	// merge leaves nothing git can follow: the branch becomes one new commit that is neither an
+	// ancestor of the base nor patch-equivalent to it, so a workspace that squash-merges would
+	// never see its own merges.
 	FindReviewContract = "find_review"
 
 	// ReviewThreadsContract lists the comment threads already on that review, so they can be

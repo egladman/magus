@@ -14555,7 +14555,7 @@
       "kind": "function",
       "label": "publish_review",
       "doc": "publish_review sends a batch of drafts as ONE review.  A batch rather than a call per comment, which is the whole shape of self-review: you read, you accumulate remarks, and only then decide the set is worth sending. Publishing each as it is written would send the first thought before the fifth changed your mind about it.  Returns the review id and the drafts it accepted, so the caller can mark exactly those published. A partial result is a real answer here: GitHub rejects an inline comment whose line is no",
-      "source": "spells/github/review/spell.buzz:246",
+      "source": "spells/github/review/spell.buzz:265",
       "attrs": {
         "exported": "true"
       }
@@ -14565,7 +14565,7 @@
       "kind": "function",
       "label": "reply_review",
       "doc": "reply_review answers one existing thread, so a conversation can be finished without leaving.",
-      "source": "spells/github/review/spell.buzz:300",
+      "source": "spells/github/review/spell.buzz:319",
       "attrs": {
         "exported": "true"
       }
@@ -14585,7 +14585,7 @@
       "kind": "function",
       "label": "review_threads",
       "doc": "review_threads lists the inline comment threads already on the review, so a reader never leaves for the browser to find out what a colleague said.  This is the one function that makes magus depend on a host being reachable. Every failure returns an EMPTY list rather than throwing: a diff that will not open because GitHub is slow is a worse tool than one that shows the change and says nothing about the conversation.",
-      "source": "spells/github/review/spell.buzz:274",
+      "source": "spells/github/review/spell.buzz:293",
       "attrs": {
         "exported": "true"
       }
