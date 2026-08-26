@@ -1,6 +1,7 @@
 package review
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/internal/prompt"
@@ -146,4 +147,23 @@ func TestLongPromptAddsRationaleAndNothingElse(t *testing.T) {
 		assert.Contains(t, short, instruction, "the short form dropped an instruction, not a rationale")
 		assert.Contains(t, long, instruction)
 	}
+}
+
+// The branch cap stopped bounding this section once local branches were scanned: one long-lived
+// branch sharing seventy files with a large changeset filled most of the prompt on its own.
+func TestPromptPathsCountsWhatItDidNotName(t *testing.T) {
+	var many []string
+	for i := range PromptOverlapPathLimit + 4 {
+		many = append(many, fmt.Sprintf("pkg/file%d.go", i))
+	}
+
+	got := promptPaths(many)
+
+	assert.Contains(t, got, "pkg/file0.go")
+	assert.Contains(t, got, "and 4 more", "a truncated list that does not admit it reads as complete")
+	assert.NotContains(t, got, fmt.Sprintf("pkg/file%d.go", PromptOverlapPathLimit))
+
+	// A list that fits is printed whole, with no remainder clause to read past.
+	short := []string{"a.go", "b.go"}
+	assert.Equal(t, "a.go, b.go", promptPaths(short))
 }

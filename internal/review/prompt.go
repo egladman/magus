@@ -20,6 +20,14 @@ const PromptFileLimit = 25
 // buries the changeset the prompt is actually about.
 const PromptBranchLimit = 6
 
+// PromptOverlapPathLimit caps the shared paths named for any ONE branch.
+//
+// The branch cap alone stopped bounding this once local branches were scanned: against a large
+// changeset a single long-lived branch shares seventy files, and six of those lines is most of the
+// prompt. What the reader needs is which branch and roughly how much, not a manifest - the exact
+// list is a `magus diff -o json` away, and this is the section's second cut rather than its first.
+const PromptOverlapPathLimit = 6
+
 // The skills a review prompt points a reader's model at.
 //
 // CHECKED references, not bare strings: MustSkill resolves each against the catalog magus actually
@@ -164,9 +172,22 @@ func promptOverlap(rev types.Diff, branches []types.BranchChange) []string {
 		if !c.Local {
 			when = " (as of your last fetch)"
 		}
-		out = append(out, fmt.Sprintf("`%s`%s: %s", c.Ref, when, strings.Join(c.Paths, ", ")))
+		out = append(out, fmt.Sprintf("`%s`%s: %s", c.Ref, when, promptPaths(c.Paths)))
 	}
 	return out
+}
+
+// promptPaths lists a branch's shared paths, saying how many it did not name.
+//
+// The remainder is COUNTED rather than dropped, for the reason every other cut in this file is:
+// a truncated list that does not admit it reads as the whole answer, and here that would understate
+// how contested a file is at exactly the moment the reader is deciding whether to care.
+func promptPaths(paths []string) string {
+	if len(paths) <= PromptOverlapPathLimit {
+		return strings.Join(paths, ", ")
+	}
+	return fmt.Sprintf("%s, and %d more",
+		strings.Join(paths[:PromptOverlapPathLimit], ", "), len(paths)-PromptOverlapPathLimit)
 }
 
 // overlapWith narrows each branch to the paths it shares with this changeset, dropping the

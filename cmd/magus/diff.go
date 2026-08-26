@@ -308,14 +308,14 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, stri
 		}
 		return string(b), in.path, nil
 	case inputRevRange:
-		// The base is the HEAD side, not the range: it names what the reader is looking at, and
-		// every downstream consumer of it - the session key, the receipt, the report heading -
-		// is asking "which tree state is this", never "how did you ask for it".
+		// The BASE side, because every reader of types.Diff.Base labels it "compared against".
+		// Returning the head made the prompt say a branch was compared against itself, which is
+		// not a wrong-looking value a reader would question - it is a sentence that parses.
 		p, err := m.RangeDiff(ctx, in.base, in.head)
 		if err != nil {
 			return "", "", fmt.Errorf("magus diff: %w", err)
 		}
-		return p, in.head, nil
+		return p, in.base, nil
 	default:
 		p, err := m.WorkingDiff(ctx, nil)
 		return p, "working", err
