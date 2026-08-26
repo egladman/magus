@@ -274,12 +274,13 @@ the clipboard is the airgap, and it is what keeps the review something you wrote
 for findings, and says so out loud: file, line, what is wrong. It does not ask for review prose,
 because generated text is the wrong thing to put in front of the colleague who asked.
 
-Against a workspace with one changed file, it prints:
+It reads the working tree by default, and a patch file when you hand it one. Against a patch
+with a single changed file:
 
 <!-- example:diff-prompt -->
 
 ```console
-$ magus diff --prompt
+$ magus diff --prompt change.patch
 # Review this change
 
 Find what is worth commenting on. I will write the actual review comments myself, so
@@ -288,8 +289,7 @@ Do not draft review prose or a summary I could paste.
 
 ## What this is
 
-- branch: base
-- compared against: working
+- compared against: change.patch
 - 1 changed file(s)
 - projects edited directly: .
 

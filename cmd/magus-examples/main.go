@@ -26,10 +26,19 @@ import (
 // repo happens to contain).
 var fixtureFiles = map[string]string{
 	"magus.yaml": "concurrency: 4\n",
-	// A source file so the review example has a changed file to describe. Its CONTENT never
-	// shows in the docs - the prompt names paths and annotations, not lines - so it only has to
-	// be something the go spell would claim.
-	"main.go": "package main\n\nfunc main() {}\n",
+	// The changeset the review example describes, as a PATCH rather than a repository.
+	// `magus diff <patch-file>` is an input magus already documents, so the fixture needs no
+	// git init, no commit and no working-tree edit to have something to review. The patch's
+	// content never shows in the docs - the prompt names paths and annotations, not lines.
+	"change.patch": `diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -1,3 +1,3 @@
+ package main
+
+-func main() {}
++func main() { println("hello") }
+`,
 	"magusfile.buzz": `import "magus";
 import "magus/spell/go";
 magus.project({ "spells": [go] });
@@ -66,9 +75,8 @@ var examples = []example{
 	{docs: knowledgeDoc, slug: "path-test-to-tool", argv: []string{"path", "target:.:test", "tool:go"}},
 	// The review prompt is captured rather than transcribed for the reason every example here is:
 	// it is prose magus assembles, so a hand-typed copy in the docs would describe a version
-	// nobody gets. It runs against the same fixture, which the setup below makes a repository
-	// with one uncommitted edit so there is a changeset to describe.
-	{docs: reviewDoc, slug: "diff-prompt", argv: []string{"diff", "--prompt"}},
+	// nobody gets. It reads the fixture's patch file, so it needs no repository to review.
+	{docs: reviewDoc, slug: "diff-prompt", argv: []string{"diff", "--prompt", "change.patch"}},
 }
 
 func main() {
@@ -110,16 +118,13 @@ func renderExamples() (map[string]string, error) {
 		}
 	}
 
-	if err := initFixtureRepo(dir); err != nil {
-		return nil, err
-	}
-
 	// Build HEAD's magus so the captured output reflects the current renderer, not a
 	// release on PATH - the whole point of the drift gate. The module path (not a
 	// relative ./cmd/magus) so this works whatever directory the generator runs from.
-	// OUTSIDE the fixture. Built into it, the binary is an untracked file in the fixture's
-	// repository, so `magus diff` reported it as part of the changeset and the harness leaked
-	// into published documentation as a changed file named magus-bin.
+	//
+	// It builds because the output being documented is CLI stdout and cmd/magus is package
+	// main, so no sibling tool can import its rendering. Into its OWN directory, not the
+	// fixture: a binary sitting in the fixture is a file the fixture's own commands can see.
 	binDir, err := os.MkdirTemp("", "magus-examples-bin-")
 	if err != nil {
 		return nil, fmt.Errorf("temp bin dir: %w", err)
@@ -141,35 +146,6 @@ func renderExamples() (map[string]string, error) {
 		out[ex.slug] = "```console\n$ " + ex.command() + "\n" + text + "```\n"
 	}
 	return out, nil
-}
-
-// initFixtureRepo makes the fixture a repository with exactly one uncommitted edit, so the
-// review-prompt example has a changeset to describe.
-//
-// Every knob that would otherwise vary by machine is pinned, because the captured output is
-// COMMITTED and compared by the drift gate: the branch name (git's default is a local setting),
-// and the identity (a developer's global config would put their name in published docs, and a
-// runner with no config would fail the commit outright). The same reasoning as the XDG_STATE_HOME
-// redirect below - anything read from the environment makes the same command produce two pages.
-func initFixtureRepo(dir string) error {
-	for _, argv := range [][]string{
-		{"init", "-b", "base"},
-		{"add", "-A"},
-		{"-c", "user.name=magus", "-c", "user.email=magus@example.invalid",
-			"commit", "-m", "the state this change is compared against"},
-	} {
-		cmd := exec.Command("git", argv...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("fixture repo (git %s): %w\n%s", strings.Join(argv, " "), err, out)
-		}
-	}
-	// The edit itself, after the commit: this is what `magus diff` reports.
-	edited := "package main\n\nfunc main() { println(\"hello\") }\n"
-	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(edited), 0o644); err != nil {
-		return fmt.Errorf("fixture edit: %w", err)
-	}
-	return nil
 }
 
 // capture runs the magus binary with argv in the fixture dir and returns its stdout.
