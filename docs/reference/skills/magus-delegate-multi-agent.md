@@ -1,6 +1,6 @@
 ---
 title: magus-delegate-multi-agent
-generated_from: cmd/magus/skills/magus-delegate-multi-agent/SKILL.md
+generated_from: internal/agent/skills/magus-delegate-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the delegations cannot collide, bound fan-out depth, and match each delegation's model to the work it needs."
 tags: [agents, skills, magus-delegate-multi-agent]
 aliases:

@@ -106,7 +106,7 @@ magus\project({
                 // its page must regenerate, or the site documents a version nobody
                 // installs - the exact drift this generator exists to prevent.
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
-                "../cmd/magus/skills/**/*.md"],
+                "../internal/agent/skills/**/*.md"],
     // The committed Markdown that content-generate derives from the Go tree
     // (buzz/modules, spells, manpage) is declared per-target in content-generate's own
     // magus.outputs, not here, so that generator's cache entry snapshots exactly its
@@ -207,7 +207,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace.file("cmd/magus-docs/**/*.go"), workspace.file("cmd/magus-spelldocs/**/*.go"),
         workspace.file("cmd/magus-manpage/**/*.go"), workspace.file("cmd/magus-examples/**/*.go"),
         workspace.file("cmd/magus-skilldocs/**/*.go"), workspace.file("internal/agent/**/*.go"),
-        workspace.file("cmd/magus/skills/**/*.md"), workspace.file("cmd/magus-protodocs/**/*.go"),
+        workspace.file("internal/agent/skills/**/*.md"), workspace.file("cmd/magus-protodocs/**/*.go"),
         // The DESCRIPTOR, not the .proto sources: it is the proto project's declared output, so
         // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
         // directly would drag a network-bound buf step into this project's cache boundary,
@@ -240,7 +240,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills", "-src", "../cmd/magus"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
     // The changelog as a docs page. CHANGELOG.md is generated at the repo ROOT (magus-utils,

@@ -271,7 +271,7 @@ func resolveDocLink(fromRel, link string, scanned map[string]bool) (string, bool
 // descends into hidden dirs on purpose (.claude/skills holds SKILL.md agent files,
 // .github holds templates), which also swept up the INSTALLED agent skills that
 // `magus agent install` writes into .agents/, .opencode/, and .claude/ - untracked
-// renderings of cmd/magus/skills/. The committed graph then carried whichever
+// renderings of internal/agent/skills/. The committed graph then carried whichever
 // provider trees the last person to regenerate it happened to have installed, so the
 // drift gate failed for everyone else and a clean CI checkout could never reproduce
 // it. .gitignore already declared all three as generated; nothing consulted it.

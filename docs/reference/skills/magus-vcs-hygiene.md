@@ -1,6 +1,6 @@
 ---
 title: magus-vcs-hygiene
-generated_from: cmd/magus/skills/magus-vcs-hygiene/SKILL.md
+generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
 aliases:

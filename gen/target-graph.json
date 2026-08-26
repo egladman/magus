@@ -335,7 +335,7 @@
         {
           "name": "skills-generate",
           "declared": "skills_generate",
-          "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.",
+          "doc": "Reinstalls the agent skills from their embedded sources in internal/agent/skills.",
           "reads_secrets": false,
           "writes_files": [
             {
@@ -1204,7 +1204,7 @@
               "glob": "tapes/**/*.md"
             },
             {
-              "glob": "cmd/magus/agents-section.md"
+              "glob": "internal/agent/agents-section.md"
             }
           ]
         },
@@ -1625,7 +1625,7 @@
             },
             {
               "project": ".",
-              "glob": "cmd/magus/skills/**/*.md"
+              "glob": "internal/agent/skills/**/*.md"
             },
             {
               "project": ".",

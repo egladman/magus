@@ -16,7 +16,7 @@ import (
 var guardSourceGlobs = []string{
 	"cmd/magus/guard*.go",
 	"internal/agent/*.go",
-	"cmd/magus/skills/*/SKILL.md",
+	"internal/agent/skills/*/SKILL.md",
 }
 
 // staleGuardNotice warns that this binary predates the guard rules in the tree

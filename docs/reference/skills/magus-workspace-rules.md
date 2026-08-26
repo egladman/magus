@@ -1,12 +1,12 @@
 ---
 title: magus-workspace-rules
-generated_from: cmd/magus/skills/magus-workspace-rules/SKILL.md
+generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
 aliases:
   - reference/skills/magus-adapt
-skill_full_bytes: 5430
-skill_simple_bytes: 4386
+skill_full_bytes: 5435
+skill_simple_bytes: 4391
 ---
 
 # magus-workspace-rules
@@ -32,7 +32,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `43` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `debdcbb39c92` |
+| `skill-content` | `a5425383c9ac` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -142,7 +142,7 @@ A rule earns promotion when it is not about this repo: it names no path, target,
 or convention specific to you, and any magus workspace would want it.
 
 - With a Go toolchain: a pull request against `egladman/magus` editing
-  `cmd/magus/skills/<skill>/SKILL.md`, which then follows that repo's own authoring
+  `internal/agent/skills/<skill>/SKILL.md`, which then follows that repo's own authoring
   method - both permutations, verified against a built binary, skill version
   bumped.
 - Without one: an issue, pasting the stamped rule verbatim. The stamp already
@@ -252,7 +252,7 @@ A rule earns promotion when it is not about this repo: it names no path, target,
 or convention specific to you, and any magus workspace would want it.
 
 - With a Go toolchain: a pull request against `egladman/magus` editing
-  `cmd/magus/skills/<skill>/SKILL.md`.
+  `internal/agent/skills/<skill>/SKILL.md`.
 - Without one: an issue, pasting the stamped rule verbatim. The stamp already
   carries its evidence, which is what makes it actionable by someone else.
 ````

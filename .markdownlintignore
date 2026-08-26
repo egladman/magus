@@ -20,4 +20,4 @@ CHANGELOG.md
 
 # The AGENTS.md section template is embedded into a larger AGENTS.md, so it intentionally
 # starts at "## magus" - the first-line-h1 rule does not apply to a fragment.
-cmd/magus/agents-section.md
+internal/agent/agents-section.md

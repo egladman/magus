@@ -250,6 +250,37 @@ type skillSource struct {
 	formerNames []string
 }
 
+// SkillRef is a checked reference to a skill magus ships: the NAME, and nothing else.
+//
+// It exists so a prompt or a message can point a reader at a skill without carrying a copy of it.
+// A copy would be a second definition free to drift from the installed one, and it would spend the
+// reader's context on what their tools already loaded - so what travels is the name, and this type
+// is the guarantee that the name resolves.
+type SkillRef string
+
+// String returns the skill's name, so a reference drops into prose without unwrapping.
+func (r SkillRef) String() string { return string(r) }
+
+// MustSkill returns a reference to the named shipped skill, and PANICS when magus ships no such
+// skill.
+//
+// Panicking is right here for the same reason [regexp.MustCompile] does it: every caller passes a
+// literal, the catalog is embedded at build time, so a bad name is a fact about the binary rather
+// than about anything that happened at runtime. Failing at init means a renamed skill breaks the
+// build's own tests instead of silently leaving a reader pointed at a skill they cannot load -
+// which is a failure that renders perfectly and helps nobody.
+//
+// The name must be the CANONICAL one. A former name still resolves for an already-installed copy
+// but reads as a typo to anyone looking it up, so it is refused here.
+func MustSkill(name string) SkillRef {
+	for _, s := range skillSources {
+		if s.name == name {
+			return SkillRef(name)
+		}
+	}
+	panic("agent: no shipped skill named " + name)
+}
+
 // FormerNames returns the names a skill previously shipped under, oldest first,
 // or nil for one that has never been renamed.
 func FormerNames(name string) []string {

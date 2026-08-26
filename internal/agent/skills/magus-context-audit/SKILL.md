@@ -94,7 +94,7 @@ session", not "how wrong is the sentence".{{end}}
 
 Fix at the SOURCE and let generation propagate{{if .Full}}; editing an installed copy is
 drift a verify step will flag anyway{{end}}. For magus's own skills that means
-`cmd/magus/skills/*/SKILL.md`, then reinstall.
+`internal/agent/skills/*/SKILL.md`, then reinstall.
 
 Reinstall with a binary built from the EDITED source, and confirm the content
 digest moved:

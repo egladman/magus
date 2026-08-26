@@ -113,7 +113,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
 | `langservice-generate` | Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads. |
-| `skills-generate` | Reinstalls the agent skills from their embedded sources in cmd/magus/skills. |
+| `skills-generate` | Reinstalls the agent skills from their embedded sources in internal/agent/skills. |
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
 | `termcast-generate` |  |

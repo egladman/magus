@@ -1,6 +1,6 @@
 ---
 title: magus-change-summary
-generated_from: cmd/magus/skills/magus-change-summary/SKILL.md
+generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
 aliases:
