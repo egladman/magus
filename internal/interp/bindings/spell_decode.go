@@ -27,7 +27,7 @@ import "fmt"
 // the same record - otherwise two spellings of one answer produce two different results.
 //
 // `where` is the caller's description of what is being decoded, e.g. `spell "github-review":
-// open_review`. It is prepended to every message, because "field \"number\" is string, want
+// find_review`. It is prepended to every message, because "field \"number\" is string, want
 // int" without it names a field in a file the reader has not opened.
 
 // strField reads an optional string field.

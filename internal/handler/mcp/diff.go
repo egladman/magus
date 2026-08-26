@@ -334,7 +334,7 @@ func (t *diffTool) reviewThreads(ctx context.Context, hunks []diff.FileHunks) []
 	ctx, cancel := context.WithTimeout(ctx, reviewLookupTimeout)
 	defer cancel()
 	from := t.src.ReviewOrigin(ctx)
-	at := bindings.OpenReview(ctx, from.Branch, from.Remote)
+	at := bindings.FindReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
 		return nil
 	}

@@ -4,7 +4,7 @@
 //   import "spells/github/review" as github
 //   magus\review.provider(github)
 //
-// It carries the review contract (spells/review.go) - open_review, review_threads,
+// It carries the review contract (spells/review.go) - find_review, review_threads,
 // publish_review, reply_review. magus knows nothing about GitHub: it calls four reserved names
 // and reads what comes back.
 //
@@ -201,10 +201,10 @@ export fun reviewBody(summary: str, drafts: [any]) > any {
     };
 }
 
-// open_review reports the pull request open for this branch, or an empty number when there is
+// find_review reports the pull request open for this branch, or an empty number when there is
 // none. A branch with no pull request is the ORDINARY state - most branches, most of the time -
 // so it is never an error and never a reason a diff fails to open.
-export fun open_review(target: magus\Target, cb: fun(any)) > any !> any {
+export fun find_review(target: magus\Target, cb: fun(any)) > any !> any {
     final io = {<str: any>};
     cb(io);
     if (!has_token()) {

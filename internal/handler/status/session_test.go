@@ -489,7 +489,7 @@ func withReviewProvider(t *testing.T, threads []any) {
 	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
-			case spells.OpenReviewContract:
+			case spells.FindReviewContract:
 				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
 			case spells.ReviewThreadsContract:
 				return threads, nil

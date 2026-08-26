@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2395,
-  "edge_count": 6113,
+  "edge_count": 6114,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -14513,6 +14513,16 @@
       }
     },
     {
+      "id": "function:spells/github/review/spell.buzz:find_review",
+      "kind": "function",
+      "label": "find_review",
+      "doc": "find_review reports the pull request open for this branch, or an empty number when there is none. A branch with no pull request is the ORDINARY state - most branches, most of the time - so it is never an error and never a reason a diff fails to open.",
+      "source": "spells/github/review/spell.buzz:207",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/github/review/spell.buzz:getenv",
       "kind": "function",
       "label": "getenv",
@@ -14536,16 +14546,6 @@
       "kind": "function",
       "label": "mgs_getName",
       "source": "spells/github/review/spell.buzz:59",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:spells/github/review/spell.buzz:open_review",
-      "kind": "function",
-      "label": "open_review",
-      "doc": "open_review reports the pull request open for this branch, or an empty number when there is none. A branch with no pull request is the ORDINARY state - most branches, most of the time - so it is never an error and never a reason a diff fails to open.",
-      "source": "spells/github/review/spell.buzz:207",
       "attrs": {
         "exported": "true"
       }
@@ -30650,6 +30650,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/conventions.md"
+    },
+    {
+      "source": "doc:docs/doctrine.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/doctrine.md"
     },
     {
       "source": "doc:docs/doctrine.md",
@@ -55877,6 +55885,14 @@
     },
     {
       "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:find_review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
       "target": "function:spells/github/review/spell.buzz:getenv",
       "relation": "contains",
       "confidence": "extracted",
@@ -55902,14 +55918,6 @@
     {
       "source": "file:spells/github/review/spell.buzz",
       "target": "function:spells/github/review/spell.buzz:mgs_getName",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/review/spell.buzz"
-    },
-    {
-      "source": "file:spells/github/review/spell.buzz",
-      "target": "function:spells/github/review/spell.buzz:open_review",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -61004,6 +61012,46 @@
       "provenance": "spells/github/review/spell.buzz"
     },
     {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:apiBase",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:apiHost",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:slug",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
       "source": "function:spells/github/review/spell.buzz:has_token",
       "target": "function:spells/github/review/spell.buzz:getenv",
       "relation": "calls",
@@ -61014,46 +61062,6 @@
     {
       "source": "function:spells/github/review/spell.buzz:headers",
       "target": "function:spells/github/review/spell.buzz:token",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/review/spell.buzz"
-    },
-    {
-      "source": "function:spells/github/review/spell.buzz:open_review",
-      "target": "function:spells/github/review/spell.buzz:apiBase",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/review/spell.buzz"
-    },
-    {
-      "source": "function:spells/github/review/spell.buzz:open_review",
-      "target": "function:spells/github/review/spell.buzz:apiHost",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/review/spell.buzz"
-    },
-    {
-      "source": "function:spells/github/review/spell.buzz:open_review",
-      "target": "function:spells/github/review/spell.buzz:has_token",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/review/spell.buzz"
-    },
-    {
-      "source": "function:spells/github/review/spell.buzz:open_review",
-      "target": "function:spells/github/review/spell.buzz:headers",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/review/spell.buzz"
-    },
-    {
-      "source": "function:spells/github/review/spell.buzz:open_review",
-      "target": "function:spells/github/review/spell.buzz:slug",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,

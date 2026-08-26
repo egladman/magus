@@ -227,7 +227,7 @@ Four subsystems accept one, and each detects its ops by name:
 | [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)`    | `enabled` (optional), `get_artifact`, `put_artifact`, `prune` (optional)           |
 | [CI provider](../concepts/ci/providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
 | [Secrets](../concepts/secrets.md)           | `magus\secret.provider(<spell>)` | `resolve_secret`                                                                   |
-| [Review](../concepts/review.md)             | `magus\review.provider(<spell>)` | `open_review`, `review_threads`, `publish_review`, `reply_review` - any subset     |
+| [Review](../concepts/review.md)             | `magus\review.provider(<spell>)` | `find_review`, `review_threads`, `publish_review`, `reply_review` - any subset     |
 
 One spell may carry several of these, and several spells may serve one vendor. Which shape is
 right is decided by RUNTIME, not by the vendor's name: `spells/github/actions` carries the
@@ -235,7 +235,7 @@ first three and is inert outside a CI runner, so the review ops live in `spells/
 instead, and a workspace that wants all four imports both.
 
 A review provider may implement a SUBSET. Reading threads and publishing are separable, so a
-missing op is a capability the spell does not have rather than a broken spell. `open_review`
+missing op is a capability the spell does not have rather than a broken spell. `find_review`
 returns the review's id as a **string** and magus never parses it: GitHub and GitLab count
 their reviews, but Gerrit and Phabricator name changes by a hash, and an integer there would
 make those providers unwritable for no gain.

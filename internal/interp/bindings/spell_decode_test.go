@@ -12,9 +12,9 @@ import (
 // pull-request number reads as "no pull request for this branch", which sends the reader to
 // look at their branch when the fault is in their spell.
 func TestAMistypedFieldNamesItselfRatherThanZeroing(t *testing.T) {
-	_, err := intField(map[string]any{"number": "482"}, "number", "spell \"x\": open_review")
+	_, err := intField(map[string]any{"number": "482"}, "number", "spell \"x\": find_review")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `spell "x": open_review`, "the context has to travel")
+	assert.Contains(t, err.Error(), `spell "x": find_review`, "the context has to travel")
 	assert.Contains(t, err.Error(), `"number"`, "and the field")
 	assert.Contains(t, err.Error(), "want int", "and what was expected")
 

@@ -16,7 +16,7 @@ import (
 var errNoReviewProvider = errors.New(
 	"no review provider wired; a magusfile selects one with magus\\review.provider(<spell>)")
 
-// OpenReview asks the selected spell which review is open for a branch.
+// FindReview asks the selected spell which review is open for a branch.
 //
 // A workspace with no provider, a branch with no pull request, and a host that could not be
 // reached are all the SAME answer here: an empty ID and a reason. None of them is an error,
@@ -25,13 +25,13 @@ var errNoReviewProvider = errors.New(
 //
 // The branch and remote are passed IN rather than discovered by the spell; see
 // types.ReviewOrigin for why.
-func OpenReview(ctx context.Context, branch, remote string) types.ReviewTarget {
+func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 	drv, ok := reviewDriver()
 	if !ok {
 		return types.ReviewTarget{Reason: "no review provider wired"}
 	}
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
-		Target: spells.OpenReviewContract,
+		Target: spells.FindReviewContract,
 		Params: map[string]any{"branch": branch, "remote": remote},
 	})
 	if err != nil {
@@ -49,7 +49,7 @@ func OpenReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 }
 
 func decodeReviewTarget(data any) (types.ReviewTarget, error) {
-	where := "review provider: " + spells.OpenReviewContract
+	where := "review provider: " + spells.FindReviewContract
 	m, ok := data.(map[string]any)
 	if !ok {
 		return types.ReviewTarget{}, fmt.Errorf("%s returned %T, want a record", where, data)
@@ -136,7 +136,7 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 
 // ReviewThreads reads the comment threads already on the review.
 //
-// Empty on an unreachable host, for the reason OpenReview gives about itself: this is the one
+// Empty on an unreachable host, for the reason FindReview gives about itself: this is the one
 // call that makes a local surface depend on a host being reachable, and the surface has to keep
 // working when it is not. Nil error, empty list.
 //

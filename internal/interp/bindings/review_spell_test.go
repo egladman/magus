@@ -35,11 +35,11 @@ func withReviewSpell(t *testing.T, answer func(op string) (any, error)) {
 // fakeSpellSeq keeps two registrations inside one test distinct.
 var fakeSpellSeq int
 
-func TestOpenReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {
+func TestFindReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return map[string]any{"id": "482", "repo": "acme/acme"}, nil
 	})
-	at := OpenReview(context.Background(), "feat/x", "git@github.com:acme/acme.git")
+	at := FindReview(context.Background(), "feat/x", "git@github.com:acme/acme.git")
 	assert.True(t, at.Open())
 	assert.Equal(t, "482", at.ID)
 	assert.Equal(t, "acme/acme", at.Repo)
@@ -48,21 +48,21 @@ func TestOpenReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {
 // A mistyped field becomes a REASON, never a zero target: those two render identically to the
 // reader and mean opposite things. Silently emptying the id would say "no pull request for this
 // branch", sending them to look at their branch when the fault is in their spell.
-func TestOpenReviewReportsAMalformedAnswerRatherThanReadingItAsNoReview(t *testing.T) {
+func TestFindReviewReportsAMalformedAnswerRatherThanReadingItAsNoReview(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return map[string]any{"id": 482}, nil
 	})
-	at := OpenReview(context.Background(), "feat/x", "")
+	at := FindReview(context.Background(), "feat/x", "")
 	assert.False(t, at.Open())
 	assert.Contains(t, at.Reason, "want str")
-	assert.Contains(t, at.Reason, "open_review")
+	assert.Contains(t, at.Reason, "find_review")
 }
 
 // A spell that fails outright is the same answer as a branch with no review: a reason, not an
 // error. A diff that refused to open because a lookup failed would be a worse tool.
-func TestOpenReviewTurnsASpellFailureIntoAReason(t *testing.T) {
+func TestFindReviewTurnsASpellFailureIntoAReason(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) { return nil, errors.New("boom") })
-	at := OpenReview(context.Background(), "feat/x", "")
+	at := FindReview(context.Background(), "feat/x", "")
 	assert.False(t, at.Open())
 	assert.Contains(t, at.Reason, "boom")
 }

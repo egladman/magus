@@ -417,7 +417,7 @@ func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionReque
 		return sess, nil
 	}
 
-	at, err := h.openReview(ctx)
+	at, err := h.findReview(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +434,7 @@ func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionReque
 // reply answers one thread on the host's review. It writes no session state: the reply belongs
 // to the host's record, and the client re-reads the review to see it.
 func (h *DiffSessionHandler) reply(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
-	at, err := h.openReview(ctx)
+	at, err := h.findReview(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -450,15 +450,15 @@ func (h *DiffSessionHandler) reply(ctx context.Context, req reviewSessionRequest
 	return &types.DiffSession{Cursor: types.DiffCursor{Hunk: -1}}, nil
 }
 
-// openReview resolves the review publish and reply both need, or the reason there is none.
+// findReview resolves the review publish and reply both need, or the reason there is none.
 // The reason travels, because "no provider wired" and "no pull request for this branch" send
 // the reader to different places.
-func (h *DiffSessionHandler) openReview(ctx context.Context) (types.ReviewTarget, error) {
+func (h *DiffSessionHandler) findReview(ctx context.Context) (types.ReviewTarget, error) {
 	if h.Workspace == nil {
 		return types.ReviewTarget{}, errors.New("this daemon has no workspace to publish from")
 	}
 	from := h.Workspace.ReviewOrigin(ctx)
-	at := bindings.OpenReview(ctx, from.Branch, from.Remote)
+	at := bindings.FindReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
 		if at.Reason == "" {
 			// A provider may close a target without saying why. "publish: " with nothing after
@@ -696,5 +696,5 @@ func (h *DiffReviewHandler) lookup(ctx context.Context) types.ReviewTarget {
 		return types.ReviewTarget{Reason: "no workspace"}
 	}
 	from := h.workspace.ReviewOrigin(ctx)
-	return bindings.OpenReview(ctx, from.Branch, from.Remote)
+	return bindings.FindReview(ctx, from.Branch, from.Remote)
 }

@@ -35,9 +35,12 @@ package spells
 // missing one is a capability that provider lacks rather than a broken spell, with nothing to
 // declare either way.
 const (
-	// OpenReviewContract reports the review open for a branch, or nothing when there is none.
+	// FindReviewContract reports the review open for a branch, or nothing when there is none.
 	// A branch with no pull request is the ordinary state, not an error.
-	OpenReviewContract = "open_review"
+	//
+	// A lookup, never a creation: no name here opens a review, and `find` says so to the next
+	// spell author, who would otherwise read `open` as the verb and implement one.
+	FindReviewContract = "find_review"
 
 	// ReviewThreadsContract lists the comment threads already on that review, so they can be
 	// read and replied to without leaving. It returns a list of records; nothing at all means
