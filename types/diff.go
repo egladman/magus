@@ -419,6 +419,10 @@ type ReviewThread struct {
 	Hunk   int    `json:"hunk" yaml:"hunk"`
 	Author string `json:"author" yaml:"author"`
 	Body   string `json:"body" yaml:"body"`
+	// New reports that the reader has not had this thread on screen before. magus's own
+	// annotation rather than anything the host said - every other field here belongs to the
+	// review, and this one belongs to the reader's history with it.
+	New bool `json:"new,omitempty" yaml:"new,omitempty"`
 }
 
 // DiffSuggestion is an agent asking for the human's attention somewhere.
@@ -471,9 +475,39 @@ type DiffSession struct {
 	// Viewed holds the content digests of hunks the human has marked read. Digests rather
 	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk -
 	// the failing of every viewed-checkbox that resets on force-push.
-	Viewed      []string         `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
-	Comments    []DiffComment    `json:"comments,omitempty"    yaml:"comments,omitempty"`
-	Suggestions []DiffSuggestion `json:"suggestions,omitempty" yaml:"suggestions,omitempty"`
+	Viewed []string `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
+	// SeenThreads holds the ids of the review's threads the human has actually had on screen.
+	// It is the watermark that decides what counts as NEW, and it belongs to the reader for the
+	// same reason Viewed does: a mark nobody made is a claim nobody can stand behind.
+	//
+	// ONE watermark, deliberately. The obvious alternative - letting the job that watches the
+	// forge record what it has reported - means everything is already marked seen by the time
+	// the reader opens the diff, so the surface could never show them what arrived. The job
+	// reads this instead and reports what lies outside it.
+	SeenThreads []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
+	Comments    []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
+	Suggestions []DiffSuggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
+}
+
+// UnseenThreads returns the ids in threads the reader has not had on screen, in the order given.
+//
+// Ids rather than a COUNT, because a count is wrong in the case that matters: a comment deleted
+// and another added nets zero, and the new one is then never reported.
+func (s DiffSession) UnseenThreads(threads []ReviewThread) []string {
+	if len(threads) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(s.SeenThreads))
+	for _, id := range s.SeenThreads {
+		seen[id] = struct{}{}
+	}
+	var out []string
+	for _, t := range threads {
+		if _, ok := seen[t.ID]; !ok && t.ID != "" {
+			out = append(out, t.ID)
+		}
+	}
+	return out
 }
 
 // GeneratedCount reports how many files are declared outputs - the ones a reader can fold

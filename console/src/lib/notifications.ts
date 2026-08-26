@@ -12,13 +12,26 @@
 // Anything that fails one of those is PULL, and belongs on the dashboard or the activity trail, not
 // here. Do NOT add notifications that merely report progress or restate what a surface already shows.
 //
-// TWO TIERS. The BELL tier is error-kind and lights the unseen-dot; it is reserved for the five things
-// that are genuinely "stop and look":
+// TWO TIERS. The BELL tier lights the unseen-dot; it is reserved for the six things that are genuinely
+// "stop and look":
 //   - an unwatched run/target failure   -> deep-link: the log viewer at the failing ref
 //   - a sandbox denial                  -> deep-link: the activity trail
 //   - daemon health degraded/down       -> deep-link: the dashboard
 //   - a drift / CheckClean violation    -> deep-link: the run output
 //   - a target turning newly volatile   -> deep-link: the insight lens
+//   - a new remark on your review       -> deep-link: the diff surface
+//
+// That last one is a DELIBERATE WIDENING of the rule above it, made 2026-08-26, and it is worth being
+// explicit rather than letting the list quietly grow. Every other entry earns the bell by changing what
+// you can TRUST about the workspace. This one does not: nothing you were relying on became false. It
+// earns the bell on the other half of the rule - it needs a human decision or action - because somebody
+// is WAITING on you, and a question that sits unanswered for a day costs your colleague their day too.
+// Attention spent here is spent on somebody else's behalf, which is the only reason it outranks the
+// reader's quiet.
+//
+// The bar this sets for the next entry: an interruption must be either something you can no longer
+// trust, or somebody blocked on you. "Something happened that concerns you" is not either, and belongs
+// in the history tier.
 // The HISTORY tier is ok/warn-kind and records SILENTLY (no dot): job completions, reconnects, a share
 // created or expired, settings applied. It is there when you go looking, and never interrupts.
 //

@@ -200,6 +200,25 @@ func (s *Store) SetCursor(root string, c types.DiffCursor) *types.DiffSession {
 	})
 }
 
+// MarkThreadsSeen records that the reader has had these threads on screen, which is the
+// watermark deciding what counts as NEW the next time somebody asks.
+//
+// Additive and idempotent: a thread never becomes unseen, so re-rendering the same conversation
+// costs nothing and cannot resurrect a remark as new. Ids the session already holds are skipped
+// rather than appended twice, because this runs on every render of the surface.
+func (s *Store) MarkThreadsSeen(root string, ids []string) *types.DiffSession {
+	if len(ids) == 0 {
+		return s.Get(root)
+	}
+	return s.mutate(root, func(sess *types.DiffSession) {
+		for _, id := range ids {
+			if id != "" && !slices.Contains(sess.SeenThreads, id) {
+				sess.SeenThreads = append(sess.SeenThreads, id)
+			}
+		}
+	})
+}
+
 // MarkViewed adds or removes a hunk digest from the human's progress set and persists it.
 //
 // finished names the file this mark just completed, empty when it completed none. That is

@@ -17,7 +17,7 @@ import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
 import { TokenService, TokenScope } from "../gen/magus/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, resolveDaemonHost } from "./daemon";
 import { showToast } from "./refresh-toast";
-import { mergedNotice } from "./review-notice";
+import { mergedNotice, saidNotice } from "./review-notice";
 import {
   type NotificationStore,
   estimateStorageBytes,
@@ -146,9 +146,24 @@ async function pollReviewMerged(host: string, store: NotificationStore): Promise
   const activity = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
   const resp = await activity.listActivityEvents({
     pageSize: 5,
-    filter: { kinds: [Kind.JOB], actions: ["review.merged"], actors: [] },
+    filter: { kinds: [Kind.JOB], actions: ["review.merged", "review.said"], actors: [] },
   });
   for (const ev of resp.events) {
+    if (ev.action === "review.said") {
+      // "<repo>: <count>: <id,id,...>". Keyed by the IDS rather than the count or the time, so the
+      // job running again before the reader looks reports the same set and the store recognises it.
+      const [repo, count, ids] = (ev.preview || "").split(": ");
+      const message = saidNotice(repo ?? "", Number(count));
+      if (!message) continue;
+      store.notify({
+        source: "Diff",
+        kind: "error",
+        important: true,
+        key: "review.said:" + (ids ?? ""),
+        message,
+      });
+      continue;
+    }
     if (ev.action !== "review.merged") continue;
     // The job writes "<repo>: <count>", the two things the sentence needs. A row it cannot read is
     // skipped rather than rendered as a half-sentence.

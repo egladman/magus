@@ -645,12 +645,33 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	}
 	from := m.ReviewOrigin(ctx)
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
-	if !at.Merged() {
+	if !at.Open() {
 		return nil
 	}
 	// The threads error is dropped with the threads that DID decode kept: a conversation is worth
-	// preserving whether or not every remark on it parsed.
+	// reporting whether or not every remark on it parsed.
 	threads, _ := bindings.ReviewThreads(ctx, at)
+
+	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
+	// because a deleted remark plus a new one nets zero and the new one would never be reported.
+	// The watermark is the READER's - see DiffSession.SeenThreads for why it cannot be the job's.
+	if unseen := sess.UnseenThreads(threads); len(unseen) > 0 {
+		trail.Append(ctx, m.CacheDir(), trail.Event{
+			Ts:        time.Now().UnixMilli(),
+			Kind:      trail.KindJob,
+			Actor:     "daemon",
+			Workspace: m.Root(),
+			Action:    "review.said",
+			Outcome:   trail.OutcomeOK,
+			// The ids ride along so the console can key its notification on exactly this set: the
+			// job running again before the reader looks must not say the same thing twice.
+			Preview: fmt.Sprintf("%s: %d: %s", at.Repo, len(unseen), strings.Join(unseen, ",")),
+		})
+	}
+
+	if !at.Merged() {
+		return nil
+	}
 	said := len(threads) + len(sess.Comments)
 	if said == 0 {
 		// Merged with nothing said on it. There is no conversation to keep, and an event here

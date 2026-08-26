@@ -287,6 +287,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 			diffSessionH := status.NewDiffSessionHandler(diffOpts, log)
 			diffReviewH := status.NewDiffReviewHandler(svc, log)
+			// The session store lets the review response say which threads the reader has not
+			// seen before; without it the conversation still serves, just unmarked.
+			diffReviewH.Sessions = diffSessions
+			diffReviewH.Root = opts.Magus.Root()
 			diffBranchesH := status.NewDiffBranchesHandler(svc, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)

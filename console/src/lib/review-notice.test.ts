@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mergedNotice, type MergedReview } from "./review-notice";
+import { mergedNotice, saidNotice, type MergedReview } from "./review-notice";
 
 const review = (over: Partial<MergedReview> = {}): MergedReview => ({
   repo: "acme/acme",

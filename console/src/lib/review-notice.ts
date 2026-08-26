@@ -6,6 +6,20 @@
 // whether to say anything is the design, not an implementation detail of either one, and two copies
 // of it would drift the moment somebody tuned the wording.
 
+// saidNotice is what to say when remarks have arrived on the review since the reader last had the
+// conversation on screen.
+//
+// A BELL notification, unlike the merge offer beside it: somebody is waiting on an answer. See the
+// admission doctrine in notifications.ts, which was widened in the same change to say so rather than
+// being quietly broken.
+export function saidNotice(repo: string, count: number): string {
+  if (count <= 0) return "";
+  const where = repo ? ` on ${repo}` : "";
+  return count === 1
+    ? `A new remark${where} is waiting for you.`
+    : `${count} new remarks${where} are waiting for you.`;
+}
+
 // MergedReview is the little of a review this needs. Structural, so the Diff surface's fuller
 // ReviewInfo satisfies it without lib/ having to know that type exists.
 export interface MergedReview {

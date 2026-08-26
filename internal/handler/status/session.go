@@ -598,6 +598,12 @@ func (h *DiffSessionHandler) mintReceipt(ctx context.Context, path string) {
 type DiffReviewHandler struct {
 	handler.Base
 	workspace reviewSource
+	// Sessions and Root are OPTIONAL, set by the daemon wiring after construction: with them the
+	// handler can say which threads the reader has not seen before, and without them it serves
+	// the conversation unmarked. A caller that has no session store is not a caller with an
+	// empty one, so the marking is skipped rather than every thread being called new.
+	Sessions *diff.Store
+	Root     string
 }
 
 // NewDiffReviewHandler returns the review-lookup handler. A nil workspace reports no review,
@@ -685,6 +691,7 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if at.Open() {
 		threads, err := bindings.ReviewThreads(r.Context(), at)
 		out.Threads = append(out.Threads, h.place(r.Context(), threads)...)
+		h.markNew(out.Threads)
 		if err != nil {
 			// The threads that DID decode still travel, and the reason rides beside them.
 			// Answering 502 here would hide a readable conversation behind one malformed
@@ -693,6 +700,37 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, out)
+}
+
+// markNew flags the threads the reader has not had on screen before, then records that they now
+// have. Serving the conversation IS having seen it, which is why the watermark moves here rather
+// than on a separate acknowledgement the reader would have to make.
+//
+// A thread stays marked for the response that first carried it and not afterwards, so the marker
+// answers "what arrived since last time" rather than "what is recent" - the second decays into
+// noise, and a reader learns to ignore a badge that is always on.
+func (h *DiffReviewHandler) markNew(threads []types.ReviewThread) {
+	if h.Sessions == nil || len(threads) == 0 {
+		return
+	}
+	sess := h.Sessions.Get(h.Root)
+	if sess == nil {
+		return
+	}
+	unseen := sess.UnseenThreads(threads)
+	if len(unseen) == 0 {
+		return
+	}
+	fresh := make(map[string]struct{}, len(unseen))
+	for _, id := range unseen {
+		fresh[id] = struct{}{}
+	}
+	for i := range threads {
+		if _, ok := fresh[threads[i].ID]; ok {
+			threads[i].New = true
+		}
+	}
+	h.Sessions.MarkThreadsSeen(h.Root, unseen)
 }
 
 func (h *DiffReviewHandler) lookup(ctx context.Context) types.ReviewTarget {

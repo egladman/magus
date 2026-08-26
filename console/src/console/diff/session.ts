@@ -117,6 +117,9 @@ export interface ReviewThread {
   readonly hunk: number;
   readonly author: string;
   readonly body: string;
+  // new reports that this thread had not been on screen before. magus's annotation rather than
+  // anything the host said, and it is true only on the response that first carried the thread.
+  readonly new?: boolean;
 }
 
 // ReviewInfo is which review this branch has open, plus what has already been said on it.

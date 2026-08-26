@@ -348,3 +348,33 @@ func TestACommentIDIsNeverReusedAfterAGap(t *testing.T) {
 	}
 	assert.Equal(t, "c4", sess.Comments[len(sess.Comments)-1].ID, "the next id clears the gap")
 }
+
+// The watermark is what decides whether a remark is NEW, so it has to be the reader's and it has
+// to survive being asked twice. Ids, never a count: a deleted remark plus a new one nets zero.
+func TestMarkThreadsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
+	store := NewStore(t.TempDir())
+	root := t.TempDir()
+	require.NotNil(t, store.Attach(root, "", types.Diff{}, ""))
+
+	threads := []types.ReviewThread{{ID: "t1"}, {ID: "t2"}}
+	require.Equal(t, []string{"t1", "t2"}, store.Get(root).UnseenThreads(threads))
+
+	store.MarkThreadsSeen(root, []string{"t1"})
+	assert.Equal(t, []string{"t2"}, store.Get(root).UnseenThreads(threads))
+
+	// Idempotent: seeing the same conversation again neither re-marks nor grows the set.
+	store.MarkThreadsSeen(root, []string{"t1"})
+	assert.Equal(t, []string{"t1"}, store.Get(root).SeenThreads)
+
+	// A thread deleted on the host and another added nets zero on a count and must not hide the
+	// new one.
+	store.MarkThreadsSeen(root, []string{"t2"})
+	assert.Equal(t, []string{"t3"}, store.Get(root).UnseenThreads([]types.ReviewThread{{ID: "t1"}, {ID: "t3"}}))
+}
+
+// A thread with no id cannot be tracked, and calling it new forever would mark the conversation
+// unread on every render.
+func TestUnseenThreadsIgnoresAnUnidentifiedThread(t *testing.T) {
+	var sess types.DiffSession
+	assert.Empty(t, sess.UnseenThreads([]types.ReviewThread{{ID: ""}}))
+}

@@ -638,6 +638,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const said = h("span", "console-diff-row__comment console-diff-md");
       setMarkdown(said, row.thread.body);
       el.append(who, said);
+      // "new" first: it is the reason to read this row rather than skim past it, and the daemon
+      // marks it only on the response that first carried the thread - so it answers "since last
+      // time" rather than "recently", which decays into a badge that is always on.
+      if (row.thread.new) el.append(label("new", "pf-m-orange"));
       el.append(label("on the review", "pf-m-blue"));
       return el;
     }
