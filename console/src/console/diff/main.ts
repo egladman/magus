@@ -96,6 +96,9 @@ type FileIndexEntry =
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const modeCell = persisted<ViewMode>("diff-view-mode", "unified");
 const sidebarCell = persisted<boolean>("diff-sidebar-collapsed", false);
+// Remembered like the view mode and the sidebar beside it: whoever reads this way reads this way
+// every time, and asking them to re-enter it per pass is the friction the mode exists to remove.
+const focusCell = persisted<boolean>("diff-focus-mode", false);
 
 type Phase = "loading" | "ready" | "empty";
 type CollaborationState = "unavailable" | "live" | "degraded" | "stale";
@@ -129,6 +132,18 @@ interface State {
   // paint rather than resolving as rows scroll into view.
   digestByRow: Map<number, string>;
   showGenerated: boolean;
+  // focus narrows the stream to ONE hunk. The counts, the reading order and the threads are all
+  // still computed over the whole changeset - what changes is how much of it is asked of the
+  // reader at once.
+  focus: boolean;
+  // focusAt is the hunk focus mode is showing, held as a path and the hunk's own index rather
+  // than a row number: rows are rebuilt on every fold, mode switch and annotation, and a row
+  // number would point at different code afterwards.
+  focusAt: { path: string; index: number } | null;
+  // pairs is every (file, hunk) in the visible changeset, in reading order, and it is built
+  // BEFORE the focus slice - which is what lets "hunk 4 of 14" and the progress bar keep
+  // describing the whole pass while the stream shows one hunk.
+  pairs: { path: string; index: number; digest: string }[];
   overview: boolean;
   phase: Phase;
   collaboration: CollaborationState;
@@ -290,6 +305,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // mostly uninteresting; a changeset's file list is the thing the reader came for, so the
     // sidebar starts showing everything and folds on request rather than the other way round.
     showGenerated: true,
+    focus: focusCell.get(),
+    focusAt: null,
+    pairs: [],
     overview: false,
     phase: "loading",
     collaboration: demo ? "live" : "unavailable",
@@ -297,6 +315,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // --- scaffold -------------------------------------------------------------
   const root = h("div", "console-diff-layout");
+  // Stamped here as well as in setFocus: the preference is remembered, so a reader who left in
+  // focus mode arrives back in it, and the attribute is what the layout keys off.
+  root.dataset.focus = state.focus ? "on" : "off";
   const sidebar = h("nav", "console-diff-sidebar");
   sidebar.setAttribute("aria-label", "Changed files");
 
@@ -395,7 +416,24 @@ export function activate(host: HTMLElement): SurfaceInstance {
     group.append(h("span", "console-diff-toolbar__keyname", what));
     keysEl.append(group);
   }
-  toolbar.append(statsEl, collaborationNotice, keysEl);
+  // The progress of the pass, shown only while reading one hunk at a time. A bar for the glance
+  // and the numbers beside it, because a bar over hunks of unequal size advances unevenly and
+  // would be read as lying about how much is left; the counts are the honest version it is
+  // approximating.
+  const progressEl = h("div", "console-diff-progress");
+  progressEl.hidden = true;
+  const progressBar = h("div", "console-diff-progress__bar");
+  const progressFill = h("div", "console-diff-progress__fill");
+  progressBar.setAttribute("role", "presentation");
+  progressBar.append(progressFill);
+  const progressText = h("span", "console-diff-progress__text");
+  progressEl.append(progressBar, progressText);
+
+  const focusButton = h("button", "pf-v6-c-button pf-m-link console-diff-toolbar__focus");
+  focusButton.type = "button";
+  focusButton.addEventListener("click", () => setFocus(!state.focus));
+
+  toolbar.append(statsEl, collaborationNotice, progressEl, focusButton, keysEl);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
   context.hidden = true;
@@ -1104,8 +1142,39 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return width;
   };
 
+  // focusSlice narrows the file list to the one hunk focus mode is showing.
+  //
+  // A slice, not a filter of the rows: buildRows takes files, so everything downstream - the
+  // offsets, the hunk marks, the thread placement - recomputes for what is actually on screen
+  // rather than being patched afterwards. It is safe to renumber nothing because a hunk carries
+  // its own index (see Hunk.index); keying by array position here would move every remark.
+  const focusSlice = (files: DiffFile[]): DiffFile[] => {
+    const want = state.focusAt;
+    for (const file of files) {
+      if (want && file.path !== want.path) continue;
+      for (const hunk of file.hunks) {
+        if (want && hunk.index !== want.index) continue;
+        state.focusAt = { path: file.path, index: hunk.index };
+        return [{ ...file, hunks: [hunk] }];
+      }
+    }
+    // The hunk went away - a fold, a re-read, a tree that moved. Fall back to the first one
+    // rather than showing nothing: an empty stream would read as "the change is gone".
+    const first = files[0];
+    const firstHunk = first?.hunks[0];
+    if (!first || !firstHunk) return files;
+    state.focusAt = { path: first.path, index: firstHunk.index };
+    return [{ ...first, hunks: [firstHunk] }];
+  };
+
   const rebuild = async (): Promise<void> => {
     state.files = visibleFiles(state.changeset, state.showGenerated);
+    // Built from the WHOLE visible changeset, before any narrowing, because the counts describe
+    // the pass and not the screen.
+    state.pairs = state.files.flatMap((f) =>
+      f.hunks.map((hunk) => ({ path: f.path, index: hunk.index, digest: hunk.digest })),
+    );
+    if (state.focus && state.pairs.length > 0) state.files = focusSlice(state.files);
     // Touches come from the annotations, so the first paint has none and the stream gains the
     // story rows when the review lands - the same two-phase shape everything else here uses.
     const touches = new Map<string, readonly DiffTouch[]>();
@@ -1330,6 +1399,32 @@ export function activate(host: HTMLElement): SurfaceInstance {
     chips.push(...reviewChips());
     collaborationNotice.textContent = transientNotice || collaboration.notice;
     statsEl.replaceChildren(...chips);
+    renderProgress();
+  };
+
+  // renderProgress draws where the pass is. Only in focus mode: the dense view already answers
+  // this with its "n/m hunks read" chip, and two counts of the same thing in one row is how a
+  // reader stops believing either.
+  const renderProgress = (): void => {
+    focusButton.textContent = state.focus ? "Leave focus" : "Focus";
+    focusButton.title = state.focus
+      ? "Show the whole changeset again (f)"
+      : "Read one hunk at a time (f)";
+    progressEl.hidden = !state.focus;
+    statsEl.hidden = state.focus;
+    if (!state.focus) return;
+    const total = state.pairs.length;
+    const read = readCount();
+    const at = pairAt();
+    progressFill.style.width = total > 0 ? `${(read / total) * 100}%` : "0%";
+    const left = state.files[0]?.path ?? "";
+    const drafted = drafts().length;
+    // Position, then what is left, then what the pass has produced so far. The last one is why a
+    // draft count belongs here: it is the evidence that reading is turning into something.
+    progressText.textContent =
+      `hunk ${at + 1} of ${total}, ${read} read` +
+      (drafted > 0 ? `, ${drafted} drafted` : "") +
+      (left ? ` - ${left}` : "");
   };
 
   const renderSidebar = (): void => {
@@ -1570,6 +1665,75 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const from = state.cursor >= 0 ? state.cursor : rowAt(state.offsets, scroll.scrollTop);
     const i = dir === 1 ? nextIndexAfter(marks, from) : prevIndexBefore(marks, from);
     if (i !== null) scrollToRow(i);
+  };
+
+  // --- focus mode -----------------------------------------------------------
+
+  const pairAt = (): number =>
+    state.pairs.findIndex(
+      (p) => p.path === state.focusAt?.path && p.index === state.focusAt?.index,
+    );
+
+  const readCount = (): number => state.pairs.filter((p) => state.viewed.has(p.digest)).length;
+
+  // firstUnread is where a pass resumes. Read-marks already persist, so an interrupted pass
+  // picks up where it stopped instead of starting at the top - which is the whole reason to
+  // read this way: the pass has to survive being interrupted.
+  const firstUnread = (): { path: string; index: number } | null => {
+    const p = state.pairs.find((x) => !state.viewed.has(x.digest)) ?? null;
+    return p ? { path: p.path, index: p.index } : null;
+  };
+
+  // focusStep moves the pass. Forward past the last hunk is not a dead end: the reading is
+  // finished, so it opens the batch that reading produced. The pass gets a conclusion rather
+  // than running out.
+  const focusStep = (dir: 1 | -1): void => {
+    const next = pairAt() + dir;
+    const p = state.pairs[next];
+    if (!p) {
+      if (dir === 1) endOfPass();
+      return;
+    }
+    state.focusAt = { path: p.path, index: p.index };
+    void rebuild();
+  };
+
+  const endOfPass = (): void => {
+    if (drafts().length > 0) {
+      composePublish();
+      return;
+    }
+    const n = state.pairs.length;
+    flashPublishNotice(`${n} of ${n} read. Nothing drafted, so there is nothing to send.`);
+  };
+
+  // focusRead is the one key a pass is made of: mark this hunk read, then move. Fused because
+  // the two are one act to the reader, and a pass that costs two keystrokes per hunk is a pass
+  // that gets abandoned. `]` still moves without marking, for reading something twice.
+  //
+  // The move does NOT wait on the mark. Recording a read is a round trip to the daemon, and a
+  // pass that pauses on each keypress until it answers is a pass that feels broken; the mark and
+  // the move are independent, so the move happens now and the count catches up when the write
+  // lands.
+  const focusRead = (): void => {
+    const p = state.pairs[pairAt()];
+    if (!p) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
+    if (!state.viewed.has(p.digest)) void sync({ op: "viewed", digest: p.digest, on: true });
+    focusStep(1);
+  };
+
+  const setFocus = (on: boolean): void => {
+    state.focus = on;
+    focusCell.set(on);
+    root.dataset.focus = on ? "on" : "off";
+    // Entering lands on the first hunk still unread rather than wherever the scroll happened to
+    // be: the mode's claim is that it knows what is left to do.
+    if (on) state.focusAt = firstUnread() ?? state.focusAt;
+    void rebuild();
   };
 
   // resume jumps to the first file that still wants attention: one that changed after it was
@@ -2067,15 +2231,23 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // --- commands -------------------------------------------------------------
   const COMMANDS: { id: string; label: string; run: () => void; key?: string }[] = [
     {
+      id: "diff.focus.toggle",
+      label: "Diff: read one hunk at a time",
+      run: () => setFocus(!state.focus),
+      key: "f",
+    },
+    {
       id: "diff.hunk.next",
       label: "Diff: next hunk",
-      run: () => step(1, state.hunks),
+      // In focus mode the stream holds one hunk, so there is no next row to scroll to - the
+      // step is a rebuild around the next one.
+      run: () => (state.focus ? focusStep(1) : step(1, state.hunks)),
       key: "]",
     },
     {
       id: "diff.hunk.prev",
       label: "Diff: previous hunk",
-      run: () => step(-1, state.hunks),
+      run: () => (state.focus ? focusStep(-1) : step(-1, state.hunks)),
       key: "[",
     },
     {
@@ -2093,7 +2265,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     {
       id: "diff.viewed.toggle",
       label: "Diff: mark hunk read",
-      run: () => void toggleViewed(),
+      run: () => void (state.focus ? focusRead() : toggleViewed()),
       key: "v",
     },
     {

@@ -284,6 +284,65 @@ test("#demo shows the batch before it sends it, and sending clears the drafts", 
   dispose.deactivate();
 });
 
+// setFocusMode puts the surface in a known mode instead of assuming one.
+//
+// The preference is a module-scope persisted cell, and its in-memory value is the source of
+// truth - localStorage.clear() in beforeEach does not touch it. These tests share one process
+// (--test-isolation=none), so a test that toggled the mode and walked away would turn it on for
+// every test defined after it, in this file and the next.
+async function setFocusMode(on: boolean): Promise<void> {
+  const root = document.querySelector<HTMLElement>(".console-diff-layout");
+  if ((root?.dataset.focus === "on") === on) return;
+  assert.ok(dispatchCommand("diff.focus.toggle"));
+  await settle();
+}
+
+// Focus mode: one hunk, and a pass that says where it is. The counts describe the WHOLE
+// changeset while the stream shows one hunk, which is the part worth pinning - a progress line
+// computed from what is on screen would read "hunk 1 of 1" forever.
+test("#demo focus mode shows one hunk and counts the whole pass", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  await setFocusMode(true);
+
+  const root = document.querySelector<HTMLElement>(".console-diff-layout");
+  assert.equal(root?.dataset.focus, "on");
+  assert.match(
+    document.querySelector(".console-diff-progress__text")?.textContent ?? "",
+    /hunk 1 of 14/,
+    "the pass is counted over the changeset, not over what is on screen",
+  );
+  // One hunk heading in the stream is the whole claim of the mode.
+  assert.equal(document.querySelectorAll(".console-diff-row--hunk").length, 1);
+
+  await setFocusMode(false);
+  dispose.deactivate();
+});
+
+// Marking read and advancing are one act. This also pins the slice: hunk 3 belongs to a
+// different file than hunk 1, and its thread has to travel with it - a slice that renumbered
+// hunks would render somebody else's remark here, or none at all.
+test("#demo focus mode marks read and advances on one key", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  await setFocusMode(true);
+  assert.ok(dispatchCommand("diff.viewed.toggle"));
+  await settle();
+
+  assert.match(
+    document.querySelector(".console-diff-progress__text")?.textContent ?? "",
+    /hunk 2 of 14, 1 read/,
+    "one key marks this hunk and moves to the next",
+  );
+
+  await setFocusMode(false);
+  dispose.deactivate();
+});
+
 // The reason the field is a textarea at all. A remark is often a paragraph and a code fence, and
 // a field where Enter commits cannot hold either. Both halves are pinned here: a bare Enter must
 // not send, and the chord must not be the only thing that does - a send only a chord can reach is

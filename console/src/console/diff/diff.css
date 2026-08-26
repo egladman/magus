@@ -333,6 +333,64 @@
    out of room: it teaches a reader who does not know the bindings, and a reader who does has
    already stopped looking at it. Text tier rather than the icon one, for the contrast reason
    in the note below. */
+/* Focus mode: one hunk, and nothing beside it to navigate with. The rail is a navigation tool,
+ * and the claim of this mode is that the reader advances rather than navigates - Esc brings the
+ * whole changeset back when they want to jump.
+ *
+ * The COLUMN goes, not just the sidebar in it. Hiding the element alone leaves the grid track
+ * standing at its 18%, and the stream then renders into the same narrow pane it always had with
+ * an empty band beside it. */
+.console-diff-layout[data-focus="on"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.console-diff-layout[data-focus="on"] .console-diff-sidebar {
+  display: none;
+}
+
+/* Sized to its content rather than growing: a progress line that claims the whole row pushes the
+ * control beside it onto a second one, and a mode whose point is less chrome cannot spend an
+ * extra toolbar row saying so. */
+.console-diff-progress {
+  display: flex;
+  flex: 0 1 auto;
+  gap: var(--pf-t--global--spacer--sm);
+  align-items: center;
+  min-width: 0;
+}
+
+.console-diff-progress__bar {
+  flex: 0 1 12rem;
+  height: 4px;
+  overflow: hidden;
+  background: var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--tiny);
+}
+
+.console-diff-progress__fill {
+  height: 100%;
+  background: var(--console-accent);
+  transition: width 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-diff-progress__fill {
+    transition: none;
+  }
+}
+
+.console-diff-progress__text {
+  overflow: hidden;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-diff-toolbar__focus {
+  flex: 0 0 auto;
+}
+
 .console-diff-toolbar__keys {
   display: flex;
   gap: var(--pf-t--global--spacer--md);
