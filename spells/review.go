@@ -46,15 +46,7 @@ const (
 	ReplyReviewContract = "reply_review"
 )
 
-// ReviewContracts is every reserved name in this contract, for a caller checking whether a
-// spell implements enough of it to be useful.
-//
-// A spell may implement a SUBSET. Reading and publishing are genuinely separable - a host with
-// no comment API can still take a review body - so a missing name is a capability this spell
-// does not have rather than a broken spell.
-var ReviewContracts = []string{
-	OpenReviewContract,
-	ThreadsContract,
-	PublishReviewContract,
-	ReplyReviewContract,
-}
+// A spell may implement a SUBSET of these. Reading and publishing are genuinely separable - a
+// host with no comment API can still take a review body - so a missing name is a capability
+// that spell does not have rather than a broken spell. Each op is looked up by name at the
+// moment it is called, which is what makes a subset work with nothing to declare.
