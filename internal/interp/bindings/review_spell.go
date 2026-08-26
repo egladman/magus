@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -30,9 +31,17 @@ func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 	if !ok {
 		return types.ReviewTarget{Reason: "no review provider wired"}
 	}
+	// Ask who the credential belongs to ONCE per process, then never again.
+	//
+	// The answer needs a second round trip on every host magus ships for (GitHub names the PR's
+	// author in the payload it already returns, but not the token's owner), and this call sits
+	// under opening a diff - the path where latency is the product. A token's owner does not
+	// change while a daemon runs, so the second call is paid once and the cache spares every
+	// lookup after it. A provider that answers nothing leaves it empty, which reads as unknown.
+	want := cachedViewer()
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.FindReviewContract,
-		Params: map[string]any{"branch": branch, "remote": remote},
+		Params: map[string]any{"branch": branch, "remote": remote, "want_viewer": want == ""},
 	})
 	if err != nil {
 		return types.ReviewTarget{Reason: "review provider: " + err.Error()}
@@ -45,7 +54,34 @@ func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 		// the fault is in their spell.
 		return types.ReviewTarget{Reason: err.Error()}
 	}
+	// Remember what the provider named, or reuse what it named earlier. Either way the answer
+	// carries it, so a caller never has to know which lookup paid for it.
+	if at.Viewer != "" {
+		rememberViewer(at.Viewer)
+	} else {
+		at.Viewer = want
+	}
 	return at
+}
+
+// viewer caches the credential owner for the life of the process. See FindReview for why it is
+// worth caching and why a stale value is not a risk: a token's owner does not change, and a
+// different token means a different daemon.
+var viewer struct {
+	sync.RWMutex
+	name string
+}
+
+func cachedViewer() string {
+	viewer.RLock()
+	defer viewer.RUnlock()
+	return viewer.name
+}
+
+func rememberViewer(name string) {
+	viewer.Lock()
+	defer viewer.Unlock()
+	viewer.name = name
 }
 
 func decodeReviewTarget(data any) (types.ReviewTarget, error) {
@@ -66,6 +102,12 @@ func decodeReviewTarget(data any) (types.ReviewTarget, error) {
 		return types.ReviewTarget{}, err
 	}
 	if at.State, err = strField(m, "state", where); err != nil {
+		return types.ReviewTarget{}, err
+	}
+	if at.Author, err = strField(m, "author", where); err != nil {
+		return types.ReviewTarget{}, err
+	}
+	if at.Viewer, err = strField(m, "viewer", where); err != nil {
 		return types.ReviewTarget{}, err
 	}
 	return at, nil

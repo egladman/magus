@@ -388,6 +388,25 @@ type ReviewTarget struct {
 	// an ancestor of the base and it is not patch-equivalent to what landed either. A repository
 	// that squash-merges would simply never notice its own merges.
 	State string `json:"state,omitempty" yaml:"state,omitempty"`
+	// Author is who opened the review and Viewer is who the credential belongs to, both in the
+	// provider's own terms. Empty when the provider does not answer, and an empty pair means
+	// UNKNOWN - never "yours". Guessing "yours" would refuse a legitimate approval on a
+	// colleague's change; guessing "theirs" would let a change approve itself.
+	Author string `json:"author,omitempty" yaml:"author,omitempty"`
+	Viewer string `json:"viewer,omitempty" yaml:"viewer,omitempty"`
+}
+
+// OpenedByViewer reports whether the credential holder opened this review, and whether that is
+// KNOWN at all.
+//
+// Two returns rather than one, in the (value, ok) shape, because the third state is real and
+// silently collapsing it is the bug this guards: a provider that names neither party leaves the
+// question unanswered, which is not the same as answering "no".
+func (r ReviewTarget) OpenedByViewer() (opened, known bool) {
+	if r.Author == "" || r.Viewer == "" {
+		return false, false
+	}
+	return r.Author == r.Viewer, true
 }
 
 // Open reports whether there is a review to publish to or read from AT ALL. It is about

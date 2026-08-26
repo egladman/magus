@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2395,
-  "edge_count": 6115,
+  "node_count": 2396,
+  "edge_count": 6119,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -14555,7 +14555,7 @@
       "kind": "function",
       "label": "publish_review",
       "doc": "publish_review sends a batch of drafts as ONE review.  A batch rather than a call per comment, which is the whole shape of self-review: you read, you accumulate remarks, and only then decide the set is worth sending. Publishing each as it is written would send the first thought before the fifth changed your mind about it.  Returns the review id and the drafts it accepted, so the caller can mark exactly those published. A partial result is a real answer here: GitHub rejects an inline comment whose line is no",
-      "source": "spells/github/review/spell.buzz:276",
+      "source": "spells/github/review/spell.buzz:306",
       "attrs": {
         "exported": "true"
       }
@@ -14565,7 +14565,7 @@
       "kind": "function",
       "label": "reply_review",
       "doc": "reply_review answers one existing thread, so a conversation can be finished without leaving.",
-      "source": "spells/github/review/spell.buzz:330",
+      "source": "spells/github/review/spell.buzz:360",
       "attrs": {
         "exported": "true"
       }
@@ -14585,7 +14585,7 @@
       "kind": "function",
       "label": "review_threads",
       "doc": "review_threads lists the inline comment threads already on the review, so a reader never leaves for the browser to find out what a colleague said.  This is the one function that makes magus depend on a host being reachable. Every failure returns an EMPTY list rather than throwing: a diff that will not open because GitHub is slow is a worse tool than one that shows the change and says nothing about the conversation.",
-      "source": "spells/github/review/spell.buzz:304",
+      "source": "spells/github/review/spell.buzz:334",
       "attrs": {
         "exported": "true"
       }
@@ -14605,6 +14605,13 @@
       "kind": "function",
       "label": "token",
       "source": "spells/github/review/spell.buzz:127"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:viewerLogin",
+      "kind": "function",
+      "label": "viewerLogin",
+      "doc": "viewerLogin names who the credential belongs to, and ONLY when magus asks.  GitHub hands over the pull request's author in the payload find_review already fetches, but the token's own owner takes a second round trip. magus caches that for the life of the daemon and sets want_viewer only while its cache is empty, so this costs one call ever rather than one per diff opened. Empty on any failure: not knowing who you are is not a reason to fail a lookup, and magus reads an empty pair as UNKNOWN rather than as \"",
+      "source": "spells/github/review/spell.buzz:286"
     },
     {
       "id": "function:spells/gitlab/ci/spell.buzz:annotate",
@@ -55981,6 +55988,14 @@
     },
     {
       "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:viewerLogin",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
       "target": "import:assert",
       "relation": "imports",
       "confidence": "inferred",
@@ -61060,6 +61075,14 @@
       "provenance": "spells/github/review/spell.buzz"
     },
     {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:viewerLogin",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
       "source": "function:spells/github/review/spell.buzz:has_token",
       "target": "function:spells/github/review/spell.buzz:getenv",
       "relation": "calls",
@@ -61149,6 +61172,22 @@
     },
     {
       "source": "function:spells/github/review/spell.buzz:review_threads",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:viewerLogin",
+      "target": "function:spells/github/review/spell.buzz:apiBase",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:viewerLogin",
       "target": "function:spells/github/review/spell.buzz:headers",
       "relation": "calls",
       "confidence": "extracted",

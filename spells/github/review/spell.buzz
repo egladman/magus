@@ -230,7 +230,13 @@ export fun find_review(target: magus\Target, cb: fun(any)) > any !> any {
     if (list.len() > 0) {
         // Rendered as a string: magus treats a review id as opaque so a provider whose changes are
         // named by a hash stays writable. GitHub's is a number and reads as one either way.
-        return {"id": "{list[0].q("number").integerValue()}", "repo": repo, "state": "open"};
+        return {
+            "id": "{list[0].q("number").integerValue()}",
+            "repo": repo,
+            "state": "open",
+            "author": list[0].q("user").q("login").stringValue(),
+            "viewer": viewerLogin(io),
+        };
     }
     // Nothing OPEN for this branch, which is what the query above asks for and all magus needed
     // until a merge became worth noticing. Ask again without that filter before reporting none:
@@ -261,7 +267,31 @@ export fun find_review(target: magus\Target, cb: fun(any)) > any !> any {
             break;
         }
     }
-    return {"id": "{pick.q("number").integerValue()}", "repo": repo, "state": state};
+    return {
+        "id": "{pick.q("number").integerValue()}",
+        "repo": repo,
+        "state": state,
+        "author": pick.q("user").q("login").stringValue(),
+        "viewer": viewerLogin(io),
+    };
+}
+
+// viewerLogin names who the credential belongs to, and ONLY when magus asks.
+//
+// GitHub hands over the pull request's author in the payload find_review already fetches, but the
+// token's own owner takes a second round trip. magus caches that for the life of the daemon and
+// sets want_viewer only while its cache is empty, so this costs one call ever rather than one per
+// diff opened. Empty on any failure: not knowing who you are is not a reason to fail a lookup,
+// and magus reads an empty pair as UNKNOWN rather than as "yours".
+fun viewerLogin(io: any) > str !> any {
+    if (io["want_viewer"] != true) {
+        return "";
+    }
+    final res = http\get(apiBase() + "/user", headers: headers());
+    if (res["status"] != 200) {
+        return "";
+    }
+    return serialize\jsonDecode(res["body"]).q("login").stringValue();
 }
 
 // publish_review sends a batch of drafts as ONE review.

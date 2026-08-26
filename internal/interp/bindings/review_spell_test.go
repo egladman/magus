@@ -211,3 +211,52 @@ func TestReviewThreadsKeepsReadingPastAMalformedRow(t *testing.T) {
 	assert.Equal(t, "before", got[0].Body)
 	assert.Equal(t, "after", got[1].Body, "a thread after the malformed row is not dropped")
 }
+
+// The credential owner is asked for ONCE per process and reused after.
+//
+// Naming it costs a second round trip on every host magus ships for, and this sits under opening
+// a diff, where latency is the product. The cache is what keeps a "whose review is this" question
+// off that path; the flag is what lets the spell skip the call it would otherwise always make.
+func TestFindReviewAsksWhoTheCredentialIsOnlyOnce(t *testing.T) {
+	// The cache is process-global, so a run under -count=2 - or any later test that answers with
+	// a viewer - would otherwise start this one with the cache already warm and see the first
+	// call skip the ask. Establish the state rather than assuming it.
+	rememberViewer("")
+	t.Cleanup(func() { rememberViewer("") })
+
+	var asked []bool
+	fakeSpellSeq++
+	name := fmt.Sprintf("fake-viewer-%d", fakeSpellSeq)
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			asked = append(asked, req.Params["want_viewer"] == true)
+			return map[string]any{"id": "482", "author": "priya", "viewer": "eli"}, nil
+		})))
+	prev := ReviewProvider()
+	SetReviewProvider(name)
+	t.Cleanup(func() { SetReviewProvider(prev) })
+
+	first := FindReview(context.Background(), "feat/x", "")
+	opened, known := first.OpenedByViewer()
+	assert.True(t, known, "both names present means the question is answerable")
+	assert.False(t, opened, "priya's review is not eli's")
+
+	second := FindReview(context.Background(), "feat/x", "")
+	assert.Equal(t, "eli", second.Viewer, "the cached owner rides along on every later answer")
+	assert.Equal(t, []bool{true, false}, asked, "asked once, then never again")
+}
+
+// A provider that names neither party leaves the question UNANSWERED, which is not the same as
+// answering no: guessing "yours" would refuse a legitimate approval on a colleague's change, and
+// guessing "theirs" would let a change approve itself.
+func TestOpenedByViewerIsUnknownWhenEitherNameIsMissing(t *testing.T) {
+	for _, at := range []types.ReviewTarget{
+		{ID: "1"},
+		{ID: "1", Author: "priya"},
+		{ID: "1", Viewer: "eli"},
+	} {
+		opened, known := at.OpenedByViewer()
+		assert.False(t, known, "%#v must read as unknown", at)
+		assert.False(t, opened)
+	}
+}
