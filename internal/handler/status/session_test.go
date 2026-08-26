@@ -3,6 +3,7 @@ package status
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -671,11 +672,12 @@ func TestDiscardRemovesOnlyAnUnsentHumanDraft(t *testing.T) {
 type fakeBranchSource struct {
 	limit int
 	out   []types.BranchChange
+	err   error
 }
 
-func (f *fakeBranchSource) BranchChanges(_ context.Context, limit int) []types.BranchChange {
+func (f *fakeBranchSource) BranchChanges(_ context.Context, limit int) ([]types.BranchChange, error) {
 	f.limit = limit
-	return f.out
+	return f.out, f.err
 }
 
 func TestDiffBranchesServesTheOverlapAndPassesTheCap(t *testing.T) {
@@ -737,4 +739,34 @@ func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &after))
 	require.Len(t, after.Threads, 1)
 	assert.False(t, after.Threads[0].New, "once the reader has seen it, it is not new again")
+}
+
+// A backend without the capability must SAY so. "Nobody else is touching this file" is
+// reassurance; "magus cannot tell you on this backend yet" is a gap in magus, and rendering both
+// as an empty list tells the reader the first when the truth is the second. The marker is only
+// worth having if its absence can be trusted.
+func TestDiffBranchesNamesTheBackendThatCannotAnswer(t *testing.T) {
+	src := &fakeBranchSource{err: fmt.Errorf("hg does not report branch changes: %w", types.ErrVCSUnsupported)}
+	rec := httptest.NewRecorder()
+	NewDiffBranchesHandler(src, nil).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/branches", nil))
+
+	// 200, not an error status: the reader did nothing wrong and their diff must still open.
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var got diffBranchesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Empty(t, got.Branches)
+	assert.Contains(t, got.Unsupported, "hg", "the gap names the backend that fell short")
+}
+
+// A supported backend with nothing to report says nothing is unsupported, so the two states stay
+// distinguishable from the other side too.
+func TestDiffBranchesLeavesUnsupportedEmptyWhenTheBackendAnswered(t *testing.T) {
+	rec := httptest.NewRecorder()
+	NewDiffBranchesHandler(&fakeBranchSource{}, nil).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/branches", nil))
+
+	var got diffBranchesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Empty(t, got.Unsupported)
 }

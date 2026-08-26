@@ -756,7 +756,7 @@ func (h *DiffReviewHandler) lookup(ctx context.Context) types.ReviewTarget {
 // branchSource is the workspace half a branch lookup needs: what other lines of work are
 // changing. Narrow on purpose, so a test can answer it without a repository.
 type branchSource interface {
-	BranchChanges(ctx context.Context, limit int) []types.BranchChange
+	BranchChanges(ctx context.Context, limit int) ([]types.BranchChange, error)
 }
 
 // DiffBranchesHandler serves GET /api/v1/diff/branches: the other branches changing the files
@@ -792,6 +792,13 @@ func NewDiffBranchesHandler(workspace branchSource, log *slog.Logger) *DiffBranc
 // iterates it, and a null would make every caller guard a state that means what empty means.
 type diffBranchesResponse struct {
 	Branches []types.BranchChange `json:"branches"`
+	// Unsupported names the backend that cannot answer, empty when one did.
+	//
+	// It exists so an empty list is never ambiguous. "No branch competes" is reassurance; "this
+	// backend has not implemented the lookup" is a gap in magus. Rendering both as silence tells
+	// the reader the first when the truth is the second, and the whole point of the marker is
+	// that it can be trusted.
+	Unsupported string `json:"unsupported,omitempty"`
 }
 
 func (h *DiffBranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
@@ -805,7 +812,18 @@ func (h *DiffBranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	out := diffBranchesResponse{Branches: []types.BranchChange{}}
 	if h.workspace != nil {
-		out.Branches = append(out.Branches, h.workspace.BranchChanges(r.Context(), branchLimit)...)
+		got, err := h.workspace.BranchChanges(r.Context(), branchLimit)
+		switch {
+		case errors.Is(err, types.ErrVCSUnsupported):
+			// 200 with the gap named, not an error status: the reader did nothing wrong and
+			// their diff must still open. What they are owed is the DIFFERENCE between "nobody
+			// else is touching this" and "magus cannot tell you on this backend yet".
+			out.Unsupported = err.Error()
+		case err != nil:
+			out.Unsupported = "branch lookup failed: " + err.Error()
+		default:
+			out.Branches = append(out.Branches, got...)
+		}
 	}
 	writeJSON(w, out)
 }

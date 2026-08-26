@@ -152,6 +152,9 @@ interface State {
   // until the lookup lands, and null is not an empty map: one means "not asked yet or the backend
   // cannot say", the other would mean "asked, and nothing competes".
   branches: Map<string, string[]> | null;
+  // branchesUnsupported names the backend that cannot answer, empty when one did. It is what
+  // keeps an empty map from reading as "nothing competes" on a backend that never looked.
+  branchesUnsupported: string;
   overview: boolean;
   phase: Phase;
   collaboration: CollaborationState;
@@ -321,6 +324,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     focusAt: null,
     pairs: [],
     branches: null,
+    branchesUnsupported: "",
     overview: false,
     phase: "loading",
     collaboration: demo ? "live" : "unavailable",
@@ -1682,6 +1686,18 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // Threads with nowhere in the stream to sit. They are READ here rather than merely
     // counted: a chip saying "3 elsewhere" tells the reader something was said and withholds
     // what, which is worse than not mentioning it - they now have to leave to find out.
+    // A capability gap, said out loud. Without it the overview looks identical to a repository
+    // where genuinely nothing else is in flight, and the reader would take magus's silence for
+    // an all-clear it never checked.
+    if (state.branchesUnsupported) {
+      box.append(
+        h(
+          "p",
+          "console-diff-overview__note",
+          `Other branches: ${state.branchesUnsupported}. magus cannot say what else is changing these files here.`,
+        ),
+      );
+    }
     const elsewhere = state.threads?.elsewhere ?? [];
     if (elsewhere.length > 0) {
       box.append(h("h3", "console-diff-overview__subtitle", "Said on the review, elsewhere"));
@@ -2021,8 +2037,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (disposed || demo) return;
     const hp = host_();
     if (!hp) return;
-    const branches = await fetchBranches(hp, controller.signal);
-    if (disposed || branches.length === 0) return;
+    const { branches, unsupported } = await fetchBranches(hp, controller.signal);
+    if (disposed) return;
+    // Recorded even when there is nothing to report, so the surface can tell "nobody else is
+    // touching this" from "this backend has not implemented the lookup". Only the first is
+    // reassurance, and only one of them is true.
+    state.branchesUnsupported = unsupported;
     state.branches = new Map();
     for (const b of branches) {
       for (const p of b.paths) {

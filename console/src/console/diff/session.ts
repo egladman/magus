@@ -376,23 +376,33 @@ export interface BranchChange {
 
 // fetchBranches asks which other branches are changing these files.
 //
-// Its own route because it forks once per branch, so it must never hold the patch. Empty on any
-// failure, and empty is the same answer as "this backend cannot tell you": a surface that said
-// "nothing competes" on a backend that cannot answer would be inventing reassurance.
-export async function fetchBranches(host: string, signal: AbortSignal): Promise<BranchChange[]> {
+// Its own route because it forks once per branch, so it must never hold the patch.
+//
+// `unsupported` is why this returns a pair rather than a list. An empty list means "nothing else
+// is touching these files", which is reassurance; a backend that has not implemented the lookup
+// is a gap in magus. Collapsing both into emptiness tells the reader the first when the truth is
+// the second, and a marker whose absence cannot be trusted is worth nothing.
+export async function fetchBranches(
+  host: string,
+  signal: AbortSignal,
+): Promise<{ branches: BranchChange[]; unsupported: string }> {
   try {
     const res = await fetch(`http://${host}/api/v1/diff/branches`, {
       headers: authHeaders(),
       signal,
     });
-    if (!res.ok) return [];
-    const got = ((await res.json()) as { branches?: BranchChange[] }).branches ?? [];
+    if (!res.ok) return { branches: [], unsupported: "" };
+    const body = (await res.json()) as { branches?: BranchChange[]; unsupported?: string };
+    const got = body.branches ?? [];
     // Shape-checked, not just cast. `Paths []string` on the Go side has no omitempty, so a nil
     // slice marshals to `null` - and iterating that throws inside a `void`-ed caller, where the
     // rejection is swallowed and the feature simply never appears with nothing logged anywhere.
-    return got.filter((b) => typeof b?.ref === "string" && Array.isArray(b.paths));
+    return {
+      branches: got.filter((b) => typeof b?.ref === "string" && Array.isArray(b.paths)),
+      unsupported: typeof body.unsupported === "string" ? body.unsupported : "",
+    };
   } catch {
-    return [];
+    return { branches: [], unsupported: "" };
   }
 }
 

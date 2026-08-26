@@ -324,9 +324,9 @@ func (s *Service) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 // BranchChanges reports what other remote-tracking branches are changing, so a reader can be
 // told a file in front of them is being edited elsewhere too. None on a workspace-less service,
 // which reads the same as a backend that cannot answer: nothing is claimed either way.
-func (s *Service) BranchChanges(ctx context.Context, limit int) []types.BranchChange {
+func (s *Service) BranchChanges(ctx context.Context, limit int) ([]types.BranchChange, error) {
 	if s.magus == nil {
-		return nil
+		return nil, nil
 	}
 	return s.magus.BranchChanges(ctx, limit)
 }

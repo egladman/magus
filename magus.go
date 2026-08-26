@@ -680,20 +680,24 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 //
 // Read through the optional capability rather than by shelling a git command, for the reason
 // ReviewOrigin reads the remote that way: the backend is asked, never its name.
-func (m *Magus) BranchChanges(ctx context.Context, limit int) []types.BranchChange {
+func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchChange, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return nil
+		return nil, nil
 	}
 	reporter, ok := res.VCS.(types.BranchChangeReporter)
 	if !ok {
-		return nil
+		// NAMED, not swallowed. A backend that cannot answer and a repository where nothing
+		// competes are different facts, and a surface shown the same emptiness for both tells
+		// the reader "nothing competes" - reassurance magus has not earned. The caller reports
+		// which backend fell short so the gap is legible rather than invisible.
+		return nil, fmt.Errorf("%s does not report branch changes: %w", res.Name, types.ErrVCSUnsupported)
 	}
 	out, err := reporter.BranchChanges(ctx, m.ws.Root, res.Base, limit)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return out
+	return out, nil
 }
 
 // ReviewOrigin reports the branch this tree is on and the remote it would be pushed to, for a
