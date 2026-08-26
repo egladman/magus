@@ -893,9 +893,50 @@
 .console-diff-composer__input {
   display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  min-width: 0;
+}
+
+.console-diff-composer__row {
+  display: flex;
   gap: var(--pf-t--global--spacer--sm);
   align-items: flex-end;
   min-width: 0;
+}
+
+.console-diff-composer__tabs {
+  display: flex;
+  gap: var(--pf-t--global--spacer--xs);
+}
+
+.console-diff-composer__tab {
+  padding: 0 var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  background: none;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  cursor: pointer;
+}
+
+.console-diff-composer__tab[aria-pressed="true"] {
+  color: var(--pf-t--global--text--color--regular);
+  border-block-end-color: var(--console-accent);
+}
+
+/* The preview stands in for the field, so it holds the same ground rather than reading as a
+ * separate panel: the reader is looking at one remark in two renderings, not at two things. */
+.console-diff-composer__preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: calc(3lh + var(--pf-t--global--spacer--sm));
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  overflow-y: auto;
+  max-height: 30vh;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
 }
 
 .console-diff-composer__input .pf-v6-c-form-control {
@@ -910,6 +951,46 @@
 
 .console-diff-composer__send {
   flex: 0 0 auto;
+}
+
+/* Rendered remark markdown, wherever it appears: a thread, a draft, the preview. A remark is a
+ * sentence or two inside a dense stream, so the block elements lose their outer margins - the
+ * row already spaces them, and a stray leading margin reads as the remark being misaligned. */
+.console-diff-md > :first-child {
+  margin-block-start: 0;
+}
+
+.console-diff-md > :last-child {
+  margin-block-end: 0;
+}
+
+.console-diff-md p {
+  margin-block: 0.25em;
+}
+
+.console-diff-md pre {
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  overflow-x: auto;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+
+.console-diff-md code {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.95em;
+}
+
+.console-diff-md ul,
+.console-diff-md ol {
+  margin-block: 0.25em;
+  padding-inline-start: 1.25em;
+}
+
+.console-diff-md blockquote {
+  margin-inline: 0;
+  padding-inline-start: var(--pf-t--global--spacer--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  border-inline-start: 2px solid var(--pf-t--global--border--color--default);
 }
 
 /* The story: who wrote this file and what they were reading when they did. Sits under the file

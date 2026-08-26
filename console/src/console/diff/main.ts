@@ -71,6 +71,7 @@ import {
   type DiffTouch,
   type ReviewInfo,
 } from "./session";
+import { setMarkdown } from "./markdown";
 import { demoSession, demoReview, applyDemoPublish, applyDemoReply, applyDemoOp } from "./demo";
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../commands";
@@ -575,7 +576,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
       el.dataset.author = "review";
       const who = h("span", "console-diff-row__who");
       who.textContent = row.thread.author || "review";
-      el.append(who, h("span", "console-diff-row__comment", row.thread.body));
+      const said = h("span", "console-diff-row__comment console-diff-md");
+      setMarkdown(said, row.thread.body);
+      el.append(who, said);
       el.append(label("on the review", "pf-m-blue"));
       return el;
     }
@@ -588,7 +591,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
       // daemon from the transport, so this is reporting who wrote it rather than repeating a
       // claim the writer made about itself.
       who.textContent = row.comment.author === "agent" ? row.comment.agent_name || "agent" : "you";
-      const body = h("span", "console-diff-row__comment", row.comment.body);
+      // Rendered the same way a colleague's remark is: a draft that reads differently here than
+      // it will on the review is a draft you cannot proofread.
+      const body = h("span", "console-diff-row__comment console-diff-md");
+      setMarkdown(body, row.comment.body);
       el.append(who, body);
       if (row.comment.resolved) el.append(label("resolved", "pf-m-green"));
       return el;
@@ -1516,7 +1522,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
       box.append(why);
       for (const t of elsewhere) {
         const r = h("p", "console-diff-overview__note");
-        r.textContent = `${t.author} on ${t.path}:${t.line} - ${t.body}`;
+        r.append(h("span", undefined, `${t.author} on ${t.path}:${t.line} - `));
+        const said = h("span", "console-diff-md");
+        setMarkdown(said, t.body);
+        r.append(said);
         box.append(r);
       }
     }
@@ -1607,12 +1616,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return prevIndexBefore(state.hunks, from + 1) ?? state.hunks[0] ?? null;
   };
 
-  // comment opens a one-line composer pinned under the hunk the cursor is in.
-  //
-  // A prompt() would have been fewer lines and is the wrong shape: it steals focus from the
-  // page, cannot show WHICH hunk is being annotated, and gives an agent's reader no way to see
-  // the code they are remarking on while they type. The composer sits in the stream for the
-  // same reason the comments do.
   // composerField builds the input every composer here shares.
   //
   // Enter is a NEWLINE. A remark worth writing is often a paragraph and a code fence, and a
@@ -1632,6 +1635,35 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const field = h("textarea", "pf-v6-c-form-control__text");
     field.rows = 3;
     field.placeholder = opts.placeholder;
+    // Write and Preview, because the remark is markdown wherever it lands and the reader is
+    // typing it blind otherwise: a fence or a list reads as its own syntax here and as rendered
+    // text on the review. The tab pair is GitHub's, deliberately - it is the shape whoever
+    // writes these already has in their hands.
+    const tabs = h("span", "console-diff-composer__tabs");
+    const writeTab = h("button", "console-diff-composer__tab");
+    writeTab.type = "button";
+    writeTab.textContent = "Write";
+    const previewTab = h("button", "console-diff-composer__tab");
+    previewTab.type = "button";
+    previewTab.textContent = "Preview";
+    const rendered = h("div", "console-diff-composer__preview console-diff-md");
+    rendered.hidden = true;
+    const show = (previewing: boolean): void => {
+      control.hidden = previewing;
+      rendered.hidden = !previewing;
+      writeTab.setAttribute("aria-pressed", String(!previewing));
+      previewTab.setAttribute("aria-pressed", String(previewing));
+      if (!previewing) {
+        field.focus();
+        return;
+      }
+      const body = field.value.trim();
+      if (body) setMarkdown(rendered, body);
+      else rendered.textContent = "Nothing written yet.";
+    };
+    writeTab.addEventListener("click", () => show(false));
+    previewTab.addEventListener("click", () => show(true));
+    tabs.append(writeTab, previewTab);
     const commit = h("button", "pf-v6-c-button pf-m-primary console-diff-composer__send");
     commit.type = "button";
     commit.textContent = opts.action;
@@ -1653,7 +1685,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     });
     commit.addEventListener("click", () => opts.onCommit(field.value.trim()));
     control.append(field);
-    wrap.append(control, commit);
+    const row = h("span", "console-diff-composer__row");
+    row.append(control, rendered, commit);
+    wrap.append(tabs, row);
+    show(false);
     return { wrap, field, commit };
   };
 
