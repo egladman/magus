@@ -145,7 +145,10 @@ async function pollDaemonStorage(host: string, store: NotificationStore): Promis
 async function pollReviewMerged(host: string, store: NotificationStore): Promise<void> {
   const activity = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
   const resp = await activity.listActivityEvents({
-    pageSize: 5,
+    // Sized for TWO actions, not one. The job appends a review.said on every run while remarks
+    // stay unread, so a handful of ticks would push the rarer review.merged off a newest-first
+    // page and the offer to keep the conversation would never be surfaced at all.
+    pageSize: 40,
     filter: { kinds: [Kind.JOB], actions: ["review.merged", "review.said"], actors: [] },
   });
   for (const ev of resp.events) {
@@ -154,12 +157,14 @@ async function pollReviewMerged(host: string, store: NotificationStore): Promise
       // job running again before the reader looks reports the same set and the store recognises it.
       const [repo, count, ids] = (ev.preview || "").split(": ");
       const message = saidNotice(repo ?? "", Number(count));
-      if (!message) continue;
+      // A preview this cannot read yields no message, and no key either - keying the malformed
+      // case on a constant made two different broken events dedupe into one.
+      if (!message || !ids) continue;
       store.notify({
         source: "Diff",
         kind: "error",
         important: true,
-        key: "review.said:" + (ids ?? ""),
+        key: "review.said:" + ids,
         message,
       });
       continue;

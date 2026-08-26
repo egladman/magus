@@ -76,6 +76,27 @@ export interface PlacedThreads {
   readonly elsewhere: readonly ReviewThread[];
 }
 
+// narrowToHunk re-buckets a placement for a stream that renders exactly ONE hunk, moving every
+// remark that hunk will not show into the elsewhere listing.
+//
+// placeThreads buckets against the FILE, which is right when the whole file is on screen. Narrow
+// the stream to one hunk and a remark on hunk 3 of the file being read at hunk 1 stays in atHunk
+// under a key the row builder never emits: no row, no chip, no overview entry. "Your colleague
+// said nothing" is the one thing this surface must never say by accident, and that is exactly
+// what it said until this existed.
+//
+// A remark under the FILE heading stays there - the heading is still on screen.
+export function narrowToHunk(placed: PlacedThreads, keep: string): PlacedThreads {
+  const atHunk = new Map<string, ReviewThread[]>();
+  const spilled: ReviewThread[] = [];
+  for (const [key, threads] of placed.atHunk) {
+    if (key === keep) atHunk.set(key, threads);
+    else spilled.push(...threads);
+  }
+  if (spilled.length === 0) return placed;
+  return { atHunk, atFile: placed.atFile, elsewhere: [...placed.elsewhere, ...spilled] };
+}
+
 // placeThreads sorts already-placed threads into the three buckets this surface renders.
 //
 // The line-to-hunk ARITHMETIC is not here: the daemon does it once (diff.PlaceThreads) and

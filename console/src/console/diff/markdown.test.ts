@@ -65,3 +65,12 @@ test("an ordinary link keeps working", () => {
     /<a href="https:\/\/example\.com\/a">/,
   );
 });
+
+// The body is typed string but arrives from an unvalidated cast over the daemon's JSON, and
+// marked.parse THROWS on anything else - inside the row renderer, which takes the paint loop down
+// and leaves the stream dead until a reload.
+test("a body that is not a string renders nothing rather than throwing", () => {
+  for (const bad of [undefined, null, 42, {}]) {
+    assert.equal(renderMarkdown(bad as unknown as string), "");
+  }
+});

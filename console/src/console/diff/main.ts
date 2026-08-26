@@ -35,6 +35,7 @@ import {
   buildRows,
   byHunk,
   commentKey,
+  narrowToHunk,
   hunkRowIndexes,
   hunksRead,
   activeFileTarget,
@@ -1190,25 +1191,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return width;
   };
 
-  // offScreenToElsewhere moves every thread the focused stream will not render into the elsewhere
-  // listing, so narrowing the view never makes a colleague's remark vanish.
-  //
-  // The stream emits exactly one hunk in focus mode. placeThreads buckets against the FILE, so a
-  // remark on hunk 3 of the file being read at hunk 1 lands in atHunk under a key buildRows never
-  // emits: no row, no chip, no overview entry. "Your colleague said nothing" is the one thing this
-  // surface must never say by accident, and that is what the unfixed version said.
-  const offScreenToElsewhere = (placed: PlacedThreads): PlacedThreads => {
-    const keep = state.focusAt ? commentKey(state.focusAt.path, state.focusAt.index) : "";
-    const atHunk = new Map<string, ReviewThread[]>();
-    const spilled: ReviewThread[] = [];
-    for (const [key, threads] of placed.atHunk) {
-      if (key === keep) atHunk.set(key, threads);
-      else spilled.push(...threads);
-    }
-    // A thread under the file heading stays there: the heading IS on screen in focus mode.
-    return { atHunk, atFile: placed.atFile, elsewhere: [...placed.elsewhere, ...spilled] };
-  };
-
   // focusSlice narrows the file list to the one hunk focus mode is showing.
   //
   // A slice, not a filter of the rows: buildRows takes files, so everything downstream - the
@@ -1241,7 +1223,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
     state.pairs = state.files.flatMap((f) =>
       f.hunks.map((hunk) => ({ path: f.path, index: hunk.index, digest: hunk.digest })),
     );
-    if (state.focus && state.pairs.length > 0) state.files = focusSlice(state.files);
+    // Resume on the FIRST rebuild of a remembered pass, not just when the mode is toggled on.
+    // setFocus seeds focusAt, but a reader who left in focus mode arrives with it null, and
+    // focusSlice's fallback is the first hunk - so the remembered preference, which is the common
+    // path, restarted the pass at the top every time and the docs promised otherwise.
+    if (state.focus && state.pairs.length > 0) {
+      state.focusAt ??= firstUnread();
+      state.files = focusSlice(state.files);
+    }
     // Touches come from the annotations, so the first paint has none and the stream gains the
     // story rows when the review lands - the same two-phase shape everything else here uses.
     const touches = new Map<string, readonly DiffTouch[]>();
@@ -1256,7 +1245,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // under a key nothing emits - rendered nowhere, counted nowhere, and absent from the
     // elsewhere listing that exists to guarantee no remark is ever silently dropped. Moving them
     // to elsewhere is what keeps that guarantee true when the stream narrows.
-    if (state.focus && state.threads) state.threads = offScreenToElsewhere(state.threads);
+    if (state.focus && state.threads) {
+      state.threads = narrowToHunk(
+        state.threads,
+        state.focusAt ? commentKey(state.focusAt.path, state.focusAt.index) : "",
+      );
+    }
     state.rows = buildRows(
       state.files,
       state.mode,
@@ -1768,8 +1762,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // finished, so it opens the batch that reading produced. The pass gets a conclusion rather
   // than running out.
   const focusStep = (dir: 1 | -1): void => {
-    const next = pairAt() + dir;
-    const p = state.pairs[next];
+    const at = pairAt();
+    // The focused hunk is no longer in the changeset - a fold, a rebase, a tree that moved under
+    // the reader. Resume rather than arithmetic on -1, which stepped FORWARD to index 0 and
+    // silently restarted the pass at the top while stepping BACK did nothing at all.
+    if (at < 0) {
+      state.focusAt = firstUnread() ?? state.focusAt;
+      void rebuild();
+      return;
+    }
+    const p = state.pairs[at + dir];
     if (!p) {
       if (dir === 1) endOfPass();
       return;

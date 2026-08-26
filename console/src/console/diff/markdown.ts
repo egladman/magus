@@ -49,6 +49,11 @@ renderer.link = (token) =>
 // break to whoever typed it, and GitHub's own comment boxes read it that way. Rendering
 // paragraphs by the CommonMark rule instead would silently join lines somebody separated.
 export function renderMarkdown(body: string): string {
+  // Typed string, but it arrives from an unvalidated `as` cast over the daemon's JSON, and
+  // marked.parse THROWS on anything else. A throw here lands inside the row renderer, takes
+  // paint() down mid-replaceChildren, and leaves the virtualized stream dead until a reload -
+  // where the same input used to render as empty text.
+  if (typeof body !== "string") return "";
   return marked.parse(body, { renderer, async: false, breaks: true, gfm: true }) as string;
 }
 

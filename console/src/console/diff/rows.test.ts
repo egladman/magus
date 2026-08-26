@@ -16,6 +16,7 @@ import {
   fileOfRow,
   heightOf,
   maxLineChars,
+  narrowToHunk,
   placeThreads,
   storyText,
   ROW_HEIGHT,
@@ -641,4 +642,39 @@ test("threads render above the session's own comments on the same hunk", () => {
     rows.map((r) => r.kind),
     ["file", "hunk", "thread", "comment", "line", "line", "line", "line"],
   );
+});
+
+// A stream showing ONE hunk must not swallow the remarks on the others. placeThreads buckets by
+// FILE, so a remark on hunk 3 of the file being read at hunk 1 sat in atHunk under a key the row
+// builder never emits: no row, no chip, no overview entry. That is the same silent drop the
+// elsewhere listing exists to prevent, reached from the other side.
+test("narrowing to one hunk moves the rest to elsewhere rather than losing them", () => {
+  const onOne = { id: "t1", path: "x.ts", line: 3, hunk: 0, author: "priya", body: "here" };
+  const onThree = {
+    id: "t2",
+    path: "x.ts",
+    line: 90,
+    hunk: 1,
+    author: "marcus",
+    body: "over here",
+  };
+  const placed = placeThreads(patchFixture(TWO_HUNKS), [onOne, onThree]);
+  // Both start on hunks of a file that is on screen, which is what makes them invisible later.
+  assert.equal(placed.elsewhere.length, 0);
+
+  const narrowed = narrowToHunk(placed, commentKey("x.ts", 0));
+  assert.deepEqual([...narrowed.atHunk.keys()], [commentKey("x.ts", 0)]);
+  assert.deepEqual(
+    narrowed.elsewhere.map((t) => t.id),
+    ["t2"],
+    "the remark on the hunk not being shown is listed, never dropped",
+  );
+});
+
+// Nothing to move is not a reason to rebuild the buckets.
+test("narrowing keeps the placement untouched when every remark is on the shown hunk", () => {
+  const placed = placeThreads(patchFixture(TWO_HUNKS), [
+    { id: "t1", path: "x.ts", line: 3, hunk: 0, author: "priya", body: "here" },
+  ]);
+  assert.equal(narrowToHunk(placed, commentKey("x.ts", 0)), placed);
 });
