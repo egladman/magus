@@ -226,6 +226,40 @@ func ReadStates(cacheDir string, paths []string, digestOf func(path string) stri
 	return out, nil
 }
 
+// ReviewedAt reports the revision a reader last got through for these paths, and how many of them
+// it covers.
+//
+// It is what makes a second pass over a colleague's branch cost only the second pass. Without it a
+// reviewer who asked for changes re-reads the whole change when the author pushes, because nothing
+// distinguishes what moved from what they already weighed - which is exhausting, and is the reason
+// people rubber-stamp a re-review.
+//
+// THE OLDEST revision wins where receipts disagree, which happens when somebody acked
+// incrementally across several pushes. Conservative on purpose: a newer checkpoint would hide the
+// changes to whichever file was read earliest. Re-showing something already read costs a moment,
+// and hiding something never read is the failure this whole surface exists to prevent - the same
+// bias Reviewable states for the same reason.
+//
+// A zero checkpoint means no receipt for these paths names a revision: nobody has reviewed them, or
+// the reviewing was done against a working tree, which has no revision to name. Both are "there is
+// no earlier pass to subtract", never "nothing changed".
+func (s Store) ReviewedAt(paths []string) (types.VCSCheckpoint, int) {
+	var at types.VCSCheckpoint
+	var oldest time.Time
+	covered := 0
+	for _, p := range paths {
+		r, ok := s[p]
+		if !ok || r.Source.Revision == "" {
+			continue
+		}
+		covered++
+		if at.Revision == "" || r.At.Before(oldest) {
+			at, oldest = r.Source, r.At
+		}
+	}
+	return at, covered
+}
+
 // DigestFile fingerprints a file's current content, BYTE FOR BYTE.
 //
 // Deliberately not the notes store's Digest, which normalizes whitespace away. The two

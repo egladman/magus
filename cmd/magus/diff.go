@@ -464,8 +464,49 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		}
 		return nil
 	}
+	hintSinceLastReview(os.Stderr, m.CacheDir(), rev, src)
 	hintReviewPrompt(os.Stderr, rev, rf)
 	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
+}
+
+// hintSinceLastReview tells a reader who has been here before what they can skip.
+//
+// The exhausting part of a second pass is not the reading, it is that nothing separates what moved
+// from what you already weighed - so you re-read the whole change, find the same things, and learn
+// to rubber-stamp the next one. Every review tool that solved this did it the same way, by naming
+// the revision you last got through and diffing from there; the one everybody uses did not, which
+// is why the habit of re-reading everything feels normal.
+//
+// It NAMES the command rather than narrowing the changeset itself. Silently showing a subset of
+// what was asked for would be the one failure this surface cannot afford - a reader who was shown
+// less than they asked for, and not told, concludes they have seen a file they have not.
+//
+// Silent unless there is a genuine earlier pass to subtract: no receipts, receipts from a
+// working-tree review that names no revision, or an earlier pass at the revision already in front
+// of them all print nothing.
+func hintSinceLastReview(w io.Writer, cacheDir string, rev types.Diff, src diffInput) {
+	if !interactive.HintsEnabled() || src.kind != inputRevRange {
+		return
+	}
+	store, err := review.Load(cacheDir)
+	if err != nil {
+		return
+	}
+	at, covered := store.ReviewedAt(diffPaths(rev))
+	if covered == 0 || at.Revision == src.base {
+		return
+	}
+	interactive.Emit(w, fmt.Sprintf(
+		"you last reviewed %d of these %d files at %s: `magus diff --rev %s...%s` shows only what changed since",
+		covered, len(rev.Files), short(at.Revision), at.Revision, src.head))
+}
+
+// short abbreviates a revision for a message a person reads, keeping the full one for the command.
+func short(rev string) string {
+	if len(rev) <= 12 {
+		return rev
+	}
+	return rev[:12]
 }
 
 // promptHintFiles is the changeset size above which reading alone stops being the whole job. Set

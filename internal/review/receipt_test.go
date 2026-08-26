@@ -165,3 +165,38 @@ func TestRecordReplacesAnEarlierReasonWhenGivenOne(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "read it properly", s["a.go"].Reason)
 }
+
+func TestReviewedAt(t *testing.T) {
+	dir := t.TempDir()
+	early := time.Now().Add(-2 * time.Hour)
+	late := time.Now()
+	require.NoError(t, Record(dir, []Receipt{
+		{Path: "a.go", Digest: "a1", At: late, Source: types.VCSCheckpoint{Revision: "rev-new", VCS: "git"}},
+		{Path: "b.go", Digest: "b1", At: early, Source: types.VCSCheckpoint{Revision: "rev-old", VCS: "git"}},
+		// A working-tree receipt names no revision and cannot answer the question.
+		{Path: "c.go", Digest: "c1", At: late},
+	}))
+	s, err := Load(dir)
+	require.NoError(t, err)
+
+	t.Run("the oldest pass wins, so nothing read earlier is hidden", func(t *testing.T) {
+		at, covered := s.ReviewedAt([]string{"a.go", "b.go", "c.go"})
+
+		assert.Equal(t, "rev-old", at.Revision)
+		assert.Equal(t, 2, covered, "c.go carries no revision and is not covered")
+	})
+
+	t.Run("paths nobody reviewed have no earlier pass to subtract", func(t *testing.T) {
+		at, covered := s.ReviewedAt([]string{"never.go"})
+
+		assert.Zero(t, at)
+		assert.Zero(t, covered)
+	})
+
+	t.Run("a working-tree-only review names no revision", func(t *testing.T) {
+		at, covered := s.ReviewedAt([]string{"c.go"})
+
+		assert.Zero(t, at, "a working tree has no revision to diff from")
+		assert.Zero(t, covered)
+	})
+}
