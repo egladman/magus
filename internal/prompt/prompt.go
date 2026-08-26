@@ -116,18 +116,6 @@ func (b *Builder) Because(lines ...string) *Builder {
 	return b.Note(lines...)
 }
 
-// Only adds content in variant v and nothing otherwise. Two calls with the two variants are the
-// builder's form of a short-or-long swap: the same fact, worded for the length.
-func (b *Builder) Only(v Variant, lines ...string) *Builder {
-	if b.variant != v {
-		return b
-	}
-	return b.Text(lines...)
-}
-
-// Variant reports which form is rendering, for a caller assembling items rather than prose.
-func (b *Builder) Variant() Variant { return b.variant }
-
 // Skill points the reader at a skill they already have, by NAME, saying what it is for.
 //
 // Referencing rather than restating is the rule this method exists to make convenient. The skill

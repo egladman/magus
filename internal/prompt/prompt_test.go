@@ -124,22 +124,6 @@ func TestBecauseAloneCannotConjureASection(t *testing.T) {
 	assert.NotContains(t, out, "Collisions")
 }
 
-// TestOnlySwapsWordingPerVariant is the builder's form of the skills' short-or-long swap: one
-// fact, worded for the length, never both at once.
-func TestOnlySwapsWordingPerVariant(t *testing.T) {
-	build := func(v Variant) string {
-		return New("T", v).
-			Section("Scope").
-			Only(Short, "3 projects rebuild.").
-			Only(Long, "3 projects rebuild, which is the reverse closure rather than the edited set.").
-			String()
-	}
-
-	assert.Contains(t, build(Short), "3 projects rebuild.")
-	assert.NotContains(t, build(Short), "reverse closure")
-	assert.Contains(t, build(Long), "reverse closure")
-}
-
 // TestProseAndListsAreSeparated. Markdown needs a blank line between a paragraph and a list, and
 // a caller writing one chain should not have to remember where those go. Without it the list
 // renders glued to the sentence above it.
