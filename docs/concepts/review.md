@@ -196,9 +196,17 @@ A file heading says **also on 2 branches** when other branches are changing the 
 a report, not a prediction: two branches touching one file is ordinary and usually fine, and
 "conflict likely" would be magus guessing at an outcome it cannot see.
 
-magus reads what you have already fetched and never fetches to answer this, so the branch names
-in the tooltip are true **as of your last fetch** and no fresher. Nothing here goes to the network
-on its own.
+Both your own branches and the remote-tracking copies of everyone else's. Local ones matter most
+where they are least visible: several agents in several worktrees of one repository are all on
+branches nobody has pushed, and a lookup that read only remote-tracking refs answered nothing
+there - which reads exactly like nothing competing.
+
+magus never fetches to answer this, so the two kinds are as fresh as different moments and the
+tooltip says which: a local branch is **here now**, and a remote-tracking one is true **as of your
+last fetch** and no fresher. Nothing here goes to the network on its own.
+
+A branch and its remote-tracking copy are one line of work under two names, so they are reported
+once, under the local side.
 
 A backend that cannot answer says nothing at all, which is deliberately different from saying
 nothing competes - those are different facts, and only one of them is reassuring.

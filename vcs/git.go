@@ -125,9 +125,12 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 	// stale remotes silently returned fewer branches than asked with no sign the list was short.
 	// Listing refs is one fork whatever the count; only the per-branch diffs are paid per entry,
 	// and the loop stops at limit.
+	// Both ref spaces, and the FULL refname rather than the short one, because the short form
+	// throws away the single fact the caller needs to caption the answer: whether this branch is
+	// here or is a copy of somebody else's as of the last fetch.
 	refs, err := vcsOutput(ctx, dir, "git", "for-each-ref",
 		"--sort=-committerdate", "--count", strconv.Itoa(limit*2+8),
-		"--format=%(refname:short)", "refs/remotes/")
+		"--format=%(refname)", "refs/heads/", "refs/remotes/")
 	if err != nil {
 		return nil, fmt.Errorf("git for-each-ref: %w", err)
 	}
@@ -136,49 +139,88 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 		return nil, fmt.Errorf("git rev-parse: %w", err)
 	}
 	out := make([]types.BranchChange, 0, limit)
-	for _, ref := range splitLines([]byte(refs)) {
-		if len(out) == limit {
-			break
+	// A local branch and its remote-tracking copy are ONE line of work under two names, and
+	// reporting both would tell the reader two people are editing a file when one is. Local wins:
+	// it is the current answer, where the tracking copy is only as new as the last fetch. Sorted
+	// by committerdate, so the copy git listed first is not reliably the fresher one - the name
+	// decides, not the order.
+	seen := make(map[string]bool, limit)
+	for _, pass := range []bool{true, false} {
+		for _, ref := range splitLines([]byte(refs)) {
+			if len(out) == limit {
+				break
+			}
+			local := strings.HasPrefix(ref, headsPrefix)
+			if local != pass {
+				continue // locals first, so a tracking copy of one already taken is skipped below
+			}
+			short, ok := shortBranchName(ref)
+			if !ok || seen[short] {
+				continue
+			}
+			// <remote>/HEAD is a symbolic pointer at the default branch, so it duplicates
+			// whatever it aims at and names no line of work of its own.
+			if short == "HEAD" {
+				continue
+			}
+			// A detached HEAD reports the literal "HEAD" here and matches nothing, which is
+			// right: there is no branch of the reader's own to exclude.
+			if short == strings.TrimSpace(mine) {
+				continue
+			}
+			if err := checkRef(ref); err != nil {
+				// A ref git itself listed, so this is not the caller-supplied case checkRef
+				// exists for - but a name that cannot be passed safely is skipped rather
+				// than trusted.
+				continue
+			}
+			// core.quotePath=false for the reason ChangedFiles sets it: a non-ASCII path
+			// otherwise arrives C-quoted, matches no source glob, and the overlap silently
+			// never reports.
+			paths, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false",
+				"diff", "--name-only", base+"..."+ref)
+			if err != nil {
+				// One unreachable branch is not a reason to report none: a ref can vanish
+				// between the listing and the diff, and the rest of the answer is still true.
+				continue
+			}
+			lines := splitLines([]byte(paths))
+			if len(lines) == 0 {
+				continue
+			}
+			seen[short] = true
+			out = append(out, types.BranchChange{Ref: short, Paths: lines, Local: local})
 		}
-		// The remote is whatever it is called. Trimming the literal "origin/" was wrong in the
-		// ordinary fork setup: an `upstream/feat/x` kept its prefix, so it never matched the
-		// reader's own branch name and came back as somebody else competing on the very files
-		// they were editing.
-		remote, short, hasRemote := strings.Cut(ref, "/")
-		if !hasRemote || remote == "" || short == "" {
-			continue
-		}
-		// <remote>/HEAD is a symbolic pointer at the default branch, so it duplicates whatever it
-		// aims at and names no line of work of its own.
-		if short == "HEAD" {
-			continue
-		}
-		// A detached HEAD reports the literal "HEAD" here and matches nothing, which is right:
-		// there is no branch of the reader's own to exclude.
-		if short == strings.TrimSpace(mine) {
-			continue
-		}
-		if err := checkRef(ref); err != nil {
-			// A ref git itself listed, so this is not the caller-supplied case checkRef exists
-			// for - but a name that cannot be passed safely is skipped rather than trusted.
-			continue
-		}
-		// core.quotePath=false for the reason ChangedFiles sets it: a non-ASCII path otherwise
-		// arrives C-quoted, matches no source glob, and the overlap silently never reports.
-		paths, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false",
-			"diff", "--name-only", base+"..."+ref)
-		if err != nil {
-			// One unreachable branch is not a reason to report none: a ref can vanish between
-			// the listing and the diff, and the rest of the answer is still true.
-			continue
-		}
-		lines := splitLines([]byte(paths))
-		if len(lines) == 0 {
-			continue
-		}
-		out = append(out, types.BranchChange{Ref: short, Paths: lines})
 	}
 	return out, nil
+}
+
+// headsPrefix and remotesPrefix are the two ref spaces BranchChanges reads.
+const (
+	headsPrefix   = "refs/heads/"
+	remotesPrefix = "refs/remotes/"
+)
+
+// shortBranchName reduces a full refname to the name a reader would use, and reports whether it
+// was a branch ref at all.
+//
+// The remote segment comes off, whatever it is called. Trimming the literal "origin/" was wrong in
+// the ordinary fork setup: an `upstream/feat/x` kept its prefix, so it never matched the reader's
+// own branch name and came back as somebody else competing on the very files they were editing.
+//
+// Dropping it is also what lets a local branch and its remote-tracking copy compare equal, which
+// is how BranchChanges tells one line of work under two names from two lines of work.
+func shortBranchName(ref string) (string, bool) {
+	switch {
+	case strings.HasPrefix(ref, headsPrefix):
+		name := strings.TrimPrefix(ref, headsPrefix)
+		return name, name != ""
+	case strings.HasPrefix(ref, remotesPrefix):
+		remote, name, ok := strings.Cut(strings.TrimPrefix(ref, remotesPrefix), "/")
+		return name, ok && remote != "" && name != ""
+	default:
+		return "", false
+	}
 }
 
 // RangeDiff returns the unified diff of what head added since it diverged from base.

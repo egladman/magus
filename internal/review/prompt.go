@@ -100,7 +100,7 @@ func Prompt(in PromptInput) string {
 		Items(in.Changeset.Notes, 0, "")
 
 	b.Section("Other branches changing these same files").
-		Note("As of the last fetch, and no fresher.").
+		Note("A local branch is current; one marked (as of your last fetch) is only that fresh.").
 		Because("A collision here is worth flagging before the merge finds it.").
 		// No command is named for the remainder, because none reports it. A pointer at something
 		// that does not answer the question is worse than admitting the list was cut.
@@ -157,7 +157,14 @@ func promptOverlap(rev types.Diff, branches []types.BranchChange) []string {
 	shared := overlapWith(rev, branches)
 	out := make([]string, 0, len(shared))
 	for _, c := range shared {
-		out = append(out, fmt.Sprintf("`%s`: %s", c.Ref, strings.Join(c.Paths, ", ")))
+		// The freshness is per branch now that local ones are scanned, and only the stale kind
+		// is marked: captioning every line would spend the reader's attention on the branches
+		// where there is nothing to doubt.
+		when := ""
+		if !c.Local {
+			when = " (as of your last fetch)"
+		}
+		out = append(out, fmt.Sprintf("`%s`%s: %s", c.Ref, when, strings.Join(c.Paths, ", ")))
 	}
 	return out
 }
@@ -182,7 +189,7 @@ func overlapWith(rev types.Diff, branches []types.BranchChange) []types.BranchCh
 			}
 		}
 		if len(shared) > 0 {
-			out = append(out, types.BranchChange{Ref: br.Ref, Paths: shared})
+			out = append(out, types.BranchChange{Ref: br.Ref, Paths: shared, Local: br.Local})
 		}
 	}
 	return out

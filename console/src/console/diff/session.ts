@@ -386,6 +386,11 @@ export async function reply(
 export interface BranchChange {
   readonly ref: string;
   readonly paths: readonly string[];
+  // local separates a branch in this repository from a remote-tracking copy of somebody else's.
+  // The two differ in what the answer is AS OF: a local branch is current, a tracking copy is
+  // exactly as fresh as the last fetch. Optional, so a daemon older than the field reads as
+  // remote-tracking - which is what every answer was before it existed.
+  readonly local?: boolean;
 }
 
 // fetchBranches asks which other branches are changing these files.

@@ -426,6 +426,13 @@ type BranchChange struct {
 	// "feat/audience", not "refs/remotes/origin/feat/audience".
 	Ref   string   `json:"ref"`
 	Paths []string `json:"paths"`
+	// Local reports whether Ref is a branch in this repository rather than a remote-tracking copy
+	// of somebody else's.
+	//
+	// It decides what the answer is AS OF, which the two kinds do not share: a local branch is
+	// current, and a remote-tracking one is exactly as fresh as the reader's last fetch. A surface
+	// that rendered both with one caption would be overstating half of them.
+	Local bool `json:"local,omitempty"`
 }
 
 // BranchChangeReporter is an optional capability for VCSDriver implementations that can report
@@ -439,9 +446,15 @@ type BranchChangeReporter interface {
 	// BranchChanges returns up to limit branches other than the current one, most recently
 	// updated first, each with the paths it changes relative to base.
 	//
-	// Remote-tracking refs only. It answers "what is somebody else doing", and it reads what is
-	// already fetched rather than fetching: the answer is as fresh as the reader's last fetch,
-	// which a caller has to say out loud rather than implying it is live.
+	// Local branches AND remote-tracking ones. Remote-tracking alone was the shape of the
+	// question when the other line of work belonged to a colleague, and it goes blind exactly
+	// where agents fan out: worktrees of one repository, on local branches nobody has pushed. A
+	// backend that answered about only half the branches that exist would leave the reader an
+	// empty list, and an empty list here reads as "nothing competes".
+	//
+	// It reads what the repository already has rather than fetching: a remote-tracking answer is
+	// as fresh as the reader's last fetch, which BranchChange.Local lets a caller say out loud
+	// instead of implying the whole answer is live.
 	//
 	// limit is the backend's to apply, not the caller's to trim afterwards, so a backend can push
 	// it down to the ref listing and never materialise a diff it was going to discard.

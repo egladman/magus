@@ -160,7 +160,7 @@ interface State {
   // branches maps a path to the other branches changing it, as of the reader's last fetch. Null
   // until the lookup lands, and null is not an empty map: one means "not asked yet or the backend
   // cannot say", the other would mean "asked, and nothing competes".
-  branches: Map<string, string[]> | null;
+  branches: Map<string, BranchChange[]> | null;
   // branchesUnsupported names the backend that cannot answer, empty when one did. It is what
   // keeps an empty map from reading as "nothing competes" on a backend that never looked.
   branchesUnsupported: string;
@@ -635,7 +635,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (file.additions > 0) el.append(label(`+${file.additions}`, "pf-m-green"));
     if (file.deletions > 0) el.append(label(`-${file.deletions}`, "pf-m-red"));
 
-    // Who else is editing this file. Reported, never predicted: two branches touching one file is
+    // branchTooltip names the branches and says WHEN each answer was true.
+  //
+  // Two captions rather than one, because the freshness differs and a single line would overstate
+  // half of them: nothing here fetches, so a remote-tracking answer is as old as the last fetch,
+  // while a local branch is simply current. Before local branches were scanned at all, every
+  // answer was the remote kind and one caption was honest.
+  const branchTooltip = (alsoOn: readonly BranchChange[]): string => {
+    const local = alsoOn.filter((b) => b.local).map((b) => b.ref);
+    const remote = alsoOn.filter((b) => !b.local).map((b) => b.ref);
+    const parts: string[] = [];
+    if (local.length > 0) parts.push(`${local.join(", ")} - here now`);
+    if (remote.length > 0) parts.push(`${remote.join(", ")} - as of your last fetch`);
+    return parts.join("; ");
+  };
+
+  // Who else is editing this file. Reported, never predicted: two branches touching one file is
     // ordinary and usually fine, so this says what is true and leaves the conclusion alone -
     // "conflict likely" would be magus guessing at an outcome it cannot see.
     const alsoOn = state.branches?.get(file.path) ?? [];
@@ -644,9 +659,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         label(
           `also on ${alsoOn.length} ${alsoOn.length === 1 ? "branch" : "branches"}`,
           "pf-m-orange",
-          // The branches by name, and WHEN this was true: nothing here fetches, so the answer is
-          // as fresh as the reader's last fetch and no fresher.
-          `${alsoOn.join(", ")} - as of your last fetch`,
+          branchTooltip(alsoOn),
         ),
       );
     }
@@ -2227,7 +2240,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     state.branches = new Map();
     for (const b of branches) {
       for (const p of b.paths) {
-        state.branches.set(p, [...(state.branches.get(p) ?? []), b.ref]);
+        state.branches.set(p, [...(state.branches.get(p) ?? []), b]);
       }
     }
     renderSidebar();
