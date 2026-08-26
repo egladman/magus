@@ -76,3 +76,20 @@ func TestConsoleURLsDegradeToEmpty(t *testing.T) {
 	assert.Equal(t, "", consoleWatchURL())
 	assert.Equal(t, "", consoleDiffURL())
 }
+
+// The message exists because "already running" answered a question nobody asked. A second
+// worktree's `server start` returns 0 having loaded nothing from that tree, and the console then
+// shows the tree the daemon was started in - which reads as success.
+func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
+	st := &proc.StatusReply{Workspaces: []proc.Workspace{
+		{Root: "/repo/worktrees/b"},
+		{Root: "/repo"},
+	}}
+
+	// Sorted, so two runs of the same daemon do not print the list two ways.
+	assert.Equal(t, ", serving /repo, /repo/worktrees/b", servingSuffix(st))
+
+	// A daemon that has loaded nothing yet says nothing rather than "serving " with an empty
+	// list, which would read as a daemon that is serving something unnameable.
+	assert.Empty(t, servingSuffix(&proc.StatusReply{}))
+}

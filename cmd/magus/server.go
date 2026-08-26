@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -169,7 +170,8 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 	// Idempotent start: a daemon already accepting on the socket means there is nothing to do.
 	if proc.SocketLive(ctx, addr) {
 		if st, err := proc.QueryStatus(ctx, addr); err == nil && st.ParentPID != 0 {
-			fmt.Fprintf(os.Stderr, "magus: daemon already running (pid %d) on %s\n", st.ParentPID, addr)
+			fmt.Fprintf(os.Stderr, "magus: daemon already running (pid %d) on %s%s\n",
+				st.ParentPID, addr, servingSuffix(st))
 		} else {
 			fmt.Fprintf(os.Stderr, "magus: daemon already running on %s\n", addr)
 		}
@@ -194,6 +196,29 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 // (so any --daemon-address the user set is honored) and marks the child via daemonDetachEnv
 // so it runs the daemon rather than backgrounding again. The child is fully detached (its own
 // session on unix) and Release()d so this process never waits on it.
+// servingSuffix names the workspaces a running daemon has loaded, or "" when it has none yet.
+//
+// One socket per user serves every workspace, so "already running" answered the question the
+// caller asked and not the one they meant. Starting the daemon from a second worktree returns 0
+// with nothing loaded from THIS tree, and the console then shows the tree it was started in -
+// which reads as the command having worked. The roots are already on the status wire; the message
+// simply never said them.
+//
+// The workspace this call was made from is not marked, deliberately: a daemon loads a workspace
+// lazily on first use, so "not listed" means "not loaded yet" far more often than it means
+// "wrong daemon", and flagging it would raise an alarm about the ordinary case.
+func servingSuffix(st *proc.StatusReply) string {
+	if st == nil || len(st.Workspaces) == 0 {
+		return ""
+	}
+	roots := make([]string, 0, len(st.Workspaces))
+	for _, w := range st.Workspaces {
+		roots = append(roots, w.Root)
+	}
+	slices.Sort(roots)
+	return ", serving " + strings.Join(roots, ", ")
+}
+
 func spawnDetachedDaemon() (pid int, logPath string, err error) {
 	exe, err := os.Executable()
 	if err != nil {
