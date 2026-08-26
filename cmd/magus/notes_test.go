@@ -161,3 +161,20 @@ func TestCaptureWithNoThreadsIsStillATranscript(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, n.Body, "mine")
 }
+
+func TestFirstNonEmptyTreatsBlankAsEmpty(t *testing.T) {
+	assert.Equal(t, "a", firstNonEmpty("a", "b"))
+	assert.Equal(t, "b", firstNonEmpty("", "b"))
+	assert.Equal(t, "b", firstNonEmpty("   \n", "b"))
+	assert.Equal(t, "", firstNonEmpty("", ""))
+}
+
+func TestRelativeToRootKeepsAnOutsidePathAbsolute(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repos", "magus")
+
+	assert.Equal(t, "cmd/magus/diff.go", relativeToRoot(root, filepath.Join(root, "cmd", "magus", "diff.go")))
+	assert.Equal(t, ".", relativeToRoot(root, root))
+
+	outside := filepath.Join(string(filepath.Separator), "repos", "other", "x.go")
+	assert.Equal(t, outside, relativeToRoot(root, outside))
+}

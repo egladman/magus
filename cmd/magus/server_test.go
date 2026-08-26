@@ -49,3 +49,30 @@ func TestServerStopNoDaemonExitsNonzero(t *testing.T) {
 	require.ErrorAs(t, err, &silent)
 	assert.NotZero(t, silent.exitCode, "stopping nothing must exit non-zero")
 }
+
+func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {
+	assert.True(t, isServerStartHelp([]string{"start", "-h"}))
+	assert.True(t, isServerStartHelp([]string{"start", "--foreground", "--help"}))
+	assert.True(t, isServerStartHelp([]string{"start", "help"}))
+	assert.False(t, isServerStartHelp([]string{"start"}))
+	assert.False(t, isServerStartHelp([]string{"start", "--foreground"}))
+	assert.False(t, isServerStartHelp([]string{"help"}), "the subcommand itself is not a help flag")
+}
+
+func TestWantsForeground(t *testing.T) {
+	assert.True(t, wantsForeground([]string{"start", "--foreground"}))
+	assert.True(t, wantsForeground([]string{"start", "-foreground"}))
+	// A pre-parse scanner takes only the bare spellings; an =value form is not a bool.
+	assert.False(t, wantsForeground([]string{"start", "--foreground=true"}))
+	assert.False(t, wantsForeground([]string{"start"}))
+}
+
+func TestConsoleURLsDegradeToEmpty(t *testing.T) {
+	prev := globalCfg.Console.Enabled
+	t.Cleanup(func() { globalCfg.Console.Enabled = prev })
+
+	off := false
+	globalCfg.Console.Enabled = &off
+	assert.Equal(t, "", consoleWatchURL())
+	assert.Equal(t, "", consoleDiffURL())
+}
