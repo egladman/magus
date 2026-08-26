@@ -79,6 +79,7 @@ func buildSchedule(m config.Maintenance) []scheduledJob {
 	add(jobs.NameRotateActivities, m.RotateActivities)
 	add(jobs.NameRotateLogs, m.RotateLogs)
 	add(jobs.NameSyncGraph, m.SyncGraph)
+	add(jobs.NameCheckReview, m.CheckReview)
 	return out
 }
 

@@ -14,6 +14,7 @@ config console.url
 config daemon.address
 config daemon.enabled
 config daemon.idle_ttl
+config daemon.maintenance.check_review
 config daemon.maintenance.rotate_activities
 config daemon.maintenance.rotate_logs
 config daemon.maintenance.sync_graph

@@ -43,3 +43,11 @@ test("a review with no repo is offered without one", () => {
   const said = mergedNotice({ state: "merged" }, 2);
   assert.match(said, /This review merged, and/);
 });
+
+// The counts are parsed out of a trail preview, so a malformed one yields NaN - and `NaN <= 0` is
+// FALSE, so the obvious guard let it through and rang the bell with "NaN new remarks are waiting
+// for you". A bell-tier notification that reads NaN spends the notification system's credibility.
+test("NaN is not a count", () => {
+  assert.equal(saidNotice("acme/acme", Number.NaN), "");
+  assert.equal(mergedNotice({ repo: "acme/acme", state: "merged" }, Number.NaN), "");
+});

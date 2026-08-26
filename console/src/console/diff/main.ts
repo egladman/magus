@@ -71,6 +71,7 @@ import {
   type DiffAnnotation,
   type DiffTouch,
   type ReviewInfo,
+  type ReviewThread,
 } from "./session";
 import { setMarkdown } from "./markdown";
 import { mergedNotice } from "../../lib/review-notice";
@@ -1189,6 +1190,25 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return width;
   };
 
+  // offScreenToElsewhere moves every thread the focused stream will not render into the elsewhere
+  // listing, so narrowing the view never makes a colleague's remark vanish.
+  //
+  // The stream emits exactly one hunk in focus mode. placeThreads buckets against the FILE, so a
+  // remark on hunk 3 of the file being read at hunk 1 lands in atHunk under a key buildRows never
+  // emits: no row, no chip, no overview entry. "Your colleague said nothing" is the one thing this
+  // surface must never say by accident, and that is what the unfixed version said.
+  const offScreenToElsewhere = (placed: PlacedThreads): PlacedThreads => {
+    const keep = state.focusAt ? commentKey(state.focusAt.path, state.focusAt.index) : "";
+    const atHunk = new Map<string, ReviewThread[]>();
+    const spilled: ReviewThread[] = [];
+    for (const [key, threads] of placed.atHunk) {
+      if (key === keep) atHunk.set(key, threads);
+      else spilled.push(...threads);
+    }
+    // A thread under the file heading stays there: the heading IS on screen in focus mode.
+    return { atHunk, atFile: placed.atFile, elsewhere: [...placed.elsewhere, ...spilled] };
+  };
+
   // focusSlice narrows the file list to the one hunk focus mode is showing.
   //
   // A slice, not a filter of the rows: buildRows takes files, so everything downstream - the
@@ -1232,6 +1252,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // group or switching to split changes which hunk a line sits in, and a placement computed
     // once would leave a colleague's remark pinned to whatever used to be there.
     state.threads = state.review ? placeThreads(state.files, state.review.threads) : null;
+    // Focus mode renders ONE hunk, so a remark on any other hunk of the same file is bucketed
+    // under a key nothing emits - rendered nowhere, counted nowhere, and absent from the
+    // elsewhere listing that exists to guarantee no remark is ever silently dropped. Moving them
+    // to elsewhere is what keeps that guarantee true when the stream narrows.
+    if (state.focus && state.threads) state.threads = offScreenToElsewhere(state.threads);
     state.rows = buildRows(
       state.files,
       state.mode,

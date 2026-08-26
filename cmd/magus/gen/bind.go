@@ -44,6 +44,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.DurationVar(&cfg.Daemon.Maintenance.RotateActivities, "daemon-maintenance-rotate-activities", cfg.Daemon.Maintenance.RotateActivities, "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES: RotateActivities is how often the daemon trims the activity trail.")
 	fs.DurationVar(&cfg.Daemon.Maintenance.RotateLogs, "daemon-maintenance-rotate-logs", cfg.Daemon.Maintenance.RotateLogs, "MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS")
 	fs.DurationVar(&cfg.Daemon.Maintenance.SyncGraph, "daemon-maintenance-sync-graph", cfg.Daemon.Maintenance.SyncGraph, "MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH")
+	fs.DurationVar(&cfg.Daemon.Maintenance.CheckReview, "daemon-maintenance-check-review", cfg.Daemon.Maintenance.CheckReview, "MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW: CheckReview notices a merge or a new remark on a review this tree took part in. The only")
 	fs.StringVar(&cfg.VCS.Name, "vcs-name", cfg.VCS.Name, "MAGUS_VCS_NAME")
 	fs.StringVar(&cfg.VCS.BaseRef, "vcs-base-ref", cfg.VCS.BaseRef, "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).")
 	fs.StringVar(&cfg.MCP.Address, "mcp-address", cfg.MCP.Address, "MAGUS_MCP_ADDRESS")

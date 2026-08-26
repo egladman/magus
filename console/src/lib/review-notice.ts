@@ -13,7 +13,10 @@
 // admission doctrine in notifications.ts, which was widened in the same change to say so rather than
 // being quietly broken.
 export function saidNotice(repo: string, count: number): string {
-  if (count <= 0) return "";
+  // `>= 1` rather than `<= 0`, because the count is parsed out of a trail preview and a malformed
+  // one yields NaN - and `NaN <= 0` is FALSE, so the obvious guard lets it straight through and
+  // rings the bell with "NaN new remarks are waiting for you".
+  if (!(count >= 1)) return "";
   const where = repo ? ` on ${repo}` : "";
   return count === 1
     ? `A new remark${where} is waiting for you.`
@@ -39,7 +42,8 @@ export interface MergedReview {
 // there is no author field to spoof because authorship rides version control, and a console that
 // wrote one would be the first thing to break that.
 export function mergedNotice(review: MergedReview | null, said: number): string {
-  if (!review || review.state !== "merged" || said <= 0) return "";
+  // `>= 1` for the reason saidNotice gives: NaN survives `<= 0`.
+  if (!review || review.state !== "merged" || !(said >= 1)) return "";
   const where = review.repo ? ` on ${review.repo}` : "";
   return (
     `This review merged${where}, and its ${said} ${said === 1 ? "remark" : "remarks"} live only on the host. ` +

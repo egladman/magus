@@ -49,6 +49,12 @@ type Store struct {
 	viewedPath string
 	// draftsPath is where unpublished human comments are persisted, empty to disable.
 	draftsPath string
+	// seenPath is where the seen-thread watermark is persisted, empty to disable.
+	//
+	// It has to outlive the process for the same reason the digest set does: a watermark that
+	// resets on a daemon restart marks the whole conversation new again the next morning, which
+	// is the badge-always-on failure the mark exists to avoid.
+	seenPath string
 	// hunks maps a root to the file each of its hunk digests belongs to, and to how many
 	// hunks each file has. It is what lets MarkViewed answer "did that finish a file", which
 	// a bare digest cannot.
@@ -77,6 +83,7 @@ func NewStore(stateDir string) *Store {
 	if stateDir != "" {
 		s.viewedPath = filepath.Join(stateDir, "review", "viewed.json")
 		s.draftsPath = filepath.Join(stateDir, "review", "drafts.json")
+		s.seenPath = filepath.Join(stateDir, "review", "seen-threads.json")
 	}
 	return s
 }
@@ -116,6 +123,8 @@ func (s *Store) Attach(root string, base string, rev types.Diff, asOf string) *t
 			Base:   base,
 			Cursor: types.DiffCursor{Hunk: -1},
 			Viewed: s.loadViewed(),
+			// Restored, or every thread reads as new again after a restart.
+			SeenThreads: s.loadSeen(),
 			// Restored whole, including comments whose anchor is no longer in the changeset:
 			// the draft is the reader's work either way, and Anchor already carries what is
 			// needed to say the code under it moved.
@@ -210,13 +219,19 @@ func (s *Store) MarkThreadsSeen(root string, ids []string) *types.DiffSession {
 	if len(ids) == 0 {
 		return s.Get(root)
 	}
-	return s.mutate(root, func(sess *types.DiffSession) {
+	var persist []string
+	sess := s.mutate(root, func(sess *types.DiffSession) {
 		for _, id := range ids {
 			if id != "" && !slices.Contains(sess.SeenThreads, id) {
 				sess.SeenThreads = append(sess.SeenThreads, id)
 			}
 		}
+		persist = slices.Clone(sess.SeenThreads)
 	})
+	// Persisted like the digest set beside it: a watermark that lived only in memory would reset
+	// on every daemon restart and mark the whole conversation new again the next morning.
+	s.saveSeen(persist)
+	return sess
 }
 
 // MarkViewed adds or removes a hunk digest from the human's progress set and persists it.
@@ -510,4 +525,55 @@ func (s *Store) saveViewed(digests []string) {
 		return
 	}
 	_ = os.Rename(tmp, s.viewedPath)
+}
+
+// LoadDrafts reads the persisted unsent remarks WITHOUT a session, for the same reason
+// LoadSeenThreads exists: a job in its own process has no session to read.
+func (s *Store) LoadDrafts() []types.DiffComment { return s.loadDrafts() }
+
+// LoadSeenThreads reads the persisted seen-thread watermark WITHOUT a session.
+//
+// Exported because the check-review job runs in its own process: it has no attached session to
+// read, and the watermark is the only thing it needs. Reading it here rather than reconstructing
+// a session is also what keeps the job from looking like a reader who opened a review.
+func (s *Store) LoadSeenThreads() []string { return s.loadSeen() }
+
+// loadSeen reads the persisted watermark. Every failure yields an empty set, for the reason
+// loadViewed does: a corrupt progress file must not stop a review from opening.
+//
+// An empty set means "nothing has been read here", which is also what a workspace where nobody
+// ever opened a review looks like. That is the same answer for both, and the caller wanting to
+// tell them apart has to ask something else.
+func (s *Store) loadSeen() []string {
+	if s.seenPath == "" {
+		return nil
+	}
+	b, err := os.ReadFile(s.seenPath)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+// saveSeen persists the watermark, best-effort for the same reason saveViewed is.
+func (s *Store) saveSeen(ids []string) {
+	if s.seenPath == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(s.seenPath), 0o755); err != nil {
+		return
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return
+	}
+	tmp := s.seenPath + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, s.seenPath)
 }

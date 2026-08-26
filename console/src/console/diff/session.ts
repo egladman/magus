@@ -374,7 +374,11 @@ export async function fetchBranches(host: string, signal: AbortSignal): Promise<
       signal,
     });
     if (!res.ok) return [];
-    return ((await res.json()) as { branches?: BranchChange[] }).branches ?? [];
+    const got = ((await res.json()) as { branches?: BranchChange[] }).branches ?? [];
+    // Shape-checked, not just cast. `Paths []string` on the Go side has no omitempty, so a nil
+    // slice marshals to `null` - and iterating that throws inside a `void`-ed caller, where the
+    // rejection is swallowed and the feature simply never appears with nothing logged anywhere.
+    return got.filter((b) => typeof b?.ref === "string" && Array.isArray(b.paths));
   } catch {
     return [];
   }

@@ -380,6 +380,10 @@ type Maintenance struct {
 	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 1h (its only bound)
 	RotateLogs       time.Duration `json:"rotate_logs" yaml:"rotate_logs"`             // trim the run-log journals; default 7d (their only bound, so weekly)
 	SyncGraph        time.Duration `json:"sync_graph" yaml:"sync_graph"`               // reconcile the graph; default 6h (a safety net behind the VCS hook)
+	// CheckReview notices a merge or a new remark on a review this tree took part in. The only
+	// scheduled job that leaves the machine, so its default is the longest here: a pull request
+	// merges once, and a remark waiting fifteen minutes costs nobody anything.
+	CheckReview time.Duration `json:"check_review" yaml:"check_review"`
 }
 
 // VCS controls VCS-driven affected detection.
@@ -628,6 +632,7 @@ func Defaults() Config {
 				RotateActivities: time.Hour,          // the trail's only bound; cheap to run often (one stat when small)
 				RotateLogs:       7 * 24 * time.Hour, // run-logs have no other bound, so trim weekly
 				SyncGraph:        6 * time.Hour,      // safety net behind the VCS refresh hook
+				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
 		HistoryPath: DefaultHistoryPath(),

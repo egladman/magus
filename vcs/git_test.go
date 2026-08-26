@@ -746,3 +746,27 @@ func TestBranchChangesHonorsTheLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, none, "a limit of zero asks for nothing and must fork nothing")
 }
+
+// The remote is not always called "origin". Trimming that literal prefix left an `upstream/feat/x`
+// with its prefix intact, so it never matched the reader's own branch name and was reported as
+// somebody else editing the exact files the reader had open - the worst possible false alarm from
+// a feature whose whole job is warning about collisions.
+func TestBranchChangesExcludesTheReadersBranchOnAnyRemote(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n"})
+	gitRun(t, repo, "branch", "-M", "main")
+
+	gitRun(t, repo, "checkout", "-q", "-b", "mine", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // mine\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "mine")
+	// The same branch on two remotes, which is what a fork checkout looks like.
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/mine", "mine")
+	gitRun(t, repo, "update-ref", "refs/remotes/upstream/mine", "mine")
+
+	got, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 10)
+	require.NoError(t, err)
+	for _, b := range got {
+		assert.NotEqual(t, "mine", b.Ref, "the reader's own branch is not competition, on any remote")
+	}
+	assert.Empty(t, got)
+}

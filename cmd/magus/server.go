@@ -639,8 +639,15 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("server %s: %w", jobs.NameCheckReview, err)
 	}
-	sess := diff.NewStore(m.CacheDir()).Get(m.Root())
-	if sess == nil {
+	// The PERSISTED watermark, not a session. This runs in its own process, so the store's
+	// in-memory session map is empty by construction - reading it was a gate that could never
+	// open, and the job was a guaranteed no-op until this was fixed.
+	store := diff.NewStore(m.CacheDir())
+	seen := store.LoadSeenThreads()
+	drafts := store.LoadDrafts()
+	if len(seen) == 0 && len(drafts) == 0 {
+		// Nothing persisted means nobody has read or drafted anything in a review here, which is
+		// the opt-in: no forge is asked about a workspace whose reviews were never opened.
 		return nil
 	}
 	from := m.ReviewOrigin(ctx)
@@ -655,7 +662,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
 	// The watermark is the READER's - see DiffSession.SeenThreads for why it cannot be the job's.
-	if unseen := sess.UnseenThreads(threads); len(unseen) > 0 {
+	if unseen := (types.DiffSession{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
@@ -672,10 +679,15 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	if !at.Merged() {
 		return nil
 	}
-	said := len(threads) + len(sess.Comments)
+	said := len(threads) + len(drafts)
 	if said == 0 {
 		// Merged with nothing said on it. There is no conversation to keep, and an event here
 		// would train the reader to ignore the ones that matter.
+		//
+		// A forge that could not be reached also lands here, and the two are NOT the same fact.
+		// The reader is told nothing either way, which is the safe direction: claiming "nothing
+		// was said" about a conversation magus could not read would be worse than silence. Read
+		// the threads error rather than guessing if that ever needs distinguishing.
 		return nil
 	}
 	trail.Append(ctx, m.CacheDir(), trail.Event{

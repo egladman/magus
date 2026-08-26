@@ -136,12 +136,21 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 		if len(out) == limit {
 			break
 		}
-		// origin/HEAD is a symbolic pointer at the default branch, so it duplicates whatever it
-		// aims at and names no line of work of its own.
-		short := strings.TrimPrefix(ref, "origin/")
-		if _, _, hasRemote := strings.Cut(ref, "/"); !hasRemote || strings.HasSuffix(ref, "/HEAD") {
+		// The remote is whatever it is called. Trimming the literal "origin/" was wrong in the
+		// ordinary fork setup: an `upstream/feat/x` kept its prefix, so it never matched the
+		// reader's own branch name and came back as somebody else competing on the very files
+		// they were editing.
+		remote, short, hasRemote := strings.Cut(ref, "/")
+		if !hasRemote || remote == "" || short == "" {
 			continue
 		}
+		// <remote>/HEAD is a symbolic pointer at the default branch, so it duplicates whatever it
+		// aims at and names no line of work of its own.
+		if short == "HEAD" {
+			continue
+		}
+		// A detached HEAD reports the literal "HEAD" here and matches nothing, which is right:
+		// there is no branch of the reader's own to exclude.
 		if short == strings.TrimSpace(mine) {
 			continue
 		}
