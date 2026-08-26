@@ -119,10 +119,14 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
-	// One over the cap, because the reader's OWN branch is usually among the most recent and is
-	// dropped below - asking for exactly limit would quietly return one fewer than asked.
+	// Deliberately over-asked. FOUR kinds of ref are dropped below - <remote>/HEAD, the reader's
+	// own branch, one whose diff fails, and one whose diff is empty (which always includes base
+	// itself) - and a budget of limit+1 covered exactly one of them, so a repository with a few
+	// stale remotes silently returned fewer branches than asked with no sign the list was short.
+	// Listing refs is one fork whatever the count; only the per-branch diffs are paid per entry,
+	// and the loop stops at limit.
 	refs, err := vcsOutput(ctx, dir, "git", "for-each-ref",
-		"--sort=-committerdate", "--count", strconv.Itoa(limit+1),
+		"--sort=-committerdate", "--count", strconv.Itoa(limit*2+8),
 		"--format=%(refname:short)", "refs/remotes/")
 	if err != nil {
 		return nil, fmt.Errorf("git for-each-ref: %w", err)

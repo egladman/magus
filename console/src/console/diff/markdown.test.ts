@@ -6,7 +6,7 @@ test("renders the syntax a remark actually uses", () => {
   const html = renderMarkdown("**bold** and `code` and a [link](https://example.com)");
   assert.match(html, /<strong>bold<\/strong>/);
   assert.match(html, /<code>code<\/code>/);
-  assert.match(html, /<a href="https:\/\/example\.com">link<\/a>/);
+  assert.match(html, /<a [^>]*href="https:\/\/example\.com">link<\/a>/);
 });
 
 test("a fenced block survives as a block, not as three backticks", () => {
@@ -62,7 +62,7 @@ test("whitespace does not smuggle a scheme past the check", () => {
 test("an ordinary link keeps working", () => {
   assert.match(
     renderMarkdown("[docs](https://example.com/a)"),
-    /<a href="https:\/\/example\.com\/a">/,
+    /<a [^>]*href="https:\/\/example\.com\/a">/,
   );
 });
 
@@ -73,4 +73,20 @@ test("a body that is not a string renders nothing rather than throwing", () => {
   for (const bad of [undefined, null, 42, {}]) {
     assert.equal(renderMarkdown(bad as unknown as string), "");
   }
+});
+
+// A refused scheme costs the reader the link, not the sentence. Escaping the raw source made the
+// remark degrade twice - once for the scheme, once into visible markdown syntax.
+test("a refused scheme keeps the link's body rendered", () => {
+  const html = renderMarkdown("[**important** fix](ftp://host/x)");
+  assert.ok(!/<a /i.test(html), `got ${html}`);
+  assert.match(html, /<strong>important<\/strong> fix/);
+});
+
+// The href is somebody else's text: an untrusted remark must not navigate the console away in
+// place, nor hand the destination the console's path.
+test("an allowed link opens away from the console and sends no referrer", () => {
+  const html = renderMarkdown("[docs](https://example.com/a)");
+  assert.match(html, /rel="noreferrer"/);
+  assert.match(html, /target="_blank"/);
 });

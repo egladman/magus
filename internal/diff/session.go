@@ -422,6 +422,7 @@ func (s *Store) mutate(root string, fn func(*types.DiffSession)) *types.DiffSess
 func clone(s *types.DiffSession) *types.DiffSession {
 	out := *s
 	out.Viewed = slices.Clone(s.Viewed)
+	out.SeenThreads = slices.Clone(s.SeenThreads)
 	out.Comments = slices.Clone(s.Comments)
 	out.Suggestions = slices.Clone(s.Suggestions)
 	return &out

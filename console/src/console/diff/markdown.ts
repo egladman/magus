@@ -40,8 +40,15 @@ const renderer = new Renderer();
 renderer.html = ({ text }) => escapeHtml(text);
 renderer.image = ({ text, title }) => escapeHtml(text || title || "");
 const linkAsWritten = renderer.link.bind(renderer);
-renderer.link = (token) =>
-  SAFE_SCHEME.test(token.href.trim()) ? linkAsWritten(token) : escapeHtml(token.text);
+renderer.link = function (token) {
+  // Refused scheme: keep the link's BODY, rendered. Escaping token.text emitted the raw markdown
+  // source instead, so a colleague's `[**important** fix](ftp://...)` came back with the asterisks
+  // showing - the remark degraded twice, once for the scheme and once for no reason.
+  if (!SAFE_SCHEME.test(token.href.trim())) return this.parser.parseInline(token.tokens);
+  // rel="noreferrer" and a new tab: the href is somebody else's text. Without them an untrusted
+  // remark navigates the console away in place and hands the destination the console's path.
+  return linkAsWritten(token).replace(/^<a /, '<a rel="noreferrer" target="_blank" ');
+};
 
 // renderMarkdown turns one remark's body into HTML.
 //
