@@ -172,6 +172,32 @@ The overview reads those remarks out rather than counting them. A chip saying "1
 tells you something was said and withholds what, which leaves you to open a browser to find
 out - the one errand this whole surface exists to save you.
 
+## When somebody says something
+
+A remark arriving on your review is the one thing here that interrupts you. The bell rings, and
+the reason it earns that is not that something happened - it is that **somebody is waiting on
+you**, and a question left sitting for a day costs your colleague their day too.
+
+The threads that arrived since you last read the conversation are marked **new** where they sit
+in the diff, so opening it shows you where to look instead of making you re-read.
+
+What counts as new is decided by threads you have actually had on screen, not by a timestamp and
+not by anything the watcher recorded for itself. That is the same rule as a read mark: it is the
+reader's claim, and nothing else may make it on your behalf.
+
+## Who else is changing this
+
+A file heading says **also on 2 branches** when other branches are changing the same file. It is
+a report, not a prediction: two branches touching one file is ordinary and usually fine, and
+"conflict likely" would be magus guessing at an outcome it cannot see.
+
+magus reads what you have already fetched and never fetches to answer this, so the branch names
+in the tooltip are true **as of your last fetch** and no fresher. Nothing here goes to the network
+on its own.
+
+A backend that cannot answer says nothing at all, which is deliberately different from saying
+nothing competes - those are different facts, and only one of them is reassuring.
+
 ## After it merges
 
 A merged pull request is where a review stops being live and becomes the only record of why the

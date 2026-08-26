@@ -354,6 +354,32 @@ export async function reply(
   if (!res.ok) throw new Error((await res.text()).trim() || `daemon answered ${res.status}`);
 }
 
+// BranchChange is one other line of work and the paths it changes, as of the reader's LAST FETCH.
+// magus does not fetch to answer this - going to the network for it would be an act nobody asked
+// for - so anything rendered from it says which moment it describes.
+export interface BranchChange {
+  readonly ref: string;
+  readonly paths: readonly string[];
+}
+
+// fetchBranches asks which other branches are changing these files.
+//
+// Its own route because it forks once per branch, so it must never hold the patch. Empty on any
+// failure, and empty is the same answer as "this backend cannot tell you": a surface that said
+// "nothing competes" on a backend that cannot answer would be inventing reassurance.
+export async function fetchBranches(host: string, signal: AbortSignal): Promise<BranchChange[]> {
+  try {
+    const res = await fetch(`http://${host}/api/v1/diff/branches`, {
+      headers: authHeaders(),
+      signal,
+    });
+    if (!res.ok) return [];
+    return ((await res.json()) as { branches?: BranchChange[] }).branches ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // HttpError carries the status so a caller can tell "no workspace yet" (503) from a real
 // failure and render the right empty state.
 export class HttpError extends Error {

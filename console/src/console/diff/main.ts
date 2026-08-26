@@ -61,6 +61,7 @@ import {
   fetchSession,
   fetchReview,
   fetchReviewSession,
+  fetchBranches,
   mutate,
   publish,
   reply,
@@ -145,6 +146,10 @@ interface State {
   // BEFORE the focus slice - which is what lets "hunk 4 of 14" and the progress bar keep
   // describing the whole pass while the stream shows one hunk.
   pairs: { path: string; index: number; digest: string }[];
+  // branches maps a path to the other branches changing it, as of the reader's last fetch. Null
+  // until the lookup lands, and null is not an empty map: one means "not asked yet or the backend
+  // cannot say", the other would mean "asked, and nothing competes".
+  branches: Map<string, string[]> | null;
   overview: boolean;
   phase: Phase;
   collaboration: CollaborationState;
@@ -313,6 +318,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     focus: focusCell.get(),
     focusAt: null,
     pairs: [],
+    branches: null,
     overview: false,
     phase: "loading",
     collaboration: demo ? "live" : "unavailable",
@@ -570,6 +576,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
     if (file.additions > 0) el.append(label(`+${file.additions}`, "pf-m-green"));
     if (file.deletions > 0) el.append(label(`-${file.deletions}`, "pf-m-red"));
+
+    // Who else is editing this file. Reported, never predicted: two branches touching one file is
+    // ordinary and usually fine, so this says what is true and leaves the conclusion alone -
+    // "conflict likely" would be magus guessing at an outcome it cannot see.
+    const alsoOn = state.branches?.get(file.path) ?? [];
+    if (alsoOn.length > 0) {
+      el.append(
+        label(
+          `also on ${alsoOn.length} ${alsoOn.length === 1 ? "branch" : "branches"}`,
+          "pf-m-orange",
+          // The branches by name, and WHEN this was true: nothing here fetches, so the answer is
+          // as fresh as the reader's last fetch and no fresher.
+          `${alsoOn.join(", ")} - as of your last fetch`,
+        ),
+      );
+    }
 
     // The blast rail: what the workspace knows about this file. Evidence, not verdicts.
     //
@@ -1958,6 +1980,27 @@ export function activate(host: HTMLElement): SurfaceInstance {
     await rebuild();
   };
 
+  // loadBranches asks what else is changing these files, after the patch is on screen.
+  //
+  // Last, like the review lookup and for the same reason: it forks once per branch, and nothing
+  // that forks may hold up a diff the reader is waiting to read. A failure leaves the map empty,
+  // which renders as no claim rather than as "nothing competes".
+  const loadBranches = async (): Promise<void> => {
+    if (disposed || demo) return;
+    const hp = host_();
+    if (!hp) return;
+    const branches = await fetchBranches(hp, controller.signal);
+    if (disposed || branches.length === 0) return;
+    state.branches = new Map();
+    for (const b of branches) {
+      for (const p of b.paths) {
+        state.branches.set(p, [...(state.branches.get(p) ?? []), b.ref]);
+      }
+    }
+    renderSidebar();
+    paint(true);
+  };
+
   // drafts are the remarks that have not left yet: written by the person, on this session.
   //
   // An agent's remark is NEVER here. It reaches the session over MCP, and the daemon derives
@@ -2561,6 +2604,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
       // only call that leaves this machine - a forge taking ten seconds must cost the reader
       // nothing but a chip that arrives late.
       void loadReview();
+      // Beside it, for the same reason: it forks once per branch, so it arrives rather than
+      // being waited on.
+      void loadBranches();
     } catch {
       // Keep the reader available, but never imply that comments, read marks, or suggestions are
       // synchronized when the pairing step did not complete.
