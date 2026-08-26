@@ -232,7 +232,7 @@ func shortBranchName(ref string) (string, bool) {
 // A non-existent revision is reported rather than swallowed. BranchChanges skips a ref whose diff
 // fails because it holds many and the rest are still true; here the range IS the request, and a
 // caller handed "" would read it as a branch that changed nothing.
-func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string) (string, error) {
+func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
 	if err := checkRef(base); err != nil {
 		return "", err
 	}
@@ -245,8 +245,12 @@ func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string) (string, 
 	// Histogram rather than the default myers because this patch is what remarks anchor into: myers
 	// reports a moved function as a delete plus an unrelated insert, while histogram anchors on
 	// lines unique to both sides and keeps the move legible as a move.
-	out, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false",
-		"diff", "--histogram", base+"..."+head)
+	args := []string{"-c", "core.quotePath=false", "diff", "--histogram", base + "..." + head}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	out, err := vcsOutput(ctx, dir, "git", args...)
 	if err != nil {
 		return "", fmt.Errorf("git diff %s...%s: %w", base, head, err)
 	}

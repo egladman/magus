@@ -236,18 +236,27 @@ func (v jjVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 //
 // jj has no three-dot spelling and needs none: --from is the merge base of the two revisions
 // already, which is the symmetric difference git's three dots have to ask for.
-func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string) (string, error) {
+func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
 	if err := checkRef(base); err != nil {
 		return "", err
 	}
 	if err := checkRef(head); err != nil {
 		return "", err
 	}
-	root, _, err := repoPathPrefix(ctx, v, dir)
+	root, prefix, err := repoPathPrefix(ctx, v, dir)
 	if err != nil {
 		return "", err
 	}
-	out, err := vcsOutputRaw(ctx, root, "jj", "diff", "--git", "--from", base, "--to", head)
+	args := []string{"diff", "--git", "--from", base, "--to", head}
+	if len(paths) > 0 {
+		// Prefixed for the reason DirtyDiff prefixes: the command runs from the workspace root,
+		// so a path relative to the caller's directory would name the wrong file.
+		args = append(args, "--")
+		for _, pth := range paths {
+			args = append(args, prefix+pth)
+		}
+	}
+	out, err := vcsOutputRaw(ctx, root, "jj", args...)
 	if err != nil {
 		return "", fmt.Errorf("jj diff --from %s --to %s: %w", base, head, err)
 	}

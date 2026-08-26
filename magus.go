@@ -721,7 +721,7 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 // silence and "nothing competes" are both true-ish and the caller can tell them apart by getting
 // nothing at all. Here an empty string reads as "this branch changed nothing", and reporting a
 // colleague's work as untouched is the one wrong answer this surface must never give.
-func (m *Magus) RangeDiff(ctx context.Context, base, head string) (string, error) {
+func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string) (string, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil {
 		return "", fmt.Errorf("resolving the version control backend: %w", err)
@@ -738,7 +738,7 @@ func (m *Magus) RangeDiff(ctx context.Context, base, head string) (string, error
 			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not diff a revision range", res.Name),
 			types.ErrVCSUnsupported)
 	}
-	return reporter.RangeDiff(ctx, m.ws.Root, base, head)
+	return reporter.RangeDiff(ctx, m.ws.Root, base, head, paths)
 }
 
 // RevisionCheckpoint resolves a revision expression to the checkpoint that names it.

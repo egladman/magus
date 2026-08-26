@@ -478,7 +478,11 @@ type RangeDiffReporter interface {
 	// Reads what the repository already has and never fetches, matching BranchChanges. An
 	// unresolvable revision is an error rather than an empty diff, because the two read identically
 	// to a caller and only one of them means "nothing changed".
-	RangeDiff(ctx context.Context, dir, base, head string) (string, error)
+	//
+	// paths, when non-empty, narrows the answer to those repo-relative paths the way the
+	// backend's own pathspec does - at the SOURCE, so a caller never has to re-emit a filtered
+	// patch and every count downstream is already scoped.
+	RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error)
 }
 
 // ConflictKind classifies why a path is unresolved in an in-progress merge.

@@ -147,6 +147,8 @@ const (
 	FlagDiffImpact = "impact"
 	// diff: --no-tui
 	FlagDiffNoTui = "no-tui"
+	// diff: --patch
+	FlagDiffPatch = "patch"
 	// diff: --prompt
 	FlagDiffPrompt = "prompt"
 	// diff: --reason
@@ -1021,6 +1023,7 @@ type DiffFlags struct {
 	Reason    string // --reason
 	Prompt    bool   // --prompt
 	Rev       string // --rev
+	Patch     string // --patch
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
@@ -1034,6 +1037,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
 	fs.BoolVar(&f.Prompt, FlagDiffPrompt, false, "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction")
 	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
+	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
 	return &f
 }
 

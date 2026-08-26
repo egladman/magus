@@ -3,7 +3,7 @@
 magus\-diff \- Read the working tree's changes in the order they deserve attention
 .SH SYNOPSIS
 .B magus
-.RI "diff [\-\-generated] [\-\-impact] [\-\-no\-tui] [\-\-watch] [\-\-rev <base>...<head>] [<patch\-file>|\-] [flags]"
+.RI "diff [\-\-generated] [\-\-impact] [\-\-no\-tui] [\-\-watch] [\-\-rev <base>...<head>] [\-\-patch <file>|\-] [<path>...] [flags]"
 .SH DESCRIPTION
 Read the working tree's uncommitted changes, annotated and ordered.
 .PP
@@ -26,6 +26,14 @@ The viewer stands aside on its own wherever it cannot draw: no terminal, \-o jso
 report printing instead, so a script or an agent needs no flag. \-\-no\-tui is for
 a person who wants the report at a terminal anyway, and
 "magus config set key=diff.tui,value=false" makes that the standing preference.
+.PP
+One rule decides what a word on the command line means: the CHANGESET is always
+named by a flag \- \-\-rev, \-\-patch, or the working tree by default \- and every
+positional is a PATH that narrows it. So "magus diff internal/ledger/" reads only
+that subtree, and it means the same thing whichever source it is narrowing.
+.PP
+The patch source moved behind \-\-patch for that rule. A bare \- still reads stdin,
+because it is unambiguous and it is what every pipe in the world already types.
 .PP
 \-\-rev reads a committed range as base...head rather than the working tree, which
 is how you review a branch: a colleague's, or the one your own agent just
@@ -103,6 +111,9 @@ Append the blast radius of landing this: reach, ownership, an estimate from reco
 \fB\-\-no\-tui\fR
 Print the report instead of opening the interactive viewer
 .TP
+\fB\-\-patch\fR \fI-\fR
+Review a patch somebody handed you instead of the working tree; `\-` reads stdin
+.TP
 \fB\-\-prompt\fR
 Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With \-\-impact, also carries the rationale behind each instruction
 .TP
@@ -138,6 +149,12 @@ magus diff
 .PP
 .EX
 magus diff --rev main...feat/audience
+.EE
+.PP
+\fINarrow it to one subtree\fR
+.PP
+.EX
+magus diff internal/ledger/
 .EE
 .PP
 \fIInclude the generated files too\fR

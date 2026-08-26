@@ -817,19 +817,18 @@ func TestGitExternalDiffIsRefusedWithTheSettingThatWorks(t *testing.T) {
 	t.Setenv("GIT_DIFF_PATH_TOTAL", "2")
 	seven := []string{"f.txt", "/tmp/blob/f.txt", "abc", "100644", "f.txt", "def", "100644"}
 
-	_, err := diffInputFromArgs(seven)
+	_, err := scopeFromArgs(seven)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pager.diff")
 	assert.Contains(t, err.Error(), "magus diff -")
 	assert.Contains(t, err.Error(), "f.txt", "the file git was asking about")
 
-	// Seven positionals with no git around are an ordinary typo, and the generic refusal is
-	// the honest answer there: inventing a git explanation would send them to the wrong page.
+	// Seven positionals with no git around are seven paths, which is now a legitimate scope.
+	// Inventing a git explanation for them would send an ordinary caller to the wrong page.
 	t.Setenv("GIT_DIFF_PATH_TOTAL", "")
-	_, err = diffInputFromArgs(seven)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "at most one patch argument")
-	assert.NotContains(t, err.Error(), "pager.diff")
+	got, err := scopeFromArgs(seven)
+	require.NoError(t, err)
+	assert.Equal(t, seven, got)
 }
 
 // A VCS colorizes when it believes it is writing to a terminal, which is precisely the case
@@ -1948,50 +1947,72 @@ func TestNoPrefixHeadersStillNameTheirFiles(t *testing.T) {
 // TestDiffInputFromArgs pins the refusal that matters most: a git ref typed by someone
 // arriving from `git diff <ref>` must not be swallowed into a plausible listing of their
 // own uncommitted edits under exit 0.
-func TestDiffInputFromArgs(t *testing.T) {
-	dir := t.TempDir()
-	patch := filepath.Join(dir, "change.patch")
-	require.NoError(t, os.WriteFile(patch, []byte("diff --git a/x b/x\n"), 0o644))
+func TestScopeFromArgs(t *testing.T) {
+	t.Run("no argument narrows nothing", func(t *testing.T) {
+		got, err := scopeFromArgs(nil)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
 
-	t.Run("no argument reads the working tree", func(t *testing.T) {
-		in, err := diffInputFromArgs(nil)
+	t.Run("positionals are paths, taken at face value", func(t *testing.T) {
+		// Deliberately not checked against the working tree: a path that exists in the
+		// changeset and not on disk is exactly what a range review is for.
+		got, err := scopeFromArgs([]string{"internal/ledger/", "types/diff.go", "gone.go"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"internal/ledger/", "types/diff.go", "gone.go"}, got)
+	})
+
+	t.Run("a bare dash is a source, and says where it moved", func(t *testing.T) {
+		_, err := scopeFromArgs([]string{"-"})
+		require.Error(t, err)
+		assert.IsType(t, errUsage{}, err)
+		assert.Contains(t, err.Error(), "--patch -")
+	})
+
+	t.Run("something flag-shaped is a typo, not a path", func(t *testing.T) {
+		_, err := scopeFromArgs([]string{"--revv"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--rev")
+	})
+}
+
+// TestDiffSourceFromFlags pins the rule the positionals depend on: the changeset is named by a
+// flag, and exactly one flag may name it.
+func TestDiffSourceFromFlags(t *testing.T) {
+	t.Run("nothing named reads the working tree", func(t *testing.T) {
+		in, err := diffSourceFromFlags(&gen.DiffFlags{})
 		require.NoError(t, err)
 		assert.Equal(t, inputWorkingTree, in.kind)
 		assert.Equal(t, "the working tree", in.label)
 	})
 
-	t.Run("dash reads stdin", func(t *testing.T) {
-		in, err := diffInputFromArgs([]string{"-"})
+	t.Run("--patch - reads stdin", func(t *testing.T) {
+		in, err := diffSourceFromFlags(&gen.DiffFlags{Patch: "-"})
 		require.NoError(t, err)
 		assert.Equal(t, inputStdin, in.kind)
 	})
 
-	t.Run("a readable file is a patch", func(t *testing.T) {
-		in, err := diffInputFromArgs([]string{patch})
+	t.Run("--patch names a file", func(t *testing.T) {
+		in, err := diffSourceFromFlags(&gen.DiffFlags{Patch: "change.patch"})
 		require.NoError(t, err)
 		assert.Equal(t, inputFile, in.kind)
-		assert.Equal(t, patch, in.path)
-		assert.Contains(t, in.label, patch)
+		assert.Equal(t, "change.patch", in.path)
+		assert.Contains(t, in.label, "change.patch")
 	})
 
-	t.Run("a directory is refused", func(t *testing.T) {
-		_, err := diffInputFromArgs([]string{dir})
+	t.Run("--rev reads a range", func(t *testing.T) {
+		in, err := diffSourceFromFlags(&gen.DiffFlags{Rev: "main...topic"})
+		require.NoError(t, err)
+		assert.Equal(t, inputRevRange, in.kind)
+		assert.Equal(t, "main", in.base)
+		assert.Equal(t, "topic", in.head)
+	})
+
+	t.Run("two sources are refused rather than ranked", func(t *testing.T) {
+		_, err := diffSourceFromFlags(&gen.DiffFlags{Rev: "main...topic", Patch: "-"})
 		require.Error(t, err)
 		assert.IsType(t, errUsage{}, err)
-	})
-
-	t.Run("a ref is refused and names the command that works", func(t *testing.T) {
-		_, err := diffInputFromArgs([]string{"HEAD~1"})
-		require.Error(t, err)
-		assert.IsType(t, errUsage{}, err)
-		assert.Contains(t, err.Error(), "git diff HEAD~1")
-		assert.Contains(t, err.Error(), "magus diff -")
-	})
-
-	t.Run("two positionals are refused", func(t *testing.T) {
-		_, err := diffInputFromArgs([]string{"a", "b"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "at most one patch argument")
+		assert.Contains(t, err.Error(), "only one may be given")
 	})
 }
 

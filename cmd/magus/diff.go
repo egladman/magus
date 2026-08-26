@@ -54,29 +54,32 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	// With --ack the positionals are PATHS, not a patch. Reading happens in whatever the
-	// reader already uses - vim, magit, a pager, an IDE - and magus has no business
-	// requiring its own viewer to record that it happened. Without this the only door open
-	// to somebody who reviews in their editor is the blanket ack, which is the one path
-	// this feature least wants to be the default.
+	// EVERY positional is a path that narrows the changeset, whichever source it came from.
+	// The source itself is always a flag - --rev, --patch, or the working tree by default -
+	// and one rule for what a word means beats two.
 	//
-	// Safe to overload because --ack already refuses a patch source: a receipt fingerprints
-	// the working tree, and a patch describes files that may not be there.
-	var ackPaths []string
-	if rf.Ack {
-		ackPaths, rest = rest, nil
-	}
-	src, err := diffInputFromArgs(rest)
+	// This is also what retires --ack's overload. It used to claim the positionals for itself
+	// because reading happens in whatever the reader already uses - vim, magit, a pager, an
+	// IDE - and magus has no business requiring its own viewer to record that it happened. It
+	// no longer needs to claim anything: the paths mean the same thing to the ack and to the
+	// view, which is why the ack can now narrow a range review too.
+	scopePaths, err := scopeFromArgs(rest)
 	if err != nil {
 		return err
 	}
-	if rf.Rev != "" {
-		if src.kind != inputWorkingTree {
-			return usagef("magus diff: --rev names the changeset, so it cannot be combined with %s", src.label)
-		}
-		if src, err = revRangeFromFlag(rf.Rev); err != nil {
-			return err
-		}
+	src, err := diffSourceFromFlags(rf)
+	if err != nil {
+		return err
+	}
+	if len(scopePaths) > 0 && !src.addressable() {
+		// Narrowing happens at the SOURCE, through the backend's own pathspec, so everything
+		// downstream is already scoped. A patch somebody handed over has no source to ask, and
+		// re-emitting a filtered patch is a different feature from reading one. Refused rather
+		// than ignored: silently reading the whole patch after being asked for part of it is
+		// how a reader concludes they have seen a file they have not.
+		return usagef("magus diff: %s is already the changeset somebody chose, so it cannot be narrowed to %s. "+
+			"Narrow it before handing it over, or read the working tree or a range instead",
+			src.label, strings.Join(scopePaths, ", "))
 	}
 	if rf.Watch && src.kind != inputWorkingTree {
 		// stdin is consumed once and a patch file is a snapshot someone handed us; re-reading
@@ -126,7 +129,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	}
 	tui := wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
 
-	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, tui, rf.Impact, ackPaths) }
+	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, tui, rf.Impact, scopePaths) }
 	if rf.Watch {
 		return watchDiff(ctx, m, render)
 	}
@@ -187,37 +190,57 @@ func revRangeFromFlag(rev string) (diffInput, error) {
 	return diffInput{kind: inputRevRange, base: base, head: head, label: "the range " + rev}, nil
 }
 
-// diffInputFromArgs resolves the one optional positional.
+// scopeFromArgs reads the positionals as repo-relative paths that narrow the changeset.
 //
-// A positional is accepted ONLY as `-` or a readable patch file. Anything else - and a git
-// ref is the case that matters, because everyone arriving from `git diff <ref>` or `gh pr
-// diff` types one first - is refused loudly. Swallowing it printed a plausible list of the
-// reader's OWN uncommitted edits under exit 0, which is the worst possible failure: the
-// output looks exactly like an answer to the question they asked.
+// A bare `-` is still stdin and not a path, because a file actually named "-" does not happen and
+// every pipe already types it. Anything else is taken at face value: magus does NOT check the path
+// exists, because a path that exists in the changeset and not in the working tree is exactly the
+// case a range review is for.
+func scopeFromArgs(rest []string) ([]string, error) {
+	// Checked FIRST, because git hands an external differ seven positionals and every one of
+	// them is path-shaped. Once positionals are paths this no longer dead-ends on an arity
+	// error, so without this the integration would silently narrow the changeset to git's
+	// temp-file arguments and render nothing - which reads as "no changes" rather than as a
+	// misconfiguration.
+	if err := gitExternalDiffRefusal(rest); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(rest))
+	for _, a := range rest {
+		if a == "-" {
+			return nil, usagef("magus diff: `-` reads a patch on stdin, so it is a source rather than a path. " +
+				"Write it as `--patch -`, and keep the positionals for the paths you want to narrow to")
+		}
+		if strings.HasPrefix(a, "-") {
+			return nil, usagef("magus diff: %q looks like a flag magus does not have. "+
+				"Positionals are paths that narrow the changeset; the changeset itself is named by "+
+				"--rev, --patch, or the working tree by default", a)
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+// diffSourceFromFlags decides which changeset is being read. Exactly one flag may name it.
 //
-// Reading a patch rather than the working tree is what lets this annotate a changeset it did
-// not produce - a colleague's patch, a stash, a mail attachment - and it composes, which the
-// working-tree-only version never did.
-func diffInputFromArgs(rest []string) (diffInput, error) {
-	if len(rest) == 0 {
+// A ref used to be refused here with a message teaching the pipe, because swallowing one printed a
+// plausible list of the reader's OWN uncommitted edits under exit 0 - the worst possible failure,
+// since the output looks exactly like an answer to the question they asked. --rev is that message's
+// successor: the ref has a door now, so the refusal became a feature.
+func diffSourceFromFlags(rf *gen.DiffFlags) (diffInput, error) {
+	patch, rev := strings.TrimSpace(rf.Patch), strings.TrimSpace(rf.Rev)
+	switch {
+	case patch != "" && rev != "":
+		return diffInput{}, usagef("magus diff: --patch and --rev each name a changeset, so only one may be given")
+	case rev != "":
+		return revRangeFromFlag(rev)
+	case patch == "-":
+		return diffInput{kind: inputStdin, label: "a patch on stdin"}, nil
+	case patch != "":
+		return diffInput{kind: inputFile, path: patch, label: "the patch in " + patch}, nil
+	default:
 		return diffInput{kind: inputWorkingTree, label: "the working tree"}, nil
 	}
-	if len(rest) > 1 {
-		if err := gitExternalDiffRefusal(rest); err != nil {
-			return diffInput{}, err
-		}
-		return diffInput{}, usagef("magus diff: takes at most one patch argument, got %d", len(rest))
-	}
-	arg := rest[0]
-	if arg == "-" {
-		return diffInput{kind: inputStdin, label: "a patch on stdin"}, nil
-	}
-	if st, serr := os.Stat(arg); serr == nil && !st.IsDir() {
-		return diffInput{kind: inputFile, path: arg, label: "the patch in " + arg}, nil
-	}
-	return diffInput{}, usagef("magus diff: %q is neither a readable patch file nor `-`. "+
-		"diff reads the working tree and takes no ref; for a committed range use `git diff %s`, "+
-		"and pipe a patch in with `git diff %s | magus diff -`", arg, arg, arg)
 }
 
 // gitExternalDiffRefusal names the mistake when magus has been wired as GIT_EXTERNAL_DIFF or
@@ -242,7 +265,7 @@ func gitExternalDiffRefusal(rest []string) error {
 	return usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
 		"magus reports on a whole changeset, so it cannot answer per file. "+
 		"Use git's pager instead, which hands over the entire diff at once: "+
-		"`git config pager.diff 'magus diff -'` - then plain `git diff` renders through magus, "+
+		"`git config pager.diff 'magus diff --patch -'` - then plain `git diff` renders through magus, "+
 		"and `git --no-pager diff` still gets you the raw patch", rest[0])
 }
 
@@ -293,7 +316,7 @@ func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm,
 }
 
 // readPatch returns the unified patch for this input.
-func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, string, error) {
+func (in diffInput) readPatch(ctx context.Context, m *magus.Magus, paths []string) (string, string, error) {
 	switch in.kind {
 	case inputStdin:
 		b, err := io.ReadAll(os.Stdin)
@@ -311,13 +334,13 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, stri
 		// The BASE side, because every reader of types.Diff.Base labels it "compared against".
 		// Returning the head made the prompt say a branch was compared against itself, which is
 		// not a wrong-looking value a reader would question - it is a sentence that parses.
-		p, err := m.RangeDiff(ctx, in.base, in.head)
+		p, err := m.RangeDiff(ctx, in.base, in.head, paths)
 		if err != nil {
 			return "", "", fmt.Errorf("magus diff: %w", err)
 		}
 		return p, in.base, nil
 	default:
-		p, err := m.WorkingDiff(ctx, nil)
+		p, err := m.WorkingDiff(ctx, paths)
 		return p, "working", err
 	}
 }
@@ -327,8 +350,8 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, stri
 // impact is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, rootOverride string, tui, impact bool, ackPaths []string) error {
-	patch, base, err := src.readPatch(ctx, m)
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, rootOverride string, tui, impact bool, scopePaths []string) error {
+	patch, base, err := src.readPatch(ctx, m, scopePaths)
 	if err != nil {
 		return err
 	}
@@ -380,7 +403,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	}
 	if rf.Ack {
 		reason := strings.TrimSpace(rf.Reason)
-		scoped, err := scopeAck(rev, ackPaths)
+		scoped, err := scopeAck(rev, scopePaths)
 		if err != nil {
 			return err
 		}
