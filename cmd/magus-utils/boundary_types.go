@@ -127,6 +127,7 @@ var boundaryTypes = []boundaryType{
 	// magus\ledger's bundle (put/list), leaf-first: Delegation.releases and
 	// DelegationReport.overlaps are each a list of the other two.
 	{Name: "DelegationRelease", Type: reflect.TypeFor[types.DelegationRelease](), RuntimeObject: true},
+	{Name: "DelegationUnattributedWrite", Type: reflect.TypeFor[types.DelegationUnattributedWrite](), RuntimeObject: true},
 	{Name: "Delegation", Type: reflect.TypeFor[types.Delegation](), RuntimeObject: true},
 	{Name: "DelegationOverlap", Type: reflect.TypeFor[types.DelegationOverlap](), RuntimeObject: true},
 	{Name: "DelegationReport", Type: reflect.TypeFor[types.DelegationReport](), RuntimeObject: true},

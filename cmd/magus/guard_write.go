@@ -285,6 +285,13 @@ func gradeDelegatedWrite(ctx context.Context, actingDelegation, writePath string
 	// delegation whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose ledger row is simply stale.
 	if owner, owned := ownerOf(live, rel, ""); owned {
+		// Recorded as well as reported, so the delegation whose file just moved can find out by
+		// asking the ledger. Telling only the writer left the one party who needed it - the agent
+		// still holding a stale read of this path - as the only party never informed.
+		//
+		// Best-effort by construction: a failure here is swallowed, because this whole function
+		// fails open and a ledger that would not accept a note must not cost somebody a save.
+		_ = store.RecordUnattributedWrite(ctx, owner.ID, rel)
 		return writeGrade{Decision: "advise", Context: notice + fmt.Sprintf(
 			"magus workspace: if you are delegation %s, set %s=%s (or pass --delegation %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths delegation %s (%s) declared it owns, and that delegation is %s. This is an advisory and not a block: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",

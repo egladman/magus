@@ -428,6 +428,12 @@ export object DelegationRelease {
     releasedAt: int = 0,
 }
 
+export object DelegationUnattributedWrite {
+    path: str = "",
+    digest: str = "",
+    at: int = 0,
+}
+
 export object Delegation {
     id: str = "",
     parent: str = "",
@@ -441,6 +447,7 @@ export object Delegation {
     state: str = "",
     readOnly: bool = false,
     releases: [DelegationRelease] = [],
+    unattributed: [DelegationUnattributedWrite] = [],
     reportedBase: str = "",
     baseVerdict: str = "",
     registered: int = 0,

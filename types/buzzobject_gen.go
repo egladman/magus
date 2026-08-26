@@ -929,10 +929,22 @@ func (v DelegationRelease) BuzzObject() BuzzObject {
 	}
 }
 
+func (v DelegationUnattributedWrite) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"path":   v.Path,
+		"digest": v.Digest,
+		"at":     v.At,
+	}
+}
+
 func (v Delegation) BuzzObject() BuzzObject {
 	itemsReleases := make([]any, len(v.Releases))
 	for indexReleases := range v.Releases {
 		itemsReleases[indexReleases] = v.Releases[indexReleases].BuzzObject()
+	}
+	itemsUnattributed := make([]any, len(v.Unattributed))
+	for indexUnattributed := range v.Unattributed {
+		itemsUnattributed[indexUnattributed] = v.Unattributed[indexUnattributed].BuzzObject()
 	}
 	return BuzzObject{
 		"id":             v.ID,
@@ -947,6 +959,7 @@ func (v Delegation) BuzzObject() BuzzObject {
 		"state":          string(v.State),
 		"readOnly":       v.ReadOnly,
 		"releases":       itemsReleases,
+		"unattributed":   itemsUnattributed,
 		"reportedBase":   v.ReportedBase,
 		"baseVerdict":    string(v.BaseVerdict),
 		"registered":     v.Registered,

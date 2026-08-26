@@ -459,3 +459,72 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q only reads", cmd)
 	}
 }
+
+// fleetLedger reopens the ledger the guard just graded against, resolved exactly the way the guard
+// resolves it, so these assertions read the same store the code under test wrote.
+func fleetLedger(t *testing.T, ctx context.Context) *ledger.Store {
+	t.Helper()
+	loc := hookActivityTrail(ctx)
+	return ledger.NewStore(ledger.Location{CacheDir: loc.base, Root: loc.workspace})
+}
+
+func unattributedOf(t *testing.T, store *ledger.Store, id string) []types.DelegationUnattributedWrite {
+	t.Helper()
+	rows, err := store.List()
+	require.NoError(t, err)
+	for _, r := range rows {
+		if r.ID == id {
+			return r.Unattributed
+		}
+	}
+	return nil
+}
+
+// TestGradeDelegatedWriteRecordsWhatItAdvisedAbout is the half the advisory was missing.
+//
+// Telling the WRITER to coordinate left the delegation whose file moved as the only party never
+// informed, and it is the one holding a now-stale read. The record is what lets it find out by
+// asking rather than by being told.
+func TestGradeDelegatedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetDelegations()...)
+	owned := filepath.Join(root, "internal/ledger/store.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(owned), 0o755))
+	require.NoError(t, os.WriteFile(owned, []byte("package ledger // edited by hand\n"), 0o644))
+
+	got := gradeDelegatedWrite(ctx, "", owned)
+	require.Equal(t, "advise", got.Decision)
+
+	store := fleetLedger(t, ctx)
+	recorded := unattributedOf(t, store, "delegation-a")
+	require.Len(t, recorded, 1, "the owner is told what moved under it")
+	assert.Equal(t, "internal/ledger/store.go", recorded[0].Path)
+	assert.NotEmpty(t, recorded[0].Digest)
+	assert.NotEqual(t, types.DigestAbsent, recorded[0].Digest,
+		"a digest of nothing gives the owner nothing to compare against")
+	assert.NotZero(t, recorded[0].At)
+
+	// The controls. Without these the test would pass against a guard that recorded on every
+	// write, which would fill the ledger with a delegation's own ordinary work.
+	t.Run("a delegation writing its own owned path is not an intrusion", func(t *testing.T) {
+		ctx, root := fleetFixture(t, fleetDelegations()...)
+		mine := filepath.Join(root, "internal/ledger/store.go")
+		require.NoError(t, os.MkdirAll(filepath.Dir(mine), 0o755))
+		require.NoError(t, os.WriteFile(mine, []byte("package ledger\n"), 0o644))
+
+		gradeDelegatedWrite(ctx, "delegation-a", mine)
+
+		assert.Empty(t, unattributedOf(t, fleetLedger(t, ctx), "delegation-a"))
+	})
+
+	t.Run("unclaimed ground records nothing", func(t *testing.T) {
+		ctx, root := fleetFixture(t, fleetDelegations()...)
+		loose := filepath.Join(root, "README.md")
+		require.NoError(t, os.WriteFile(loose, []byte("# readme\n"), 0o644))
+
+		gradeDelegatedWrite(ctx, "", loose)
+
+		store := fleetLedger(t, ctx)
+		assert.Empty(t, unattributedOf(t, store, "delegation-a"))
+		assert.Empty(t, unattributedOf(t, store, "delegation-b"))
+	})
+}

@@ -20,6 +20,7 @@ var RuntimeBoundaryTypes = []any{
 	types.DelegationOverlap{},
 	types.DelegationRelease{},
 	types.DelegationReport{},
+	types.DelegationUnattributedWrite{},
 	types.Diff{},
 	types.DiffChurn{},
 	types.DiffFile{},
