@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"flag"
@@ -15,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
@@ -23,10 +25,13 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/gopherbuzz"
+	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -495,6 +500,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 	// Ctrl-C read as a key, a cancelled context. A raw SIGINT unwinds nothing, and the reader
 	// loses the queue along with the restored terminal.
 	defer sync.close()
+	threads, _ := daemonReviewThreads(ctx)
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
@@ -505,11 +511,10 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 			Viewed:      sess.Viewed,
 			Comments:    sess.Comments,
 			Suggestions: sess.Suggestions,
-			// What colleagues have already said, so the terminal reader is not sent to a
-			// browser to find out. Best-effort and read through the daemon, which is where the
-			// provider lives - with no daemon, or no review, this is empty and the viewer is
-			// exactly what it was before.
-			Threads:  diffReviewThreads(ctx),
+			// What colleagues said, so a terminal reader is not sent to a browser to find out.
+			// The incompleteness reason is dropped because the viewer takes the terminal over
+			// immediately; `magus notes capture` keeps it, where a reader can still see it.
+			Threads:  threads,
 			Unfolded: showGenerated,
 			Link:     pathLinker(m.Root()),
 		},
@@ -577,18 +582,6 @@ func diffTUIFiles(rev types.Diff, parsed []diff.FileHunks) []difftui.File {
 		out = append(out, file)
 	}
 	return out
-}
-
-// diffReviewThreads is the viewer's half of the review read: the threads, without the reason a
-// partial read carries.
-//
-// The reason is dropped HERE and not in the reader, because this caller has nowhere to put it:
-// the viewer takes over the terminal immediately, so a line printed before it opens is gone
-// before anyone reads it. `magus notes capture` keeps the reason, because a transcript is an
-// artifact nobody re-checks and an incomplete one has to say so.
-func diffReviewThreads(ctx context.Context) []types.ReviewThread {
-	threads, _ := daemonReviewThreads(ctx)
-	return threads
 }
 
 // diffSync is a difftui.Sync with a shutdown. The two implementations get their writes out
@@ -1775,6 +1768,871 @@ func changedPathsFromPatch(patch string) []string {
 		if f.Path != "" && !seen[f.Path] {
 			seen[f.Path] = true
 			out = append(out, f.Path)
+		}
+	}
+	return out
+}
+
+// anchorHit is one note anchor that names something in the changeset, shaped for the
+// impact report rather than for the store.
+type anchorHit struct {
+	Note   string           `json:"note"            yaml:"note"`
+	Title  string           `json:"title,omitempty" yaml:"title,omitempty"`
+	Kind   notes.AnchorKind `json:"kind"            yaml:"kind"`
+	Target string           `json:"target"          yaml:"target"`
+	// Drift is the notes.IssueCode this anchor resolved to. Empty is graded CLEAN;
+	// notes.StatusUngraded is unmeasured, which grading needs the knowledge graph for and
+	// cannot report when the graph will not load. The two are distinct so a renderer cannot
+	// show an anchor nobody checked as fresh.
+	Drift string `json:"drift,omitempty" yaml:"drift,omitempty"`
+}
+
+// impactAnchors joins every note anchor against the changeset. A knowledge graph that will
+// not load costs the drift column and nothing else: notes.ResolveAnchors takes a nil resolver
+// and grades every anchor ungraded, so the section still answers WHAT is anchored.
+func impactAnchors(ctx context.Context, root string, files, symbols []string) []anchorHit {
+	stores, err := notesStores(root, "")
+	if err != nil {
+		return nil
+	}
+	res, resErr := notesResolver(ctx, root)
+
+	var resolved []notes.ResolvedAnchor
+	for _, st := range stores {
+		var scoped notes.Resolver
+		if resErr == nil {
+			scoped = res.ForScope(string(st.scope))
+		}
+		ra, raErr := notes.ResolveAnchors(ctx, st.dir, scoped)
+		if raErr != nil {
+			continue
+		}
+		resolved = append(resolved, ra...)
+	}
+
+	hits := notes.AnchorHits(resolved, files, symbols)
+	out := make([]anchorHit, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, anchorHit{
+			Note: h.Note, Title: h.Title, Kind: h.Kind, Target: h.Target, Drift: string(h.Status),
+		})
+	}
+	return out
+}
+
+// earnedSync watches a viewer session and turns finished files into read receipts.
+//
+// This is the receipt worth trusting. `--ack` is a claim made about files in bulk and pays
+// for that with a reason on the record; this one is minted from what the reader actually
+// did - every hunk of the file marked read, one keypress at a time, in a viewer only a
+// person can drive. Nothing is inferred: the marks were already explicit, and all this adds
+// is that they now outlive the session.
+//
+// It wraps rather than replaces the underlying sync, because publishing the reader's
+// progress to the daemon and recording a durable receipt are different jobs with different
+// lifetimes, and the viewer must keep knowing about neither.
+type earnedSync struct {
+	diffSync
+	root, cacheDir string
+	// fileOf maps a hunk digest to the file it belongs to, and hunksOf counts how many a
+	// file has. A receipt is per FILE, so a file is earned only once every hunk it
+	// contributes is marked - reading four hunks of six is not reading the file.
+	fileOf map[string]string
+	// hunksOf counts DISTINCT hunk digests per file. Two byte-identical hunks in one file
+	// share a digest - HunkDigest is path plus body - so counting occurrences would set a
+	// total the marked set can never reach, and that file could never be finished.
+	hunksOf map[string]int
+	// digestAt is each file's content fingerprint as it was when the reader started, taken
+	// once here rather than at mint time.
+	//
+	// A receipt must attest to the bytes somebody SAW. Fingerprinting at close instead would
+	// stamp whatever the file holds by then - and the advertised scenario for this whole
+	// surface is a paired review where an agent edits while the human reads, so the file
+	// moving mid-session is the expected case, not a corner. Minting the content they read
+	// means the next report correctly calls it stale.
+	digestAt map[string]string
+	viewed   map[string]bool
+	// live are the hunks marked in THIS session, as opposed to seeded from the store.
+	//
+	// A file earns a receipt only if at least one of its hunks was marked here. The stored
+	// viewed set is a plain unauthenticated JSON file whose hunk digests are computable
+	// from `magus diff` output, so anything with write access can forge a complete reading;
+	// without this, opening the viewer once would launder that forgery into durable
+	// receipts. Requiring a live mark keeps the seed doing its real job - resuming a
+	// reading across sittings - while making it worth nothing on its own.
+	live map[string]bool
+	now  func() time.Time
+}
+
+// newEarnedSync wraps sync with receipt minting, seeded with the marks the session already
+// carried so a reader who finishes a file across two sittings still earns it.
+func newEarnedSync(inner diffSync, root, cacheDir string, files []difftui.File, seen []string) *earnedSync {
+	e := &earnedSync{
+		diffSync: inner,
+		root:     root,
+		cacheDir: cacheDir,
+		fileOf:   map[string]string{},
+		hunksOf:  map[string]int{},
+		digestAt: map[string]string{},
+		viewed:   map[string]bool{},
+		live:     map[string]bool{},
+		now:      time.Now,
+	}
+	for _, f := range files {
+		// Generated files are excluded for the reason they are folded away by default:
+		// reading a machine's restatement of an edit made elsewhere is not the review.
+		if f.Generated {
+			continue
+		}
+		for _, h := range f.Hunks {
+			if _, seen := e.fileOf[h.Digest]; seen {
+				continue // an identical hunk repeated in one file is one mark, not two
+			}
+			e.fileOf[h.Digest] = f.Path
+			e.hunksOf[f.Path]++
+		}
+		if _, ok := e.digestAt[f.Path]; !ok {
+			e.digestAt[f.Path] = review.DigestFile(filepath.Join(root, filepath.FromSlash(f.Path)))
+		}
+	}
+	for _, d := range seen {
+		e.viewed[d] = true
+	}
+	return e
+}
+
+// SetViewed records the mark and forwards it, so the daemon and the console still see the
+// reader's progress exactly as before.
+func (e *earnedSync) SetViewed(digest string, on bool) {
+	e.viewed[digest] = on
+	// Comma-ok rather than a bare lookup: an untracked digest would otherwise record a live
+	// mark against the empty path, which no file can ever match but which leaves a map
+	// entry that reads as a bug to whoever finds it next.
+	if path, ok := e.fileOf[digest]; ok && on {
+		e.live[path] = true
+	}
+	e.diffSync.SetViewed(digest, on)
+}
+
+// close mints a receipt for every file whose hunks were all marked read, then shuts the
+// wrapped sync down.
+//
+// At close rather than per mark, because a file is not read until its last hunk is, and a
+// reader who marks a hunk and then unmarks it has not read anything. Failures are silent:
+// this is a side effect of reading, and a reader who reached the end of a changeset should
+// not meet an error about bookkeeping.
+func (e *earnedSync) close() {
+	defer e.diffSync.close()
+	if add := e.finished(); len(add) > 0 {
+		_ = review.Record(e.cacheDir, add)
+	}
+}
+
+// pending is how many files the reader has finished but not yet had recorded, for the line
+// the viewer prints on the way out. Reading it before close is the point: a reader is told
+// what their session earned at the moment they finish it, not the next time they happen to
+// run a report.
+func (e *earnedSync) pending() int { return len(e.finished()) }
+
+// finished is every file whose hunks were all marked read in a session that touched it.
+func (e *earnedSync) finished() []review.Receipt {
+	var add []review.Receipt
+	for path, total := range e.hunksOf {
+		if !e.live[path] {
+			continue
+		}
+		marked := 0
+		for digest, file := range e.fileOf {
+			if file == path && e.viewed[digest] {
+				marked++
+			}
+		}
+		if marked < total {
+			continue
+		}
+		// The content as it was when the reading STARTED, not as it is now. See digestAt.
+		content := e.digestAt[path]
+		if content == "" {
+			continue
+		}
+		add = append(add, review.Receipt{Path: path, Digest: content, At: e.now()})
+	}
+	return add
+}
+
+// compatMarker is the convention's opening, INCLUDING the space the convention always
+// writes after the colon. Everything from there to the closing paren is the RETIREMENT
+// CONDITION, which is the half a reader needs: what would have to become true before the
+// code below may go.
+//
+// The trailing space is not what keeps this constant out of its own report - it cannot be,
+// since the constant contains the space too and so matches itself. inAComment is what does
+// that, by requiring the marker to sit in a comment rather than in a string literal.
+const compatMarker = "compat(until: "
+
+// rationaleHit is one deliberate decision recorded beside code this change touches.
+type rationaleHit struct {
+	Path string `json:"path"      yaml:"path"`
+	Line int    `json:"line"      yaml:"line"`
+	// Until is the retirement condition the marker declares. It is carried rather than the
+	// whole comment because the condition is the part that tells a reader whether their
+	// edit is the thing that retires it.
+	Until string `json:"until" yaml:"until"`
+}
+
+// rationaleShown bounds the list for the same reason every other section is bounded: a
+// report nobody scrolls to the end of has told the reader less than a count would.
+const rationaleShown = 8
+
+// collectRationale finds the compat(until:) markers in the files this change touches.
+//
+// Notes cover the decisions somebody wrote a note about, which is the small minority. This
+// covers the ones recorded where they are actually kept: in a comment beside the code, under
+// the marker this repository's conventions require. An audit once ranked three of its
+// findings as work when each was a choice explained two lines above the thing it flagged,
+// and nothing put that explanation in front of the reader at the moment they proposed to
+// undo it.
+//
+// FILE-level, not hunk-level, and the wording says so. Deciding whether a marker sits inside
+// a changed region needs the hunk ranges, and a marker fifty lines from your edit still
+// governs the code you are in - claiming otherwise would be a precision this does not have.
+//
+// Generated files are skipped: a marker there was written by whatever produced the file.
+func collectRationale(root string, rev types.Diff) []rationaleHit {
+	var out []rationaleHit
+	for _, f := range rev.Files {
+		if f.Generated() {
+			continue
+		}
+		out = append(out, compatMarkersIn(root, f.Path)...)
+	}
+	return out
+}
+
+// compatMarkersIn scans one file. An unreadable file yields nothing: a deleted path is the
+// common case and is not worth a line of report.
+func compatMarkersIn(root, rel string) []rationaleHit {
+	fh, err := os.Open(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		return nil
+	}
+	defer fh.Close()
+
+	var out []rationaleHit
+	sc := bufio.NewScanner(fh)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for line := 1; sc.Scan(); line++ {
+		idx := strings.Index(sc.Text(), compatMarker)
+		if idx < 0 || !inAComment(sc.Text()[:idx]) {
+			continue
+		}
+		until := compatUntil(sc.Text()[idx:])
+		if until == "" {
+			continue
+		}
+		out = append(out, rationaleHit{Path: rel, Line: line, Until: until})
+	}
+	return out
+}
+
+// inAComment reports whether the text preceding a marker opens a comment.
+//
+// The convention writes this marker in a comment beside the code it explains, so a match
+// anywhere else is a mention of the convention rather than a use of it - this file's own
+// constant, and the fixtures in its test, both of which reported themselves as decisions
+// governing the reader's change.
+//
+// Not a parser, and it does not need to be: it cannot tell a `//` inside a string from one
+// that starts a comment. The cases that matters for are files whose subject IS this marker,
+// where the remaining noise is a handful of lines in one test.
+func inAComment(before string) bool {
+	if strings.Contains(before, "//") || strings.Contains(before, "#") || strings.Contains(before, "/*") {
+		return true
+	}
+	// A block comment's continuation lines carry only a leading star.
+	return strings.HasPrefix(strings.TrimLeft(before, " \t"), "*")
+}
+
+// compatUntil extracts the retirement condition from a marker, empty when there is none.
+//
+// A condition running past the end of the line is truncated rather than dropped: these are
+// prose and routinely wrap, and half a condition still tells a reader what kind of thing
+// would retire the code.
+func compatUntil(s string) string {
+	rest := strings.TrimPrefix(s, compatMarker)
+	if end := strings.Index(rest, ")"); end >= 0 {
+		rest = rest[:end]
+	}
+	return strings.TrimSpace(rest)
+}
+
+// impactRationaleLines renders the section, including its empty form.
+func impactRationaleLines(hits []rationaleHit) []string {
+	if len(hits) == 0 {
+		return []string{"RATIONALE: no compat(until:) marker in the files you changed"}
+	}
+	out := []string{fmt.Sprintf("RATIONALE: %d compat(until:) marker%s in files you changed - each names why the code stays",
+		len(hits), pluralSuffix(len(hits), "", "s"))}
+	shown := hits
+	if len(shown) > rationaleShown {
+		shown = shown[:rationaleShown]
+	}
+	for _, h := range shown {
+		out = append(out, fmt.Sprintf("      %s:%d until %s", h.Path, h.Line, h.Until))
+	}
+	if len(hits) > len(shown) {
+		out = append(out, fmt.Sprintf("      and %d more", len(hits)-len(shown)))
+	}
+	return out
+}
+
+// adviceSection is one advisor's finding: the section it owns in the pull-request
+// comment, rendered for a local reader instead. An EMPTY Body is a retraction - the
+// advisor ran and found nothing - and is a section like any other, not an absence.
+type adviceSection struct {
+	Name  string `json:"name"  yaml:"name"`
+	Title string `json:"title" yaml:"title"`
+	Body  string `json:"body"  yaml:"body"`
+}
+
+// adviceDirRel is where this repository keeps the advisors. They are checked in as a
+// composite action because CI is where they run first, not because the pull request is
+// the only place their answers are useful.
+var adviceDirRel = filepath.Join(".github", "actions", "advice")
+
+// localAdvisors is every advisor a local run may execute, in the order action.yml runs
+// them. action.yml is the source of truth for that set; this list restates it.
+//
+// Restating it rather than reading the directory is deliberate, and the deciding reason
+// is safety. Three of the scripts in that directory PUSH to a branch, and nothing about a
+// filename separates them from the read-only ones: `fix-generated-drift.buzz` and
+// `fix-merge-conflict.buzz` share a prefix that `settle-fix-labels.buzz` does not. A
+// sweep of *.buzz would therefore enroll a writer into a local command the moment someone
+// added one, and the failure mode of getting that wrong is a `magus diff` that pushes.
+//
+// Two lesser reasons: the directory also holds `advice.buzz`, which is the shared library
+// and not an advisor at all. And filename order is not the order action.yml chose.
+//
+// first-contribution.buzz is the one read-only advisor deliberately left out: it asks the
+// forge who opened the pull request, through its own `gh` call rather than through
+// advice.buzz, so local mode cannot intercept it. It also has no local meaning.
+//
+// Restating is not the same as drifting, and TestLocalAdvisorsMatchActionYML is what keeps
+// the two apart: it reads the steps back out of action.yml and fails naming any advisor
+// that is in one list and not the other. Adding a read-only advisor to CI without adding
+// it here is the failure that gate exists for.
+var localAdvisors = []string{
+	"merge-conflict.buzz",
+	"hand-edited-generated.buzz",
+	"target-outputs.buzz",
+	"doctor.buzz",
+	"version-floor.buzz",
+	"unclaimed.buzz",
+	"blast-radius.buzz",
+	"skip-cache.buzz",
+	"conformance.buzz",
+	"missing-target.buzz",
+	"api-surface.buzz",
+}
+
+// runLocalAdvisors runs the read-only PR advisors against the local tree and returns
+// their sections in localAdvisors order, plus a note per advisor that failed.
+//
+// base is a BRANCH name, not a rev: the advisors compare against `origin/<base>`, the
+// same way they use PR_BASE in CI.
+//
+// An advisor that raises produces a note and never an error - one broken advisor must not
+// take the other nine down, because the caller is showing a reader what magus knows and
+// nine tenths of that is still worth showing. The error return is for a failure that
+// makes the whole set meaningless.
+//
+// Not safe for concurrent use: the advisors read their inputs with os\env, so the two
+// local-mode variables are set process-wide for the duration of the call.
+func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string) ([]adviceSection, []string, error) {
+	dir := filepath.Join(m.Root(), adviceDirRel)
+	if _, err := os.Stat(dir); err != nil {
+		return nil, []string{fmt.Sprintf("no advisors in this workspace: %s is not readable (%v)", dir, err)}, nil
+	}
+
+	// The advisors ask magus about the workspace (magus\describeFile, magus\diff,
+	// magus\affectedImpact), which reads it off the context the way `magus buzz` does.
+	// The caller's already-loaded workspace is attached rather than loaded again:
+	// loadMagus is once-per-process and panics on a second call with a different root.
+	if m != nil {
+		ctx = types.WithWorkspace(ctx, m)
+	}
+	return collectAdvice(ctx, dir, localAdvisors, base)
+}
+
+// collectAdvice is runLocalAdvisors without the workspace and directory resolution, so a
+// test can drive it against stub advisors.
+func collectAdvice(ctx context.Context, dir string, files []string, base string) ([]adviceSection, []string, error) {
+	restore, err := setAdviceEnv(base)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer restore()
+
+	var sections []adviceSection
+	var notes []string
+	for _, file := range files {
+		out, warnings, err := runAdvisor(ctx, dir, file)
+		// Sections printed before the failure are kept: an advisor that publishes and
+		// then dies has already said something true, and dropping it would report the
+		// finding as absent rather than as partial.
+		sections = append(sections, parseAdviceSections(out)...)
+		if err != nil {
+			// Warnings first, then the failure: that is the order they happened in, and a
+			// BZZ3001 above a crash is usually the explanation for it.
+			//
+			// ONLY when it crashed. These are lint diagnostics about the advisor's own
+			// source - magus's shipped scripts, not the reader's change - and an advisor
+			// that ran fine has told the reader nothing by emitting them. Four personas
+			// independently hit the version that printed them unconditionally: a one-line
+			// docs fix drew ~40 lines of BZZ3001/BZZ3002 about `merge-conflict.buzz` and
+			// `doctor.buzz`, and the drive-by contributor named it the moment they nearly
+			// closed the laptop, assuming they had broken something. Lint about magus's
+			// own sources belongs in magus's own lint run.
+			for _, w := range warnings {
+				notes = append(notes, fmt.Sprintf("%s: %s", file, w))
+			}
+			// Stamped here, not at render time: warnings and failures share one ordered
+			// stream, and only this frame knows which is which.
+			notes = append(notes, fmt.Sprintf("could not run: %s: %v", file, err))
+		}
+	}
+	return sections, notes, nil
+}
+
+// The contract between this driver and advice.buzz. The names are read there with os\env;
+// there is no per-session environment to hand a Buzz script, so they are set on the
+// process.
+//
+// MAGUS_INTERNAL_ says what these are: the handshake between two halves of one feature,
+// not a knob. Setting either by hand puts the advisors into local mode with no driver
+// reading their stdout, and both names may change with this file in one commit. advice.buzz
+// pins the same three strings in a test block of its own, because nothing at runtime
+// couples its copy to this one - rename one side alone and every advisor fails with
+// "nowhere to publish" instead of saying anything.
+const (
+	adviceModeEnv       = "MAGUS_INTERNAL_ADVICE_MODE"
+	adviceModeLocal     = "local"
+	adviceBaseBranchEnv = "MAGUS_INTERNAL_ADVICE_BASE_BRANCH"
+)
+
+// setAdviceEnv puts the local-mode variables on the process and returns the restore.
+// It restores an absent variable to absent rather than to empty, because advice.buzz
+// distinguishes the two.
+func setAdviceEnv(base string) (func(), error) {
+	saved := map[string]*string{}
+	for name, want := range map[string]string{adviceModeEnv: adviceModeLocal, adviceBaseBranchEnv: base} {
+		if had, ok := os.LookupEnv(name); ok {
+			saved[name] = &had
+		} else {
+			saved[name] = nil
+		}
+		if err := os.Setenv(name, want); err != nil {
+			return func() {}, fmt.Errorf("magus diff: set %s: %w", name, err)
+		}
+	}
+	return func() {
+		for name, was := range saved {
+			if was == nil {
+				_ = os.Unsetenv(name)
+				continue
+			}
+			_ = os.Setenv(name, *was)
+		}
+	}, nil
+}
+
+// runAdvisor evaluates one advisor in-process and returns what it printed, the warnings
+// its compilation raised, and the error that ended it. Nothing here writes or exits: all
+// three are the caller's to report.
+//
+// The session is built as `magus buzz <file>` builds one - same module surface, same
+// strict parse mode, warnings drained at the same point, `fun main() > int` read rather
+// than discarded - so an advisor cannot behave one way in CI and another way here. Two
+// differences remain, both deliberate:
+//
+//   - std.print goes to a buffer, not stdout. That IS the transport: a section is a line
+//     the advisor printed, and parseAdviceSections reads them back.
+//   - the include path is set on the session rather than through BUZZ_INCLUDE_PATH, for
+//     the reason at the call site below.
+//
+// Where those two observations LAND differs as well, and has to. `magus buzz` prints
+// warnings to stderr and exits with main's value; ten advisors run here, and the ninth
+// failing is not a verdict on `magus diff`. Both become notes instead.
+func runAdvisor(ctx context.Context, dir, file string) (string, []string, error) {
+	src, err := os.ReadFile(filepath.Join(dir, file))
+	if err != nil {
+		return "", nil, err
+	}
+	sess := buzz.NewSession(ctx)
+	defer func() { _ = sess.Close() }()
+	// `import "advice"` resolves against this list. The composite action gets the same
+	// effect from BUZZ_INCLUDE_PATH; setting it directly keeps the advisor's view of the
+	// filesystem out of the process environment.
+	sess.SetIncludeDirs([]string{dir})
+
+	var out bytes.Buffer
+	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(&out))
+	bindings.RegisterMagusNamespace(ctx, sess)
+	bindings.RegisterSpellSourceModules(sess)
+
+	if err := sess.Exec(ctx, string(src)); err != nil {
+		return out.String(), nil, err
+	}
+	// Drained where `magus buzz` drains them: after Exec, before main. These are parse and
+	// check diagnostics (BZZ3001 unused import, and the rest), so Exec is where all of them
+	// are produced, and it never fails on one - which is exactly why they need collecting
+	// rather than trusting a green run. An advisor whose imports have rotted is the kind of
+	// thing a reader wants told, not left to read as an advisor with nothing to say.
+	var warnings []string
+	for _, w := range sess.Warnings() {
+		w.File = file
+		warnings = append(warnings, w.String())
+	}
+
+	mainFn := sess.GetGlobal("main")
+	if !mainFn.IsFun() {
+		return out.String(), warnings, fmt.Errorf("no main() to run")
+	}
+	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(nil)})
+	if err != nil {
+		return out.String(), warnings, err
+	}
+	// `fun main() > int` is upstream's exit-status convention, and the checker permits it,
+	// so an advisor may report failure by returning rather than by throwing. Discarding the
+	// value read that advisor as having succeeded.
+	if ret.IsInt() && ret.AsInt() != 0 {
+		return out.String(), warnings, fmt.Errorf("main() returned %d", ret.AsInt())
+	}
+	return out.String(), warnings, nil
+}
+
+// parseAdviceSections picks the section objects out of one advisor's output. An advisor
+// also prints a progress line for a human ("unclaimed: advised on ..."), so the two are
+// told apart by decoding rather than by position: a line that is not a section object is
+// the advisor talking, and is dropped.
+func parseAdviceSections(out string) []adviceSection {
+	var got []adviceSection
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		var s adviceSection
+		if err := json.Unmarshal([]byte(line), &s); err != nil || s.Name == "" {
+			continue
+		}
+		got = append(got, s)
+	}
+	return got
+}
+
+// impactReview is where a reader left off in this change.
+//
+// It is a BOOKMARK, not a score, and the difference decides the whole design. An earlier
+// version led with "N of M files carry a read receipt", which is a completion metric: it
+// has a target, and the cheapest way to reach the target is to stamp everything without
+// reading it. A count that can be satisfied by typing is worse than no count, because it
+// trains the reader to type something they do not mean.
+//
+// So no ratio is reported. What is reported is the two things a reader cannot produce
+// without reading: which files moved after they read them, and which they have not opened.
+// Both are answers to "where was I", and the test any addition here has to pass is whether
+// somebody would still want it if nobody else ever saw the result.
+type impactReview struct {
+	Files int `json:"files" yaml:"files"`
+	Read  int `json:"read"  yaml:"read"`
+	// Stale are files read and then edited. They lead the section: the signal is derived
+	// from CONTENT rather than from a claim, so inattention cannot fake it, and it is the
+	// more dangerous shape anyway - somebody did look, which is exactly why nobody will
+	// look again.
+	Stale  []string `json:"stale,omitempty"  yaml:"stale,omitempty"`
+	Unread []string `json:"unread,omitempty" yaml:"unread,omitempty"`
+	// Required are unread files inside a project's declared review_required globs. Listed
+	// separately and in FULL rather than capped: the workspace said an unread change costs
+	// something here, so this is the half of the section that is not just a count.
+	Required []string `json:"required,omitempty" yaml:"required,omitempty"`
+	// Reasons are the distinct bulk-ack justifications covering files in this changeset,
+	// so "somebody read it" and "somebody assumed it was fine, here is why" do not
+	// collapse into one number.
+	Reasons []string `json:"reasons,omitempty" yaml:"reasons,omitempty"`
+}
+
+// unreadShown bounds the never-opened list, which is context rather than the finding.
+const unreadShown = 10
+
+// reviewMinFiles is the changeset size below which the section says nothing at all.
+//
+// A four-file change needs no reading plan, and printing one there is how a reader learns
+// to skip this section before ever meeting a change big enough to need it. Nothing stale is
+// part of the condition: a small change where a file moved after you read it is exactly
+// when the section earns its line.
+const reviewMinFiles = 5
+
+// reviewRequiredMatcher reports whether a workspace-relative path sits inside any project's
+// declared review_required globs.
+//
+// Globs are matched against the path relative to the DECLARING project, so a project names
+// its own files the same way its sources and outputs do rather than having to spell the
+// workspace prefix that its magusfile already sits under.
+//
+// nil when no project declares any, which the caller treats as "single nothing out" rather
+// than as "everything matters".
+func reviewRequiredMatcher(ws types.WorkspaceReader) func(string) bool {
+	type scope struct {
+		dir   string
+		globs []string
+	}
+	var scopes []scope
+	for _, p := range ws.All() {
+		if len(p.ReviewRequired) > 0 {
+			scopes = append(scopes, scope{dir: p.Path, globs: p.ReviewRequired})
+		}
+	}
+	if len(scopes) == 0 {
+		return nil
+	}
+	return func(path string) bool {
+		for _, s := range scopes {
+			rel := path
+			if s.dir != "" && s.dir != "." {
+				if !strings.HasPrefix(path, s.dir+"/") {
+					continue
+				}
+				rel = strings.TrimPrefix(path, s.dir+"/")
+			}
+			for _, g := range s.globs {
+				if ok, err := doublestar.Match(g, rel); err == nil && ok {
+					return true
+				}
+			}
+		}
+		return false
+	}
+}
+
+// bulkReasons is every distinct reason a bulk ack recorded against a file in this
+// changeset, in first-seen order.
+func bulkReasons(cacheDir string, rev types.Diff) []string {
+	store, err := review.Load(cacheDir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range rev.Files {
+		r, ok := store[f.Path]
+		if !ok || r.Reason == "" || seen[r.Reason] {
+			continue
+		}
+		seen[r.Reason] = true
+		out = append(out, r.Reason)
+	}
+	return out
+}
+
+// collectReview tallies the read state already folded onto the changeset by annotateDiff.
+//
+// It reads DiffFile.ReadState rather than consulting the store a second time, so the
+// terminal report and the console's review surface cannot disagree about which files
+// somebody has read - they are looking at one join.
+//
+// nil when no file carries a state at all, which the renderer states as unmeasured rather
+// than as unread. Those are opposite claims and only one of them accuses.
+//
+// Generated files are excluded: reading a machine's restatement of an edit made elsewhere
+// is not the review, the same reason the file list folds them away by default.
+func collectReview(rev types.Diff, required func(string) bool, reasons []string) *impactReview {
+	out := &impactReview{Reasons: reasons}
+	measured := false
+	for _, f := range rev.Files {
+		if f.Generated() {
+			continue
+		}
+		out.Files++
+		switch f.ReadState {
+		case types.DiffReadRead:
+			measured = true
+			out.Read++
+			continue
+		case types.DiffReadStale:
+			measured = true
+			out.Stale = append(out.Stale, f.Path)
+			// Not also Required: the section already names it under "changed after you
+			// read them", and listing it again as "unopened" would both contradict itself
+			// and print one path as two findings.
+			continue
+		case types.DiffReadUnread:
+			measured = true
+			out.Unread = append(out.Unread, f.Path)
+		default:
+			continue
+		}
+		if required != nil && required(f.Path) {
+			out.Required = append(out.Required, f.Path)
+		}
+	}
+	if !measured && out.Files > 0 {
+		return nil
+	}
+	return out
+}
+
+// scopeAck narrows a changeset to the paths the caller named, so a reader can record the
+// three files they just read in their editor without claiming the other thirty.
+//
+// An unnamed path is an ERROR rather than a silent no-op. The whole value of a receipt is
+// that it names something real; a typo that quietly acknowledged nothing would leave the
+// reader believing they had recorded work they had not.
+func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
+	if len(paths) == 0 {
+		return rev, nil
+	}
+	inChange := make(map[string]bool, len(rev.Files))
+	for _, f := range rev.Files {
+		inChange[f.Path] = true
+	}
+	want := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(p)), "./")
+		if !inChange[clean] {
+			return types.Diff{}, usagef("magus diff --ack: %q is not a changed file in this changeset; `magus diff -o name` lists them", p)
+		}
+		want[clean] = true
+	}
+	out := types.Diff{Base: rev.Base}
+	for _, f := range rev.Files {
+		if want[f.Path] {
+			out.Files = append(out.Files, f)
+		}
+	}
+	return out, nil
+}
+
+// ackChangeset records a receipt for every non-generated changed file at its current
+// content, carrying the reason the caller gave for covering them all at once.
+func ackChangeset(root, cacheDir string, rev types.Diff, reason string, now time.Time) (int, error) {
+	var add []review.Receipt
+	for _, f := range rev.Files {
+		if f.Generated() {
+			continue
+		}
+		digest := review.DigestFile(filepath.Join(root, filepath.FromSlash(f.Path)))
+		if digest == "" {
+			// A deleted file has no content anyone can have read. Recording a receipt
+			// against "" would then satisfy Covers for every unreadable file forever.
+			continue
+		}
+		add = append(add, review.Receipt{Path: f.Path, Digest: digest, At: now, Reason: reason})
+	}
+	if len(add) == 0 {
+		return 0, nil
+	}
+	return len(add), review.Record(cacheDir, add)
+}
+
+// impactReviewLines renders the section, or nothing at all.
+//
+// Nil is a real answer here and the common one. A section that always prints is a section
+// people stop reading, and this one has nothing to say about a small change nobody has
+// disturbed since reading.
+//
+// It STAYS in the impact report, though a review argued for moving it to the stepping surface
+// on the grounds that a report about what landing costs is the wrong home for what a reader
+// has read. That was fair when the viewer was a flag you opted into and this report was the
+// only surface most people saw. It stopped being fair twice over: the viewer is what opens at
+// a terminal now, so it is not a corner anything gets hidden in - and the viewer counts hunks
+// read but has no notion of STALE. "This changed after you read it" is the half of this
+// section worth having, and there is nowhere else it is said.
+//
+// The additive version of that review's point is still open and still good: teach the viewer
+// stale state, so a reader stepping through sees which files moved under them. That is worth
+// doing. It is not a reason to take the only telling of it out of the report first.
+func impactReviewLines(r *impactReview) []string {
+	if r == nil {
+		return []string{"REVIEW: read receipts unavailable; step a file through in `magus diff` to earn one"}
+	}
+	// Silence, not a reassurance. "Everything here has been read" would be a claim the
+	// reader can produce by stamping rather than by reading, which is the sentence this
+	// section was rebuilt to stop printing.
+	if r.Files == 0 || (len(r.Stale) == 0 && (r.Files < reviewMinFiles || len(r.Unread) == 0)) {
+		return nil
+	}
+
+	var out []string
+	// Stale leads, always, whatever else is in the section. It is the one finding here
+	// that no amount of stamping produces: the file moved after somebody read it.
+	if len(r.Stale) > 0 {
+		out = append(out, fmt.Sprintf("REVIEW: %d file(s) changed after you read them", len(r.Stale)))
+		for _, p := range r.Stale {
+			out = append(out, "      "+p)
+		}
+	}
+	// Then what the workspace itself said was worth reading, uncapped.
+	if len(r.Required) > 0 {
+		head := fmt.Sprintf("%d unopened in review_required paths:", len(r.Required))
+		if len(out) == 0 {
+			out = append(out, "REVIEW: "+head)
+		} else {
+			out = append(out, "      "+head)
+		}
+		for _, p := range r.Required {
+			out = append(out, "        "+p)
+		}
+	}
+	// Then the rest, as context and capped, in the order the reader would take them.
+	if rest := unreadRest(r); len(rest) > 0 {
+		head := fmt.Sprintf("%d file(s) you have not opened, widest blast radius first", len(rest))
+		if len(out) == 0 {
+			out = append(out, "REVIEW: "+head)
+		} else {
+			out = append(out, "      "+head)
+		}
+		shown := rest
+		if len(shown) > unreadShown {
+			shown = shown[:unreadShown]
+		}
+		for _, p := range shown {
+			out = append(out, "        "+p)
+		}
+		if len(rest) > len(shown) {
+			out = append(out, fmt.Sprintf("        and %d more", len(rest)-len(shown)))
+		}
+	}
+	for _, reason := range r.Reasons {
+		// Echoed so a file covered by one keystroke does not read as one somebody sat
+		// down with. It is a note the reader left themselves, not a toll they paid.
+		out = append(out, fmt.Sprintf("      some were covered in bulk: %q", reason))
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	// Both doors, because the reader's editor is not magus's business: naming only the
+	// viewer told anyone who reviews in vim or magit that their only option was the
+	// blanket ack.
+	return append(out,
+		"      record what you read, wherever you read it: magus diff --ack <path>...",
+		"      or step through them here: magus diff")
+}
+
+// unreadRest is the never-opened files the section has not already named under
+// review_required, so no path appears twice.
+func unreadRest(r *impactReview) []string {
+	if len(r.Required) == 0 {
+		return r.Unread
+	}
+	named := make(map[string]bool, len(r.Required))
+	for _, p := range r.Required {
+		named[p] = true
+	}
+	var out []string
+	for _, p := range r.Unread {
+		if !named[p] {
+			out = append(out, p)
 		}
 	}
 	return out

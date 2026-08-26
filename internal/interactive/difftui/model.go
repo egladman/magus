@@ -509,7 +509,7 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 // It says "on the review" rather than naming the author alone, because the reader has to be
 // able to tell what the world has already seen from what is still theirs to send. The console
 // draws the same distinction with a colour it cannot use here.
-func threadRows(t types.ReviewThread, file, row int) []Row {
+func threadRows(t types.ReviewThread, file, hunk int) []Row {
 	who := t.Author
 	if who == "" {
 		who = "review"
@@ -521,7 +521,7 @@ func threadRows(t types.ReviewThread, file, row int) []Row {
 		if j == 0 {
 			text = fmt.Sprintf("  | %s, on the review: %s", who, line)
 		}
-		out = append(out, Row{Kind: RowComment, File: file, Hunk: row, Text: text})
+		out = append(out, Row{Kind: RowComment, File: file, Hunk: hunk, Text: text})
 	}
 	return out
 }

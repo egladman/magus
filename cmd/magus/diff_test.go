@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,7 +20,9 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/interactive/difftui"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 )
 
@@ -824,4 +831,966 @@ func TestAColorizedPatchNamesColorAsTheCause(t *testing.T) {
 		"\x1b[0;32;1m+++ b/f.txt\x1b[0m\n"
 	assert.Empty(t, changedPathsFromPatch(colorized), "escape sequences hide the headers")
 	assert.Contains(t, colorized, "\x1b[", "the detection this refusal keys on")
+}
+
+// recordingSync is the inner sync earnedSync wraps, so a test can assert the wrapper still
+// forwards every mark: the daemon and the console read the reader's progress through it, and
+// a wrapper that swallowed marks would desynchronize them silently.
+type recordingSync struct {
+	marks  []string
+	closed bool
+}
+
+func (r *recordingSync) SetCursor(types.DiffCursor)       {}
+func (r *recordingSync) SetViewed(digest string, on bool) { r.marks = append(r.marks, digest) }
+func (r *recordingSync) close()                           { r.closed = true }
+
+func earnedFixture(t *testing.T, files map[string]string) (root, cache string, tui []difftui.File) {
+	t.Helper()
+	root, cache = t.TempDir(), t.TempDir()
+	for path, body := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(root, path), []byte(body), 0o644))
+	}
+	return root, cache, tui
+}
+
+func tuiFile(path string, generated bool, digests ...string) difftui.File {
+	f := difftui.File{Path: path, Generated: generated}
+	for _, d := range digests {
+		f.Hunks = append(f.Hunks, difftui.Hunk{Digest: d})
+	}
+	return f
+}
+
+func TestEarnedSyncMintsWhenEveryHunkIsMarked(t *testing.T) {
+	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
+	inner := &recordingSync{}
+	e := newEarnedSync(inner, root, cache, []difftui.File{tuiFile("a.go", false, "h1", "h2")}, nil)
+
+	e.SetViewed("h1", true)
+	e.close()
+	store, err := review.Load(cache)
+	require.NoError(t, err)
+	assert.Empty(t, store, "one of two hunks read is not a file read")
+
+	e = newEarnedSync(&recordingSync{}, root, cache, []difftui.File{tuiFile("a.go", false, "h1", "h2")}, nil)
+	e.SetViewed("h1", true)
+	e.SetViewed("h2", true)
+	e.close()
+	store, err = review.Load(cache)
+	require.NoError(t, err)
+	assert.True(t, store.Covers("a.go", review.DigestFile(filepath.Join(root, "a.go"))))
+}
+
+// THE trust property. The seeded viewed set comes from an unauthenticated JSON file whose
+// hunk digests are computable from `magus diff` output, so anything with write access can
+// forge a complete reading. Without the live-mark rule, opening the viewer once would launder
+// that forgery into durable receipts.
+func TestEarnedSyncRefusesToMintFromASeededSetAlone(t *testing.T) {
+	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
+	// Every hunk already "read", exactly as a forged store would present them.
+	e := newEarnedSync(&recordingSync{}, root, cache,
+		[]difftui.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1", "h2"})
+	e.close()
+
+	store, err := review.Load(cache)
+	require.NoError(t, err)
+	assert.Empty(t, store, "a seeded set with no live mark must mint nothing")
+}
+
+// ...but the seed still does its real job: a reader who finishes a file across two sittings
+// earns it on the mark that completes it.
+func TestEarnedSyncLetsASeededSetFinishALiveReading(t *testing.T) {
+	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
+	e := newEarnedSync(&recordingSync{}, root, cache,
+		[]difftui.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1"})
+
+	e.SetViewed("h2", true)
+	e.close()
+
+	store, err := review.Load(cache)
+	require.NoError(t, err)
+	assert.True(t, store.Covers("a.go", review.DigestFile(filepath.Join(root, "a.go"))),
+		"the last hunk was marked in this session, so the reading was earned")
+}
+
+// Reading a machine's restatement of an edit made elsewhere is not the review, which is why
+// the file list folds generated output away by default too.
+func TestEarnedSyncIgnoresGeneratedFiles(t *testing.T) {
+	root, cache, _ := earnedFixture(t, map[string]string{"gen.json": "{}\n"})
+	e := newEarnedSync(&recordingSync{}, root, cache, []difftui.File{tuiFile("gen.json", true, "g1")}, nil)
+
+	e.SetViewed("g1", true)
+	e.close()
+
+	store, err := review.Load(cache)
+	require.NoError(t, err)
+	assert.Empty(t, store)
+}
+
+// The wrapper is a side channel, not a replacement: the daemon and the console read the
+// reader's progress through the inner sync, and swallowing a mark would desynchronize them.
+func TestEarnedSyncForwardsEveryMarkAndClosesTheInnerSync(t *testing.T) {
+	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
+	inner := &recordingSync{}
+	e := newEarnedSync(inner, root, cache, []difftui.File{tuiFile("a.go", false, "h1")}, nil)
+
+	e.SetViewed("h1", true)
+	e.SetViewed("unknown-digest", true)
+	e.close()
+
+	assert.Equal(t, []string{"h1", "unknown-digest"}, inner.marks)
+	assert.True(t, inner.closed, "the wrapped sync must still be shut down")
+}
+
+// A file that cannot be fingerprinted records nothing rather than a receipt against no
+// content, which Covers would then satisfy for every unreadable file forever.
+func TestEarnedSyncMintsNothingForAFileItCannotRead(t *testing.T) {
+	root, cache := t.TempDir(), t.TempDir()
+	e := newEarnedSync(&recordingSync{}, root, cache, []difftui.File{tuiFile("gone.go", false, "h1")}, nil)
+	e.now = func() time.Time { return time.Unix(0, 0) }
+
+	e.SetViewed("h1", true)
+	e.close()
+
+	store, err := review.Load(cache)
+	require.NoError(t, err)
+	assert.Empty(t, store)
+}
+
+func TestCompatUntil(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"compat(until: no store still serves ed25519 envelopes): sigAlg is", "no store still serves ed25519 envelopes"},
+		{"compat(until: console reads the new keys)", "console reads the new keys"},
+		// A condition that wraps onto the next line is truncated rather than dropped: half
+		// of it still says what KIND of thing would retire the code.
+		{"compat(until: no install still carries the pre-rename file - the", "no install still carries the pre-rename file - the"},
+		{"compat(until: )", ""},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, compatUntil(c.in), c.in)
+	}
+}
+
+func TestCollectRationale(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, body string) {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+	write("a.go", "package a\n\n// compat(until: no store holds v1 descriptors): keep the branch.\nfunc F() {}\n")
+	write("b.go", "package b\n\nfunc G() {}\n")
+	write("gen/c.go", "package gen\n\n// compat(until: whatever): generated.\n")
+
+	rev := types.Diff{Files: []types.DiffFile{
+		{Path: "a.go", Role: types.DiffRoleSource},
+		{Path: "b.go", Role: types.DiffRoleSource},
+		{Path: "gen/c.go", Role: types.DiffRoleOutput},
+	}}
+
+	got := collectRationale(root, rev)
+	require.Len(t, got, 1)
+	assert.Equal(t, "a.go", got[0].Path)
+	assert.Equal(t, 3, got[0].Line)
+	assert.Equal(t, "no store holds v1 descriptors", got[0].Until)
+}
+
+func TestImpactRationaleLines(t *testing.T) {
+	t.Run("empty says nothing was marked, not nothing was checked", func(t *testing.T) {
+		lines := impactRationaleLines(nil)
+		require.Len(t, lines, 1)
+		assert.Contains(t, lines[0], "no compat(until:) marker")
+	})
+
+	t.Run("names the file, the line, and the condition", func(t *testing.T) {
+		lines := impactRationaleLines([]rationaleHit{{Path: "a.go", Line: 12, Until: "no store holds v1"}})
+		assert.Contains(t, lines[0], "1 compat(until:) marker")
+		assert.Equal(t, "      a.go:12 until no store holds v1", lines[1])
+	})
+
+	// The marker appears as a bare token in this tool's own source, in doc comments naming
+	// the convention, and in lint patterns. Matching those would put the reporting code at
+	// the top of its own report.
+	t.Run("a bare mention of the marker is not a decision", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"),
+			[]byte("package a\n\nconst marker = \"compat(until:\"\n// the compat(until:) convention\n"), 0o644))
+
+		got := collectRationale(root, types.Diff{
+			Files: []types.DiffFile{{Path: "a.go", Role: types.DiffRoleSource}},
+		})
+		assert.Empty(t, got)
+	})
+
+	t.Run("the list is capped", func(t *testing.T) {
+		var hits []rationaleHit
+		for i := range rationaleShown + 3 {
+			hits = append(hits, rationaleHit{Path: "a.go", Line: i, Until: "x"})
+		}
+		lines := impactRationaleLines(hits)
+		assert.Contains(t, lines[rationaleShown+1], "and 3 more")
+	})
+}
+
+// The scanner used to report its own constant - `const compatMarker = "compat(until: "` -
+// as a decision governing the reader's change, alongside its own test fixtures, rendering
+// a line whose condition was a bare quote character. The file comment claimed the marker's
+// trailing space prevented this; it cannot, because the constant contains that space too.
+func TestAMarkerInAStringLiteralIsNotADecision(t *testing.T) {
+	assert.False(t, inAComment(`const compatMarker = "`), "the scanner's own constant")
+	assert.False(t, inAComment(`		{"`), "a table-driven fixture")
+
+	assert.True(t, inAComment("\t// "), "a line comment")
+	assert.True(t, inAComment("// "), "a line comment at column 0")
+	assert.True(t, inAComment("  * "), "a block comment continuation")
+	assert.True(t, inAComment("# "), "a shell or yaml comment")
+}
+
+// stubAdviceDir builds an advisor directory holding the REAL advice.buzz plus the given
+// stubs, so a test exercises the shipped collect sink rather than a re-implementation of
+// it. The stubs stand in for the advisors themselves, whose findings depend on a git
+// history and a loaded workspace.
+func stubAdviceDir(t *testing.T, stubs map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	src, err := os.ReadFile(filepath.Join("..", "..", adviceDirRel, "advice.buzz"))
+	if err != nil {
+		t.Fatalf("read advice.buzz: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "advice.buzz"), src, 0o600); err != nil {
+		t.Fatalf("write advice.buzz: %v", err)
+	}
+	for name, body := range stubs {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return dir
+}
+
+// echoAdvisor publishes the local env contract back out, so a test can assert what
+// reached the advisor rather than what the driver believes it sent.
+const echoAdvisor = `import "advice";
+import "std";
+
+fun main() > void !> any {
+    std\print("echo: looked at the tree");
+    advice\publish(advice\env("REPO"), pr: advice\env("PR_NUMBER"), name: "echo",
+        title: advice\env("PR_HEAD_SHA"), body: advice\env("PR_BASE"));
+}
+`
+
+// warningAdvisor trips BZZ3002 (string rebuilt in a loop) and still publishes, the shape
+// of every shipped advisor that lints imperfectly but runs.
+const warningAdvisor = `import "advice";
+
+fun main() > void !> any {
+    var text = "";
+    foreach (part in ["still", "standing"]) {
+        text = text + part;
+    }
+    advice\publish("", pr: "", name: "warned", title: "Ran anyway", body: text);
+}
+`
+
+const retractingAdvisor = `import "advice";
+
+fun main() > void !> any {
+    advice\publish("", pr: "", name: "quiet", title: "Nothing to report", body: "");
+}
+`
+
+// rangeAdvisor publishes the rev spec diffRange handed it. Only the driver can put an
+// advisor into local mode (advice.buzz decides on os\env), so the local half of the range
+// contract is only reachable from here.
+const rangeAdvisor = `import "advice";
+
+fun main() > void !> any {
+    advice\publish("", pr: "", name: "range", title: "Range",
+        body: advice\diffRange(advice\env("PR_BASE"), head: advice\env("PR_HEAD_SHA")));
+}
+`
+
+const brokenAdvisor = `fun main() > void !> any {
+    throw "broken on purpose";
+}
+`
+
+// staleBaseAdvisor exercises the half of the local-base contract no Buzz test can reach:
+// advice.buzz decides on os\env, and os\with_env does not touch this process's own
+// environment, so only a driver that really sets the variable can put an advisor into
+// local mode.
+//
+// The base is one no remote can resolve. In CI mode fetchBase runs the refspec fetch,
+// git fails to find the ref, and fetchBase throws - so merely reaching publish is the
+// proof that the local-mode gate returned before any git ran.
+const staleBaseAdvisor = `import "advice";
+
+fun main() > void !> any {
+    advice\fetchBase("magus-advice-no-such-base", refspec: true);
+    advice\publish("", pr: "", name: "stale", title: "Stale base", body: advice\env("PR_BASE"));
+}
+`
+
+func TestCollectAdviceEmitsSectionsAndSkipsTheForge(t *testing.T) {
+	dir := stubAdviceDir(t, map[string]string{"echo.buzz": echoAdvisor})
+
+	sections, notes, err := collectAdvice(context.Background(), dir, []string{"echo.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(notes) != 0 {
+		// Compile warnings are notes too, so a note here may be a BZZ diagnostic raised by
+		// the shipped advice.buzz rather than anything the stub did.
+		t.Fatalf("notes = %v, want none", notes)
+	}
+	if len(sections) != 1 {
+		t.Fatalf("sections = %+v, want exactly one", sections)
+	}
+	got := sections[0]
+	if got.Name != "echo" {
+		t.Errorf("Name = %q, want %q", got.Name, "echo")
+	}
+	// The driver's base reaches the advisor as PR_BASE, which is the whole point of the
+	// shared env helper's local mode.
+	if got.Body != "main" {
+		t.Errorf("Body = %q, want the base %q", got.Body, "main")
+	}
+	// PR_HEAD_SHA is supplied rather than left empty; an empty one makes every advisor
+	// read the run as "not a pull request" and say nothing at all.
+	if got.Title == "" {
+		t.Error("Title is empty: PR_HEAD_SHA was not supplied to the advisor")
+	}
+}
+
+func TestCollectAdviceKeepsARetraction(t *testing.T) {
+	dir := stubAdviceDir(t, map[string]string{"quiet.buzz": retractingAdvisor})
+
+	sections, _, err := collectAdvice(context.Background(), dir, []string{"quiet.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(sections) != 1 || sections[0].Name != "quiet" || sections[0].Body != "" {
+		t.Fatalf("sections = %+v, want one empty-bodied \"quiet\" section", sections)
+	}
+}
+
+func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
+	dir := stubAdviceDir(t, map[string]string{
+		"echo.buzz":   echoAdvisor,
+		"broken.buzz": brokenAdvisor,
+		"quiet.buzz":  retractingAdvisor,
+	})
+	// Broken in the MIDDLE: a failure that stops the run would take the third advisor
+	// with it and look identical to one that had nothing to say.
+	order := []string{"echo.buzz", "broken.buzz", "quiet.buzz"}
+
+	sections, notes, err := collectAdvice(context.Background(), dir, order, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(notes) != 1 {
+		t.Fatalf("notes = %v, want exactly one", notes)
+	}
+	if !strings.Contains(notes[0], "broken.buzz") || !strings.Contains(notes[0], "broken on purpose") {
+		t.Errorf("note = %q, want it to name the advisor and the error", notes[0])
+	}
+	// The renderer prints notes verbatim, so an unstamped failure would read as a
+	// warning from an advisor that ran.
+	if !strings.HasPrefix(notes[0], "could not run: ") {
+		t.Errorf("note = %q, want the could-not-run stamp on a failure", notes[0])
+	}
+	if len(sections) != 2 {
+		t.Fatalf("sections = %+v, want the two working advisors", sections)
+	}
+	if sections[0].Name != "echo" || sections[1].Name != "quiet" {
+		t.Errorf("sections = %+v, want them in the order they were listed", sections)
+	}
+}
+
+// A warning from an advisor that RAN is not the reader's business.
+//
+// These are lint diagnostics about the advisor's own source - magus's shipped scripts, not
+// anything in the changeset. Printing them unconditionally is what made a one-line docs fix
+// draw ~40 lines of BZZ3001/BZZ3002 about merge-conflict.buzz and doctor.buzz; four
+// personas hit it independently and the drive-by contributor named it as the point they
+// nearly abandoned the repo, assuming they had broken something.
+func TestCollectAdviceDropsWarningsFromAnAdvisorThatRan(t *testing.T) {
+	dir := stubAdviceDir(t, map[string]string{"warned.buzz": warningAdvisor})
+
+	sections, notes, err := collectAdvice(context.Background(), dir, []string{"warned.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(sections) != 1 {
+		t.Fatalf("sections = %+v, want the advisor's finding: it ran", sections)
+	}
+	if len(notes) != 0 {
+		t.Fatalf("notes = %v, want none: the advisor ran, so its own lint is not the reader's business", notes)
+	}
+}
+
+// ...but when the advisor CRASHED, its warnings are kept and ordered above the failure: a
+// BZZ3001 over a crash is usually the explanation for it, which is the whole reason they
+// were ever collected.
+func TestCollectAdviceKeepsWarningsFromAnAdvisorThatFailed(t *testing.T) {
+	dir := stubAdviceDir(t, map[string]string{"broken.buzz": brokenAdvisor})
+
+	_, notes, err := collectAdvice(context.Background(), dir, []string{"broken.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(notes) == 0 {
+		t.Fatal("want the failure surfaced as a note")
+	}
+	last := notes[len(notes)-1]
+	if !strings.HasPrefix(last, "could not run: ") {
+		t.Errorf("last note = %q, want the could-not-run stamp last, after any warnings", last)
+	}
+}
+
+// TestLocalModeDiffsTheWorkingTree pins the half of the range contract advice.buzz cannot
+// reach: only a driver that really sets the mode variable puts an advisor into local mode.
+//
+// The assertion is the REV the advisors are handed, not the diff it produces, because the
+// behaviour being bought is git's: `git diff <commit>` with no second rev compares the
+// WORKING TREE against that commit, where `base...head` stops at the last commit. Choosing
+// the merge base is this code's decision and the only part worth pinning.
+func TestLocalModeDiffsTheWorkingTree(t *testing.T) {
+	// The advisors run git against the process working directory, which under `go test` is
+	// this package inside magus's own repository - a real clone with a real history.
+	out, err := exec.Command("git", "merge-base", "origin/main", "HEAD").Output()
+	if err != nil {
+		t.Skip("origin/main is not in this clone, which is the fallback path below, not this one")
+	}
+	want := strings.TrimSpace(string(out))
+
+	dir := stubAdviceDir(t, map[string]string{"range.buzz": rangeAdvisor})
+	sections, notes, err := collectAdvice(context.Background(), dir, []string{"range.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(notes) != 0 {
+		t.Fatalf("notes = %v, want none", notes)
+	}
+	if len(sections) != 1 {
+		t.Fatalf("sections = %+v, want exactly one", sections)
+	}
+	if got := sections[0].Body; got != want {
+		t.Errorf("range = %q, want the merge base %q: a three-dot range would stop at the "+
+			"last commit and report the uncommitted change as absent", got, want)
+	}
+}
+
+// TestLocalModeReadsAStaleBaseWithoutFetching pins the rule that a local advice run stays
+// off the network. `magus diff` is a read-only report on a working tree - it may run
+// offline, and under --watch it re-fires on every save - so fetching, and writing
+// refs/remotes/ while doing it, is a report mutating what it reports on.
+func TestLocalModeReadsAStaleBaseWithoutFetching(t *testing.T) {
+	dir := stubAdviceDir(t, map[string]string{"stale.buzz": staleBaseAdvisor})
+
+	sections, notes, err := collectAdvice(context.Background(), dir, []string{"stale.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	// A note here IS the defect: fetchBase reached git, git could not resolve the refspec,
+	// and it threw. On the correct path no git runs at all.
+	if len(notes) != 0 {
+		t.Fatalf("notes = %v, want none: fetchBase went to the network during a local run", notes)
+	}
+	if len(sections) != 1 {
+		t.Fatalf("sections = %+v, want exactly one", sections)
+	}
+	// The advisor saw the driver's base rather than a pull request's. Saying that the base
+	// went unfetched is the DRIVER's line, once for the whole set - see
+	// TestImpactBaseSeparatesOldFromAbsent - so no section carries the disclaimer.
+	if body := sections[0].Body; body != "main" {
+		t.Errorf("Body = %q, want the local base the driver supplied", body)
+	}
+}
+
+func TestParseAdviceSectionsDropsProgressLines(t *testing.T) {
+	out := "unclaimed: advised on a, b\n" +
+		`{"name":"unclaimed","title":"Files no project claims (2)","body":"a\nb"}` + "\n" +
+		"not json at all\n" +
+		`{"title":"no name","body":"x"}` + "\n"
+
+	got := parseAdviceSections(out)
+	if len(got) != 1 {
+		t.Fatalf("got %+v, want only the one named section", got)
+	}
+	if got[0].Body != "a\nb" {
+		t.Errorf("Body = %q, want the escaped newline decoded", got[0].Body)
+	}
+}
+
+func TestSetAdviceEnvRestoresAbsence(t *testing.T) {
+	t.Setenv(adviceModeEnv, "")
+	if err := os.Unsetenv(adviceModeEnv); err != nil {
+		t.Fatalf("unsetenv: %v", err)
+	}
+
+	restore, err := setAdviceEnv("main")
+	if err != nil {
+		t.Fatalf("setAdviceEnv: %v", err)
+	}
+	if got := os.Getenv(adviceModeEnv); got != adviceModeLocal {
+		t.Fatalf("%s = %q, want %q", adviceModeEnv, got, adviceModeLocal)
+	}
+	restore()
+	// Absent, not empty: advice.buzz tells the two apart, so restoring to "" would leave
+	// a later reader looking at a variable this call invented.
+	if _, ok := os.LookupEnv(adviceModeEnv); ok {
+		t.Errorf("%s is still set after restore", adviceModeEnv)
+	}
+}
+
+// adviceLocalExclusions are read-only advisors action.yml runs that `magus diff`
+// deliberately does not. The value is the reason, and carrying one is the point: leaving
+// an advisor out is a decision, and a decision with no reason recorded is indistinguishable
+// from having forgotten it.
+var adviceLocalExclusions = map[string]string{
+	"first-contribution.buzz": "reads the pull request's author through its own gh call " +
+		"rather than through advice.buzz, so local mode cannot intercept it, and a working " +
+		"tree has no first-time contributor to welcome",
+}
+
+// adviceStep is one step of the advice composite action, reduced to the two facts this
+// test needs: the advisor it runs, and the environment keys it sets.
+type adviceStep struct {
+	name    string
+	file    string
+	envKeys map[string]bool
+}
+
+// parseAdviceSteps reads the advice composite action and returns its advisor steps in the
+// order action.yml declares them.
+//
+// A LINE SCAN rather than a YAML decode, which is a judgment worth recording. Decoding
+// would mean modeling enough of the composite-action schema to reach `runs.steps[].env`
+// and `.run`, and `run` would still be a shell string this test has to pick a script path
+// out of by hand - so the schema buys nothing and the sub-parse remains either way. It
+// would also put a YAML dependency in package main to serve one test. The scan reads the
+// same two facts a human reads, off a file whose indentation the action schema fixes:
+// steps open at `    - name:`, step keys sit at six spaces, env keys at eight.
+//
+// The scan is allowed to be wrong in one direction only. A step it fails to recognize
+// drops out of the returned set and then surfaces as a mismatch against localAdvisors,
+// which is a red test naming the file - never a quietly shorter list.
+func parseAdviceSteps(t *testing.T) []adviceStep {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join("..", "..", adviceDirRel, "action.yml"))
+	if err != nil {
+		t.Fatalf("read action.yml: %v", err)
+	}
+
+	var steps []adviceStep
+	var cur *adviceStep
+	inEnv := false
+	flush := func() {
+		if cur != nil && cur.file != "" {
+			steps = append(steps, *cur)
+		}
+		cur = nil
+	}
+	for _, line := range strings.Split(string(src), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "    - name: "):
+			flush()
+			cur = &adviceStep{
+				name:    strings.TrimSpace(strings.TrimPrefix(line, "    - name: ")),
+				envKeys: map[string]bool{},
+			}
+			inEnv = false
+		case cur == nil:
+			// Everything ahead of the first step: the action's description and inputs.
+		case trimmed == "" || strings.HasPrefix(trimmed, "#"):
+			// Blank lines and comments say nothing about where the scan is.
+		case inEnv && strings.HasPrefix(line, "        "):
+			if key, _, ok := strings.Cut(trimmed, ":"); ok {
+				cur.envKeys[key] = true
+			}
+		case trimmed == "env:":
+			inEnv = true
+		case strings.HasPrefix(line, "      run: "):
+			inEnv = false
+			run := strings.TrimPrefix(line, "      run: ")
+			_, after, ok := strings.Cut(run, "$GITHUB_ACTION_PATH/")
+			if !ok {
+				// A step invoking an advisor some other way would evade the scan
+				// entirely, which is the one failure this design cannot absorb.
+				if strings.Contains(run, ".buzz") {
+					t.Errorf("step %q runs a .buzz script the scan cannot name: %q", cur.name, run)
+				}
+				continue
+			}
+			cur.file, _, _ = strings.Cut(after, `"`)
+		default:
+			inEnv = false
+		}
+	}
+	flush()
+	return steps
+}
+
+// TestLocalAdvisorsMatchActionYML is the gate on localAdvisors restating action.yml by
+// hand. A read-only advisor added to CI that never reaches `magus diff` is invisible
+// otherwise: both halves keep working, and the local command is simply quieter than the
+// pull request for no stated reason.
+func TestLocalAdvisorsMatchActionYML(t *testing.T) {
+	steps := parseAdviceSteps(t)
+
+	// A step carrying FIX_LABEL is a WRITER. That variable is the per-change consent the
+	// two fixers and the label-settler each read before touching the branch, so it is a
+	// structural signal action.yml already carries, rather than a second hand-kept list of
+	// writers that could drift exactly the way localAdvisors can. FIX_LABEL_OFFER - which
+	// the read-only merge-conflict advisor sets - is a different key and does not match.
+	var readOnly []string
+	writers := 0
+	for _, s := range steps {
+		if s.envKeys["FIX_LABEL"] {
+			writers++
+			continue
+		}
+		readOnly = append(readOnly, s.file)
+	}
+	if len(readOnly) == 0 || writers == 0 {
+		t.Fatalf("the scan found %d steps, %d read-only and %d writers: it is measuring "+
+			"nothing, and every comparison below would pass on an empty file",
+			len(steps), len(readOnly), writers)
+	}
+
+	want := make([]string, 0, len(readOnly))
+	for _, file := range readOnly {
+		if _, excluded := adviceLocalExclusions[file]; !excluded {
+			want = append(want, file)
+		}
+	}
+	for file := range adviceLocalExclusions {
+		if !slices.Contains(readOnly, file) {
+			t.Errorf("adviceLocalExclusions names %q, which action.yml no longer runs as a "+
+				"read-only advisor: drop the entry, since the exclusion now protects nothing", file)
+		}
+	}
+	if slices.Equal(localAdvisors, want) {
+		return
+	}
+
+	mismatched := false
+	for _, file := range want {
+		if !slices.Contains(localAdvisors, file) {
+			mismatched = true
+			t.Errorf("action.yml runs read-only advisor %q and `magus diff` does not. Add it "+
+				"to localAdvisors, or name it in adviceLocalExclusions with the reason it has "+
+				"no local meaning. If it WRITES it belongs in neither: a writer is recognized "+
+				"here by the FIX_LABEL consent variable on its step, and one that pushes "+
+				"without reading that label is a bug in the advisor, not in this test.", file)
+		}
+	}
+	for _, file := range localAdvisors {
+		if !slices.Contains(want, file) {
+			mismatched = true
+			t.Errorf("localAdvisors runs %q, which action.yml does not run as a read-only "+
+				"advisor: it was renamed, removed, or has become a writer.", file)
+		}
+	}
+	if !mismatched {
+		// Same members either way, so only the order moved. It is not cosmetic: a local
+		// reader gets the findings in the order CI chose to present them.
+		t.Errorf("localAdvisors = %v, want action.yml's order %v", localAdvisors, want)
+	}
+}
+
+// reviewFixture plants files in a working tree and returns the tree, a cache dir, and the
+// changeset naming them.
+func reviewFixture(t *testing.T, files map[string]string, roles map[string]string) (string, string, types.Diff) {
+	t.Helper()
+	root, cache := t.TempDir(), t.TempDir()
+
+	var rev types.Diff
+	for path, body := range files {
+		abs := filepath.Join(root, filepath.FromSlash(path))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+
+		role := types.DiffRoleSource
+		if r, ok := roles[path]; ok {
+			role = r
+		}
+		rev.Files = append(rev.Files, types.DiffFile{Path: path, Role: role})
+	}
+	return root, cache, rev
+}
+
+// attach folds the receipt store onto the changeset the way annotateDiff does, so these
+// tests exercise the join the CLI and the console both go through rather than a second one.
+func attach(t *testing.T, root, cache string, rev types.Diff) types.Diff {
+	t.Helper()
+	states, err := review.ReadStates(root, cache, diffPaths(rev))
+	require.NoError(t, err)
+	rev.AttachReadState(states)
+	return rev
+}
+
+func TestCollectReview(t *testing.T) {
+	t.Run("an unacknowledged changeset reports every file unread", func(t *testing.T) {
+		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"}, nil)
+
+		got := collectReview(attach(t, root, cache, rev), nil, nil)
+		require.NotNil(t, got)
+		assert.Equal(t, 2, got.Files)
+		assert.Equal(t, 0, got.Read)
+		assert.Len(t, got.Unread, 2)
+	})
+
+	t.Run("acknowledging then re-reading reports it read", func(t *testing.T) {
+		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n"}, nil)
+
+		n, err := ackChangeset(root, cache, rev, "spot-checked", time.Now())
+		require.NoError(t, err)
+		assert.Equal(t, 1, n)
+
+		got := collectReview(attach(t, root, cache, rev), nil, nil)
+		require.NotNil(t, got)
+		assert.Equal(t, 1, got.Read)
+		assert.Empty(t, got.Unread)
+	})
+
+	// The property the whole feature turns on: acknowledging code and then changing it must
+	// not leave the change looking reviewed.
+	t.Run("editing after acknowledging goes stale, not read", func(t *testing.T) {
+		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n\nfunc F() {}\n"}, nil)
+		_, err := ackChangeset(root, cache, rev, "spot-checked", time.Now())
+		require.NoError(t, err)
+
+		require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nfunc G() {}\n"), 0o644))
+
+		got := collectReview(attach(t, root, cache, rev), nil, nil)
+		require.NotNil(t, got)
+		assert.Equal(t, 0, got.Read)
+		// Stale is its own list, not an annotated entry in the unopened one: it is a
+		// different finding and it leads the section.
+		assert.Equal(t, []string{"a.go"}, got.Stale)
+		assert.Empty(t, got.Unread)
+	})
+
+	// Reading a machine's restatement of an edit made elsewhere is not the review, which is
+	// why the file list folds generated output away by default too.
+	t.Run("generated output is not something to have read", func(t *testing.T) {
+		root, cache, rev := reviewFixture(t,
+			map[string]string{"a.go": "package a\n", "gen/x.go": "package gen\n"},
+			map[string]string{"gen/x.go": types.DiffRoleOutput})
+
+		got := collectReview(attach(t, root, cache, rev), nil, nil)
+		require.NotNil(t, got)
+		assert.Equal(t, 1, got.Files)
+
+		n, err := ackChangeset(root, cache, rev, "spot-checked", time.Now())
+		require.NoError(t, err)
+		assert.Equal(t, 1, n)
+	})
+
+	// A file nothing could fingerprint carries no state, and a changeset of only those was
+	// not measured. Reporting it as unread would accuse somebody of skipping a deletion.
+	t.Run("a deleted file is unmeasured, not unread", func(t *testing.T) {
+		root, cache := t.TempDir(), t.TempDir()
+		rev := types.Diff{Files: []types.DiffFile{{Path: "gone.go", Role: types.DiffRoleSource}}}
+
+		n, err := ackChangeset(root, cache, rev, "spot-checked", time.Now())
+		require.NoError(t, err)
+		assert.Equal(t, 0, n)
+
+		assert.Nil(t, collectReview(attach(t, root, cache, rev), nil, nil))
+	})
+}
+
+func TestImpactReviewLines(t *testing.T) {
+	// The empty form is the half that matters: a silent section reads as a clean bill of
+	// health, and here that would mean "somebody read this".
+	t.Run("unmeasured says so rather than saying unread", func(t *testing.T) {
+		lines := impactReviewLines(nil)
+		require.Len(t, lines, 1)
+		assert.Contains(t, lines[0], "unavailable")
+	})
+
+	t.Run("names the unopened files and caps the list", func(t *testing.T) {
+		r := &impactReview{Files: 30, Read: 0}
+		for i := range 30 {
+			r.Unread = append(r.Unread, fmt.Sprintf("f%d.go", i))
+		}
+		lines := impactReviewLines(r)
+		assert.Contains(t, lines[0], "30 file(s) you have not opened")
+		assert.Contains(t, lines[unreadShown+1], "and 20 more")
+	})
+
+	// No ratio, anywhere. A count with a target is one that gets cleared rather than
+	// satisfied, and clearing it takes one keystroke and no reading.
+	t.Run("reports no read ratio", func(t *testing.T) {
+		lines := impactReviewLines(&impactReview{
+			Files: 40, Read: 12,
+			Stale:  []string{"internal/cache/key.go"},
+			Unread: []string{"a.go", "b.go"},
+		})
+		for _, l := range lines {
+			assert.NotContains(t, l, " of 40")
+			assert.NotContains(t, l, "12")
+		}
+	})
+
+	// Stale is the finding, so it leads whatever else the section holds: it is derived
+	// from content rather than from a claim, so no amount of stamping produces it.
+	t.Run("stale leads and is named", func(t *testing.T) {
+		lines := impactReviewLines(&impactReview{
+			Files: 4, Read: 1,
+			Stale:  []string{"internal/cache/key.go"},
+			Unread: []string{"a.go"},
+		})
+		assert.Contains(t, lines[0], "1 file(s) changed after you read them")
+		assert.Equal(t, "      internal/cache/key.go", lines[1])
+	})
+
+	// A small undisturbed change needs no reading plan, and printing one there is how a
+	// reader learns to skip the section before meeting a change big enough to need it.
+	t.Run("says nothing about a small undisturbed change", func(t *testing.T) {
+		assert.Nil(t, impactReviewLines(&impactReview{
+			Files: 3, Unread: []string{"a.go", "b.go", "c.go"},
+		}))
+	})
+
+	// ...but a small change where something moved under the reader is exactly when the
+	// section earns its line.
+	t.Run("a small change still reports stale", func(t *testing.T) {
+		lines := impactReviewLines(&impactReview{Files: 2, Stale: []string{"a.go"}})
+		require.NotEmpty(t, lines)
+		assert.Contains(t, lines[0], "changed after you read them")
+	})
+
+	t.Run("says nothing when everything has been read", func(t *testing.T) {
+		assert.Nil(t, impactReviewLines(&impactReview{Files: 30, Read: 30}))
+	})
+}
+
+// TestReviewRequiredMatcher pins the scoping rule: globs are declared per project and
+// matched against paths relative to it, so a project names its own files the same way its
+// sources and outputs do.
+func TestReviewRequiredMatcher(t *testing.T) {
+	ws := &stubReviewWorkspace{projects: []*types.Project{
+		{Path: ".", ReviewRequired: []string{"internal/secret/**"}},
+		{Path: "console", ReviewRequired: []string{"src/auth/*.ts"}},
+	}}
+	match := reviewRequiredMatcher(ws)
+	require.NotNil(t, match)
+
+	assert.True(t, match("internal/secret/value.go"))
+	assert.True(t, match("console/src/auth/token.ts"))
+	assert.False(t, match("internal/cache/key.go"))
+	// The console's glob must not reach outside the project that declared it.
+	assert.False(t, match("src/auth/token.ts"))
+}
+
+// A workspace declaring nothing gets no matcher, which the report reads as "single nothing
+// out" rather than as "everything matters".
+func TestReviewRequiredMatcherNilWhenUndeclared(t *testing.T) {
+	ws := &stubReviewWorkspace{projects: []*types.Project{{Path: "."}}}
+	assert.Nil(t, reviewRequiredMatcher(ws))
+}
+
+func TestCollectReviewSeparatesRequiredPaths(t *testing.T) {
+	root, cache, rev := reviewFixture(t, map[string]string{
+		"internal/secret/value.go": "package secret\n",
+		"internal/cache/key.go":    "package cache\n",
+	}, nil)
+
+	got := collectReview(attach(t, root, cache, rev), func(p string) bool {
+		return strings.HasPrefix(p, "internal/secret/")
+	}, nil)
+	require.NotNil(t, got)
+	assert.Equal(t, []string{"internal/secret/value.go"}, got.Required)
+	assert.Len(t, got.Unread, 2)
+}
+
+// A bulk cover is echoed so a file stamped in one keystroke does not read as one somebody
+// sat down with. It is a note the reader left themselves, not a toll they paid.
+func TestImpactReviewLinesReportsBulkReasons(t *testing.T) {
+	lines := impactReviewLines(&impactReview{
+		Files: 8, Read: 4,
+		Unread:  []string{"a.go"},
+		Reasons: []string{"codemod output, spot-checked 3 of 40"},
+	})
+	joined := strings.Join(lines, "\n")
+	assert.Contains(t, joined, "covered in bulk")
+	assert.Contains(t, joined, "codemod output")
+}
+
+func TestImpactReviewLinesListsRequiredUncapped(t *testing.T) {
+	r := &impactReview{Files: 30, Read: 0}
+	for i := range unreadShown + 5 {
+		r.Required = append(r.Required, fmt.Sprintf("internal/secret/f%d.go", i))
+	}
+	r.Unread = append([]string{}, r.Required...)
+	lines := impactReviewLines(r)
+	assert.Contains(t, lines[0], "15 unopened in review_required paths")
+	// Uncapped, unlike the general list: the workspace said these cost something.
+	assert.Contains(t, lines[15], "internal/secret/f14.go")
+}
+
+// A path the workspace flagged is named once, under review_required, and not again in the
+// general list. Saying it twice reads as two findings.
+func TestImpactReviewLinesDoesNotRepeatRequiredPaths(t *testing.T) {
+	lines := impactReviewLines(&impactReview{
+		Files:    8,
+		Required: []string{"internal/secret/value.go"},
+		Unread:   []string{"internal/secret/value.go", "a.go"},
+	})
+	joined := strings.Join(lines, "\n")
+	assert.Equal(t, 1, strings.Count(joined, "internal/secret/value.go"))
+	assert.Contains(t, joined, "1 file(s) you have not opened")
+}
+
+// stubReviewWorkspace is the narrow slice of the reader the matcher uses.
+type stubReviewWorkspace struct {
+	types.WorkspaceReader
+	projects []*types.Project
+}
+
+func (s *stubReviewWorkspace) All() []*types.Project { return s.projects }
+
+// TestScopeAck is the editor-freedom path: a reader who read three files in vim records
+// those three, without claiming the other thirty and without opening magus's viewer.
+func TestScopeAck(t *testing.T) {
+	rev := types.Diff{Files: []types.DiffFile{
+		{Path: "a.go", Role: types.DiffRoleSource},
+		{Path: "b.go", Role: types.DiffRoleSource},
+		{Path: "c.go", Role: types.DiffRoleSource},
+	}}
+
+	t.Run("no paths covers the whole changeset", func(t *testing.T) {
+		got, err := scopeAck(rev, nil)
+		require.NoError(t, err)
+		assert.Len(t, got.Files, 3)
+	})
+
+	t.Run("named paths narrow it", func(t *testing.T) {
+		got, err := scopeAck(rev, []string{"a.go", "c.go"})
+		require.NoError(t, err)
+		require.Len(t, got.Files, 2)
+		assert.Equal(t, "a.go", got.Files[0].Path)
+		assert.Equal(t, "c.go", got.Files[1].Path)
+	})
+
+	t.Run("a leading ./ still matches", func(t *testing.T) {
+		got, err := scopeAck(rev, []string{"./a.go"})
+		require.NoError(t, err)
+		require.Len(t, got.Files, 1)
+	})
+
+	// A typo that quietly acknowledged nothing would leave the reader believing they had
+	// recorded work they had not.
+	t.Run("a path outside the changeset is an error, not a no-op", func(t *testing.T) {
+		_, err := scopeAck(rev, []string{"a.go", "nope.go"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not a changed file")
+	})
 }

@@ -41,7 +41,7 @@ func OpenReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 	at, err := decodeReviewTarget(resp.Data)
 	if err != nil {
 		// A malformed answer becomes a REASON rather than a zero target, because those two
-		// render identically and mean opposite things. Silently zeroing `number` would say
+		// render identically and mean opposite things. Silently emptying `id` would say
 		// "no pull request for this branch", sending the reader to look at their branch when
 		// the fault is in their spell.
 		return types.ReviewTarget{Reason: err.Error()}

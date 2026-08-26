@@ -205,7 +205,7 @@ type DiffFile struct {
 	// Touches are the agent sessions that wrote this file and what they had READ first.
 	// Empty when no guard hook is wired, which is the common case and not a fault.
 	Touches []DiffTouch `json:"touches,omitempty" yaml:"touches,omitempty"`
-	// ReadState is one of the DiffReadState constants: whether a person recorded reading
+	// ReadState is one of the DiffRead constants: whether a person recorded reading
 	// this file at its current content. Empty is DiffReadUnknown - nobody checked - and is
 	// deliberately not "unread".
 	ReadState string `json:"read_state,omitempty" yaml:"read_state,omitempty"`
@@ -361,7 +361,7 @@ type ReviewOrigin struct {
 // ReviewTarget is the review a branch has open, or the reason it has none.
 //
 // "No provider wired", "no pull request for this branch" and "the host was unreachable" are
-// all a zero Number with a Reason, deliberately. None is a thing the reader did wrong, and a
+// all an empty ID with a Reason, deliberately. None is a thing the reader did wrong, and a
 // surface that renders them differently would be inventing a distinction its user does not
 // have - what they can do next is identical in all three.
 type ReviewTarget struct {

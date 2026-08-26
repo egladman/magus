@@ -10,16 +10,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// This is the ONE unified-diff reader in the product. The console used to carry a second one
-// in TypeScript and the two drifted - the frontend learned Mercurial's headerless dialect and
-// the tab-delimited timestamps POSIX diff appends, the backend did not, and `magus diff`
-// silently reported an empty changeset on an hg tree while the browser rendered it fine.
-//
-// Drift here is not cosmetic. A hunk's DIGEST is its identity: it is what a read receipt is
-// keyed by and what lets a mark made in the console be seen by the CLI and by an agent. Two
-// implementations computing that independently is a shared session that can quietly disagree
-// with itself, and the parity test pinning a literal computed in node was the tell that the
-// arrangement never really worked.
+// This is the ONE unified-diff reader in the product, and a second one must not be written.
+// A hunk's DIGEST is its identity: it keys a read receipt and lets a mark made in the console
+// be seen by the CLI and by an agent. Two readers computing that independently is a shared
+// session that can disagree with itself, silently and only for some hunks.
 //
 // It reads GIT's extended unified format, a superset of the POSIX one: the `diff --git` line
 // and its `old mode` / `new file` / `rename from` / `index` headers carry facts a `---`/`+++`
@@ -305,14 +299,7 @@ func (p *parser) closeHunk() {
 	p.hunk, p.raw = nil, nil
 }
 
-// markEmphasis fills in each changed row's intra-line span.
-//
-// Computed HERE, once, and shipped, rather than by each surface at render time. The console
-// used to do its own and the terminal viewer did another, and the Go one carried a comment
-// saying the two "must agree exactly" with a manual re-transcription as the only mitigation -
-// "nothing else will notice" were its words. Emphasis is only presentational, so drift would
-// not corrupt anything; it would just mean the same changed line reads as two different
-// changes depending on where you opened it, and nobody would ever find out why.
+// markEmphasis fills in each changed row's intra-line span, once, for every surface to read.
 //
 // The pairing is a run of removed lines against the run of added lines that follows, matched
 // positionally and only when the two runs are the same length. An unequal run means lines were
@@ -469,10 +456,9 @@ type FileHunks struct {
 // ParseHunks is the identity view of a patch: paths and hunk digests, without the rendering
 // detail. It is what the session store and the MCP surface consume.
 //
-// A thin projection of Parse rather than a second reader. It used to be its own pass, and the
-// two disagreed: this one knew only git's `diff --git` header, so a Mercurial patch parsed to
-// zero files here while the richer reader handled it - and this is the one that decides which
-// files a changeset contains.
+// A projection of Parse, never its own pass. This is what decides which files a changeset
+// contains, so a reader of its own here would be the one place a dialect gap turns into an
+// empty changeset.
 func ParseHunks(patch string) []FileHunks {
 	files := Parse(patch)
 	if len(files) == 0 {

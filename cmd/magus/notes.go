@@ -71,7 +71,7 @@ func notesUsage() {
 	fmt.Fprintln(os.Stderr, "  get      show one note")
 	fmt.Fprintln(os.Stderr, "  edit     open one note in $VISUAL or $EDITOR (creates it if absent)")
 	fmt.Fprintln(os.Stderr, "  verify   check malformed notes and anchors that no longer resolve")
-	fmt.Fprintln(os.Stderr, "  capture  keep the review conversation, yours and the pull request's, as a note")
+	fmt.Fprintln(os.Stderr, "  capture  keep the review conversation, yours and the host's, as a note")
 	fmt.Fprintln(os.Stderr, "  promote  edit an agent-drafted memory record into a note of your own")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Set knowledge.notes.shared (in the repo, your team gets it) or knowledge.notes.private")

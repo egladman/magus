@@ -68,12 +68,9 @@ func ByteSpan(text string, s Span) Span {
 // completely that emphasizing everything would be noise rather than signal - in each case the
 // row color already says all there is to say.
 //
-// This is the ONE implementation. It used to be a port of a TypeScript original that stayed
-// the source of truth, with a comment asking the next editor to re-transcribe the test vectors
-// by hand because "nothing else will notice" - which is a drift hazard with a manual
-// mitigation, and manual mitigations are how the same changed line came to be highlightable
-// two different ways depending on where you opened it. Parse calls this now and ships the
-// result, so both surfaces read one answer.
+// Parse calls this and ships the result, so both surfaces read one answer. Do not add a
+// second implementation: nothing checks two against each other, so they diverge in silence and
+// the same changed line reads as two different changes depending on where it was opened.
 //
 // BOUNDARY SEMANTICS: the scan compares RUNES and the returned offsets are BYTES. Byte-wise
 // scanning is not the same algorithm - "café" and "cafè" share a lead byte, and a byte-wise
