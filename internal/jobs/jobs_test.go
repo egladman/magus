@@ -28,6 +28,7 @@ func TestAll_IsTheRegistryInOrder(t *testing.T) {
 		{Name: "rotate-activities", Desc: "trim the activity trail back to its cap and drop orphaned payload blobs", Argv: []string{"server", "rotate-activities"}},
 		{Name: "rotate-logs", Desc: "trim the invocation run-log journals back to their cap", Argv: []string{"server", "rotate-logs"}},
 		{Name: "clear-cache", Desc: "invalidate cached build entries for the workspace", Argv: []string{"clean", "--cache"}},
+		{Name: "check-review", Desc: "note when a review this tree took part in has merged", Argv: []string{"server", "check-review"}},
 	}, All())
 }
 

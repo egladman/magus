@@ -15,7 +15,9 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
@@ -48,6 +50,8 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverRotateActivities(ctx, root, rest)
 	case jobs.NameRotateLogs:
 		return serverRotateLogs(ctx, root, rest)
+	case jobs.NameCheckReview:
+		return serverCheckReview(ctx, root, rest)
 	default:
 		return usagef("magus server: unknown target %q (want start, stop, reload, or job); use `%s` to inspect daemon state", sub, clihint.Status)
 	}
@@ -601,5 +605,66 @@ func serverReload(ctx context.Context, args []string) error {
 	default:
 		fmt.Fprintf(os.Stderr, "magus: reloaded %d workspace(s); the next command against each reads the current config\n", dropped)
 	}
+	return nil
+}
+
+// serverCheckReview is the worker for the check-review job: it notes, once, that a review this
+// tree took part in has merged, so the conversation can be kept before it becomes only a page on
+// somebody else's website.
+//
+// A JOB rather than a poll in the browser, because the console is optional and a merge does not
+// wait for it to be open. Being a job also buys what a hand-rolled timer had to fake: coalescing,
+// a configured interval, a last-run the schedule reads back from the trail so it survives a
+// restart, and idle-gating so it never competes with a build.
+//
+// The gate is the SESSION, and it is what keeps this from being a tracker: no review session for
+// this tree means the reader never opened a review here, and no forge is asked anything at all.
+// Opening a review is the opt-in.
+//
+// It records rather than notifies. The event is the durable fact; the console's watcher reads the
+// trail for it, exactly as it already does for a share being opened. Normally reached via
+// `magus server job check-review`.
+func serverCheckReview(ctx context.Context, root string, args []string) error {
+	if _, err := cmdParse("server "+jobs.NameCheckReview, args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus server check-review")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Note when a review this tree took part in has merged. This is the worker")
+			fmt.Fprintln(os.Stderr, "for `magus server job check-review`; prefer that form.")
+		}
+	}); err != nil {
+		return err
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return fmt.Errorf("server %s: %w", jobs.NameCheckReview, err)
+	}
+	sess := diff.NewStore(m.CacheDir()).Get(m.Root())
+	if sess == nil {
+		return nil
+	}
+	from := m.ReviewOrigin(ctx)
+	at := bindings.FindReview(ctx, from.Branch, from.Remote)
+	if !at.Merged() {
+		return nil
+	}
+	// The threads error is dropped with the threads that DID decode kept: a conversation is worth
+	// preserving whether or not every remark on it parsed.
+	threads, _ := bindings.ReviewThreads(ctx, at)
+	said := len(threads) + len(sess.Comments)
+	if said == 0 {
+		// Merged with nothing said on it. There is no conversation to keep, and an event here
+		// would train the reader to ignore the ones that matter.
+		return nil
+	}
+	trail.Append(ctx, m.CacheDir(), trail.Event{
+		Ts:        time.Now().UnixMilli(),
+		Kind:      trail.KindJob,
+		Actor:     "daemon",
+		Workspace: m.Root(),
+		Action:    "review.merged",
+		Outcome:   trail.OutcomeOK,
+		Preview:   fmt.Sprintf("%s: %d", at.Repo, said),
+	})
 	return nil
 }
