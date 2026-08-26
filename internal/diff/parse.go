@@ -58,7 +58,7 @@ type Row struct {
 	//
 	// Offsets are UTF-16 code units, indexing Text - what a JavaScript string is indexed by,
 	// because the browser is this field's consumer. A Go caller slicing bytes converts with
-	// ByteSpan.
+	// byteSpan.
 	Emph *Span `json:"emph,omitempty"`
 }
 
@@ -308,8 +308,8 @@ func (p *parser) closeHunk() {
 func markEmphasis(rows []Row) {
 	var dels, adds []int
 	flush := func() {
-		for _, pair := range PairForEmphasis(dels, adds) {
-			before, after := Emphasize(rows[pair.Del].Text, rows[pair.Add].Text)
+		for _, pair := range pairForEmphasis(dels, adds) {
+			before, after := emphasize(rows[pair.Del].Text, rows[pair.Add].Text)
 			rows[pair.Del].Emph = utf16Span(rows[pair.Del].Text, before)
 			rows[pair.Add].Emph = utf16Span(rows[pair.Add].Text, after)
 		}
@@ -332,8 +332,8 @@ func markEmphasis(rows []Row) {
 }
 
 // RawLineEmphasis re-expresses a hunk's intra-line spans in the coordinates a terminal
-// renderer slices: byte offsets into the RAW line, +/- marker included. Indexed alongside
-// Hunk.Lines; an empty span means the line has nothing to mark.
+// renderer slices: byte offsets into the RAW line, +/- marker included. Indexed by Rows, which
+// the parser's push keeps parallel with Lines; an empty span means nothing to mark.
 //
 // Two conversions, and each is a coordinate the other consumer does not want. Rows carry
 // UTF-16 offsets because the wire's reader is a browser, and they measure Text, which has no
@@ -348,7 +348,7 @@ func RawLineEmphasis(h Hunk) []Span {
 		if r.Emph == nil {
 			continue
 		}
-		s := ByteSpan(r.Text, *r.Emph)
+		s := byteSpan(r.Text, *r.Emph)
 		if s.Empty() {
 			continue
 		}

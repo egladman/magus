@@ -310,7 +310,7 @@ func (s *Store) DiscardDraft(root, id string) *types.DiffSession {
 			if c.ID != id || c.Published || c.Author != types.DiffAuthorHuman {
 				continue
 			}
-			sess.Comments = append(sess.Comments[:i], sess.Comments[i+1:]...)
+			sess.Comments = slices.Delete(sess.Comments, i, i+1)
 			return
 		}
 	})

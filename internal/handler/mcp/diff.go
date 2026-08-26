@@ -40,19 +40,21 @@ type diffTool struct {
 	// src recomputes the changeset. Without it the tool can only replay whatever a browser
 	// last attached, which is how an agent came to comment on a file that had no uncommitted
 	// changes, in a tree the CLI reported clean, with nothing objecting.
-	src diffSource
+	src workspaceSource
 }
 
 // reviewLookupTimeout bounds the two forge calls op=state makes. An agent asked for the
 // changeset; it must not wait on a stranger's outage to get one.
 const reviewLookupTimeout = 5 * time.Second
 
-// diffSource is what this tool reads from the workspace, satisfied by *console.Service.
-type diffSource interface {
+// workspaceSource is what this tool reads from the workspace, satisfied by *console.Service.
+// Named for the workspace rather than the diff because it reads three unrelated facts, and
+// because internal/handler/status has its own diffSource meaning something narrower.
+type workspaceSource interface {
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 	// ReviewOrigin says where this tree's changes are discussed, so the threads on that review
-	// can be read. Satisfied by the same *console.Service as the other two.
+	// can be read.
 	ReviewOrigin(ctx context.Context) types.ReviewOrigin
 }
 
@@ -218,11 +220,11 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	case "state":
 		// The whole session: the annotated changeset, where the human is, what they have read,
 		// and the conversation so far - recomputed first when the tree has moved underneath it.
-		st, serr := t.state(ctx, sess)
+		projection := strings.TrimSpace(paramString(req.Params, "projection", "full"))
+		st, serr := t.state(ctx, sess, wantsThreads(projection))
 		if serr != nil {
 			return spells.InvokeResponse{}, serr
 		}
-		projection := strings.TrimSpace(paramString(req.Params, "projection", "full"))
 		data, perr := projectDiffState(st, projection)
 		if perr != nil {
 			return spells.InvokeResponse{}, perr
@@ -291,7 +293,14 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 // Recomputing rather than reporting staleness and leaving it there: an agent cannot see the
 // tree, so "this may be stale" is advice it has no way to act on, and the failure it prevents
 // is the agent confidently describing a changeset that no longer exists.
-func (t *diffTool) state(ctx context.Context, sess *types.DiffSession) (diffState, error) {
+// wantsThreads reports whether a projection carries the review's threads. Only these two do,
+// and reading them costs a forge round trip - which a caller asking for counts or the patch
+// should not wait on.
+func wantsThreads(projection string) bool {
+	return projection == "" || projection == "full" || projection == "conversation"
+}
+
+func (t *diffTool) state(ctx context.Context, sess *types.DiffSession, withThreads bool) (diffState, error) {
 	if t.src == nil {
 		// No recompute source: serve what is held rather than nothing, and say the change
 		// itself is unavailable rather than implying there is none.
@@ -310,7 +319,9 @@ func (t *diffTool) state(ctx context.Context, sess *types.DiffSession) (diffStat
 		st.DiffSession = t.sessions.Attach(t.root, rev.Base, rev, now)
 		st.Recomputed = true
 	}
-	st.Threads = t.reviewThreads(ctx, st.Hunks)
+	if withThreads {
+		st.Threads = t.reviewThreads(ctx, st.Hunks)
+	}
 	return st, nil
 }
 

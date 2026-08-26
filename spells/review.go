@@ -30,6 +30,10 @@ package spells
 // said. It is the one contract function that makes magus depend on a host being reachable, so
 // it is deliberately its own name: a workspace with no credential, or no pull request open,
 // still publishes nothing and reads nothing, and every other surface works exactly as before.
+//
+// A spell may implement a SUBSET. Each op is looked up by name at the moment it is called, so a
+// missing one is a capability that provider lacks rather than a broken spell, with nothing to
+// declare either way.
 const (
 	// OpenReviewContract reports the review open for a branch, or nothing when there is none.
 	// A branch with no pull request is the ordinary state, not an error.
@@ -49,8 +53,3 @@ const (
 	// reaches a colleague twice.
 	ReplyReviewContract = "reply_review"
 )
-
-// A spell may implement a SUBSET of these. Reading and publishing are genuinely separable - a
-// host with no comment API can still take a review body - so a missing name is a capability
-// that spell does not have rather than a broken spell. Each op is looked up by name at the
-// moment it is called, which is what makes a subset work with nothing to declare.

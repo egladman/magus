@@ -50,7 +50,7 @@ func TestEmphasizeMatchesTheConsoleImplementation(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotBefore, gotAfter := Emphasize(tc.before, tc.after)
+			gotBefore, gotAfter := emphasize(tc.before, tc.after)
 			assert.Equal(t, tc.wantBefore, gotBefore, "before span over %q", tc.before)
 			assert.Equal(t, tc.wantAfter, gotAfter, "after span over %q", tc.after)
 
@@ -72,12 +72,12 @@ func TestEmphasizeMatchesTheConsoleImplementation(t *testing.T) {
 func TestPairForEmphasisIsPositionalAndOnlyWithinAnEqualRun(t *testing.T) {
 	// The inputs are line positions in a hunk body: two removed lines followed by the two that
 	// replaced them, which is the shape the run scanner hands over.
-	assert.Equal(t, []EmphasisPair{{Del: 0, Add: 2}, {Del: 1, Add: 3}},
-		PairForEmphasis([]int{0, 1}, []int{2, 3}))
+	assert.Equal(t, []emphasisPair{{Del: 0, Add: 2}, {Del: 1, Add: 3}},
+		pairForEmphasis([]int{0, 1}, []int{2, 3}))
 	// An unequal run means lines were added or removed rather than rewritten. Pairing across
 	// that would invent a correspondence the patch does not contain.
-	assert.Nil(t, PairForEmphasis([]int{0}, []int{1, 2}))
-	assert.Nil(t, PairForEmphasis([]int{}, []int{}))
+	assert.Nil(t, pairForEmphasis([]int{0}, []int{1, 2}))
+	assert.Nil(t, pairForEmphasis([]int{}, []int{}))
 }
 
 // ByteSpan converts the UTF-16 offsets a row carries back into the bytes a Go renderer slices
@@ -87,34 +87,34 @@ func TestByteSpanConvertsUTF16OffsetsBackToBytes(t *testing.T) {
 	// Three two-byte runes ahead of the change, so byte and UTF-16 offsets differ.
 	const text = `x = "` + "αβγ" + ` one"`
 
-	got := ByteSpan(text, Span{Start: 9, End: 12})
+	got := byteSpan(text, Span{Start: 9, End: 12})
 	assert.Equal(t, "one", text[got.Start:got.End], "the span must select the same word it did in UTF-16")
 
 	// A span reaching the very end converts rather than falling off it.
-	end := ByteSpan(text, Span{Start: 9, End: 13})
+	end := byteSpan(text, Span{Start: 9, End: 13})
 	assert.Equal(t, `one"`, text[end.Start:end.End])
 }
 
 // An empty or reversed span marks nothing, and must not be turned into one that marks
 // something: these numbers travelled, and a renderer must not slice on a guess.
 func TestByteSpanRefusesASpanThatMarksNothing(t *testing.T) {
-	assert.True(t, ByteSpan("hello", Span{}).Empty())
-	assert.True(t, ByteSpan("hello", Span{Start: 3, End: 3}).Empty())
-	assert.True(t, ByteSpan("hello", Span{Start: 4, End: 2}).Empty())
+	assert.True(t, byteSpan("hello", Span{}).Empty())
+	assert.True(t, byteSpan("hello", Span{Start: 3, End: 3}).Empty())
+	assert.True(t, byteSpan("hello", Span{Start: 4, End: 2}).Empty())
 }
 
 // Out of range yields an empty span rather than a panic or a slice past the end. The offsets
 // come from a wire field, so a renderer must survive one that does not fit the text it has.
 func TestByteSpanSurvivesOffsetsThatDoNotFitTheText(t *testing.T) {
-	assert.True(t, ByteSpan("hi", Span{Start: 40, End: 50}).Empty())
-	assert.NotPanics(t, func() { ByteSpan("", Span{Start: 1, End: 2}) })
+	assert.True(t, byteSpan("hi", Span{Start: 40, End: 50}).Empty())
+	assert.NotPanics(t, func() { byteSpan("", Span{Start: 1, End: 2}) })
 }
 
 // ASCII is the common case and must round-trip exactly: there, UTF-16 units and bytes agree,
 // so a conversion that quietly shifted by one would be invisible in every test but this one.
 func TestByteSpanIsIdentityForASCII(t *testing.T) {
 	const text = "call(a, b)"
-	got := ByteSpan(text, Span{Start: 8, End: 9})
+	got := byteSpan(text, Span{Start: 8, End: 9})
 	assert.Equal(t, Span{Start: 8, End: 9}, got)
 	assert.Equal(t, "b", text[got.Start:got.End])
 }

@@ -1,13 +1,13 @@
 package diff
 
 // Span is a half-open [Start, End) range of a line to emphasize. The zero Span means there is
-// nothing to emphasize on that side; Emphasize never returns a span that marks nothing, so the
+// nothing to emphasize on that side; emphasize never returns a span that marks nothing, so the
 // zero value is unambiguous.
 //
 // The UNIT depends on where the span came from, which is why both spellings are named at their
-// source: Emphasize returns BYTES, because that is what a Go caller slices a string with, and
+// source: emphasize returns BYTES, because that is what a Go caller slices a string with, and
 // Row.Emph carries UTF-16 code units, because that is what the browser it is shipped to indexes
-// by. ByteSpan converts the second back into the first.
+// by. byteSpan converts the second back into the first.
 type Span struct {
 	Start int `json:"start"`
 	End   int `json:"end"`
@@ -16,11 +16,11 @@ type Span struct {
 // Empty reports whether the span marks nothing.
 func (s Span) Empty() bool { return s.End <= s.Start }
 
-// ByteSpan converts a UTF-16 span over text into the byte offsets a Go caller slices with.
+// byteSpan converts a UTF-16 span over text into the byte offsets a Go caller slices with.
 //
 // Out-of-range input yields an empty span rather than a panic: this converts a number that
 // travelled, and a renderer must not crash on a line it was handed.
-func ByteSpan(text string, s Span) Span {
+func byteSpan(text string, s Span) Span {
 	if s.Empty() {
 		return Span{}
 	}
@@ -50,7 +50,7 @@ func ByteSpan(text string, s Span) Span {
 	return Span{Start: start, End: end}
 }
 
-// Emphasize reports which PART of a changed line changed, as a span of the before side and a
+// emphasize reports which PART of a changed line changed, as a span of the before side and a
 // span of the after side.
 //
 // A line diff only says "this line is different". On a line where one identifier was renamed,
@@ -77,7 +77,7 @@ func ByteSpan(text string, s Span) Span {
 // common prefix would end in the middle of a rune and hand back an offset that slices the line
 // into invalid UTF-8. Bytes are what a Go caller slices a string with; the browser is handed
 // UTF-16 offsets instead, converted where the row is built.
-func Emphasize(before, after string) (Span, Span) {
+func emphasize(before, after string) (Span, Span) {
 	if before == after || before == "" || after == "" {
 		return Span{}, Span{}
 	}
@@ -113,35 +113,35 @@ func Emphasize(before, after string) (Span, Span) {
 	return span(bOff, p, bEnd), span(aOff, p, aEnd)
 }
 
-// EmphasisPair is one deleted line matched to the added line that replaced it, as positions in
+// emphasisPair is one deleted line matched to the added line that replaced it, as positions in
 // the hunk body both were read from.
-type EmphasisPair struct {
+type emphasisPair struct {
 	Del int
 	Add int
 }
 
-// PairForEmphasis matches deleted lines to added lines inside one run of changes.
+// pairForEmphasis matches deleted lines to added lines inside one run of changes.
 //
 // Pairing is strictly positional and only within a run of equal length. An unequal run means
 // lines were added or removed rather than rewritten, and pairing across that boundary invents a
 // correspondence the patch does not contain - which would emphasize the wrong half of two
 // unrelated lines and read as a confident lie.
-func PairForEmphasis(dels, adds []int) []EmphasisPair {
+func pairForEmphasis(dels, adds []int) []emphasisPair {
 	if len(dels) == 0 || len(dels) != len(adds) {
 		return nil
 	}
-	out := make([]EmphasisPair, 0, len(dels))
+	out := make([]emphasisPair, 0, len(dels))
 	for i := range dels {
-		out = append(out, EmphasisPair{Del: dels[i], Add: adds[i]})
+		out = append(out, emphasisPair{Del: dels[i], Add: adds[i]})
 	}
 	return out
 }
 
-// isWordRune matches words.ts's WORDISH, which is ASCII-only on purpose: identifier runs stay
+// isWordRune is ASCII-only on purpose: identifier runs stay
 // whole so a rename highlights the whole name rather than the three letters it happens to share
 // with the old one. A letter outside the class is therefore a token BOUNDARY, which is why
-// "naive" and "naïve" split differently - matching that is load-bearing for parity, not an
-// oversight to correct with unicode.IsLetter.
+// "naive" and "naïve" split differently. Deliberate, not an oversight to correct with
+// unicode.IsLetter: widening the class merges tokens a reader sees as separate words.
 func isWordRune(r rune) bool {
 	return r >= 'a' && r <= 'z' ||
 		r >= 'A' && r <= 'Z' ||
@@ -150,8 +150,7 @@ func isWordRune(r rune) bool {
 }
 
 // backToBoundary walks an index back to the start of the token it lands inside, so a common
-// prefix never cuts an identifier in half. An index at or past the end is already a boundary,
-// which is what indexing past the end yields in the TypeScript.
+// prefix never cuts an identifier in half. An index at or past the end is already a boundary.
 func backToBoundary(s []rune, i int) int {
 	n := i
 	for n > 0 && n < len(s) && isWordRune(s[n-1]) && isWordRune(s[n]) {

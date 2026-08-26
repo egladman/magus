@@ -160,3 +160,22 @@ func TestReplyReviewTreatsAnyNonTrueAnswerAsARefusal(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "t1", "the error names the thread that did not take it")
 }
+
+// Every row is attempted. Returning at the first malformed one drops the threads AFTER it, so
+// a provider with one bad remark near the top renders as a conversation nobody had - and the
+// reader has no way to tell that from silence.
+func TestReviewThreadsKeepsReadingPastAMalformedRow(t *testing.T) {
+	withReviewSpell(t, func(string) (any, error) {
+		return []any{
+			map[string]any{"id": "t1", "path": "a.go", "body": "before"},
+			map[string]any{"id": "t2", "line": "not a number"},
+			map[string]any{"id": "t3", "path": "b.go", "body": "after"},
+		}, nil
+	})
+	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+
+	require.Error(t, err)
+	require.Len(t, got, 2, "the readable threads on BOTH sides of the bad one survive")
+	assert.Equal(t, "before", got[0].Body)
+	assert.Equal(t, "after", got[1].Body, "a thread after the malformed row is not dropped")
+}

@@ -69,7 +69,7 @@ func decodeReviewTarget(data any) (types.ReviewTarget, error) {
 	return at, nil
 }
 
-// PublishReview sends drafts as ONE review and reports how many the host accepted.
+// PublishReview sends drafts as ONE review.
 //
 // The batch is the unit for the reason spells/review.go gives: self-review is a pass, and
 // publishing each remark as it is written would send the first thought before the fifth
@@ -129,7 +129,8 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 		return err
 	}
 	if sent, _ := resp.Data.(bool); !sent {
-		return fmt.Errorf("the host did not accept a reply to thread %s", thread)
+		return fmt.Errorf("review provider: %s did not accept a reply to thread %s",
+			spells.ReplyReviewContract, thread)
 	}
 	return nil
 }
@@ -154,10 +155,7 @@ func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewTh
 		Params: map[string]any{"repo": at.Repo, "id": at.ID},
 	})
 	if err != nil {
-		//nolint:nilerr // an unreachable host is not a failure of this call: the surface has
-		// to keep working when the forge is down, and a diff that will not open because
-		// GitHub is slow is a worse tool than one that shows the change and says nothing
-		// about the conversation. A MALFORMED answer is different and is reported below.
+		//nolint:nilerr // an unreachable host is not a failure of this call; see the doc above.
 		return nil, nil
 	}
 	where := "review provider: " + spells.ReviewThreadsContract
@@ -172,14 +170,19 @@ func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewTh
 		return nil, fmt.Errorf("%s returned %T, want a list", where, resp.Data)
 	}
 	out := make([]types.ReviewThread, 0, len(rows))
+	// Every row is attempted. Returning at the first bad one would drop the threads AFTER it,
+	// so a provider with one malformed remark near the top would render as a conversation
+	// nobody had - which is the failure this whole path is written to avoid.
+	var bad []error
 	for i, r := range rows {
 		t, err := decodeReviewThread(r, fmt.Sprintf("%s[%d]", where, i))
 		if err != nil {
-			return out, err
+			bad = append(bad, err)
+			continue
 		}
 		out = append(out, t)
 	}
-	return out, nil
+	return out, errors.Join(bad...)
 }
 
 func decodeReviewThread(row any, where string) (types.ReviewThread, error) {

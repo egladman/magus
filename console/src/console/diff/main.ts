@@ -1764,10 +1764,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const summary = input.value.trim();
       input.disabled = true;
       where.textContent = "Sending...";
+      const heldBack = pending.filter((d) => !d.line).length;
       void sendDrafts(summary).then((failure) => {
         if (disposed) return;
         if (!failure) {
           close();
+          // A send that could not carry everything must SAY so. The remarks with no line stay
+          // drafts and go nowhere, and a reader told only "sent" would believe the whole pass
+          // reached their colleague.
+          if (heldBack > 0) {
+            flashPublishNotice(
+              `Sent, but ${heldBack} ${heldBack === 1 ? "remark has" : "remarks have"} no line to anchor to and stayed a draft.`,
+            );
+          }
           return;
         }
         // The box STAYS OPEN on failure, holding what the reader typed. A send that failed

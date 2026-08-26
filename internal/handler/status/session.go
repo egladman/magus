@@ -23,7 +23,7 @@ import (
 
 // patchSource is the narrow consumer contract the diff handler needs from the console
 // service: the working tree's uncommitted unified diff. It is satisfied by *console.Service;
-// the handler package holds no concrete service, matching insightSource above.
+// this package holds no concrete service, matching insightSource in insight.go.
 type patchSource interface {
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 }
@@ -32,12 +32,8 @@ type patchSource interface {
 // two routes have genuinely different costs and a caller should be able to mount the cheap
 // one without the expensive one.
 type diffSource interface {
+	patchSource
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
-	// WorkingDiff is read here only to stamp the session's snapshot identity. It is the same
-	// call the patch route makes, and it is cheap next to the symbol and impact work above it -
-	// whereas a client-supplied digest would describe whatever that client last fetched, which
-	// is not necessarily the tree this changeset was computed from.
-	WorkingDiff(ctx context.Context, paths []string) (string, error)
 }
 
 // DiffHandler serves GET /api/v1/diff: the changed files annotated with what the
@@ -376,7 +372,7 @@ func NewDiffSessionHandler(opts DiffSessionOptions, log *slog.Logger) *DiffSessi
 // reviewSessionRequest is the wire shape. Op names the mutation; the rest are its arguments,
 // and which ones matter depends on Op.
 type reviewSessionRequest struct {
-	// Op is one of: cursor, viewed, comment, resolve, answer, publish, reply.
+	// Op is one of: cursor, viewed, comment, discard, resolve, answer, publish, reply.
 	Op string `json:"op"`
 	// cursor
 	Path string `json:"path,omitempty"`
@@ -424,8 +420,12 @@ func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionReque
 	}
 	if len(drafts) == 0 {
 		if len(unplaceable) > 0 {
-			return nil, fmt.Errorf("%d draft(s) have no line to anchor to, so none of them can be sent",
-				len(unplaceable))
+			noun := "drafts have"
+			if len(unplaceable) == 1 {
+				noun = "draft has"
+			}
+			return nil, fmt.Errorf("%d %s no line to anchor to, so nothing can be sent",
+				len(unplaceable), noun)
 		}
 		// Publishing twice, or with nothing drafted, is no mistake to report.
 		return sess, nil
@@ -615,8 +615,8 @@ type DiffReviewHandler struct {
 	workspace reviewSource
 }
 
-// NewDiffReviewHandler returns the review-lookup handler. A nil src reports no review, which
-// is what a daemon with no workspace has.
+// NewDiffReviewHandler returns the review-lookup handler. A nil workspace reports no review,
+// which is what a daemon with no workspace has.
 func NewDiffReviewHandler(workspace reviewSource, log *slog.Logger) *DiffReviewHandler {
 	h := &DiffReviewHandler{workspace: workspace}
 	h.Base = handler.New(h.serve, log)
