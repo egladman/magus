@@ -531,23 +531,26 @@ const THREAD_PATCH = [
   "",
 ].join("\n");
 
-function thread(id: string, path: string, line: number) {
-  return { id, path, line, author: "dana", body: `remark ${id}` };
+// hunk is the daemon's answer (diff.PlaceThreads), not something this surface works out. What
+// is left here is the grouping, which depends on what is actually on screen.
+function thread(id: string, path: string, hunk: number) {
+  return { id, path, hunk, line: 11, author: "dana", body: `remark ${id}` };
 }
 
-test("a thread lands on the hunk holding its line", () => {
+test("a placed thread is grouped onto its hunk", () => {
   const files = patchFixture(THREAD_PATCH);
-  const placed = placeThreads(files, [thread("t1", "x.ts", 11)]);
+  const placed = placeThreads(files, [thread("t1", "x.ts", 0)]);
   assert.deepEqual([...placed.atHunk.keys()], [commentKey("x.ts", 0)]);
   assert.equal(placed.atFile.size, 0);
   assert.equal(placed.elsewhere.length, 0);
 });
 
-// The line moved out from under the remark. It still belongs to this file and the reader still
-// has to hear it - a surface that dropped it would be claiming a colleague said nothing.
-test("a thread on a line this changeset does not contain falls back to its file", () => {
+// The line moved out from under the remark, so the daemon could not place it. It still belongs
+// to this file and the reader still has to hear it - a surface that dropped it would be
+// claiming a colleague said nothing.
+test("an unplaced thread on a visible file falls back to that file", () => {
   const files = patchFixture(THREAD_PATCH);
-  const placed = placeThreads(files, [thread("t1", "x.ts", 400)]);
+  const placed = placeThreads(files, [thread("t1", "x.ts", -1)]);
   assert.equal(placed.atHunk.size, 0);
   assert.deepEqual([...placed.atFile.keys()], ["x.ts"]);
 });
@@ -556,13 +559,21 @@ test("a thread on a line this changeset does not contain falls back to its file"
 // named rather than swallowed, so the caller can list it.
 test("a thread on a file outside the changeset is kept as elsewhere", () => {
   const files = patchFixture(THREAD_PATCH);
-  const placed = placeThreads(files, [thread("t1", "other.ts", 2)]);
+  const placed = placeThreads(files, [thread("t1", "other.ts", -1)]);
   assert.equal(placed.atHunk.size, 0);
   assert.equal(placed.atFile.size, 0);
   assert.deepEqual(
     placed.elsewhere.map((t) => t.path),
     ["other.ts"],
   );
+});
+
+// A thread the daemon PLACED, on a file this stream is not showing - the generated fold is the
+// ordinary way that happens. It is listed rather than rendered against a hunk nobody can see.
+test("a placed thread on a hidden file is elsewhere, not a phantom row", () => {
+  const placed = placeThreads([], [thread("t1", "x.ts", 0)]);
+  assert.equal(placed.atHunk.size, 0);
+  assert.equal(placed.elsewhere.length, 1);
 });
 
 // What a colleague already said is context for what you are about to write, so it precedes
@@ -584,7 +595,7 @@ test("threads render above the session's own comments on the same hunk", () => {
     "unified",
     comments,
     undefined,
-    placeThreads(files, [thread("t1", "x.ts", 11)]),
+    placeThreads(files, [thread("t1", "x.ts", 0)]),
   );
   assert.deepEqual(
     rows.map((r) => r.kind),

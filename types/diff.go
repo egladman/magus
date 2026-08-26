@@ -386,9 +386,19 @@ func (r ReviewTarget) Open() bool { return r.ID != "" }
 // magus renders it so a reader never leaves to find out what a colleague said, and replies
 // through the provider rather than editing a local copy that would silently diverge.
 type ReviewThread struct {
-	ID     string `json:"id" yaml:"id"`
-	Path   string `json:"path" yaml:"path"`
-	Line   int    `json:"line" yaml:"line"`
+	ID   string `json:"id" yaml:"id"`
+	Path string `json:"path" yaml:"path"`
+	// Line is the new-side line the host anchored this remark to.
+	Line int `json:"line" yaml:"line"`
+	// Hunk is the index WITHIN Path's hunks of the one containing Line, or -1 when no hunk in
+	// this changeset does.
+	//
+	// Resolved by magus rather than by each surface, because the arithmetic is the only hard
+	// part of placing a thread and two surfaces doing it independently is how the same remark
+	// comes to sit against different code in the terminal and the browser. -1 is ordinary: the
+	// working tree moves after a colleague writes, and a review covers commits a working diff
+	// does not.
+	Hunk   int    `json:"hunk" yaml:"hunk"`
 	Author string `json:"author" yaml:"author"`
 	Body   string `json:"body" yaml:"body"`
 }

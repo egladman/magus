@@ -355,6 +355,10 @@ export function demoReview(): ReviewInfo {
         id: "th1",
         path: "libs/authkit/claims.go",
         line: 24,
+        // The placement the daemon would have computed, stated here because the showcase has no
+        // daemon - the same reason the fixture carries hunk digests rather than hashing them.
+        // Hunk 0 of claims.go covers new-side lines 14 to 27.
+        hunk: 0,
         author: "priya",
         body: "Audience as a slice means a token can verify at two services. Was that the intent, or should it be one?",
       },
@@ -362,6 +366,7 @@ export function demoReview(): ReviewInfo {
         id: "th2",
         path: "services/identity/internal/token/verify.go",
         line: 34,
+        hunk: 0,
         author: "marcus",
         body: "Membership is right, but this is the third hand-rolled audience check. Worth a helper on Claims before a fourth.",
       },
@@ -369,6 +374,9 @@ export function demoReview(): ReviewInfo {
         id: "th4",
         path: "services/gateway/internal/mint/token.go",
         line: 204,
+        // In the changeset, but line 204 is outside its only hunk (new-side 52 to 61): the code
+        // moved after the remark was written, so it renders under the file heading.
+        hunk: -1,
         author: "marcus",
         body: "Whatever we settle on here, the minter's docstring still describes the single-audience shape.",
       },
@@ -376,6 +384,9 @@ export function demoReview(): ReviewInfo {
         id: "th3",
         path: "services/gateway/internal/proxy/auth.go",
         line: 88,
+        // On a file this changeset does not touch at all, so there is nothing to place it
+        // against and the surface lists it instead.
+        hunk: -1,
         author: "priya",
         body: "Gateway mints scope-only tokens on the health path. It will start failing Valid the moment this lands.",
       },
@@ -417,6 +428,9 @@ export function applyDemoReply(
     id: `${thread}-r`,
     path: answered.path,
     line: answered.line,
+    // A reply lands where the thread it answers landed, which is what keeps it beside the same
+    // code rather than jumping to the file heading.
+    hunk: answered.hunk,
     author: "you",
     body,
   });

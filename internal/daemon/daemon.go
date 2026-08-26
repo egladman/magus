@@ -280,7 +280,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			diffRoot := opts.Magus.Root()
 			diffH := status.NewDiffHandler(svc, diffSessions, diffRoot, log)
 			diffSessionH := status.NewDiffSessionHandler(diffSessions, svc, diffRoot, opts.Magus.CacheDir(), log)
-			diffReviewH := status.NewDiffReviewHandler(svc, log)
+			diffReviewH := status.NewDiffReviewHandler(svc, svc, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 			runsH := viewer.NewRunsHandler(outputStore, log)

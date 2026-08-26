@@ -285,14 +285,35 @@ func (h *DiffSessionHandler) mintReceipt(ctx context.Context, path string) {
 type DiffReviewHandler struct {
 	handler.Base
 	origin originSource
+	// src is the working patch, read only to place each thread on the hunk holding its line.
+	// Nil leaves every thread unplaced, which renders as "on this file" rather than as nothing.
+	src patchSource
 }
 
 // NewDiffReviewHandler returns the review-lookup handler. origin may be nil, which reports no
 // review rather than failing - a daemon with no workspace has no branch to look one up for.
-func NewDiffReviewHandler(origin originSource, log *slog.Logger) *DiffReviewHandler {
-	h := &DiffReviewHandler{origin: origin}
+func NewDiffReviewHandler(origin originSource, src patchSource, log *slog.Logger) *DiffReviewHandler {
+	h := &DiffReviewHandler{origin: origin, src: src}
 	h.Base = handler.New(h.serve, log)
 	return h
+}
+
+// place resolves each thread onto the hunk containing its line.
+//
+// Done HERE rather than in each client, because it is the only hard part of showing a thread
+// beside the code it is about, and two surfaces computing it independently is the same remark
+// landing on different lines in the terminal and the browser. A patch that cannot be read
+// leaves every thread at -1: a thread shown against its file is worth far more than one
+// withheld because its exact line could not be resolved.
+func (h *DiffReviewHandler) place(ctx context.Context, threads []types.ReviewThread) []types.ReviewThread {
+	if len(threads) == 0 || h.src == nil {
+		return threads
+	}
+	patch, err := h.src.WorkingDiff(ctx, nil)
+	if err != nil {
+		return threads
+	}
+	return diff.PlaceThreads(diff.ParseHunks(patch), threads)
 }
 
 // diffReviewResponse is the wire shape: the target, flattened, plus its threads.
@@ -325,7 +346,7 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	if at.Open() {
 		threads, err := bindings.ReviewThreads(r.Context(), at)
-		out.Threads = append(out.Threads, threads...)
+		out.Threads = append(out.Threads, h.place(r.Context(), threads)...)
 		if err != nil {
 			// The threads that DID decode still travel, and the reason rides beside them.
 			// Answering 502 here would hide a readable conversation behind one malformed

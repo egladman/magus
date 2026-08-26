@@ -110,6 +110,11 @@ export interface ReviewThread {
   readonly id: string;
   readonly path: string;
   readonly line: number;
+  // hunk is the index within path's hunks of the one holding line, or -1 when no hunk in this
+  // changeset does. Resolved by the daemon, not here: the arithmetic is the only hard part of
+  // placing a thread, and two surfaces doing it independently is the same remark sitting
+  // against different code in the terminal and the browser.
+  readonly hunk: number;
   readonly author: string;
   readonly body: string;
 }

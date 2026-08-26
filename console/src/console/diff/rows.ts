@@ -76,11 +76,15 @@ export interface PlacedThreads {
   readonly elsewhere: readonly ReviewThread[];
 }
 
-// placeThreads resolves each thread's (path, line) anchor against the changeset's hunks.
+// placeThreads sorts already-placed threads into the three buckets this surface renders.
 //
-// The new side, always. A host anchors an inline comment to the line as it stands AFTER the
-// change, which is the side the reader is looking at; matching the old side would land a
-// remark about new code on whatever used to be there.
+// The line-to-hunk ARITHMETIC is not here: the daemon does it once (diff.PlaceThreads) and
+// ships `hunk` on each thread, for the reason the parser and the intra-line emphasis moved
+// there. Two surfaces computing it independently is the same remark sitting against different
+// code in the terminal and the browser, and nothing would ever have reported the disagreement.
+//
+// What is left is a grouping that depends on what THIS surface is showing: a thread magus could
+// not place belongs under its file when that file is on screen, and is elsewhere when it is not.
 export function placeThreads(
   files: readonly DiffFile[],
   threads: readonly ReviewThread[],
@@ -88,19 +92,12 @@ export function placeThreads(
   const atHunk = new Map<string, ReviewThread[]>();
   const atFile = new Map<string, ReviewThread[]>();
   const elsewhere: ReviewThread[] = [];
-  const byPath = new Map(files.map((f) => [f.path, f]));
+  const shown = new Set(files.map((f) => f.path));
 
   for (const t of threads) {
-    const file = byPath.get(t.path);
-    if (!file) {
-      elsewhere.push(t);
-      continue;
-    }
-    const hunk = file.hunks.findIndex(
-      (h) => t.line >= h.newStart && t.line < h.newStart + h.newCount,
-    );
-    if (hunk < 0) push(atFile, t.path, t);
-    else push(atHunk, commentKey(t.path, hunk), t);
+    if (t.hunk >= 0 && shown.has(t.path)) push(atHunk, commentKey(t.path, t.hunk), t);
+    else if (shown.has(t.path)) push(atFile, t.path, t);
+    else elsewhere.push(t);
   }
   return { atHunk, atFile, elsewhere };
 }

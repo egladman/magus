@@ -59,6 +59,11 @@ type Input struct {
 	Viewed      []string
 	Comments    []types.DiffComment
 	Suggestions []types.DiffSuggestion
+	// Threads are the remarks already on the host's review, with Hunk resolved by
+	// diff.PlaceThreads. A thread whose line this changeset does not contain (Hunk < 0) renders
+	// under the file heading rather than being dropped: a colleague said it, and a viewer that
+	// silently withheld it would be telling the reader nobody had.
+	Threads []types.ReviewThread
 	// Unfolded starts with generated files expanded, which is what --generated asks for.
 	Unfolded bool
 	// Link decorates a path for display (an OSC 8 hyperlink). Nil renders it plain.
@@ -110,6 +115,10 @@ type Model struct {
 	viewed   map[string]bool
 	comments map[hunkRef][]types.DiffComment
 	suggests map[hunkRef][]types.DiffSuggestion
+	// threads is the host's remarks by hunk; unplaced holds, per path, the ones whose line this
+	// changeset does not contain.
+	threads  map[hunkRef][]types.ReviewThread
+	unplaced map[string][]types.ReviewThread
 
 	// file and hunk are where the HUMAN is. hunk is -1 on a file heading.
 	file, hunk int
@@ -139,6 +148,8 @@ func New(in Input) *Model {
 		viewed:   make(map[string]bool, len(in.Viewed)),
 		comments: map[hunkRef][]types.DiffComment{},
 		suggests: map[hunkRef][]types.DiffSuggestion{},
+		threads:  map[hunkRef][]types.ReviewThread{},
+		unplaced: map[string][]types.ReviewThread{},
 		hunk:     -1,
 		height:   1,
 	}
@@ -160,6 +171,14 @@ func New(in Input) *Model {
 		}
 		k := hunkRef{path: s.Path, hunk: s.Hunk}
 		m.suggests[k] = append(m.suggests[k], s)
+	}
+	for _, t := range in.Threads {
+		if t.Hunk < 0 {
+			m.unplaced[t.Path] = append(m.unplaced[t.Path], t)
+			continue
+		}
+		k := hunkRef{path: t.Path, hunk: t.Hunk}
+		m.threads[k] = append(m.threads[k], t)
 	}
 	m.rebuild()
 	return m
@@ -422,6 +441,11 @@ func (m *Model) rebuild() {
 		for _, fact := range f.Facts {
 			m.rows = append(m.rows, Row{Kind: RowFact, File: i, Hunk: -1, Text: "  " + fact})
 		}
+		// Threads whose line this changeset no longer contains, under the heading rather than
+		// dropped. The line moved after a colleague wrote; what they said still stands.
+		for _, t := range m.unplaced[f.Path] {
+			m.rows = append(m.rows, threadRows(t, i, -1)...)
+		}
 		for hi := range f.Hunks {
 			h := &f.Hunks[hi]
 			mark := "[ ]"
@@ -452,6 +476,11 @@ func (m *Model) rebuild() {
 func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 	k := hunkRef{path: m.files[file].Path, hunk: h.Index}
 	var out []Row
+	// The host's threads first. What a colleague already said is context for the remark you are
+	// about to write, not a footnote to it - the same order the console renders.
+	for _, t := range m.threads[k] {
+		out = append(out, threadRows(t, file, row)...)
+	}
 	for _, c := range m.comments[k] {
 		who := string(c.Author)
 		if c.AgentName != "" {
@@ -471,6 +500,27 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 	for _, s := range m.suggests[k] {
 		out = append(out, Row{Kind: RowSuggestion, File: file, Hunk: row,
 			Text: "  > SUGGESTION: " + s.Reason})
+	}
+	return out
+}
+
+// threadRows renders one remark from the host's review, wrapped the way a comment is.
+//
+// It says "on the review" rather than naming the author alone, because the reader has to be
+// able to tell what the world has already seen from what is still theirs to send. The console
+// draws the same distinction with a colour it cannot use here.
+func threadRows(t types.ReviewThread, file, row int) []Row {
+	who := t.Author
+	if who == "" {
+		who = "review"
+	}
+	var out []Row
+	for j, line := range strings.Split(t.Body, "\n") {
+		text := "  | " + line
+		if j == 0 {
+			text = fmt.Sprintf("  | %s, on the review: %s", who, line)
+		}
+		out = append(out, Row{Kind: RowComment, File: file, Hunk: row, Text: text})
 	}
 	return out
 }

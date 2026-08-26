@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/egladman/magus/types"
 )
 
 // This is the ONE unified-diff reader in the product. The console used to carry a second one
@@ -501,4 +503,40 @@ func HunkCounts(patch string) map[string]int {
 func PatchDigest(patch string) string {
 	sum := sha256.Sum256([]byte(patch))
 	return hex.EncodeToString(sum[:16])
+}
+
+// PlaceThreads resolves each thread's line onto the hunk of its file that contains it, setting
+// Hunk to that index or to -1 when nothing in this changeset does.
+//
+// The arithmetic lives HERE, once, for the reason the parser and the emphasis do: a thread is
+// anchored to a line of the REVIEW, and the review is not the changeset in front of the reader.
+// Two surfaces working that out independently is the same remark landing against different code
+// depending on where you opened it.
+//
+// The NEW side, always. A host anchors an inline comment to the line as it stands after the
+// change, which is the side a reader is looking at; matching the old side would land a remark
+// about new code on whatever used to be there.
+//
+// Threads are returned in the order given, so a caller that renders them keeps the
+// conversation's order.
+func PlaceThreads(files []FileHunks, threads []types.ReviewThread) []types.ReviewThread {
+	if len(threads) == 0 {
+		return nil
+	}
+	byPath := make(map[string][]Hunk, len(files))
+	for _, f := range files {
+		byPath[f.Path] = f.Hunks
+	}
+	out := make([]types.ReviewThread, 0, len(threads))
+	for _, t := range threads {
+		t.Hunk = -1
+		for i, h := range byPath[t.Path] {
+			if t.Line >= h.NewStart && t.Line < h.NewStart+h.NewCount {
+				t.Hunk = i
+				break
+			}
+		}
+		out = append(out, t)
+	}
+	return out
 }

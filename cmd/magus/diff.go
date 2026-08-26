@@ -505,6 +505,11 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 			Viewed:      sess.Viewed,
 			Comments:    sess.Comments,
 			Suggestions: sess.Suggestions,
+			// What colleagues have already said, so the terminal reader is not sent to a
+			// browser to find out. Best-effort and read through the daemon, which is where the
+			// provider lives - with no daemon, or no review, this is empty and the viewer is
+			// exactly what it was before.
+			Threads: daemonReviewThreads(ctx),
 			Unfolded:    showGenerated,
 			Link:        pathLinker(m.Root()),
 		},

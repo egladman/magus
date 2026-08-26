@@ -521,3 +521,55 @@ func rowTextFor(m *Model, kind RowKind, file int) string {
 	}
 	return ""
 }
+
+// A colleague's remark reaches the TERMINAL, not only the browser. The reader chooses where to
+// read and magus does not care which - read receipts already work both ways, and a review that
+// showed the conversation in one surface and not the other would send half of them to a browser
+// to find out what was asked.
+func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{
+			{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-old", "+new"}, Digest: "d0"},
+		}}},
+		Comments: []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorHuman, Body: "mine"}},
+		Threads:  []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "theirs"}},
+	})
+
+	text := everyRowText(m)
+	// What a colleague already said precedes the remark it provoked, the same order the console
+	// renders in.
+	assert.Less(t, indexOfSubstring(text, "theirs"), indexOfSubstring(text, "mine"))
+	// And it says the world has seen it, which is what separates it from a draft of your own.
+	assert.Contains(t, text[indexOfSubstring(text, "theirs")], "on the review")
+}
+
+// A thread whose line this changeset no longer contains still belongs to its file. Dropping it
+// would have the viewer telling the reader a colleague said nothing.
+func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files:   []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
+		Threads: []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: -1, Author: "marcus", Body: "moved away"}},
+	})
+	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "moved away"))
+}
+
+// everyRowText is the visible text of every row, for asserting on order and presence. Named
+// away from render.go's rowText, which renders ONE row and is the package's real one.
+func everyRowText(m *Model) []string {
+	out := make([]string, 0, len(m.Rows()))
+	for _, r := range m.Rows() {
+		out = append(out, r.Text)
+	}
+	return out
+}
+
+func indexOfSubstring(rows []string, want string) int {
+	for i, r := range rows {
+		if strings.Contains(r, want) {
+			return i
+		}
+	}
+	return -1
+}

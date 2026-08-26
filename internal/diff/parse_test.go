@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // These cases came from the console's parse.test.ts when the two readers were consolidated
@@ -417,4 +419,45 @@ func TestEmphasisSpansAreByteOffsetsIntoTheRawLine(t *testing.T) {
 	require.NotNil(t, h.Rows[0].Emph)
 	assert.Equal(t, 9, h.Rows[0].Emph.Start)
 	assert.Equal(t, 12, h.Rows[0].Emph.End)
+}
+
+// A thread is anchored to a line of the REVIEW, and the review is not the changeset in front of
+// the reader: the working tree moves, and a pull request covers commits a working diff does not.
+// So placement is resolved here, once, and both surfaces read the answer.
+func TestPlaceThreadsResolvesALineOntoItsHunk(t *testing.T) {
+	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
+		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n" +
+		"@@ -40,2 +40,2 @@\n-x\n+y\n")
+	require.Len(t, files, 1)
+	require.Len(t, files[0].Hunks, 2)
+
+	got := PlaceThreads(files, []types.ReviewThread{
+		{ID: "t1", Path: "a.go", Line: 11},
+		{ID: "t2", Path: "a.go", Line: 40},
+		// The line moved out from under this remark. It still belongs to the file, and the
+		// caller renders it there rather than dropping it.
+		{ID: "t3", Path: "a.go", Line: 900},
+		// A file this changeset does not touch has no hunks at all to search.
+		{ID: "t4", Path: "other.go", Line: 2},
+	})
+
+	assert.Equal(t, 0, got[0].Hunk, "the first hunk holds line 11")
+	assert.Equal(t, 1, got[1].Hunk, "the second holds line 40")
+	assert.Equal(t, -1, got[2].Hunk, "a line outside every hunk is unplaced, not dropped")
+	assert.Equal(t, -1, got[3].Hunk, "and so is a file outside the changeset")
+	assert.Len(t, got, 4, "every thread survives placement")
+}
+
+// The NEW side, always: a host anchors an inline comment to the line as it stands after the
+// change, and matching the old side would land a remark about new code on whatever used to be
+// there. This hunk's two sides deliberately disagree about which lines they cover.
+func TestPlaceThreadsMatchesTheNewSideNotTheOld(t *testing.T) {
+	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
+		"@@ -100,2 +5,2 @@\n-old\n+new\n")
+	got := PlaceThreads(files, []types.ReviewThread{
+		{ID: "new", Path: "a.go", Line: 5},
+		{ID: "old", Path: "a.go", Line: 100},
+	})
+	assert.Equal(t, 0, got[0].Hunk, "a new-side line places")
+	assert.Equal(t, -1, got[1].Hunk, "an old-side line does not")
 }

@@ -118,7 +118,7 @@ func (f fixedOrigin) ReviewOrigin(context.Context) types.ReviewOrigin {
 // leaves the reader with the same options, and rendering any of them as a failure would
 // accuse them of something they did not do.
 func TestReviewLookupWithNoProviderIsNotAnError(t *testing.T) {
-	h := NewDiffReviewHandler(fixedOrigin{branch: "feat/x"}, nil)
+	h := NewDiffReviewHandler(fixedOrigin{branch: "feat/x"}, nil, nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
@@ -142,7 +142,7 @@ func TestReviewLookupWithNoProviderIsNotAnError(t *testing.T) {
 // A daemon with no workspace has no branch to look a review up for, and says so instead of
 // panicking on a nil source.
 func TestReviewLookupWithoutAWorkspace(t *testing.T) {
-	h := NewDiffReviewHandler(nil, nil)
+	h := NewDiffReviewHandler(nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
@@ -202,7 +202,7 @@ func TestAnEmptyReplyIsRefusedBeforeTheHostIsAsked(t *testing.T) {
 // and reason travel together on one 200 - rather than the decode itself, which is pinned in
 // internal/interp/bindings.
 func TestAReviewReadCarriesThreadsAndItsReasonTogether(t *testing.T) {
-	h := NewDiffReviewHandler(fixedOrigin{branch: "feat/x"}, nil)
+	h := NewDiffReviewHandler(fixedOrigin{branch: "feat/x"}, nil, nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
