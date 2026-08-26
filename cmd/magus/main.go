@@ -48,6 +48,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -951,10 +952,35 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 // dispatch half that makes `graph build`, `clean --cache`, and the rotate workers actually run
 // as jobs; without it they returned ErrNotAdoptable and the submitted job was a silent no-op.
 func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) error {
-	if !jobs.IsWorkerArgv(args) {
+	if !jobs.IsWorkerArgv(args) && !isDeclaredRun(ctx, args) {
 		return fmt.Errorf("%w: %q is not a registered job worker", proc.ErrNotAdoptable, strings.Join(args, " "))
 	}
 	return dispatchSub(ctx, root, rc, args[0], args[1:])
+}
+
+// isDeclaredRun is the second, deliberately narrow admission path into dispatchJob: a plain
+// `run <target> <project>` whose target the workspace's own magusfile declares for that project.
+// The review surface submits these so a reader can run a project's tests against the code they
+// are looking at.
+//
+// It admits strictly less than a terminal's `magus run`: exactly three tokens, no flags, no
+// charms, no `spell::op` form, and a target name that has to appear in the generated target graph
+// rather than being taken from the caller. So the property dispatchJob exists to hold - a job RPC
+// can never name an arbitrary command - still holds by construction: the allowlist is the
+// magusfile, not the request.
+func isDeclaredRun(ctx context.Context, args []string) bool {
+	if len(args) != 3 || args[0] != "run" {
+		return false
+	}
+	target, project := args[1], args[2]
+	if strings.HasPrefix(target, "-") || strings.Contains(target, ":") {
+		return false
+	}
+	m, ok := magusFromContext(ctx)
+	if !ok {
+		return false
+	}
+	return slices.Contains(m.ProjectTargets(ctx, project), target)
 }
 
 // daemonProvider is the single observability provider the daemon shares between its

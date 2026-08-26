@@ -292,6 +292,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			diffReviewH.Sessions = diffSessions
 			diffReviewH.Root = opts.Magus.Root()
 			diffBranchesH := status.NewDiffBranchesHandler(svc, log)
+			diffRunH := status.NewDiffRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 			runsH := viewer.NewRunsHandler(outputStore, log)
@@ -339,6 +340,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// a reader must not wait on it to see their own diff, and it reads only what has
 			// already been fetched rather than going to the network for more.
 			bridgeMux.Handle("/api/v1/diff/branches", cors(diffBranchesH))
+			// Does this still pass? Asked of the machine the code is on, which is the one review
+			// question a forge structurally cannot answer. Loopback only and MUTATING - it starts
+			// work - so it sits with the diff routes rather than in the LAN share subset, and the
+			// work it can start is bounded by what the magusfile declares.
+			bridgeMux.Handle("/api/v1/diff/run", cors(diffRunH))
 			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
 			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.

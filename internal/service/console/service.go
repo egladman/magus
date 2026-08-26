@@ -331,6 +331,16 @@ func (s *Service) BranchChanges(ctx context.Context, limit int) ([]types.BranchC
 	return s.magus.BranchChanges(ctx, limit)
 }
 
+// ProjectTargets names the targets the workspace declares for a project: the allowlist a run
+// asked for from outside a terminal is checked against. None on a workspace-less service, which
+// refuses every such run rather than admitting one it cannot check.
+func (s *Service) ProjectTargets(ctx context.Context, project string) []string {
+	if s.magus == nil {
+		return nil
+	}
+	return s.magus.ProjectTargets(ctx, project)
+}
+
 // Diff annotates a changed-path set: role, owning project, changed-symbol reach, coverage,
 // and the blast radius, ordered by what magus recommends reading first.
 //

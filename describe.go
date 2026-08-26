@@ -655,6 +655,38 @@ func concatSource(src *interp.Source) string {
 	return sb.String()
 }
 
+// ProjectTargets names the targets one project declares, in the order [Magus.TargetGraph]
+// reports them. Empty for a project this workspace does not know.
+//
+// It is a projection of that graph rather than a second source: the graph is already the answer
+// to "what does this project declare", and a membership test computed any other way would be a
+// second definition free to drift from the one MAGUS.md and `magus ls targets` are generated
+// from.
+//
+// It exists as its own method because it is the ALLOWLIST a run triggered from outside a terminal
+// is checked against, and that check has two call sites - the console's run route and the daemon's
+// job dispatch. The dispatch admits only argvs the jobs registry recognises, deliberately, "so the
+// fire-and-forget job RPC can never be used to run an arbitrary command"; a console button able to
+// name any command would hand a browser-reachable surface exactly that. Both sites asking THIS is
+// what keeps the capability strictly smaller than a terminal's `magus run`.
+func (m *Magus) ProjectTargets(ctx context.Context, project string) []string {
+	graph, err := m.TargetGraph(ctx)
+	if err != nil {
+		return nil
+	}
+	for _, p := range graph.Projects {
+		if p.Path != project {
+			continue
+		}
+		out := make([]string, 0, len(p.Nodes))
+		for _, n := range p.Nodes {
+			out = append(out, n.Name)
+		}
+		return out
+	}
+	return nil
+}
+
 // TargetGraph returns the target dependency graph of each project, read statically
 // from the magusfile source (describe.Extract) - deterministic and side-effect free, so
 // introspection never runs a target body. Buzz magusfiles are supported; a project on
