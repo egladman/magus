@@ -244,13 +244,24 @@ export fun find_review(target: magus\Target, cb: fun(any)) > any !> any {
     if (closed.len() == 0) {
         return {"id": "", "reason": "no pull request for this branch"};
     }
-    // merged_at rather than state: GitHub says "closed" for a pull request that landed and for
-    // one that was abandoned, and those are opposite outcomes to whoever wrote the review.
+    // A MERGED one wins over a merely closed one, whatever the sort said. These arrive newest-
+    // updated first, so a branch that carried two pull requests - one merged last week, one
+    // abandoned and commented on today - put the abandoned one first and the merge was never
+    // noticed. Recency answers "what happened last"; the reader is asking "did my work land".
+    //
+    // merged_at rather than state, because GitHub says "closed" for a pull request that landed
+    // and for one that was thrown away, and those are opposite outcomes to whoever wrote the
+    // review.
+    var pick = closed[0];
     var state = "closed";
-    if ("{closed[0].q("merged_at").stringValue()}" != "") {
-        state = "merged";
+    foreach (pr in closed) {
+        if ("{pr.q("merged_at").stringValue()}" != "") {
+            pick = pr;
+            state = "merged";
+            break;
+        }
     }
-    return {"id": "{closed[0].q("number").integerValue()}", "repo": repo, "state": state};
+    return {"id": "{pick.q("number").integerValue()}", "repo": repo, "state": state};
 }
 
 // publish_review sends a batch of drafts as ONE review.

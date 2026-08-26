@@ -655,9 +655,16 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	if !at.Open() {
 		return nil
 	}
-	// The threads error is dropped with the threads that DID decode kept: a conversation is worth
-	// reporting whether or not every remark on it parsed.
-	threads, _ := bindings.ReviewThreads(ctx, at)
+	// The error is READ here, unlike on the surfaces that render what they could get. An
+	// unreachable forge answers with an EMPTY list, and every number below is derived from that
+	// list - so reporting anyway meant "3 remarks live only on the host" when the true figure was
+	// fifteen, or silence about a merge whose whole conversation was unreadable. "Nothing was
+	// said" and "I could not ask" are opposite facts, and this is the one place that can still
+	// tell them apart.
+	threads, err := bindings.ReviewThreads(ctx, at)
+	if err != nil {
+		return nil
+	}
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
@@ -682,12 +689,8 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	said := len(threads) + len(drafts)
 	if said == 0 {
 		// Merged with nothing said on it. There is no conversation to keep, and an event here
-		// would train the reader to ignore the ones that matter.
-		//
-		// A forge that could not be reached also lands here, and the two are NOT the same fact.
-		// The reader is told nothing either way, which is the safe direction: claiming "nothing
-		// was said" about a conversation magus could not read would be worse than silence. Read
-		// the threads error rather than guessing if that ever needs distinguishing.
+		// would train the reader to ignore the ones that matter. A forge that could not be
+		// reached returned above rather than landing here, so this really is "nothing was said".
 		return nil
 	}
 	trail.Append(ctx, m.CacheDir(), trail.Event{
