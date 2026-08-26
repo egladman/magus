@@ -64,7 +64,6 @@ import {
   mutate,
   publish,
   reply,
-  mergedNotice,
   HttpError,
   type DiffComment,
   type DiffSession,
@@ -73,6 +72,7 @@ import {
   type ReviewInfo,
 } from "./session";
 import { setMarkdown } from "./markdown";
+import { mergedNotice } from "../../lib/review-notice";
 import { demoSession, demoReview, applyDemoPublish, applyDemoReply, applyDemoOp } from "./demo";
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../commands";

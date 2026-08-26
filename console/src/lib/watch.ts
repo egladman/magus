@@ -1,10 +1,12 @@
 // watch.ts - the shell-side notification watchers. These are the notifications the console cannot derive
 // from a surface it happens to have open: they must be observed at the SHELL so they fire whether or not
-// you are looking (the "unwatched" half of the admission doctrine). Two daemon-dependent watchers poll on
-// a slow ticker over the console's existing authenticated transport - no new backend push:
+// you are looking (the "unwatched" half of the admission doctrine). Three daemon-dependent watchers poll
+// on a slow ticker over the console's existing authenticated transport - no new backend push:
 //   - share-connect: a device first exercising the share token records a TOKEN_LIFECYCLE "share.open"
 //     trail event; surfaced as a BELL-tier notification with a one-click "Revoke share" action.
 //   - daemon storage: the daemon cache crossing its size threshold; a warn that rings once.
+//   - review merged: a review you took part in has landed, so its conversation can be kept. The only
+//     watcher that reaches past the daemon to a forge, which is why it has its own slower clock.
 // A third watcher (localStorage size) needs no daemon and runs on mount. All are best-effort: an
 // unreachable daemon just means the poll no-ops until the next tick.
 
@@ -12,8 +14,9 @@ import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind } from "../gen/magus/activity/v1alpha1/activity_pb";
 import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
 import { TokenService, TokenScope } from "../gen/magus/token/v1alpha1/token_pb";
-import { createDaemonTransport, getLiveToken, resolveDaemonHost } from "./daemon";
+import { authHeaders, createDaemonTransport, getLiveToken, resolveDaemonHost } from "./daemon";
 import { showToast } from "./refresh-toast";
+import { mergedNotice, type MergedReview } from "./review-notice";
 import {
   type NotificationStore,
   estimateStorageBytes,
@@ -23,6 +26,13 @@ import {
 } from "./notifications";
 
 const POLL_MS = 30_000;
+
+// The merge check reaches the FORGE through the daemon, unlike every other watcher here, so it runs on
+// its own far slower clock. A pull request merges once; learning about it a few minutes later costs the
+// reader nothing, and asking every 30 seconds would spend an API rate limit all day to find that out.
+const REVIEW_POLL_MS = 5 * 60_000;
+let reviewMergedCheckedMs = 0;
+let reviewMergedReported = false;
 
 // checkLocalStorageAlert warns once when the console's own localStorage footprint nears the browser quota.
 // Runs on mount regardless of daemon connectivity - it is the console's storage, not the daemon's.
@@ -126,6 +136,45 @@ async function pollDaemonStorage(host: string, store: NotificationStore): Promis
   });
 }
 
+// pollReviewMerged reports that a review you took part in has landed, so its conversation can be kept
+// before it becomes only a page on somebody else's website.
+//
+// HISTORY tier, deliberately. The admission doctrine in notifications.ts gives the bell to things that
+// change what you can TRUST about the workspace; a merge changes nothing you were relying on. It is
+// worth recording and not worth interrupting for, which is exactly what the silent tier is.
+//
+// Three gates, and each is load-bearing:
+//
+//   - a review SESSION must exist. Opening a review is the opt-in, and without this gate magus would
+//     talk to a forge about branches you never looked at.
+//   - it runs at REVIEW_POLL_MS, not the shell's 30s. Every other watcher here asks the local daemon
+//     and costs nothing; this one reaches the forge through it, and a 30-second poll would spend a
+//     rate limit all day to learn something that changes once.
+//   - it stops after reporting. The notification store dedupes by key, but the CALL is the cost here,
+//     not the record.
+async function pollReviewMerged(host: string, store: NotificationStore): Promise<void> {
+  if (reviewMergedReported) return;
+  const now = Date.now();
+  if (now - reviewMergedCheckedMs < REVIEW_POLL_MS) return;
+  reviewMergedCheckedMs = now;
+
+  // The session first, because it is local and it is what decides whether the forge is asked at all.
+  const session = await fetch(`http://${host}/api/v1/diff/session`, { headers: authHeaders() });
+  if (!session.ok) return;
+  const mine = ((await session.json()) as { comments?: unknown[] }).comments ?? [];
+
+  const res = await fetch(`http://${host}/api/v1/diff/review`, { headers: authHeaders() });
+  if (!res.ok) return;
+  const review = (await res.json()) as MergedReview & { id: string; threads?: unknown[] };
+  // The same sentence the Diff surface offers, decided by the same rule. Two copies of "is this
+  // worth saying" would drift the first time either was tuned.
+  const message = mergedNotice(review, (review.threads?.length ?? 0) + mine.length);
+  if (!message) return;
+
+  reviewMergedReported = true;
+  store.notify({ source: "Diff", kind: "ok", key: "review.merged:" + review.id, message });
+}
+
 // startShellWatch begins the daemon-dependent watchers on a slow ticker and returns a stop function. It
 // resolves the daemon host per tick (an attach can happen after boot) and no-ops when none is resolved.
 export function startShellWatch(store: NotificationStore): () => void {
@@ -140,6 +189,7 @@ export function startShellWatch(store: NotificationStore): () => void {
     await Promise.allSettled([
       pollShareConnect(host, store, baselineMs),
       pollDaemonStorage(host, store),
+      pollReviewMerged(host, store),
     ]);
   };
   const timer = setInterval(() => void tick(), POLL_MS);
