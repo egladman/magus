@@ -376,11 +376,24 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // resolve to a chord in the console-wide keymap, and these are surface-local single keys
   // that never enter it. Until then the only summary lived inside the Esc overview - behind
   // the one key a first-time reader is least likely to try.
-  const keysEl = h(
-    "div",
-    "console-diff-toolbar__keys",
-    "]/[ hunk   }/{ file   v read   u next unread   . generated   Esc overview",
-  );
+  // Each key is its own element rather than a run of text. Written as a sentence, the pair that
+  // steps by file reads as `}/{` beside `]/[`, and a reader who has met a template engine sees
+  // mustache syntax and a rendering bug - the author of this surface did, off a screenshot.
+  // Punctuation is only legible AS a key when it is drawn as one.
+  const keysEl = h("div", "console-diff-toolbar__keys");
+  for (const [keys, what] of [
+    [["]", "["], "hunk"],
+    [["}", "{"], "file"],
+    [["v"], "read"],
+    [["u"], "next unread"],
+    [["."], "generated"],
+    [["Esc"], "overview"],
+  ] as [string[], string][]) {
+    const group = h("span", "console-diff-toolbar__key");
+    for (const key of keys) group.append(h("kbd", undefined, key));
+    group.append(h("span", "console-diff-toolbar__keyname", what));
+    keysEl.append(group);
+  }
   toolbar.append(statsEl, collaborationNotice, keysEl);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");

@@ -334,6 +334,8 @@
    already stopped looking at it. Text tier rather than the icon one, for the contrast reason
    in the note below. */
 .console-diff-toolbar__keys {
+  display: flex;
+  gap: var(--pf-t--global--spacer--md);
   margin-inline-start: auto;
   color: var(--pf-t--global--text--color--subtle);
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -341,6 +343,23 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.console-diff-toolbar__key {
+  display: inline-flex;
+  gap: var(--pf-t--global--spacer--xs);
+  align-items: center;
+}
+
+/* A border is what separates a key from the prose around it: `}` and `{` set as running text read
+ * as template syntax, which is exactly how this row was misread. */
+.console-diff-toolbar__keys kbd {
+  padding: 0 var(--pf-t--global--spacer--xs);
+  font: inherit;
+  color: var(--pf-t--global--text--color--regular);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--tiny);
 }
 
 @media (max-width: 60rem) {
