@@ -147,6 +147,8 @@ const (
 	FlagDiffImpact = "impact"
 	// diff: --no-tui
 	FlagDiffNoTui = "no-tui"
+	// diff: --prompt
+	FlagDiffPrompt = "prompt"
 	// diff: --reason
 	FlagDiffReason = "reason"
 	// diff: --watch
@@ -1015,6 +1017,7 @@ type DiffFlags struct {
 	Watch     bool   // --watch
 	Ack       bool   // --ack
 	Reason    string // --reason
+	Prompt    bool   // --prompt
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
@@ -1026,6 +1029,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
 	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
+	fs.BoolVar(&f.Prompt, FlagDiffPrompt, false, "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction")
 	return &f
 }
 

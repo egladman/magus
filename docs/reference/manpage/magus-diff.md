@@ -91,6 +91,9 @@ performance metric, and a performance metric gets gamed rather than met.
 **--no-tui**
 : Print the report instead of opening the interactive viewer
 
+**--prompt**
+: Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction
+
 **--reason** *string*
 : An optional note kept with an --ack, for the next reader of the report
 
@@ -132,6 +135,12 @@ magus diff --impact
 
 ```sh
 magus diff --no-tui
+```
+
+*Build a review prompt for the model of your choice*
+
+```sh
+magus diff --prompt
 ```
 
 *Machine-readable, for a script or a Buzz advisor*

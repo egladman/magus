@@ -81,6 +81,9 @@ Append the blast radius of landing this: reach, ownership, an estimate from reco
 \fB\-\-no\-tui\fR
 Print the report instead of opening the interactive viewer
 .TP
+\fB\-\-prompt\fR
+Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With \-\-impact, also carries the rationale behind each instruction
+.TP
 \fB\-\-reason\fR \fIstring\fR
 An optional note kept with an \-\-ack, for the next reader of the report
 .TP
@@ -122,6 +125,12 @@ magus diff --impact
 .PP
 .EX
 magus diff --no-tui
+.EE
+.PP
+\fIBuild a review prompt for the model of your choice\fR
+.PP
+.EX
+magus diff --prompt
 .EE
 .PP
 \fIMachine\-readable, for a script or a Buzz advisor\fR

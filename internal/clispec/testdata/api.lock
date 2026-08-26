@@ -114,6 +114,7 @@ flag diff/ack
 flag diff/generated
 flag diff/impact
 flag diff/no-tui
+flag diff/prompt
 flag diff/reason
 flag diff/watch
 flag doctor/fix

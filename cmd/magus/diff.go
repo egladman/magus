@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/internal/prompt"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -225,9 +226,9 @@ func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm,
 	switch {
 	case rf.NoTui, !enabled:
 		return false
-	// Both of these END in output the viewer has nowhere to put - a receipt count, and a report.
-	// They are requests for an answer rather than for somewhere to read.
-	case rf.Ack, rf.Impact:
+	// All three END in output the viewer has nowhere to put - a receipt count, a report, and a
+	// prompt to copy. They are requests for an answer rather than for somewhere to read.
+	case rf.Ack, rf.Impact, rf.Prompt:
 		return false
 	// The viewer reads the working tree and drives the terminal itself, so a patch argument and
 	// a watch loop are each somebody else's job.
@@ -331,6 +332,28 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		return nil
 	}
 
+	// Before the format switch, because a prompt is TEXT for a person to paste whatever -o says.
+	// The other formats project a record; this one is prose, and there is nothing to project.
+	if rf.Prompt {
+		// --impact already means "give me the fuller answer", so it selects the long form here
+		// rather than a second flag that would ask the same question again.
+		variant := prompt.Short
+		if impact {
+			variant = prompt.Long
+		}
+		// Best-effort: a backend that cannot report branches is an ordinary state, and the
+		// prompt omits that section rather than refusing to render.
+		overlap, _ := m.BranchChanges(ctx, branchOverlapLimit)
+		out := review.Prompt(review.PromptInput{
+			Changeset: rev,
+			Origin:    m.ReviewOrigin(ctx),
+			Overlap:   overlap,
+			Variant:   variant,
+		})
+		_, err := io.WriteString(os.Stdout, out)
+		return err
+	}
+
 	var pre *diffImpact
 	if impact {
 		p := collectImpact(ctx, m, rootOverride, rev)
@@ -356,6 +379,11 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	}
 	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
 }
+
+// branchOverlapLimit caps how many branches the prompt's overlap lookup examines, and so how many
+// forks it costs. It matches the console route's bound for the same reason: unbounded, it would be
+// the most expensive thing in the command on a repository with a hundred stale branches.
+const branchOverlapLimit = 20
 
 // annotateDiff computes the annotated changeset for a set of changed paths.
 //
