@@ -438,6 +438,23 @@ export function applyDemoReply(
   return { ...review, threads };
 }
 
+// demoRun is the showcase's stand-in for the daemon's run route: pressing the verdict button has
+// to actually run something, or the reader meets a control that does nothing and concludes the
+// feature is broken - the same rule applyDemoOp exists for.
+//
+// It settles on PASSED after a beat rather than answering instantly, because the honest shape of
+// this control is that a run takes time, and a button that flips to green with no interval reads
+// as a lookup rather than as work.
+export function demoRun(): Promise<{ state: "passed"; duration_ms: number }> {
+  return new Promise((resolve) =>
+    setTimeout(() => resolve({ state: "passed", duration_ms: 4200 }), DEMO_RUN_MS),
+  );
+}
+
+// DEMO_RUN_MS is long enough that the running state is visible and short enough that a reader
+// does not think it hung.
+export const DEMO_RUN_MS = 900;
+
 // applyDemoOp is the showcase's stand-in for the daemon's session store: the reader's writes
 // land in memory instead of over HTTP.
 //

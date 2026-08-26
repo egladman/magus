@@ -77,7 +77,14 @@ import {
 } from "./session";
 import { setMarkdown } from "./markdown";
 import { mergedNotice } from "../../lib/review-notice";
-import { demoSession, demoReview, applyDemoPublish, applyDemoReply, applyDemoOp } from "./demo";
+import {
+  demoSession,
+  demoReview,
+  demoRun,
+  applyDemoPublish,
+  applyDemoReply,
+  applyDemoOp,
+} from "./demo";
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
@@ -1545,7 +1552,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // answer this surface exists not to give.
   const renderVerdict = (): void => {
     const project = currentProject();
-    if (!project || demo) {
+    if (!project) {
       verdictButton.hidden = true;
       return;
     }
@@ -1595,11 +1602,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // which is why the surface can show "Testing..." without ever having to claim it started it.
   const startRun = async (): Promise<void> => {
     const project = currentProject();
-    const hp = host_();
-    if (!project || demo || !hp) return;
+    if (!project) return;
     const asOf = treeState();
     state.verdicts.set(project, { state: "running", asOf });
     renderVerdict();
+    if (demo) {
+      const v = await demoRun();
+      state.verdicts.set(project, { state: v.state, durationMs: v.duration_ms, asOf });
+      renderVerdict();
+      return;
+    }
+    const hp = host_();
+    if (!hp) {
+      state.verdicts.delete(project);
+      renderVerdict();
+      return;
+    }
     const first = await runTarget(hp, RUN_TARGET, project, true, controller.signal);
     if (first.undeclared) {
       state.verdicts.set(project, { state: "unknown", asOf, undeclared: first.undeclared });

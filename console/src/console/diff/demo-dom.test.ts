@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 import { activate } from "./main";
 import { dispatchCommand } from "../commands";
+import { DEMO_RUN_MS } from "./demo";
 
 const realFetch = globalThis.fetch;
 
@@ -497,6 +498,54 @@ test("#demo names the network destination before a reply is sent", async () => {
   const box = document.querySelector<HTMLElement>(".console-diff-composer");
   assert.match(box?.textContent ?? "", /Reply to priya on acme\/acme #482/);
   assert.match(box?.textContent ?? "", /Posts over the network to github\.com/);
+
+  dispose.deactivate();
+});
+
+// The run control is the one review capability a forge structurally cannot offer: it asks the
+// machine the code is on. It is in the showcase for the reason every other control is - the
+// showcase IS the surface, so a button that does nothing here reads as a broken feature - and
+// these pin the two claims it makes that are easy to get wrong and invisible when wrong.
+
+test("#demo offers to run the project in view", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const button = document.querySelector<HTMLButtonElement>(".console-diff-toolbar__verdict");
+  assert.ok(button, "the verdict control is absent");
+  assert.equal(button.hidden, false);
+  assert.match(button.textContent ?? "", /^Test /, `got ${button.textContent}`);
+  // Never a verdict before anything ran: "unknown" and "passed" must not render alike.
+  assert.equal(button.dataset.state, "unknown");
+
+  dispose.deactivate();
+});
+
+test("#demo reports a run in flight, then its verdict", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const button = document.querySelector<HTMLButtonElement>(".console-diff-toolbar__verdict");
+  assert.ok(button);
+  button.click();
+  await settle();
+
+  // In flight: the control says so and refuses a second press, because a run already running is
+  // joined rather than started again.
+  assert.equal(button.dataset.state, "running");
+  assert.equal(button.disabled, true);
+  assert.match(button.textContent ?? "", /Testing /);
+
+  await new Promise((r) => setTimeout(r, DEMO_RUN_MS + 50));
+  await settle();
+
+  assert.equal(button.dataset.state, "passed");
+  assert.equal(button.disabled, false);
+  assert.match(button.textContent ?? "", /passed/);
+  // The duration is the evidence the run happened rather than being looked up.
+  assert.match(button.textContent ?? "", /\d+\.\ds/);
 
   dispose.deactivate();
 });
