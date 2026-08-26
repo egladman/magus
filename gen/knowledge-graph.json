@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2395,
-  "edge_count": 6114,
+  "edge_count": 6115,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -29070,6 +29070,14 @@
     {
       "source": "doc:docs/concepts/review.md",
       "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/doctrine.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,

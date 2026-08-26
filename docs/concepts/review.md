@@ -54,7 +54,7 @@ magus\review.provider(ghReview);
 
 | Op               | Answers                                                      |
 | ---------------- | ------------------------------------------------------------ |
-| `find_review`    | which review this branch has open, or the reason it has none |
+| `find_review`    | which review this branch has, and whether it has merged      |
 | `review_threads` | the remarks already on it                                    |
 | `publish_review` | send a batch of drafts as one review                         |
 | `reply_review`   | answer one thread                                            |
@@ -96,7 +96,28 @@ In the console's Diff surface:
 | `a`   | answer the thread under the cursor          |
 | `r`   | resolve the comment under the cursor        |
 | `s`   | read the batch of drafts, then send it      |
+| `f`   | read one hunk at a time                     |
 | `Esc` | the changeset overview                      |
+
+### One hunk at a time
+
+A changeset arrives as everything at once: eleven files, a dozen chips, a rail, and somewhere in
+it the hunk you were going to judge. `f` puts one hunk on screen and takes the rest away - the
+file index, the counts, all of it one key from coming back.
+
+What replaces them is a line saying where you are: a bar, the position, how many hunks you have
+read, and how many remarks the pass has produced so far. That last number is the one worth
+having. It is the evidence that reading is turning into something.
+
+- `v` marks this hunk read **and moves to the next one**. It is one key because it is one act,
+  and a pass that costs two keystrokes a hunk is a pass that gets abandoned halfway.
+- `]` and `[` move without marking, for reading something twice.
+- Reading the last hunk opens the batch you drafted. A pass ends in the decision it was for,
+  rather than running out.
+
+Stop halfway and the marks persist, so opening the diff again puts you back at the first hunk
+you have not read. The mode is remembered too: it is how you read, not a thing to re-enter every
+time.
 
 ### Writing one
 
@@ -149,6 +170,28 @@ reader: absent. The terminal viewer has no elsewhere list, so it shows the first
 The overview reads those remarks out rather than counting them. A chip saying "1 elsewhere"
 tells you something was said and withholds what, which leaves you to open a browser to find
 out - the one errand this whole surface exists to save you.
+
+## After it merges
+
+A merged pull request is where a review stops being live and becomes the only record of why the
+code is the way it is - and that record is on somebody else's website. So when the diff surface
+opens on a review the host says has landed, it offers once to keep the conversation:
+
+> This review merged on acme/acme, and its 3 remarks live only on the host. Run
+> `magus notes capture` to keep the conversation in your knowledge graph.
+
+**Only when there was a conversation.** A pull request nobody remarked on has nothing worth
+preserving, and a prompt that fires on every merge is one you learn to dismiss without reading -
+which spends the attention it was saving for the merge that mattered.
+
+It names the command rather than running it. Notes are human-authored by construction, which is
+a [standing decision](../doctrine.md#manual-on-purpose) rather than an omission here.
+
+magus asks the provider whether a review merged rather than working it out from git, and that is
+not a preference. A squash merge rewrites a branch into one new commit, so the branch tip is
+neither an ancestor of the base nor patch-equivalent to what landed; a workspace that
+squash-merges would never see its own merges. A provider answers `state` on `find_review`, and a
+provider that does not answer reads as open.
 
 ## What magus will not do
 
