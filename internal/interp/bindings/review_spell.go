@@ -93,7 +93,7 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, d
 			"body": d.Body,
 		})
 	}
-	_, err := drv.Invoke(ctx, spells.InvokeRequest{
+	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.PublishReviewContract,
 		Params: map[string]any{
 			"repo": at.Repo, "id": at.ID, "summary": summary, "drafts": rows,
@@ -102,10 +102,17 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, d
 	if err != nil {
 		return err
 	}
-	// The answer is not read. A review posts as ONE request, so reaching here means the host
-	// took the batch, and a per-draft count could only ever restate the length of what was
-	// sent - which the caller already has. See the handler's publish for why every draft in
-	// the batch is one the provider could actually place.
+	// An absent op answers nil without failing, which is the read paths' "this provider lacks
+	// the capability" and cannot mean the same thing here: the caller marks every draft
+	// published on a nil error, and publish considers only unpublished drafts, so a silent
+	// no-op costs the remarks permanently.
+	if resp.Data == nil {
+		return fmt.Errorf("review provider: %s is not implemented by this spell, so nothing was sent",
+			spells.PublishReviewContract)
+	}
+	// What came back is not read beyond that. A review posts as ONE request, so a per-draft
+	// count could only restate the length of what was sent - which the caller already has. See
+	// the handler's publish for why every draft in the batch is one the provider could place.
 	return nil
 }
 

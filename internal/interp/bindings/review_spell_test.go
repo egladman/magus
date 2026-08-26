@@ -140,6 +140,19 @@ func TestPublishReviewCarriesTheDraftsAndFailsLoudly(t *testing.T) {
 	assert.Equal(t, map[string]any{"path": "a.go", "line": 4, "body": "why"}, sent[0])
 }
 
+// A spell that exports no publish_review answers nil without failing, which the handler reads as
+// "the host took the batch": it marks every draft published, and publish only ever considers
+// unpublished drafts, so the remarks can never go again. A capability the provider lacks has to
+// refuse.
+func TestPublishReviewRefusesAProviderThatCannotPublish(t *testing.T) {
+	withReviewSpell(t, func(string) (any, error) { return nil, nil })
+
+	err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
+		[]types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), spells.PublishReviewContract)
+}
+
 func TestPublishAndReplyRefuseWithNoProviderWired(t *testing.T) {
 	prev := ReviewProvider()
 	SetReviewProvider("")
