@@ -310,6 +310,21 @@ func gradeDelegatedWrite(ctx context.Context, actingDelegation, writePath string
 // claims passes: an orchestrator's owned set is a plan, not a census, and denying on
 // unclaimed ground would block a delegation from a file nobody is competing for.
 func gradeAgainstOwnDelegation(me types.Delegation, live []types.Delegation, rel string) writeGrade {
+	// BEFORE the path checks, because an unregistered delegation should not be writing anywhere -
+	// not merely outside its lane. A checkpoint is what makes its work recoverable and what says
+	// which base the work applies to, and both facts are worth nothing recorded afterwards.
+	//
+	// This is the one rule here that enforces a PROCEDURE rather than a boundary, and it is a deny
+	// rather than an advisory for the reason the skill was not enough: an instruction an agent can
+	// skip is an instruction that gets skipped, and the record it was meant to leave is missing
+	// exactly when somebody needs to recover from it. A human is unaffected - they never set
+	// MAGUS_DELEGATION, so they never reach this function at all.
+	if me.Registered == 0 {
+		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+			"magus workspace: run `magus vcs checkpoint -o name` in this tree and register what it prints with the magus_ledger tool (op register, delegation %s), then retry this write.\n"+
+				"Delegation %s (%s) has not registered the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
+			me.ID, me.ID, goalLine(me))}
+	}
 	if decl, forbidden := declarationCovering(me.ForbiddenPaths, rel); forbidden {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: work inside your own owned paths, or report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this.\n"+
@@ -317,6 +332,15 @@ func gradeAgainstOwnDelegation(me types.Delegation, live []types.Delegation, rel
 			rel, decl, me.ID, goalLine(me))}
 	}
 	if _, mine := declarationCovering(me.OwnedPaths, rel); mine {
+		// Advisory rather than a block: an orchestrator may have rebased the plan deliberately,
+		// and magus cannot tell that from a worker that wandered. What it can do is refuse to let
+		// the divergence stay silent until the merge finds it.
+		if me.BaseVerdict == types.BaseDiverged {
+			return writeGrade{Decision: "advise", Context: fmt.Sprintf(
+				"magus workspace: re-checkpoint and re-register if you moved on purpose; otherwise reconcile with the orchestrator before writing more.\n"+
+					"Delegation %s registered on %s, which is not the checkpoint it was handed (%s). You are working from a different base than the plan assumes, so your changes may not apply where it expects them.",
+				me.ID, me.ReportedBase, me.Checkpoint)}
+		}
 		return writeGrade{}
 	}
 	if owner, owned := ownerOf(live, rel, me.ID); owned {
