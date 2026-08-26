@@ -274,7 +274,8 @@ func TestHumanDraftsSurviveARestart(t *testing.T) {
 	first := NewStore(dir)
 	first.Attach(root, "main", types.Diff{}, "asof1")
 	first.AddComment(root, types.DiffComment{
-		Path: "a.go", Hunk: 0, Body: "this is the bit reviewers always ask about", Anchor: "d1",
+		Path: "a.go", Hunk: 0, Body: "this is the bit reviewers always ask about",
+		Anchor: types.CommentAnchor{Digest: "d1", Quote: "\treturn nil"},
 	}, types.DiffAuthorHuman)
 	first.AddComment(root, types.DiffComment{
 		Path: "b.go", Hunk: 2, Body: "agent noise from the pairing session",
@@ -287,7 +288,7 @@ func TestHumanDraftsSurviveARestart(t *testing.T) {
 	assert.Equal(t, "a.go", sess.Comments[0].Path)
 	assert.Equal(t, "this is the bit reviewers always ask about", sess.Comments[0].Body)
 	// The anchor rides along, so the surface can still say the code under it moved.
-	assert.Equal(t, "d1", sess.Comments[0].Anchor)
+	assert.Equal(t, types.CommentAnchor{Digest: "d1", Quote: "\treturn nil"}, sess.Comments[0].Anchor)
 	assert.False(t, sess.Comments[0].Published)
 }
 
@@ -377,4 +378,63 @@ func TestMarkThreadsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
 func TestUnseenThreadsIgnoresAnUnidentifiedThread(t *testing.T) {
 	var sess types.DiffSession
 	assert.Empty(t, sess.UnseenThreads([]types.ReviewThread{{ID: ""}}))
+}
+
+// TestTrackHunksRelocatesADraftWhoseCodeMoved is the end-to-end shape of the anchor: a remark
+// written against a line, the file edited above it, and the remark still on the right code.
+//
+// Before this the anchor field was written by nobody and read by nothing, while the store's own
+// comment claimed it "carries what is needed to say the code under it moved". It did not.
+func TestTrackHunksRelocatesADraftWhoseCodeMoved(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore("")
+	s.Attach(root, "main", types.Diff{}, "asof1")
+
+	before := []FileHunks{{Path: "a.go", Hunks: []Hunk{
+		{Lines: []string{" func F() {", " \tx := 1", " \treturn x", " }"}, Digest: "d1", NewStart: 10, NewCount: 4},
+	}}}
+	s.TrackHunks(root, before, nil)
+
+	sess := s.AddComment(root, types.DiffComment{
+		Path: "a.go", Hunk: 0, Line: 12, Body: "why is this not a pointer",
+		Anchor: s.AnchorFor(root, "a.go", 12),
+	}, types.DiffAuthorHuman)
+	require.Len(t, sess.Comments, 1)
+	require.Equal(t, "\treturn x", sess.Comments[0].Anchor.Quote, "the server captured what the reader saw")
+
+	// The same code, twenty lines further down.
+	after := []FileHunks{{Path: "a.go", Hunks: []Hunk{
+		{Lines: []string{" func F() {", " \tx := 1", " \treturn x", " }"}, Digest: "d2", NewStart: 30, NewCount: 4},
+	}}}
+	s.TrackHunks(root, after, nil)
+
+	got := s.Get(root)
+	require.Len(t, got.Comments, 1)
+	assert.Equal(t, 32, got.Comments[0].Line, "the remark follows its code")
+	assert.Equal(t, types.AnchorMoved, got.Comments[0].Rung, "and says it moved rather than claiming it never did")
+}
+
+// A published remark is not re-placed: a colleague may already have replied to it where it sits,
+// and moving our copy would make the two surfaces disagree about what was said where.
+func TestTrackHunksLeavesAPublishedRemarkWhereItWasSent(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore("")
+	s.Attach(root, "main", types.Diff{}, "asof1")
+	tracked := []FileHunks{{Path: "a.go", Hunks: []Hunk{
+		{Lines: []string{" a", " b"}, Digest: "d1", NewStart: 1, NewCount: 2},
+	}}}
+	s.TrackHunks(root, tracked, nil)
+	s.AddComment(root, types.DiffComment{
+		Path: "a.go", Line: 1, Body: "sent already", Published: true,
+		Anchor: types.CommentAnchor{Quote: "a"},
+	}, types.DiffAuthorHuman)
+
+	s.TrackHunks(root, []FileHunks{{Path: "a.go", Hunks: []Hunk{
+		{Lines: []string{" z", " a", " b"}, Digest: "d2", NewStart: 1, NewCount: 3},
+	}}}, nil)
+
+	got := s.Get(root)
+	require.Len(t, got.Comments, 1)
+	assert.Equal(t, 1, got.Comments[0].Line, "a published remark stays where the colleague saw it")
+	assert.Equal(t, types.AnchorUnknown, got.Comments[0].Rung)
 }

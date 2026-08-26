@@ -67,7 +67,14 @@ type Store struct {
 	// content is each tracked file's fingerprint as of the last TrackHunks - the bytes the
 	// reader is looking at, which is what a receipt must attest to.
 	content map[string]map[string]string
-	nextID  int
+	// parsed is each tracked file's hunks as of the last TrackHunks, kept because a remark's
+	// anchor has to be captured from the patch the READER WAS SHOWN.
+	//
+	// Server-side only, like hunks. Taking it from the client instead would mean three
+	// implementations - console, terminal, MCP - of a thing that must agree, and an anchor a
+	// caller can compose is an anchor a caller can compose wrongly.
+	parsed map[string]map[string][]Hunk
+	nextID int
 }
 
 // NewStore returns a session store persisting viewed state under stateDir. An empty stateDir
@@ -78,6 +85,7 @@ func NewStore(stateDir string) *Store {
 		sessions: map[string]*types.DiffSession{},
 		hunks:    map[string]map[string]string{},
 		counts:   map[string]map[string]int{},
+		parsed:   map[string]map[string][]Hunk{},
 		content:  map[string]map[string]string{},
 	}
 	if stateDir != "" {
@@ -126,8 +134,8 @@ func (s *Store) Attach(root string, base string, rev types.Diff, asOf string) *t
 			// Restored, or every thread reads as new again after a restart.
 			SeenThreads: s.loadSeen(),
 			// Restored whole, including comments whose anchor is no longer in the changeset:
-			// the draft is the reader's work either way, and Anchor already carries what is
-			// needed to say the code under it moved.
+			// the draft is the reader's work either way, and the anchor is what LocateAnchor
+			// re-finds it by when the code under it moved.
 			Comments: s.loadDrafts(),
 		}
 		s.sessions[root] = sess
@@ -155,7 +163,9 @@ func (s *Store) TrackHunks(root string, files []FileHunks, digestAt func(path st
 	byDigest := make(map[string]string)
 	counts := make(map[string]int)
 	content := make(map[string]string)
+	parsed := make(map[string][]Hunk, len(files))
 	for _, f := range files {
+		parsed[f.Path] = f.Hunks
 		for _, h := range f.Hunks {
 			// DISTINCT digests. Two byte-identical hunks in one file share a digest -
 			// HunkDigest is path plus body - so counting occurrences would set a total the
@@ -175,6 +185,55 @@ func (s *Store) TrackHunks(root string, files []FileHunks, digestAt func(path st
 	s.hunks[root] = byDigest
 	s.counts[root] = counts
 	s.content[root] = content
+	s.parsed[root] = parsed
+	s.relocate(root)
+}
+
+// relocate re-finds every draft remark in the changeset just tracked.
+//
+// Here rather than at render time because this is the moment the changeset moved, and it is the
+// only moment at which the OLD placement and the NEW patch are both in hand. A remark whose code
+// moved keeps pointing at the line it was written on until something re-finds it, and pointing at
+// a line that now holds different code is the one failure this whole anchor exists to prevent.
+//
+// Runs under the caller's lock.
+func (s *Store) relocate(root string) {
+	sess, ok := s.sessions[root]
+	if !ok {
+		return
+	}
+	for i, c := range sess.Comments {
+		// A published remark is not moved. It exists somewhere a colleague may already have
+		// replied to, and re-placing our copy would make the two surfaces disagree about what
+		// was said where - the same reason a published remark is no longer editable.
+		if c.Published {
+			continue
+		}
+		line, rung := LocateAnchor(c.Anchor, s.parsed[root][c.Path], c.Line)
+		sess.Comments[i].Line, sess.Comments[i].Rung = line, rung
+	}
+}
+
+// AnchorFor captures what a remark at path:line should remember about the code under it, from the
+// patch this session last tracked.
+//
+// Zero when the session has never tracked that file, which is the same honest answer CaptureAnchor
+// gives for a line no hunk covers: there is nothing under the remark to remember, and inventing
+// something would put a quote on the record that nobody was shown.
+func (s *Store) AnchorFor(root, path string, line int) types.CommentAnchor {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return CaptureAnchor(s.parsed[root][path], line)
+}
+
+// HunksFor returns the hunks this session last tracked for path, for a caller re-finding a
+// remark's anchor against what the reader is being shown now.
+func (s *Store) HunksFor(root, path string) []Hunk {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.parsed[root][path]
 }
 
 // ContentAt is the fingerprint file had when this session's changeset was tracked, empty when

@@ -366,9 +366,9 @@ type reviewSessionRequest struct {
 	// viewed
 	Digest string `json:"digest,omitempty"`
 	On     bool   `json:"on,omitempty"`
-	// comment
-	Body   string `json:"body,omitempty"`
-	Anchor string `json:"anchor,omitempty"`
+	// comment. No anchor field: the server captures it from the patch it tracked, so a client
+	// cannot supply one and cannot get it wrong.
+	Body string `json:"body,omitempty"`
 	// publish: the summary heading the review. The branch and remote are NOT here - the
 	// daemon resolves those itself, so a client cannot aim a review at another repository.
 	Summary string `json:"summary,omitempty"`
@@ -532,8 +532,13 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		// mint on its own.
 		h.mintReceipt(r.Context(), finished)
 	case "comment":
+		// The anchor is CAPTURED here rather than accepted from the request. The server holds the
+		// patch this session tracked, so it can record what the reader was actually shown; a
+		// client-supplied anchor would be three implementations of one thing, each able to be
+		// wrong in its own way. The wire field is gone for the same reason.
 		sess = h.Sessions.AddComment(h.Root, types.DiffComment{
-			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body, Anchor: req.Anchor,
+			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body,
+			Anchor: h.Sessions.AnchorFor(h.Root, req.Path, req.Line),
 		}, types.DiffAuthorHuman)
 	case "seen":
 		// The reader's claim that these threads were put in front of them, which is the ONLY

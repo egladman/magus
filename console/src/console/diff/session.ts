@@ -274,7 +274,7 @@ export interface SeenOp {
 export type SessionOp =
   | { op: "cursor"; path: string; hunk: number }
   | { op: "viewed"; digest: string; on: boolean }
-  | { op: "comment"; path: string; hunk: number; line?: number; body: string; anchor?: string }
+  | { op: "comment"; path: string; hunk: number; line?: number; body: string }
   | { op: "discard"; id: string }
   | { op: "resolve"; id: string; on: boolean }
   | { op: "answer"; id: string; on: boolean }

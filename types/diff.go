@@ -299,6 +299,59 @@ type DiffCursor struct {
 	Hunk int `json:"hunk" yaml:"hunk"`
 }
 
+// CommentAnchorRung is how well a remark still knows where it belongs, worst case named rather
+// than guessed at.
+type CommentAnchorRung string
+
+const (
+	// AnchorExact is the remembered line, still holding the remembered text.
+	AnchorExact CommentAnchorRung = "exact"
+	// AnchorMoved is the text found somewhere else in the file. The remark is placed there and
+	// says so, because a reader who is not told will read the new position as the original one.
+	AnchorMoved CommentAnchorRung = "moved"
+	// AnchorLost is the text gone from the file. The remark keeps its path and loses its line,
+	// which is the degradation Gerrit's comment porter makes for the same reason: a remark that
+	// lands on the wrong code is worse than one that admits it lost the thread.
+	AnchorLost CommentAnchorRung = "lost"
+	// AnchorUnknown is a remark carrying no quote to look for - written before anchors were
+	// captured, or on a hunk whose text magus never held. Distinct from AnchorExact because
+	// "still in place" and "nobody checked" are different facts.
+	AnchorUnknown CommentAnchorRung = ""
+)
+
+// CommentAnchor is what a remark remembers about the code it was written against, so it can be
+// re-found after that code moves.
+//
+// THREE THINGS, because no single one of them survives every edit, and the mature review tools all
+// converged on storing several and degrading the CLAIM rather than guessing. Digest DETECTS a
+// change and cannot recover from one; Quote RECOVERS a line that moved and cannot tell an
+// unmoved line from a re-typed one. Together they answer both, and Line stops being the answer and
+// becomes a hint - the prior a search starts from rather than the thing it trusts.
+//
+// The field this replaced was a bare digest, documented as letting a remark "report that the code
+// under it has since changed". No client ever set it and nothing ever read it, so the report it
+// promised was never made.
+type CommentAnchor struct {
+	// Digest is the hunk's content digest when the remark was written.
+	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
+	// Quote is the new-side line the remark sits on, verbatim.
+	Quote string `json:"quote,omitempty" yaml:"quote,omitempty"`
+	// Before and After are the lines around Quote, up to AnchorContextLines each.
+	//
+	// They are what make a short quote usable at all. A line of code is often not unique in its
+	// own file - a bare closing brace, a `return nil`, a repeated field tag - so a search for the
+	// quote alone lands on the first of many. The context is what picks the right one, and it is
+	// the same trick the web-annotation model uses under the name prefix/suffix.
+	Before []string `json:"before,omitempty" yaml:"before,omitempty"`
+	After  []string `json:"after,omitempty"  yaml:"after,omitempty"`
+}
+
+// AnchorContextLines is how many lines of context each side of the quote carries.
+//
+// Three, which is the same width unified diff chose for the same reason: enough to disambiguate a
+// repeated line, few enough that the anchor costs a fraction of the hunk it describes.
+const AnchorContextLines = 3
+
 // DiffComment is one remark attached to a hunk.
 //
 // Distinct from a note, and deliberately not stored with one. A note is durable workspace
@@ -316,10 +369,12 @@ type DiffComment struct {
 	// only: nothing branches on it, matching the hook's treatment of the same field.
 	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
 	Body      string `json:"body" yaml:"body"`
-	// Anchor is the hunk's content digest at the time of writing, so the comment can report
-	// that the code under it has since changed rather than silently pointing at moved text.
-	Anchor   string `json:"anchor,omitempty" yaml:"anchor,omitempty"`
-	Resolved bool   `json:"resolved" yaml:"resolved"`
+	// Anchor is what this remark remembers about the code it was written against.
+	Anchor CommentAnchor `json:"anchor,omitzero" yaml:"anchor,omitzero"`
+	// Rung is how the remark's Line was arrived at, recomputed whenever the changeset is tracked
+	// and never stored. Output-only: a client renders it, and nothing accepts one.
+	Rung     CommentAnchorRung `json:"rung,omitempty" yaml:"rung,omitempty"`
+	Resolved bool              `json:"resolved" yaml:"resolved"`
 
 	// Published records that this remark has left the machine. False for a draft, which is
 	// every comment until someone publishes.
