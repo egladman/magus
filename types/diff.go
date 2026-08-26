@@ -476,7 +476,10 @@ func (r ReviewTarget) VerdictLimit() string {
 	mine, known := r.OpenedByViewer()
 	switch {
 	case !known:
-		return "magus could not tell who opened this review, so it will not approve on your behalf"
+		// Carries its code, so a surface can link the reader to the page explaining why not
+		// knowing resolves the same way as knowing it is yours.
+		return string(ReviewAuthorshipUnknown) +
+			": magus could not tell who opened this review, so it will not approve on your behalf"
 	case mine:
 		return "you opened this review, and a change cannot approve itself"
 	default:

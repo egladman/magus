@@ -696,7 +696,12 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 		// competes are different facts, and a surface shown the same emptiness for both tells
 		// the reader "nothing competes" - reassurance magus has not earned. The caller reports
 		// which backend fell short so the gap is legible rather than invisible.
-		return nil, fmt.Errorf("%s does not report branch changes: %w", res.Name, types.ErrVCSUnsupported)
+		// Coded, so a surface can render the gap as a gap rather than as an empty answer, and
+		// so the reader has a page explaining why an empty list here would have been a lie.
+		// Still wraps ErrVCSUnsupported: callers match the sentinel, not the prose.
+		return nil, fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not report branch changes", res.Name),
+			types.ErrVCSUnsupported)
 	}
 	out, err := reporter.BranchChanges(ctx, m.ws.Root, res.Base, limit)
 	if err != nil {

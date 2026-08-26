@@ -158,3 +158,19 @@ func TestPermittedVerdictLeavesARemarkAlone(t *testing.T) {
 		}
 	}
 }
+
+// TestVerdictLimitCarriesItsCodeOnlyForTheGap. Two refusals, and only one is a capability gap:
+// "you opened this" is how review is meant to work and has no page to send anyone to, while
+// "magus could not tell" is something a provider could fix. A code on both would make the
+// ordinary case look like a defect.
+func TestVerdictLimitCarriesItsCodeOnlyForTheGap(t *testing.T) {
+	unknown := ReviewTarget{}.VerdictLimit()
+	assert.Contains(t, unknown, string(ReviewAuthorshipUnknown))
+
+	mine := ReviewTarget{Author: "ada", Viewer: "ada"}.VerdictLimit()
+	assert.NotContains(t, mine, "MGS")
+	assert.NotEmpty(t, mine, "the reason is still said, it just is not a gap")
+
+	theirs := ReviewTarget{Author: "grace", Viewer: "ada"}.VerdictLimit()
+	assert.Empty(t, theirs, "nothing is limited, so nothing is explained")
+}

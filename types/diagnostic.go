@@ -34,6 +34,10 @@ const (
 	diagnosticKnowledgeBase = "https://eli.gladman.cc/magus/reference/codes/knowledge/"
 	diagnosticOutputRefBase = "https://eli.gladman.cc/magus/reference/codes/outputref/"
 	diagnosticAuthBase      = "https://eli.gladman.cc/magus/reference/codes/auth/"
+	// Capability gaps. MGS11## because every leading digit 1-9 is already a family, so a tenth
+	// needs two digits - and 11 rather than 10 because MGS1010 is a magusfile code and an
+	// "MGS10" prefix would silently steal it.
+	diagnosticCapabilityBase = "https://eli.gladman.cc/magus/reference/codes/capability/"
 )
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code). It aliases the framework's Code type, so
@@ -58,6 +62,12 @@ var ErrDiag = diagnostics.ErrSentinel
 // coded error is minted through it so the docs URL is captured for rendering.
 var mgs = diagnostics.New(func(c DiagnosticCode) string {
 	switch {
+	// BEFORE the single-digit cases: MGS11## starts with "MGS1" too, so the magusfile family
+	// would otherwise swallow it. TestEveryDiagnosticCodeHasDocPage is what keeps this honest -
+	// it resolves every code's URL back to a file on disk, so a mis-routed code has no page and
+	// fails rather than shipping a dead link.
+	case strings.HasPrefix(string(c), "MGS11"):
+		return diagnosticCapabilityBase + string(c) + "/"
 	case strings.HasPrefix(string(c), "MGS9"):
 		return diagnosticAuthBase + string(c) + "/"
 	case strings.HasPrefix(string(c), "MGS8"):
@@ -219,6 +229,29 @@ const (
 	NoAuthToken              DiagnosticCode = "MGS9004"
 	ConnectorNameExists      DiagnosticCode = "MGS9005"
 	ConnectorNotFound        DiagnosticCode = "MGS9006"
+
+	// VCSCapabilityMissing fires when the configured version-control backend does not implement
+	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
+	//
+	// It heads the CAPABILITY family: a magus feature exists, and the backend or provider wired
+	// here has not implemented the piece it needs. These are not errors in the ordinary sense and
+	// mostly do not fail a command - the reader did nothing wrong, and the surface still works
+	// without the missing piece. They exist because the alternative is silence, and silence is
+	// indistinguishable from the good news. "No other branch touches these files" and "this
+	// backend cannot tell you about other branches" lead a reader to opposite decisions, and only
+	// one of them is reassurance.
+	//
+	// A subset is legitimate by design - the review contract says so outright, and a VCS backend
+	// answers what its host can answer - so a gap is a fact to report, never a spell to fix.
+	VCSCapabilityMissing DiagnosticCode = "MGS1101"
+	// ReviewOpMissing fires when the wired review spell does not export one of the four reserved
+	// ops. On a READ that is a silence worth naming; on a WRITE it is an error, because a
+	// tolerated no-op would mark every draft published and lose the remarks permanently.
+	ReviewOpMissing DiagnosticCode = "MGS1102"
+	// ReviewAuthorshipUnknown fires when a provider names neither the review's author nor the
+	// credential holder, so magus cannot tell a self-review from a colleague's and will not
+	// approve on the reader's behalf. Not knowing is not permission.
+	ReviewAuthorshipUnknown DiagnosticCode = "MGS1103"
 )
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
@@ -248,6 +281,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
 	NoAuthToken, ConnectorNameExists, ConnectorNotFound,
+	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 
 // AllDiagnosticCodes returns every registered diagnostic code in ascending MGS

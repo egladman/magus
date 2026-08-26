@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2397,
-  "edge_count": 6120,
+  "node_count": 2404,
+  "edge_count": 6139,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -300,6 +300,30 @@
       "label": "MGS1030",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1030/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1101",
+      "kind": "diagnostic",
+      "label": "MGS1101",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/capability/MGS1101/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1102",
+      "kind": "diagnostic",
+      "label": "MGS1102",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/capability/MGS1102/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1103",
+      "kind": "diagnostic",
+      "label": "MGS1103",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/capability/MGS1103/"
       }
     },
     {
@@ -886,7 +910,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "216",
+        "dir_files": "220",
         "dir_languages": "markdown"
       }
     },
@@ -1156,7 +1180,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "86",
+        "dir_files": "90",
         "dir_languages": "markdown"
       }
     },
@@ -1167,6 +1191,16 @@
       "source": "docs/reference/codes/auth",
       "attrs": {
         "dir_files": "6",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/codes/capability",
+      "kind": "dir",
+      "label": "docs/reference/codes/capability",
+      "source": "docs/reference/codes/capability",
+      "attrs": {
+        "dir_files": "3",
         "dir_languages": "markdown"
       }
     },
@@ -3811,6 +3845,42 @@
         "section": "reference",
         "tags": "MGS9006,auth,connector,token,revoke,fingerprint",
         "title": "MGS9006: connector token not found"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/capability/MGS1101.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/capability/MGS1101.md",
+      "source": "docs/reference/codes/capability/MGS1101.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1101,capability,vcs,git,backend,branches,review",
+        "title": "MGS1101: this VCS backend cannot answer that"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/capability/MGS1102.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/capability/MGS1102.md",
+      "source": "docs/reference/codes/capability/MGS1102.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1102,capability,review,provider,spell,github,publish",
+        "title": "MGS1102: this review provider does not implement that op"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/capability/MGS1103.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/capability/MGS1103.md",
+      "source": "docs/reference/codes/capability/MGS1103.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1103,capability,review,provider,approve,verdict,authorship",
+        "title": "MGS1103: this provider did not say who opened the review"
       }
     },
     {
@@ -23774,6 +23844,14 @@
     },
     {
       "source": "dir:docs/reference/codes",
+      "target": "dir:docs/reference/codes/capability",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability"
+    },
+    {
+      "source": "dir:docs/reference/codes",
       "target": "dir:docs/reference/codes/charms",
       "relation": "contains",
       "confidence": "extracted",
@@ -23875,6 +23953,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/auth/MGS9006.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/capability",
+      "target": "doc:docs/reference/codes/capability/MGS1101.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/capability",
+      "target": "doc:docs/reference/codes/capability/MGS1102.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/capability",
+      "target": "doc:docs/reference/codes/capability/MGS1103.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
     },
     {
       "source": "dir:docs/reference/codes/charms",
@@ -34251,6 +34353,126 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/auth/MGS9006.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1101.md",
+      "target": "diagnostic:MGS1101",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1101.md",
+      "target": "diagnostic:MGS1102",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1101.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1101.md",
+      "target": "doc:docs/reference/codes/capability/MGS1102.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "diagnostic:MGS1101",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "diagnostic:MGS1102",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "diagnostic:MGS1103",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "doc:docs/guides/authoring-spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "doc:docs/reference/codes/capability/MGS1101.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "doc:docs/reference/codes/capability/MGS1103.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1103.md",
+      "target": "diagnostic:MGS1102",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1103.md",
+      "target": "diagnostic:MGS1103",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1103.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1103.md",
+      "target": "doc:docs/reference/codes/capability/MGS1102.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
     },
     {
       "source": "doc:docs/reference/codes/charms/MGS6001.md",
