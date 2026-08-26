@@ -549,3 +549,48 @@ test("#demo reports a run in flight, then its verdict", async () => {
 
   dispose.deactivate();
 });
+
+// The verdict control is the reachable half of the approval rule. The daemon decides what is
+// allowed and refuses anything else at publish time, but a rule nobody can invoke is a feature
+// that never fires - which is the failure these pin.
+
+test("#demo offers every verdict the daemon allowed", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  await settle();
+
+  const choices = [
+    ...document.querySelectorAll<HTMLInputElement>(".console-diff-composer__verdict input"),
+  ];
+  assert.deepEqual(
+    choices.map((c) => c.value),
+    ["comment", "approve", "request_changes"],
+    "the showcase reviews somebody else's change, so all three are offered",
+  );
+  // Remarks is what a reader gets by doing nothing. Approving has to be a choice they made.
+  assert.deepEqual(
+    choices.filter((c) => c.checked).map((c) => c.value),
+    ["comment"],
+  );
+
+  dispose.deactivate();
+});
+
+// The row is present even when only remarks are allowed, so its absence can never hide a bug -
+// and no reason is shown when nothing was limited.
+test("#demo gives no reason when nothing narrowed the verdicts", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  await settle();
+
+  assert.ok(document.querySelector(".console-diff-composer__verdicts"));
+  assert.equal(document.querySelectorAll(".console-diff-composer__verdictnote").length, 0);
+
+  dispose.deactivate();
+});

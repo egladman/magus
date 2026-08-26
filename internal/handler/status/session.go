@@ -671,9 +671,18 @@ type diffReviewResponse struct {
 	Host string `json:"host,omitempty"`
 	// State is what the host says became of the review: "open", "merged" or "closed". Empty when
 	// the provider does not answer, which reads as open.
-	State   string               `json:"state,omitempty"`
-	Reason  string               `json:"reason,omitempty"`
-	Threads []types.ReviewThread `json:"threads"`
+	State  string `json:"state,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	// Verdicts are the verdicts this reviewer may publish, and VerdictLimit says why when the
+	// set is only remarks.
+	//
+	// The daemon sends the ANSWER rather than the author and viewer names, so a surface renders
+	// the choices magus allows and has no rule of its own to get wrong. Always populated, so an
+	// absent field is a magus too old to have an opinion rather than a review nobody may remark
+	// on.
+	Verdicts     []types.ReviewVerdict `json:"verdicts"`
+	VerdictLimit string                `json:"verdict_limit,omitempty"`
+	Threads      []types.ReviewThread  `json:"threads"`
 }
 
 // remoteHost reduces a git remote URL to the host a reader would recognize. Empty when it is
@@ -707,11 +716,13 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	at := h.lookup(r.Context())
 	out := diffReviewResponse{
-		ID:      at.ID,
-		Repo:    at.Repo,
-		State:   at.State,
-		Reason:  at.Reason,
-		Threads: []types.ReviewThread{},
+		ID:           at.ID,
+		Repo:         at.Repo,
+		State:        at.State,
+		Reason:       at.Reason,
+		Verdicts:     at.AllowedVerdicts(),
+		VerdictLimit: at.VerdictLimit(),
+		Threads:      []types.ReviewThread{},
 	}
 	if at.Open() && h.workspace != nil {
 		out.Host = remoteHost(h.workspace.ReviewOrigin(r.Context()).Remote)

@@ -450,6 +450,40 @@ func (r ReviewTarget) PermittedVerdict(want ReviewVerdict) ReviewVerdict {
 	return want
 }
 
+// AllowedVerdicts lists every verdict this reviewer may publish, remarks first.
+//
+// DERIVED from PermittedVerdict rather than restating its rule, so a surface offering the choices
+// and the publish path enforcing them cannot drift apart. A client renders exactly this list; it
+// is never handed the author and viewer names to compare for itself, because a permission rule
+// re-implemented in a browser is one that eventually disagrees with the one that matters.
+func (r ReviewTarget) AllowedVerdicts() []ReviewVerdict {
+	out := []ReviewVerdict{VerdictComment}
+	for _, v := range []ReviewVerdict{VerdictApprove, VerdictRequestChanges} {
+		if r.PermittedVerdict(v) == v {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// VerdictLimit explains why AllowedVerdicts is only remarks, or "" when it is not limited.
+//
+// The two reasons are different facts and a surface that renders them alike misleads: "this is
+// your own change" is how review is supposed to work, while "magus could not tell who opened
+// this" is a gap in what the provider answered - the same distinction the branch lookup's
+// unsupported marker exists to preserve.
+func (r ReviewTarget) VerdictLimit() string {
+	mine, known := r.OpenedByViewer()
+	switch {
+	case !known:
+		return "magus could not tell who opened this review, so it will not approve on your behalf"
+	case mine:
+		return "you opened this review, and a change cannot approve itself"
+	default:
+		return ""
+	}
+}
+
 // OpenedByViewer reports whether the credential holder opened this review, and whether that is
 // KNOWN at all.
 //

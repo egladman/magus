@@ -141,8 +141,21 @@ export interface ReviewInfo {
   // the provider does not answer it, which reads as open.
   readonly state?: string;
   readonly reason?: string;
+  // verdicts are the verdicts this reviewer may publish, decided by the daemon. The surface
+  // renders exactly these and never works the permission out for itself: a rule re-implemented
+  // in a browser is one that eventually disagrees with the one the publish path enforces.
+  //
+  // Absent means a daemon too old to have an opinion, which reads as remarks only.
+  readonly verdicts?: readonly ReviewVerdict[];
+  // verdict_limit says WHY the set is only remarks: your own change, or a provider that did not
+  // name either party. Different facts, and a surface that renders them alike misleads.
+  readonly verdict_limit?: string;
   readonly threads: readonly ReviewThread[];
 }
+
+// ReviewVerdict is what a published review says about the change. Mirrors types.ReviewVerdict,
+// and the values are the wire spelling rather than any host's vocabulary.
+export type ReviewVerdict = "comment" | "approve" | "request_changes";
 
 export interface DiffSuggestion {
   readonly id: string;
@@ -326,12 +339,13 @@ export async function fetchReview(host: string, signal: AbortSignal): Promise<Re
 export async function publish(
   host: string,
   summary: string,
+  verdict: ReviewVerdict,
   signal: AbortSignal,
 ): Promise<DiffSession> {
   const res = await fetch(`http://${host}/api/v1/diff/session`, {
     method: "POST",
     headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ op: "publish", summary }),
+    body: JSON.stringify({ op: "publish", summary, verdict }),
     signal,
   });
   if (!res.ok) {

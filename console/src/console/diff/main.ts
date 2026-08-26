@@ -74,6 +74,7 @@ import {
   type DiffTouch,
   type ReviewInfo,
   type ReviewThread,
+  type ReviewVerdict,
 } from "./session";
 import { setMarkdown } from "./markdown";
 import { mergedNotice } from "../../lib/review-notice";
@@ -196,6 +197,14 @@ const STATUS_COPY: Record<FileStatus, { short: string; modifier: string }> = {
   modified: { short: "M", modifier: "pf-m-grey" },
   renamed: { short: "R", modifier: "pf-m-blue" },
   copied: { short: "C", modifier: "pf-m-blue" },
+};
+
+// What each verdict is called in front of a person. The wire words are magus's vocabulary; these
+// are what a reviewer would say they are doing.
+const VERDICT_COPY: Record<ReviewVerdict, string> = {
+  comment: "Remarks only",
+  approve: "Approve",
+  request_changes: "Request changes",
 };
 
 const TONE_CLASS: Record<string, string> = {
@@ -2296,6 +2305,34 @@ export function activate(host: HTMLElement): SurfaceInstance {
       box.remove();
       scroll.focus();
     };
+
+    // What this review will SAY. Rendered from the daemon's allowed set, never worked out here:
+    // a permission rule re-implemented in a browser is one that eventually disagrees with the
+    // one the publish path enforces. An older daemon sends none, which reads as remarks only.
+    const allowed = state.review.verdicts ?? ["comment"];
+    let verdict: ReviewVerdict = "comment";
+    const verdicts = h("div", "console-diff-composer__verdicts");
+    if (allowed.length > 1) {
+      for (const v of allowed) {
+        const label = h("label", "console-diff-composer__verdict");
+        const radio = h("input") as HTMLInputElement;
+        radio.type = "radio";
+        radio.name = "console-diff-verdict";
+        radio.value = v;
+        radio.checked = v === "comment";
+        radio.addEventListener("change", () => {
+          if (radio.checked) verdict = v;
+        });
+        label.append(radio, h("span", undefined, VERDICT_COPY[v]));
+        verdicts.append(label);
+      }
+    } else if (state.review.verdict_limit) {
+      // Only remarks, and the REASON said out loud. "This is your own change" is how review is
+      // meant to work; "magus could not tell who opened it" is a gap in what the provider
+      // answered. Rendering them alike would hide the second behind the first.
+      verdicts.append(h("span", "console-diff-composer__verdictnote", state.review.verdict_limit));
+    }
+
     const {
       wrap: inputWrap,
       field,
@@ -2309,7 +2346,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         commit.disabled = true;
         where.textContent = "Sending...";
         const heldBack = pending.filter((d) => !d.line).length;
-        void sendDrafts(summary).then((failure) => {
+        void sendDrafts(summary, verdict).then((failure) => {
           if (disposed) return;
           if (!failure) {
             close();
@@ -2334,7 +2371,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         });
       },
     });
-    box.append(where, warn, listing, inputWrap);
+    box.append(where, warn, listing, verdicts, inputWrap);
     scroll.append(box);
     field.focus();
   };
@@ -2344,7 +2381,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // A string rather than a thrown error, because the caller's job is to put the reason in front
   // of the reader: "no pull request for this branch" and "the host refused a comment on a line
   // it cannot see" send them to different places, and a boolean would send them to neither.
-  const sendDrafts = async (summary: string): Promise<string> => {
+  const sendDrafts = async (summary: string, verdict: ReviewVerdict): Promise<string> => {
     if (demo) {
       // The showcase sends for real, into memory. Publishing is the one act here a colleague
       // would see, so a reader trying it must find out what it does rather than meeting a
@@ -2355,7 +2392,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const hp = host_();
     if (!hp) return "Connect a daemon to publish.";
     try {
-      const next = await publish(hp, summary, controller.signal);
+      const next = await publish(hp, summary, verdict, controller.signal);
       if (disposed) return "";
       applySession(next);
       // Re-read the review, so what just left comes back as a thread beside the code it is
@@ -2410,6 +2447,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       box.remove();
       scroll.focus();
     };
+
     const {
       wrap: inputWrap,
       field,

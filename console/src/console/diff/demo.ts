@@ -351,6 +351,10 @@ export function demoReview(): ReviewInfo {
     id: "482",
     repo: "acme/acme",
     host: "github.com",
+    // The showcase reviews somebody ELSE's change, so the verdict control has all three
+    // choices. A self-review would show only remarks, which is the state a reader meets on
+    // their own branch - and the less interesting one to demonstrate.
+    verdicts: ["comment", "approve", "request_changes"],
     threads: [
       {
         id: "th1",

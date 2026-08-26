@@ -1413,3 +1413,29 @@
 .console-diff-composer__drop:hover {
   color: var(--pf-t--global--text--color--status--danger--default);
 }
+
+/* The verdict choice in the send box: what this review will SAY. Laid out as a row of radios
+   rather than a select, because the options are three and all three should be readable without
+   opening anything - a reader deciding whether to approve is making the most consequential
+   choice on this surface. */
+.console-diff-composer__verdicts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--md);
+  padding-block: var(--pf-t--global--spacer--sm);
+}
+
+.console-diff-composer__verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  cursor: pointer;
+}
+
+/* Why the choice is not offered. Subtle rather than a warning: on your own change this is
+   ordinary, and only the wording distinguishes it from a provider that could not say. */
+.console-diff-composer__verdictnote {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
