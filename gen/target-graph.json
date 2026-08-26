@@ -1674,6 +1674,9 @@
             },
             {
               "glob": "concepts/knowledge.md"
+            },
+            {
+              "glob": "concepts/review.md"
             }
           ]
         },
@@ -1828,7 +1831,18 @@
               "target": "diagrams-generate"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "concepts/spells.md"
+            },
+            {
+              "glob": "concepts/knowledge.md"
+            },
+            {
+              "glob": "concepts/review.md"
+            }
+          ]
         },
         {
           "name": "format",

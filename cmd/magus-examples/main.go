@@ -26,6 +26,10 @@ import (
 // repo happens to contain).
 var fixtureFiles = map[string]string{
 	"magus.yaml": "concurrency: 4\n",
+	// A source file so the review example has a changed file to describe. Its CONTENT never
+	// shows in the docs - the prompt names paths and annotations, not lines - so it only has to
+	// be something the go spell would claim.
+	"main.go": "package main\n\nfunc main() {}\n",
 	"magusfile.buzz": `import "magus";
 import "magus/spell/go";
 magus.project({ "spells": [go] });
@@ -41,31 +45,54 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 `,
 }
 
-// example is one worked example: its marker slug and the magus argv to run. The
-// displayed command line is derived from the argv, so the two never disagree.
+// example is one worked example: the page it belongs on, its marker slug, and the magus argv to
+// run. The displayed command line is derived from the argv, so the two never disagree.
 type example struct {
+	docs string // the Markdown file, relative to -dir, carrying this example's markers
 	slug string
 	argv []string
 }
 
 func (e example) command() string { return "magus " + strings.Join(e.argv, " ") }
 
+const (
+	knowledgeDoc = "concepts/knowledge.md"
+	reviewDoc    = "concepts/review.md"
+)
+
 var examples = []example{
-	{slug: "explain-tool-go", argv: []string{"explain", "tool:go"}},
-	{slug: "explain-target-test", argv: []string{"explain", "target:.:test"}},
-	{slug: "path-test-to-tool", argv: []string{"path", "target:.:test", "tool:go"}},
+	{docs: knowledgeDoc, slug: "explain-tool-go", argv: []string{"explain", "tool:go"}},
+	{docs: knowledgeDoc, slug: "explain-target-test", argv: []string{"explain", "target:.:test"}},
+	{docs: knowledgeDoc, slug: "path-test-to-tool", argv: []string{"path", "target:.:test", "tool:go"}},
+	// The review prompt is captured rather than transcribed for the reason every example here is:
+	// it is prose magus assembles, so a hand-typed copy in the docs would describe a version
+	// nobody gets. It runs against the same fixture, which the setup below makes a repository
+	// with one uncommitted edit so there is a changeset to describe.
+	{docs: reviewDoc, slug: "diff-prompt", argv: []string{"diff", "--prompt"}},
 }
 
 func main() {
-	docsPath := flag.String("docs", "docs/knowledge.md", "the Markdown file whose <!-- example:<slug> --> blocks to fill")
+	docsDir := flag.String("dir", "docs", "the directory holding the Markdown files whose <!-- example:<slug> --> blocks to fill")
 	flag.Parse()
 
 	rendered, err := renderExamples()
 	if err != nil {
 		fatalf("%v", err)
 	}
-	if err := inject(*docsPath, rendered); err != nil {
-		fatalf("%v", err)
+	// Grouped by page, because inject treats a rendered example with no marker as a hard error -
+	// which is what keeps the docs and the example set in lockstep, and would otherwise fire for
+	// every example that belongs on a different page.
+	byDoc := map[string]map[string]string{}
+	for _, ex := range examples {
+		if byDoc[ex.docs] == nil {
+			byDoc[ex.docs] = map[string]string{}
+		}
+		byDoc[ex.docs][ex.slug] = rendered[ex.slug]
+	}
+	for doc, snippets := range byDoc {
+		if err := inject(filepath.Join(*docsDir, doc), snippets); err != nil {
+			fatalf("%v", err)
+		}
 	}
 }
 
@@ -83,10 +110,22 @@ func renderExamples() (map[string]string, error) {
 		}
 	}
 
+	if err := initFixtureRepo(dir); err != nil {
+		return nil, err
+	}
+
 	// Build HEAD's magus so the captured output reflects the current renderer, not a
 	// release on PATH - the whole point of the drift gate. The module path (not a
 	// relative ./cmd/magus) so this works whatever directory the generator runs from.
-	bin := filepath.Join(dir, "magus-bin")
+	// OUTSIDE the fixture. Built into it, the binary is an untracked file in the fixture's
+	// repository, so `magus diff` reported it as part of the changeset and the harness leaked
+	// into published documentation as a changed file named magus-bin.
+	binDir, err := os.MkdirTemp("", "magus-examples-bin-")
+	if err != nil {
+		return nil, fmt.Errorf("temp bin dir: %w", err)
+	}
+	defer os.RemoveAll(binDir)
+	bin := filepath.Join(binDir, "magus-bin")
 	build := exec.Command("go", "build", "-o", bin, "github.com/egladman/magus/cmd/magus")
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -102,6 +141,35 @@ func renderExamples() (map[string]string, error) {
 		out[ex.slug] = "```console\n$ " + ex.command() + "\n" + text + "```\n"
 	}
 	return out, nil
+}
+
+// initFixtureRepo makes the fixture a repository with exactly one uncommitted edit, so the
+// review-prompt example has a changeset to describe.
+//
+// Every knob that would otherwise vary by machine is pinned, because the captured output is
+// COMMITTED and compared by the drift gate: the branch name (git's default is a local setting),
+// and the identity (a developer's global config would put their name in published docs, and a
+// runner with no config would fail the commit outright). The same reasoning as the XDG_STATE_HOME
+// redirect below - anything read from the environment makes the same command produce two pages.
+func initFixtureRepo(dir string) error {
+	for _, argv := range [][]string{
+		{"init", "-b", "base"},
+		{"add", "-A"},
+		{"-c", "user.name=magus", "-c", "user.email=magus@example.invalid",
+			"commit", "-m", "the state this change is compared against"},
+	} {
+		cmd := exec.Command("git", argv...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("fixture repo (git %s): %w\n%s", strings.Join(argv, " "), err, out)
+		}
+	}
+	// The edit itself, after the commit: this is what `magus diff` reports.
+	edited := "package main\n\nfunc main() { println(\"hello\") }\n"
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(edited), 0o644); err != nil {
+		return fmt.Errorf("fixture edit: %w", err)
+	}
+	return nil
 }
 
 // capture runs the magus binary with argv in the fixture dir and returns its stdout.
@@ -157,7 +225,11 @@ func inject(path string, rendered map[string]string) error {
 			return fmt.Errorf("%s: marker %q has no closing %q", path, start, end)
 		}
 		ei := after + rel
-		content = content[:after] + "\n" + snippet + content[ei:]
+		// A BLANK line on BOTH sides of the fence, not just a newline: dprint's markdown formatter
+		// wants one between an HTML comment and an adjacent fenced block, and without them the
+		// generator and the formatter each undo the other on every run - the oscillation that
+		// makes a page a hybrid nobody can gate.
+		content = content[:after] + "\n\n" + snippet + "\n" + content[ei:]
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)

@@ -150,6 +150,11 @@ from this list.
 the patch it is showing. It cannot publish, and no review command carries a `--publish` flag:
 you send with the batch in front of you or you do not send.
 
+Two things the console has that the terminal viewer does not yet: reading one hunk at a time
+(`f`), and the run control below. Both are read-side and nothing about a terminal prevents them -
+they are missing, not withheld, unlike publishing. `--prompt` needs neither: it is a flag on
+`magus diff` itself, and the viewer stands aside for it the way it does for `--impact`.
+
 ### Where a remark lands
 
 A colleague anchors a thread to a line of the **review**, which is not the changeset in front
@@ -268,6 +273,51 @@ magus assembles it and stops. Nothing calls a model, holds a key, or sends anyth
 the clipboard is the airgap, and it is what keeps the review something you wrote. The prompt asks
 for findings, and says so out loud: file, line, what is wrong. It does not ask for review prose,
 because generated text is the wrong thing to put in front of the colleague who asked.
+
+Against a workspace with one changed file, it prints:
+
+<!-- example:diff-prompt -->
+
+```console
+$ magus diff --prompt
+# Review this change
+
+Find what is worth commenting on. I will write the actual review comments myself, so
+give me findings - file, line, what is wrong - and flag the ones you are unsure of.
+Do not draft review prose or a summary I could paste.
+
+## What this is
+
+- branch: base
+- compared against: working
+- 1 changed file(s)
+- projects edited directly: .
+
+## Read in this order
+
+magus ranked these by what they can break, consequence first.
+
+- `main.go` - source; in .
+
+## What magus could not measure
+
+Do not read any of these as evidence that there is nothing there.
+
+- no symbol index loaded: changed-symbol callers and coverage overlays are unavailable (build it with `magus graph build`)
+
+## Use what is already installed
+
+Load these rather than inferring from the diff alone:
+
+- `magus-query` - what references what, without guessing from a text search
+- `magus-architecture-review` - where code belongs, grounded in the graph
+
+Follow the conventions this workspace documents over generic ones.
+Before reporting a finding, look for the test that PINS the behavior you are about
+to call a bug. If you cannot find where a claim is verified, say it is unverified.
+```
+
+<!-- /example -->
 
 What it carries is the part no model can work out from a diff: the reading order magus ranked,
 which projects rebuild as a result, what could NOT be measured, and which other branches are

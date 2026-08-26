@@ -113,7 +113,7 @@ func Prompt(in PromptInput) string {
 		Skill(SkillArchitecture, "where code belongs, grounded in the graph").
 		Because("A graph answer is checked against declared sources; a text search is a guess.").
 		Text("Follow the conventions this workspace documents over generic ones.").
-		Text("Before reporting a finding, look for the test that PINS the behaviour you are about").
+		Text("Before reporting a finding, look for the test that PINS the behavior you are about").
 		Text("to call a bug. If you cannot find where a claim is verified, say it is unverified.").
 		Because("Roughly one review finding in ten is wrong that way: the code says what it says",
 			"on purpose, and the comment beside it usually says why.")
