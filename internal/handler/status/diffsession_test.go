@@ -129,7 +129,7 @@ func TestReviewLookupWithNoProviderIsNotAnError(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Number != 0 || got.Reason == "" {
+	if got.ID != "" || got.Reason == "" {
 		t.Fatalf("want a closed target carrying its reason, got %#v", got)
 	}
 	// Never null: a client iterating threads must not have to guard a state that means the

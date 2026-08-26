@@ -301,7 +301,7 @@ func NewDiffReviewHandler(origin originSource, log *slog.Logger) *DiffReviewHand
 // it, and a null would make every caller write the same guard for a state that means exactly
 // what an empty list means.
 type diffReviewResponse struct {
-	Number  int                  `json:"number"`
+	ID      string               `json:"id"`
 	Repo    string               `json:"repo,omitempty"`
 	Reason  string               `json:"reason,omitempty"`
 	Threads []types.ReviewThread `json:"threads"`
@@ -318,7 +318,7 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	at := h.lookup(r.Context())
 	out := diffReviewResponse{
-		Number:  at.Number,
+		ID:      at.ID,
 		Repo:    at.Repo,
 		Reason:  at.Reason,
 		Threads: []types.ReviewThread{},

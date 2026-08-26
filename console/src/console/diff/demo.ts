@@ -348,7 +348,7 @@ export function demoSession(): DiffSession {
 // telling the reader a colleague said nothing, which is the worst thing a review can say.
 export function demoReview(): ReviewInfo {
   return {
-    number: 482,
+    id: "482",
     repo: "acme/acme",
     threads: [
       {

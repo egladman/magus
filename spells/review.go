@@ -3,10 +3,13 @@ package spells
 // The review contract: the reserved function names a spell exports to connect a workspace to
 // wherever its changes are discussed.
 //
-// A fourth contract on the same vendor spell that already carries the cache, CI and secret
-// ones. That is the shape this repository settled on before this existed - "one spell per
-// vendor, three contracts" is written at the top of spells/github/actions - and a review
-// contract is the fourth rather than a new subsystem beside it.
+// A fourth CONTRACT beside the cache, CI and secret ones, detected the same way - by reserved
+// function name on a spell a magusfile selected. It is not a new subsystem.
+//
+// Whether it rides on the same spell as the other three is up to the vendor. For GitHub it does
+// not: spells/github/actions is inert outside a CI runner by design, and a review happens on a
+// laptop, so the review ops live in spells/github/review and that workspace imports two spells.
+// A vendor whose contracts share a runtime would carry all four in one.
 //
 // magus knows nothing about GitHub. It calls these four names, and the spell talks to whatever
 // host it was written for over ordinary HTTP: `spells/github/actions` already does exactly

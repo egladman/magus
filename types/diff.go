@@ -362,13 +362,23 @@ type ReviewOrigin struct {
 // surface that renders them differently would be inventing a distinction its user does not
 // have - what they can do next is identical in all three.
 type ReviewTarget struct {
-	Number int    `json:"number" yaml:"number"`
+	// ID is the review's identity in the provider's own terms, opaque to magus and passed
+	// back to the spell untouched.
+	//
+	// A STRING, though every provider magus ships speaks in integers. GitHub numbers pull
+	// requests and GitLab numbers merge requests, but Gerrit and Phabricator identify a change
+	// by a hash, and an int here would have made those providers unwritable for a saving of
+	// nothing - magus does no arithmetic on it. The wrong kind of specific is the kind you find
+	// out about from the person who could not write the second provider.
+	ID string `json:"id" yaml:"id"`
+	// Repo is where the review lives, for display: an owner/name on GitHub, a project path on
+	// GitLab. Never parsed here.
 	Repo   string `json:"repo,omitempty" yaml:"repo,omitempty"`
 	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
 }
 
 // Open reports whether there is a review to publish to or read from.
-func (r ReviewTarget) Open() bool { return r.Number != 0 }
+func (r ReviewTarget) Open() bool { return r.ID != "" }
 
 // ReviewThread is one comment already on the review, written by anybody.
 //

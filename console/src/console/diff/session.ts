@@ -120,7 +120,10 @@ export interface ReviewThread {
 // this branch", a host that did not answer - and NONE of them is an error. The reader's
 // options are identical in all three, so the surface states the reason and moves on.
 export interface ReviewInfo {
-  readonly number: number;
+  // The review's identity in the provider's own terms, opaque here. A string rather than a
+  // number, though GitHub and GitLab both count: Gerrit and Phabricator identify a change by a
+  // hash, and a numeric field would have made those providers unwritable for no gain.
+  readonly id: string;
   readonly repo?: string;
   readonly reason?: string;
   readonly threads: readonly ReviewThread[];
@@ -275,10 +278,10 @@ export async function fetchReview(host: string, signal: AbortSignal): Promise<Re
       headers: authHeaders(),
       signal,
     });
-    if (!res.ok) return { number: 0, reason: `daemon answered ${res.status}`, threads: [] };
+    if (!res.ok) return { id: "", reason: `daemon answered ${res.status}`, threads: [] };
     return (await res.json()) as ReviewInfo;
   } catch {
-    return { number: 0, reason: "the daemon could not be reached", threads: [] };
+    return { id: "", reason: "the daemon could not be reached", threads: [] };
   }
 }
 

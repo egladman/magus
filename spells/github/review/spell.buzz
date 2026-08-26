@@ -5,14 +5,37 @@
 //   magus\review.provider(github)
 //
 // It carries the review contract (spells/review.go) - open_review, review_threads,
-// publish_review, reply_review - as a FOURTH contract on this vendor, beside the cache, CI and
-// secret ones spells/github/actions carries. magus knows nothing about GitHub: it calls four
-// reserved names and reads what comes back.
+// publish_review, reply_review. magus knows nothing about GitHub: it calls four reserved names
+// and reads what comes back.
 //
-// A SEPARATE spell from github/actions rather than four more functions in it, because the two
-// run in different places. That one is inert outside a CI job by design - every op checks for
-// the Actions runtime token first. This one runs on a laptop, in the middle of a review, where
-// no Actions token exists and never will.
+// # Why this is a second GitHub spell
+//
+// spells/github/actions carries three contracts (cache, CI, secret) and this one carries a
+// fourth, so a workspace wanting everything imports BOTH:
+//
+//   import "spells/github/actions" as ghActions
+//   import "spells/github/review"  as ghReview
+//   magus\cache.remote(ghActions)
+//   magus\ci.provider(ghActions)
+//   magus\secret.provider(ghActions)
+//   magus\review.provider(ghReview)
+//
+// Two imports rather than one, because the two run in different PLACES. Every op in
+// github/actions checks for the Actions runtime token first and is inert without it, which is
+// correct for a cache that only exists on a runner - and fatal for a review, which happens on a
+// laptop where no Actions token exists and never will. Folding these four ops into that spell
+// would make them permanently inert in the only place they are used.
+//
+// The directory says which surface each speaks to, matching spells/gitlab/ci beside them:
+// vendor, then the product or API the spell talks to.
+//
+// # Enterprise
+//
+// The endpoint is read from GITHUB_API_URL and defaults to github.com, so GitHub Enterprise
+// Server works by setting the variable GitHub itself defines for it. Nothing else needs
+// configuring: the git remote's host is DERIVED from that endpoint (see apiHost), because an
+// installation has one host and two settings that must agree is one setting plus a way to get
+// it wrong.
 //
 // HTTP directly, no `gh` binary. That is what github/actions already does for the Actions cache
 // (`import "http"`, a bearer token, no CLI), so it is this repository's established way of
@@ -35,7 +58,56 @@ import "magus";
 
 export fun mgs_getName() > str { return "github-review"; }
 
-final API = "https://api.github.com";
+// DEFAULT_API is github.com's endpoint, used when nothing overrides it.
+//
+// GitHub Enterprise Server serves its API from the appliance instead - typically
+// https://github.example.com/api/v3 - so the endpoint is READ rather than fixed. This mirrors
+// what the cache half of this vendor already does: spells/github/actions takes its base from
+// ACTIONS_RESULTS_URL, so a GHES runner works with no magus change at all.
+final DEFAULT_API = "https://api.github.com";
+
+// API_ENV is the variable GitHub itself defines for this, so an Actions job (including one on
+// a GHES runner) is already correct with nothing set by hand, and a laptop against an
+// appliance sets the same name `gh` and every GitHub SDK expect.
+final API_ENV = "GITHUB_API_URL";
+
+// apiBase is the endpoint to call, without a trailing slash. Trailing slashes are stripped
+// because every URL below joins with "/" - GITHUB_API_URL arrives with one on some runners and
+// without on others, and "//repos" is a 404 nobody would think to look for.
+fun apiBase() > str {
+    var base = getenv(API_ENV);
+    if (base == "") {
+        return DEFAULT_API;
+    }
+    while (base.endsWith("/")) {
+        base = base.sub(0, len: base.len() - 1);
+    }
+    return base;
+}
+
+// apiHost is the git remote host that pairs with apiBase, so a remote is recognized on an
+// appliance and not only on github.com.
+//
+// Derived from the endpoint rather than configured separately: an installation has ONE host,
+// and two settings that must agree is one setting plus a way to get it wrong. "api.github.com"
+// loses its "api." because github.com's API lives on a subdomain while an appliance serves
+// both from the same name.
+export fun apiHost(base: str) > str {
+    var h = base;
+    if (h.startsWith("https://")) {
+        h = h.sub(8);
+    } else if (h.startsWith("http://")) {
+        h = h.sub(7);
+    }
+    final cut = h.indexOf("/");
+    if (cut != null) {
+        h = h.sub(0, len: cut ?? 0);
+    }
+    if (h.startsWith("api.")) {
+        h = h.sub(4);
+    }
+    return h;
+}
 
 // TOKEN_REF is the reference this spell reads its credential by, resolved through whatever
 // secret provider the workspace wired. It is a REFERENCE, not a value: nothing here ever holds
@@ -62,24 +134,28 @@ fun headers() > any !> any {
     };
 }
 
-// slug turns a git remote URL into "owner/name", empty when it is not a GitHub remote.
+// slug turns a git remote URL into "owner/name", empty when it is not a remote of this host.
 //
-// Both spellings, because both are in daily use and a reader who cloned over SSH is not
+// Three spellings, because all three are in daily use and a reader who cloned over SSH is not
 // holding a different repository than one who cloned over HTTPS:
 //
 //   git@github.com:acme/acme.git
 //   https://github.com/acme/acme.git
+//   ssh://git@github.com/acme/acme.git
 //
-// Empty rather than an error for a non-GitHub remote: a workspace on another host that wired
-// this spell by mistake should publish nothing, not fail to open a diff.
-export fun slug(remote: str) > str {
+// The host is passed IN rather than fixed, so an Enterprise appliance works: apiHost derives it
+// from the configured endpoint, and a test can hand over either.
+//
+// Empty rather than an error for a remote on another host: a workspace that wired this spell by
+// mistake should publish nothing, not fail to open a diff.
+export fun slug(remote: str, host: str) > str {
     var s = remote;
-    if (s.startsWith("git@github.com:")) {
-        s = s.sub(15);
-    } else if (s.startsWith("https://github.com/")) {
-        s = s.sub(19);
-    } else if (s.startsWith("ssh://git@github.com/")) {
-        s = s.sub(21);
+    if (s.startsWith("git@" + host + ":")) {
+        s = s.sub(("git@" + host + ":").len());
+    } else if (s.startsWith("https://" + host + "/")) {
+        s = s.sub(("https://" + host + "/").len());
+    } else if (s.startsWith("ssh://git@" + host + "/")) {
+        s = s.sub(("ssh://git@" + host + "/").len());
     } else {
         return "";
     }
@@ -132,27 +208,30 @@ export fun open_review(target: magus\Target, cb: fun(any)) > any !> any {
     final io = {<str: any>};
     cb(io);
     if (!has_token()) {
-        return {"number": 0, "reason": "no credential"};
+        return {"id": "", "reason": "no credential"};
     }
     // The branch and the remote arrive from the CALLER rather than being discovered here.
     // magus already knows both, through a VCS layer that speaks four backends, and a spell
     // that re-derived them would be a second opinion about the same working tree - one that
     // only knows git.
-    final repo = slug("{io["remote"] ?? ""}");
+    final base = apiBase();
+    final repo = slug("{io["remote"] ?? ""}", host: apiHost(base));
     final branch = "{io["branch"] ?? ""}";
     if (repo == "" or branch == "") {
-        return {"number": 0, "reason": "not a github remote"};
+        return {"id": "", "reason": "not a {apiHost(base)} remote"};
     }
-    final url = API + "/repos/" + repo + "/pulls?head=" + repo.split("/")[0] + ":" + branch;
+    final url = base + "/repos/" + repo + "/pulls?head=" + repo.split("/")[0] + ":" + branch;
     final res = http\get(url, headers: headers());
     if (res["status"] != 200) {
-        return {"number": 0, "reason": "github: HTTP {res["status"]}"};
+        return {"id": "", "reason": "github: HTTP {res["status"]}"};
     }
     final list = serialize\jsonDecode(res["body"]);
     if (list.len() == 0) {
-        return {"number": 0, "reason": "no pull request for this branch"};
+        return {"id": "", "reason": "no pull request for this branch"};
     }
-    return {"number": list[0].q("number").integerValue(), "repo": repo};
+    // Rendered as a string: magus treats a review id as opaque so a provider whose changes are
+    // named by a hash stays writable. GitHub's is a number and reads as one either way.
+    return {"id": "{list[0].q("number").integerValue()}", "repo": repo};
 }
 
 // publish_review sends a batch of drafts as ONE review.
@@ -171,13 +250,13 @@ export fun publish_review(target: magus\Target, cb: fun(any)) > any !> any {
         throw "github-review: no credential; publishing needs {TOKEN_REF}";
     }
     final repo = "{io["repo"] ?? ""}";
-    final number = io["number"] ?? 0;
-    if (repo == "" or number == 0) {
-        throw "github-review: publish needs a repo and a pull-request number";
+    final id = "{io["id"] ?? ""}";
+    if (repo == "" or id == "") {
+        throw "github-review: publish needs a repo and a pull-request id";
     }
     final drafts = io["drafts"] ?? [<any>];
     final payload = reviewBody("{io["summary"] ?? ""}", drafts);
-    final url = API + "/repos/" + repo + "/pulls/{number}/reviews";
+    final url = apiBase() + "/repos/" + repo + "/pulls/" + id + "/reviews";
     final res = http\post(url, serialize\jsonEncode(payload), headers: headers());
     if (res["status"] != 200 and res["status"] != 201) {
         throw "github-review: publish failed: HTTP {res["status"]}: {res["body"]}";
@@ -196,11 +275,11 @@ export fun review_threads(target: magus\Target, cb: fun(any)) > [any] !> any {
     final io = {<str: any>};
     cb(io);
     final repo = "{io["repo"] ?? ""}";
-    final number = io["number"] ?? 0;
-    if (!has_token() or repo == "" or number == 0) {
+    final id = "{io["id"] ?? ""}";
+    if (!has_token() or repo == "" or id == "") {
         return [<any>];
     }
-    final res = http\get(API + "/repos/" + repo + "/pulls/{number}/comments", headers: headers());
+    final res = http\get(apiBase() + "/repos/" + repo + "/pulls/" + id + "/comments", headers: headers());
     if (res["status"] != 200) {
         return [<any>];
     }
@@ -222,24 +301,41 @@ export fun reply_review(target: magus\Target, cb: fun(any)) > bool !> any {
     final io = {<str: any>};
     cb(io);
     final repo = "{io["repo"] ?? ""}";
-    final number = io["number"] ?? 0;
+    final id = "{io["id"] ?? ""}";
     final thread = "{io["thread"] ?? ""}";
-    if (!has_token() or repo == "" or number == 0 or thread == "") {
+    if (!has_token() or repo == "" or id == "" or thread == "") {
         return false;
     }
-    final url = API + "/repos/" + repo + "/pulls/{number}/comments/" + thread + "/replies";
+    final url = apiBase() + "/repos/" + repo + "/pulls/" + id + "/comments/" + thread + "/replies";
     final res = http\post(url, serialize\jsonEncode({"body": "{io["body"] ?? ""}"}), headers: headers());
     return res["status"] == 200 or res["status"] == 201;
 }
 
-test "slug reads both remote spellings and rejects a foreign host" {
-    assert\equal(slug("git@github.com:acme/acme.git"), want: "acme/acme", message: "ssh scp-style");
-    assert\equal(slug("https://github.com/acme/acme.git"), want: "acme/acme", message: "https");
-    assert\equal(slug("https://github.com/acme/acme"), want: "acme/acme", message: "no .git suffix");
-    assert\equal(slug("ssh://git@github.com/acme/acme.git"), want: "acme/acme", message: "ssh url");
+test "slug reads every remote spelling and rejects a foreign host" {
+    assert\equal(slug("git@github.com:acme/acme.git", host: "github.com"), want: "acme/acme", message: "ssh scp-style");
+    assert\equal(slug("https://github.com/acme/acme.git", host: "github.com"), want: "acme/acme", message: "https");
+    assert\equal(slug("https://github.com/acme/acme", host: "github.com"), want: "acme/acme", message: "no .git suffix");
+    assert\equal(slug("ssh://git@github.com/acme/acme.git", host: "github.com"), want: "acme/acme", message: "ssh url");
     // A workspace on another host that wired this spell publishes nothing rather than failing.
-    assert\equal(slug("git@gitlab.com:acme/acme.git"), want: "", message: "not github");
-    assert\equal(slug(""), want: "", message: "no remote");
+    assert\equal(slug("git@gitlab.com:acme/acme.git", host: "github.com"), want: "", message: "not github");
+    assert\equal(slug("", host: "github.com"), want: "", message: "no remote");
+}
+
+test "an Enterprise appliance is recognised by its own host" {
+    // A GHES remote names the appliance, not github.com, so a fixed host would refuse every
+    // enterprise repository - the reader would be told "not a github remote" about a
+    // repository that plainly is one.
+    assert\equal(slug("git@github.acme.com:team/svc.git", host: "github.acme.com"), want: "team/svc", message: "ssh");
+    assert\equal(slug("https://github.acme.com/team/svc.git", host: "github.acme.com"), want: "team/svc", message: "https");
+    // The public host is then the foreign one, which is the same rule read the other way.
+    assert\equal(slug("git@github.com:acme/acme.git", host: "github.acme.com"), want: "", message: "public host is foreign here");
+}
+
+test "the API host is derived from the endpoint, so two settings cannot disagree" {
+    assert\equal(apiHost("https://api.github.com"), want: "github.com", message: "github.com serves its API on a subdomain");
+    // An appliance serves both from one name, so there is no subdomain to strip.
+    assert\equal(apiHost("https://github.acme.com/api/v3"), want: "github.acme.com", message: "GHES");
+    assert\equal(apiHost("http://ghe.internal/api/v3"), want: "ghe.internal", message: "plain http appliance");
 }
 
 test "a review is always a COMMENT, never an approval of your own change" {

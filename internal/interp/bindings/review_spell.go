@@ -12,7 +12,7 @@ import (
 // OpenReview asks the selected spell which review is open for a branch.
 //
 // A workspace with no provider, a branch with no pull request, and a host that could not be
-// reached are all the SAME answer here: a zero Number and a reason. None of them is an error,
+// reached are all the SAME answer here: an empty ID and a reason. None of them is an error,
 // because none of them is a thing the reader did wrong, and a diff that refuses to open
 // because a review lookup failed would be a worse tool than one that shows the change.
 //
@@ -50,7 +50,7 @@ func decodeReviewTarget(data any) (types.ReviewTarget, error) {
 	}
 	var at types.ReviewTarget
 	var err error
-	if at.Number, err = intField(m, "number", where); err != nil {
+	if at.ID, err = strField(m, "id", where); err != nil {
 		return types.ReviewTarget{}, err
 	}
 	if at.Repo, err = strField(m, "repo", where); err != nil {
@@ -90,7 +90,7 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, d
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.PublishReviewContract,
 		Params: map[string]any{
-			"repo": at.Repo, "number": at.Number, "summary": summary, "drafts": rows,
+			"repo": at.Repo, "id": at.ID, "summary": summary, "drafts": rows,
 		},
 	})
 	if err != nil {
@@ -117,7 +117,7 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 	}
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.ReplyReviewContract,
-		Params: map[string]any{"repo": at.Repo, "number": at.Number, "thread": thread, "body": body},
+		Params: map[string]any{"repo": at.Repo, "id": at.ID, "thread": thread, "body": body},
 	})
 	if err != nil {
 		return err
@@ -140,12 +140,12 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 // it could not read.
 func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewThread, error) {
 	drv, ok := reviewDriver()
-	if !ok || at.Number == 0 {
+	if !ok || !at.Open() {
 		return nil, nil
 	}
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.ThreadsContract,
-		Params: map[string]any{"repo": at.Repo, "number": at.Number},
+		Params: map[string]any{"repo": at.Repo, "id": at.ID},
 	})
 	if err != nil {
 		//nolint:nilerr // an unreachable host is not a failure of this call: the surface has

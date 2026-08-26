@@ -1136,6 +1136,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const UNRANKED_TITLE =
     "No symbol index. Files use path order. Run magus graph build to order them by impact.";
 
+  // reviewLabel names the review the way its host does.
+  //
+  // The "#" is a NUMBERING convention, so it goes on a number and nowhere else: "#482" is how
+  // GitHub and GitLab write theirs, while a Gerrit change is "I8473b95" and "#I8473b95" would
+  // be magus inventing a spelling its own provider does not use.
+  const reviewLabel = (info: ReviewInfo): string =>
+    /^\d+$/.test(info.id) ? `#${info.id}` : info.id;
+
   // reviewChips says where this pass is going and what is waiting for it.
   //
   // Nothing at all until the lookup lands, and nothing when no review is open. A branch with no
@@ -1143,9 +1151,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // on every one of them would be a permanent complaint about nothing.
   const reviewChips = (): HTMLElement[] => {
     const info = state.review;
-    if (!info?.number) return [];
+    if (!info?.id) return [];
     const chips = [
-      label(`#${info.number}`, "pf-m-blue", info.repo ? `Open on ${info.repo}` : "The open review"),
+      label(reviewLabel(info), "pf-m-blue", info.repo ? `Open on ${info.repo}` : "The open review"),
     ];
     const pending = drafts().length;
     if (pending > 0) {
@@ -1682,7 +1690,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // fifth remark often changes your mind about the first.
   const composePublish = (): void => {
     const pending = drafts();
-    if (!state.review?.number || pending.length === 0) {
+    if (!state.review?.id || pending.length === 0) {
       flashPublishNotice(
         pending.length === 0
           ? "Nothing drafted. Press c to comment on a hunk."
@@ -1698,7 +1706,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
     const box = h("div", "console-diff-composer console-diff-composer--batch");
     const where = h("span", "console-diff-composer__where");
-    where.textContent = `Send ${pending.length} ${pending.length === 1 ? "remark" : "remarks"} to #${state.review.number}`;
+    where.textContent = `Send ${pending.length} ${pending.length === 1 ? "remark" : "remarks"} to ${reviewLabel(state.review)}`;
     const listing = h("ul", "console-diff-composer__batch");
     for (const d of pending) {
       const item = h("li");
