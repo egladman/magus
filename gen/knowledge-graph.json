@@ -14527,7 +14527,7 @@
       "kind": "function",
       "label": "find_review",
       "doc": "find_review reports the pull request open for this branch, or an empty number when there is none. A branch with no pull request is the ORDINARY state - most branches, most of the time - so it is never an error and never a reason a diff fails to open.",
-      "source": "spells/github/review/spell.buzz:207",
+      "source": "spells/github/review/spell.buzz:213",
       "attrs": {
         "exported": "true"
       }
@@ -14565,7 +14565,7 @@
       "kind": "function",
       "label": "publish_review",
       "doc": "publish_review sends a batch of drafts as ONE review.  A batch rather than a call per comment, which is the whole shape of self-review: you read, you accumulate remarks, and only then decide the set is worth sending. Publishing each as it is written would send the first thought before the fifth changed your mind about it.  Returns the review id and the drafts it accepted, so the caller can mark exactly those published. A partial result is a real answer here: GitHub rejects an inline comment whose line is no",
-      "source": "spells/github/review/spell.buzz:306",
+      "source": "spells/github/review/spell.buzz:312",
       "attrs": {
         "exported": "true"
       }
@@ -14575,7 +14575,7 @@
       "kind": "function",
       "label": "reply_review",
       "doc": "reply_review answers one existing thread, so a conversation can be finished without leaving.",
-      "source": "spells/github/review/spell.buzz:360",
+      "source": "spells/github/review/spell.buzz:366",
       "attrs": {
         "exported": "true"
       }
@@ -14584,8 +14584,8 @@
       "id": "function:spells/github/review/spell.buzz:reviewBody",
       "kind": "function",
       "label": "reviewBody",
-      "doc": "reviewBody assembles the payload GitHub's \"create a review\" endpoint takes.  COMMENT, never APPROVE or REQUEST_CHANGES: this publishes YOUR notes on YOUR change, and a self-review that approves itself is a lie the API is happy to tell. The event is fixed here rather than passed in so no caller can widen it later without reading this.  Each draft becomes one inline comment anchored to a path and a line. A draft carrying no line is dropped rather than promoted to a review-level remark: it would arrive detache",
-      "source": "spells/github/review/spell.buzz:182",
+      "doc": "reviewBody assembles the payload GitHub's \"create a review\" endpoint takes.  The verdict arrives ALREADY RESOLVED. magus decides whether an approval is allowed - a review may never approve a change its own credential opened, and \"we could not tell who opened it\" resolves the same way - and it decides that in Go, because this file is workspace-authored and a rule living here could be edited out by the person it constrains. So this maps three provider-neutral words onto GitHub's event vocabulary and does no j",
+      "source": "spells/github/review/spell.buzz:185",
       "attrs": {
         "exported": "true"
       }
@@ -14595,7 +14595,7 @@
       "kind": "function",
       "label": "review_threads",
       "doc": "review_threads lists the inline comment threads already on the review, so a reader never leaves for the browser to find out what a colleague said.  This is the one function that makes magus depend on a host being reachable. Every failure returns an EMPTY list rather than throwing: a diff that will not open because GitHub is slow is a worse tool than one that shows the change and says nothing about the conversation.",
-      "source": "spells/github/review/spell.buzz:334",
+      "source": "spells/github/review/spell.buzz:340",
       "attrs": {
         "exported": "true"
       }
@@ -14621,7 +14621,7 @@
       "kind": "function",
       "label": "viewerLogin",
       "doc": "viewerLogin names who the credential belongs to, and ONLY when magus asks.  GitHub hands over the pull request's author in the payload find_review already fetches, but the token's own owner takes a second round trip. magus caches that for the life of the daemon and sets want_viewer only while its cache is empty, so this costs one call ever rather than one per diff opened. Empty on any failure: not knowing who you are is not a reason to fail a lookup, and magus reads an empty pair as UNKNOWN rather than as \"",
-      "source": "spells/github/review/spell.buzz:286"
+      "source": "spells/github/review/spell.buzz:292"
     },
     {
       "id": "function:spells/gitlab/ci/spell.buzz:annotate",

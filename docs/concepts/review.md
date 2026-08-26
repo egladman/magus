@@ -335,8 +335,12 @@ from the installed one and spends your context on text your tools already loaded
   produces one - replying lives on the human route alone - so an answer to your colleague is
   something you wrote. Receiving generated text where you asked a question is how the human half
   of a review dies, and this is the one place magus spends a refusal to prevent it.
-- **A self-review is always a `COMMENT`.** The API would accept your change approving itself;
-  magus does not offer it.
+- **A review never approves a change its own credential opened.** Reviewing a colleague's
+  branch, you may approve or request changes; on your own, the verdict is silently downgraded
+  to remarks and the surface says so. The API would happily let your change approve itself,
+  which is why the rule lives in magus rather than in a spell you could edit - and why
+  "magus could not tell who opened this" resolves the same way as "you did". Not knowing is
+  not permission.
 - **A draft with no line never moves to a line magus guessed.** The send box marks those
   before you send, because a remark that arrives against the wrong code costs more than one
   the host refused.

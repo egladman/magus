@@ -378,6 +378,10 @@ type reviewSessionRequest struct {
 	// resolve / answer, and the THREAD for reply. One field because they are the same
 	// question - which one - and never asked together.
 	ID string `json:"id,omitempty"`
+	// Verdict is what the published review should SAY: "comment" (the default), "approve", or
+	// "request_changes". It is a REQUEST, not a decision - the daemon resolves it against who
+	// opened the review, and a self-review is always a comment however this is set.
+	Verdict string `json:"verdict,omitempty"`
 	// seen: the review threads the surface has just put in front of the reader.
 	//
 	// The CLIENT says this, rather than the review lookup assuming it. Serving a response is not
@@ -428,8 +432,19 @@ func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionReque
 	if err != nil {
 		return nil, err
 	}
-	if err := bindings.PublishReview(ctx, at, req.Summary, drafts); err != nil {
+	want := types.ReviewVerdict(req.Verdict)
+	// Unchecked conversion on purpose: PermittedVerdict treats anything that is not one of the
+	// two asserting words as remarks, so a client cannot spell its way into an approval.
+	got, err := bindings.PublishReview(ctx, at, req.Summary, want, drafts)
+	if err != nil {
 		return nil, err
+	}
+	if got != want && want.Asserts() {
+		// Said out loud rather than swallowed. The remarks DID go, so this is not an error - but
+		// a person who asked to approve and was silently given a comment would believe they had
+		// approved, which is the one outcome worse than refusing.
+		h.Log.InfoContext(ctx, "review published as remarks: a review cannot approve a change its own credential opened",
+			"review", at.ID, "asked", string(want), "published", string(got))
 	}
 	// All or none: a review posts as one request, so reaching here means the host took it.
 	for _, d := range drafts {

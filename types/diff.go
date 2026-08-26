@@ -396,6 +396,60 @@ type ReviewTarget struct {
 	Viewer string `json:"viewer,omitempty" yaml:"viewer,omitempty"`
 }
 
+// ReviewVerdict is what a published review SAYS about the change: remarks alone, an approval, or
+// a request for changes. It follows the family rule KnowledgeVerdict states - the scalar judgment
+// is a Verdict, and the constants carry that prefix rather than the domain's.
+//
+// Provider-neutral by design. GitHub calls this an "event" and spells its values in caps; GitLab
+// approves through a different endpoint entirely; Gerrit scores a label. Naming the magus-side
+// concept after any one of them would make the others translate a foreign word, so a spell maps
+// these three onto whatever its host actually wants.
+type ReviewVerdict string
+
+const (
+	// VerdictComment publishes the remarks and takes no position. The default everywhere, the
+	// only verdict a self-review can carry, and what any unrecognized value becomes.
+	VerdictComment ReviewVerdict = "comment"
+	// VerdictApprove says the change should land.
+	VerdictApprove ReviewVerdict = "approve"
+	// VerdictRequestChanges says it should not, yet.
+	VerdictRequestChanges ReviewVerdict = "request_changes"
+)
+
+// Asserts reports whether v takes a position on the change rather than only remarking on it.
+//
+// It is the question the permission rule turns on, and it is written once here so an unrecognized
+// value - a client's typo, a newer magus's vocabulary - is not an assertion by default. Only the
+// two words below can be.
+func (v ReviewVerdict) Asserts() bool {
+	return v == VerdictApprove || v == VerdictRequestChanges
+}
+
+// PermittedVerdict returns the verdict this review may actually carry, which is want unless magus
+// will not permit it, and [VerdictComment] when it will not.
+//
+// A caller that needs to know whether it was refused compares the result against what it asked
+// for. That is deliberate: a second `downgraded bool` return would read as the (value, ok) idiom
+// with its polarity inverted, and a reader who glanced at it would take true for success.
+//
+// Two cases are refused, and both come back as remarks rather than as an error - the review still
+// publishes, it just does not assert:
+//
+//   - The viewer opened the review. A change cannot approve itself. The provider API would take
+//     it, which is exactly why the rule lives here rather than in a workspace-authored spell.
+//   - Authorship is UNKNOWN. A provider that names neither party has not said the review belongs
+//     to somebody else, and "magus could not tell" must never resolve to "go ahead" - which is
+//     the whole reason OpenedByViewer reports its own certainty.
+func (r ReviewTarget) PermittedVerdict(want ReviewVerdict) ReviewVerdict {
+	if !want.Asserts() {
+		return VerdictComment
+	}
+	if mine, known := r.OpenedByViewer(); !known || mine {
+		return VerdictComment
+	}
+	return want
+}
+
 // OpenedByViewer reports whether the credential holder opened this review, and whether that is
 // KNOWN at all.
 //

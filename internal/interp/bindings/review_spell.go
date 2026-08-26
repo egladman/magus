@@ -122,11 +122,19 @@ func decodeReviewTarget(data any) (types.ReviewTarget, error) {
 // An error here is REAL and propagates, unlike the read paths. Publishing is the one thing in
 // this file that changes something a colleague can see, so a caller must never be told it
 // happened when it did not.
-func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, drafts []types.DiffComment) error {
+//
+// want is the verdict the person asked for; what goes is [types.ReviewTarget.PermittedVerdict]'s
+// answer, decided HERE rather than in the spell because a spell is workspace-authored and a rule
+// living there could be edited out by the person it constrains.
+//
+// It returns the verdict actually published, so a caller that asked to approve can see it became
+// a comment and say so, rather than being left to assume either outcome.
+func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, want types.ReviewVerdict, drafts []types.DiffComment) (types.ReviewVerdict, error) {
 	drv, ok := reviewDriver()
 	if !ok {
-		return errNoReviewProvider
+		return "", errNoReviewProvider
 	}
+	verdict := at.PermittedVerdict(want)
 	rows := make([]any, 0, len(drafts))
 	for _, d := range drafts {
 		rows = append(rows, map[string]any{
@@ -142,23 +150,26 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, d
 		Target: spells.PublishReviewContract,
 		Params: map[string]any{
 			"repo": at.Repo, "id": at.ID, "summary": summary, "drafts": rows,
+			// The RESOLVED verdict, never the requested one: a spell is handed a decision that
+			// has already been checked, so it has nothing to get wrong.
+			"verdict": string(verdict),
 		},
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	// An absent op answers nil without failing, which is the read paths' "this provider lacks
 	// the capability" and cannot mean the same thing here: the caller marks every draft
 	// published on a nil error, and publish considers only unpublished drafts, so a silent
 	// no-op costs the remarks permanently.
 	if resp.Data == nil {
-		return fmt.Errorf("review provider: %s is not implemented by this spell, so nothing was sent",
+		return "", fmt.Errorf("review provider: %s is not implemented by this spell, so nothing was sent",
 			spells.PublishReviewContract)
 	}
 	// What came back is not read beyond that. A review posts as ONE request, so a per-draft
 	// count could only restate the length of what was sent - which the caller already has. See
 	// the handler's publish for why every draft in the batch is one the provider could place.
-	return nil
+	return verdict, nil
 }
 
 // ReplyReview answers one existing thread, so a conversation can be finished without leaving.

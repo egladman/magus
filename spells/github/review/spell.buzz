@@ -172,14 +172,20 @@ export fun slug(remote: str, host: str) > str {
 
 // reviewBody assembles the payload GitHub's "create a review" endpoint takes.
 //
-// COMMENT, never APPROVE or REQUEST_CHANGES: this publishes YOUR notes on YOUR change, and a
-// self-review that approves itself is a lie the API is happy to tell. The event is fixed here
-// rather than passed in so no caller can widen it later without reading this.
+// The verdict arrives ALREADY RESOLVED. magus decides whether an approval is allowed - a review
+// may never approve a change its own credential opened, and "we could not tell who opened it"
+// resolves the same way - and it decides that in Go, because this file is workspace-authored and
+// a rule living here could be edited out by the person it constrains. So this maps three
+// provider-neutral words onto GitHub's event vocabulary and does no judging of its own. An
+// unrecognized word maps to COMMENT: the safe end, never the asserting one.
 //
 // Each draft becomes one inline comment anchored to a path and a line. A draft carrying no
 // line is dropped rather than promoted to a review-level remark: it would arrive detached from
 // the code it was written about, which is the one thing an inline comment is for.
-export fun reviewBody(summary: str, drafts: [any]) > any {
+export fun reviewBody(summary: str, verdict: str, drafts: [any]) > any {
+    final event = if (verdict == "approve") "APPROVE"
+        else if (verdict == "request_changes") "REQUEST_CHANGES"
+        else "COMMENT";
     final comments = mut [<any>];
     foreach (d in drafts) {
         final path = "{d["path"] ?? ""}";
@@ -195,7 +201,7 @@ export fun reviewBody(summary: str, drafts: [any]) > any {
         });
     }
     return {
-        "event": "COMMENT",
+        "event": event,
         "body": summary,
         "comments": comments,
     };
@@ -315,7 +321,7 @@ export fun publish_review(target: magus\Target, cb: fun(any)) > any !> any {
         throw "github-review: publish needs a repo and a pull-request id";
     }
     final drafts = io["drafts"] ?? [<any>];
-    final payload = reviewBody("{io["summary"] ?? ""}", drafts);
+    final payload = reviewBody("{io["summary"] ?? ""}", verdict: "{io["verdict"] ?? "comment"}", drafts: drafts);
     final url = apiBase() + "/repos/" + repo + "/pulls/" + id + "/reviews";
     final res = http\post(url, serialize\jsonEncode(payload), headers: headers());
     if (res["status"] != 200 and res["status"] != 201) {
@@ -398,14 +404,24 @@ test "the API host is derived from the endpoint, so two settings cannot disagree
     assert\equal(apiHost("http://ghe.internal/api/v3"), want: "ghe.internal", message: "plain http appliance");
 }
 
-test "a review is always a COMMENT, never an approval of your own change" {
-    final body = reviewBody("self-review", [{"path": "a.go", "line": 3, "body": "why"}]);
-    assert\equal(body["event"], want: "COMMENT", message: "a self-review may not approve itself");
-    assert\equal(body["body"], want: "self-review", message: "summary rides along");
+test "the resolved verdict maps onto GitHub's event vocabulary" {
+    final drafts = [{"path": "a.go", "line": 3, "body": "why"}];
+    assert\equal(reviewBody("s", verdict: "comment", drafts: drafts)["event"], want: "COMMENT", message: "remarks alone");
+    assert\equal(reviewBody("s", verdict: "approve", drafts: drafts)["event"], want: "APPROVE", message: "a colleague's change");
+    assert\equal(reviewBody("s", verdict: "request_changes", drafts: drafts)["event"], want: "REQUEST_CHANGES", message: "not yet");
+    assert\equal(reviewBody("self-review", verdict: "comment", drafts: drafts)["body"], want: "self-review", message: "summary rides along");
+}
+
+test "an unrecognized verdict comments rather than asserting" {
+    final drafts = [{"path": "a.go", "line": 3, "body": "why"}];
+    // The safe end. A word this spell does not know must never become an approval - and magus
+    // has already refused the case that matters, a self-review, before calling in here.
+    assert\equal(reviewBody("s", verdict: "", drafts: drafts)["event"], want: "COMMENT", message: "empty");
+    assert\equal(reviewBody("s", verdict: "APPROVE", drafts: drafts)["event"], want: "COMMENT", message: "host vocabulary is not magus's");
 }
 
 test "a draft with no line is dropped rather than detached from its code" {
-    final body = reviewBody("s", [
+    final body = reviewBody("s", verdict: "comment", drafts: [
         {"path": "a.go", "line": 3, "body": "anchored"},
         {"path": "b.go", "body": "no line"},
         {"path": "", "line": 9, "body": "no path"},

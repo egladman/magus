@@ -133,8 +133,8 @@ func TestPublishReviewCarriesTheDraftsAndFailsLoudly(t *testing.T) {
 	SetReviewProvider(name)
 	t.Cleanup(func() { SetReviewProvider(prev) })
 
-	err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
-		[]types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	_, err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
+		types.VerdictComment, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
 	require.NoError(t, err)
 	require.Len(t, sent, 1)
 	assert.Equal(t, map[string]any{"path": "a.go", "line": 4, "body": "why"}, sent[0])
@@ -166,8 +166,8 @@ func TestFindReviewCarriesTheStateAndTreatsSilenceAsOpen(t *testing.T) {
 func TestPublishReviewRefusesAProviderThatCannotPublish(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) { return nil, nil })
 
-	err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
-		[]types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	_, err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
+		types.VerdictComment, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), spells.PublishReviewContract)
 }
@@ -177,7 +177,8 @@ func TestPublishAndReplyRefuseWithNoProviderWired(t *testing.T) {
 	SetReviewProvider("")
 	t.Cleanup(func() { SetReviewProvider(prev) })
 
-	assert.ErrorIs(t, PublishReview(context.Background(), types.ReviewTarget{ID: "1"}, "", nil), errNoReviewProvider)
+	_, perr := PublishReview(context.Background(), types.ReviewTarget{ID: "1"}, "", types.VerdictComment, nil)
+	assert.ErrorIs(t, perr, errNoReviewProvider)
 	assert.ErrorIs(t, ReplyReview(context.Background(), types.ReviewTarget{ID: "1"}, "t1", "ok"), errNoReviewProvider)
 }
 
@@ -259,4 +260,39 @@ func TestOpenedByViewerIsUnknownWhenEitherNameIsMissing(t *testing.T) {
 		assert.False(t, known, "%#v must read as unknown", at)
 		assert.False(t, opened)
 	}
+}
+
+// capturedVerdict publishes to a throwaway spell and returns the verdict that actually reached
+// it. What the resolver decided matters only if that decision is what gets SENT.
+func capturedVerdict(t *testing.T, at types.ReviewTarget, want types.ReviewVerdict) (sent string, published types.ReviewVerdict) {
+	t.Helper()
+	var got string
+	fakeSpellSeq++
+	name := fmt.Sprintf("fake-verdict-%d", fakeSpellSeq)
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			got, _ = req.Params["verdict"].(string)
+			return map[string]any{}, nil
+		})))
+	prev := ReviewProvider()
+	SetReviewProvider(name)
+	t.Cleanup(func() { SetReviewProvider(prev) })
+
+	pub, err := PublishReview(context.Background(), at, "s", want,
+		[]types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	require.NoError(t, err)
+	return got, pub
+}
+
+// TestPublishSendsTheResolvedVerdictNotTheRequestedOne. The resolver could be perfectly correct
+// and the feature still broken, if the requested verdict were the one that travelled - so this
+// asserts on what the provider received rather than on what the resolver returned.
+func TestPublishSendsTheResolvedVerdictNotTheRequestedOne(t *testing.T) {
+	sent, published := capturedVerdict(t, types.ReviewTarget{ID: "1", Author: "ada", Viewer: "ada"}, types.VerdictApprove)
+	assert.Equal(t, string(types.VerdictComment), sent, "a change must not approve itself at the wire")
+	assert.Equal(t, types.VerdictComment, published, "and the caller is told what actually went")
+
+	sent, published = capturedVerdict(t, types.ReviewTarget{ID: "1", Author: "grace", Viewer: "ada"}, types.VerdictApprove)
+	assert.Equal(t, string(types.VerdictApprove), sent, "a colleague's change may be approved")
+	assert.Equal(t, types.VerdictApprove, published)
 }
