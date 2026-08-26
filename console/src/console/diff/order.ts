@@ -120,6 +120,10 @@ export function visibleFiles(
 export interface ReviewStats {
   readonly files: number;
   readonly generated: number;
+  // settled is how many primary files a receipt already covers at their current content. Counted
+  // so the toolbar can SAY what it folded: a hidden file nobody was told about is the one failure
+  // this surface cannot have.
+  readonly settled: number;
   readonly additions: number;
   readonly deletions: number;
   readonly publicSurface: number;
@@ -136,7 +140,9 @@ export function stats(cs: OrderedChangeset): ReviewStats {
   let deletions = 0;
   let publicSurface = 0;
   let untested = 0;
+  let settledCount = 0;
   for (const { file, annotation } of cs.primary) {
+    if (settled(file, annotation)) settledCount++;
     additions += file.additions;
     deletions += file.deletions;
     if (annotation?.surface === "public") publicSurface++;
@@ -146,6 +152,7 @@ export function stats(cs: OrderedChangeset): ReviewStats {
   return {
     files: cs.primary.length,
     generated: cs.generated.length,
+    settled: settledCount,
     additions,
     deletions,
     publicSurface,

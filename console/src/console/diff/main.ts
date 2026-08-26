@@ -145,6 +145,10 @@ interface State {
   // paint rather than resolving as rows scroll into view.
   digestByRow: Map<number, string>;
   showGenerated: boolean;
+  // showSettled reveals the files a receipt already covers at their current content. Folded by
+  // default, which is what makes a second pass cost only the second pass: a reviewer who asked
+  // for changes comes back to a changeset that is mostly what they already read.
+  showSettled: boolean;
   // focus narrows the stream to ONE hunk. The counts, the reading order and the threads are all
   // still computed over the whole changeset - what changes is how much of it is asked of the
   // reader at once.
@@ -359,6 +363,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // mostly uninteresting; a changeset's file list is the thing the reader came for, so the
     // sidebar starts showing everything and folds on request rather than the other way round.
     showGenerated: true,
+    showSettled: false,
     focus: focusCell.get(),
     focusAt: null,
     pairs: [],
@@ -1286,7 +1291,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
 
   const rebuild = async (): Promise<void> => {
-    state.files = visibleFiles(state.changeset, state.showGenerated);
+    state.files = visibleFiles(state.changeset, state.showGenerated, state.showSettled);
     // Built from the WHOLE visible changeset, before any narrowing, because the counts describe
     // the pass and not the screen.
     state.pairs = state.files.flatMap((f) =>
@@ -1465,6 +1470,18 @@ export function activate(host: HTMLElement): SurfaceInstance {
           state.showGenerated ? `${s.generated} generated` : `${s.generated} generated folded`,
           undefined,
           "Declared target outputs. Review the source change instead. Fold these files in the sidebar or press period.",
+        ),
+      );
+    }
+    // Said out loud for the reason the generated count is: a folded file the reader was never
+    // told about is the one failure this surface cannot have. It is the second pass's whole
+    // value, so it reads as progress rather than as a warning.
+    if (s.settled > 0) {
+      chips.push(
+        label(
+          state.showSettled ? `${s.settled} already read` : `${s.settled} already read, folded`,
+          undefined,
+          "You read these at exactly this content and they have not changed since. Press n to show them.",
         ),
       );
     }
@@ -2562,6 +2579,15 @@ export function activate(host: HTMLElement): SurfaceInstance {
     await rebuild();
   };
 
+  // Same shape as toggleGenerated and deliberately a separate control: a generated file is a
+  // machine's restatement of an edit made elsewhere, and a settled file is one this reader already
+  // weighed. One key for both would fold a colleague's unreviewed generated file and the reader's
+  // own finished work under one word.
+  const toggleSettled = async (): Promise<void> => {
+    state.showSettled = !state.showSettled;
+    await rebuild();
+  };
+
   const setMode = async (m: ViewMode): Promise<void> => {
     if (m === state.mode) return;
     state.mode = m;
@@ -2624,6 +2650,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       label: "Diff: go to the first file that needs reading",
       run: () => resume(),
       key: "u",
+    },
+    {
+      id: "diff.settled.toggle",
+      label: "Diff: fold or unfold files you have already read",
+      run: () => void toggleSettled(),
+      key: "n",
     },
     {
       id: "diff.generated.toggle",

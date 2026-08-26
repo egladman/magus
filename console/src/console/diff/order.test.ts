@@ -284,3 +284,19 @@ test("already-reviewed files fold by default, and show on request", () => {
     ["read.ts", "moved.ts"],
   );
 });
+
+test("stats counts what the fold hides, so the toolbar can say it", () => {
+  const cs = order(
+    [file("read.ts"), file("moved.ts"), file("fresh.ts")],
+    session([
+      ann("read.ts", { read_state: "read" }),
+      ann("moved.ts", { read_state: "stale" }),
+      ann("fresh.ts", { read_state: "unread" }),
+    ]),
+  );
+
+  const s = stats(cs);
+  assert.equal(s.settled, 1);
+  // The denominator is unchanged: folding is a view, not a smaller changeset.
+  assert.equal(s.files, 3);
+});
