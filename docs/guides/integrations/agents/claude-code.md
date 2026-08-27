@@ -102,7 +102,7 @@ record one:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && \"$GUARD_MAGUS_BIN\" session hook --agent-name claude-code >/dev/null 2>&1; exit 0",
+            "command": "d=$PWD; while [ -n \"$d\" ] && [ ! -f \"$d/magusfile.buzz\" ]; do d=${d%/*}; done; GUARD_MAGUS_BIN=$([ -x \"$d/magus\" ] && printf %s \"$d/magus\" || command -v magus 2>/dev/null); [ -n \"$GUARD_MAGUS_BIN\" ] && \"$GUARD_MAGUS_BIN\" session hook --agent-name claude-code >/dev/null 2>&1; exit 0",
             "timeout": 10
           }
         ]
@@ -117,6 +117,15 @@ No `jq` and no template: the whole event goes in unchanged, and magus reads
 `description`, then `tool_name`) for the callee's label, and `session_id` for the
 parent's session. The result is one `agent_spawn` event per delegation, with the
 handed context stored as a payload blob you fetch by ref.
+
+The `while` loop at the front is how it finds magus, and it is doing the same job
+as the templates' longer version: walk up from the hook's working directory to
+the nearest `magusfile.buzz`, prefer that workspace's own `./magus`, and fall
+back to `PATH`. A hook runs in the SESSION's directory, which is not always the
+workspace root - open a session one level down and a plain `./magus` is not
+there. It falls through to `PATH` silently, and where the `PATH` copy cannot load
+the workspace, the event is simply never recorded. Nothing surfaces that: an
+audit trail with holes reads exactly like one nobody wrote to.
 
 It records; it does not judge. A delegation prompt is prose, so the command rules
 never run against it and the verdict is always a pass - a prompt that mentions a
@@ -143,7 +152,7 @@ permission prompt and when the agent goes idle waiting for input), and `Stop` or
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && jq -c '{schema_version: 1, outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$GUARD_MAGUS_BIN\" session notify --desktop >/dev/null 2>&1; exit 0"
+            "command": "d=$PWD; while [ -n \"$d\" ] && [ ! -f \"$d/magusfile.buzz\" ]; do d=${d%/*}; done; GUARD_MAGUS_BIN=$([ -x \"$d/magus\" ] && printf %s \"$d/magus\" || command -v magus 2>/dev/null); [ -n \"$GUARD_MAGUS_BIN\" ] && jq -c '{schema_version: 1, outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$GUARD_MAGUS_BIN\" session notify --desktop >/dev/null 2>&1; exit 0"
           }
         ]
       }
@@ -153,7 +162,9 @@ permission prompt and when the agent goes idle waiting for input), and `Stop` or
 ```
 
 It exits 0 and swallows its own output on purpose: a notifier that can fail is a
-hook that can break the session it was meant to watch. [Attention hooks](notifications.md) covers the envelope and the outcome vocabulary.
+hook that can break the session it was meant to watch. It opens with the same
+magusfile walk as the delegation hook above, for the same reason.
+[Attention hooks](notifications.md) covers the envelope and the outcome vocabulary.
 
 ## Coverage and limits
 

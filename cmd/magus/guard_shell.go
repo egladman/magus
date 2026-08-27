@@ -142,11 +142,51 @@ func magusRedirected(command string) bool {
 // segment - the places a COPY of a workspace gets made rather than checked out.
 var throwawayDirRe = regexp.MustCompile(`^(/private)?/(tmp|var/folders)/|/scratchpad(/|$)`)
 
-// assignmentRe and cdTargetRe recover `NAME=value` and the argument of a `cd`.
-var (
-	assignmentRe = regexp.MustCompile(`(?:^|[;&|]\s*|\s)([A-Za-z_]\w*)=("?)([^"'\s;&|]+)`)
-	cdTargetRe   = regexp.MustCompile(`\bcd\s+["']?([^"'\s;&|]+)`)
-)
+// assignmentRe recovers a `NAME=value` made earlier on the same line.
+var assignmentRe = regexp.MustCompile(`(?:^|[;&|]\s*|\s)([A-Za-z_]\w*)=("?)([^"'\s;&|]+)`)
+
+// magusCdTargets returns the directories a line relocates to before running
+// magus, resolving same-line variable assignments: the observed shape chains a
+// whole pipeline onto one, so a literal `cd /tmp/...` would be missed.
+//
+// Empty when the line does not RUN magus, so a rule built on this cannot fire on
+// one that merely names a directory.
+func magusCdTargets(command string) []string {
+	if !mentionsMagusCommand(command) {
+		return nil
+	}
+	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil
+	}
+	vars := map[string]string{}
+	for _, m := range assignmentRe.FindAllStringSubmatch(command, -1) {
+		vars[m[1]] = m[3]
+	}
+	var out []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		call, ok := n.(*syntax.CallExpr)
+		if !ok || len(call.Args) < 2 || literalWord(call.Args[0].Parts) != "cd" {
+			return true
+		}
+		out = append(out, expandGuardVars(rawWord(command, call.Args[1]), vars))
+		return true
+	})
+	return out
+}
+
+// rawWord returns a word's SOURCE text, quotes stripped.
+//
+// The parser renders `$WT` as empty, since its value is unknowable without running
+// anything, and that is the one form expandGuardVars can still resolve from a
+// same-line assignment. So the raw text is what it needs, not the rendered word.
+func rawWord(command string, w *syntax.Word) string {
+	start, end := int(w.Pos().Offset()), int(w.End().Offset())
+	if start < 0 || end > len(command) || start >= end {
+		return ""
+	}
+	return strings.Trim(command[start:end], `"'`)
+}
 
 // magusInThrowawayCopy reports a magus command being run from a COPY of a
 // workspace in a temp or scratchpad directory.
@@ -156,24 +196,14 @@ var (
 // cache, strands generated files inside the copy, and duplicates spell sources
 // (MGS1002).
 //
-// Variable assignments are resolved too, since the observed shape chains a whole
-// pipeline onto one - keying on a literal `cd /tmp/...` would miss it.
-//
 // A genuinely different workspace is `--root <path>`, which keeps one cache.
+//
+// A temp path announces itself by name, so this rule stays pure. The other
+// instance of the same mistake - a sibling checkout of this repository - can only
+// be recognized by reading the filesystem, so it lives in guard_checkout.go and
+// shares magusCdTargets rather than growing a second cd scanner.
 func magusInThrowawayCopy(command string) bool {
-	if !mentionsMagusCommand(command) {
-		return false
-	}
-	vars := map[string]string{}
-	for _, m := range assignmentRe.FindAllStringSubmatch(command, -1) {
-		vars[m[1]] = m[3]
-	}
-	for _, m := range cdTargetRe.FindAllStringSubmatch(command, -1) {
-		if throwawayDirRe.MatchString(expandGuardVars(m[1], vars)) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(magusCdTargets(command), throwawayDirRe.MatchString)
 }
 
 // expandGuardVars substitutes $NAME and ${NAME} from assignments made earlier on

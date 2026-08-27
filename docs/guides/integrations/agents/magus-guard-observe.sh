@@ -33,7 +33,7 @@
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 7
+# magus-guard-template: 8
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -56,7 +56,18 @@
 # recorded, forever, with nothing anywhere saying so. Measured 2026-08-14 in magus's own
 # repository, where the wiring was correct, the binary was wrong, and the trail held 3252
 # events and not one read.
-[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
+#
+# Found by walking UP to the magusfile, not by testing ./magus alone: a hook runs in the
+# host's session directory, which is not always the workspace root. The command template
+# carries the full reasoning.
+guard_root=$PWD
+while [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ]; do
+  if [ -f "$guard_root/magusfile.buzz" ]; then
+    [ -x "$guard_root/magus" ] && GUARD_MAGUS_BIN=$guard_root/magus
+    break
+  fi
+  guard_root=${guard_root%/*}
+done
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 # An absent observer is SILENT, where an absent guard is loud.

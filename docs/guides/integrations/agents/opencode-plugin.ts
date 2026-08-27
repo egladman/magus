@@ -20,7 +20,7 @@
 // context-injection arm. That is what the two declarations below record, and
 // they are machine-read by the host-parity gate - see the longer note in
 // magus-guard-command.sh.
-// magus-guard-template: 7
+// magus-guard-template: 8
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=human pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=human pass=none
 //
@@ -30,6 +30,7 @@
 // deliberately avoids the MAGUS_* space, which is magus's own config surface.
 
 import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Plugin } from "@opencode-ai/plugin";
 
 /** The verdict schema this plugin understands; a bump means re-read the docs. */
@@ -76,11 +77,33 @@ function argString(args: unknown, keys: readonly string[]): string {
   return "";
 }
 
+/**
+ * The binary belonging to the workspace this process is inside, found by walking up to
+ * the magusfile, or null when that workspace has not built one.
+ *
+ * Walked rather than testing `./magus` alone: a plugin runs in the host's session
+ * directory, and that is not always the workspace root - a session opened in a
+ * subdirectory, or opened in one checkout while the work happens in another, tests a
+ * `./magus` that is not there and falls through to PATH. Where PATH's copy cannot load
+ * the workspace at all, that is the entire guard failing open.
+ */
+function workspaceMagus(): string | null {
+  for (let dir = process.cwd(); ; ) {
+    if (existsSync(join(dir, "magusfile.buzz"))) {
+      const bin = join(dir, "magus");
+      return existsSync(bin) ? bin : null;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
 export const MagusGuard: Plugin = async () => {
   // Prefer the workspace's own ./magus over PATH, for the reason spelled out in
   // magus-guard-command.sh: an older PATH binary does not fail when it lacks a rule, it
   // fails to recognize the config key that arms the rule and returns pass.
-  const magus = process.env.GUARD_MAGUS_BIN ?? (existsSync("./magus") ? "./magus" : "magus");
+  const magus = process.env.GUARD_MAGUS_BIN ?? workspaceMagus() ?? "magus";
 
   /**
    * Runs one `magus session hook` invocation and returns its raw stdout, or null when the
