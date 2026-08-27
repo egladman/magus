@@ -1,6 +1,6 @@
 ---
 title: magus-buzz-write
-generated_from: cmd/magus/skills/magus-buzz-write/SKILL.md
+generated_from: internal/agent/skills/magus-buzz-write/SKILL.md
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz-write]
 aliases:

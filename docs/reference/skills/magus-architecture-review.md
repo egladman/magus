@@ -1,6 +1,6 @@
 ---
 title: magus-architecture-review
-generated_from: cmd/magus/skills/magus-architecture-review/SKILL.md
+generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
 aliases:

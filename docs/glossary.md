@@ -299,7 +299,7 @@ Letters, digits and `-_./:` only.
 
 One read-only check from the advice suite: it reads the changeset through magus
 and writes one titled section of findings. The same advisors run as a pull
-request comment in CI and inside `magus diff --cost` locally.
+request comment in CI and inside `magus diff --impact` locally.
 
 ## Console
 

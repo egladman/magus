@@ -19,6 +19,20 @@
 // falls back to the patch's own, which is exactly the plain diff viewer it started as.
 
 import type { DiffFile } from "./parse";
+
+// modeChange names a file-mode change, or null when there is nothing to say.
+//
+// A mode change carries NO hunks, so a row without this is a filename and a churn count with
+// nothing explaining why the file is in the changeset - which reads as the surface having
+// dropped something. A script gaining +x is a real reviewable event.
+//
+// Here rather than inline in the renderer so it can be pinned: the row it belongs to is inside
+// a virtualized list, where a DOM test can only see whatever happens to be on screen.
+export function modeChange(file: DiffFile): string | null {
+  const { oldMode, newMode } = file;
+  if (oldMode === undefined || newMode === undefined || oldMode === newMode) return null;
+  return `mode ${oldMode} -> ${newMode}`;
+}
 import type { DiffAnnotation, DiffSession } from "./session";
 
 export interface OrderedFile {
@@ -69,10 +83,33 @@ export function order(files: readonly DiffFile[], session: DiffSession | null): 
   return { primary, generated };
 }
 
-// visibleFiles is the file list the stream renders: primary always, plus the generated group
-// only when the reader has expanded it.
-export function visibleFiles(cs: OrderedChangeset, showGenerated: boolean): DiffFile[] {
-  const out = cs.primary.map((o) => o.file);
+// settled is a file a receipt covers at exactly its current content: read, and unmoved since.
+//
+// READ-AND-UNMOVED, never merely read. "stale" means a receipt exists at DIFFERENT content, which
+// is the file that most needs a second look rather than the least, and folding it would hide the
+// change from the one person who would otherwise have caught it.
+//
+// The predicate is spelled the same way in the terminal viewer (diff.File.Settled), against the
+// same read_state the daemon computes once. The STATE is shared; only the folding is per surface.
+export function settled(annotation: DiffAnnotation | undefined): boolean {
+  // role, not a field on the patch file: DiffFile is the PATCH, and whether a path is generated is
+  // something only the annotation knows - the same a.role === "output" the grouping above uses.
+  return annotation?.read_state === "read" && annotation.role !== "output";
+}
+
+// visibleFiles is the file list the stream renders: primary always, plus the generated group and
+// the already-reviewed group only when the reader has expanded them.
+//
+// Settled files fold by default for the reason generated ones do - they are not what the reader is
+// here for - but for a different reason, so they are a separate group and a separate control. It
+// is what makes a second pass cost only the second pass: a reviewer who asked for changes comes
+// back to a changeset that is mostly what they already read.
+export function visibleFiles(
+  cs: OrderedChangeset,
+  showGenerated: boolean,
+  showSettled = true,
+): DiffFile[] {
+  const out = cs.primary.filter((o) => showSettled || !settled(o.annotation)).map((o) => o.file);
   if (showGenerated) out.push(...cs.generated.map((o) => o.file));
   return out;
 }
@@ -83,6 +120,10 @@ export function visibleFiles(cs: OrderedChangeset, showGenerated: boolean): Diff
 export interface ReviewStats {
   readonly files: number;
   readonly generated: number;
+  // settled is how many primary files a receipt already covers at their current content. Counted
+  // so the toolbar can SAY what it folded: a hidden file nobody was told about is the one failure
+  // this surface cannot have.
+  readonly settled: number;
   readonly additions: number;
   readonly deletions: number;
   readonly publicSurface: number;
@@ -99,7 +140,9 @@ export function stats(cs: OrderedChangeset): ReviewStats {
   let deletions = 0;
   let publicSurface = 0;
   let untested = 0;
+  let settledCount = 0;
   for (const { file, annotation } of cs.primary) {
+    if (settled(annotation)) settledCount++;
     additions += file.additions;
     deletions += file.deletions;
     if (annotation?.surface === "public") publicSurface++;
@@ -109,6 +152,7 @@ export function stats(cs: OrderedChangeset): ReviewStats {
   return {
     files: cs.primary.length,
     generated: cs.generated.length,
+    settled: settledCount,
     additions,
     deletions,
     publicSurface,
@@ -128,6 +172,39 @@ export interface Chip {
 export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   if (!a) return [];
   const chips: Chip[] = [];
+
+  // Read state leads. In a viewer the reader is working THROUGH a list, so which rows are
+  // still outstanding is the navigation they came for - the same job GitHub's per-file Viewed
+  // checkbox does, and the reason all three states show here while the terminal report names
+  // only the finding.
+  //
+  // An ABSENT state still shows nothing, and that is not the same call: absent means nobody
+  // checked, and rendering it as unread would turn "unmeasured" into an accusation.
+  if (a.read_state === "stale") {
+    chips.push({
+      text: "changed since read",
+      tone: "danger",
+      title:
+        "You recorded reading this file, and its content changed afterwards. " +
+        "The version you read is not the version you are about to land.",
+    });
+  } else if (a.read_state === "read") {
+    chips.push({
+      text: "read",
+      tone: "ok",
+      title:
+        "A read receipt covers this file at its current content. " +
+        "Editing it voids the receipt.",
+    });
+  } else if (a.read_state === "unread") {
+    chips.push({
+      text: "unread",
+      tone: "neutral",
+      title:
+        "Nobody has recorded reading this file. Read it through here, or record it " +
+        "from wherever you did read it with `magus diff --ack <path>`.",
+    });
+  }
 
   if (a.surface === "public") {
     const api = (a.symbols ?? []).filter((s) => s.module_api).map((s) => s.label ?? s.id);

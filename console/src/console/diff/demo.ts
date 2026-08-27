@@ -1,6 +1,6 @@
 // demo.ts - the Diff surface's daemon-free showcase (the shared #demo fragment).
 //
-// It supplies the two things the daemon would have supplied - a working-tree patch and an
+// It supplies the two things the daemon would have supplied - a parsed changeset and an
 // annotated session - and nothing else changes: order(), buildRows(), the ranking, the
 // generated fold, the rail and the comment stream are all the production paths. So what a
 // reader meets at /console/diff/#demo is the real surface with fabricated input, not a
@@ -13,230 +13,18 @@
 // services/identity:test run, and the apps/dashboard typecheck diagnostics at
 // src/api/session.ts:42 are all THIS diff, seen from the other side - so a reader who opens
 // two surfaces finds the same names, files and reasons in both. The churn and reach numbers
-// below are the same figures scenarioInsight reports for those paths, for the same reason.
+// below are the same figures scenarioInsight reports for those paths, and demo.test.ts asserts
+// that rather than trusting this sentence - a reader who compares the Insight surface with this
+// one and finds different numbers has caught the showcase lying.
 //
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.
 
-import type { DiffSession, SessionOp } from "./session";
+import type { DiffSession, ReviewInfo, SessionOp } from "./session";
 
 // The patch is an array of lines rather than one template literal because Go struct tags are
 // backtick-quoted: a template literal would need every one of them escaped, and an escaped
 // patch is a patch nobody can check against the tool that would have produced it.
-const PATCH_LINES: readonly string[] = [
-  // ---- libs/authkit/claims.go: the contract change everything else follows from ----------
-  "diff --git a/libs/authkit/claims.go b/libs/authkit/claims.go",
-  "index 4c1d9a2..a77f30e 100644",
-  "--- a/libs/authkit/claims.go",
-  "+++ b/libs/authkit/claims.go",
-  "@@ -14,10 +14,12 @@ type Claims struct {",
-  " \t// Subject is the account the token was minted for.",
-  ' \tSubject string `json:"sub"`',
-  " \t// Issuer is the authority that signed it.",
-  ' \tIssuer string `json:"iss"`',
-  "-\t// Scope is the space-separated permission list.",
-  '-\tScope string `json:"scope"`',
-  // The stub the failing run at 92m read as empty: one audience, never populated, no doc
-  // comment. Deleting it beside the field that replaces it is what the story turns on.
-  '-\tAudience string `json:"aud"`',
-  "+\t// Audience is every service this token may be presented to. Asserted on",
-  "+\t// verify, never logged: it names the systems the holder can reach.",
-  '+\tAudience []string `json:"aud"`',
-  "+\t// IssuedAt is when the authority signed the token, in epoch seconds.",
-  '+\tIssuedAt int64 `json:"iat"`',
-  " \t// ExpiresAt is when the token stops verifying.",
-  ' \tExpiresAt int64 `json:"exp"`',
-  " }",
-  "@@ -41,8 +43,11 @@ func (c Claims) Valid(now time.Time) error {",
-  ' \tif c.Subject == "" {',
-  " \t\treturn ErrNoSubject",
-  " \t}",
-  "-\tif c.ExpiresAt < now.Unix() {",
-  '-\t\treturn errors.New("token: expired")',
-  "+\tif c.ExpiresAt <= now.Unix() {",
-  "+\t\treturn ErrExpired",
-  " \t}",
-  "+\tif len(c.Audience) == 0 {",
-  "+\t\treturn ErrNoAudience",
-  "+\t}",
-  " \treturn nil",
-  " }",
-
-  // ---- services/identity: the verifier that broke, and its fix --------------------------
-  "diff --git a/services/identity/internal/token/verify.go b/services/identity/internal/token/verify.go",
-  "index 9b0c145..2e83aa7 100644",
-  "--- a/services/identity/internal/token/verify.go",
-  "+++ b/services/identity/internal/token/verify.go",
-  "@@ -28,12 +28,17 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*authkit.Claims, error) {",
-  " \tclaims, err := v.keys.Decode(ctx, raw)",
-  " \tif err != nil {",
-  ' \t\treturn nil, fmt.Errorf("token: decode: %w", err)',
-  " \t}",
-  '-\tif claims.Scope == "" {',
-  '-\t\treturn nil, errors.New("token: no scope")',
-  "+\tif !slices.Contains(claims.Audience, v.audience) {",
-  "+\t\t// The audience is the whole point of the claim: a token minted for the",
-  "+\t\t// admin app must not verify here just because the signature checks out.",
-  '+\t\treturn nil, fmt.Errorf("token: audience %q not accepted", v.audience)',
-  " \t}",
-  " \tif err := claims.Valid(v.now()); err != nil {",
-  " \t\treturn nil, err",
-  " \t}",
-  "+\tif claims.IssuedAt > v.now().Add(leeway).Unix() {",
-  "+\t\treturn nil, ErrFromTheFuture",
-  "+\t}",
-  " \treturn claims, nil",
-  " }",
-
-  // ---- apps/dashboard: the same change on the web side ----------------------------------
-  "diff --git a/apps/dashboard/src/api/session.ts b/apps/dashboard/src/api/session.ts",
-  "index 0d5f7b1..c4a9e33 100644",
-  "--- a/apps/dashboard/src/api/session.ts",
-  "+++ b/apps/dashboard/src/api/session.ts",
-  "@@ -38,7 +38,8 @@ export interface SessionClaims {",
-  "   readonly subject: string;",
-  "-  readonly scope: string;",
-  "+  readonly audience: readonly string[];",
-  "+  readonly issuedAt: number;",
-  "   readonly expiresAt: number;",
-  " }",
-  " export function canReach(claims: SessionClaims, service: string): boolean {",
-  '-  return claims.scope.split(" ").includes(service);',
-  "+  return claims.audience.includes(service);",
-  " }",
-
-  // ---- a file added on this branch: no history, no coverage, nothing measured -----------
-  "diff --git a/libs/authkit/audience.go b/libs/authkit/audience.go",
-  "new file mode 100644",
-  "index 0000000..5f1b2c9",
-  "--- /dev/null",
-  "+++ b/libs/authkit/audience.go",
-  "@@ -0,0 +1,13 @@",
-  "+package authkit",
-  "+",
-  "+// Audiences is the set a verifier accepts. Ordered, so a token minted for two",
-  "+// services verifies the same way whichever one reads it first.",
-  "+type Audiences []string",
-  "+",
-  "+// Accepts reports whether aud names a service in the set.",
-  "+func (a Audiences) Accepts(aud string) bool {",
-  "+\treturn slices.Contains(a, aud)",
-  "+}",
-  "+",
-  "+// ErrNoAudience is what Claims.Valid returns for a token carrying no audience.",
-  '+var ErrNoAudience = errors.New("token: no audience")',
-
-  // ---- a deletion: the pre-audience workaround the branch retires -----------------------
-  "diff --git a/services/identity/internal/token/legacy_audience.go b/services/identity/internal/token/legacy_audience.go",
-  "deleted file mode 100644",
-  "index 8ad0f21..0000000",
-  "--- a/services/identity/internal/token/legacy_audience.go",
-  "+++ /dev/null",
-  "@@ -1,13 +0,0 @@",
-  "-package token",
-  "-",
-  "-// legacyAudience read the audience out of the scope string, which is where it",
-  "-// lived before authkit.Claims carried one. Nothing mints scope-encoded",
-  "-// audiences any more.",
-  "-func legacyAudience(scope string) string {",
-  "-\tfor _, s := range strings.Fields(scope) {",
-  '-\t\tif strings.HasPrefix(s, "aud:") {',
-  '-\t\t\treturn strings.TrimPrefix(s, "aud:")',
-  "-\t\t}",
-  "-\t}",
-  '-\treturn ""',
-  "-}",
-
-  // ---- the test that named the failure, updated -----------------------------------------
-  "diff --git a/services/identity/internal/token/verify_test.go b/services/identity/internal/token/verify_test.go",
-  "index 71c0aa8..b9d4e51 100644",
-  "--- a/services/identity/internal/token/verify_test.go",
-  "+++ b/services/identity/internal/token/verify_test.go",
-  "@@ -140,9 +140,16 @@ func TestVerifyAudienceMismatch(t *testing.T) {",
-  ' \tv := newTestVerifier(t, "acme-dashboard")',
-  ' \tclaims, err := v.Verify(t.Context(), mint(t, "acme-admin"))',
-  "-\tif err != nil {",
-  '-\t\tt.Fatalf("Verify(admin token) error = %v, want nil", err)',
-  "+\tif !errors.Is(err, token.ErrAudience) {",
-  '+\t\tt.Fatalf("Verify(admin token) error = %v, want %v", err, token.ErrAudience)',
-  " \t}",
-  '-\tif claims.Audience != "acme-dashboard" {',
-  '-\t\tt.Fatalf("claims.Audience = %q, want %q", claims.Audience, "acme-dashboard")',
-  "+\tif claims != nil {",
-  '+\t\tt.Fatalf("Verify(admin token) claims = %v, want nil", claims)',
-  " \t}",
-  " }",
-  "+",
-  "+func TestVerifyFromTheFuture(t *testing.T) {",
-  '+\tv := newTestVerifier(t, "acme-dashboard")',
-  '+\tif _, err := v.Verify(t.Context(), mintAt(t, "acme-dashboard", future)); err == nil {',
-  '+\t\tt.Fatal("Verify(future token) error = nil, want token: issued in the future")',
-  "+\t}",
-  "+}",
-
-  // ---- a rename plus an edit, in a file no project declares -----------------------------
-  "diff --git a/docs/auth/jwt.md b/docs/auth/tokens.md",
-  "similarity index 74%",
-  "rename from docs/auth/jwt.md",
-  "rename to docs/auth/tokens.md",
-  "index 2c9e004..6b1f8ad 100644",
-  "--- a/docs/auth/jwt.md",
-  "+++ b/docs/auth/tokens.md",
-  "@@ -1,9 +1,10 @@",
-  " # Tokens",
-  " ",
-  "-A token carries a subject, an issuer, a scope and an expiry. The scope is a",
-  "-space-separated permission list, and every service reads it to decide what a",
-  "-caller may do.",
-  "+A token carries a subject, an issuer, an audience and an expiry. The audience",
-  "+names every service the token may be presented to, and a service not named in",
-  "+it must refuse the token even when the signature verifies.",
-  " ",
-  " ## Verifying",
-  " ",
-  "-Call `authkit.Claims.Valid` and then check the scope yourself.",
-  "+Call `authkit.Claims.Valid`, then check the audience with `Audiences.Accepts`.",
-  "+A token carrying no audience at all is refused by `Valid` - see `ErrNoAudience`.",
-
-  // ---- declared outputs: folded away, because reading them is reading a restatement -----
-  "diff --git a/libs/protocol/gen/token_pb.go b/libs/protocol/gen/token_pb.go",
-  "index 33ab901..cd7e412 100644",
-  "--- a/libs/protocol/gen/token_pb.go",
-  "+++ b/libs/protocol/gen/token_pb.go",
-  "@@ -211,6 +211,7 @@ func (x *Token) GetClaims() *Claims {",
-  " type Claims struct {",
-  " \tstate         protoimpl.MessageState",
-  ' \tSubject       string   `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`',
-  '-\tScope         string   `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`',
-  '+\tAudience      []string `protobuf:"bytes,2,rep,name=audience,proto3" json:"audience,omitempty"`',
-  '+\tIssuedAt      int64    `protobuf:"varint,3,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`',
-  ' \tExpiresAt     int64    `protobuf:"varint,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`',
-  " }",
-  "diff --git a/apps/dashboard/src/gen/session_pb.ts b/apps/dashboard/src/gen/session_pb.ts",
-  "index a71ff30..e0c4b18 100644",
-  "--- a/apps/dashboard/src/gen/session_pb.ts",
-  "+++ b/apps/dashboard/src/gen/session_pb.ts",
-  "@@ -64,5 +64,6 @@",
-  "   fields: [",
-  '     { no: 1, name: "subject", kind: "scalar", T: 9 },',
-  '-    { no: 2, name: "scope", kind: "scalar", T: 9 },',
-  '+    { no: 2, name: "audience", kind: "scalar", T: 9, repeated: true },',
-  '+    { no: 3, name: "issued_at", kind: "scalar", T: 3 },',
-  '     { no: 4, name: "expires_at", kind: "scalar", T: 3 },',
-  "   ],",
-  "diff --git a/docs/gen/auth/tokens.html b/docs/gen/auth/tokens.html",
-  "index 5504e1b..9c2f7a6 100644",
-  "--- a/docs/gen/auth/tokens.html",
-  "+++ b/docs/gen/auth/tokens.html",
-  "@@ -18,3 +18,3 @@",
-  "   <h1>Tokens</h1>",
-  "-  <p>A token carries a subject, an issuer, a scope and an expiry.</p>",
-  "+  <p>A token carries a subject, an issuer, an audience and an expiry.</p>",
-  "   <h2>Verifying</h2>",
-];
-
-// DEMO_PATCH is the working-tree patch, in the shape /api/v1/diff/patch returns.
-export const DEMO_PATCH = `${PATCH_LINES.join("\n")}\n`;
 
 // The role hints are magus's OWN sentences, verbatim from describe file (types.FileEntry.Hint),
 // because that is where a live session gets them - a paraphrase here would be a second wording
@@ -386,6 +174,52 @@ export function demoSession(): DiffSession {
           reach: 0,
         },
         {
+          // The third consumer the reach numbers above have always named and the changeset
+          // never contained: Claims lists services/gateway among its external projects, so a
+          // contract change that left the gateway untouched was a blast radius contradicting
+          // its own annotation.
+          path: "services/gateway/internal/mint/token.go",
+          project: "services/gateway",
+          role: "source",
+          hint: HINT_SOURCE,
+          surface: "internal",
+          reach: 9,
+          churn: { commits: 12, authors: 3, score: 1284 },
+          touches: [{ host: AGENT.host, session: AGENT.session }],
+        },
+        {
+          path: "services/gateway/internal/mint/token_test.go",
+          project: "services/gateway",
+          role: "source",
+          hint: HINT_SOURCE,
+          surface: "internal",
+          reach: 0,
+        },
+        {
+          // A BINARY file: no hunks, and the surface has to say so rather than render an empty
+          // diff, which reads as "nothing changed". A golden fixture regenerated because the
+          // type it captures moved is the most ordinary way one appears in a review.
+          path: "libs/authkit/testdata/claims.golden",
+          project: "libs/authkit",
+          role: "source",
+          hint: HINT_SOURCE,
+          surface: "internal",
+          reach: 0,
+          churn: { commits: 4, authors: 2, score: 96 },
+        },
+        {
+          // A MODE change and nothing else: no hunks either, for a different reason. A script
+          // becoming executable is a real reviewable event that renders as an empty entry
+          // unless the surface reads the mode.
+          path: "tools/migrate/backfill.sh",
+          project: "tools/migrate",
+          role: "source",
+          hint: HINT_SOURCE,
+          surface: "internal",
+          reach: 0,
+          churn: { commits: 2, authors: 1, score: 18 },
+        },
+        {
           path: "services/identity/internal/token/legacy_audience.go",
           project: "services/identity",
           role: "source",
@@ -447,6 +281,9 @@ export function demoSession(): DiffSession {
         id: "cm1",
         path: "libs/authkit/claims.go",
         hunk: 0,
+        // The new-side line the remark hangs on, which is what a host anchors an inline
+        // comment to. Inside hunk 0's range (+14,14), so the batch can place it.
+        line: 22,
         author: "human",
         body: "Audience is repeated on the wire. Does a token minted for two services verify at both, or is the first one authoritative?",
         resolved: false,
@@ -464,9 +301,14 @@ export function demoSession(): DiffSession {
         id: "cm3",
         path: "apps/dashboard/src/api/session.ts",
         hunk: 0,
+        line: 41,
         author: "human",
         body: "canReach was the only reader of scope, so this is the whole web-side change.",
         resolved: true,
+        // Already sent, so the showcase has both states side by side: what the reader still
+        // holds and what the world has seen. A surface where those look the same is one where
+        // pressing send is a guess.
+        published: true,
       },
     ],
     suggestions: [
@@ -493,6 +335,130 @@ export function demoSession(): DiffSession {
   };
 }
 
+// demoReview is the pull request the acme branch has open, and what has already been said on
+// it. Same story as everything else in this file: the claims contract grew an audience, and
+// the people who consume it are asking about it in public.
+//
+// The four threads cover every way a remark can land, which is the point of having four. Two
+// sit on hunks the reader can see. One is on a file in this changeset but a line outside its
+// hunks, because the code moved after the remark was written. One is on a file this changeset
+// does not touch at all, because a review covers commits a working diff does not.
+//
+// The last two are why placement is not just a lookup: a surface that dropped them would be
+// telling the reader a colleague said nothing, which is the worst thing a review can say.
+export function demoReview(): ReviewInfo {
+  return {
+    id: "482",
+    repo: "acme/acme",
+    host: "github.com",
+    // The showcase reviews somebody ELSE's change, so the verdict control has all three
+    // choices. A self-review would show only remarks, which is the state a reader meets on
+    // their own branch - and the less interesting one to demonstrate.
+    verdicts: ["comment", "approve", "request_changes"],
+    threads: [
+      {
+        id: "th1",
+        path: "libs/authkit/claims.go",
+        line: 24,
+        // The placement the daemon would have computed, stated here because the showcase has no
+        // daemon - the same reason the fixture carries hunk digests rather than hashing them.
+        // Hunk 0 of claims.go covers new-side lines 14 to 27.
+        hunk: 0,
+        author: "priya",
+        body: "Audience as a slice means a token can verify at two services. Was that the intent, or should it be one?",
+      },
+      {
+        id: "th2",
+        path: "services/identity/internal/token/verify.go",
+        line: 34,
+        hunk: 0,
+        author: "marcus",
+        body: "Membership is right, but this is the third hand-rolled audience check. Worth a helper on Claims before a fourth.",
+      },
+      {
+        id: "th4",
+        path: "services/gateway/internal/mint/token.go",
+        line: 204,
+        // In the changeset, but line 204 is outside its only hunk (new-side 52 to 61): the code
+        // moved after the remark was written, so it renders under the file heading.
+        hunk: -1,
+        author: "marcus",
+        body: "Whatever we settle on here, the minter's docstring still describes the single-audience shape.",
+      },
+      {
+        id: "th3",
+        path: "services/gateway/internal/proxy/auth.go",
+        line: 88,
+        // On a file this changeset does not touch at all, so there is nothing to place it
+        // against and the surface lists it instead.
+        hunk: -1,
+        author: "priya",
+        body: "Gateway mints scope-only tokens on the health path. It will start failing Valid the moment this lands.",
+      },
+    ],
+  };
+}
+
+// applyDemoPublish is the showcase's send: the drafts stop being drafts.
+//
+// It marks rather than removes, because that is what publishing does - the remark is still
+// yours and still beside the code, it has simply also left. A showcase that deleted them would
+// teach the reader that sending loses their work.
+export function applyDemoPublish(session: DiffSession): DiffSession {
+  return {
+    ...session,
+    comments: (session.comments ?? []).map((c) =>
+      c.author === "human" ? { ...c, published: true } : c,
+    ),
+  };
+}
+
+// applyDemoReply is the showcase's reply: the answer joins the thread it answers.
+//
+// Appended directly after the thread rather than at the end, because that is where a reply
+// belongs in a conversation, and a showcase that piled every answer at the bottom would teach
+// the reader a shape the real surface does not have.
+export function applyDemoReply(
+  review: ReviewInfo | null,
+  thread: string,
+  body: string,
+): ReviewInfo | null {
+  if (!review) return review;
+  const at = review.threads.findIndex((t) => t.id === thread);
+  if (at < 0) return review;
+  const answered = review.threads[at];
+  if (!answered) return review;
+  const threads = [...review.threads];
+  threads.splice(at + 1, 0, {
+    id: `${thread}-r`,
+    path: answered.path,
+    line: answered.line,
+    // A reply lands where the thread it answers landed, which is what keeps it beside the same
+    // code rather than jumping to the file heading.
+    hunk: answered.hunk,
+    author: "you",
+    body,
+  });
+  return { ...review, threads };
+}
+
+// demoRun is the showcase's stand-in for the daemon's run route: pressing the verdict button has
+// to actually run something, or the reader meets a control that does nothing and concludes the
+// feature is broken - the same rule applyDemoOp exists for.
+//
+// It settles on PASSED after a beat rather than answering instantly, because the honest shape of
+// this control is that a run takes time, and a button that flips to green with no interval reads
+// as a lookup rather than as work.
+export function demoRun(): Promise<{ state: "passed"; duration_ms: number }> {
+  return new Promise((resolve) =>
+    setTimeout(() => resolve({ state: "passed", duration_ms: 4200 }), DEMO_RUN_MS),
+  );
+}
+
+// DEMO_RUN_MS is long enough that the running state is visible and short enough that a reader
+// does not think it hung.
+export const DEMO_RUN_MS = 900;
+
 // applyDemoOp is the showcase's stand-in for the daemon's session store: the reader's writes
 // land in memory instead of over HTTP.
 //
@@ -504,6 +470,12 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
   switch (op.op) {
     case "cursor":
       return { ...session, cursor: { path: op.path, hunk: op.hunk } };
+    case "seen": {
+      // The showcase has no watermark to keep - demoReview() rebuilds the conversation on every
+      // load - so this records nothing. It is handled rather than defaulted so the switch stays
+      // exhaustive and a future op cannot fall through it silently.
+      return session;
+    }
     case "viewed": {
       const viewed = new Set(session.viewed ?? []);
       if (op.on) viewed.add(op.digest);
@@ -523,6 +495,7 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
             id: `cm${comments.length + 1}`,
             path: op.path,
             hunk: op.hunk,
+            line: op.line,
             author: "human",
             body: op.body,
             resolved: false,
@@ -530,6 +503,15 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
         ],
       };
     }
+    case "discard":
+      // Only an unsent remark of the reader's own leaves, matching the store: a published one
+      // cannot be unsaid by deleting the local copy, and an agent's is not theirs to remove.
+      return {
+        ...session,
+        comments: (session.comments ?? []).filter(
+          (c) => !(c.id === op.id && c.author === "human" && !c.published),
+        ),
+      };
     case "resolve":
       return {
         ...session,

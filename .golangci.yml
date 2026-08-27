@@ -49,6 +49,14 @@ linters:
     # value. makezero is the length half of what prealloc only checks the
     # capacity half of. Zero findings when adopted: it is a ratchet, not a cleanup.
     - makezero
+    # A bidirectional override (U+202E and its family) reorders how a line RENDERS while
+    # leaving the bytes the compiler reads untouched, so a reviewer and the toolchain can be
+    # made to disagree about what a line says. Nothing in Go's own tooling reports one, and
+    # this tree is a review surface: a deception it failed to notice in its own source is one
+    # it would then render to somebody else. Zero findings when adopted: it is a ratchet, not
+    # a cleanup. The renderer half of this lives in internal/diff.SanitizeBidi, which is what
+    # protects code magus DISPLAYS rather than code it ships.
+    - bidichk
     - gosec           # security: subprocess safety, path traversal, etc.
 
     # --- Secret safety ---

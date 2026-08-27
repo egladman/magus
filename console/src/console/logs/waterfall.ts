@@ -9,8 +9,8 @@ import { must } from "../../lib/guards";
 // target's end). It renders as inline SVG (presentation attributes + CSS classes, no chart
 // library, no external request), supports drag-to-focus (brush) and a wall-clock preset picker.
 
-import { Kind } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
-import type { Event, Status } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import { Kind } from "@wire/viewer/v1alpha1/viewer_pb";
+import type { Event, Status } from "@wire/viewer/v1alpha1/viewer_pb";
 import type { InvocationView, Source, SpanMulti, SpanTree, Step, TargetSpan } from "./state";
 import { state, waterfallSource } from "./state";
 import { bodyEl, el } from "./dom";

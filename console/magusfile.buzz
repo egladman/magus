@@ -157,8 +157,29 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes
 // dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result
 // instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
+// Regenerates the Diff showcase's changeset from its .patch fixture.
+//
+// The showcase renders with NO daemon, so it cannot ask one to parse its patch - and this
+// surface no longer parses patches itself, because carrying a second reader is what let the
+// browser and the daemon drift. Rendering the fixture with the same Go reader keeps one
+// parser without making the showcase the single consumer allowed to disagree with the product.
+//
+// It lives here rather than in the root project, which is where it was first written: the root
+// is this project's ANCESTOR, and a parent writing into a descendant is MGS3001. proto can
+// write into src/gen because it is a sibling; the root cannot.
+//
+// The authored artifact stays the .patch file. A patch you can read is one you can check
+// against the tool that would have produced it; a hand-maintained tree of rows is not.
+export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("src/console/diff/gen/*.ts");
+    proc\exec("go", ["run", "../cmd/magus-utils", "diffdemo",
+                     "-patch", "src/console/diff/demo.patch",
+                     "-out", "src/console/diff/gen/demo.ts"], ".", {});
+}
+
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
+    ctx.needs(diffdemo_generate);
     ctx.needs(root\graph_generate);
     // NOT drift.hashes: console/gen is gitignored, so there is nothing committed to drift
     // against and hashing fires on every rebuild. vcs\isDirty reports an ignored path as

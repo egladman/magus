@@ -15,9 +15,11 @@
     "types": [],
     "baseUrl": ".",
     "paths": {
-      "@magus/textsearch": ["../libs/textsearch/src/textsearch"]
+      "@magus/textsearch": ["../libs/textsearch/src/textsearch"],
+      "@wire/*": ["src/gen/magus/*"]
     }
   },
+  "//wire": "@wire/* maps to the generated protobuf tree. A surface imports @wire/viewer/v1alpha1/viewer_pb rather than reaching ../../gen/magus/... - the codegen LAYOUT then lives in this file instead of in 26 modules, and the contract VERSION stays visible at every call site, which is the half worth keeping. Deliberately not a barrel module re-exporting the types: that would add a second name for everything and hide which service a symbol comes from.",
   "//paths": "The shared DOM-free search engine (libs/textsearch) is consumed as source, not an npm package: the paths alias maps @magus/textsearch straight to its entry module so tsc resolves the import for the type-check gate. esbuild honors the same tsconfig paths when it bundles from this project cwd, so the build inlines the source too (the lib has zero npm deps, so cross-dir resolution is clean); NO pnpm workspace.",
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "src/**/*.test.ts"]

@@ -94,7 +94,7 @@ func ResolveProject(ctx context.Context, input, anchor string) (string, error) {
 		//
 		// Observe dropping it is safe when the deprecation notes themselves have aged
 		// out: `grep -rn --exclude-dir=gen "workspace://" docs/ CONTRIBUTING.md
-		// cmd/magus/skills/` finds nothing (docs/gen is rendered output and follows the
+		// internal/agent/skills/` finds nothing (docs/gen is rendered output and follows the
 		// sources). Today it finds exactly two, both saying the scheme is deprecated and
 		// a bare path replaced it - that pair IS the window this branch covers. The
 		// hits under types/ are a different thing: the OUTPUT rendering

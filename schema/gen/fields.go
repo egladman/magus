@@ -269,6 +269,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH",
 	},
 	{
+		GoPath:   "Daemon.Maintenance.CheckReview",
+		YamlPath: "daemon.maintenance.check_review",
+		EnvVar:   "MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW",
+		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-check-review"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW: CheckReview notices a merge or a new remark on a review this tree took part in. The only",
+	},
+	{
 		GoPath:   "VCS.Enabled",
 		YamlPath: "vcs.enabled",
 		EnvVar:   "MAGUS_VCS_ENABLED",
@@ -467,6 +475,14 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "secret-unattended-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on. Default 10s.",
+	},
+	{
+		GoPath:   "Diff.Tui",
+		YamlPath: "diff.tui",
+		EnvVar:   "MAGUS_DIFF_TUI",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindBoolPtr,
+		Usage:    "MAGUS_DIFF_TUI: Tui opens the interactive viewer when the terminal can draw it. nil = default true.",
 	},
 	{
 		GoPath:   "Concurrency",

@@ -8,8 +8,8 @@ import (
 	"net/url"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/types"
 )
@@ -63,7 +63,7 @@ type Options struct {
 	// rather than each side holding a private opinion of the changeset.
 	//
 	// Nil disables magus_diff, which is the honest state for a daemon with no workspace.
-	DiffSessions *diff.Store
+	DiffSessions *changeset.Store
 
 	// Ledger is the daemon's shared delegation-ledger store, the SAME one the console's
 	// /api/v1/ledger route reads. Sharing it is what makes the Store's mutex mean

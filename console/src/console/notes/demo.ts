@@ -14,6 +14,17 @@
 // The set exercises the rendering rather than looking full - both scopes, every anchor
 // verdict, both staleness tiers, a multi-anchor note, and a store carrying a repair warning.
 // Six identical healthy notes would show nothing the empty state did not.
+//
+// They are notes from ACME, the fictional monorepo every other showcase inhabits
+// (demo-scenario.ts), and about the same change: one shared library grew an audience list and
+// took a Go token verifier and a TypeScript web client down with it. They used to be notes
+// about magus's own cache and lockfile, which meant a reader who clicked from Diff to Notes
+// met a different fictional company one tab over - the surfaces were each coherent and the
+// product was not.
+//
+// The timeline is why two of these are stale. verify.go changed 92 minutes ago in the very
+// changeset the Diff surface is showing, so the note anchored to it reads DRIFTED here. The
+// staleness tiers are demonstrated BY the story rather than beside it.
 
 import { create } from "@bufbuild/protobuf";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
@@ -28,7 +39,7 @@ import {
   type Note,
   type Anchor,
   type StoreStatus,
-} from "../../gen/magus/notes/v1alpha1/notes_pb";
+} from "@wire/notes/v1alpha1/notes_pb";
 
 interface AnchorSpec {
   kind: AnchorKind;
@@ -78,59 +89,70 @@ function anchor(spec: AnchorSpec): Anchor {
 }
 
 const NOTES: NoteSpec[] = [
+  // The payoff note. A reader meets this change in the Diff surface - Claims growing an audience
+  // list - and finds here the colleague who wrote down why, which is the entire argument for the
+  // notes store existing. Recent, healthy, both anchors resolving: the shape a note is supposed to
+  // have, shown before the four ways one can go wrong.
   {
-    name: "why-the-cache-keys-on-declared-inputs",
-    editedDaysAgo: 6,
-    title: "Why the cache keys on declared inputs, not the tree",
+    name: "why-claims-carries-an-audience-list",
+    editedDaysAgo: 2,
+    title: "Why Claims carries an audience list, not one string",
     scope: Scope.SHARED,
-    path: "notes/why-the-cache-keys-on-declared-inputs.md",
-    tags: ["cache", "decisions"],
+    path: "notes/why-claims-carries-an-audience-list.md",
+    tags: ["auth", "decisions"],
     anchors: [
-      { kind: AnchorKind.PROJECT, target: ".", status: AnchorStatus.RESOLVES },
-      { kind: AnchorKind.SYMBOL, target: "m cache/Key().", status: AnchorStatus.RESOLVES },
+      { kind: AnchorKind.PROJECT, target: "libs/authkit", status: AnchorStatus.RESOLVES },
+      { kind: AnchorKind.SYMBOL, target: "m authkit/Claims#", status: AnchorStatus.RESOLVES },
     ],
     body:
-      "Keying on the whole tree was tried first and abandoned. It is correct and it is useless:\n" +
-      "every target misses on every commit, so the cache never pays for itself.\n\n" +
-      "Declared inputs make the key a claim the magusfile can be wrong about, and that is the\n" +
-      "trade. An undeclared read replays stale output, and it fails silently - the run is green\n" +
-      "and the bytes are old. Written down because the code cannot show you the option that was\n" +
-      "rejected, only the one that survived.",
+      "The single `Audience string` was a stub from the first week and it was never populated.\n" +
+      "Every caller that needed to know who a token was for read the issuer instead, which is a\n" +
+      "different question and happens to agree until it does not.\n\n" +
+      "A list, because the gateway now mints one token accepted by both identity and ledger, and\n" +
+      "a single value cannot say that. The cost is real and worth writing down: every consumer\n" +
+      "that read the field has to change with it, and two of them are not Go.",
   },
+  // DRIFTED + OUTRUN, and the story is what caused it: verify.go changed 92 minutes ago in this
+  // very changeset, so the fingerprint this note recorded no longer matches. The surface's staleness
+  // tiers are demonstrated by the timeline rather than by an unrelated coincidence.
   {
-    name: "two-caches-and-why-they-pair",
-    editedDaysAgo: 41,
-    title: "Two caches, and why they pair",
+    name: "verification-asserts-on-audience",
+    editedDaysAgo: 34,
+    title: "Verification asserts on audience, and that is deliberate",
     scope: Scope.SHARED,
-    path: "notes/two-caches-and-why-they-pair.md",
-    tags: ["cache", "performance"],
+    path: "notes/verification-asserts-on-audience.md",
+    tags: ["auth", "identity"],
     anchors: [
       {
         kind: AnchorKind.SYMBOL,
-        target: "m cache/Store#Put().",
+        target: "m identity/token/Verify().",
         status: AnchorStatus.DRIFTED,
         detail:
           "The anchored code still exists and no longer matches the fingerprint recorded here.",
       },
     ],
     staleness: Staleness.OUTRUN,
-    outrunDays: 34,
+    outrunDays: 31,
     body:
-      "The local cache and the remote one are not a hierarchy, they are a pair with different\n" +
-      "failure modes. Local is fast and lies after a branch switch; remote is slow and lies after\n" +
-      "a force-push. Reading both and comparing is what catches either one.",
+      "A token this service will accept has to name this service. Dropping the assertion makes\n" +
+      "every service in the mesh a valid audience for every other one, which is the failure you\n" +
+      "find in an incident review rather than in a test.\n\n" +
+      "So the assertion stays even though it is the thing that breaks loudly whenever the claims\n" +
+      "contract moves. Breaking loudly is the feature.",
   },
+  // DANGLING + PETRIFIED. Worth keeping precisely because the file is gone - the note is the only
+  // record that the idea was tried, and it is what the next person to have it will find.
   {
-    name: "rejected-a-second-lockfile-format",
+    name: "rejected-a-second-service-token",
     editedDaysAgo: 240,
-    title: "Rejected: a second lockfile format",
+    title: "Rejected: a second token type for service-to-service",
     scope: Scope.SHARED,
-    path: "notes/rejected-a-second-lockfile-format.md",
-    tags: ["decisions"],
+    path: "notes/rejected-a-second-service-token.md",
+    tags: ["auth", "decisions"],
     anchors: [
       {
         kind: AnchorKind.FILE,
-        target: "internal/lock/v2.go",
+        target: "services/identity/internal/token/s2s.go",
         status: AnchorStatus.DANGLING,
         detail: "Nothing in the workspace resolves this anchor any more.",
       },
@@ -138,45 +160,54 @@ const NOTES: NoteSpec[] = [
     staleness: Staleness.PETRIFIED,
     outrunDays: 211,
     body:
-      "Worth keeping precisely because the file it points at is gone. The v2 format was written,\n" +
-      "measured and deleted: it shaved 40ms off a cold resolve and cost a migration nobody could\n" +
-      "roll back. The next person to have this idea should find this note, not the empty space\n" +
-      "where the code used to be.",
+      "A separate S2S token was built and deleted. It worked, and it doubled every code path that\n" +
+      "touches auth: two mint calls, two verify calls, two rotation schedules, two ways to be\n" +
+      "wrong.\n\n" +
+      "The audience list does the same job inside the type that already exists. The next person to\n" +
+      "propose this should find this note rather than the empty space where s2s.go was.",
   },
+  // The multi-anchor note, and the one that explains the second half of the blast radius: why a Go
+  // contract change took down a TypeScript typecheck. BODY_CHANGED is the subtle verdict - the
+  // declaration held, the implementation moved - and the NOTE anchor makes the store a graph rather
+  // than a list.
   {
-    name: "the-sandbox-is-off-by-default",
-    editedDaysAgo: 12,
-    title: "The sandbox is off by default, so the env passthrough is inert",
+    name: "the-dashboard-reads-claims-directly",
+    editedDaysAgo: 9,
+    title: "The dashboard reads claims directly, so auth changes reach it",
     scope: Scope.SHARED,
-    path: "notes/the-sandbox-is-off-by-default.md",
-    tags: ["sandbox", "gotcha"],
+    path: "notes/the-dashboard-reads-claims-directly.md",
+    tags: ["auth", "dashboard", "gotcha"],
     anchors: [
-      { kind: AnchorKind.TARGET, target: "test", status: AnchorStatus.RESOLVES },
+      { kind: AnchorKind.TARGET, target: "typecheck", status: AnchorStatus.RESOLVES },
       {
         kind: AnchorKind.SYMBOL,
-        target: "m sandbox/Policy#Apply().",
+        target: "m dashboard/session/parseClaims().",
         status: AnchorStatus.BODY_CHANGED,
         detail:
           "This changed inside a declaration that did not, which usually leaves prose about the interface standing. Re-read only if the note claims something about the implementation.",
       },
       {
         kind: AnchorKind.NOTE,
-        target: "two-caches-and-why-they-pair",
+        target: "why-claims-carries-an-audience-list",
         status: AnchorStatus.RESOLVES,
       },
     ],
     body:
-      "Measured, not assumed: with the sandbox disabled no policy is attached and the child gets\n" +
-      "the environment unscrubbed. So the sandbox.env passthrough does nothing as configured.\n" +
-      "Do not delete it - it becomes load-bearing the moment the sandbox is enabled - but do not\n" +
-      "credit it for fixing anything either.",
+      "The web client does not go through a Go client library - it decodes the token itself and\n" +
+      "reads the claims off it. That was a deliberate call (one less generated dependency for the\n" +
+      "browser bundle) and this is the bill for it: a change to the claims contract is a change to\n" +
+      "apps/dashboard, and nothing in either project's imports says so.\n\n" +
+      "If you are here because typecheck broke and the diff looks like it only touched Go, this\n" +
+      "is why.",
   },
+  // PRIVATE + UNVERIFIED. The store for reasoning nobody else needs, and the one anchor verdict
+  // that means "not measured yet" rather than "measured and wrong".
   {
-    name: "my-local-toolchain-pins",
+    name: "my-local-acme-setup",
     editedDaysAgo: 3,
-    title: "My local toolchain pins",
+    title: "My local acme setup",
     scope: Scope.PRIVATE,
-    path: "/Users/you/notes/my-local-toolchain-pins.md",
+    path: "/Users/you/notes/my-local-acme-setup.md",
     tags: ["local"],
     anchors: [
       {
@@ -187,9 +218,8 @@ const NOTES: NoteSpec[] = [
       },
     ],
     body:
-      "Nothing here is committed and nothing attributes it. This is the store for reasoning that\n" +
-      "is only useful to me: which node build actually works on this machine, and why the obvious\n" +
-      "one does not.",
+      "Nothing here is committed and nothing attributes it. Which postgres the ledger tests\n" +
+      "actually want, and why the documented one hangs on this machine.",
   },
 ];
 

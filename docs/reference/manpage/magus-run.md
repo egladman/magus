@@ -1,6 +1,6 @@
 ---
 title: magus run
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.
 tags: [cli, magus run, run, target, build, test, ci]
 ---

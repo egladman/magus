@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/memory"
 	store "github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -114,4 +115,66 @@ func TestNotePathReportsTheFileNotTheId(t *testing.T) {
 	if got, want := notePath(root, shared, n), "notes/Archive/Some Note.md"; got != want {
 		t.Errorf("renamed note path = %q, want %q", got, want)
 	}
+}
+
+// A capture holds BOTH halves of the conversation. A transcript of only your own remarks is
+// not a transcript of the review: what was decided is nearly always in what somebody said
+// back, and that half lives on the forge rather than in the session.
+func TestCaptureKeepsWhatColleaguesSaid(t *testing.T) {
+	sess := &types.DiffSession{
+		ID:   "rev-1",
+		AsOf: "patch-1",
+		Comments: []types.DiffComment{
+			{Path: "a.go", Hunk: 1, Author: types.DiffAuthorHuman, Body: "mine"},
+		},
+	}
+	threads := []types.ReviewThread{
+		{ID: "t1", Path: "a.go", Line: 12, Author: "priya", Body: "theirs"},
+		{ID: "t2", Path: "z.go", Line: 3, Author: "marcus", Body: "elsewhere"},
+	}
+
+	c := captureFromSession(sess, threads, "review", nil)
+	n, err := c.Note("cap")
+	require.NoError(t, err)
+
+	assert.Contains(t, n.Body, "theirs")
+	assert.Contains(t, n.Body, "priya")
+	// The colleague's remark precedes the reply it provoked. A transcript that opened with the
+	// answer reads backwards.
+	assert.Less(t, strings.Index(n.Body, "theirs"), strings.Index(n.Body, "mine"))
+	// A thread on a file the session never commented on still anchors that file, which is what
+	// makes the capture turn up when somebody later asks what is known about z.go.
+	assert.Contains(t, n.Body, "elsewhere")
+	assert.Len(t, n.Anchors, 2)
+}
+
+// A review with no forge behind it is the ordinary case, and the local conversation is worth
+// keeping on its own.
+func TestCaptureWithNoThreadsIsStillATranscript(t *testing.T) {
+	sess := &types.DiffSession{
+		ID: "rev-1",
+		Comments: []types.DiffComment{
+			{Path: "a.go", Author: types.DiffAuthorHuman, Body: "mine"},
+		},
+	}
+	n, err := captureFromSession(sess, nil, "review", nil).Note("cap")
+	require.NoError(t, err)
+	assert.Contains(t, n.Body, "mine")
+}
+
+func TestFirstNonEmptyTreatsBlankAsEmpty(t *testing.T) {
+	assert.Equal(t, "a", firstNonEmpty("a", "b"))
+	assert.Equal(t, "b", firstNonEmpty("", "b"))
+	assert.Equal(t, "b", firstNonEmpty("   \n", "b"))
+	assert.Equal(t, "", firstNonEmpty("", ""))
+}
+
+func TestRelativeToRootKeepsAnOutsidePathAbsolute(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repos", "magus")
+
+	assert.Equal(t, "cmd/magus/diff.go", relativeToRoot(root, filepath.Join(root, "cmd", "magus", "diff.go")))
+	assert.Equal(t, ".", relativeToRoot(root, root))
+
+	outside := filepath.Join(string(filepath.Separator), "repos", "other", "x.go")
+	assert.Equal(t, outside, relativeToRoot(root, outside))
 }

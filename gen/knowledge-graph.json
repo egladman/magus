@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2369,
-  "edge_count": 6104,
+  "node_count": 2399,
+  "edge_count": 6192,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -300,6 +300,38 @@
       "label": "MGS1030",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1030/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1031",
+      "kind": "diagnostic",
+      "label": "MGS1031",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1031/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1101",
+      "kind": "diagnostic",
+      "label": "MGS1101",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/capability/MGS1101/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1102",
+      "kind": "diagnostic",
+      "label": "MGS1102",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/capability/MGS1102/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1103",
+      "kind": "diagnostic",
+      "label": "MGS1103",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/capability/MGS1103/"
       }
     },
     {
@@ -716,8 +748,8 @@
       "label": "cmd",
       "source": "cmd",
       "attrs": {
-        "dir_files": "33",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "2",
+        "dir_languages": "buzz"
       }
     },
     {
@@ -736,158 +768,8 @@
       "label": "cmd/magus",
       "source": "cmd/magus",
       "attrs": {
-        "dir_files": "31",
-        "dir_languages": "buzz,markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills",
-      "kind": "dir",
-      "label": "cmd/magus/skills",
-      "source": "cmd/magus/skills",
-      "attrs": {
-        "dir_files": "28",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-architecture-review",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-architecture-review",
-      "source": "cmd/magus/skills/magus-architecture-review",
-      "attrs": {
         "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-buzz-review",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-buzz-review",
-      "source": "cmd/magus/skills/magus-buzz-review",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-buzz-write",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-buzz-write",
-      "source": "cmd/magus/skills/magus-buzz-write",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-change-summary",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-change-summary",
-      "source": "cmd/magus/skills/magus-change-summary",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-commit-composition",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-commit-composition",
-      "source": "cmd/magus/skills/magus-commit-composition",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-context-audit",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-context-audit",
-      "source": "cmd/magus/skills/magus-context-audit",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-delegate-multi-agent",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-delegate-multi-agent",
-      "source": "cmd/magus/skills/magus-delegate-multi-agent",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-docs-lookup",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-docs-lookup",
-      "source": "cmd/magus/skills/magus-docs-lookup",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-handoff-journal",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-handoff-journal",
-      "source": "cmd/magus/skills/magus-handoff-journal",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-query",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-query",
-      "source": "cmd/magus/skills/magus-query",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-run",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-run",
-      "source": "cmd/magus/skills/magus-run",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-sdk",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-sdk",
-      "source": "cmd/magus/skills/magus-sdk",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-vcs-hygiene",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-vcs-hygiene",
-      "source": "cmd/magus/skills/magus-vcs-hygiene",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:cmd/magus/skills/magus-workspace-rules",
-      "kind": "dir",
-      "label": "cmd/magus/skills/magus-workspace-rules",
-      "source": "cmd/magus/skills/magus-workspace-rules",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
+        "dir_languages": "buzz"
       }
     },
     {
@@ -906,7 +788,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "47",
+        "dir_files": "48",
         "dir_languages": "markdown"
       }
     },
@@ -996,7 +878,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "21",
+        "dir_files": "22",
         "dir_languages": "markdown"
       }
     },
@@ -1046,7 +928,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "217",
+        "dir_files": "222",
         "dir_languages": "markdown"
       }
     },
@@ -1316,7 +1198,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "86",
+        "dir_files": "91",
         "dir_languages": "markdown"
       }
     },
@@ -1327,6 +1209,16 @@
       "source": "docs/reference/codes/auth",
       "attrs": {
         "dir_files": "6",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/codes/capability",
+      "kind": "dir",
+      "label": "docs/reference/codes/capability",
+      "source": "docs/reference/codes/capability",
+      "attrs": {
+        "dir_files": "3",
         "dir_languages": "markdown"
       }
     },
@@ -1356,7 +1248,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "31",
+        "dir_files": "32",
         "dir_languages": "markdown"
       }
     },
@@ -1466,8 +1358,168 @@
       "label": "internal",
       "source": "internal",
       "attrs": {
-        "dir_files": "3",
+        "dir_files": "34",
         "dir_languages": "buzz,markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent",
+      "kind": "dir",
+      "label": "internal/agent",
+      "source": "internal/agent",
+      "attrs": {
+        "dir_files": "30",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills",
+      "kind": "dir",
+      "label": "internal/agent/skills",
+      "source": "internal/agent/skills",
+      "attrs": {
+        "dir_files": "28",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-architecture-review",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-architecture-review",
+      "source": "internal/agent/skills/magus-architecture-review",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-buzz-review",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-buzz-review",
+      "source": "internal/agent/skills/magus-buzz-review",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-buzz-write",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-buzz-write",
+      "source": "internal/agent/skills/magus-buzz-write",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-change-summary",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-change-summary",
+      "source": "internal/agent/skills/magus-change-summary",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-commit-composition",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-commit-composition",
+      "source": "internal/agent/skills/magus-commit-composition",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-context-audit",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-context-audit",
+      "source": "internal/agent/skills/magus-context-audit",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-delegate-multi-agent",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-delegate-multi-agent",
+      "source": "internal/agent/skills/magus-delegate-multi-agent",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-docs-lookup",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-docs-lookup",
+      "source": "internal/agent/skills/magus-docs-lookup",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-handoff-journal",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-handoff-journal",
+      "source": "internal/agent/skills/magus-handoff-journal",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-query",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-query",
+      "source": "internal/agent/skills/magus-query",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-run",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-run",
+      "source": "internal/agent/skills/magus-run",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-sdk",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-sdk",
+      "source": "internal/agent/skills/magus-sdk",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-vcs-hygiene",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-vcs-hygiene",
+      "source": "internal/agent/skills/magus-vcs-hygiene",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-workspace-rules",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-workspace-rules",
+      "source": "internal/agent/skills/magus-workspace-rules",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
       }
     },
     {
@@ -1596,7 +1648,7 @@
       "label": "spells",
       "source": "spells",
       "attrs": {
-        "dir_files": "67",
+        "dir_files": "68",
         "dir_languages": "buzz,markdown"
       }
     },
@@ -1806,7 +1858,7 @@
       "label": "spells/github",
       "source": "spells/github",
       "attrs": {
-        "dir_files": "1",
+        "dir_files": "2",
         "dir_languages": "buzz"
       }
     },
@@ -1815,6 +1867,16 @@
       "kind": "dir",
       "label": "spells/github/actions",
       "source": "spells/github/actions",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "buzz"
+      }
+    },
+    {
+      "id": "dir:spells/github/review",
+      "kind": "dir",
+      "label": "spells/github/review",
+      "source": "spells/github/review",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "buzz"
@@ -2186,141 +2248,6 @@
       }
     },
     {
-      "id": "doc:cmd/magus/agents-section.md",
-      "kind": "doc",
-      "label": "cmd/magus/agents-section.md",
-      "source": "cmd/magus/agents-section.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-architecture-review/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-architecture-review/SKILL.md",
-      "source": "cmd/magus/skills/magus-architecture-review/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-buzz-review/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-buzz-review/SKILL.md",
-      "source": "cmd/magus/skills/magus-buzz-review/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-buzz-write/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-buzz-write/SKILL.md",
-      "source": "cmd/magus/skills/magus-buzz-write/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-change-summary/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-change-summary/SKILL.md",
-      "source": "cmd/magus/skills/magus-change-summary/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-commit-composition/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-commit-composition/SKILL.md",
-      "source": "cmd/magus/skills/magus-commit-composition/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-context-audit/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-context-audit/SKILL.md",
-      "source": "cmd/magus/skills/magus-context-audit/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-delegate-multi-agent/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-delegate-multi-agent/SKILL.md",
-      "source": "cmd/magus/skills/magus-delegate-multi-agent/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-docs-lookup/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-docs-lookup/SKILL.md",
-      "source": "cmd/magus/skills/magus-docs-lookup/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-handoff-journal/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-handoff-journal/SKILL.md",
-      "source": "cmd/magus/skills/magus-handoff-journal/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-query/SKILL.md",
-      "source": "cmd/magus/skills/magus-query/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-run/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-run/SKILL.md",
-      "source": "cmd/magus/skills/magus-run/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-sdk/SKILL.md",
-      "source": "cmd/magus/skills/magus-sdk/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-vcs-hygiene/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-vcs-hygiene/SKILL.md",
-      "source": "cmd/magus/skills/magus-vcs-hygiene/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
-      "id": "doc:cmd/magus/skills/magus-workspace-rules/SKILL.md",
-      "kind": "doc",
-      "label": "cmd/magus/skills/magus-workspace-rules/SKILL.md",
-      "source": "cmd/magus/skills/magus-workspace-rules/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
       "id": "doc:console/README.md",
       "kind": "doc",
       "label": "console/README.md",
@@ -2518,6 +2445,18 @@
         "section": "concepts",
         "tags": "operations,ops,hierarchy,spells,targets,ci,work-model,execution",
         "title": "Operations"
+      }
+    },
+    {
+      "id": "doc:docs/concepts/review.md",
+      "kind": "doc",
+      "label": "docs/concepts/review.md",
+      "source": "docs/concepts/review.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "review,diff,pull-request,merge-request,provider,threads,github,enterprise,notes",
+        "title": "Review"
       }
     },
     {
@@ -3186,6 +3125,18 @@
         "section": "guides",
         "tags": "release,versioning,tags,go-modules,workflow",
         "title": "Releasing"
+      }
+    },
+    {
+      "id": "doc:docs/guides/reviewing-changes.md",
+      "kind": "doc",
+      "label": "docs/guides/reviewing-changes.md",
+      "source": "docs/guides/reviewing-changes.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "diff,review,read-receipts,impact,blast-radius,tui,ack,patch",
+        "title": "Reviewing your changes"
       }
     },
     {
@@ -3920,6 +3871,42 @@
       }
     },
     {
+      "id": "doc:docs/reference/codes/capability/MGS1101.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/capability/MGS1101.md",
+      "source": "docs/reference/codes/capability/MGS1101.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1101,capability,vcs,git,backend,branches,review",
+        "title": "MGS1101: this VCS backend cannot answer that"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/capability/MGS1102.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/capability/MGS1102.md",
+      "source": "docs/reference/codes/capability/MGS1102.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1102,capability,review,provider,spell,github,publish",
+        "title": "MGS1102: this review provider does not implement that op"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/capability/MGS1103.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/capability/MGS1103.md",
+      "source": "docs/reference/codes/capability/MGS1103.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1103,capability,review,provider,approve,verdict,authorship",
+        "title": "MGS1103: this provider did not say who opened the review"
+      }
+    },
+    {
       "id": "doc:docs/reference/codes/charms/MGS6001.md",
       "kind": "doc",
       "label": "docs/reference/codes/charms/MGS6001.md",
@@ -4337,6 +4324,18 @@
         "section": "reference",
         "tags": "MGS1030,memory_mb,doctor,memory,declarations,admission",
         "title": "MGS1030: memory declaration disagrees with what was measured"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1031.md",
+      "source": "docs/reference/codes/magusfile/MGS1031.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1031,magusfile,sources,outputs,generated,doctor",
+        "title": "MGS1031: a project's output is another project's source"
       }
     },
     {
@@ -5535,6 +5534,141 @@
         "section": "setup",
         "tags": "download,install,windows,powershell,path",
         "title": "Install on Windows"
+      }
+    },
+    {
+      "id": "doc:internal/agent/agents-section.md",
+      "kind": "doc",
+      "label": "internal/agent/agents-section.md",
+      "source": "internal/agent/agents-section.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-architecture-review/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-architecture-review/SKILL.md",
+      "source": "internal/agent/skills/magus-architecture-review/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-buzz-review/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-buzz-review/SKILL.md",
+      "source": "internal/agent/skills/magus-buzz-review/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-buzz-write/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-buzz-write/SKILL.md",
+      "source": "internal/agent/skills/magus-buzz-write/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-change-summary/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-change-summary/SKILL.md",
+      "source": "internal/agent/skills/magus-change-summary/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-commit-composition/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-commit-composition/SKILL.md",
+      "source": "internal/agent/skills/magus-commit-composition/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-context-audit/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-context-audit/SKILL.md",
+      "source": "internal/agent/skills/magus-context-audit/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
+      "source": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-docs-lookup/SKILL.md",
+      "source": "internal/agent/skills/magus-docs-lookup/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "source": "internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-query/SKILL.md",
+      "source": "internal/agent/skills/magus-query/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-run/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-run/SKILL.md",
+      "source": "internal/agent/skills/magus-run/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-sdk/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-sdk/SKILL.md",
+      "source": "internal/agent/skills/magus-sdk/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-vcs-hygiene/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-vcs-hygiene/SKILL.md",
+      "source": "internal/agent/skills/magus-vcs-hygiene/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-workspace-rules/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-workspace-rules/SKILL.md",
+      "source": "internal/agent/skills/magus-workspace-rules/SKILL.md",
+      "attrs": {
+        "role": "skill"
       }
     },
     {
@@ -7243,6 +7377,15 @@
       }
     },
     {
+      "id": "file:spells/github/review/spell.buzz",
+      "kind": "file",
+      "label": "spells/github/review/spell.buzz",
+      "source": "spells/github/review/spell.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:spells/gitlab/ci/spell.buzz",
       "kind": "file",
       "label": "spells/gitlab/ci/spell.buzz",
@@ -7985,8 +8128,7 @@
       "id": "function:console/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:160",
+      "source": "console/magusfile.buzz:180",
       "attrs": {
         "exported": "true"
       }
@@ -7996,7 +8138,17 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:220",
+      "source": "console/magusfile.buzz:241",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:console/magusfile.buzz:diffdemo_generate",
+      "kind": "function",
+      "label": "diffdemo_generate",
+      "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds. Regenerates the Diff showcase's changeset from its .patch fixture.  The showcase renders with NO daemon, so it cannot a",
+      "source": "console/magusfile.buzz:173",
       "attrs": {
         "exported": "true"
       }
@@ -8006,7 +8158,7 @@
       "kind": "function",
       "label": "format",
       "doc": "`format:rw` maintains declared source inputs.",
-      "source": "console/magusfile.buzz:189",
+      "source": "console/magusfile.buzz:210",
       "attrs": {
         "exported": "true"
       }
@@ -8023,7 +8175,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:178",
+      "source": "console/magusfile.buzz:199",
       "attrs": {
         "exported": "true"
       }
@@ -8042,7 +8194,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:213",
+      "source": "console/magusfile.buzz:234",
       "attrs": {
         "exported": "true"
       }
@@ -9822,7 +9974,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build renders the site: the tree cd.yaml publishes and deploy-generate assembles. None of it is committed, so unlike generate it is gated by producing without error rather than by a byte comparison - see generate's comment for the split.  generate first, because site-generate reads the Markdown and catalog it derives. The esbuild bundles are NOT listed here: site-generate declares them itself, which is what makes it correct when something other than this target invokes it. Repeating them would state the ord",
-      "source": "docs/magusfile.buzz:435",
+      "source": "docs/magusfile.buzz:445",
       "attrs": {
         "exported": "true"
       }
@@ -9832,7 +9984,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:538",
+      "source": "docs/magusfile.buzz:548",
       "attrs": {
         "exported": "true"
       }
@@ -9842,7 +9994,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. The glue must come from the SAME Go that built the wasm - it is a matched pair.  gen/, not vendor/. Those bytes were committed for one reason: CI had no TinyGo, so it could not reproduce them and they had to be inputs rather than output. CI has Go. So this is ordinary render output now, r",
-      "source": "docs/magusfile.buzz:482",
+      "source": "docs/magusfile.buzz:492",
       "attrs": {
         "exported": "true"
       }
@@ -9852,7 +10004,7 @@
       "kind": "function",
       "label": "build_playground_editor",
       "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. It existed only as a pnpm script before, because the artifact was committed and a human ran it after a version bump. gen/ is no longer committed, so every published byte needs a target CI can run - a script nothing invokes would have shipped a playground with no editor.",
-      "source": "docs/magusfile.buzz:551",
+      "source": "docs/magusfile.buzz:561",
       "attrs": {
         "exported": "true"
       }
@@ -9862,7 +10014,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:443",
+      "source": "docs/magusfile.buzz:453",
       "attrs": {
         "exported": "true"
       }
@@ -9871,7 +10023,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:459",
+      "source": "docs/magusfile.buzz:469",
       "attrs": {
         "exported": "true"
       }
@@ -9880,7 +10032,7 @@
       "id": "function:docs/magusfile.buzz:content_generate",
       "kind": "function",
       "label": "content_generate",
-      "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/clispec), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the g",
+      "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the go sp",
       "source": "docs/magusfile.buzz:202",
       "attrs": {
         "exported": "true"
@@ -9891,7 +10043,7 @@
       "kind": "function",
       "label": "conventions",
       "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. See docs/conventions.md for what each rule means.  Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose nit should name the thing that is wrong; folding it into lint would report a stale path in the README as \"docs lint failed\", and a target that fails for reasons unrelated to",
-      "source": "docs/magusfile.buzz:399",
+      "source": "docs/magusfile.buzz:409",
       "attrs": {
         "exported": "true"
       }
@@ -9901,7 +10053,7 @@
       "kind": "function",
       "label": "diagrams_generate",
       "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render time so a diagram follows the theme toggle. This pair is for GitHub, where the README loads an image through <img> and cannot reach the page's CSS at all.  The pair lands under this project rather than beside the terminal recordings in the workspace's assets/gen: docs already depends on the root project, so writing there is MGS1012, a targ",
-      "source": "docs/magusfile.buzz:511",
+      "source": "docs/magusfile.buzz:521",
       "attrs": {
         "exported": "true"
       }
@@ -9911,7 +10063,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. Since the guard-hook templates' project under guides/integrations/agents grew Markdown pages of its own, a bare run here reached them - the parent target writing into a descendant project, which magus rejects as MGS3001. That project formats its own pages.  Keep this list in ste",
-      "source": "docs/magusfile.buzz:378",
+      "source": "docs/magusfile.buzz:388",
       "attrs": {
         "exported": "true"
       }
@@ -9921,7 +10073,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate owns the COMMITTED derived files, and nothing else. That is the line between generate and build here: generate's output is in the repository, so CI can re-run it and fail when the bytes move, and the drift gate below is that check. build's output is not committed, so no comparison can gate it - it is verified by rendering without error.  The site render, the esbuild bundles, and the WebAssembly playground all write the ignored gen/ tree, so they live in build. They used to run here, which cost ever",
-      "source": "docs/magusfile.buzz:304",
+      "source": "docs/magusfile.buzz:305",
       "attrs": {
         "exported": "true"
       }
@@ -9948,7 +10100,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both need node_modules, which it reaches through format -> generate -> preflight; proc.exec raises on a non-zero exit, so either gate fails lint.  Markdown formatting is dprint, run once from the root project (its scope is dprint.json at the workspace root), so `format` here is a dependency edge and nothing else. This project only lints prose; see docs/concep",
-      "source": "docs/magusfile.buzz:412",
+      "source": "docs/magusfile.buzz:422",
       "attrs": {
         "exported": "true"
       }
@@ -9967,7 +10119,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:559",
+      "source": "docs/magusfile.buzz:569",
       "attrs": {
         "exported": "true"
       }
@@ -9977,7 +10129,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "docs/magusfile.buzz:454",
+      "source": "docs/magusfile.buzz:464",
       "attrs": {
         "exported": "true"
       }
@@ -9987,7 +10139,7 @@
       "kind": "function",
       "label": "site_generate",
       "doc": "site-generate owns publication. It cannot replay while it reads VCS state; the public generate target still lets the independent content stages fan out first.  The bundles are needed HERE, not merely ordered by whoever calls this. They used to be ordered only in `generate`, which made this target correct as a stage and broken on its own: `magus run site-generate docs` - and `magus vcs resolve`, which invokes the target that owns a conflicted output directly - failed on `playground/index.html references miss",
-      "source": "docs/magusfile.buzz:283",
+      "source": "docs/magusfile.buzz:284",
       "attrs": {
         "exported": "true"
       }
@@ -9996,7 +10148,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:447",
+      "source": "docs/magusfile.buzz:457",
       "attrs": {
         "exported": "true"
       }
@@ -12888,7 +13040,7 @@
       "id": "function:magusfile.buzz:magusfile_api_generate",
       "kind": "function",
       "label": "magusfile_api_generate",
-      "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. Named for the magusfile surface rather than \"api\" alone, because two other things in this repo are also an API surface - internal/clispec/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives completions.  The regeneration route is a TEST, not a generator, which is why this target exists: the snapshot is written by TestMagusSurfaceLocked under UPDATE_MAGUS_API_LOCK, so wi",
+      "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. Named for the magusfile surface rather than \"api\" alone, because two other things in this repo are also an API surface - internal/cli/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives completions.  The regeneration route is a TEST, not a generator, which is why this target exists: the snapshot is written by TestMagusSurfaceLocked under UPDATE_MAGUS_API_LOCK, so withou",
       "source": "magusfile.buzz:890",
       "attrs": {
         "exported": "true"
@@ -12898,7 +13050,7 @@
       "id": "function:magusfile.buzz:man_generate",
       "kind": "function",
       "label": "man_generate",
-      "doc": "Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION artifact - the .1 source the `man` command reads, shipped with releases - so they stay owned here at the root, NOT in the docs project. The docs project owns the Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the same internal/clispec registry by cmd/magus-manpage (see its -format flag).  It also refreshes api.lock, the drift-gated snapshot of the public CLI surface, because that is serialized fro",
+      "doc": "Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION artifact - the .1 source the `man` command reads, shipped with releases - so they stay owned here at the root, NOT in the docs project. The docs project owns the Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the same internal/cli registry by cmd/magus-manpage (see its -format flag).  It also refreshes api.lock, the drift-gated snapshot of the public CLI surface, because that is serialized from th",
       "source": "magusfile.buzz:830",
       "attrs": {
         "exported": "true"
@@ -13044,7 +13196,7 @@
       "id": "function:magusfile.buzz:skills_generate",
       "kind": "function",
       "label": "skills_generate",
-      "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is absent here because magus d",
+      "doc": "Reinstalls the agent skills from their embedded sources in internal/agent/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is absent here because ma",
       "source": "magusfile.buzz:983",
       "attrs": {
         "exported": "true"
@@ -14213,7 +14365,7 @@
       "kind": "function",
       "label": "annotate",
       "doc": "annotate raises a message that surfaces on the pull request, not just the log. Actions has no dedicated code field, so a diagnostic code leads the title where it stays greppable in the annotations list.",
-      "source": "spells/github/actions/spell.buzz:222",
+      "source": "spells/github/actions/spell.buzz:227",
       "attrs": {
         "exported": "true"
       }
@@ -14222,21 +14374,21 @@
       "id": "function:spells/github/actions/spell.buzz:base",
       "kind": "function",
       "label": "base",
-      "source": "spells/github/actions/spell.buzz:85"
+      "source": "spells/github/actions/spell.buzz:90"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:cache_key",
       "kind": "function",
       "label": "cache_key",
       "doc": "cache_key derives the cache key from the spec hash. The hash already folds in the project path (see cache/hash.go), so it is unique per project and needs no extra namespacing — and being hex, it is URL-safe. NOTE: cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose: GHA keeps CACHE_VERSION in a separate `version` request field, while S3 folds it into the key string. Do NOT change the emitted string here — it would invalidate every existing GHA cache entry. Track the inconsistency for",
-      "source": "spells/github/actions/spell.buzz:109"
+      "source": "spells/github/actions/spell.buzz:114"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:enabled",
       "kind": "function",
       "label": "enabled",
       "doc": "enabled gates the whole provider on running under GitHub Actions. The cache probes this once and skips fetch/push entirely when false, so wiring this spell in a magusfile is a no-op everywhere except GHA - no remote calls, no exports.",
-      "source": "spells/github/actions/spell.buzz:67",
+      "source": "spells/github/actions/spell.buzz:72",
       "attrs": {
         "exported": "true"
       }
@@ -14246,21 +14398,21 @@
       "kind": "function",
       "label": "escapeData",
       "doc": "escapeData encodes the characters Actions treats as structural in a command's message. A raw newline would end the command early and spill the rest into the log as loose text, and a failure's cause is usually the part after line one. Percent goes first, or it would corrupt the escapes introduced after it.",
-      "source": "spells/github/actions/spell.buzz:185"
+      "source": "spells/github/actions/spell.buzz:190"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:escapeProp",
       "kind": "function",
       "label": "escapeProp",
       "doc": "escapeProp additionally encodes the separators between properties, so a title containing a comma or colon cannot be read as the start of another property.",
-      "source": "spells/github/actions/spell.buzz:193"
+      "source": "spells/github/actions/spell.buzz:198"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:get_artifact",
       "kind": "function",
       "label": "get_artifact",
       "doc": "get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns true on a hit (dest written), false on a miss or when not running under Actions.",
-      "source": "spells/github/actions/spell.buzz:125",
+      "source": "spells/github/actions/spell.buzz:130",
       "attrs": {
         "exported": "true"
       }
@@ -14270,14 +14422,14 @@
       "kind": "function",
       "label": "getenv",
       "doc": "getenv reads one environment variable, returning \"\" when unset (os.env returns null for an unset var; the callers below test against \"\"). NOTE: byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The duplication is intentional/temporary: there is no shared magus/... buzz helper module for it yet (extracting one needs the embed+register plumbing magus/charm uses). Track for follow-up; keep the two copies in sync.",
-      "source": "spells/github/actions/spell.buzz:77"
+      "source": "spells/github/actions/spell.buzz:82"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:group_end",
       "kind": "function",
       "label": "group_end",
       "doc": "group_end closes the current fold. Actions tracks a single open group, so the id is unused; it is in the contract for providers keyed by section name.",
-      "source": "spells/github/actions/spell.buzz:214",
+      "source": "spells/github/actions/spell.buzz:219",
       "attrs": {
         "exported": "true"
       }
@@ -14287,7 +14439,7 @@
       "kind": "function",
       "label": "group_start",
       "doc": "group_start opens a fold. Actions has no expanded section: ::group:: always starts collapsed. A caller asking for an expanded one wants output the reader must not have to click for, so the group is skipped and the content stays inline. Folding it anyway would be worse - a hidden failure is one nobody sees.",
-      "source": "spells/github/actions/spell.buzz:203",
+      "source": "spells/github/actions/spell.buzz:208",
       "attrs": {
         "exported": "true"
       }
@@ -14297,28 +14449,28 @@
       "kind": "function",
       "label": "has_token",
       "doc": "has_token reports presence WITHOUT resolving, so enabled() and the cache-path guards stay cheap and cannot prompt.",
-      "source": "spells/github/actions/spell.buzz:100"
+      "source": "spells/github/actions/spell.buzz:105"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:in_actions",
       "kind": "function",
       "label": "in_actions",
       "doc": "in_actions is the one condition the whole provider gates on. A private predicate rather than a call to enabled() because enabled is a spell OP - it takes the op signature - so the internal guards below cannot reuse it directly.",
-      "source": "spells/github/actions/spell.buzz:62"
+      "source": "spells/github/actions/spell.buzz:67"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:maskInRunnerLog",
       "kind": "function",
       "label": "maskInRunnerLog",
       "doc": "maskInRunnerLog asks the RUNNER to redact value from its own log. magus already redacts the output it captures; this covers the half magus cannot reach - a later step, or an action that never ran under magus at all. It is not pure belt and braces: the runner auto-masks anything interpolated from `secrets.*`, but NOT a step output injected into env:, and not a token minted mid-job like the OIDC one below.  std\\print rather than anything magus captures, for the same reason group_start above uses it: a workflo",
-      "source": "spells/github/actions/spell.buzz:344"
+      "source": "spells/github/actions/spell.buzz:349"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
       "doc": "\"GitHub Actions\" is the product's canonical name; the bare leaf \"actions\" named nothing on its own, and a spell's registered name has to stand alone - it is what `magus describe spells` and every diagnostic show, with no directory around it to supply the vendor. See CONTRIBUTING.md#naming.",
-      "source": "spells/github/actions/spell.buzz:52",
+      "source": "spells/github/actions/spell.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -14328,14 +14480,14 @@
       "kind": "function",
       "label": "oidcToken",
       "doc": "oidcToken mints an OIDC token for audience from the runner's token endpoint. Actions publishes the endpoint and its request token into the environment only when the job declares `permissions: id-token: write`, so an unset variable means a missing permission far more often than a broken runner - and the message says that rather than naming the variable.  The audience identifies the relying party: \"sts.amazonaws.com\" for AWS, the workload-identity-pool provider URL for GCP, whatever the trust policy on the ot",
-      "source": "spells/github/actions/spell.buzz:378"
+      "source": "spells/github/actions/spell.buzz:383"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:put_artifact",
       "kind": "function",
       "label": "put_artifact",
       "doc": "put_artifact uploads the artifact at payload.src for payload.hash. Returns true on success or when another runner already stored the same key, else false.",
-      "source": "spells/github/actions/spell.buzz:143",
+      "source": "spells/github/actions/spell.buzz:148",
       "attrs": {
         "exported": "true"
       }
@@ -14345,7 +14497,7 @@
       "kind": "function",
       "label": "quote_prefixes",
       "doc": "quote_prefixes declares the line prefixes that introduce a workflow command. magus captures subprocess output and replays it, so a dependency printing \"::error::\" would otherwise have the runner execute it and forge annotations. Returned once per run; magus does the per-line matching itself.",
-      "source": "spells/github/actions/spell.buzz:263",
+      "source": "spells/github/actions/spell.buzz:268",
       "attrs": {
         "exported": "true"
       }
@@ -14355,7 +14507,7 @@
       "kind": "function",
       "label": "resolve_secret",
       "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so a provider returning the wrong shape fails to load rather than failing at the first read.",
-      "source": "spells/github/actions/spell.buzz:302",
+      "source": "spells/github/actions/spell.buzz:307",
       "attrs": {
         "exported": "true"
       }
@@ -14365,28 +14517,146 @@
       "kind": "function",
       "label": "rpc",
       "doc": "rpc POSTs a JSON Twirp request to the named CacheService method and returns the host http response map ({status, body}).",
-      "source": "spells/github/actions/spell.buzz:113"
+      "source": "spells/github/actions/spell.buzz:118"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:token",
       "kind": "function",
       "label": "token",
       "doc": "token reads ACTIONS_RUNTIME_TOKEN through the SECRET PROVIDER, not getenv.  That one-word difference is the whole fix. A value read with getenv is not a value magus knows is a credential, so this token was absent from the redaction set entirely - any run log, captured output or cached entry quoting it kept it in the clear, in CI. Reading it through the provider registers it, and magus masks it everywhere it writes.  Under Actions no provider is selected, so the built-in environment provider resolves this to",
-      "source": "spells/github/actions/spell.buzz:96"
+      "source": "spells/github/actions/spell.buzz:101"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:tokenURL",
       "kind": "function",
       "label": "tokenURL",
       "doc": "tokenURL puts the audience on the runner's token endpoint. The separator is chosen rather than assumed: the endpoint arrives carrying ?api-version=2.0, so a hard-coded \"?\" would build a second query string and earn a 400 that names nothing.",
-      "source": "spells/github/actions/spell.buzz:428"
+      "source": "spells/github/actions/spell.buzz:433"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:workflowEnv",
       "kind": "function",
       "label": "workflowEnv",
       "doc": "workflowEnv reads a secret the workflow injected. There is no other way in, so a miss is a workflow-file edit rather than anything this run could recover from - which is why the error is the snippet to paste rather than a status.",
-      "source": "spells/github/actions/spell.buzz:353"
+      "source": "spells/github/actions/spell.buzz:358"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:apiBase",
+      "kind": "function",
+      "label": "apiBase",
+      "doc": "apiBase is the endpoint to call, without a trailing slash. Trailing slashes are stripped because every URL below joins with \"/\" - GITHUB_API_URL arrives with one on some runners and without on others, and \"//repos\" is a 404 nobody would think to look for.",
+      "source": "spells/github/review/spell.buzz:77"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:apiHost",
+      "kind": "function",
+      "label": "apiHost",
+      "doc": "apiHost is the git remote host that pairs with apiBase, so a remote is recognized on an appliance and not only on github.com.  Derived from the endpoint rather than configured separately: an installation has ONE host, and two settings that must agree is one setting plus a way to get it wrong. \"api.github.com\" loses its \"api.\" because github.com's API lives on a subdomain while an appliance serves both from the same name.",
+      "source": "spells/github/review/spell.buzz:95",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:find_review",
+      "kind": "function",
+      "label": "find_review",
+      "doc": "find_review reports the pull request open for this branch, or an empty number when there is none. A branch with no pull request is the ORDINARY state - most branches, most of the time - so it is never an error and never a reason a diff fails to open.",
+      "source": "spells/github/review/spell.buzz:213",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:getenv",
+      "kind": "function",
+      "label": "getenv",
+      "source": "spells/github/review/spell.buzz:117"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:has_token",
+      "kind": "function",
+      "label": "has_token",
+      "doc": "has_token reports presence WITHOUT resolving, so the guards below stay cheap and cannot prompt - the same split github/actions draws for the same reason. A reader opening a diff must never be asked for a credential by the act of looking.",
+      "source": "spells/github/review/spell.buzz:125"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:headers",
+      "kind": "function",
+      "label": "headers",
+      "source": "spells/github/review/spell.buzz:129"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:mgs_getName",
+      "kind": "function",
+      "label": "mgs_getName",
+      "source": "spells/github/review/spell.buzz:59",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:publish_review",
+      "kind": "function",
+      "label": "publish_review",
+      "doc": "publish_review sends a batch of drafts as ONE review.  A batch rather than a call per comment, which is the whole shape of self-review: you read, you accumulate remarks, and only then decide the set is worth sending. Publishing each as it is written would send the first thought before the fifth changed your mind about it.  Returns the review id and the drafts it accepted, so the caller can mark exactly those published. A partial result is a real answer here: GitHub rejects an inline comment whose line is no",
+      "source": "spells/github/review/spell.buzz:312",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:reply_review",
+      "kind": "function",
+      "label": "reply_review",
+      "doc": "reply_review answers one existing thread, so a conversation can be finished without leaving.",
+      "source": "spells/github/review/spell.buzz:366",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:reviewBody",
+      "kind": "function",
+      "label": "reviewBody",
+      "doc": "reviewBody assembles the payload GitHub's \"create a review\" endpoint takes.  The verdict arrives ALREADY RESOLVED. magus decides whether an approval is allowed - a review may never approve a change its own credential opened, and \"we could not tell who opened it\" resolves the same way - and it decides that in Go, because this file is workspace-authored and a rule living here could be edited out by the person it constrains. So this maps three provider-neutral words onto GitHub's event vocabulary and does no j",
+      "source": "spells/github/review/spell.buzz:185",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:review_threads",
+      "kind": "function",
+      "label": "review_threads",
+      "doc": "review_threads lists the inline comment threads already on the review, so a reader never leaves for the browser to find out what a colleague said.  This is the one function that makes magus depend on a host being reachable. Every failure returns an EMPTY list rather than throwing: a diff that will not open because GitHub is slow is a worse tool than one that shows the change and says nothing about the conversation.",
+      "source": "spells/github/review/spell.buzz:340",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:slug",
+      "kind": "function",
+      "label": "slug",
+      "doc": "slug turns a git remote URL into \"owner/name\", empty when it is not a remote of this host.  Three spellings, because all three are in daily use and a reader who cloned over SSH is not holding a different repository than one who cloned over HTTPS:  git@github.com:acme/acme.git https://github.com/acme/acme.git ssh://git@github.com/acme/acme.git  The host is passed IN rather than fixed, so an Enterprise appliance works: apiHost derives it from the configured endpoint, and a test can hand over either.  Empty ra",
+      "source": "spells/github/review/spell.buzz:151",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:token",
+      "kind": "function",
+      "label": "token",
+      "source": "spells/github/review/spell.buzz:127"
+    },
+    {
+      "id": "function:spells/github/review/spell.buzz:viewerLogin",
+      "kind": "function",
+      "label": "viewerLogin",
+      "doc": "viewerLogin names who the credential belongs to, and ONLY when magus asks.  GitHub hands over the pull request's author in the payload find_review already fetches, but the token's own owner takes a second round trip. magus caches that for the life of the daemon and sets want_viewer only while its cache is empty, so this costs one call ever rather than one per diff opened. Empty on any failure: not knowing who you are is not a reason to fail a lookup, and magus reads an empty pair as UNKNOWN rather than as \"",
+      "source": "spells/github/review/spell.buzz:292"
     },
     {
       "id": "function:spells/gitlab/ci/spell.buzz:annotate",
@@ -20156,7 +20426,7 @@
       "source": "console",
       "attrs": {
         "engine": "buzz",
-        "target_count": "7"
+        "target_count": "8"
       }
     },
     {
@@ -20268,18 +20538,18 @@
       "source": "spells/aws/s3-cache/spell.buzz:81"
     },
     {
-      "id": "rationale:spells/github/actions/spell.buzz:109:NOTE",
+      "id": "rationale:spells/github/actions/spell.buzz:114:NOTE",
       "kind": "rationale",
       "label": "NOTE",
       "doc": "cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose:",
-      "source": "spells/github/actions/spell.buzz:109"
+      "source": "spells/github/actions/spell.buzz:114"
     },
     {
-      "id": "rationale:spells/github/actions/spell.buzz:77:NOTE",
+      "id": "rationale:spells/github/actions/spell.buzz:82:NOTE",
       "kind": "rationale",
       "label": "NOTE",
       "doc": "byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The",
-      "source": "spells/github/actions/spell.buzz:77"
+      "source": "spells/github/actions/spell.buzz:82"
     },
     {
       "id": "spell:bash",
@@ -20738,7 +21008,7 @@
       "id": "target:.:skills-generate",
       "kind": "target",
       "label": "skills-generate",
-      "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.",
+      "doc": "Reinstalls the agent skills from their embedded sources in internal/agent/skills.",
       "source": ".",
       "attrs": {
         "declared_as": "skills_generate",
@@ -20845,7 +21115,6 @@
       "id": "target:console:build",
       "kind": "target",
       "label": "build",
-      "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
       "source": "console",
       "attrs": {
         "engine": "buzz"
@@ -20858,6 +21127,17 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
       "source": "console",
       "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:console:diffdemo-generate",
+      "kind": "target",
+      "label": "diffdemo-generate",
+      "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
+      "source": "console",
+      "attrs": {
+        "declared_as": "diffdemo_generate",
         "engine": "buzz"
       }
     },
@@ -21026,7 +21306,7 @@
       "id": "target:docs:content-generate",
       "kind": "target",
       "label": "content-generate",
-      "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/clispec), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).",
+      "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).",
       "source": "docs",
       "attrs": {
         "declared_as": "content_generate",
@@ -22105,251 +22385,11 @@
     },
     {
       "source": "dir:cmd/magus",
-      "target": "dir:cmd/magus/skills",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills"
-    },
-    {
-      "source": "dir:cmd/magus",
       "target": "dir:cmd/magus/starter",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "dir:cmd/magus",
-      "target": "doc:cmd/magus/agents-section.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/agents-section.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-architecture-review",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-architecture-review"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-buzz-review",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-buzz-review"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-buzz-write",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-buzz-write"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-change-summary",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-change-summary"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-commit-composition",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-commit-composition"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-context-audit",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-context-audit"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-delegate-multi-agent",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-delegate-multi-agent"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-docs-lookup",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-docs-lookup"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-handoff-journal",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-handoff-journal"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-query",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-query"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-run",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-run"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-sdk",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-sdk"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-vcs-hygiene",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-vcs-hygiene"
-    },
-    {
-      "source": "dir:cmd/magus/skills",
-      "target": "dir:cmd/magus/skills/magus-workspace-rules",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-workspace-rules"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-architecture-review",
-      "target": "doc:cmd/magus/skills/magus-architecture-review/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-architecture-review/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-buzz-review",
-      "target": "doc:cmd/magus/skills/magus-buzz-review/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-buzz-review/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-buzz-write",
-      "target": "doc:cmd/magus/skills/magus-buzz-write/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-buzz-write/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-change-summary",
-      "target": "doc:cmd/magus/skills/magus-change-summary/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-change-summary/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-commit-composition",
-      "target": "doc:cmd/magus/skills/magus-commit-composition/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-commit-composition/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-context-audit",
-      "target": "doc:cmd/magus/skills/magus-context-audit/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-context-audit/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-delegate-multi-agent",
-      "target": "doc:cmd/magus/skills/magus-delegate-multi-agent/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-delegate-multi-agent/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-docs-lookup",
-      "target": "doc:cmd/magus/skills/magus-docs-lookup/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-docs-lookup/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-handoff-journal",
-      "target": "doc:cmd/magus/skills/magus-handoff-journal/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-handoff-journal/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-query",
-      "target": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-run",
-      "target": "doc:cmd/magus/skills/magus-run/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-run/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-sdk",
-      "target": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-sdk/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-vcs-hygiene",
-      "target": "doc:cmd/magus/skills/magus-vcs-hygiene/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-vcs-hygiene/SKILL.md"
-    },
-    {
-      "source": "dir:cmd/magus/skills/magus-workspace-rules",
-      "target": "doc:cmd/magus/skills/magus-workspace-rules/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/skills/magus-workspace-rules/SKILL.md"
     },
     {
       "source": "dir:cmd/magus/starter",
@@ -22494,6 +22534,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/operations.md"
+    },
+    {
+      "source": "dir:docs/concepts",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
     },
     {
       "source": "dir:docs/concepts",
@@ -22886,6 +22934,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/releasing.md"
+    },
+    {
+      "source": "dir:docs/guides",
+      "target": "doc:docs/guides/reviewing-changes.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/reviewing-changes.md"
     },
     {
       "source": "dir:docs/guides",
@@ -23777,6 +23833,14 @@
     },
     {
       "source": "dir:docs/reference/codes",
+      "target": "dir:docs/reference/codes/capability",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability"
+    },
+    {
+      "source": "dir:docs/reference/codes",
       "target": "dir:docs/reference/codes/charms",
       "relation": "contains",
       "confidence": "extracted",
@@ -23878,6 +23942,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/auth/MGS9006.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/capability",
+      "target": "doc:docs/reference/codes/capability/MGS1101.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/capability",
+      "target": "doc:docs/reference/codes/capability/MGS1102.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/capability",
+      "target": "doc:docs/reference/codes/capability/MGS1103.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
     },
     {
       "source": "dir:docs/reference/codes/charms",
@@ -24158,6 +24246,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1030.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
@@ -25273,6 +25369,14 @@
     },
     {
       "source": "dir:internal",
+      "target": "dir:internal/agent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent"
+    },
+    {
+      "source": "dir:internal",
       "target": "dir:internal/handler",
       "relation": "contains",
       "confidence": "extracted",
@@ -25286,6 +25390,246 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal/spellruntime"
+    },
+    {
+      "source": "dir:internal/agent",
+      "target": "dir:internal/agent/skills",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills"
+    },
+    {
+      "source": "dir:internal/agent",
+      "target": "doc:internal/agent/agents-section.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/agents-section.md"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-architecture-review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-architecture-review"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-buzz-review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-buzz-review"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-buzz-write",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-buzz-write"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-change-summary",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-change-summary"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-commit-composition",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-commit-composition"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-context-audit",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-context-audit"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-delegate-multi-agent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-delegate-multi-agent"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-docs-lookup",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-docs-lookup"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-handoff-journal",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-handoff-journal"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-query",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-query"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-run",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-run"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-sdk",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-sdk"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-vcs-hygiene",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-vcs-hygiene"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-workspace-rules",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-workspace-rules"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-architecture-review",
+      "target": "doc:internal/agent/skills/magus-architecture-review/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-architecture-review/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-buzz-review",
+      "target": "doc:internal/agent/skills/magus-buzz-review/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-buzz-review/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-buzz-write",
+      "target": "doc:internal/agent/skills/magus-buzz-write/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-buzz-write/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-change-summary",
+      "target": "doc:internal/agent/skills/magus-change-summary/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-change-summary/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-commit-composition",
+      "target": "doc:internal/agent/skills/magus-commit-composition/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-commit-composition/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-context-audit",
+      "target": "doc:internal/agent/skills/magus-context-audit/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-context-audit/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-delegate-multi-agent",
+      "target": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-docs-lookup",
+      "target": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-docs-lookup/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-handoff-journal",
+      "target": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-query",
+      "target": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-run",
+      "target": "doc:internal/agent/skills/magus-run/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-sdk",
+      "target": "doc:internal/agent/skills/magus-sdk/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-vcs-hygiene",
+      "target": "doc:internal/agent/skills/magus-vcs-hygiene/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-vcs-hygiene/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-workspace-rules",
+      "target": "doc:internal/agent/skills/magus-workspace-rules/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-workspace-rules/SKILL.md"
     },
     {
       "source": "dir:internal/handler",
@@ -26336,12 +26680,28 @@
       "provenance": "spells/github/actions"
     },
     {
+      "source": "dir:spells/github",
+      "target": "dir:spells/github/review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review"
+    },
+    {
       "source": "dir:spells/github/actions",
       "target": "file:spells/github/actions/spell.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "dir:spells/github/review",
+      "target": "file:spells/github/review/spell.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
     },
     {
       "source": "dir:spells/gitlab",
@@ -27313,6 +27673,14 @@
     },
     {
       "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
+    },
+    {
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "inferred",
@@ -27454,262 +27822,6 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
-    },
-    {
-      "source": "doc:cmd/magus/agents-section.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/agents-section.md"
-    },
-    {
-      "source": "doc:cmd/magus/agents-section.md",
-      "target": "doc:docs/reference/manpage/magus-memory.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/agents-section.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-buzz-review/SKILL.md",
-      "target": "diagnostic:MGS3003",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-buzz-review/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-buzz-review/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-buzz.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-buzz-review/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-buzz-write/SKILL.md",
-      "target": "diagnostic:MGS1022",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-buzz-write/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-buzz-write/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-buzz.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-buzz-write/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-buzz-write/SKILL.md",
-      "target": "spell:markdown",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "cmd/magus/skills/magus-buzz-write/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-change-summary/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-diff.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-change-summary/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-change-summary/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-change-summary/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-delegate-multi-agent/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-session.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-delegate-multi-agent/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-delegate-multi-agent/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-delegate-multi-agent/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-docs-lookup/SKILL.md",
-      "target": "diagnostic:MGS2001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-docs-lookup/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-docs-lookup/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-docs-lookup/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-docs-lookup/SKILL.md",
-      "target": "spell:go",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "cmd/magus/skills/magus-docs-lookup/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-handoff-journal/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-memory.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-handoff-journal/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-handoff-journal/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-notes.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-handoff-journal/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-handoff-journal/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-query.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-handoff-journal/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "target": "diagnostic:MGS2001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-describe.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-refs.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-run/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-run/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-run/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-run/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-run/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-run/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
-      "target": "spell:go",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "cmd/magus/skills/magus-sdk/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
-      "target": "spell:rust",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "cmd/magus/skills/magus-sdk/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-vcs-hygiene/SKILL.md",
-      "target": "diagnostic:MGS1028",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-vcs-hygiene/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-vcs-hygiene/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-clean.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-vcs-hygiene/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-workspace-rules/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-workspace-rules/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-workspace-rules/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-memory.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-workspace-rules/SKILL.md"
     },
     {
       "source": "doc:docs/concepts/cache.md",
@@ -28694,6 +28806,46 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/operations.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/guides/authoring-spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/review.md"
+    },
+    {
+      "source": "doc:docs/concepts/review.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/review.md"
     },
     {
       "source": "doc:docs/concepts/sandbox.md",
@@ -30257,6 +30409,14 @@
     },
     {
       "source": "doc:docs/doctrine.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/doctrine.md"
+    },
+    {
+      "source": "doc:docs/doctrine.md",
       "target": "doc:docs/reference/diagnostics.md",
       "relation": "references",
       "confidence": "extracted",
@@ -30354,6 +30514,14 @@
     {
       "source": "doc:docs/documentation.md",
       "target": "doc:docs/concepts/operations.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
+      "target": "doc:docs/concepts/review.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30954,6 +31122,14 @@
     {
       "source": "doc:docs/guides/authoring-spells.md",
       "target": "doc:docs/concepts/operations.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/authoring-spells.md"
+    },
+    {
+      "source": "doc:docs/guides/authoring-spells.md",
+      "target": "doc:docs/concepts/review.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32177,6 +32353,22 @@
     },
     {
       "source": "doc:docs/guides/integrations/git.md",
+      "target": "doc:docs/guides/reviewing-changes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/git.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/git.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/git.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/git.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
       "relation": "references",
       "confidence": "inferred",
@@ -32401,6 +32593,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/pr-advice.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/pr-advice.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/pr-advice.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
@@ -32606,6 +32806,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/quickstart.md"
+    },
+    {
+      "source": "doc:docs/guides/reviewing-changes.md",
+      "target": "doc:docs/guides/integrations/git.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/reviewing-changes.md"
+    },
+    {
+      "source": "doc:docs/guides/reviewing-changes.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/reviewing-changes.md"
     },
     {
       "source": "doc:docs/guides/tips.md",
@@ -34128,6 +34344,126 @@
       "provenance": "docs/reference/codes/auth/MGS9006.md"
     },
     {
+      "source": "doc:docs/reference/codes/capability/MGS1101.md",
+      "target": "diagnostic:MGS1101",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1101.md",
+      "target": "diagnostic:MGS1102",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1101.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1101.md",
+      "target": "doc:docs/reference/codes/capability/MGS1102.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1101.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "diagnostic:MGS1101",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "diagnostic:MGS1102",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "diagnostic:MGS1103",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "doc:docs/guides/authoring-spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "doc:docs/reference/codes/capability/MGS1101.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1102.md",
+      "target": "doc:docs/reference/codes/capability/MGS1103.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1102.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1103.md",
+      "target": "diagnostic:MGS1102",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1103.md",
+      "target": "diagnostic:MGS1103",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1103.md",
+      "target": "doc:docs/concepts/review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/capability/MGS1103.md",
+      "target": "doc:docs/reference/codes/capability/MGS1102.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/capability/MGS1103.md"
+    },
+    {
       "source": "doc:docs/reference/codes/charms/MGS6001.md",
       "target": "diagnostic:MGS6001",
       "relation": "documents",
@@ -35448,6 +35784,62 @@
       "provenance": "docs/reference/codes/magusfile/MGS1030.md"
     },
     {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "diagnostic:MGS1028",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "diagnostic:MGS1031",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "diagnostic:MGS4002",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "diagnostic:MGS4007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1028.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "doc:docs/reference/codes/race/MGS4002.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "doc:docs/reference/codes/race/MGS4007.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
       "source": "doc:docs/reference/codes/magusfile/README.md",
       "target": "diagnostic:MGS1001",
       "relation": "documents",
@@ -36518,14 +36910,6 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/reference/codes/services/README.md"
-    },
-    {
-      "source": "doc:docs/reference/console.md",
-      "target": "doc:docs/concepts/cache/output-refs.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/console.md"
     },
     {
       "source": "doc:docs/reference/console.md",
@@ -45224,6 +45608,262 @@
       "provenance": "docs/setup/windows.md"
     },
     {
+      "source": "doc:internal/agent/agents-section.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/agents-section.md"
+    },
+    {
+      "source": "doc:internal/agent/agents-section.md",
+      "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/agents-section.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-buzz-review/SKILL.md",
+      "target": "diagnostic:MGS3003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-buzz-review/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-buzz-review/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-buzz-review/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-buzz-write/SKILL.md",
+      "target": "diagnostic:MGS1022",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-buzz-write/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-buzz-write/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-buzz-write/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-buzz-write/SKILL.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "internal/agent/skills/magus-buzz-write/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-change-summary/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-change-summary/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-change-summary/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-change-summary/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
+      "target": "diagnostic:MGS2001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-docs-lookup/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-docs-lookup/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "internal/agent/skills/magus-docs-lookup/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-query.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "target": "diagnostic:MGS2001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-sdk/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "internal/agent/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-sdk/SKILL.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "internal/agent/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-vcs-hygiene/SKILL.md",
+      "target": "diagnostic:MGS1028",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-vcs-hygiene/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-vcs-hygiene/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-clean.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-vcs-hygiene/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-workspace-rules/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-workspace-rules/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-workspace-rules/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-workspace-rules/SKILL.md"
+    },
+    {
       "source": "doc:libs/gopherbuzz/README.md",
       "target": "doc:docs/reference/manpage/magus-buzz.md",
       "relation": "references",
@@ -45586,6 +46226,14 @@
     {
       "source": "file:console/magusfile.buzz",
       "target": "function:console/magusfile.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "file:console/magusfile.buzz",
+      "target": "function:console/magusfile.buzz:diffdemo_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -55880,6 +56528,158 @@
       "provenance": "spells/github/actions/spell.buzz"
     },
     {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:apiBase",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:apiHost",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:find_review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:getenv",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:mgs_getName",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:publish_review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:reply_review",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:reviewBody",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:review_threads",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:slug",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:token",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "function:spells/github/review/spell.buzz:viewerLogin",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:assert",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:http",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/review/spell.buzz",
+      "target": "import:serialize",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
       "source": "file:spells/gitlab/ci/spell.buzz",
       "target": "function:spells/gitlab/ci/spell.buzz:annotate",
       "relation": "contains",
@@ -60872,6 +61672,174 @@
       "provenance": "spells/github/actions/spell.buzz"
     },
     {
+      "source": "function:spells/github/review/spell.buzz:apiBase",
+      "target": "function:spells/github/review/spell.buzz:getenv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:apiBase",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:apiHost",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:slug",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:find_review",
+      "target": "function:spells/github/review/spell.buzz:viewerLogin",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:has_token",
+      "target": "function:spells/github/review/spell.buzz:getenv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:headers",
+      "target": "function:spells/github/review/spell.buzz:token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:publish_review",
+      "target": "function:spells/github/review/spell.buzz:apiBase",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:publish_review",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:publish_review",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:publish_review",
+      "target": "function:spells/github/review/spell.buzz:reviewBody",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:reply_review",
+      "target": "function:spells/github/review/spell.buzz:apiBase",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:reply_review",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:reply_review",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:review_threads",
+      "target": "function:spells/github/review/spell.buzz:apiBase",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:review_threads",
+      "target": "function:spells/github/review/spell.buzz:has_token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:review_threads",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:viewerLogin",
+      "target": "function:spells/github/review/spell.buzz:apiBase",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/review/spell.buzz:viewerLogin",
+      "target": "function:spells/github/review/spell.buzz:headers",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/review/spell.buzz"
+    },
+    {
       "source": "function:spells/gitlab/ci/spell.buzz:enabled",
       "target": "function:spells/gitlab/ci/spell.buzz:getenv",
       "relation": "calls",
@@ -64665,6 +65633,14 @@
     },
     {
       "source": "project:console",
+      "target": "target:console:diffdemo-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "project:console",
       "target": "target:console:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -65712,20 +66688,20 @@
       "provenance": "spells/aws/s3-cache/spell.buzz:81"
     },
     {
-      "source": "rationale:spells/github/actions/spell.buzz:109:NOTE",
+      "source": "rationale:spells/github/actions/spell.buzz:114:NOTE",
       "target": "function:spells/github/actions/spell.buzz:cache_key",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/github/actions/spell.buzz:109"
+      "provenance": "spells/github/actions/spell.buzz:114"
     },
     {
-      "source": "rationale:spells/github/actions/spell.buzz:77:NOTE",
+      "source": "rationale:spells/github/actions/spell.buzz:82:NOTE",
       "target": "function:spells/github/actions/spell.buzz:getenv",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/github/actions/spell.buzz:77"
+      "provenance": "spells/github/actions/spell.buzz:82"
     },
     {
       "source": "spell:bash",
@@ -67117,6 +68093,14 @@
     },
     {
       "source": "target:console:build",
+      "target": "target:console:diffdemo-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "target:console:build",
       "target": "target:console:preflight",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -67358,118 +68342,6 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:CHANGELOG.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-architecture-review/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-buzz-review/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-buzz-write/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-change-summary/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-commit-composition/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-context-audit/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-delegate-multi-agent/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-docs-lookup/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-handoff-journal/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-run/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-vcs-hygiene/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:cmd/magus/skills/magus-workspace-rules/SKILL.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -68335,6 +69207,118 @@
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/skills/magus-workspace-rules.md",
       "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-architecture-review/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-buzz-review/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-buzz-write/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-change-summary/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-commit-composition/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-context-audit/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-query/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-run/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-sdk/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-vcs-hygiene/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-workspace-rules/SKILL.md",
+      "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"

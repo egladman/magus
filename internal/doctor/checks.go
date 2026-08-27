@@ -49,7 +49,7 @@ func (r *runner) checkBridgeReachability() types.DoctorCheck {
 // a single run's graph) this audit is repo-wide, so it is "potential overlap":
 // some clusters may never co-occur in one run.
 func (*runner) checkNearDuplicateServices(projects []*types.Project) types.DoctorCheck {
-	const name = "service duplication"
+	const name = "service-duplication"
 	clusters := serviceaudit.NearDuplicates(projects, nil)
 	if len(clusters) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no near-duplicate services detected"}
@@ -69,7 +69,7 @@ func (*runner) checkNearDuplicateServices(projects []*types.Project) types.Docto
 // reason) whose near-duplicate no longer exists, so the reason is stale and should
 // be pruned to keep the opt-out meaningful.
 func (*runner) checkStaleServiceSuppressions(projects []*types.Project) types.DoctorCheck {
-	const name = "service suppressions"
+	const name = "service-suppressions"
 	unused := serviceaudit.UnusedDistinct(projects, nil)
 	if len(unused) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no stale distinct-service suppressions"}
@@ -114,11 +114,11 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) types.DoctorChec
 		if exempt > 0 {
 			msg = fmt.Sprintf("every project matched a spell or declared no_language (%d exempt)", exempt)
 		}
-		return types.DoctorCheck{Name: "language coverage", Status: types.DoctorOK, Message: msg}
+		return types.DoctorCheck{Name: "language-coverage", Status: types.DoctorOK, Message: msg}
 	}
 	slices.Sort(noLang)
 	return types.DoctorCheck{
-		Name:   "language coverage",
+		Name:   "language-coverage",
 		Status: types.DoctorAdvice,
 		Message: fmt.Sprintf("%d project(s) without a language pack; binding one puts the project's work "+
 			"under affected tracking and the cache", len(noLang)),
@@ -134,9 +134,9 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) types.DoctorChec
 // Detection reuses the magusfile source scan (ci lives in the magusfile, never a
 // spell). Matching is case-insensitive because magus normalizes CI/Ci to ci.
 func (*runner) checkCITarget(projects []*types.Project) types.DoctorCheck {
-	const name = "ci target"
+	const name = "ci-target"
 	if len(projects) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no projects; skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "no projects; skipped"}
 	}
 	norm := types.Normalize
 	for _, p := range projects {
@@ -168,7 +168,7 @@ func (*runner) checkCITarget(projects []*types.Project) types.DoctorCheck {
 // captured, are skipped - so the check enforces the convention exactly where the
 // Buzz interpreter can verify it.
 func (*runner) checkSpellDocs(spells []*spells.Spell) types.DoctorCheck {
-	const name = "spell target docs"
+	const name = "spell-target-docs"
 	var undocumented []string
 	for _, s := range spells {
 		for _, t := range s.DocRequiredTargets() {
@@ -191,9 +191,9 @@ func (*runner) checkSpellDocs(spells []*spells.Spell) types.DoctorCheck {
 
 func (r *runner) checkGraphCycles() types.DoctorCheck {
 	if _, err := r.ws.Graph(); err != nil {
-		return types.DoctorCheck{Name: "dependency graph", Status: types.DoctorFail, Message: err.Error()}
+		return types.DoctorCheck{Name: "dependency-graph", Status: types.DoctorFail, Message: err.Error()}
 	}
-	return types.DoctorCheck{Name: "dependency graph", Status: types.DoctorOK, Message: "no cycles detected"}
+	return types.DoctorCheck{Name: "dependency-graph", Status: types.DoctorOK, Message: "no cycles detected"}
 }
 
 func (r *runner) checkSymlinks() types.DoctorCheck {
@@ -215,7 +215,7 @@ func (r *runner) checkGraphBounds() types.DoctorCheck {
 //
 // Import nodes are exempt: their ID is the specifier the source literally wrote.
 func checkGraphBounds(root string) types.DoctorCheck {
-	const name = "graph bounds"
+	const name = "graph-bounds"
 	path := filepath.Join(root, "gen", "knowledge-graph.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -349,13 +349,13 @@ func (*runner) checkJSONCodec() types.DoctorCheck {
 	if v == "v2" {
 		msg += " (GOEXPERIMENT=jsonv2; faster marshaling)"
 	}
-	return types.DoctorCheck{Name: "json codec", Status: types.DoctorOK, Message: msg}
+	return types.DoctorCheck{Name: "json-codec", Status: types.DoctorOK, Message: msg}
 }
 
 func (r *runner) checkConfigFile() types.DoctorCheck {
 	paths := configFilePaths(r.root)
 	if len(paths) == 0 {
-		return types.DoctorCheck{Name: "config file", Status: types.DoctorOK, Message: "no magus.yaml found; using defaults"}
+		return types.DoctorCheck{Name: "config-file", Status: types.DoctorOK, Message: "no magus.yaml found; using defaults"}
 	}
 	var all []string
 	for _, p := range paths {
@@ -377,11 +377,11 @@ func (r *runner) checkConfigFile() types.DoctorCheck {
 		if len(paths) > 1 {
 			msg = fmt.Sprintf("%d files checked", len(paths))
 		}
-		return types.DoctorCheck{Name: "config file", Status: types.DoctorOK, Message: msg + " (valid)"}
+		return types.DoctorCheck{Name: "config-file", Status: types.DoctorOK, Message: msg + " (valid)"}
 	}
 	slices.Sort(all)
 	return types.DoctorCheck{
-		Name:    "config file",
+		Name:    "config-file",
 		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d problem(s) in config file(s)", len(all)),
 		Details: all,
@@ -439,7 +439,7 @@ func (r *runner) cacheDir() string {
 // its own: "ran, did not replay" looks identical whether the target was forbidden to
 // replay or merely failed to.
 func (r *runner) checkCacheYield(projects []*types.Project) types.DoctorCheck {
-	const name = "cache yield"
+	const name = "cache-yield"
 	stalled := cache.StalledTargets(r.cacheDir(), nil)
 
 	// project path -> normalized target name -> the author's stated reason.
@@ -504,7 +504,7 @@ func (r *runner) checkCacheWritable() types.DoctorCheck {
 	cacheDir := r.cacheDir()
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return types.DoctorCheck{
-			Name:    "cache writable",
+			Name:    "cache-writable",
 			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("cannot create cache dir: %v", err),
 			Details: []string{cacheDir},
@@ -513,7 +513,7 @@ func (r *runner) checkCacheWritable() types.DoctorCheck {
 	tmp, err := os.CreateTemp(cacheDir, ".magus-doctor-*")
 	if err != nil {
 		return types.DoctorCheck{
-			Name:    "cache writable",
+			Name:    "cache-writable",
 			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("cache dir not writable: %v", err),
 			Details: []string{cacheDir},
@@ -521,7 +521,7 @@ func (r *runner) checkCacheWritable() types.DoctorCheck {
 	}
 	_ = tmp.Close()
 	_ = os.Remove(tmp.Name())
-	return types.DoctorCheck{Name: "cache writable", Status: types.DoctorOK, Message: cacheDir}
+	return types.DoctorCheck{Name: "cache-writable", Status: types.DoctorOK, Message: cacheDir}
 }
 
 func (r *runner) checkVCSBaseRef() types.DoctorCheck {
@@ -531,11 +531,11 @@ func (r *runner) checkVCSBaseRef() types.DoctorCheck {
 func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) types.DoctorCheck {
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil {
-		return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorFail, Message: err.Error()}
+		return types.DoctorCheck{Name: "vcs-base-ref", Status: types.DoctorFail, Message: err.Error()}
 	}
 	switch res.Source {
 	case types.VCSSourceDisabled:
-		return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: "vcs disabled; skipped"}
+		return types.DoctorCheck{Name: "vcs-base-ref", Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "vcs disabled; skipped"}
 	default:
 		// explicit/auto/default sources: proceed to the live probe below
 	}
@@ -551,14 +551,14 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 	// required interface, so every backend answers it by construction.
 	if _, err := res.VCS.FindCommit(ctx, root, res.Base); err != nil {
 		return types.DoctorCheck{
-			Name:    "vcs base ref",
+			Name:    "vcs-base-ref",
 			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("base_ref %q not reachable (set MAGUS_VCS_BASE_REF to a reachable ref)", res.Base),
 			Details: []string{fmt.Sprintf("%s: %v", res.Name, err)},
 		}
 	}
 
-	return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
+	return types.DoctorCheck{Name: "vcs-base-ref", Status: types.DoctorOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
 }
 
 // runtimeEnvVars are the MAGUS_* variables magus reads without them being config
@@ -609,11 +609,11 @@ func (*runner) checkEnvVars() types.DoctorCheck {
 		unknown = append(unknown, key)
 	}
 	if len(unknown) == 0 {
-		return types.DoctorCheck{Name: "environment variables", Status: types.DoctorOK, Message: "no unknown MAGUS_* variables"}
+		return types.DoctorCheck{Name: "environment-variables", Status: types.DoctorOK, Message: "no unknown MAGUS_* variables"}
 	}
 	slices.Sort(unknown)
 	return types.DoctorCheck{
-		Name:    "environment variables",
+		Name:    "environment-variables",
 		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d unknown MAGUS_* variable(s); typos?", len(unknown)),
 		Details: unknown,
@@ -644,7 +644,7 @@ func (r *runner) checkTargetNameConventions(projects []*types.Project) types.Doc
 	}
 	if len(conventions) <= 1 {
 		return types.DoctorCheck{
-			Name:    "target name conventions",
+			Name:    "target-name-conventions",
 			Status:  types.DoctorOK,
 			Message: "target names use a consistent convention",
 		}
@@ -655,7 +655,7 @@ func (r *runner) checkTargetNameConventions(projects []*types.Project) types.Doc
 	}
 	slices.Sort(details)
 	return types.DoctorCheck{
-		Name:   "target name conventions",
+		Name:   "target-name-conventions",
 		Status: types.DoctorAdvice,
 		Message: fmt.Sprintf("target names mix %d naming conventions; magus normalizes any casing so they "+
 			"all resolve, and picking one keeps invocations consistent and greppable", len(conventions)),
@@ -700,13 +700,13 @@ var bespokePhaseFragmentNames = map[string]bool{
 // lint, so `magus affected ci` covers it without a target the pipeline can forget.
 //
 // ADVICE, not failure. `ci` is the one reserved target and the rest of the layout
-// belongs to whoever wrote it; `--strict` promotes this where the convention is
-// wanted.
+// belongs to whoever wrote it. Nothing promotes this to a failure - see the
+// DoctorAdvice doc for why that switch does not exist.
 //
 // Reported per project, not once per name: two projects naming a target "security"
 // are two separate decisions.
 func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) types.DoctorCheck {
-	const name = "bespoke phase-fragment target names"
+	const name = "bespoke-phase-fragment-targets"
 	var found []string
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
@@ -759,7 +759,7 @@ func (r *runner) displayPath(abs string) string {
 // never enters a cache key, so the target silently under-declares its footprint (a
 // stale-hit risk). A warning, not a load error: an orphan may just be dead code.
 func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) types.DoctorCheck {
-	const name = "unreached footprint declarations"
+	const name = "unreached-footprint-declarations"
 	var details []string
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
@@ -799,7 +799,7 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) types.D
 // A warning, not a load error - a target may legitimately produce a cacheable artifact from
 // a credential, and only the author knows. The remedy is skip_cache with a reason.
 func (r *runner) checkCacheableSecretReads(projects []*types.Project) types.DoctorCheck {
-	const name = "cacheable secret reads"
+	const name = "cacheable-secret-reads"
 	var details []string
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
@@ -839,7 +839,7 @@ func (r *runner) checkCacheableSecretReads(projects []*types.Project) types.Doct
 // present project-wide. Explicit inputs intentionally do not participate because
 // they narrow a target's source footprint even when a glob is also project-wide.
 func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.DoctorCheck {
-	const name = "redundant footprint globs"
+	const name = "redundant-footprint-globs"
 	var details []string
 	for _, p := range projects {
 		for target, refs := range p.TargetOutputs {
@@ -895,7 +895,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.D
 // when it was not, and then reports every untracked sibling as dead. A backend that
 // cannot answer "is this tracked?" degrades to plain presence rather than guess.
 func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.DoctorCheck {
-	const name = "dead output globs"
+	const name = "dead-output-globs"
 
 	var tracked types.TrackedFileReporter
 	if res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
@@ -952,7 +952,7 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.DoctorChe
 // Only DECLARED writes are visible, so a formatter that omits ctx.writesFiles is
 // undetectable here.
 func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.DoctorCheck {
-	const name = "output ownership"
+	const name = "output-ownership"
 	var details []string
 	for _, p := range projects {
 		owners := map[string][]string{}
@@ -1005,7 +1005,7 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Doc
 // from a working one. A backend that cannot report tracked files skips the question
 // rather than guessing, the same way checkDeadOutputGlobs does.
 func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.DoctorCheck {
-	const name = "undeclared seeding files"
+	const name = "undeclared-seeding-files"
 
 	res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
@@ -1157,7 +1157,7 @@ func declaredTargetNames(path string) []string {
 // rather than stopping at the first failure - what makes it useful in the CI
 // preflight target: one `magus doctor` surfaces all magusfile problems at once.
 func (r *runner) checkMagusfileSyntax(projects []*types.Project) types.DoctorCheck {
-	const name = "magusfile syntax"
+	const name = "magusfile-syntax"
 	var problems []string
 	var checked int
 	for _, p := range projects {
@@ -1239,14 +1239,14 @@ func (r *runner) checkCharmTargetCollision(projects []*types.Project) types.Doct
 	}
 	if len(details) == 0 {
 		return types.DoctorCheck{
-			Name:    "charm/target name collisions",
+			Name:    "charm-target-collisions",
 			Status:  types.DoctorOK,
 			Message: "no charm shares a target name",
 		}
 	}
 	slices.Sort(details)
 	return types.DoctorCheck{
-		Name:   "charm/target name collisions",
+		Name:   "charm-target-collisions",
 		Status: types.DoctorFail,
 		Message: fmt.Sprintf("%d charm name(s) also name a target; the `target:charm` suffix "+
 			"makes these ambiguous to read and debug; rename one side", len(details)),
@@ -1282,7 +1282,7 @@ func declaredCharmNames(path string) []string {
 // "no-cache", has_charm("rw_") for "rw") are correctly treated as live reads, not
 // typos. What remains are genuine misspellings (has_charm("rww") for "rw").
 func (r *runner) checkHasCharmTypos(projects []*types.Project) types.DoctorCheck {
-	const name = "has_charm typos"
+	const name = "has-charm-typos"
 
 	// The known-charm vocabulary: magus's reserved built-ins plus every charm any
 	// bound spell declares, canonicalized. A read matching one of these is live; a
@@ -1348,7 +1348,7 @@ func (r *runner) checkHasCharmTypos(projects []*types.Project) types.DoctorCheck
 // reason are dead config. Mirrors the unused-distinct check for services, keeping
 // the acknowledged-suppression list honest.
 func (r *runner) checkStaleShadowAcks() types.DoctorCheck {
-	const name = "stale spell-shadow acknowledgments"
+	const name = "stale-spell-shadow-acknowledgments"
 	acks := r.opts.cfg.Spells.AllowShadow
 	if len(acks) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no allow_shadow entries"}
@@ -1390,7 +1390,7 @@ func (r *runner) checkStaleShadowAcks() types.DoctorCheck {
 func (r *runner) checkWorkspaceRegistration() types.DoctorCheck {
 	d := r.opts.daemonInfo
 	if d == nil || !d.Reachable || len(d.Workspaces) == 0 {
-		return types.DoctorCheck{Name: "workspace registration", Status: types.DoctorOK, Message: "no loaded workspaces in daemon"}
+		return types.DoctorCheck{Name: "workspace-registration", Status: types.DoctorOK, Message: "no loaded workspaces in daemon"}
 	}
 	thisRoot := r.root
 	if r.ws != nil {
@@ -1410,14 +1410,14 @@ func (r *runner) checkWorkspaceRegistration() types.DoctorCheck {
 	}
 	if registered {
 		return types.DoctorCheck{
-			Name:    "workspace registration",
+			Name:    "workspace-registration",
 			Status:  types.DoctorOK,
 			Message: fmt.Sprintf("loaded in daemon  (%d workspace(s) total)", len(d.Workspaces)),
 			Details: details,
 		}
 	}
 	return types.DoctorCheck{
-		Name:    "workspace registration",
+		Name:    "workspace-registration",
 		Status:  types.DoctorOK,
 		Message: fmt.Sprintf("not yet loaded in daemon  (%d other workspace(s) loaded)", len(d.Workspaces)),
 		Details: details,
@@ -1539,7 +1539,7 @@ func (r *runner) checkSpellContract() types.DoctorCheck {
 // judging me?" has no other way to be asked. The staleness test is deliberately
 // coarse (binary mtime against the newest tracked .go file).
 func (r *runner) checkGuardBinary() types.DoctorCheck {
-	const name = "guard binary"
+	const name = "guard-binary"
 
 	bin := filepath.Join(r.ws.Root(), "magus")
 	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
@@ -1591,7 +1591,7 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 // workspace where no agent has run yet is the ordinary case, and failing it would train
 // people to ignore the check.
 func (r *runner) checkObserverRecording() types.DoctorCheck {
-	const name = "agent observer"
+	const name = "agent-observer"
 	const window = 2000
 
 	reads, writes, shell := trail.ObservedCounts(r.cacheDir(), window)
@@ -1859,7 +1859,7 @@ const guardCanaryBudget = 5 * time.Second
 // than calling os.UserHomeDir() itself so a test can point it at a fixture
 // directory instead of the machine's real home.
 func checkGuardWiring(ctx context.Context, root, home string, budget time.Duration) types.DoctorCheck {
-	const name = "guard wiring"
+	const name = "guard-wiring"
 
 	bin, ok := resolveGuardBinaryForWiring(root)
 	if !ok {
@@ -1983,10 +1983,10 @@ func checkGuardWiring(ctx context.Context, root, home string, budget time.Durati
 // AGENTS.md is graded too but can only ever be ADVICE: magus does not write that file, so
 // failing a check whose fix magus cannot apply would make --fix a liar.
 func (r *runner) checkAgentSkills() types.DoctorCheck {
-	const name = "agent skills"
+	const name = "agent-skills"
 
 	if r.opts.skills == nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no skill catalog supplied; check skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "no skill catalog supplied; check skipped"}
 	}
 	root := r.ws.Root()
 	statuses := r.opts.skills.CheckStatuses(root)
@@ -2100,7 +2100,7 @@ const (
 // Matching HEAD's OWN hash keeps it precise - a lockfile or fixture full of other hashes
 // cannot match.
 func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.DoctorCheck {
-	const name = "self-staling outputs"
+	const name = "self-staling-outputs"
 
 	res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
@@ -2108,7 +2108,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Doctor
 	}
 	reporter, ok := res.VCS.(types.TrackedFileReporter)
 	if !ok {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
 	}
 	meta, err := res.VCS.Metadata(r.runCtx(), r.root)
 	if err != nil || meta.ID == "" {
@@ -2251,15 +2251,15 @@ func isHexByte(data []byte, i int) bool {
 // It runs no generator, so it cannot see a generator that would produce different bytes
 // from unchanged inputs. That is the drift gate's job.
 func (r *runner) checkGeneratedDrift() types.DoctorCheck {
-	const name = "generated output"
+	const name = "generated-output"
 	ctx := r.runCtx()
 	res, err := vcs.Resolve(ctx, r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no vcs resolved; skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "no vcs resolved; skipped"}
 	}
 	paths, err := res.VCS.DirtyFiles(ctx, r.root, nil)
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not read tree status; skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "could not read tree status; skipped"}
 	}
 	if len(paths) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "tree is clean"}
@@ -2268,11 +2268,11 @@ func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 	// Inspector role, and a reader that does not implement it simply skips this check.
 	insp, ok := r.ws.(types.Inspector)
 	if !ok {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "workspace cannot classify paths; skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "workspace cannot classify paths; skipped"}
 	}
 	files, err := insp.ClassifyFiles(ctx, paths)
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not classify changed paths; skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "could not classify changed paths; skipped"}
 	}
 	// Sources committed since the base ref explain their outputs too; see
 	// types.SourcesChangedSinceBase for why the working tree alone is wrong.
@@ -2301,7 +2301,7 @@ func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 // for something else on the box), and magus has no way to tell that apart from a stale
 // one. It says what it sees and offers the command.
 func (r *runner) checkConcurrencySizing() types.DoctorCheck {
-	const name = "concurrency sizing"
+	const name = "concurrency-sizing"
 	fit := cache.DefaultConcurrency()
 	set := r.opts.cfg.Concurrency
 	if set <= 0 {
@@ -2345,7 +2345,7 @@ func (r *runner) checkConcurrencySizing() types.DoctorCheck {
 // that is the fix this check is the residue of. Letting a pattern in too is what
 // pruning exists to prevent: a bare **/*.js would start hashing all of node_modules.
 func (r *runner) checkUnmatchableSourceGlobs(projects []*types.Project) types.DoctorCheck {
-	const name = "unmatchable source globs"
+	const name = "unmatchable-source-globs"
 
 	var details []string
 	for _, p := range projects {
@@ -2392,4 +2392,86 @@ func prunedPrefix(glob string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// checkOutputIsAnotherProjectsSource is MGS1031: a file one project declares as an OUTPUT that a
+// DIFFERENT project's source glob also claims.
+//
+// Harmless until the bytes change. Then the owning project regenerates it, the claiming project
+// sees a declared source move underneath a target it is running, and reports the write as an
+// undeclared source mutation - against a file that is generated by definition. The report names a
+// real conflict and blames the wrong thing, which is the worst shape a diagnostic has.
+//
+// Static, so it holds whether or not anything is drifting today. That is the value: this repository
+// carried the conflict on every project's MAGUS.md for as long as the markdown spell has claimed
+// **/*.md, and only the one whose content went stale ever surfaced it.
+//
+// EXACT output paths only, matched against the other project's globs - the decidability line
+// MGS4002 already draws. Whether two globs can overlap is undecidable in general; whether a pattern
+// matches one literal path is not.
+//
+// ADVICE rather than a failure, like MGS1028 beside it: the fix is a judgment about which project
+// owns the file, and a checker that failed would be dictating a layout it cannot see the reasons
+// for.
+func (r *runner) checkOutputIsAnotherProjectsSource(projects []*types.Project) types.DoctorCheck {
+	const name = "output-is-another-projects-source"
+
+	// Rooted exact output paths, and who writes each.
+	owners := map[string]string{}
+	for _, p := range projects {
+		for _, glob := range p.AllOutputs() {
+			if rooted := types.RootGlob(p.Path, glob); !strings.ContainsAny(rooted, "*?[") {
+				owners[rooted] = p.Path
+			}
+		}
+		for _, refs := range p.TargetOutputs {
+			for _, ref := range refs {
+				owner := ref.Project
+				if owner == "" {
+					owner = p.Path
+				}
+				if rooted := types.RootGlob(owner, ref.Glob); !strings.ContainsAny(rooted, "*?[") {
+					owners[rooted] = owner
+				}
+			}
+		}
+	}
+	if len(owners) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no project declares an exact output path"}
+	}
+
+	var details []string
+	for _, p := range projects {
+		var sources []string
+		for _, glob := range p.Sources {
+			sources = append(sources, types.RootGlob(p.Path, glob))
+		}
+		for _, refs := range p.TargetInputs {
+			for _, ref := range refs {
+				owner := ref.Project
+				if owner == "" {
+					owner = p.Path
+				}
+				sources = append(sources, types.RootGlob(owner, ref.Glob))
+			}
+		}
+		for path, owner := range owners {
+			if owner == p.Path {
+				continue // its own output; writing it is what generate is for
+			}
+			if types.MatchesAnyGlob(sources, path) {
+				details = append(details, fmt.Sprintf("%s is %s's output and %s's source", path, owner, p.Path))
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no project claims another's declared output as a source"}
+	}
+	slices.Sort(details)
+	return types.DoctorCheck{
+		Name:    name,
+		Status:  types.DoctorAdvice,
+		Message: fmt.Sprintf("%d declared output(s) are also another project's source", len(details)),
+		Details: details,
+	}
 }

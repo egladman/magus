@@ -94,9 +94,18 @@ magus could automate each row below, and does not.
 | disposing an agent request  | an event that means "blocked on input" or "blocked on approval" exists to reach a person; answering it for them removes the person it exists to reach |
 | applying suggested changes  | a suggestion lands only when a person accepts it                                                                                                      |
 | writing the knowledge store | notes are human-authored by construction: there is no author field to spoof, because authorship rides version control                                 |
+| sending a review            | a remark reaches a colleague under your name; an agent drafts into the session and a person sends the batch                                           |
 
-All three would be cheap to build. Each removes the person at the point where
+All four would be cheap to build. Each removes the person at the point where
 the mechanism needs their judgment, so each stays out.
+
+[Sending a review](concepts/review.md) is the newest of them and the one with
+the most surface to give away, so its refusals are worth naming: no command
+carries a `--publish` flag, a self-review is always a comment rather than an
+approval, and authorship is stamped from the transport a write arrived on
+rather than from what the writer claims. A batch waits for a person because
+publishing is one outward-facing act; splitting it into a call per remark would
+turn the act that needs confirming into a series of small ones nobody confirms.
 
 ## Where this is strained
 

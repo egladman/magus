@@ -155,6 +155,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Daemon.Maintenance.SyncGraph = d
 		}
 	}
+	if v := getenv("MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Daemon.Maintenance.CheckReview = d
+		}
+	}
 	if v := getenv("MAGUS_VCS_ENABLED"); v != "" {
 		b := parseBoolEnv(v, cfg.VCS.Enabled != nil && *cfg.VCS.Enabled)
 		cfg.VCS.Enabled = &b
@@ -262,6 +267,10 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Secret.Unattended = d
 		}
+	}
+	if v := getenv("MAGUS_DIFF_TUI"); v != "" {
+		b := parseBoolEnv(v, cfg.Diff.Tui != nil && *cfg.Diff.Tui)
+		cfg.Diff.Tui = &b
 	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {

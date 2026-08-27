@@ -1,10 +1,10 @@
 ---
 title: magus-context-audit
-generated_from: cmd/magus/skills/magus-context-audit/SKILL.md
+generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5568
-skill_simple_bytes: 4060
+skill_full_bytes: 5573
+skill_simple_bytes: 4065
 ---
 
 # magus-context-audit
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `43` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `72482f5a1242` |
+| `skill-content` | `c4d3f426ec35` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -135,7 +135,7 @@ A lens that cries wolf gets switched off, taking the real findings with it.
 
 Fix at the SOURCE and let generation propagate; editing an installed copy is
 drift a verify step will flag anyway. For magus's own skills that means
-`cmd/magus/skills/*/SKILL.md`, then reinstall.
+`internal/agent/skills/*/SKILL.md`, then reinstall.
 
 Reinstall with a binary built from the EDITED source, and confirm the content
 digest moved:
@@ -237,7 +237,7 @@ Report findings in this order.
 ## Recommend, then verify the fix landed
 
 Fix at the SOURCE and let generation propagate. For magus's own skills that means
-`cmd/magus/skills/*/SKILL.md`, then reinstall.
+`internal/agent/skills/*/SKILL.md`, then reinstall.
 
 Reinstall with a binary built from the EDITED source, and confirm the content
 digest moved:

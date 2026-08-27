@@ -483,9 +483,27 @@ func (v DiffFile) BuzzObject() BuzzObject {
 		"symbols":   itemsSymbols,
 		"surface":   v.Surface,
 		"touches":   itemsTouches,
+		"readState": v.ReadState,
 		"churn":     optChurn,
 		"noHistory": v.NoHistory,
 		"reach":     optReach,
+	}
+}
+
+func (v DiffReviewed) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"at":    v.At.BuzzObject(),
+		"files": v.Files,
+	}
+}
+
+func (v VCSCheckpoint) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"revision":    v.Revision,
+		"branch":      v.Branch,
+		"dirty":       v.Dirty,
+		"patchDigest": v.PatchDigest,
+		"vcs":         v.VCS,
 	}
 }
 
@@ -504,24 +522,27 @@ func (v Diff) BuzzObject() BuzzObject {
 		"seedProjects":     v.SeedProjects,
 		"affectedProjects": itemsAffectedProjects,
 		"notes":            v.Notes,
+		"reviewed":         v.Reviewed.BuzzObject(),
 	}
 }
 
 func (v DoctorCheck) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"name":    v.Name,
-		"status":  string(v.Status),
-		"message": v.Message,
-		"details": v.Details,
-		"fix":     v.Fix,
+		"name":     v.Name,
+		"status":   string(v.Status),
+		"message":  v.Message,
+		"details":  v.Details,
+		"evidence": string(v.Evidence),
+		"fix":      v.Fix,
 	}
 }
 
 func (v DoctorSummary) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"ok":     v.OK,
-		"fail":   v.Fail,
-		"advice": v.Advice,
+		"ok":      v.OK,
+		"fail":    v.Fail,
+		"advice":  v.Advice,
+		"unknown": v.Unknown,
 	}
 }
 
@@ -926,10 +947,22 @@ func (v DelegationRelease) BuzzObject() BuzzObject {
 	}
 }
 
+func (v DelegationUnattributedWrite) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"path":   v.Path,
+		"digest": v.Digest,
+		"at":     v.At,
+	}
+}
+
 func (v Delegation) BuzzObject() BuzzObject {
 	itemsReleases := make([]any, len(v.Releases))
 	for indexReleases := range v.Releases {
 		itemsReleases[indexReleases] = v.Releases[indexReleases].BuzzObject()
+	}
+	itemsUnattributed := make([]any, len(v.Unattributed))
+	for indexUnattributed := range v.Unattributed {
+		itemsUnattributed[indexUnattributed] = v.Unattributed[indexUnattributed].BuzzObject()
 	}
 	return BuzzObject{
 		"id":             v.ID,
@@ -944,6 +977,7 @@ func (v Delegation) BuzzObject() BuzzObject {
 		"state":          string(v.State),
 		"readOnly":       v.ReadOnly,
 		"releases":       itemsReleases,
+		"unattributed":   itemsUnattributed,
 		"reportedBase":   v.ReportedBase,
 		"baseVerdict":    string(v.BaseVerdict),
 		"registered":     v.Registered,

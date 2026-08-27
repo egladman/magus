@@ -17,5 +17,6 @@ export object DoctorCheck {
     status: DoctorCheckStatus = DoctorCheckStatus.none,
     message: str = "",
     details: [str] = [],
+    evidence: str = "",
     fix: [str] = [],
 }

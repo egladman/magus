@@ -28,6 +28,7 @@ type Config struct {
 	Hints      Hints      `json:"hints" yaml:"hints"`
 	Knowledge  Knowledge  `json:"knowledge" yaml:"knowledge"`
 	Secret     Secret     `json:"secret" yaml:"secret"`
+	Diff       Diff       `json:"diff" yaml:"diff"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -97,6 +98,23 @@ type Config struct {
 	// would silently disable the floor for every workspace that session touches.
 	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
 }
+
+// Diff configures `magus diff`.
+type Diff struct {
+	// Tui opens the interactive viewer when the terminal can draw it. nil = default true.
+	//
+	// Default ON because the viewer is the same report plus navigation - it renders the same
+	// annotation lines, from the same diffFileFacts the text mode uses - and a reader who has
+	// to know a flag exists before they can step through a changeset mostly never does.
+	//
+	// Turning it off is a preference, not a workaround: `magus diff --no-tui` for one run, this
+	// for every run. Neither is needed to make the command scriptable - the viewer already
+	// stands aside on its own for anything that is not a person at a terminal.
+	Tui *bool `json:"tui" yaml:"tui"`
+}
+
+// TuiEnabled reports whether `magus diff` may open the viewer.
+func (d Diff) TuiEnabled() bool { return d.Tui == nil || *d.Tui }
 
 // SpellsConfig holds workspace-level spell settings.
 type SpellsConfig struct {
@@ -362,6 +380,10 @@ type Maintenance struct {
 	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 1h (its only bound)
 	RotateLogs       time.Duration `json:"rotate_logs" yaml:"rotate_logs"`             // trim the run-log journals; default 7d (their only bound, so weekly)
 	SyncGraph        time.Duration `json:"sync_graph" yaml:"sync_graph"`               // reconcile the graph; default 6h (a safety net behind the VCS hook)
+	// CheckReview notices a merge or a new remark on a review this tree took part in. The only
+	// scheduled job that leaves the machine, so its default is the longest here: a pull request
+	// merges once, and a remark waiting fifteen minutes costs nobody anything.
+	CheckReview time.Duration `json:"check_review" yaml:"check_review"`
 }
 
 // VCS controls VCS-driven affected detection.
@@ -610,6 +632,7 @@ func Defaults() Config {
 				RotateActivities: time.Hour,          // the trail's only bound; cheap to run often (one stat when small)
 				RotateLogs:       7 * 24 * time.Hour, // run-logs have no other bound, so trim weekly
 				SyncGraph:        6 * time.Hour,      // safety net behind the VCS refresh hook
+				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
 		HistoryPath: DefaultHistoryPath(),

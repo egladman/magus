@@ -131,7 +131,10 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
           row.append(h("code", "console-commands-token", displayToken(cmd.id)));
           row.append(h("span", "console-commands-label", cmd.label));
           const chordCell = h("span", "console-commands-chord");
-          const chord = formatChord(keymap[cmd.id] ?? "", deps.mac);
+          // Surface-local key first, for the reason cheatsheet.ts gives at its own call: the
+          // surface dispatches from its own table, so a keymap entry for one of these would
+          // display a chord that does nothing.
+          const chord = (cmd.key ?? "") || formatChord(keymap[cmd.id] ?? "", deps.mac);
           if (chord !== "") {
             // Each chord token as its own <kbd> reads as physical keys (Cmd + K), reusing the keyboard
             // sheet's keycap styling.

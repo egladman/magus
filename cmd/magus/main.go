@@ -48,6 +48,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -195,6 +196,36 @@ func isUsageOnlyInvocation(subArgs []string) bool {
 	return false
 }
 
+// wantsUsage reports whether a subcommand's args ask for its help text.
+//
+// Distinct from isUsageOnlyInvocation, which additionally treats NO arguments as a usage
+// request. That is right for run and affected, whose first positional is required, and wrong
+// for everything else: bare `magus diff` is a real invocation.
+//
+// Scanning stops at "--", past which the tokens belong to a forwarded tool: a run that
+// forwards `-h` after the marker is asking the test binary for help, not magus.
+func wantsUsage(subArgs []string) bool {
+	for i, a := range subArgs {
+		if a == "--" {
+			return false
+		}
+		// -h and --help are unambiguous: no subcommand takes either as a positional, so
+		// they mean help wherever they sit. `magus diff --impact -h` is the case worth
+		// catching.
+		if a == "-h" || a == "--help" {
+			return true
+		}
+		// The bare word is only a help request in the FIRST position. Elsewhere it is
+		// ordinary data - `magus memory get help` fetches an entry named help, and
+		// `magus notes show help` shows a note. Treating those as usage would skip the
+		// workspace preload for a real invocation.
+		if a == "help" && i == 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // hasDetachFlag reports whether argv carries --detach, in every spelling the flag
 // package accepts. Scanning stops at "--", past which the tokens belong to a forwarded
 // tool rather than to magus.
@@ -232,6 +263,18 @@ func isForensicAffected(subArgs []string) bool {
 
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
+	// Asking a command what it does must not do anything. Every subcommand's own parser
+	// already prints usage and returns before it loads a workspace, but the preload here
+	// runs FIRST - so `magus diff -h` opened the workspace, and opening one refreshes the
+	// VCS merge-driver registration, which WRITES the tracked .gitattributes and a git
+	// config entry naming the running binary. A persona doing nothing but reading help
+	// found a dangling registration pointing at a throwaway path.
+	//
+	// The config tier stays: usage text reads it (daemonDefaultAddr in `server start -h`),
+	// and reading magus.yaml writes nothing.
+	if wantsUsage(subArgs) {
+		return dispatchProfile{needsConfig: true}
+	}
 	switch sub {
 	case "help", "version":
 		// Neither reads a workspace or a config: one prints text compiled into the
@@ -911,10 +954,35 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 // dispatch half that makes `graph build`, `clean --cache`, and the rotate workers actually run
 // as jobs; without it they returned ErrNotAdoptable and the submitted job was a silent no-op.
 func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) error {
-	if !jobs.IsWorkerArgv(args) {
+	if !jobs.IsWorkerArgv(args) && !isDeclaredRun(ctx, args) {
 		return fmt.Errorf("%w: %q is not a registered job worker", proc.ErrNotAdoptable, strings.Join(args, " "))
 	}
 	return dispatchSub(ctx, root, rc, args[0], args[1:])
+}
+
+// isDeclaredRun is the second, deliberately narrow admission path into dispatchJob: a plain
+// `run <target> <project>` whose target the workspace's own magusfile declares for that project.
+// The review surface submits these so a reader can run a project's tests against the code they
+// are looking at.
+//
+// It admits strictly less than a terminal's `magus run`: exactly three tokens, no flags, no
+// charms, no `spell::op` form, and a target name that has to appear in the generated target graph
+// rather than being taken from the caller. So the property dispatchJob exists to hold - a job RPC
+// can never name an arbitrary command - still holds by construction: the allowlist is the
+// magusfile, not the request.
+func isDeclaredRun(ctx context.Context, args []string) bool {
+	if len(args) != 3 || args[0] != "run" {
+		return false
+	}
+	target, project := args[1], args[2]
+	if strings.HasPrefix(target, "-") || strings.Contains(target, ":") {
+		return false
+	}
+	m, ok := magusFromContext(ctx)
+	if !ok {
+		return false
+	}
+	return slices.Contains(m.ProjectTargets(ctx, project), target)
 }
 
 // daemonProvider is the single observability provider the daemon shares between its

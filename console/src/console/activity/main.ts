@@ -15,7 +15,7 @@ import {
   Kind,
   Outcome,
   type ActivityEvent,
-} from "../../gen/magus/activity/v1alpha1/activity_pb";
+} from "@wire/activity/v1alpha1/activity_pb";
 import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
 import { notify } from "../../lib/notifications";
 import { buildSection } from "../render/sections";
@@ -138,10 +138,20 @@ function notifyDenials(events: ActivityEvent[]): void {
 
 // leafLabel is a tree leaf's text: the action (or the kind tag as a fallback) plus how long ago it
 // happened, so the index reads "what, when" without opening the section.
-function leafLabel(ev: ActivityEvent, now: number): string {
+// The two halves of a leaf row, split because they are laid out on separate lines. leafLabel
+// still joins them for the title attribute, where a tooltip wants one string.
+function leafAction(ev: ActivityEvent): string {
+  return ev.action || "event";
+}
+
+function leafWhen(ev: ActivityEvent, now: number): string {
   const ms = tsMillis(ev.time);
-  const when = ms === null ? "" : relTime(ms, now);
-  const action = ev.action || "event";
+  return ms === null ? "" : relTime(ms, now);
+}
+
+function leafLabel(ev: ActivityEvent, now: number): string {
+  const when = leafWhen(ev, now);
+  const action = leafAction(ev);
   return when ? action + "  " + when : action;
 }
 
@@ -200,14 +210,27 @@ function renderIndexTree(
       lNode.title = (err ? "error" : "ok") + " - " + leafLabel(event, now);
       const lContainer = h("span", "pf-v6-c-tree-view__node-container");
       const lNodeContent = h("span", "pf-v6-c-tree-view__node-content");
-      if (err) {
-        // Reuse the run browser's outcome dot (styled in logs.css, which this surface loads) to mark a
-        // failed event in the index.
-        const dot = h("span", "console-log-runs__dot");
-        dot.dataset.status = "fail";
-        lNodeContent.append(dot);
+      // node-content is a COLUMN in PatternFly - its slot for a title over a description - so
+      // anything appended here takes a row of its own. The dot went in beside the text and got
+      // one, landing on a line above the name it was marking rather than in front of it.
+      //
+      // Two rows now, which is what the slot is for: the dot and the action name on the first,
+      // the timestamp on the second. The break falls between the name and the time instead of
+      // between the mark and everything it refers to.
+      const title = h("span", "pf-v6-c-tree-view__node-text");
+      // EVERY row carries the dot, not just the failures. It is the run browser's outcome dot
+      // (logs.css, which this surface loads), and there it marks every row - so marking only
+      // errors here taught two rules for one symbol: "outcome" one tab over, "this one broke"
+      // in this list. A reader cannot tell a passing event from an unmarked one.
+      const dot = h("span", "console-log-runs__dot");
+      dot.dataset.status = err ? "fail" : "pass";
+      title.append(dot);
+      title.append(h("span", "console-activity-index__action", leafAction(event)));
+      lNodeContent.append(title);
+      const when = leafWhen(event, now);
+      if (when !== "") {
+        lNodeContent.append(h("span", "console-activity-index__when", when));
       }
-      lNodeContent.append(h("span", "pf-v6-c-tree-view__node-text", leafLabel(event, now)));
       lContainer.append(lNodeContent);
       lNode.append(lContainer);
       lContent.append(lNode);
@@ -255,7 +278,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     scroll: refs.scroll,
     title: "Events",
     label: "Event index",
-    bodyTitle: "Detail",
+    bodyTitle: "Details",
     onRefresh: load,
     hideWhenEmpty: true,
   });

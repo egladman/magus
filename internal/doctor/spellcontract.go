@@ -35,7 +35,7 @@ import (
 // Catching declaration-versus-application drift needs a test over magus's own
 // construction paths, not a workspace diagnostic. See TestSpellOptionsApplied.
 func checkSpellContract(spells []*spells.Spell) types.DoctorCheck {
-	const name = "spell contract"
+	const name = "spell-contract"
 	if len(spells) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no spells registered"}
 	}

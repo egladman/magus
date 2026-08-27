@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
 )
@@ -19,7 +20,7 @@ import (
 func testFiles() []File {
 	return []File{
 		{Path: "a.go", Facts: []string{"PUBLIC SURFACE", "in root"}, Hunks: []Hunk{
-			{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-one", "+two"}, Digest: "da0"},
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "da0"},
 			{Index: 1, Header: "@@ -9 +9 @@", Lines: []string{"-three", "+four"}, Digest: "da1"},
 		}},
 		{Path: "b.go", Hunks: []Hunk{
@@ -57,7 +58,7 @@ func at(path string, hunk int) types.DiffCursor { return types.DiffCursor{Path: 
 func TestCursorPublishesThePatchIndexNotTheRowPosition(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Index: 4, Header: "@@ -1 +1 @@", Lines: []string{"+one"}, Digest: "d0"},
+		{Index: 4, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"+one"}, Digest: "d0"},
 		{Index: 7, Header: "@@ -9 +9 @@", Lines: []string{"+two"}, Digest: "d1"},
 	}}}})
 	assert.Equal(t, at("a.go", -1), m.Cursor(), "a heading names no hunk")
@@ -320,75 +321,37 @@ func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 	assert.False(t, m.Overview())
 }
 
-func TestEmphasisMarksOnlyThePairedRewrite(t *testing.T) {
+// The viewer no longer computes emphasis - the parser does, and hands it over in Hunk.Emph.
+// What is left to check here is that a span it was GIVEN survives into the row it belongs to,
+// including the "nothing to mark" case, since the slice may be short or absent entirely.
+//
+// The rule those numbers follow (which lines pair, and how a multi-byte prefix shifts the
+// offsets) is pinned where it now lives, in internal/diff's TestEmphasisMarksOnlyThePairedRewrite.
+func TestAGivenEmphasisSpanReachesItsRow(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name  string
-		lines []string
-		// want is the text each hunk line's span selects, in line order, "" for no emphasis.
-		want []string
-	}{
-		{"one changed argument is the only part emphasised",
-			[]string{" ctx", "-call(a, b)", "+call(a, c)"},
-			[]string{"", "b", "c"}},
-		{"a wholly different line has nothing to point at",
-			[]string{"-one", "+two"},
-			[]string{"", ""}},
-		{"runs of unequal length are not paired at all",
-			[]string{"-one", "+two", "+three"},
-			[]string{"", "", ""}},
-		{"an insertion has no partner to differ from",
-			[]string{" ctx", "+added"},
-			[]string{"", ""}},
-		{"a two-line rewrite pairs positionally",
-			[]string{"-let a = 1", "-let b = 2", "+let a = 9", "+let b = 8"},
-			[]string{"1", "2", "9", "8"}},
-		{"a second run pairs on its own",
-			[]string{"-call(a, b)", "+call(a, c)", " ctx", "-x := 1", "+x := 2"},
-			[]string{"b", "c", "", "1", "2"}},
-		{"spans are BYTES, so a multi-byte prefix does not shift what they select",
-			[]string{`-x = "` + "αβγ" + ` one"`, `+x = "` + "αβγ" + ` two"`},
-			[]string{"one", "two"}},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-				{Header: "@@ -1 +1 @@", Lines: tc.lines, Digest: "d0"},
-			}}}})
-			assert.Equal(t, tc.want, emphasisOf(m))
-		})
-	}
+	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{{
+		Header: "@@ -1 +1 @@", NewStart: 1,
+		Lines:  []string{" ctx", "-call(a, b)", "+call(a, c)"},
+		Emph:   []changeset.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
+		Digest: "d0",
+	}}}}})
+	assert.Equal(t, []string{"", "b", "c"}, emphasisOf(m))
 }
 
-func TestEmphasisSpansAreByteOffsetsIntoTheRawLine(t *testing.T) {
+// A caller that hands over no spans at all renders every line plain rather than panicking on
+// an index. That is the honest degradation, and it is what a hunk built by hand gets.
+func TestNoEmphasisSliceIsNotAnIndexError(t *testing.T) {
 	t.Parallel()
-	// The renderer slices Text with these numbers, so a span counted in RUNES would not merely
-	// highlight the wrong word - it would cut a rune in half and hand the terminal invalid
-	// UTF-8. Three two-byte runes sit ahead of the change, so byte and rune offsets differ.
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{`-x = "` + "αβγ" + ` one"`}, Digest: "d0"},
+		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "d0"},
 	}}}})
-	require.Len(t, m.Rows(), 3)
-	// One line has nobody to pair with, which is the run-length rule and not a byte question.
-	assert.True(t, m.Rows()[2].Emph.Empty())
-
-	m = New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{
-			`-x = "` + "αβγ" + ` one"`,
-			`+x = "` + "αβγ" + ` two"`,
-		}, Digest: "d0"},
-	}}}})
-	del := m.Rows()[2]
-	assert.Equal(t, 13, del.Emph.Start, "the marker plus five ASCII bytes plus six bytes of Greek")
-	assert.Equal(t, 16, del.Emph.End)
-	assert.Equal(t, "one", del.Text[del.Emph.Start:del.Emph.End])
+	assert.Equal(t, []string{"", ""}, emphasisOf(m))
 }
 
 func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{" ctx", "-call(a, b)", "+call(a, c)"}, Digest: "d0"},
+		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{" ctx", "-call(a, b)", "+call(a, c)"}, Digest: "d0"},
 	}}}})
 	m.Resize(5)
 
@@ -397,11 +360,11 @@ func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 	// assertion is that no palette may move a single byte of it.
 	want := strings.Join([]string{
 		"▸ a.go  1 hunk, 0 read",
-		"  [ ] @@ -1 +1 @@",
+		"  [ ] line 1",
 		"   ctx",
 		"  -call(a, b)",
 		"  +call(a, c)",
-		"]/[ hunk   }/{ file   v read   . generated   esc overview   q quit",
+		"]/[ hunk   }/{ file   v read   n read-already   . generated   esc overview   q quit",
 	}, "\n")
 	assert.Equal(t, want, Frame(m, false))
 
@@ -436,24 +399,27 @@ func TestNoColorSilencesTheWholeFrame(t *testing.T) {
 
 func TestColourDrawsTheChangedPartHarderThanItsLine(t *testing.T) {
 	t.Parallel()
-	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{" ctx", "-call(a, b)", "+call(a, c)"}, Digest: "d0"},
-	}}}})
+	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{{
+		Header: "@@ -1 +1 @@", NewStart: 1,
+		Lines:  []string{" ctx", "-call(a, b)", "+call(a, c)"},
+		Emph:   []changeset.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
+		Digest: "d0",
+	}}}}})
 	m.Resize(5)
 	lines := strings.Split(Frame(m, true), "\n")
 	require.Len(t, lines, 6)
 
 	assert.Equal(t, "▸ \x1b[1ma.go  1 hunk, 0 read\x1b[0m", lines[0], "a file heading is bold")
-	assert.Equal(t, "  \x1b[2m[ ] @@ -1 +1 @@\x1b[0m", lines[1], "a hunk heading is dim")
+	assert.Equal(t, "  \x1b[2m[ ] line 1\x1b[0m", lines[1], "a hunk heading is dim")
 	assert.Equal(t, "   ctx", lines[2], "a context line is left alone")
 	assert.Equal(t, "  \x1b[31m-call(a, \x1b[0m\x1b[1;31mb\x1b[0m\x1b[31m)\x1b[0m", lines[3])
 	assert.Equal(t, "  \x1b[32m+call(a, \x1b[0m\x1b[1;32mc\x1b[0m\x1b[32m)\x1b[0m", lines[4])
-	assert.Equal(t, "]/[ hunk   }/{ file   v read   . generated   esc overview   q quit", lines[5])
+	assert.Equal(t, "]/[ hunk   }/{ file   v read   n read-already   . generated   esc overview   q quit", lines[5])
 
 	// A whole-line change carries the row colour and nothing else: emphasising everything would
 	// say no more than the colour already did.
 	whole := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{"-one", "+two"}, Digest: "d0"},
+		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "d0"},
 	}}}})
 	whole.Resize(4)
 	styled := strings.Split(Frame(whole, true), "\n")
@@ -501,7 +467,7 @@ type termWriter struct{ io.Writer }
 
 func (termWriter) Fd() uintptr { return 1 }
 
-// sgrPattern matches the only escape difftui emits. A hyperlink would need more, and the
+// sgrPattern matches the only escape this package emits. A hyperlink would need more, and the
 // fixtures here deliberately carry no Link for that reason.
 var sgrPattern = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
@@ -554,4 +520,147 @@ func rowTextFor(m *Model, kind RowKind, file int) string {
 		}
 	}
 	return ""
+}
+
+// A colleague's remark reaches the TERMINAL, not only the browser. The reader chooses where to
+// read and magus does not care which - read receipts already work both ways, and a review that
+// showed the conversation in one surface and not the other would send half of them to a browser
+// to find out what was asked.
+func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+new"}, Digest: "d0"},
+		}}},
+		Comments: []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorHuman, Body: "mine"}},
+		Threads:  []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "theirs"}},
+	})
+
+	text := everyRowText(m)
+	// What a colleague already said precedes the remark it provoked, the same order the console
+	// renders in.
+	assert.Less(t, indexOfSubstring(text, "theirs"), indexOfSubstring(text, "mine"))
+	// And it says the world has seen it, which is what separates it from a draft of your own.
+	assert.Contains(t, text[indexOfSubstring(text, "theirs")], "on the review")
+}
+
+// A thread whose line this changeset no longer contains still belongs to its file. Dropping it
+// would have the viewer telling the reader a colleague said nothing.
+func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files:   []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
+		Threads: []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: -1, Author: "marcus", Body: "moved away"}},
+	})
+	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "moved away"))
+}
+
+// A pull request covers commits a working diff does not, so a colleague's remark can land on a
+// file this changeset never touches. The console lists those; the viewer used to read m.unplaced
+// only INSIDE its per-file loop, so a thread on a path it was not drawing reached no row at all
+// and was discarded in silence - the one thing a review surface must never do.
+func TestAThreadOutsideTheChangesetIsListedRatherThanDropped(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
+		Threads: []types.ReviewThread{
+			{ID: "t1", Path: "elsewhere.go", Line: 12, Hunk: -1, Author: "priya", Body: "on another file"},
+		},
+	})
+
+	text := everyRowText(m)
+	assert.NotEqual(t, -1, indexOfSubstring(text, "on another file"))
+	assert.NotEqual(t, -1, indexOfSubstring(text, "said on the review, elsewhere"))
+	// Named, so the reader knows where to go and is not left with a remark about nothing.
+	assert.NotEqual(t, -1, indexOfSubstring(text, "elsewhere.go:12"))
+}
+
+// A folded file draws one stand-in row instead of its hunks, so a remark anchored inside it has
+// nowhere to sit either - and it was dropped for the same reason, one loop deeper.
+func TestAThreadOnAFoldedFileIsListedRatherThanDropped(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{
+			Path:      "gen/api.go",
+			Generated: true,
+			Hunks:     []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}},
+		}},
+		Threads: []types.ReviewThread{
+			{ID: "t1", Path: "gen/api.go", Line: 3, Hunk: 0, Author: "marcus", Body: "regenerate this"},
+		},
+	})
+
+	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "regenerate this"))
+}
+
+// everyRowText is the visible text of every row, for asserting on order and presence. Named
+// away from render.go's rowText, which renders ONE row and is the package's real one.
+func everyRowText(m *Model) []string {
+	out := make([]string, 0, len(m.Rows()))
+	for _, r := range m.Rows() {
+		out = append(out, r.Text)
+	}
+	return out
+}
+
+func indexOfSubstring(rows []string, want string) int {
+	for i, r := range rows {
+		if strings.Contains(r, want) {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestSettledFilesFoldByDefault is what makes a second pass cost only the second pass: a reviewer
+// who asked for changes comes back to a changeset that is mostly what they already read, and
+// nothing distinguished that from what moved.
+func TestSettledFilesFoldByDefault(t *testing.T) {
+	m := New(Input{Files: []File{
+		{Path: "read.go", Settled: true, Hunks: []Hunk{{Digest: "h1", Lines: []string{" ALREADY-WEIGHED"}}}},
+		{Path: "moved.go", Hunks: []Hunk{{Digest: "h2", Lines: []string{" NEEDS-A-SECOND-LOOK"}}}},
+	}})
+
+	body := allRowText(m)
+	assert.NotContains(t, body, "ALREADY-WEIGHED", "a file already read at this content is not what the reader is here for")
+	assert.Contains(t, body, "NEEDS-A-SECOND-LOOK", "a file that moved is exactly what they came back for")
+	assert.Contains(t, body, "you read this already and it has not changed since",
+		"a folded file must say why, and how to see it")
+
+	// n reveals them, and says nothing is hidden any more.
+	m.ToggleSettled()
+	assert.Contains(t, allRowText(m), "ALREADY-WEIGHED")
+	assert.True(t, m.Unsettled())
+}
+
+// The control that keeps the fold honest. DiffReadStale - read, then EDITED - is the file that
+// most needs a second look, and folding it would hide the change from the one person who would
+// otherwise have caught it.
+func TestAStaleFileIsNeverFolded(t *testing.T) {
+	// Settled is set only from DiffReadRead; a stale or unread file arrives with it false.
+	m := New(Input{Files: []File{
+		{Path: "stale.go", Settled: false, Hunks: []Hunk{{Digest: "h1", Lines: []string{" changed since you read it"}}}},
+	}})
+
+	assert.Contains(t, allRowText(m), "changed since you read it")
+}
+
+// Generated wins where both apply: a generated file is not worth reading whether or not this
+// reader got to it, so its reason is the more useful of the two.
+func TestAGeneratedAndSettledFileNamesTheGeneratedReason(t *testing.T) {
+	m := New(Input{Files: []File{
+		{Path: "gen.go", Settled: true, Generated: true, Hunks: []Hunk{{Digest: "h1", Lines: []string{" x"}}}},
+	}})
+
+	assert.Contains(t, allRowText(m), "a target rewrites this")
+}
+
+// allRowText joins every visible row, for assertions about what a reader can and cannot see.
+func allRowText(m *Model) string {
+	var b strings.Builder
+	for _, r := range m.Rows() {
+		b.WriteString(r.Text)
+		b.WriteString("\n")
+	}
+	return b.String()
 }

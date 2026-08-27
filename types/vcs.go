@@ -321,6 +321,24 @@ type DefaultRefReporter interface {
 	DefaultRef(ctx context.Context, dir string) (string, error)
 }
 
+// RevTimeReporter is an optional capability (sibling of RemoteReporter) for VCSDriver
+// implementations that can report when a named revision was committed.
+//
+// Separate from Metadata's CommitDate, which describes the checked-out commit and is
+// opaque display text. This one answers it for an ARBITRARY rev and returns a real
+// time.Time, because the caller does arithmetic on it: how far behind a comparison base
+// has fallen is a number, not a banner string.
+type RevTimeReporter interface {
+	// RevTime returns the commit date of rev in the repository containing dir.
+	//
+	// found is false when rev names nothing in this clone, which is an ordinary
+	// state rather than an error - a base branch never fetched into a fresh clone
+	// resolves to nothing, and a caller reporting staleness has to tell "old" from
+	// "not here". err is reserved for a backend that answered something it cannot
+	// itself read back.
+	RevTime(ctx context.Context, dir, rev string) (t time.Time, found bool, err error)
+}
+
 // TrackedFileReporter is an optional capability (sibling of RemoteReporter) for
 // VCSDriver implementations that can report which paths the VCS actually tracks.
 //
@@ -400,6 +418,71 @@ type ChurnReporter interface {
 	// which costs lineage but stays correct: PrevPath is simply never set, and
 	// FileHotspots then ranks the two names separately rather than wrongly.
 	ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
+}
+
+// BranchChange is one other line of work and the repo-relative paths it changes.
+type BranchChange struct {
+	// Ref is the branch as a reader would name it, with any remote-tracking prefix removed:
+	// "feat/audience", not "refs/remotes/origin/feat/audience".
+	Ref   string   `json:"ref"`
+	Paths []string `json:"paths"`
+	// Local reports whether Ref is a branch in this repository rather than a remote-tracking copy
+	// of somebody else's.
+	//
+	// It decides what the answer is AS OF, which the two kinds do not share: a local branch is
+	// current, and a remote-tracking one is exactly as fresh as the reader's last fetch. A surface
+	// that rendered both with one caption would be overstating half of them.
+	Local bool `json:"local,omitempty"`
+}
+
+// BranchChangeReporter is an optional capability for VCSDriver implementations that can report
+// what OTHER branches are changing, so a reader can be told a file in front of them is also being
+// edited elsewhere before the merge conflict tells them.
+//
+// Callers type-assert for it and degrade gracefully. Degrading here means saying NOTHING rather
+// than "no branch competes": a backend that cannot answer and a repository where nothing overlaps
+// are different facts, and only one of them is reassuring.
+type BranchChangeReporter interface {
+	// BranchChanges returns up to limit branches other than the current one, most recently
+	// updated first, each with the paths it changes relative to base.
+	//
+	// Local branches AND remote-tracking ones. Remote-tracking alone was the shape of the
+	// question when the other line of work belonged to a colleague, and it goes blind exactly
+	// where agents fan out: worktrees of one repository, on local branches nobody has pushed. A
+	// backend that answered about only half the branches that exist would leave the reader an
+	// empty list, and an empty list here reads as "nothing competes".
+	//
+	// It reads what the repository already has rather than fetching: a remote-tracking answer is
+	// as fresh as the reader's last fetch, which BranchChange.Local lets a caller say out loud
+	// instead of implying the whole answer is live.
+	//
+	// limit is the backend's to apply, not the caller's to trim afterwards, so a backend can push
+	// it down to the ref listing and never materialise a diff it was going to discard.
+	BranchChanges(ctx context.Context, dir, base string, limit int) ([]BranchChange, error)
+}
+
+// RangeDiffReporter is an optional capability for VCSDriver implementations that can produce the
+// unified diff of a committed revision range, which is the half of review DirtyDiff cannot reach.
+//
+// Callers type-assert for it and degrade gracefully. Degrading here means REFUSING, not answering
+// empty: a working tree with no changes is a real clean answer, but a range magus cannot diff is a
+// gap, and rendering a gap as an empty changeset would report a colleague's branch as untouched.
+type RangeDiffReporter interface {
+	// RangeDiff returns the unified diff from base to head, both backend-native revision names.
+	//
+	// Symmetric difference, not a two-dot comparison: the answer is what head added since it
+	// diverged, never what base gained meanwhile. A reviewer asking about a branch is asking what
+	// its author did, and two-dot would charge them for every commit that landed on the base while
+	// they were not looking.
+	//
+	// Reads what the repository already has and never fetches, matching BranchChanges. An
+	// unresolvable revision is an error rather than an empty diff, because the two read identically
+	// to a caller and only one of them means "nothing changed".
+	//
+	// paths, when non-empty, narrows the answer to those repo-relative paths the way the
+	// backend's own pathspec does - at the SOURCE, so a caller never has to re-emit a filtered
+	// patch and every count downstream is already scoped.
+	RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error)
 }
 
 // ConflictKind classifies why a path is unresolved in an in-progress merge.

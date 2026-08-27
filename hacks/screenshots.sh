@@ -43,7 +43,12 @@ find_chrome() {
   return 1
 }
 
-# name|path under the served tree|width|height|scale|mobile(0|1)
+# name|path under the served tree|width|height|scale|mobile(0|1)|keys (optional)
+#
+# The trailing keys field presses its comma-separated list once the surface has settled. Two of
+# the review pictures live behind a keystroke and cannot be reached by a URL: the send box, which
+# is the only place magus names the host a write is about to reach, and the overview that carries
+# the threads the stream has nowhere to put.
 # The #demo fragment is what each surface reads to enter the daemon-free showcase, so
 # these need no daemon and no workspace.
 # Only what the site actually shows. Adding a surface here is the whole cost of adding a
@@ -63,6 +68,8 @@ shots=(
   "console-logs|console/logs/#demo|1280|820|2|0"
   "console-activity|console/activity/#demo|1280|820|2|0"
   "console-diff|console/diff/#demo|1280|820|2|0"
+  "console-diff-send|console/diff/#demo|1280|820|2|0|s"
+  "console-diff-overview|console/diff/#demo|1280|820|2|0|Escape"
   "console-diff-mobile|console/diff/#demo|375|812|3|1"
   "console-logs-mobile|console/logs/#demo|375|812|3|1"
   "console-dashboard-mobile|console/dashboard/#demo|375|812|3|1"
@@ -96,12 +103,12 @@ for _ in $(seq 1 40); do
 done
 
 for shot in "${shots[@]}"; do
-  IFS='|' read -r name path w h scale mobile <<<"$shot"
+  IFS='|' read -r name path w h scale mobile keys <<<"$shot"
   [ -n "$want" ] && [ "$want" != "$name" ] && continue
   label=$([ "$mobile" = 1 ] && echo "mobile" || echo "desktop")
-  echo "==> $name  (${w}x${h} @${scale}x, $label)"
+  echo "==> $name  (${w}x${h} @${scale}x, $label${keys:+, keys $keys})"
   node "$repo_root/hacks/screenshot.mjs" \
-    "$chrome" "http://127.0.0.1:$port/$path" "$out_dir/$name.png" "$w" "$h" "$scale" "$mobile"
+    "$chrome" "http://127.0.0.1:$port/$path" "$out_dir/$name.png" "$w" "$h" "$scale" "$mobile" "${keys:-}"
   [ -s "$out_dir/$name.png" ] || { echo "screenshots: $name produced nothing" >&2; exit 1; }
 done
 

@@ -36,7 +36,7 @@ const (
 // Advice, never a failure: the magusfile figure stays a human's to write, and a
 // deliberate ceiling above the measured peak is a legitimate thing to declare.
 func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.DoctorCheck {
-	const name = "memory declarations"
+	const name = "memory-declarations"
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {

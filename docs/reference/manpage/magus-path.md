@@ -1,6 +1,6 @@
 ---
 title: magus path
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: "Find the shortest chain of edges connecting two knowledge-graph nodes, walking edges in either direction, with each hop's relation named."
 tags: [cli, magus path, path, knowledge graph, shortest path, relationship, coupling]
 ---

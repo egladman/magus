@@ -15,7 +15,7 @@ import { must } from "../../lib/guards";
 // render path, no transport, nothing fetched.
 
 import { create } from "@bufbuild/protobuf";
-import type { Journal } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import type { Journal } from "@wire/viewer/v1alpha1/viewer_pb";
 import {
   EventSchema,
   JournalSchema,
@@ -23,7 +23,7 @@ import {
   Status,
   Stream,
   Trigger,
-} from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+} from "@wire/viewer/v1alpha1/viewer_pb";
 import { state } from "./state";
 import { emptyEl, setRefIdentity } from "./dom";
 import { tsMs } from "./waterfall";

@@ -91,7 +91,7 @@ terminal and saw a rendering surface instead of an interface carrying fifty year
 of contract. Frontend instincts pointed at a backend concern, rebuilding a
 problem the terminal settled before I got here.
 
-magus ships a text interface too, `magus diff --tui`. It renders inline, in your
+magus ships a text interface too: at a terminal, `magus diff` IS one. It renders inline, in your
 scrollback, and it does not take over the screen or the scroll wheel: your
 terminal keeps behaving like your terminal. That is the whole distinction. A
 text interface that fights the terminal it lives in has already lost the

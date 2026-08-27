@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 import { activate } from "./main";
 import { dispatchCommand } from "../commands";
+import { DEMO_RUN_MS } from "./demo";
 
 const realFetch = globalThis.fetch;
 
@@ -53,7 +54,7 @@ test("#demo renders the changeset with no daemon", async () => {
   const text = [...document.querySelectorAll(".console-diff-row__text")].map(
     (el) => el.textContent,
   );
-  assert.ok(text.some((t) => t?.includes("Audience []string")));
+  assert.ok(text.some((t) => t?.includes("Audience Audience")));
 
   dispose.deactivate();
 });
@@ -63,7 +64,7 @@ test("#demo lists the primary files in the sidebar and folds the generated group
   const dispose = activate(document.body);
   await settle();
 
-  assert.equal(document.querySelectorAll(".console-diff-sidebar__item").length, 7);
+  assert.equal(document.querySelectorAll(".console-diff-sidebar__item").length, 11);
   assert.equal(document.querySelector(".console-diff-sidebar__group")?.textContent, "3 generated");
 
   const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
@@ -73,7 +74,7 @@ test("#demo lists the primary files in the sidebar and folds the generated group
   // the shell's connection pill, the one place every surface says it. A second badge here made
   // the diff the only surface announcing demo twice, in a style nothing else uses.
   assert.ok(!chips.includes("demo data"), "demo state belongs to the connection pill, not a chip");
-  assert.ok(chips.includes("7 files"));
+  assert.ok(chips.includes("11 files"));
   assert.ok(chips.includes("1 public surface"));
   assert.ok(chips.includes("1 untested"));
   // The ranking key is present in the fixture, so the surface must NOT be wearing the
@@ -217,4 +218,405 @@ test("the diff sizes itself from its own pane, not the window", async () => {
   } finally {
     globalThis.ResizeObserver = realRO;
   }
+});
+
+// The review half, mounted. Everything below is the production path with the showcase's
+// fabricated review: the chips, the placement of a colleague's remark against the hunks on
+// screen, and the send box that shows the batch before it leaves.
+test("#demo places the review's threads beside the code they are about", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const threads = [...document.querySelectorAll('.console-diff-row[data-author="review"]')];
+  assert.ok(threads.length > 0, "a colleague's remark has to reach the stream");
+
+  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
+    (el) => el.textContent,
+  );
+  assert.ok(chips.includes("#482"), "the open review is named");
+  // One human comment in the fixture is already published, so the draft count is what is left
+  // to send rather than everything the reader has written.
+  assert.ok(chips.includes("1 draft"), `want one draft, got ${chips.join(", ")}`);
+  // A thread on a file this changeset does not touch has nowhere in the stream to sit. It is
+  // counted rather than dropped: "your colleague said nothing" is the one thing this surface
+  // must never say by accident.
+  assert.ok(chips.includes("1 elsewhere"));
+
+  dispose.deactivate();
+});
+
+test("#demo shows the batch before it sends it, and sending clears the drafts", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  const box = document.querySelector<HTMLElement>(".console-diff-composer--batch");
+  assert.ok(box, "publishing has to show what is about to leave");
+  // The whole address, not just the review: repo and number, so "send" never means somewhere
+  // the reader would have to guess.
+  assert.match(box?.textContent ?? "", /Send 1 remark to acme\/acme #482/);
+  // And the network, said out loud. Everything else on this surface is local; the one act that
+  // leaves the machine names the host it leaves for, before it leaves.
+  assert.match(box?.textContent ?? "", /Posts over the network to github\.com/);
+  assert.match(box?.textContent ?? "", /Nothing has left this machine yet/);
+  // The listing names WHERE each remark lands, because a host anchors an inline comment to a
+  // line and a draft that cannot be placed has to be visible as such before the send.
+  assert.match(box?.textContent ?? "", /libs\/authkit\/claims\.go:22/);
+
+  const field = box?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  field.value = "self-review pass";
+  // A bare Enter is a newline here, so the send takes the chord. The next test pins that a bare
+  // Enter sends nothing.
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+  await settle();
+
+  assert.equal(document.querySelector(".console-diff-composer--batch"), null, "the box closes");
+  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
+    (el) => el.textContent,
+  );
+  assert.ok(
+    !chips.some((c) => c?.endsWith("draft") || c?.endsWith("drafts")),
+    `nothing is left to send, got ${chips.join(", ")}`,
+  );
+
+  dispose.deactivate();
+});
+
+// setFocusMode puts the surface in a known mode instead of assuming one.
+//
+// The preference is a module-scope persisted cell, and its in-memory value is the source of
+// truth - localStorage.clear() in beforeEach does not touch it. These tests share one process
+// (--test-isolation=none), so a test that toggled the mode and walked away would turn it on for
+// every test defined after it, in this file and the next.
+async function setFocusMode(on: boolean): Promise<void> {
+  const root = document.querySelector<HTMLElement>(".console-diff-layout");
+  if ((root?.dataset.focus === "on") === on) return;
+  assert.ok(dispatchCommand("diff.focus.toggle"));
+  await settle();
+}
+
+// Focus mode: one hunk, and a pass that says where it is. The counts describe the WHOLE
+// changeset while the stream shows one hunk, which is the part worth pinning - a progress line
+// computed from what is on screen would read "hunk 1 of 1" forever.
+test("#demo focus mode shows one hunk and counts the whole pass", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  await setFocusMode(true);
+
+  const root = document.querySelector<HTMLElement>(".console-diff-layout");
+  assert.equal(root?.dataset.focus, "on");
+  assert.match(
+    document.querySelector(".console-diff-progress__text")?.textContent ?? "",
+    /hunk 1 of 14/,
+    "the pass is counted over the changeset, not over what is on screen",
+  );
+  // One hunk heading in the stream is the whole claim of the mode.
+  assert.equal(document.querySelectorAll(".console-diff-row--hunk").length, 1);
+
+  await setFocusMode(false);
+  dispose.deactivate();
+});
+
+// Marking read and advancing are one act. This also pins the slice: hunk 3 belongs to a
+// different file than hunk 1, and its thread has to travel with it - a slice that renumbered
+// hunks would render somebody else's remark here, or none at all.
+test("#demo focus mode marks read and advances on one key", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  await setFocusMode(true);
+  assert.ok(dispatchCommand("diff.viewed.toggle"));
+  await settle();
+
+  assert.match(
+    document.querySelector(".console-diff-progress__text")?.textContent ?? "",
+    /hunk 2 of 14, 1 read/,
+    "one key marks this hunk and moves to the next",
+  );
+
+  await setFocusMode(false);
+  dispose.deactivate();
+});
+
+// The reason the field is a textarea at all. A remark is often a paragraph and a code fence, and
+// a field where Enter commits cannot hold either. Both halves are pinned here: a bare Enter must
+// not send, and the chord must not be the only thing that does - a send only a chord can reach is
+// a send whoever has not read the docs cannot make.
+test("#demo does not send on a bare Enter, and sends from the button", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  const box = document.querySelector<HTMLElement>(".console-diff-composer--batch");
+  const field = box?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  field.value = "first line";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await settle();
+  assert.ok(
+    document.querySelector(".console-diff-composer--batch"),
+    "a bare Enter leaves the box open with the remark still in it",
+  );
+
+  const send = box?.querySelector<HTMLButtonElement>(".console-diff-composer__send");
+  assert.ok(send, "the chord cannot be the only way to send");
+  send.click();
+  await settle();
+  assert.equal(document.querySelector(".console-diff-composer--batch"), null, "the button sends");
+
+  dispose.deactivate();
+});
+
+// Pressing send with nothing drafted must say so. The alternative is a key that appears broken:
+// the reader presses it, no box opens, and nothing anywhere explains why.
+test("#demo answers a send with nothing drafted", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  const field = document.querySelector<HTMLTextAreaElement>(
+    ".console-diff-composer--batch textarea",
+  );
+  assert.ok(field);
+  field.value = "";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  assert.equal(document.querySelector(".console-diff-composer--batch"), null);
+  assert.match(
+    document.querySelector(".console-diff-collaboration")?.textContent ?? "",
+    /Nothing drafted/,
+  );
+
+  dispose.deactivate();
+});
+
+// Replying is what makes this a conversation rather than a reader. The contract half existed
+// in the spell from the start and nothing called it; these pin the path from a key to a thread
+// that has an answer under it.
+test("#demo answers the thread under the cursor", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.thread.reply"));
+  const box = document.querySelector<HTMLElement>(".console-diff-composer");
+  assert.ok(box, "a thread on the first hunk has to be answerable");
+  // Who is being answered, not where: a reply goes to a person, and the row above already
+  // says which file.
+  assert.match(box?.textContent ?? "", /Reply to priya/);
+
+  const field = box?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  field.value = "one service. I will pin it in the docstring.";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+  await settle();
+
+  assert.equal(document.querySelector(".console-diff-composer"), null, "the box closes");
+  const said = [...document.querySelectorAll('.console-diff-row[data-author="review"]')].map(
+    (el) => el.textContent,
+  );
+  assert.ok(
+    said.some((t) => t?.includes("I will pin it in the docstring")),
+    "the reply joins the thread it answers",
+  );
+  dispose.deactivate();
+});
+
+// A hunk nobody has remarked on must say so rather than opening an empty box addressed to
+// nobody.
+test("#demo says when there is no thread here to answer", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  // Step to a file the review has not been commented on, then ask to reply.
+  for (let i = 0; i < 4; i++) assert.ok(dispatchCommand("diff.file.next"));
+  dispatchCommand("diff.thread.reply");
+  assert.equal(document.querySelector(".console-diff-composer"), null);
+  assert.match(
+    document.querySelector(".console-diff-collaboration")?.textContent ?? "",
+    /No thread here to answer/,
+  );
+  dispose.deactivate();
+});
+
+// The threads with nowhere in the stream to sit are READ in the overview, not merely counted.
+// A chip saying "1 elsewhere" tells the reader something was said and withholds what, which
+// leaves them worse off than not mentioning it at all.
+test("#demo lets the elsewhere threads be read, not just counted", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.overview"));
+  const text = document.querySelector(".console-diff-overview")?.textContent ?? "";
+  assert.match(text, /Said on the review, elsewhere/);
+  assert.match(text, /scope-only tokens on the health path/);
+  dispose.deactivate();
+});
+
+// Staging is only half a transaction: a remark you have changed your mind about must not have
+// to be SENT to get rid of it. Discarding is local and reaches no network at all.
+test("#demo lets a staged remark be discarded without sending it", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  const drop = document.querySelector<HTMLButtonElement>(".console-diff-composer__drop");
+  assert.ok(drop, "every staged remark offers a way out");
+  drop.click();
+  await settle();
+
+  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
+    (el) => el.textContent,
+  );
+  assert.ok(
+    !chips.some((c) => c?.endsWith("draft") || c?.endsWith("drafts")),
+    `the discarded remark is gone, got ${chips.join(", ")}`,
+  );
+});
+
+// The reply is the second act that leaves the machine, and it names its destination for the
+// same reason the send box does.
+test("#demo names the network destination before a reply is sent", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.thread.reply"));
+  const box = document.querySelector<HTMLElement>(".console-diff-composer");
+  assert.match(box?.textContent ?? "", /Reply to priya on acme\/acme #482/);
+  assert.match(box?.textContent ?? "", /Posts over the network to github\.com/);
+
+  dispose.deactivate();
+});
+
+// The run control is the one review capability a forge structurally cannot offer: it asks the
+// machine the code is on. It is in the showcase for the reason every other control is - the
+// showcase IS the surface, so a button that does nothing here reads as a broken feature - and
+// these pin the two claims it makes that are easy to get wrong and invisible when wrong.
+
+test("#demo offers to run the project in view", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const button = document.querySelector<HTMLButtonElement>(".console-diff-toolbar__verdict");
+  assert.ok(button, "the verdict control is absent");
+  assert.equal(button.hidden, false);
+  assert.match(button.textContent ?? "", /^Test /, `got ${button.textContent}`);
+  // Never a verdict before anything ran: "unknown" and "passed" must not render alike.
+  assert.equal(button.dataset.state, "unknown");
+
+  dispose.deactivate();
+});
+
+test("#demo reports a run in flight, then its verdict", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const button = document.querySelector<HTMLButtonElement>(".console-diff-toolbar__verdict");
+  assert.ok(button);
+  button.click();
+  await settle();
+
+  // In flight: the control says so and refuses a second press, because a run already running is
+  // joined rather than started again.
+  assert.equal(button.dataset.state, "running");
+  assert.equal(button.disabled, true);
+  assert.match(button.textContent ?? "", /Testing /);
+
+  await new Promise((r) => setTimeout(r, DEMO_RUN_MS + 50));
+  await settle();
+
+  assert.equal(button.dataset.state, "passed");
+  assert.equal(button.disabled, false);
+  assert.match(button.textContent ?? "", /passed/);
+  // The duration is the evidence the run happened rather than being looked up.
+  assert.match(button.textContent ?? "", /\d+\.\ds/);
+
+  dispose.deactivate();
+});
+
+// The verdict control is the reachable half of the approval rule. The daemon decides what is
+// allowed and refuses anything else at publish time, but a rule nobody can invoke is a feature
+// that never fires - which is the failure these pin.
+
+test("#demo offers every verdict the daemon allowed", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  await settle();
+
+  const choices = [
+    ...document.querySelectorAll<HTMLInputElement>(".console-diff-composer__verdict input"),
+  ];
+  assert.deepEqual(
+    choices.map((c) => c.value),
+    ["comment", "approve", "request_changes"],
+    "the showcase reviews somebody else's change, so all three are offered",
+  );
+  // Remarks is what a reader gets by doing nothing. Approving has to be a choice they made.
+  assert.deepEqual(
+    choices.filter((c) => c.checked).map((c) => c.value),
+    ["comment"],
+  );
+
+  dispose.deactivate();
+});
+
+// The row is present even when only remarks are allowed, so its absence can never hide a bug -
+// and no reason is shown when nothing was limited.
+test("#demo gives no reason when nothing narrowed the verdicts", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  await settle();
+
+  assert.ok(document.querySelector(".console-diff-composer__verdicts"));
+  assert.equal(document.querySelectorAll(".console-diff-composer__verdictnote").length, 0);
+
+  dispose.deactivate();
+});
+
+// The toolbar STACKS, and that is the whole reason this is pinned structurally. An item appended
+// straight to it is stretched to the toolbar's full width, so a button lands as a centred caption
+// in a row of its own - which is how the verdict and the focus toggle each took a full row, and
+// how the key legend's "sits at the trailing edge" auto margin ended up with no row to sit in.
+// jsdom computes no layout, so the sibling relationship is what a test can hold; it is also the
+// thing that was actually wrong.
+test("the toolbar's controls share one row rather than stacking", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const controls = document.querySelector(".console-diff-toolbar__controls");
+  assert.ok(controls, "the controls row exists");
+  for (const cls of [
+    "console-diff-toolbar__verdict",
+    "console-diff-toolbar__focus",
+    "console-diff-toolbar__keys",
+  ]) {
+    const el = document.querySelector(`.${cls}`);
+    assert.ok(el, `${cls} is rendered`);
+    assert.equal(el.parentElement, controls, `${cls} is in the controls row, not the stack`);
+  }
+
+  dispose.deactivate();
 });

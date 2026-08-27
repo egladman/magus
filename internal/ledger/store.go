@@ -177,6 +177,62 @@ func (s *Store) Update(ctx context.Context, id string, apply func(*types.Delegat
 	})
 }
 
+// MaxUnattributedWrites bounds how many outside-written paths one row keeps.
+//
+// A cap rather than a growing list because this is written from the guard, which runs on every
+// file write a host makes: without one, a plan left declared over a long editing session would
+// accumulate a row entry per save until the ledger was mostly this. The newest are kept, since a
+// delegation asking what moved is asking about the tree it faces now.
+const MaxUnattributedWrites = 32
+
+// RecordUnattributedWrite notes that somebody outside delegation id wrote one of its owned paths,
+// with the content they left behind.
+//
+// ONE ROW PER PATH, newest wins. A person saves a file a dozen times while an agent works; the
+// twelfth save is the only one that describes the tree, and eleven superseded digests would bury
+// it. The timestamp moves with the digest, so "when did this last move" stays answerable.
+//
+// Recording from the guard is a deliberate softening of this package's split - the ledger records,
+// the guard enforces - and it survives the rule because what lands here is an OBSERVATION and
+// never a verdict. The guard already read these boundaries to grade the write; it simply discarded
+// what it saw afterwards, leaving the one party who needed it uninformed.
+//
+// A missing row is not an error: the delegation may have ended between the grading and this call,
+// and a write graded against a plan that has since finished is nothing to report to anybody.
+func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	_, err := s.mutate(ctx, id, func(cur *types.Delegation, exists bool, now int64) error {
+		if !exists {
+			return errNoSuchRow
+		}
+		next := make([]types.DelegationUnattributedWrite, 0, len(cur.Unattributed)+1)
+		for _, w := range cur.Unattributed {
+			if w.Path != path {
+				next = append(next, w)
+			}
+		}
+		next = append(next, types.DelegationUnattributedWrite{
+			Path: path, Digest: s.digest(ctx, path), At: now,
+		})
+		if len(next) > MaxUnattributedWrites {
+			next = next[len(next)-MaxUnattributedWrites:]
+		}
+		cur.Unattributed = next
+		return nil
+	})
+	if errors.Is(err, errNoSuchRow) {
+		return nil
+	}
+	return err
+}
+
+// errNoSuchRow is internal to RecordUnattributedWrite: mutate creates a row that is not there, and
+// this is how the apply func declines that without inventing a delegation nobody declared.
+var errNoSuchRow = errors.New("ledger: no such delegation")
+
 // mutate is the locked read-modify-write [Store.Update] and [Store.Register] share, and
 // the only place units.json is rewritten row-wise.
 //

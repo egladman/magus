@@ -820,7 +820,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // artifact - the .1 source the `man` command reads, shipped with releases - so they
 // stay owned here at the root, NOT in the docs project. The docs project owns the
 // Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the
-// same internal/clispec registry by cmd/magus-manpage (see its -format flag).
+// same internal/cli registry by cmd/magus-manpage (see its -format flag).
 //
 // It also refreshes api.lock, the drift-gated snapshot of the public CLI surface,
 // because that is serialized from the SAME registry - the two can only disagree if
@@ -828,10 +828,10 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
 // never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("manpage/*.1", "internal/clispec/testdata/api.lock");
+    ctx.writesFiles("manpage/*.1", "internal/cli/testdata/api.lock");
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
-    proc\exec("go", ["generate", "./internal/clispec/..."]);
+    proc\exec("go", ["generate", "./internal/cli/..."]);
 }
 
 // CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a
@@ -869,7 +869,7 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Regenerates the magusfile API surface lock: every member a magusfile can call on the
 // magus namespace, one dotted name per line. Named for the magusfile surface rather
 // than "api" alone, because two other things in this repo are also an API surface -
-// internal/clispec/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
+// internal/cli/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
 // completions.
 //
 // The regeneration route is a TEST, not a generator, which is why this target exists:
@@ -938,7 +938,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-utils", "mockassert"]);
 }
 
-// Reinstalls the agent skills from their embedded sources in cmd/magus/skills.
+// Reinstalls the agent skills from their embedded sources in internal/agent/skills.
 //
 // The installed copies are GENERATED, and declaring them says so: without this
 // they classified as ordinary source, so `magus describe file .claude/skills/...`
@@ -966,7 +966,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // invisible to it, flagged as a computed footprint argument rather than silently
 // accepted. So the name list is written out per destination, and
 // TestSkillsGenerateDeclaresEveryShippedSkill keeps it in step with
-// cmd/magus/skills: adding a skill without touching this fails there rather than
+// internal/agent/skills: adding a skill without touching this fails there rather than
 // shipping an installed file magus calls hand-editable.
 //
 // One pattern per skill per destination, rather than one brace alternation per
@@ -2111,9 +2111,9 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // dprint.json still apply, so MAGUS.md and CHANGELOG.md stay out. Keep this list in
     // step with that file's `includes`.
     ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "tapes/**/*.md",
-        "cmd/magus/agents-section.md");
+        "internal/agent/agents-section.md");
     markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
-        "./cmd/magus/agents-section.md"]});
+        "./internal/agent/agents-section.md"]});
 }
 
 // Runs the CI gates through their declared dependencies.

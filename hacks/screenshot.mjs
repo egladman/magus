@@ -17,16 +17,25 @@
 // hack script rather than a puppeteer install. The top of screenshots.sh explains why a browser
 // driver is a dependency this repo does not want.
 //
-//   node hacks/screenshot.mjs <chrome> <url> <out.png> <width> <height> <scale> <mobile:0|1>
+//   node hacks/screenshot.mjs <chrome> <url> <out.png> <width> <height> <scale> <mobile:0|1> [keys]
+//
+// `keys` is a comma-separated list of keys to press once the surface has settled, so a picture can
+// show a state that only a keystroke reaches - a send box, an overview. A surface reachable only by
+// typing is the one a page most needs a picture of, and hand-capturing it puts a screenshot in the
+// repo that nothing can reproduce.
 
 import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
-const [chrome, url, out, w, h, scale, mobileFlag] = process.argv.slice(2);
+const [chrome, url, out, w, h, scale, mobileFlag, keys] = process.argv.slice(2);
 const width = Number(w);
 const height = Number(h);
 const deviceScaleFactor = Number(scale);
 const mobile = mobileFlag === "1";
+
+// Named keys the shots table uses. Chrome needs the virtual key code for these; there is no
+// lookup in CDP, so the list grows as a picture needs one.
+const KEY_CODES = { Escape: 27, Enter: 13, Tab: 9 };
 
 // A per-process port so two captures can never collide on a shared debugging socket.
 const port = 9222 + (process.pid % 500);
@@ -90,6 +99,12 @@ try {
     });
 
   await send("Page.enable");
+  // The console's theme defaults to "auto" - the OS preference - and headless Chrome inherits the
+  // machine's appearance, so the committed gallery would flip theme with whoever ran this last.
+  // Pinned light to match the gallery it feeds.
+  await send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: "light" }],
+  });
   await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor, mobile });
   if (mobile) {
     await send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
@@ -100,6 +115,19 @@ try {
   // The demo surfaces reveal incrementally (the log viewer streams its fixture in), so load is the
   // start of the picture rather than the end of it.
   await sleep(3000);
+
+  for (const key of (keys ?? "").split(",").filter(Boolean)) {
+    // A printable key needs `text` for the surface to read it as typing; a named one must not
+    // carry text at all, or the page receives a character rather than the key.
+    const printable = key.length === 1;
+    const base = printable ? { text: key, key } : { key, windowsVirtualKeyCode: KEY_CODES[key] };
+    if (!printable && base.windowsVirtualKeyCode === undefined) {
+      throw new Error(`screenshot: no key code for ${key}`);
+    }
+    await send("Input.dispatchKeyEvent", { type: "keyDown", ...base });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", ...base });
+    await sleep(600);
+  }
 
   const shot = await send("Page.captureScreenshot", { format: "png" });
   if (!shot?.data) throw new Error("screenshot: chrome returned no image data");

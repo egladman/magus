@@ -1,6 +1,6 @@
 ---
 title: magus-run
-generated_from: cmd/magus/skills/magus-run/SKILL.md
+generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
 skill_full_bytes: 10877

@@ -1,6 +1,6 @@
 ---
 title: magus-buzz-review
-generated_from: cmd/magus/skills/magus-buzz-review/SKILL.md
+generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
 skill_full_bytes: 20279

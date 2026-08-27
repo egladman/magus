@@ -832,3 +832,69 @@ func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 	assert.Contains(t, v.Context, "magus graph build", "a cold index must name the command that fixes it")
 	assert.Contains(t, v.Context, "unknown, not absent", "the verdict's meaning is the point, not just the command")
 }
+
+// TestGuardDeniesReadAck is the integrity property the whole read-receipt feature rests on.
+//
+// A receipt claims a PERSON read something. An agent able to mint one turns the measure into
+// a formality it satisfies on the way past - and it would, because stamping the changeset is
+// the obvious tidy-up at the end of a task. The guard is the right place because of what it
+// sees: it is wired into agent hosts, so everything reaching it came from an agent, and a
+// person at a terminal never meets this rule.
+func TestGuardDeniesReadAck(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus diff ` + "--ack",
+		`./magus diff --impact ` + "--ack",
+		`cd /tmp && magus diff ` + "--ack" + ` --reason x`,
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+		assert.Contains(t, v.Deny, "only a person can record one")
+	}
+}
+
+// Reading the report is exactly what an agent SHOULD do, so the deny must not reach it. A
+// rule that swallowed the read path would push agents off the surface entirely, which is the
+// opposite of the point: an agent that cannot mint a receipt should still be able to say
+// which files carry none.
+func TestGuardAllowsReadingTheReport(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus diff --impact`,
+		`magus diff -o json`,
+	} {
+		assert.Empty(t, evaluateBashGuard(cmd).Deny, "unexpected deny for %q", cmd)
+	}
+}
+
+// The pattern this caught was mine, run perhaps twenty times in one session: format, then
+// lint, then generate, as separate invocations. `lint` needs `format` needs `generate`, so
+// the last one alone does all three - every earlier call was a workspace reload to redo work
+// the next call redid anyway.
+//
+// An advisory rather than a deny: two independent targets on one line is real work, and only
+// the dependency graph knows which case a given chain is.
+func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
+	chained := []string{
+		"./magus run format . --silent; ./magus run lint . --silent",
+		"magus run generate . && magus run lint .",
+		"./magus run generate . --silent; ./magus run format . --silent; ./magus run lint . --silent",
+		// The gate counts too, and this exact line is how the rule's own author tripped MGS4007
+		// an hour after writing it: console:build left an output behind that the gate then read.
+		"./magus run build console --silent; ./magus affected ci --no-default-charms",
+	}
+	for _, cmd := range chained {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny, "a chain is questionable, not forbidden: %s", cmd)
+		assert.Contains(t, v.Context, "compose through ctx.needs", cmd)
+	}
+
+	// One invocation is the shape being taught, and must stay silent.
+	for _, cmd := range []string{
+		"./magus run lint . --silent",
+		"magus run build api web/studio",
+		"echo 'magus run format . ; magus run lint .'",
+	} {
+		assert.Empty(t, evaluateBashGuard(cmd).Context, "should not fire: %s", cmd)
+	}
+}

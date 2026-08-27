@@ -14,12 +14,14 @@ import (
 )
 
 func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) error {
-	var probe, fix bool
+	var probe, fix, list bool
 	_, err := cmdParse("doctor", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&probe, "probe", false,
 			"Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
 		fs.BoolVar(&fix, "fix", false,
 			"Run the remedy each finding names, where one exists (see --dry-run to list them first)")
+		fs.BoolVar(&list, "list", false,
+			"Print every check magus would run - name, subject, and MGS code - without running any of them")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus doctor [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -35,6 +37,9 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 			fmt.Fprintln(os.Stderr, "recommends, reported and not fatal, because how your workspace is")
 			fmt.Fprintln(os.Stderr, "laid out is your call.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Every finding is reported under a stable check name. --list prints")
+			fmt.Fprintln(os.Stderr, "them all, and what each one looks at, without running any.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
@@ -48,6 +53,10 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 		return err
 	}
 
+	if list {
+		return emitDoctorChecks(opts, doctor.Checks())
+	}
+
 	ws, wsErr := inspectWorkspace(ctx, root)
 
 	// Query daemon status for the daemon-related checks. Non-fatal on failure.
@@ -56,6 +65,9 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 	dopts := []doctor.Option{doctor.WithConfig(globalCfg), doctor.WithDaemonInfo(daemonInfo), doctor.WithSkillCatalog(agentSkills)}
 	if probe {
 		dopts = append(dopts, doctor.WithProbe())
+	}
+	if exp, ok := doctorExplanations(root); ok {
+		dopts = append(dopts, doctor.WithExplanations(exp))
 	}
 	out := doctor.Run(ctx, root, ws, wsErr, dopts...)
 
@@ -73,6 +85,41 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 	}
 	if out.Summary.Fail > 0 {
 		return fmt.Errorf("magus doctor: %d check(s) failed", out.Summary.Fail)
+	}
+	return nil
+}
+
+// emitDoctorChecks renders `magus doctor --list`: what magus would check, without
+// checking it.
+//
+// The name is printed alone on its line so the identifier is what a reader copies, and
+// the subject sits underneath rather than beside it - a name column wide enough for
+// "stale-spell-shadow-acknowledgments" pushes every subject past a terminal's width.
+func emitDoctorChecks(opts OutputOptions, checks []doctor.CheckInfo) error {
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, checks)
+	case outputName:
+		for _, c := range checks {
+			fmt.Println(c.Name)
+		}
+		return nil
+	}
+
+	fmt.Printf("%d checks, in the order `magus doctor` reports them:\n\n", len(checks))
+	for _, c := range checks {
+		fmt.Print("  " + c.Name)
+		var notes []string
+		if c.Code != "" {
+			notes = append(notes, c.Code)
+		}
+		if !c.NeedsWorkspace {
+			notes = append(notes, "reported even when the workspace fails to load")
+		}
+		if len(notes) > 0 {
+			fmt.Printf("  (%s)", strings.Join(notes, "; "))
+		}
+		fmt.Printf("\n      %s [%s]\n", c.Doc, c.Evidence)
 	}
 	return nil
 }
@@ -99,9 +146,15 @@ func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
 		fmt.Printf("workspace: %s\n\n", out.Workspace)
 	}
 	for _, c := range out.Checks {
-		fmt.Printf("%s %s", statusGlyph(c.Status, color), c.Name)
+		fmt.Printf("%s %s", checkGlyph(c, color), c.Name)
 		if c.Message != "" {
 			fmt.Printf(": %s", c.Message)
+		}
+		// Only the evidence that qualifies the verdict is printed. Stamping "measured"
+		// on the forty checks that measured something is noise, and noise is what
+		// people learn to skip; "inferred" is the one that says read this twice.
+		if c.Evidence == types.EvidenceInferred {
+			fmt.Printf(" [%s]", c.Evidence)
 		}
 		fmt.Println()
 		for _, d := range c.Details {
@@ -114,8 +167,27 @@ func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
 		// a scold when it is always there.
 		fmt.Printf(", %d advice", out.Summary.Advice)
 	}
+	if out.Summary.Unknown > 0 {
+		fmt.Printf(", %d unknown", out.Summary.Unknown)
+	}
 	fmt.Println()
 	return nil
+}
+
+// checkGlyph renders a finding's level, except that a check which did not run gets its
+// own glyph rather than the pass it nominally returned.
+//
+// A skipped check carries DoctorOK because it found nothing wrong, which is true and
+// misleading: nothing was looked at. Rendering it as [pass] is how a green report came
+// to mean "either fine or unexamined, and you cannot tell which from here".
+func checkGlyph(c types.DoctorCheck, color bool) string {
+	if c.Evidence == types.EvidenceUnknown {
+		if color {
+			return "\x1b[36m[unknown]\x1b[0m"
+		}
+		return "[unknown]"
+	}
+	return statusGlyph(c.Status, color)
 }
 
 // statusGlyph renders a doctor check's status with the shared [pass]/[fail] glyphs,

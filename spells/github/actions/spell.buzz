@@ -6,7 +6,12 @@
 //
 // It carries two more contracts further down, each wired the same way and each inert
 // outside Actions: a CI provider (magus\ci.provider) and a secret provider
-// (magus\secret.provider). One spell per vendor, three contracts.
+// (magus\secret.provider). Three contracts, one runtime.
+//
+// The REVIEW contract for this vendor lives in spells/github/review instead, and the split is
+// the runtime rather than the vendor: every op here checks for the Actions token first, which
+// is right for a cache that only exists on a runner and would leave a review permanently inert
+// on the laptop where reviews happen. A workspace wanting both imports both.
 //
 // magus knows nothing about GitHub Actions: it speaks only the generic spell
 // contract. It exports the cache contract, functions typed fun(Target, fun(any))

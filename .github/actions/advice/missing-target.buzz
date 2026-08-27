@@ -39,7 +39,7 @@ final section = "missing-target";
 // is neither judged nor counted as evidence about anyone else.
 export fun kind(spells: [str]) > str {
     if (spells.len() == 0) { return ""; }
-    var uniq = mut [];
+    final uniq = mut [<str>];
     foreach (s in spells) {
         var already = false;
         foreach (u in uniq) {
@@ -49,12 +49,7 @@ export fun kind(spells: [str]) > str {
     }
     // sort mutates in place, so uniq is built fresh rather than sorting the argument.
     final ordered = uniq.sort(fun (a: str, b: str) > bool { return a < b; });
-    var joined = "";
-    foreach (s in ordered) {
-        if (joined != "") { joined = joined + ","; }
-        joined = joined + s;
-    }
-    return joined;
+    return ordered.join(",");
 }
 
 fun has(names: [str], name: str) > bool {
@@ -134,13 +129,13 @@ export fun keepEdited(all: [{str: str}], edited: [str]) > [{str: str}] {
 }
 
 fun body(items: [{str: str}]) > str {
-    var text = "**This project is missing a target that comparable projects have.**\n\n"
-        + "| project | missing | projects of this kind that have it |\n| --- | --- | --- |\n";
+    final parts = mut ["**This project is missing a target that comparable projects have.**\n\n"
+        + "| project | missing | projects of this kind that have it |\n| --- | --- | --- |\n"];
     foreach (f in items) {
-        text = text + "| `" + (f["project"] ?? "") + "` | `" + (f["missing"] ?? "") + "` | "
-            + (f["evidence"] ?? "") + " (uses `" + (f["kind"] ?? "") + "`) |\n";
+        parts.append("| `" + (f["project"] ?? "") + "` | `" + (f["missing"] ?? "") + "` | "
+            + (f["evidence"] ?? "") + " (uses `" + (f["kind"] ?? "") + "`) |\n");
     }
-    return text
+    return parts.join("")
         + "\nThe comparison is against projects that use the same spells, not against the "
         + "whole workspace - a schema project is only ever measured against other schema "
         + "projects. Nobody declared this convention; magus derived it from what projects "

@@ -43,7 +43,7 @@
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 7
+# magus-guard-template: 8
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=none pass=none
 
@@ -72,7 +72,22 @@ fi
 # warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
 # 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
 # the knowledge.notes key while `magus doctor` reported the guard as fine.
-[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
+#
+# Found by walking UP to the magusfile, not by testing ./magus alone. A hook runs in the
+# host's session directory, and that is not always the workspace root: a session opened in
+# a subdirectory, or opened in one checkout while the work happens in another, tests a
+# ./magus that is not there and falls through to PATH. Where PATH's copy cannot load the
+# workspace at all, that is the entire guard failing open - measured 2026-08-27, when a
+# piped `magus affected ci` that the rules DO deny ran unjudged. Same upward search for a
+# project root that every other ecosystem's runner does.
+guard_root=$PWD
+while [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ]; do
+  if [ -f "$guard_root/magusfile.buzz" ]; then
+    [ -x "$guard_root/magus" ] && GUARD_MAGUS_BIN=$guard_root/magus
+    break
+  fi
+  guard_root=${guard_root%/*}
+done
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
 [ -n "$GUARD_FAILED_RESPONSE" ] || GUARD_FAILED_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the session hook subcommand, or cannot load this workspace - run magus session hook by hand to see the error, then rebuild or update it to restore the guard."}}'

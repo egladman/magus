@@ -65,7 +65,7 @@ func TestCacheYieldExemptsSkipCacheTargets(t *testing.T) {
 	got := r.checkCacheYield(projects)
 
 	assert.Equal(t, types.DoctorCheck{
-		Name:    "cache yield",
+		Name:    "cache-yield",
 		Status:  types.DoctorOK,
 		Message: "no target is running uncached (1 declared skip_cache)",
 	}, got, "the charm suffix must not defeat the policy lookup, and the exemption stays visible")
@@ -164,7 +164,7 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(repo)})
 
 	assert.Equal(t, types.DoctorCheck{
-		Name:    "dead output globs",
+		Name:    "dead-output-globs",
 		Status:  types.DoctorOK,
 		Message: "no dead output globs",
 	}, got, "a committed generated tree is not evidence the project was built")
@@ -234,7 +234,7 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 			},
 		}})
 		assert.Equal(t, types.DoctorCheck{
-			Name:    "output ownership",
+			Name:    "output-ownership",
 			Status:  types.DoctorOK,
 			Message: "every declared output has one owning target",
 		}, got, "distinct globs are not an overlap, even nested ones")
@@ -428,7 +428,7 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "api", Spell: "go"},
 		})
 		assert.Equal(t, types.DoctorCheck{
-			Name:    "language coverage",
+			Name:    "language-coverage",
 			Status:  types.DoctorOK,
 			Message: "every project matched a spell or declared no_language (1 exempt)",
 		}, got)
@@ -721,4 +721,47 @@ func TestCheckAgentSkills(t *testing.T) {
 		assert.Contains(t, strings.Join(got.Details, "\n"), "magus agent install")
 		assert.Empty(t, got.Fix, "install into WHICH directory is the developer's choice, so there is nothing to apply")
 	})
+}
+
+// The case this was written for: the root claims **/*.md through the markdown spell, which sweeps
+// in a nested project's generated MAGUS.md. Harmless until the content changes, and then the root
+// reports the nested project's own generate as an undeclared source mutation.
+func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
+	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	projects := []*types.Project{
+		{Path: ".", Name: "root", Sources: []string{"**/*.md"}},
+		{Path: "libs/leaf", Name: "leaf", Outputs: []string{"MAGUS.md"}},
+	}
+
+	got := r.checkOutputIsAnotherProjectsSource(projects)
+
+	require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
+	assert.Equal(t, []string{"libs/leaf/MAGUS.md is libs/leaf's output and .'s source"}, got.Details)
+}
+
+// A project claiming its OWN output is not the finding: writing what you declared you write is what
+// generate is for, and reporting it would make the check fire on every project in the workspace.
+func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
+	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	projects := []*types.Project{
+		{Path: "docs", Name: "docs", Sources: []string{"**/*.md"}, Outputs: []string{"MAGUS.md"}},
+	}
+
+	got := r.checkOutputIsAnotherProjectsSource(projects)
+
+	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+}
+
+// A pattern output is not reported, which is the decidability line MGS4002 draws: whether two globs
+// can overlap is undecidable in general, whether a glob matches one literal path is not.
+func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
+	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	projects := []*types.Project{
+		{Path: ".", Name: "root", Sources: []string{"**/*.md"}},
+		{Path: "libs/leaf", Name: "leaf", Outputs: []string{"docs/**"}},
+	}
+
+	got := r.checkOutputIsAnotherProjectsSource(projects)
+
+	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 }

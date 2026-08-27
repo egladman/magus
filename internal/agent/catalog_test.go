@@ -262,8 +262,20 @@ func TestCatalogSkillBytesByName(t *testing.T) {
 	assert.ErrorContains(t, err, "unknown skill")
 }
 
+// TestMustSkillRefusesWhatMagusDoesNotShip is what makes a SkillRef worth more than a string. A
+// prompt naming a skill nobody can load still renders perfectly, so the only place to catch it is
+// where the reference is made.
+func TestMustSkillRefusesWhatMagusDoesNotShip(t *testing.T) {
+	assert.Equal(t, SkillRef("magus-query"), MustSkill("magus-query"))
+	assert.Panics(t, func() { MustSkill("magus-not-a-real-skill") })
+	// A FORMER name is refused too: it still resolves for an already-installed copy, which is
+	// precisely why a stale one would go unnoticed by anything but this.
+	require.NotEmpty(t, FormerNames("magus-architecture-review"))
+	assert.Panics(t, func() { MustSkill("magus-architecture") })
+}
+
 func TestDelegateUltraVariantsKeepTheSameSafetyContract(t *testing.T) {
-	catalog := NewCatalog(os.DirFS(filepath.Join("..", "..", "cmd", "magus")), "", 7)
+	catalog := Default(7)
 	full, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantFull)
 	require.NoError(t, err)
 	simple, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantSimple)
@@ -458,7 +470,9 @@ func TestApplyVariantRefusesMalformedTemplate(t *testing.T) {
 func TestSkillTemplatesUseOnlyBranching(t *testing.T) {
 	for _, source := range skillSources {
 		t.Run(source.name, func(t *testing.T) {
-			body, err := os.ReadFile(filepath.Join("..", "..", "cmd", "magus", source.bodyPath))
+			// Read through the embedded FS rather than off disk: the assets live in this
+			// package now, so the test reads exactly what a build ships.
+			body, err := skillFS.ReadFile(source.bodyPath)
 			require.NoError(t, err)
 			tmpl, err := template.New(source.name).Parse(string(body))
 			require.NoError(t, err)

@@ -8,6 +8,7 @@ package console
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -310,6 +312,36 @@ func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, erro
 	return s.magus.WorkingDiff(ctx, paths)
 }
 
+// ReviewOrigin reports the branch and remote a provider needs to find the review open for this
+// tree. Empty on a workspace-less service, which is the same answer a tree with no remote
+// gives and needs no separate branch in any caller.
+func (s *Service) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
+	if s.magus == nil {
+		return types.ReviewOrigin{}
+	}
+	return s.magus.ReviewOrigin(ctx)
+}
+
+// BranchChanges reports what other remote-tracking branches are changing, so a reader can be
+// told a file in front of them is being edited elsewhere too. None on a workspace-less service,
+// which reads the same as a backend that cannot answer: nothing is claimed either way.
+func (s *Service) BranchChanges(ctx context.Context, limit int) ([]types.BranchChange, error) {
+	if s.magus == nil {
+		return nil, nil
+	}
+	return s.magus.BranchChanges(ctx, limit)
+}
+
+// ProjectTargets names the targets the workspace declares for a project: the allowlist a run
+// asked for from outside a terminal is checked against. None on a workspace-less service, which
+// refuses every such run rather than admitting one it cannot check.
+func (s *Service) ProjectTargets(ctx context.Context, project string) []string {
+	if s.magus == nil {
+		return nil
+	}
+	return s.magus.ProjectTargets(ctx, project)
+}
+
 // Diff annotates a changed-path set: role, owning project, changed-symbol reach, coverage,
 // and the blast radius, ordered by what magus recommends reading first.
 //
@@ -344,6 +376,22 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 	// diffReplayEvents rather than the whole history, because the question is about the
 	// change in front of the reader, not about the repository's whole past.
 	rev.AttachReplay(diffTouches(s.magus.Root(), s.magus.CacheDir(), paths))
+	// Which of these files somebody has recorded reading, from the same store `magus diff
+	// --ack` writes. The console gets it because "how much of this has anyone read" is a
+	// question a review surface should answer without the reader dropping to a terminal.
+	// The console reads the daemon's working tree and nothing else, so it names that source
+	// explicitly rather than inheriting a default.
+	root := s.magus.Root()
+	digest := func(path string) string { return review.DigestFile(filepath.Join(root, filepath.FromSlash(path))) }
+	if states, serr := review.ReadStates(s.magus.CacheDir(), paths, digest); serr == nil {
+		rev.AttachReadState(states)
+	}
+	// Where the reader left off, from the same receipts. It ships to the console for the reason
+	// the read states do: a surface that can show what moved since the last pass and one that
+	// cannot are not two clients of one review, and the terminal already had it.
+	if store, serr := review.Load(s.magus.CacheDir()); serr == nil {
+		rev.AttachReviewed(store.ReviewedAt(paths))
+	}
 	return rev, nil
 }
 

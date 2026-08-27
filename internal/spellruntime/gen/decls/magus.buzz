@@ -157,9 +157,23 @@ export object DiffFile {
     symbols: [DiffSymbol] = [],
     surface: str = "",
     touches: [DiffTouch] = [],
+    readState: str = "",
     churn: DiffChurn? = null,
     noHistory: bool = false,
     reach: int? = null,
+}
+
+export object VCSCheckpoint {
+    revision: str = "",
+    branch: str = "",
+    dirty: bool = false,
+    patchDigest: str = "",
+    vcs: str = "",
+}
+
+export object DiffReviewed {
+    at: VCSCheckpoint = VCSCheckpoint{},
+    files: int = 0,
 }
 
 export object Diff {
@@ -168,6 +182,7 @@ export object Diff {
     seedProjects: [str] = [],
     affectedProjects: [ImpactProject] = [],
     notes: [str] = [],
+    reviewed: DiffReviewed = DiffReviewed{},
 }
 
 export object DoctorCheck {
@@ -175,6 +190,7 @@ export object DoctorCheck {
     status: DoctorCheckStatus = DoctorCheckStatus.none,
     message: str = "",
     details: [str] = [],
+    evidence: str = "",
     fix: [str] = [],
 }
 
@@ -182,6 +198,7 @@ export object DoctorSummary {
     ok: int = 0,
     fail: int = 0,
     advice: int = 0,
+    unknown: int = 0,
 }
 
 export object DoctorReport {
@@ -425,6 +442,12 @@ export object DelegationRelease {
     releasedAt: int = 0,
 }
 
+export object DelegationUnattributedWrite {
+    path: str = "",
+    digest: str = "",
+    at: int = 0,
+}
+
 export object Delegation {
     id: str = "",
     parent: str = "",
@@ -438,6 +461,7 @@ export object Delegation {
     state: str = "",
     readOnly: bool = false,
     releases: [DelegationRelease] = [],
+    unattributed: [DelegationUnattributedWrite] = [],
     reportedBase: str = "",
     baseVerdict: str = "",
     registered: int = 0,

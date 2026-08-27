@@ -60,13 +60,21 @@ func fleetFixture(t *testing.T, delegations ...types.Delegation) (context.Contex
 
 // fleetDelegations is the two-delegation plan most cases below grade against: two live workers with
 // disjoint owned paths, one of them declaring a forbidden subtree inside its own.
+//
+// Both are REGISTERED, because these cases are about boundaries and an unregistered delegation is
+// denied before any boundary is consulted. TestGradeDelegatedWriteRequiresACheckpoint covers that
+// rule on its own.
 func fleetDelegations() []types.Delegation {
 	return []types.Delegation{
 		{
-			ID:         "delegation-a",
-			Goal:       "own the ledger store\nacceptance: List stays cheap",
-			OwnedPaths: []string{"internal/ledger/**"},
-			State:      types.StateRunning,
+			ID:           "delegation-a",
+			Goal:         "own the ledger store\nacceptance: List stays cheap",
+			OwnedPaths:   []string{"internal/ledger/**"},
+			State:        types.StateRunning,
+			Checkpoint:   "rev-a",
+			ReportedBase: "rev-a",
+			BaseVerdict:  types.BaseMatch,
+			Registered:   1,
 		},
 		{
 			ID:             "delegation-b",
@@ -74,6 +82,10 @@ func fleetDelegations() []types.Delegation {
 			OwnedPaths:     []string{"cmd/magus/**", "docs/guard.md"},
 			ForbiddenPaths: []string{"cmd/magus/gen/**"},
 			State:          types.StateDeclared,
+			Checkpoint:     "rev-a",
+			ReportedBase:   "rev-a",
+			BaseVerdict:    types.BaseMatch,
+			Registered:     1,
 		},
 	}
 }
@@ -458,4 +470,136 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 	for _, cmd := range []string{"magus notes ls", "magus notes get foo", "magus notes verify"} {
 		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q only reads", cmd)
 	}
+}
+
+// fleetLedger reopens the ledger the guard just graded against, resolved exactly the way the guard
+// resolves it, so these assertions read the same store the code under test wrote.
+func fleetLedger(t *testing.T, ctx context.Context) *ledger.Store {
+	t.Helper()
+	loc := hookActivityTrail(ctx)
+	return ledger.NewStore(ledger.Location{CacheDir: loc.base, Root: loc.workspace})
+}
+
+func unattributedOf(t *testing.T, store *ledger.Store, id string) []types.DelegationUnattributedWrite {
+	t.Helper()
+	rows, err := store.List()
+	require.NoError(t, err)
+	for _, r := range rows {
+		if r.ID == id {
+			return r.Unattributed
+		}
+	}
+	return nil
+}
+
+// TestGradeDelegatedWriteRecordsWhatItAdvisedAbout is the half the advisory was missing.
+//
+// Telling the WRITER to coordinate left the delegation whose file moved as the only party never
+// informed, and it is the one holding a now-stale read. The record is what lets it find out by
+// asking rather than by being told.
+func TestGradeDelegatedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetDelegations()...)
+	owned := filepath.Join(root, "internal/ledger/store.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(owned), 0o755))
+	require.NoError(t, os.WriteFile(owned, []byte("package ledger // edited by hand\n"), 0o644))
+
+	got := gradeDelegatedWrite(ctx, "", owned)
+	require.Equal(t, "advise", got.Decision)
+
+	store := fleetLedger(t, ctx)
+	recorded := unattributedOf(t, store, "delegation-a")
+	require.Len(t, recorded, 1, "the owner is told what moved under it")
+	assert.Equal(t, "internal/ledger/store.go", recorded[0].Path)
+	assert.NotEmpty(t, recorded[0].Digest)
+	assert.NotEqual(t, types.DigestAbsent, recorded[0].Digest,
+		"a digest of nothing gives the owner nothing to compare against")
+	assert.NotZero(t, recorded[0].At)
+
+	// The controls. Without these the test would pass against a guard that recorded on every
+	// write, which would fill the ledger with a delegation's own ordinary work.
+	t.Run("a delegation writing its own owned path is not an intrusion", func(t *testing.T) {
+		ctx, root := fleetFixture(t, fleetDelegations()...)
+		mine := filepath.Join(root, "internal/ledger/store.go")
+		require.NoError(t, os.MkdirAll(filepath.Dir(mine), 0o755))
+		require.NoError(t, os.WriteFile(mine, []byte("package ledger\n"), 0o644))
+
+		gradeDelegatedWrite(ctx, "delegation-a", mine)
+
+		assert.Empty(t, unattributedOf(t, fleetLedger(t, ctx), "delegation-a"))
+	})
+
+	t.Run("unclaimed ground records nothing", func(t *testing.T) {
+		ctx, root := fleetFixture(t, fleetDelegations()...)
+		loose := filepath.Join(root, "README.md")
+		require.NoError(t, os.WriteFile(loose, []byte("# readme\n"), 0o644))
+
+		gradeDelegatedWrite(ctx, "", loose)
+
+		store := fleetLedger(t, ctx)
+		assert.Empty(t, unattributedOf(t, store, "delegation-a"))
+		assert.Empty(t, unattributedOf(t, store, "delegation-b"))
+	})
+}
+
+// TestGradeDelegatedWriteRequiresACheckpoint is the rule that turns a skill into a guarantee.
+//
+// The instruction to checkpoint before working lived only in a skill, which an agent can skip -
+// and the record it was meant to leave is missing exactly when somebody needs to recover from it.
+// This is the enforcement point, and it is a deny because an advisory is the same pinky promise
+// with better wording.
+func TestGradeDelegatedWriteRequiresACheckpoint(t *testing.T) {
+	unregistered := func() []types.Delegation {
+		fleet := fleetDelegations()
+		fleet[1].Registered = 0
+		fleet[1].ReportedBase = ""
+		fleet[1].BaseVerdict = types.BaseUnknown
+		return fleet
+	}
+
+	t.Run("an unregistered delegation is denied even inside its own paths", func(t *testing.T) {
+		ctx, root := fleetFixture(t, unregistered()...)
+
+		got := gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "cmd/magus/diff.go"))
+
+		require.Equal(t, "deny", got.Decision, "owning the path is not enough; the base has to be on record")
+		assert.Contains(t, got.Reason, "magus vcs checkpoint", "the denial must name the command")
+		assert.Contains(t, got.Reason, "magus_ledger", "and where to register what it prints")
+		assert.Contains(t, got.Reason, "delegation-b")
+	})
+
+	t.Run("a registered delegation writes its own paths freely", func(t *testing.T) {
+		// The positive control. Without it this would pass against a guard that denied everything.
+		ctx, root := fleetFixture(t, fleetDelegations()...)
+
+		got := gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "cmd/magus/diff.go"))
+
+		assert.Empty(t, got.Decision)
+	})
+
+	t.Run("a human is never subject to it", func(t *testing.T) {
+		// An un-enrolled writer never reaches this rule: magus cannot tell "not in the fleet" from
+		// "in it and not saying so", and blocking a person in their own checkout is the one
+		// failure the guard must not have.
+		ctx, root := fleetFixture(t, unregistered()...)
+
+		got := gradeDelegatedWrite(ctx, "", filepath.Join(root, "cmd/magus/diff.go"))
+
+		assert.NotEqual(t, "deny", got.Decision)
+	})
+}
+
+// A worker that registered on a base other than the one it was handed is ADVISED, not blocked: an
+// orchestrator may have rebased the plan deliberately, and magus cannot tell that from a worker
+// that wandered. What it refuses is letting the divergence stay silent until the merge finds it.
+func TestGradeDelegatedWriteFlagsADivergedBase(t *testing.T) {
+	fleet := fleetDelegations()
+	fleet[1].ReportedBase = "rev-somewhere-else"
+	fleet[1].BaseVerdict = types.BaseDiverged
+	ctx, root := fleetFixture(t, fleet...)
+
+	got := gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "cmd/magus/diff.go"))
+
+	require.Equal(t, "advise", got.Decision, "a deliberate rebase must not be blocked")
+	assert.Contains(t, got.Context, "rev-somewhere-else")
+	assert.Contains(t, got.Context, "rev-a", "the advisory names both bases so the reader can tell which moved")
 }

@@ -607,6 +607,13 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 
+// DiffTUIEnabled reports whether `magus diff` may open its viewer, per workspace config.
+//
+// One question rather than an exported Config accessor: the caller needs this answer, not the
+// whole configuration, and a broad getter is how a command ends up branching on settings that
+// were never meant to reach it.
+func (m *Magus) DiffTUIEnabled() bool { return m.cfg.Diff.TuiEnabled() }
+
 // WorkingDiff returns the working tree's uncommitted changes as the backend's own unified
 // diff, scoped to paths when non-empty and repository-wide otherwise. Empty when the tree
 // is clean.
@@ -660,6 +667,150 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 		return tracked + "\n" + untracked, nil
 	}
 	return tracked + untracked, nil
+}
+
+// BranchChanges reports what other remote-tracking branches are changing, so a reader can be told
+// that a file in front of them is also being edited elsewhere.
+//
+// Empty rather than an error whenever the answer cannot be had - no VCS, a backend without the
+// capability, a repository with no other branches. The three are the same to the reader, and a
+// surface that has nothing to say about competition should say nothing. That is also why a
+// backend lacking BranchChangeReporter must not be reported as "nothing competes": those are
+// different facts, and the caller can only tell them apart by getting nothing at all here.
+//
+// Read through the optional capability rather than by shelling a git command, for the reason
+// ReviewOrigin reads the remote that way: the backend is asked, never its name.
+func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchChange, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil {
+		return nil, fmt.Errorf("resolving the version control backend: %w", err)
+	}
+	if res.VCS == nil {
+		// Version control disabled for this workspace. There are genuinely no other branches, so
+		// this is an empty answer rather than a gap - the distinction the error below exists for.
+		return nil, nil
+	}
+	reporter, ok := res.VCS.(types.BranchChangeReporter)
+	if !ok {
+		// NAMED, not swallowed. A backend that cannot answer and a repository where nothing
+		// competes are different facts, and a surface shown the same emptiness for both tells
+		// the reader "nothing competes" - reassurance magus has not earned. The caller reports
+		// which backend fell short so the gap is legible rather than invisible.
+		// Coded, so a surface can render the gap as a gap rather than as an empty answer, and
+		// so the reader has a page explaining why an empty list here would have been a lie.
+		// Still wraps ErrVCSUnsupported: callers match the sentinel, not the prose.
+		return nil, fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not report branch changes", res.Name),
+			types.ErrVCSUnsupported)
+	}
+	out, err := reporter.BranchChanges(ctx, m.ws.Root, res.Base, limit)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// RangeDiff returns the unified diff of what head added since it diverged from base: the
+// COMMITTED half of review, which is a colleague's branch or your own agent's finished work.
+//
+// The counterpart to WorkingDiff, and separate from it on purpose. A range names two revisions and
+// the working tree names none, so folding them into one signature would make the common case carry
+// arguments it never uses - the reason WorkingDiff's doc gives for not answering both.
+//
+// A gap is REFUSED rather than answered empty, which is the opposite of BranchChanges. There,
+// silence and "nothing competes" are both true-ish and the caller can tell them apart by getting
+// nothing at all. Here an empty string reads as "this branch changed nothing", and reporting a
+// colleague's work as untouched is the one wrong answer this surface must never give.
+func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string) (string, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil {
+		return "", fmt.Errorf("resolving the version control backend: %w", err)
+	}
+	if res.VCS == nil {
+		return "", fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing,
+				"this workspace has version control disabled, so there is no revision range to read"),
+			types.ErrVCSUnsupported)
+	}
+	reporter, ok := res.VCS.(types.RangeDiffReporter)
+	if !ok {
+		return "", fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not diff a revision range", res.Name),
+			types.ErrVCSUnsupported)
+	}
+	return reporter.RangeDiff(ctx, m.ws.Root, base, head, paths)
+}
+
+// RevisionCheckpoint resolves a revision expression to the checkpoint that names it.
+//
+// The point is Revision: a movable name resolves to the full id it currently points at, so a
+// caller recording what it read records something that still means the same thing after somebody
+// pushes to that branch. Dirty and PatchDigest stay zero, because a committed revision is not a
+// working tree and reporting it as clean-or-dirty would be answering a question nobody asked.
+func (m *Magus) RevisionCheckpoint(ctx context.Context, rev string) (types.VCSCheckpoint, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return types.VCSCheckpoint{}, fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing,
+				"this workspace has version control disabled, so %q names no revision", rev),
+			types.ErrVCSUnsupported)
+	}
+	commit, err := res.VCS.FindCommit(ctx, m.ws.Root, rev)
+	if err != nil {
+		return types.VCSCheckpoint{}, fmt.Errorf("resolving %q: %w", rev, err)
+	}
+	return types.VCSCheckpoint{Revision: commit.ID, Branch: rev, VCS: res.Name}, nil
+}
+
+// FileAt returns a repo-relative path's content at a revision.
+//
+// A path absent at that revision is an error and not empty content, which is RevisionFileReader's
+// own contract: the two are indistinguishable to a caller, and only one of them means the file was
+// empty. Callers digesting for a receipt must treat the error as "nothing to attest to" rather
+// than hashing "".
+func (m *Magus) FileAt(ctx context.Context, rev, path string) (string, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return "", fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing,
+				"this workspace has version control disabled, so there is no revision to read %s at", path),
+			types.ErrVCSUnsupported)
+	}
+	reader, ok := res.VCS.(types.RevisionFileReader)
+	if !ok {
+		return "", fmt.Errorf("%w: %w",
+			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not read a file at a revision", res.Name),
+			types.ErrVCSUnsupported)
+	}
+	return reader.ReadFileAt(ctx, m.ws.Root, rev, path)
+}
+
+// ReviewOrigin reports the branch this tree is on and the remote it would be pushed to, for a
+// caller asking a provider which review is open.
+//
+// Never an error. A workspace with no VCS, a backend that cannot name a remote, a detached
+// HEAD: all of them yield an empty field, and every one is an ordinary state of a tree rather
+// than a failure. The caller's next question - "is a review open?" - has the same answer for
+// all of them, so making this fail would only move a branch nobody needs up a layer.
+//
+// The remote is read through the optional RemoteReporter capability rather than by shelling a
+// git command, so it works on every backend that implements one and degrades to empty on the
+// ones that do not.
+func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return types.ReviewOrigin{}
+	}
+	var out types.ReviewOrigin
+	if meta, err := res.VCS.Metadata(ctx, m.ws.Root); err == nil {
+		out.Branch = meta.Ref
+	}
+	if reporter, ok := res.VCS.(types.RemoteReporter); ok {
+		if remote, err := reporter.RemoteURL(ctx, m.ws.Root); err == nil {
+			out.Remote = remote
+		}
+	}
+	return out
 }
 
 // untrackedPatch synthesizes a unified patch for files the VCS does not track yet: every line

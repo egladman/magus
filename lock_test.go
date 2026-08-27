@@ -229,11 +229,31 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 	// nothing about which order was waiting, how far it had got, or how long the
 	// call took. A flake nobody can diagnose gets rerun until it passes, which
 	// is how a real defect hides.
+	//
+	// The diagnosis those numbers bought, recorded so it is not re-litigated: the
+	// flake was I/O contention on the OWNER RECORDS, never the lock order. Every
+	// acquire and release calls record.Write, which is a MkdirTemp, a WriteFile
+	// per field, a RemoveAll and a Rename - about twenty filesystem operations.
+	// acquireAll takes three locks, so one iteration costs ~90 of them, and the
+	// two goroutines run 50 iterations each against the SAME lock directory tree,
+	// where those renames serialize. Roughly 9,000 filesystem operations, which on
+	// a machine already running the full suite is enough for one acquisition to
+	// exceed a five-second budget. Measured 2026-08-26: 216ms slowest in
+	// isolation, over 5s under load, and the failing iteration varied (0 and 7),
+	// so it was a stall rather than a creep.
+	//
+	// So acquireBudget is generous ON PURPOSE and hides nothing. The invariant this
+	// test is named for - sorted order cannot deadlock - is guarded by the deadline
+	// below, which a genuine deadlock trips whatever this is set to. This budget
+	// only decides whether a stall is reported as a failed acquire (with the order,
+	// the iteration and the duration) or as an expired deadline that says none of
+	// them, and a diagnosable failure is worth waiting for.
+	const acquireBudget = 20 * time.Second
 	done := make(chan error, 2)
 	run := func(name string, paths []string) {
 		slowest := time.Duration(0)
 		for i := 0; i < 50; i++ {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), acquireBudget)
 			start := time.Now()
 			rel, err := locker.acquireAll(ctx, paths)
 			took := time.Since(start)
@@ -263,7 +283,9 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 	go run("a,b,c", set1)
 	go run("c,b,a", set2)
 
-	deadline := time.After(30 * time.Second)
+	// Comfortably past two goroutines each hitting the acquire budget once, so a real
+	// deadlock reports through the diagnosable path rather than through this one.
+	deadline := time.After(90 * time.Second)
 	for i := 0; i < 2; i++ {
 		select {
 		case err := <-done:

@@ -30,6 +30,33 @@ const (
 	DiffRoleUnclaimed = "unclaimed"
 )
 
+// The DiffRead constants say whether anybody recorded reading a file AT the content it holds
+// now. Untyped strings, matching the older DiffRole and DiffSurface constants beside them
+// rather than the newer types.Evidence: DiffFile.ReadState is one more string field on a
+// struct whose peers are all strings, and typing this one alone would make the odd one out.
+//
+// It is the one fact in a review that no analysis can supply. Every other annotation here
+// describes what a change DOES; this describes whether a person weighed it, which is the
+// property that decays when work is produced faster than it is read.
+//
+// Never inferred. magus could watch an editor and call an open file read, and a measure
+// satisfied by scrolling is worse than none because it launders skimming into review. A
+// receipt exists only where somebody typed `magus diff --ack`.
+const (
+	// DiffReadUnknown means no receipt store was readable, so the question was not asked.
+	// It is the zero value, and it must never render as unread: "nobody has read this" and
+	// "nobody checked whether anyone read this" are opposite claims and only one accuses.
+	DiffReadUnknown = ""
+	// DiffReadUnread means the store was read and holds no receipt for this file.
+	DiffReadUnread = "unread"
+	// DiffReadRead means a receipt covers this file at exactly its current content.
+	DiffReadRead = "read"
+	// DiffReadStale means a receipt exists for this file at DIFFERENT content: it was read,
+	// then edited. Distinct from unread because it is the more dangerous shape - somebody
+	// did look, which is exactly why nobody will look again.
+	DiffReadStale = "stale"
+)
+
 // DiffSurface is how far a changed symbol's referents reach, which is the question a
 // semver decision actually turns on. It is EVIDENCE, never a verdict: magus reports where a
 // symbol is used and lets the reader decide the bump.
@@ -178,6 +205,10 @@ type DiffFile struct {
 	// Touches are the agent sessions that wrote this file and what they had READ first.
 	// Empty when no guard hook is wired, which is the common case and not a fault.
 	Touches []DiffTouch `json:"touches,omitempty" yaml:"touches,omitempty"`
+	// ReadState is one of the DiffRead constants: whether a person recorded reading
+	// this file at its current content. Empty is DiffReadUnknown - nobody checked - and is
+	// deliberately not "unread".
+	ReadState string `json:"read_state,omitempty" yaml:"read_state,omitempty"`
 	// Churn is how often this file has been changing, nil when no history lens was attached.
 	// Nil is DISTINCT from zero: "nobody measured" and "this file is quiet" are different
 	// facts, and a review that renders the first as the second is lying quietly.
@@ -239,6 +270,25 @@ type Diff struct {
 	// coverage run). They are surfaced rather than swallowed: a reader who sees no reach
 	// numbers must be able to tell "nothing depends on this" from "nothing was measured".
 	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
+	// Reviewed is the earlier pass this reader already made over these files, when there was one.
+	Reviewed DiffReviewed `json:"reviewed,omitzero" yaml:"reviewed,omitzero"`
+}
+
+// DiffReviewed is what a reader already got through on an earlier pass over this changeset.
+//
+// A CHANGESET-level fact rather than a per-file one, because it answers a question about the
+// reader's history rather than about any file: "where did I leave off". The per-file half is
+// DiffFile.ReadState, and the two are not redundant - ReadState says whether THIS file still
+// matches what was read, and this says which revision to diff from to see everything that moved.
+//
+// The zero value means there is no earlier pass to subtract: nobody has reviewed these files, or
+// the reviewing was done against a working tree, which has no revision to name. Neither is
+// "nothing changed", and a surface must not render it as reassurance.
+type DiffReviewed struct {
+	// At is the revision the reader last got through, oldest where receipts disagree.
+	At VCSCheckpoint `json:"at,omitzero" yaml:"at,omitzero"`
+	// Files is how many of this changeset's files that revision covers.
+	Files int `json:"files,omitempty" yaml:"files,omitempty"`
 }
 
 // DiffAuthor says which kind of client produced a comment or a suggestion.
@@ -268,6 +318,76 @@ type DiffCursor struct {
 	Hunk int `json:"hunk" yaml:"hunk"`
 }
 
+// CommentAnchorRung is how well a remark still knows where it belongs, worst case named rather
+// than guessed at.
+type CommentAnchorRung string
+
+const (
+	// AnchorExact is the remembered line, still holding the remembered text.
+	AnchorExact CommentAnchorRung = "exact"
+	// AnchorMoved is the text found somewhere else in the file. The remark is placed there and
+	// says so, because a reader who is not told will read the new position as the original one.
+	AnchorMoved CommentAnchorRung = "moved"
+	// AnchorDeclaration is the quoted line gone, but the DECLARATION it sat in still present. The
+	// remark keeps its path and moves to that declaration's hunk, saying it lost the exact line -
+	// which is the rung Gerrit spells "file level", one step narrower.
+	AnchorDeclaration CommentAnchorRung = "declaration"
+	// AnchorLost is the text gone from the file. The remark keeps its path and loses its line,
+	// which is the degradation Gerrit's comment porter makes for the same reason: a remark that
+	// lands on the wrong code is worse than one that admits it lost the thread.
+	AnchorLost CommentAnchorRung = "lost"
+	// AnchorUnknown is a remark carrying no quote to look for - written before anchors were
+	// captured, or on a hunk whose text magus never held. Distinct from AnchorExact because
+	// "still in place" and "nobody checked" are different facts.
+	AnchorUnknown CommentAnchorRung = ""
+)
+
+// CommentAnchor is what a remark remembers about the code it was written against, so it can be
+// re-found after that code moves.
+//
+// THREE THINGS, because no single one of them survives every edit, and the mature review tools all
+// converged on storing several and degrading the CLAIM rather than guessing. Digest DETECTS a
+// change and cannot recover from one; Quote RECOVERS a line that moved and cannot tell an
+// unmoved line from a re-typed one. Together they answer both, and Line stops being the answer and
+// becomes a hint - the prior a search starts from rather than the thing it trusts.
+//
+// The field this replaced was a bare digest, documented as letting a remark "report that the code
+// under it has since changed". No client ever set it and nothing ever read it, so the report it
+// promised was never made.
+type CommentAnchor struct {
+	// Digest is the hunk's content digest when the remark was written.
+	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
+	// Quote is the new-side line the remark sits on, verbatim.
+	Quote string `json:"quote,omitempty" yaml:"quote,omitempty"`
+	// Before and After are the lines around Quote, up to AnchorContextLines each.
+	//
+	// They are what make a short quote usable at all. A line of code is often not unique in its
+	// own file - a bare closing brace, a `return nil`, a repeated field tag - so a search for the
+	// quote alone lands on the first of many. The context is what picks the right one, and it is
+	// the same trick the web-annotation model uses under the name prefix/suffix.
+	Before []string `json:"before,omitempty" yaml:"before,omitempty"`
+	After  []string `json:"after,omitempty"  yaml:"after,omitempty"`
+	// Declaration is the enclosing declaration git named in the hunk header: the text after the
+	// second @@, which is "func (r Diff) AttachChurn(...)" or "type Diff struct {".
+	//
+	// GIT'S OWN funcname, not a symbol from the knowledge graph, and the difference is what makes
+	// this rung fire at all. A SCIP symbol is a better identifier - it survives a rename of the
+	// surrounding file and carries real structure - and it is absent unless somebody has run
+	// `magus graph build`, which in this very workspace they have not. An anchor that needs an
+	// index nobody built is an anchor that never resolves. This one is in every patch already,
+	// in every language git has a funcname pattern for, and costs nothing to keep.
+	//
+	// It is the WEAKEST of the three and deliberately last: a declaration says which function a
+	// remark was about, never which line, so it is what remains when the quote is gone.
+	Declaration string `json:"declaration,omitempty" yaml:"declaration,omitempty"`
+}
+
+// AnchorContextLines is how many lines of context each side of the quote carries.
+//
+// Three, which is the same width unified diff chose for the same reason: enough to disambiguate a
+// repeated line, few enough that the anchor costs a fraction of the hunk it describes.
+const AnchorContextLines = 3
+
 // DiffComment is one remark attached to a hunk.
 //
 // Distinct from a note, and deliberately not stored with one. A note is durable workspace
@@ -285,10 +405,225 @@ type DiffComment struct {
 	// only: nothing branches on it, matching the hook's treatment of the same field.
 	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
 	Body      string `json:"body" yaml:"body"`
-	// Anchor is the hunk's content digest at the time of writing, so the comment can report
-	// that the code under it has since changed rather than silently pointing at moved text.
-	Anchor   string `json:"anchor,omitempty" yaml:"anchor,omitempty"`
-	Resolved bool   `json:"resolved" yaml:"resolved"`
+	// Anchor is what this remark remembers about the code it was written against.
+	Anchor CommentAnchor `json:"anchor,omitzero" yaml:"anchor,omitzero"`
+	// Rung is how the remark's Line was arrived at, recomputed whenever the changeset is tracked
+	// and never stored. Output-only: a client renders it, and nothing accepts one.
+	Rung     CommentAnchorRung `json:"rung,omitempty" yaml:"rung,omitempty"`
+	Resolved bool              `json:"resolved" yaml:"resolved"`
+
+	// Published records that this remark has left the machine. False for a draft, which is
+	// every comment until someone publishes.
+	//
+	// A published comment is no longer editable here: it exists somewhere a teammate may have
+	// already replied to, and a local edit that silently diverged from what they are reading
+	// would be worse than no edit at all.
+	//
+	// What the HOST called it is deliberately not recorded. A review posts as one request and
+	// its per-comment ids come back in a shape no provider is obliged to return, so a field
+	// for them would have been a field nothing fills.
+	Published bool `json:"published,omitempty" yaml:"published,omitempty"`
+
+	// Line is the position in the file's NEW side, which is what a host anchors an inline
+	// comment to. Hunk cannot serve: it is an index into this changeset's hunks, a coordinate
+	// that means nothing outside the session that produced it.
+	//
+	// Zero means the writer did not pin one, and a publisher drops such a comment rather than
+	// guessing. A remark that lands on the wrong line is worse than one that never left.
+	Line int `json:"line,omitempty" yaml:"line,omitempty"`
+}
+
+// ReviewOrigin is where a working tree's changes would be discussed: the movable name they
+// sit on, and the remote they would be pushed to.
+//
+// Two VCS facts, resolved by magus and handed to a provider spell rather than discovered by
+// it. A spell rederiving them would be a second opinion about the same working tree, and one
+// that only knows its own host's conventions where magus already speaks four backends.
+//
+// Either field may be empty, and that is ordinary rather than an error: a detached HEAD has no
+// branch, a tree with no remote has no remote, and a workspace with no VCS at all has neither.
+// A provider answers "no review" for all three, which is what the reader sees anyway when the
+// branch simply has no pull request open.
+type ReviewOrigin struct {
+	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
+	Remote string `json:"remote,omitempty" yaml:"remote,omitempty"`
+}
+
+// ReviewTarget is the review a branch has open, or the reason it has none.
+//
+// "No provider wired", "no pull request for this branch" and "the host was unreachable" are
+// all an empty ID with a Reason, deliberately. None is a thing the reader did wrong, and a
+// surface that renders them differently would be inventing a distinction its user does not
+// have - what they can do next is identical in all three.
+type ReviewTarget struct {
+	// ID is the review's identity in the provider's own terms, opaque to magus and passed
+	// back to the spell untouched.
+	//
+	// A STRING, though every provider magus ships speaks in integers. GitHub numbers pull
+	// requests and GitLab numbers merge requests, but Gerrit and Phabricator identify a change
+	// by a hash, and an int here would have made those providers unwritable for a saving of
+	// nothing - magus does no arithmetic on it. The wrong kind of specific is the kind you find
+	// out about from the person who could not write the second provider.
+	ID string `json:"id" yaml:"id"`
+	// Repo is where the review lives, for display: an owner/name on GitHub, a project path on
+	// GitLab. Never parsed here.
+	Repo   string `json:"repo,omitempty" yaml:"repo,omitempty"`
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
+	// State is what the host says has become of the review: "open", "merged" or "closed".
+	//
+	// EMPTY reads as open, so a provider that does not answer this keeps working unchanged and
+	// the subset rule holds - a spell declares nothing to opt out.
+	//
+	// It is asked of the provider rather than worked out from git because a squash merge leaves
+	// no trace git can follow: the branch is rewritten into one new commit, so its tip is never
+	// an ancestor of the base and it is not patch-equivalent to what landed either. A repository
+	// that squash-merges would simply never notice its own merges.
+	State string `json:"state,omitempty" yaml:"state,omitempty"`
+	// Author is who opened the review and Viewer is who the credential belongs to, both in the
+	// provider's own terms. Empty when the provider does not answer, and an empty pair means
+	// UNKNOWN - never "yours". Guessing "yours" would refuse a legitimate approval on a
+	// colleague's change; guessing "theirs" would let a change approve itself.
+	Author string `json:"author,omitempty" yaml:"author,omitempty"`
+	Viewer string `json:"viewer,omitempty" yaml:"viewer,omitempty"`
+}
+
+// ReviewVerdict is what a published review SAYS about the change: remarks alone, an approval, or
+// a request for changes. It follows the family rule KnowledgeVerdict states - the scalar judgment
+// is a Verdict, and the constants carry that prefix rather than the domain's.
+//
+// Provider-neutral by design. GitHub calls this an "event" and spells its values in caps; GitLab
+// approves through a different endpoint entirely; Gerrit scores a label. Naming the magus-side
+// concept after any one of them would make the others translate a foreign word, so a spell maps
+// these three onto whatever its host actually wants.
+type ReviewVerdict string
+
+const (
+	// VerdictComment publishes the remarks and takes no position. The default everywhere, the
+	// only verdict a self-review can carry, and what any unrecognized value becomes.
+	VerdictComment ReviewVerdict = "comment"
+	// VerdictApprove says the change should land.
+	VerdictApprove ReviewVerdict = "approve"
+	// VerdictRequestChanges says it should not, yet.
+	VerdictRequestChanges ReviewVerdict = "request_changes"
+)
+
+// Asserts reports whether v takes a position on the change rather than only remarking on it.
+//
+// It is the question the permission rule turns on, and it is written once here so an unrecognized
+// value - a client's typo, a newer magus's vocabulary - is not an assertion by default. Only the
+// two words below can be.
+func (v ReviewVerdict) Asserts() bool {
+	return v == VerdictApprove || v == VerdictRequestChanges
+}
+
+// PermittedVerdict returns the verdict this review may actually carry, which is want unless magus
+// will not permit it, and [VerdictComment] when it will not.
+//
+// A caller that needs to know whether it was refused compares the result against what it asked
+// for. That is deliberate: a second `downgraded bool` return would read as the (value, ok) idiom
+// with its polarity inverted, and a reader who glanced at it would take true for success.
+//
+// Two cases are refused, and both come back as remarks rather than as an error - the review still
+// publishes, it just does not assert:
+//
+//   - The viewer opened the review. A change cannot approve itself. The provider API would take
+//     it, which is exactly why the rule lives here rather than in a workspace-authored spell.
+//   - Authorship is UNKNOWN. A provider that names neither party has not said the review belongs
+//     to somebody else, and "magus could not tell" must never resolve to "go ahead" - which is
+//     the whole reason OpenedByViewer reports its own certainty.
+func (r ReviewTarget) PermittedVerdict(want ReviewVerdict) ReviewVerdict {
+	if !want.Asserts() {
+		return VerdictComment
+	}
+	if mine, known := r.OpenedByViewer(); !known || mine {
+		return VerdictComment
+	}
+	return want
+}
+
+// AllowedVerdicts lists every verdict this reviewer may publish, remarks first.
+//
+// DERIVED from PermittedVerdict rather than restating its rule, so a surface offering the choices
+// and the publish path enforcing them cannot drift apart. A client renders exactly this list; it
+// is never handed the author and viewer names to compare for itself, because a permission rule
+// re-implemented in a browser is one that eventually disagrees with the one that matters.
+func (r ReviewTarget) AllowedVerdicts() []ReviewVerdict {
+	out := []ReviewVerdict{VerdictComment}
+	for _, v := range []ReviewVerdict{VerdictApprove, VerdictRequestChanges} {
+		if r.PermittedVerdict(v) == v {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// VerdictLimit explains why AllowedVerdicts is only remarks, or "" when it is not limited.
+//
+// The two reasons are different facts and a surface that renders them alike misleads: "this is
+// your own change" is how review is supposed to work, while "magus could not tell who opened
+// this" is a gap in what the provider answered - the same distinction the branch lookup's
+// unsupported marker exists to preserve.
+func (r ReviewTarget) VerdictLimit() string {
+	mine, known := r.OpenedByViewer()
+	switch {
+	case !known:
+		// Carries its code, so a surface can link the reader to the page explaining why not
+		// knowing resolves the same way as knowing it is yours.
+		return string(ReviewAuthorshipUnknown) +
+			": magus could not tell who opened this review, so it will not approve on your behalf"
+	case mine:
+		return "you opened this review, and a change cannot approve itself"
+	default:
+		return ""
+	}
+}
+
+// OpenedByViewer reports whether the credential holder opened this review, and whether that is
+// KNOWN at all.
+//
+// Two returns rather than one, in the (value, ok) shape, because the third state is real and
+// silently collapsing it is the bug this guards: a provider that names neither party leaves the
+// question unanswered, which is not the same as answering "no".
+func (r ReviewTarget) OpenedByViewer() (opened, known bool) {
+	if r.Author == "" || r.Viewer == "" {
+		return false, false
+	}
+	return r.Author == r.Viewer, true
+}
+
+// Open reports whether there is a review to publish to or read from AT ALL. It is about
+// existence, not about State: a merged review is still one whose conversation can be read, and
+// Open stays true for it.
+func (r ReviewTarget) Open() bool { return r.ID != "" }
+
+// Merged reports whether the host says this review has landed.
+func (r ReviewTarget) Merged() bool { return r.State == "merged" }
+
+// ReviewThread is one comment already on the review, written by anybody.
+//
+// Read-only here. A thread belongs to the host, which is the record every participant sees;
+// magus renders it so a reader never leaves to find out what a colleague said, and replies
+// through the provider rather than editing a local copy that would silently diverge.
+type ReviewThread struct {
+	ID   string `json:"id" yaml:"id"`
+	Path string `json:"path" yaml:"path"`
+	// Line is the new-side line the host anchored this remark to.
+	Line int `json:"line" yaml:"line"`
+	// Hunk is the index WITHIN Path's hunks of the one containing Line, or -1 when no hunk in
+	// this changeset does.
+	//
+	// Resolved by magus rather than by each surface, because the arithmetic is the only hard
+	// part of placing a thread and two surfaces doing it independently is how the same remark
+	// comes to sit against different code in the terminal and the browser. -1 is ordinary: the
+	// working tree moves after a colleague writes, and a review covers commits a working diff
+	// does not.
+	Hunk   int    `json:"hunk" yaml:"hunk"`
+	Author string `json:"author" yaml:"author"`
+	Body   string `json:"body" yaml:"body"`
+	// New reports that the reader has not had this thread on screen before. magus's own
+	// annotation rather than anything the host said - every other field here belongs to the
+	// review, and this one belongs to the reader's history with it.
+	New bool `json:"new,omitempty" yaml:"new,omitempty"`
 }
 
 // DiffSuggestion is an agent asking for the human's attention somewhere.
@@ -341,9 +676,39 @@ type DiffSession struct {
 	// Viewed holds the content digests of hunks the human has marked read. Digests rather
 	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk -
 	// the failing of every viewed-checkbox that resets on force-push.
-	Viewed      []string         `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
-	Comments    []DiffComment    `json:"comments,omitempty"    yaml:"comments,omitempty"`
-	Suggestions []DiffSuggestion `json:"suggestions,omitempty" yaml:"suggestions,omitempty"`
+	Viewed []string `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
+	// SeenThreads holds the ids of the review's threads the human has actually had on screen.
+	// It is the watermark that decides what counts as NEW, and it belongs to the reader for the
+	// same reason Viewed does: a mark nobody made is a claim nobody can stand behind.
+	//
+	// ONE watermark, deliberately. The obvious alternative - letting the job that watches the
+	// forge record what it has reported - means everything is already marked seen by the time
+	// the reader opens the diff, so the surface could never show them what arrived. The job
+	// reads this instead and reports what lies outside it.
+	SeenThreads []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
+	Comments    []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
+	Suggestions []DiffSuggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
+}
+
+// UnseenThreads returns the ids in threads the reader has not had on screen, in the order given.
+//
+// Ids rather than a COUNT, because a count is wrong in the case that matters: a comment deleted
+// and another added nets zero, and the new one is then never reported.
+func (s DiffSession) UnseenThreads(threads []ReviewThread) []string {
+	if len(threads) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(s.SeenThreads))
+	for _, id := range s.SeenThreads {
+		seen[id] = struct{}{}
+	}
+	var out []string
+	for _, t := range threads {
+		if _, ok := seen[t.ID]; !ok && t.ID != "" {
+			out = append(out, t.ID)
+		}
+	}
+	return out
 }
 
 // GeneratedCount reports how many files are declared outputs - the ones a reader can fold
@@ -411,6 +776,35 @@ func (r Diff) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 	// any history existed, so leaving the old order would keep a ranking key magus now has out
 	// of the order it is supposed to drive. SortForReading is idempotent, so re-running it is
 	// the cheap way to keep ONE definition of review order rather than a second one here.
+	r.SortForReading()
+}
+
+// AttachReviewed records the earlier pass a reader made over these files.
+//
+// A pointer receiver, unlike its neighbours: this writes a field on the Diff itself rather than on
+// the elements of a slice it holds, and a value receiver would drop it silently.
+func (r *Diff) AttachReviewed(at VCSCheckpoint, files int) {
+	r.Reviewed = DiffReviewed{At: at, Files: files}
+}
+
+// AttachReadState folds recorded read receipts onto the review, in place.
+//
+// Supplied by the caller for the same reason AttachReplay's data is: the receipts live beside
+// the cache dir, and fingerprinting each file to check one is a cost the caller decides to
+// pay while the fold stays defined once. A file the map does not name keeps DiffReadUnknown,
+// which is why an empty map returns early rather than marking everything unread.
+func (r Diff) AttachReadState(byPath map[string]string) {
+	if len(byPath) == 0 {
+		return
+	}
+	for i := range r.Files {
+		if s, ok := byPath[r.Files[i].Path]; ok {
+			r.Files[i].ReadState = s
+		}
+	}
+	// Re-sort for the reason AttachChurn does: this call is what makes ReadState known, and
+	// the review was ordered before any receipt was read. Leaving the old order would keep a
+	// ranking key magus now has out of the order it drives.
 	r.SortForReading()
 }
 
@@ -484,6 +878,17 @@ func (r Diff) SortForReading() {
 		if a.Reach != nil && b.Reach != nil && *a.Reach != *b.Reach {
 			return *b.Reach - *a.Reach // widest reach first
 		}
+		// Among files of equal consequence, the ones nobody has read come first, and a file
+		// read and then edited comes first of all - see DiffReadStale.
+		//
+		// A TIEBREAK, never a reordering: reach still decides whenever it is known,
+		// because a widely-referenced file you have read is still likelier to break things
+		// than an unread leaf. What this buys is that a receipt pays for itself the moment
+		// it is minted - read a file and it sinks, edit it and it surfaces - so the record
+		// is worth keeping for its own sake rather than because a report scolds you.
+		if ra, rb := readRank(a.ReadState), readRank(b.ReadState); ra != rb {
+			return ra - rb
+		}
 		// A file magus has no history for reads BEFORE one it does, but only as a tiebreak:
 		// reach still decides whenever it is known, because "widely referenced" beats "new"
 		// as a reason to read something first. This is what stops a new file sinking under
@@ -502,6 +907,23 @@ func (r Diff) SortForReading() {
 		}
 		return 0
 	})
+}
+
+// readRank orders the read states by how much a reader still owes the file.
+//
+// DiffReadUnknown ranks with read rather than with unread, deliberately. Unknown means nobody
+// checked, and sorting an unmeasured workspace's whole changeset to the top would dress "no
+// receipt store" up as "you have read none of this" - the same collapse the state constants
+// refuse everywhere else.
+func readRank(state string) int {
+	switch state {
+	case DiffReadStale:
+		return 0
+	case DiffReadUnread:
+		return 1
+	default:
+		return 2
+	}
 }
 
 // Ranked reports whether the ordering had a ranking key to work with at all.

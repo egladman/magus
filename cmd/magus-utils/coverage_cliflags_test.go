@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/clispec"
+	"github.com/egladman/magus/internal/cli"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,10 +51,10 @@ func TestAliasGroupSpellings(t *testing.T) {
 }
 
 func TestGroupAliasesFoldsAnAliasIntoItsPrimary(t *testing.T) {
-	groups := groupAliases("demo", []clispec.Flag{
-		{Name: "explain", Kind: clispec.FlagBool},
-		{Name: "e", Kind: clispec.FlagBool, AliasOf: "explain"},
-		{Name: "base", Kind: clispec.FlagString},
+	groups := groupAliases("demo", []cli.Flag{
+		{Name: "explain", Kind: cli.FlagBool},
+		{Name: "e", Kind: cli.FlagBool, AliasOf: "explain"},
+		{Name: "base", Kind: cli.FlagString},
 	})
 
 	require.Len(t, groups, 2, "an alias must not introduce a group of its own")
@@ -67,9 +67,9 @@ func TestGroupAliasesFoldsAnAliasIntoItsPrimary(t *testing.T) {
 // TestGroupAliasesNamesTheFieldForTheLongestSpelling covers the {t, test} case from the
 // doc comment: naming the field after the PRIMARY would hand every read site f.T.
 func TestGroupAliasesNamesTheFieldForTheLongestSpelling(t *testing.T) {
-	groups := groupAliases("demo", []clispec.Flag{
-		{Name: "t", Kind: clispec.FlagBool},
-		{Name: "test", Kind: clispec.FlagBool, AliasOf: "t"},
+	groups := groupAliases("demo", []cli.Flag{
+		{Name: "t", Kind: cli.FlagBool},
+		{Name: "test", Kind: cli.FlagBool, AliasOf: "t"},
 	})
 	require.Len(t, groups, 1)
 	assert.Equal(t, "Test", groups[0].field)
@@ -83,8 +83,8 @@ func TestGroupAliasesPanics(t *testing.T) {
 		assert.PanicsWithValue(t,
 			`cliflags: demo --x is AliasOf "nope", which it does not declare`,
 			func() {
-				groupAliases("demo", []clispec.Flag{
-					{Name: "x", Kind: clispec.FlagBool, AliasOf: "nope"},
+				groupAliases("demo", []cli.Flag{
+					{Name: "x", Kind: cli.FlagBool, AliasOf: "nope"},
 				})
 			})
 	})
@@ -93,10 +93,10 @@ func TestGroupAliasesPanics(t *testing.T) {
 		assert.PanicsWithValue(t,
 			"cliflags: demo --z aliases --y, which is itself an alias",
 			func() {
-				groupAliases("demo", []clispec.Flag{
-					{Name: "a", Kind: clispec.FlagBool},
-					{Name: "y", Kind: clispec.FlagBool, AliasOf: "a"},
-					{Name: "z", Kind: clispec.FlagBool, AliasOf: "y"},
+				groupAliases("demo", []cli.Flag{
+					{Name: "a", Kind: cli.FlagBool},
+					{Name: "y", Kind: cli.FlagBool, AliasOf: "a"},
+					{Name: "z", Kind: cli.FlagBool, AliasOf: "y"},
 				})
 			})
 	})
@@ -105,34 +105,34 @@ func TestGroupAliasesPanics(t *testing.T) {
 		assert.PanicsWithValue(t,
 			"cliflags: demo --b is string but aliases --a, which is bool",
 			func() {
-				groupAliases("demo", []clispec.Flag{
-					{Name: "a", Kind: clispec.FlagBool},
-					{Name: "b", Kind: clispec.FlagString, AliasOf: "a"},
+				groupAliases("demo", []cli.Flag{
+					{Name: "a", Kind: cli.FlagBool},
+					{Name: "b", Kind: cli.FlagString, AliasOf: "a"},
 				})
 			})
 	})
 }
 
 func TestModesOfListsTheBaseFirst(t *testing.T) {
-	flags := []clispec.Flag{
-		{Name: "no-cache", Kind: clispec.FlagBool},
-		{Name: "detail", Kind: clispec.FlagBool, Modes: []string{"plan"}},
-		{Name: "base", Kind: clispec.FlagString, Modes: []string{"plan", "impact"}},
+	flags := []cli.Flag{
+		{Name: "no-cache", Kind: cli.FlagBool},
+		{Name: "detail", Kind: cli.FlagBool, Modes: []string{"plan"}},
+		{Name: "base", Kind: cli.FlagString, Modes: []string{"plan", "impact"}},
 	}
 	assert.Equal(t, []string{"", "plan", "impact"}, modesOf(flags))
 
 	// A command declaring no modes keeps a single binder.
-	assert.Equal(t, []string{""}, modesOf([]clispec.Flag{{Name: "x", Kind: clispec.FlagBool}}))
+	assert.Equal(t, []string{""}, modesOf([]cli.Flag{{Name: "x", Kind: cli.FlagBool}}))
 }
 
 func TestFlagsForMode(t *testing.T) {
-	flags := []clispec.Flag{
-		{Name: "no-cache", Kind: clispec.FlagBool},
-		{Name: "detail", Kind: clispec.FlagBool, Modes: []string{"plan"}},
-		{Name: "base", Kind: clispec.FlagString, Modes: []string{"plan", "impact"}},
+	flags := []cli.Flag{
+		{Name: "no-cache", Kind: cli.FlagBool},
+		{Name: "detail", Kind: cli.FlagBool, Modes: []string{"plan"}},
+		{Name: "base", Kind: cli.FlagString, Modes: []string{"plan", "impact"}},
 	}
 
-	names := func(fs []clispec.Flag) []string {
+	names := func(fs []cli.Flag) []string {
 		out := make([]string, 0, len(fs))
 		for _, f := range fs {
 			out = append(out, f.Name)
@@ -149,21 +149,21 @@ func TestFlagsForMode(t *testing.T) {
 }
 
 func TestDocFor(t *testing.T) {
-	flags := []clispec.Flag{{Name: "watch", Kind: clispec.FlagBool, Doc: "Watch it"}}
+	flags := []cli.Flag{{Name: "watch", Kind: cli.FlagBool, Doc: "Watch it"}}
 	assert.Equal(t, "Watch it", docFor(flags, "watch"))
 	assert.Equal(t, "", docFor(flags, "absent"))
 }
 
 func TestGoTypeAndBindMethodCoverEveryBoundKind(t *testing.T) {
 	cases := []struct {
-		kind       clispec.FlagKind
+		kind       cli.FlagKind
 		goType     string
 		bindMethod string
 	}{
-		{clispec.FlagBool, "bool", "Bool"},
-		{clispec.FlagInt, "int", "Int"},
-		{clispec.FlagDuration, "time.Duration", "Duration"},
-		{clispec.FlagString, "string", "String"},
+		{cli.FlagBool, "bool", "Bool"},
+		{cli.FlagInt, "int", "Int"},
+		{cli.FlagDuration, "time.Duration", "Duration"},
+		{cli.FlagString, "string", "String"},
 	}
 	for _, c := range cases {
 		assert.Equal(t, c.goType, goType(c.kind))
@@ -172,30 +172,30 @@ func TestGoTypeAndBindMethodCoverEveryBoundKind(t *testing.T) {
 
 	// FlagCustom is declared but never bound, so reaching either of these with it
 	// means writeBinder's filter stopped working.
-	assert.Panics(t, func() { goType(clispec.FlagCustom) })
-	assert.Panics(t, func() { bindMethod(clispec.FlagCustom) })
+	assert.Panics(t, func() { goType(cli.FlagCustom) })
+	assert.Panics(t, func() { bindMethod(cli.FlagCustom) })
 }
 
 func TestFlagDefaultLiteral(t *testing.T) {
 	cases := []struct {
 		name string
-		flag clispec.Flag
+		flag cli.Flag
 		want string
 	}{
-		{"bool true", clispec.Flag{Kind: clispec.FlagBool, Default: true}, "true"},
-		{"bool false", clispec.Flag{Kind: clispec.FlagBool, Default: false}, "false"},
-		{"bool nil default", clispec.Flag{Kind: clispec.FlagBool}, "false"},
-		{"int", clispec.Flag{Kind: clispec.FlagInt, Default: 8}, "8"},
-		{"int nil default", clispec.Flag{Kind: clispec.FlagInt}, "0"},
+		{"bool true", cli.Flag{Kind: cli.FlagBool, Default: true}, "true"},
+		{"bool false", cli.Flag{Kind: cli.FlagBool, Default: false}, "false"},
+		{"bool nil default", cli.Flag{Kind: cli.FlagBool}, "false"},
+		{"int", cli.Flag{Kind: cli.FlagInt, Default: 8}, "8"},
+		{"int nil default", cli.Flag{Kind: cli.FlagInt}, "0"},
 		// Rendered as the nanosecond count rather than "5s": the generated file is Go
 		// source, and a duration literal has no untyped spelling.
-		{"duration", clispec.Flag{Kind: clispec.FlagDuration, Default: 5 * time.Second}, "time.Duration(5000000000)"},
-		{"duration nil default", clispec.Flag{Kind: clispec.FlagDuration}, "0"},
-		{"string", clispec.Flag{Kind: clispec.FlagString, Default: "test"}, `"test"`},
-		{"string nil default", clispec.Flag{Kind: clispec.FlagString}, `""`},
+		{"duration", cli.Flag{Kind: cli.FlagDuration, Default: 5 * time.Second}, "time.Duration(5000000000)"},
+		{"duration nil default", cli.Flag{Kind: cli.FlagDuration}, "0"},
+		{"string", cli.Flag{Kind: cli.FlagString, Default: "test"}, `"test"`},
+		{"string nil default", cli.Flag{Kind: cli.FlagString}, `""`},
 		// A Default of the wrong Go type falls back to the kind's zero rather than
 		// emitting something unparsable.
-		{"mistyped default", clispec.Flag{Kind: clispec.FlagInt, Default: "8"}, "0"},
+		{"mistyped default", cli.Flag{Kind: cli.FlagInt, Default: "8"}, "0"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -203,14 +203,14 @@ func TestFlagDefaultLiteral(t *testing.T) {
 		})
 	}
 
-	assert.Panics(t, func() { flagDefaultLiteral(clispec.Flag{Kind: clispec.FlagCustom}) })
+	assert.Panics(t, func() { flagDefaultLiteral(cli.Flag{Kind: cli.FlagCustom}) })
 }
 
 func TestConstsFor(t *testing.T) {
 	seen := map[string]string{}
-	got := constsFor("demo", []clispec.Flag{
-		{Name: "watch", Kind: clispec.FlagBool},
-		{Name: "no-cache", Kind: clispec.FlagBool},
+	got := constsFor("demo", []cli.Flag{
+		{Name: "watch", Kind: cli.FlagBool},
+		{Name: "no-cache", Kind: cli.FlagBool},
 	}, seen)
 
 	require.Equal(t, []string{
@@ -220,7 +220,7 @@ func TestConstsFor(t *testing.T) {
 
 	// A command visited twice must not emit the constant twice: the second run is a
 	// duplicate declaration, not a collision.
-	again := constsFor("demo", []clispec.Flag{{Name: "watch", Kind: clispec.FlagBool}}, seen)
+	again := constsFor("demo", []cli.Flag{{Name: "watch", Kind: cli.FlagBool}}, seen)
 	assert.Empty(t, again)
 }
 
@@ -230,9 +230,9 @@ func TestConstsForRefusesTwoFlagsUnderOneName(t *testing.T) {
 	assert.PanicsWithValue(t,
 		`cliflags: FlagDemoC would name both "c" and "C"`,
 		func() {
-			constsFor("demo", []clispec.Flag{
-				{Name: "c", Kind: clispec.FlagBool},
-				{Name: "C", Kind: clispec.FlagBool},
+			constsFor("demo", []cli.Flag{
+				{Name: "c", Kind: cli.FlagBool},
+				{Name: "C", Kind: cli.FlagBool},
 			}, map[string]string{})
 		})
 }
@@ -240,19 +240,19 @@ func TestConstsForRefusesTwoFlagsUnderOneName(t *testing.T) {
 // TestWalkCommandsDescendsEveryLevel is the one-level walk that left `config cache
 // prune --older-than` and six siblings unbindable.
 func TestWalkCommandsDescendsEveryLevel(t *testing.T) {
-	root := clispec.Command{
+	root := cli.Command{
 		Name: "config",
-		Children: []clispec.Command{{
+		Children: []cli.Command{{
 			Name: "mcp",
-			Children: []clispec.Command{{
+			Children: []cli.Command{{
 				Name:     "connector",
-				Children: []clispec.Command{{Name: "create"}},
+				Children: []cli.Command{{Name: "create"}},
 			}},
 		}},
 	}
 
 	var paths []string
-	walkCommands(root.Name, root, func(path string, _ clispec.Command) {
+	walkCommands(root.Name, root, func(path string, _ cli.Command) {
 		paths = append(paths, path)
 	})
 
@@ -266,9 +266,9 @@ func TestWalkCommandsDescendsEveryLevel(t *testing.T) {
 
 func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "demo", "demo", []clispec.Flag{
-		{Name: "watch", Kind: clispec.FlagBool, Doc: "Watch it"},
-		{Name: "W", Kind: clispec.FlagBool, AliasOf: "watch", Doc: "Short for --watch"},
+	writeBinder(&b, "demo", "demo", []cli.Flag{
+		{Name: "watch", Kind: cli.FlagBool, Doc: "Watch it"},
+		{Name: "W", Kind: cli.FlagBool, AliasOf: "watch", Doc: "Short for --watch"},
 	})
 	got := b.String()
 
@@ -288,9 +288,9 @@ func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 // generated binders from hardcoding a number the live binding disagreed with.
 func TestWriteBinderEmitsDefaultsForARuntimeDefault(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "affected plan", "affected", []clispec.Flag{
-		{Name: "max-shards", Kind: clispec.FlagInt, Default: 8, DefaultAtBind: true, Doc: "Maximum CI shards"},
-		{Name: "detail", Kind: clispec.FlagBool, Doc: "Per-shard detail"},
+	writeBinder(&b, "affected plan", "affected", []cli.Flag{
+		{Name: "max-shards", Kind: cli.FlagInt, Default: 8, DefaultAtBind: true, Doc: "Maximum CI shards"},
+		{Name: "detail", Kind: cli.FlagBool, Doc: "Per-shard detail"},
 	})
 	got := b.String()
 
@@ -318,7 +318,7 @@ func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 	// would panic at parse time with "flag redefined".
 	t.Run("only custom flags", func(t *testing.T) {
 		var b bytes.Buffer
-		writeBinder(&b, "demo", "demo", []clispec.Flag{{Name: "ignore", Kind: clispec.FlagCustom}})
+		writeBinder(&b, "demo", "demo", []cli.Flag{{Name: "ignore", Kind: cli.FlagCustom}})
 		assert.Empty(t, b.String())
 	})
 }
@@ -329,10 +329,10 @@ func TestWriteBinderEmitsParsableGo(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString("package gen\n\nimport (\n\t\"flag\"\n\t\"time\"\n)\n\n")
 	b.WriteString("const (\n\tFlagDemoTimeout = \"timeout\"\n\tFlagDemoName = \"name\"\n\tFlagDemoDepth = \"depth\"\n)\n")
-	writeBinder(&b, "demo", "demo", []clispec.Flag{
-		{Name: "timeout", Kind: clispec.FlagDuration, Default: 90 * time.Second, Doc: "Give up after this long"},
-		{Name: "name", Kind: clispec.FlagString, Default: "main", Doc: "Which one"},
-		{Name: "depth", Kind: clispec.FlagInt, Doc: "How deep"},
+	writeBinder(&b, "demo", "demo", []cli.Flag{
+		{Name: "timeout", Kind: cli.FlagDuration, Default: 90 * time.Second, Doc: "Give up after this long"},
+		{Name: "name", Kind: cli.FlagString, Default: "main", Doc: "Which one"},
+		{Name: "depth", Kind: cli.FlagInt, Doc: "How deep"},
 	})
 
 	_, err := format.Source(b.Bytes())

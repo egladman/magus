@@ -420,3 +420,90 @@ func TestStoreReportsUnreadableLedger(t *testing.T) {
 	_, err := s.List()
 	assert.Error(t, err, "a corrupt ledger is reported, never silently read as empty")
 }
+
+func TestRecordUnattributedWrite(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n"), 0o644))
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
+	ctx := t.Context()
+
+	_, err := s.Put(ctx, types.Delegation{ID: "worker-1", OwnedPaths: []string{"a.go"}})
+	require.NoError(t, err)
+
+	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Len(t, rows[0].Unattributed, 1)
+	got := rows[0].Unattributed[0]
+	assert.Equal(t, "a.go", got.Path)
+	assert.NotEmpty(t, got.Digest, "the digest is the whole signal: without it there is nothing to compare")
+	assert.NotEqual(t, types.DigestAbsent, got.Digest)
+	assert.NotZero(t, got.At)
+}
+
+// One row per path, newest wins. A person saves a file a dozen times while an agent works, and
+// eleven superseded digests would bury the only one that describes the tree.
+func TestRecordUnattributedWriteKeepsOneRowPerPath(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "a.go")
+	require.NoError(t, os.WriteFile(path, []byte("first\n"), 0o644))
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
+	ctx := t.Context()
+
+	_, err := s.Put(ctx, types.Delegation{ID: "worker-1", OwnedPaths: []string{"a.go"}})
+	require.NoError(t, err)
+	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	first := rows[0].Unattributed[0].Digest
+
+	require.NoError(t, os.WriteFile(path, []byte("second\n"), 0o644))
+	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
+
+	rows, err = s.List()
+	require.NoError(t, err)
+	require.Len(t, rows[0].Unattributed, 1, "one row per path")
+	assert.NotEqual(t, first, rows[0].Unattributed[0].Digest, "the newest write is the one that describes the tree")
+}
+
+// The guard calls this on every write it grades, so an unbounded list would make a long editing
+// session against a declared plan grow the ledger without limit.
+func TestRecordUnattributedWriteIsBounded(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
+	ctx := t.Context()
+
+	const over = 5
+	var owned []string
+	for i := range MaxUnattributedWrites + over {
+		owned = append(owned, fmt.Sprintf("f%d.go", i))
+	}
+	_, err := s.Put(ctx, types.Delegation{ID: "worker-1", OwnedPaths: owned})
+	require.NoError(t, err)
+	for _, p := range owned {
+		require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", p))
+	}
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	kept := rows[0].Unattributed
+	require.Len(t, kept, MaxUnattributedWrites)
+	// Written f0..f(Max+over-1), so trimming to the last Max drops exactly the first `over`.
+	assert.Equal(t, fmt.Sprintf("f%d.go", over), kept[0].Path, "the oldest are dropped")
+	assert.Equal(t, fmt.Sprintf("f%d.go", MaxUnattributedWrites+over-1), kept[len(kept)-1].Path)
+}
+
+// A delegation that ended between the grading and the record is nothing to report to anybody, and
+// inventing a row for it would put a plan in the ledger nobody declared.
+func TestRecordUnattributedWriteDoesNotInventARow(t *testing.T) {
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+
+	require.NoError(t, s.RecordUnattributedWrite(t.Context(), "never-declared", "a.go"))
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}

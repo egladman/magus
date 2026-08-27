@@ -123,3 +123,16 @@ func TestShortRev(t *testing.T) {
 	assert.Equal(t, "abc", shortRev("abc"), "a value already short is passed through")
 	assert.Empty(t, shortRev(""), "an unrecorded revision stays empty rather than becoming a rendered blank")
 }
+
+func TestFilterPathsIsCaseInsensitiveSubstring(t *testing.T) {
+	items := []string{"cmd/magus/diff.go", "internal/CACHE/log.go", "types/diff.go"}
+
+	// An empty filter returns the input itself rather than a copy: the picker shows
+	// everything before a keystroke arrives.
+	assert.Equal(t, items, filterPaths(items, ""))
+	assert.Equal(t, items, filterPaths(items, "   "))
+
+	assert.Equal(t, []string{"cmd/magus/diff.go", "types/diff.go"}, filterPaths(items, "DIFF"))
+	assert.Equal(t, []string{"internal/CACHE/log.go"}, filterPaths(items, "cache"))
+	assert.Nil(t, filterPaths(items, "nothing-matches"))
+}

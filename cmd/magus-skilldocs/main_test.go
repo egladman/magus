@@ -15,10 +15,10 @@ import (
 	"github.com/egladman/magus/internal/docs"
 )
 
-// skillSrc is the directory holding the skills/ tree, relative to this package.
-// The tests run in the command's own directory; the embedded bodies live beside
-// the CLI that embeds them.
-const skillSrc = "../magus"
+// skillCatalog is the same embedded catalog the generator renders from, so a test asserting what
+// pages exist is asserting against the bodies a build actually ships. It replaced a relative path
+// into another command's directory, which only worked because the assets were not importable.
+func skillCatalog() *agent.Catalog { return agent.Default(0) }
 
 // generate renders the whole reference into a fresh directory. It drives the real
 // embedded bodies rather than a fixture on purpose: the pages exist so a skill
@@ -27,7 +27,7 @@ const skillSrc = "../magus"
 func generate(t *testing.T) string {
 	t.Helper()
 	out := t.TempDir()
-	require.NoError(t, run(out, skillSrc))
+	require.NoError(t, run(out))
 	return out
 }
 
@@ -69,7 +69,7 @@ func TestRunWritesOnePagePerShippedSkill(t *testing.T) {
 		got = append(got, e.Name())
 	}
 
-	defs, err := agent.NewCatalog(os.DirFS(skillSrc), "", 0).EmbeddedSkills()
+	defs, err := skillCatalog().EmbeddedSkills()
 	require.NoError(t, err)
 	want := []string{"index.md"}
 	for _, d := range defs {
@@ -90,7 +90,7 @@ func TestSkillPageShowsTheStampAndBothForms(t *testing.T) {
 	fm, ok := docs.ParseFrontmatter(body)
 	require.True(t, ok, "the page has no parsable frontmatter")
 	assert.Equal(t, "magus-query", fm.Title)
-	assert.Equal(t, "cmd/magus/skills/magus-query/SKILL.md", fm.GeneratedFrom)
+	assert.Equal(t, "internal/agent/skills/magus-query/SKILL.md", fm.GeneratedFrom)
 	assert.Equal(t, []string{"agents", "skills", "magus-query"}, fm.Tags)
 	assert.True(t, strings.HasSuffix(fm.Description, "."), "the description is trimmed to its opening claim: %q", fm.Description)
 	assert.NotContains(t, fm.Description, "Use INSTEAD of Grep", "the trigger text does not belong in a frontmatter description")
@@ -143,7 +143,7 @@ func TestIndexTotalsEverySkill(t *testing.T) {
 	out := generate(t)
 	index := page(t, out, "index.md")
 
-	defs, err := agent.NewCatalog(os.DirFS(skillSrc), "", 0).EmbeddedSkills()
+	defs, err := skillCatalog().EmbeddedSkills()
 	require.NoError(t, err)
 	for _, d := range defs {
 		assert.Contains(t, index, "| ["+d.Name+"]("+d.Name+".md) |", "no index row for %s", d.Name)
@@ -180,13 +180,11 @@ func TestPruneReportsAnUnreadableDirectory(t *testing.T) {
 	assert.Error(t, prune(filepath.Join(t.TempDir(), "absent"), nil))
 }
 
-// TestRunNeedsTheRealAgentsSection guards the digest: the section is part of the
-// content fingerprint the stamp table publishes, so rendering with a placeholder
-// would print a digest no install ever writes.
-func TestRunNeedsTheRealAgentsSection(t *testing.T) {
-	err := run(t.TempDir(), t.TempDir())
-	assert.ErrorContains(t, err, "agents-section.md")
-}
+// The digest guard that stood here is GONE, and deliberately: it checked that run refused a -src
+// directory holding no agents-section.md, because the section feeds the content fingerprint the
+// stamp table publishes and a placeholder would print a digest no install ever writes. The section
+// is embedded in internal/agent now and arrives with the catalog, so there is no longer a wrong
+// one to pass. The move deleted the failure mode rather than the check for it.
 
 func TestFirstSentence(t *testing.T) {
 	assert.Equal(t, "One claim.", firstSentence("One claim. Then the trigger text."))

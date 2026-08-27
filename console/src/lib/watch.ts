@@ -1,19 +1,23 @@
 // watch.ts - the shell-side notification watchers. These are the notifications the console cannot derive
 // from a surface it happens to have open: they must be observed at the SHELL so they fire whether or not
-// you are looking (the "unwatched" half of the admission doctrine). Two daemon-dependent watchers poll on
-// a slow ticker over the console's existing authenticated transport - no new backend push:
+// you are looking (the "unwatched" half of the admission doctrine). Three daemon-dependent watchers poll
+// on a slow ticker over the console's existing authenticated transport - no new backend push:
 //   - share-connect: a device first exercising the share token records a TOKEN_LIFECYCLE "share.open"
 //     trail event; surfaced as a BELL-tier notification with a one-click "Revoke share" action.
 //   - daemon storage: the daemon cache crossing its size threshold; a warn that rings once.
+//   - review merged: a review you took part in has landed, so its conversation can be kept. The forge
+//     is asked by the check-review JOB on the maintenance schedule, not here; this reads what it
+//     recorded, so a merge is noticed even when the console was shut when it happened.
 // A third watcher (localStorage size) needs no daemon and runs on mount. All are best-effort: an
 // unreachable daemon just means the poll no-ops until the next tick.
 
 import { createClient } from "@connectrpc/connect";
-import { ActivityService, Kind } from "../gen/magus/activity/v1alpha1/activity_pb";
-import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
-import { TokenService, TokenScope } from "../gen/magus/token/v1alpha1/token_pb";
+import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
+import { StatusService } from "@wire/status/v1alpha1/status_pb";
+import { TokenService, TokenScope } from "@wire/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, resolveDaemonHost } from "./daemon";
 import { showToast } from "./refresh-toast";
+import { mergedNotice, saidNotice } from "./review-notice";
 import {
   type NotificationStore,
   estimateStorageBytes,
@@ -126,6 +130,62 @@ async function pollDaemonStorage(host: string, store: NotificationStore): Promis
   });
 }
 
+// pollReviewMerged surfaces that a review you took part in has landed, so its conversation can be kept
+// before it becomes only a page on somebody else's website.
+//
+// It READS the trail; it does not do the watching. The check-review JOB asks the forge on the
+// maintenance schedule and records what it found, which is what lets the merge be noticed while the
+// console is shut - and the console is optional, so a watcher that only runs with a tab open would
+// miss most merges. This is the same shape pollShareConnect uses for share.open: the daemon records,
+// the console reads.
+//
+// HISTORY tier, deliberately. The admission doctrine in notifications.ts gives the bell to things that
+// change what you can TRUST about the workspace; a merge changes nothing you were relying on. It is
+// worth recording and not worth interrupting for, which is exactly what the silent tier is.
+async function pollReviewMerged(host: string, store: NotificationStore): Promise<void> {
+  const activity = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
+  const resp = await activity.listActivityEvents({
+    // Sized for TWO actions, not one. The job appends a review.said on every run while remarks
+    // stay unread, so a handful of ticks would push the rarer review.merged off a newest-first
+    // page and the offer to keep the conversation would never be surfaced at all.
+    pageSize: 40,
+    filter: { kinds: [Kind.JOB], actions: ["review.merged", "review.said"], actors: [] },
+  });
+  for (const ev of resp.events) {
+    if (ev.action === "review.said") {
+      // "<repo>: <count>: <id,id,...>". Keyed by the IDS rather than the count or the time, so the
+      // job running again before the reader looks reports the same set and the store recognises it.
+      const [repo, count, ids] = (ev.preview || "").split(": ");
+      const message = saidNotice(repo ?? "", Number(count));
+      // A preview this cannot read yields no message, and no key either - keying the malformed
+      // case on a constant made two different broken events dedupe into one.
+      if (!message || !ids) continue;
+      store.notify({
+        source: "Diff",
+        kind: "error",
+        important: true,
+        key: "review.said:" + ids,
+        message,
+      });
+      continue;
+    }
+    if (ev.action !== "review.merged") continue;
+    // The job writes "<repo>: <count>", the two things the sentence needs. A row it cannot read is
+    // skipped rather than rendered as a half-sentence.
+    const [repo, said] = (ev.preview || "").split(": ");
+    const message = mergedNotice({ repo, state: "merged" }, Number(said));
+    if (!message) continue;
+    // Keyed by the event rather than by the review, so a later merge on the same repo is a new
+    // record and re-seeing this one across polls is not.
+    store.notify({
+      source: "Diff",
+      kind: "ok",
+      key: "review.merged:" + (ev.time ? Number(ev.time.seconds) : 0) + ":" + (ev.preview || ""),
+      message,
+    });
+  }
+}
+
 // startShellWatch begins the daemon-dependent watchers on a slow ticker and returns a stop function. It
 // resolves the daemon host per tick (an attach can happen after boot) and no-ops when none is resolved.
 export function startShellWatch(store: NotificationStore): () => void {
@@ -140,6 +200,7 @@ export function startShellWatch(store: NotificationStore): () => void {
     await Promise.allSettled([
       pollShareConnect(host, store, baselineMs),
       pollDaemonStorage(host, store),
+      pollReviewMerged(host, store),
     ]);
   };
   const timer = setInterval(() => void tick(), POLL_MS);

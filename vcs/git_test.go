@@ -662,3 +662,171 @@ func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
 	assert.Contains(t, got, "uni/café.md", "tracked non-ASCII path came back quoted: %q", got)
 	assert.Contains(t, got, "uni/naïve.md", "untracked non-ASCII path came back quoted: %q", got)
 }
+
+// The switch is per-backend and the wrong one is silently useless, so each is pinned here
+// rather than left to the parity suite alone - that suite skips a backend whose binary is
+// absent, which is most CI machines for three of these four.
+//
+// git is the odd one out on purpose: it has no global --color flag (only a per-subcommand
+// one, which not every subcommand takes), so it gets the config override, which covers diff,
+// log and status alike. The other three accept --color=never before the subcommand.
+func TestUncoloredUsesEachBackendsOwnSwitch(t *testing.T) {
+	assert.Equal(t, []string{"-c", "color.ui=false", "diff", "-U1", "HEAD"},
+		uncolored("git", []string{"diff", "-U1", "HEAD"}))
+	for _, name := range []string{"hg", "sl", "jj"} {
+		assert.Equal(t, []string{"--color=never", "diff"}, uncolored(name, []string{"diff"}), name)
+	}
+	// The switch must PRECEDE the subcommand: all four treat it as a global option, and one
+	// placed after the subcommand is either rejected or silently scoped to it.
+	got := uncolored("hg", []string{"-R", "/repo", "log"})
+	assert.Equal(t, "--color=never", got[0])
+
+	// An unknown backend is passed through untouched rather than guessed at - inventing a
+	// flag for it would break every invocation instead of merely leaving color on.
+	assert.Equal(t, []string{"diff"}, uncolored("fossil", []string{"diff"}))
+}
+
+// BranchChanges answers the question the console asks to warn a reader that a file in front of
+// them is also being edited elsewhere. The remote-tracking refs are built by hand rather than by
+// cloning: what matters is that the ref exists under refs/remotes, not how it got there.
+func TestBranchChangesReportsOtherRemoteBranches(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
+	gitRun(t, repo, "branch", "-M", "main")
+
+	// Two colleagues' branches, each touching one file, recorded where a fetch would put them.
+	gitRun(t, repo, "checkout", "-q", "-b", "theirs")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // theirs\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "theirs")
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/theirs", "theirs")
+
+	gitRun(t, repo, "checkout", "-q", "-b", "other", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "b.go"), []byte("package b // other\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "other")
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/other", "other")
+
+	// The reader's own branch, which must NOT come back as competition with itself.
+	gitRun(t, repo, "checkout", "-q", "-b", "mine", "main")
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/mine", "mine")
+
+	got, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 10)
+	require.NoError(t, err)
+
+	byRef := map[string][]string{}
+	for _, b := range got {
+		byRef[b.Ref] = b.Paths
+	}
+	assert.Equal(t, []string{"a.go"}, byRef["theirs"])
+	assert.Equal(t, []string{"b.go"}, byRef["other"])
+	assert.NotContains(t, byRef, "mine", "the reader's own branch is not competition")
+	// The remote prefix is stripped: a reader names the branch, not the ref.
+	assert.NotContains(t, byRef, "origin/theirs")
+}
+
+// The cap belongs to the backend so git can apply it to the ref listing and no diff is ever run
+// for a branch that was going to be discarded.
+func TestBranchChangesHonorsTheLimit(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n"})
+	gitRun(t, repo, "branch", "-M", "main")
+	for _, name := range []string{"one", "two", "three"} {
+		gitRun(t, repo, "checkout", "-q", "-b", name, "main")
+		require.NoError(t, os.WriteFile(filepath.Join(repo, name+".go"), []byte("package "+name+"\n"), 0o644))
+		gitRun(t, repo, "add", "-A")
+		gitRun(t, repo, "commit", "-qm", name)
+		gitRun(t, repo, "update-ref", "refs/remotes/origin/"+name, name)
+	}
+	gitRun(t, repo, "checkout", "-q", "main")
+
+	got, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 2)
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+
+	none, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 0)
+	require.NoError(t, err)
+	assert.Empty(t, none, "a limit of zero asks for nothing and must fork nothing")
+}
+
+// The remote is not always called "origin". Trimming that literal prefix left an `upstream/feat/x`
+// with its prefix intact, so it never matched the reader's own branch name and was reported as
+// somebody else editing the exact files the reader had open - the worst possible false alarm from
+// a feature whose whole job is warning about collisions.
+func TestBranchChangesExcludesTheReadersBranchOnAnyRemote(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n"})
+	gitRun(t, repo, "branch", "-M", "main")
+
+	gitRun(t, repo, "checkout", "-q", "-b", "mine", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // mine\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "mine")
+	// The same branch on two remotes, which is what a fork checkout looks like.
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/mine", "mine")
+	gitRun(t, repo, "update-ref", "refs/remotes/upstream/mine", "mine")
+
+	got, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 10)
+	require.NoError(t, err)
+	for _, b := range got {
+		assert.NotEqual(t, "mine", b.Ref, "the reader's own branch is not competition, on any remote")
+	}
+	assert.Empty(t, got)
+}
+
+// TestBranchChangesSeesLocalBranchesNobodyHasPushed is the case the remote-only scan went blind
+// on, and it is the normal shape of agent fan-out: worktrees of one repository, on local branches
+// with no remote-tracking copy. An empty answer here is indistinguishable from "nothing competes".
+func TestBranchChangesSeesLocalBranchesNobodyHasPushed(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
+	gitRun(t, repo, "branch", "-M", "main")
+
+	// Never pushed, so no refs/remotes/ entry exists for either.
+	gitRun(t, repo, "checkout", "-q", "-b", "agent-one")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // one\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "one")
+
+	gitRun(t, repo, "checkout", "-q", "-b", "agent-two", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "b.go"), []byte("package b // two\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "two")
+
+	gitRun(t, repo, "checkout", "-q", "-b", "mine", "main")
+
+	got, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 10)
+	require.NoError(t, err)
+
+	byRef := map[string]types.BranchChange{}
+	for _, b := range got {
+		byRef[b.Ref] = b
+	}
+	assert.Equal(t, []string{"a.go"}, byRef["agent-one"].Paths)
+	assert.Equal(t, []string{"b.go"}, byRef["agent-two"].Paths)
+	assert.True(t, byRef["agent-one"].Local, "a local branch is current, not as-of-last-fetch")
+	assert.NotContains(t, byRef, "mine", "the reader's own branch is not competition")
+}
+
+// A branch and its remote-tracking copy are ONE line of work under two names. Reporting both would
+// tell the reader two people are editing a file when one is, and the local side wins because it is
+// the current answer where the tracking copy is only as new as the last fetch.
+func TestBranchChangesReportsABranchAndItsTrackingCopyOnce(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n"})
+	gitRun(t, repo, "branch", "-M", "main")
+
+	gitRun(t, repo, "checkout", "-q", "-b", "theirs")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // theirs\n"), 0o644))
+	gitRun(t, repo, "commit", "-qam", "theirs")
+	gitRun(t, repo, "update-ref", "refs/remotes/origin/theirs", "theirs")
+
+	gitRun(t, repo, "checkout", "-q", "-b", "mine", "main")
+
+	got, err := gitVCS{}.BranchChanges(t.Context(), repo, "main", 10)
+	require.NoError(t, err)
+
+	var theirs []types.BranchChange
+	for _, b := range got {
+		if b.Ref == "theirs" {
+			theirs = append(theirs, b)
+		}
+	}
+	require.Len(t, theirs, 1, "one line of work, reported once")
+	assert.True(t, theirs[0].Local, "the local side wins: it is current, the tracking copy is not")
+}

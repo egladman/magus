@@ -10,7 +10,7 @@
 //	                 project (docs/magusfile.buzz), which renders these to HTML like
 //	                 any other doc.
 //
-// Both render from the same internal/clispec registry; they are independent
+// Both render from the same internal/cli registry; they are independent
 // serializers, not a conversion of one format into the other.
 //
 // Usage:
@@ -30,7 +30,7 @@ import (
 	"strconv"
 	"strings"
 
-	iclispec "github.com/egladman/magus/internal/clispec"
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/config"
 )
 
@@ -65,7 +65,7 @@ func genRoff(outDir, date, ver string) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		fatalf("mkdir %s: %v", outDir, err)
 	}
-	pages := iclispec.RoffPages(date, ver)
+	pages := cli.RoffPages(date, ver)
 	wrote := make(map[string]bool, len(pages))
 	for _, page := range pages {
 		if err := writeFile(outDir, page.Name, page.Content); err != nil {
@@ -88,7 +88,7 @@ func genMD(outDir string) {
 		fatalf("magus.md: %v", err)
 	}
 	wrote := map[string]bool{"magus.md": true}
-	for _, seg := range iclispec.All {
+	for _, seg := range cli.All {
 		name := "magus-" + seg.Name + ".md"
 		if err := writeFile(outDir, name, renderCommandMD(seg)); err != nil {
 			fatalf("%s: %v", name, err)
@@ -149,7 +149,7 @@ func renderMainMD() []byte {
 	m.frontmatter(
 		"magus command",
 		"Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.",
-		"internal/clispec/registry.go",
+		"internal/cli/registry.go",
 		[]string{"cli", "magus", "build", "monorepo", "orchestrator", "cache", "workspace"},
 	)
 	m.h1("magus")
@@ -159,7 +159,7 @@ func renderMainMD() []byte {
 	m.p(mdB("magus") + " [flags] " + mdEsc("<subcommand>") + " [args]")
 
 	m.h2("Description")
-	for _, para := range iclispec.SplitParas(mainDescription) {
+	for _, para := range cli.SplitParas(mainDescription) {
 		m.p(mdEsc(para))
 	}
 
@@ -172,7 +172,7 @@ func renderMainMD() []byte {
 	m.def(mdB("-v"), mdEsc(flagVerbose))
 
 	m.h2("Subcommands")
-	for _, seg := range iclispec.All {
+	for _, seg := range cli.All {
 		ref := fmt.Sprintf("[%s(1)](magus-%s.md)", mdB("magus-"+seg.Name), seg.Name)
 		m.def(mdB(seg.Name), mdEsc(seg.Short)+". See "+ref+".")
 	}
@@ -185,7 +185,7 @@ func renderMainMD() []byte {
 }
 
 // writeChildFlagsMD emits an options block for every descendant declaring flags.
-func writeChildFlagsMD(m *mdBuf, path string, children []iclispec.Command) {
+func writeChildFlagsMD(m *mdBuf, path string, children []cli.Command) {
 	for _, child := range children {
 		sub := path + " " + child.Name
 		if child.HasFlags() {
@@ -201,7 +201,7 @@ func writeChildFlagsMD(m *mdBuf, path string, children []iclispec.Command) {
 	}
 }
 
-func renderCommandMD(seg iclispec.Command) []byte {
+func renderCommandMD(seg cli.Command) []byte {
 	var m mdBuf
 	desc := seg.Description
 	if desc == "" {
@@ -211,7 +211,7 @@ func renderCommandMD(seg iclispec.Command) []byte {
 	if len(tags) == 0 {
 		tags = []string{"cli", "magus " + seg.Name, seg.Name}
 	}
-	m.frontmatter("magus "+seg.Name, desc, "internal/clispec/registry.go", tags)
+	m.frontmatter("magus "+seg.Name, desc, "internal/cli/registry.go", tags)
 	pageName := "magus-" + seg.Name
 	m.h1(pageName)
 	m.p(mdEsc(seg.Short))
@@ -225,7 +225,7 @@ func renderCommandMD(seg iclispec.Command) []byte {
 
 	if seg.Long != "" {
 		m.h2("Description")
-		for _, para := range iclispec.SplitParas(seg.Long) {
+		for _, para := range cli.SplitParas(seg.Long) {
 			m.p(mdEsc(para))
 		}
 	}
@@ -274,7 +274,7 @@ func renderCommandMD(seg iclispec.Command) []byte {
 	return m.bytes()
 }
 
-func writeExitStatusMD(m *mdBuf, codes []iclispec.ExitCode) {
+func writeExitStatusMD(m *mdBuf, codes []cli.ExitCode) {
 	if len(codes) == 0 {
 		return
 	}
@@ -310,7 +310,7 @@ func writeSeeAlsoMD(m *mdBuf, currentName string) {
 	if currentName != "" {
 		refs = append(refs, fmt.Sprintf("[%s(1)](magus.md)", mdB("magus")))
 	}
-	for _, seg := range iclispec.All {
+	for _, seg := range cli.All {
 		if seg.Name == currentName {
 			continue
 		}

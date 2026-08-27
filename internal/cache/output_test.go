@@ -178,7 +178,7 @@ func TestRotateRunsKeepsNewestAndReportsFreed(t *testing.T) {
 		require.NoError(t, os.Chtimes(p, base.Add(time.Duration(i)*time.Minute), base.Add(time.Duration(i)*time.Minute)))
 	}
 
-	removed, freed := s.RotateRuns(2) // keep inv4, inv3
+	removed, freed := s.RotateRuns(2, 0) // keep inv4, inv3; no byte cap
 	require.Equal(t, 3, removed)
 	require.Equal(t, int64(3*len(body)), freed)
 
@@ -198,11 +198,11 @@ func TestRotateRunsUnderCapAndZeroAreNoops(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(runs, "inv0.jsonl"), []byte("x\n"), 0o644))
 
-	removed, freed := s.RotateRuns(10) // under cap
+	removed, freed := s.RotateRuns(10, 0) // under cap
 	require.Equal(t, 0, removed)
 	require.Zero(t, freed)
 
-	removed, _ = s.RotateRuns(0) // never wipe the whole dir
+	removed, _ = s.RotateRuns(0, 0) // never wipe the whole dir
 	require.Equal(t, 0, removed)
 
 	got, _ := os.ReadDir(runs)
@@ -1097,4 +1097,59 @@ func TestRefNotFoundNamesTheStoresConsulted(t *testing.T) {
 	assert.Contains(t, msg, "outdeadbeefcafe")
 	assert.Contains(t, msg, "local cache")
 	assert.True(t, strings.Contains(msg, "consulted"), "the message must say where magus looked: %q", msg)
+}
+
+// The count cap alone bounds nothing: a journal holds every output line of its run, so N files is
+// N times an unbounded number. This is the cap that makes the runs dir actually bounded.
+func TestRotateRunsBoundsBytesNotJustCount(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+
+	body := []byte(strings.Repeat("x", 100))
+	base := time.Now().Add(-time.Hour)
+	for i := range 5 {
+		p := filepath.Join(runs, fmt.Sprintf("inv%d.jsonl", i))
+		require.NoError(t, os.WriteFile(p, body, 0o644))
+		require.NoError(t, os.Chtimes(p, base.Add(time.Duration(i)*time.Minute), base.Add(time.Duration(i)*time.Minute)))
+	}
+
+	// Well under the count cap, so only the byte budget can bite: 250 bytes holds two 100-byte
+	// journals and not the third.
+	removed, freed := s.RotateRuns(100, 250)
+
+	require.Equal(t, 3, removed)
+	require.Equal(t, int64(300), freed)
+	got, err := os.ReadDir(runs)
+	require.NoError(t, err)
+	names := make([]string, 0, len(got))
+	for _, e := range got {
+		names = append(names, e.Name())
+	}
+	require.ElementsMatch(t, []string{"inv3.jsonl", "inv4.jsonl"}, names, "the newest two survive")
+}
+
+// A single run bigger than the whole budget is a reason to raise the budget, never a reason to
+// delete the run somebody just did and is most likely about to open.
+func TestRotateRunsKeepsTheNewestEvenWhenItAloneBustsTheBudget(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+
+	base := time.Now().Add(-time.Hour)
+	for i := range 3 {
+		p := filepath.Join(runs, fmt.Sprintf("inv%d.jsonl", i))
+		require.NoError(t, os.WriteFile(p, []byte(strings.Repeat("x", 1000)), 0o644))
+		require.NoError(t, os.Chtimes(p, base.Add(time.Duration(i)*time.Minute), base.Add(time.Duration(i)*time.Minute)))
+	}
+
+	removed, _ := s.RotateRuns(100, 10) // every journal is 100x the budget
+
+	require.Equal(t, 2, removed)
+	got, err := os.ReadDir(runs)
+	require.NoError(t, err)
+	require.Len(t, got, 1, "the newest is kept whatever it weighs")
+	require.Equal(t, "inv2.jsonl", got[0].Name())
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
@@ -493,4 +494,30 @@ func TestLocalOnlyFlagsNeverReachTheDaemon(t *testing.T) {
 	assert.Equal(t, []string{"ci", "--", "--wait"},
 		withoutDetachFlag([]string{"ci", "--", "--wait"}),
 		"past the separator the tokens belong to the forwarded tool")
+}
+
+func TestEnvDefaultRewritesTheDefaultNotTheValue(t *testing.T) {
+	newFS := func() *flag.FlagSet {
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		fs.String("base", "origin/main", "")
+		fs.Int("max", 4, "")
+		return fs
+	}
+
+	fs := newFS()
+	envDefault(fs, "base", "release")
+	assert.Equal(t, "release", fs.Lookup("base").Value.String())
+	assert.Equal(t, "release", fs.Lookup("base").DefValue)
+
+	// An empty value is "nothing was set in the environment", not "set it to empty".
+	fs = newFS()
+	envDefault(fs, "base", "")
+	assert.Equal(t, "origin/main", fs.Lookup("base").DefValue)
+
+	// An unknown flag and an unparseable value are both no-ops rather than failures:
+	// the environment is not the caller's invocation, so it must not abort one.
+	fs = newFS()
+	envDefault(fs, "nosuchflag", "x")
+	envDefault(fs, "max", "not-a-number")
+	assert.Equal(t, "4", fs.Lookup("max").DefValue)
 }

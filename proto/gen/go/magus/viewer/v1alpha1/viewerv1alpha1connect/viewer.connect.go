@@ -52,6 +52,17 @@ const (
 	// ViewerServiceStreamEventsProcedure is the fully-qualified name of the ViewerService's
 	// StreamEvents RPC.
 	ViewerServiceStreamEventsProcedure = "/magus.viewer.v1alpha1.ViewerService/StreamEvents"
+	// ViewerServiceListOutputsProcedure is the fully-qualified name of the ViewerService's ListOutputs
+	// RPC.
+	ViewerServiceListOutputsProcedure = "/magus.viewer.v1alpha1.ViewerService/ListOutputs"
+	// ViewerServiceGetOutputProcedure is the fully-qualified name of the ViewerService's GetOutput RPC.
+	ViewerServiceGetOutputProcedure = "/magus.viewer.v1alpha1.ViewerService/GetOutput"
+	// ViewerServiceListInvocationsProcedure is the fully-qualified name of the ViewerService's
+	// ListInvocations RPC.
+	ViewerServiceListInvocationsProcedure = "/magus.viewer.v1alpha1.ViewerService/ListInvocations"
+	// ViewerServiceGetJournalProcedure is the fully-qualified name of the ViewerService's GetJournal
+	// RPC.
+	ViewerServiceGetJournalProcedure = "/magus.viewer.v1alpha1.ViewerService/GetJournal"
 )
 
 // ViewerServiceClient is a client for the magus.viewer.v1alpha1.ViewerService service.
@@ -65,6 +76,20 @@ type ViewerServiceClient interface {
 	// StreamEvents streams a running invocation's events as they are produced. Reconnect
 	// with start_time set to the last seen time to resume.
 	StreamEvents(context.Context, *connect.Request[v1alpha1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1alpha1.StreamEventsResponse], error)
+	// ListOutputs returns the stored runs' descriptors, newest first, so a viewer can browse
+	// recent runs grouped project -> target -> run.
+	ListOutputs(context.Context, *connect.Request[v1alpha1.ListOutputsRequest]) (*connect.Response[v1alpha1.ListOutputsResponse], error)
+	// GetOutput returns one stored run's captured output VERBATIM - the bytes the subprocess
+	// wrote, unparsed and unstyled. Bytes rather than string: a captured log is whatever the
+	// tool emitted, which is not guaranteed to be valid UTF-8.
+	GetOutput(context.Context, *connect.Request[v1alpha1.GetOutputRequest]) (*connect.Response[v1alpha1.GetOutputResponse], error)
+	// ListInvocations returns the retained run journals by the command that produced them.
+	// The run browser's other axis: ListOutputs is per target, this is per `magus` command.
+	ListInvocations(context.Context, *connect.Request[v1alpha1.ListInvocationsRequest]) (*connect.Response[v1alpha1.ListInvocationsResponse], error)
+	// GetJournal returns one past invocation whole - header plus every event - which is the
+	// same message the offline `#data=` URL fragment carries, so a browsed run and a shared
+	// one render from identical bytes.
+	GetJournal(context.Context, *connect.Request[v1alpha1.GetJournalRequest]) (*connect.Response[v1alpha1.Journal], error)
 }
 
 // NewViewerServiceClient constructs a client for the magus.viewer.v1alpha1.ViewerService service.
@@ -96,14 +121,42 @@ func NewViewerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(viewerServiceMethods.ByName("StreamEvents")),
 			connect.WithClientOptions(opts...),
 		),
+		listOutputs: connect.NewClient[v1alpha1.ListOutputsRequest, v1alpha1.ListOutputsResponse](
+			httpClient,
+			baseURL+ViewerServiceListOutputsProcedure,
+			connect.WithSchema(viewerServiceMethods.ByName("ListOutputs")),
+			connect.WithClientOptions(opts...),
+		),
+		getOutput: connect.NewClient[v1alpha1.GetOutputRequest, v1alpha1.GetOutputResponse](
+			httpClient,
+			baseURL+ViewerServiceGetOutputProcedure,
+			connect.WithSchema(viewerServiceMethods.ByName("GetOutput")),
+			connect.WithClientOptions(opts...),
+		),
+		listInvocations: connect.NewClient[v1alpha1.ListInvocationsRequest, v1alpha1.ListInvocationsResponse](
+			httpClient,
+			baseURL+ViewerServiceListInvocationsProcedure,
+			connect.WithSchema(viewerServiceMethods.ByName("ListInvocations")),
+			connect.WithClientOptions(opts...),
+		),
+		getJournal: connect.NewClient[v1alpha1.GetJournalRequest, v1alpha1.Journal](
+			httpClient,
+			baseURL+ViewerServiceGetJournalProcedure,
+			connect.WithSchema(viewerServiceMethods.ByName("GetJournal")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // viewerServiceClient implements ViewerServiceClient.
 type viewerServiceClient struct {
-	getInvocation *connect.Client[v1alpha1.GetInvocationRequest, v1alpha1.Invocation]
-	listEvents    *connect.Client[v1alpha1.ListEventsRequest, v1alpha1.ListEventsResponse]
-	streamEvents  *connect.Client[v1alpha1.StreamEventsRequest, v1alpha1.StreamEventsResponse]
+	getInvocation   *connect.Client[v1alpha1.GetInvocationRequest, v1alpha1.Invocation]
+	listEvents      *connect.Client[v1alpha1.ListEventsRequest, v1alpha1.ListEventsResponse]
+	streamEvents    *connect.Client[v1alpha1.StreamEventsRequest, v1alpha1.StreamEventsResponse]
+	listOutputs     *connect.Client[v1alpha1.ListOutputsRequest, v1alpha1.ListOutputsResponse]
+	getOutput       *connect.Client[v1alpha1.GetOutputRequest, v1alpha1.GetOutputResponse]
+	listInvocations *connect.Client[v1alpha1.ListInvocationsRequest, v1alpha1.ListInvocationsResponse]
+	getJournal      *connect.Client[v1alpha1.GetJournalRequest, v1alpha1.Journal]
 }
 
 // GetInvocation calls magus.viewer.v1alpha1.ViewerService.GetInvocation.
@@ -121,6 +174,26 @@ func (c *viewerServiceClient) StreamEvents(ctx context.Context, req *connect.Req
 	return c.streamEvents.CallServerStream(ctx, req)
 }
 
+// ListOutputs calls magus.viewer.v1alpha1.ViewerService.ListOutputs.
+func (c *viewerServiceClient) ListOutputs(ctx context.Context, req *connect.Request[v1alpha1.ListOutputsRequest]) (*connect.Response[v1alpha1.ListOutputsResponse], error) {
+	return c.listOutputs.CallUnary(ctx, req)
+}
+
+// GetOutput calls magus.viewer.v1alpha1.ViewerService.GetOutput.
+func (c *viewerServiceClient) GetOutput(ctx context.Context, req *connect.Request[v1alpha1.GetOutputRequest]) (*connect.Response[v1alpha1.GetOutputResponse], error) {
+	return c.getOutput.CallUnary(ctx, req)
+}
+
+// ListInvocations calls magus.viewer.v1alpha1.ViewerService.ListInvocations.
+func (c *viewerServiceClient) ListInvocations(ctx context.Context, req *connect.Request[v1alpha1.ListInvocationsRequest]) (*connect.Response[v1alpha1.ListInvocationsResponse], error) {
+	return c.listInvocations.CallUnary(ctx, req)
+}
+
+// GetJournal calls magus.viewer.v1alpha1.ViewerService.GetJournal.
+func (c *viewerServiceClient) GetJournal(ctx context.Context, req *connect.Request[v1alpha1.GetJournalRequest]) (*connect.Response[v1alpha1.Journal], error) {
+	return c.getJournal.CallUnary(ctx, req)
+}
+
 // ViewerServiceHandler is an implementation of the magus.viewer.v1alpha1.ViewerService service.
 type ViewerServiceHandler interface {
 	// GetInvocation returns an invocation's header: its command, lineage, and timing - what
@@ -132,6 +205,20 @@ type ViewerServiceHandler interface {
 	// StreamEvents streams a running invocation's events as they are produced. Reconnect
 	// with start_time set to the last seen time to resume.
 	StreamEvents(context.Context, *connect.Request[v1alpha1.StreamEventsRequest], *connect.ServerStream[v1alpha1.StreamEventsResponse]) error
+	// ListOutputs returns the stored runs' descriptors, newest first, so a viewer can browse
+	// recent runs grouped project -> target -> run.
+	ListOutputs(context.Context, *connect.Request[v1alpha1.ListOutputsRequest]) (*connect.Response[v1alpha1.ListOutputsResponse], error)
+	// GetOutput returns one stored run's captured output VERBATIM - the bytes the subprocess
+	// wrote, unparsed and unstyled. Bytes rather than string: a captured log is whatever the
+	// tool emitted, which is not guaranteed to be valid UTF-8.
+	GetOutput(context.Context, *connect.Request[v1alpha1.GetOutputRequest]) (*connect.Response[v1alpha1.GetOutputResponse], error)
+	// ListInvocations returns the retained run journals by the command that produced them.
+	// The run browser's other axis: ListOutputs is per target, this is per `magus` command.
+	ListInvocations(context.Context, *connect.Request[v1alpha1.ListInvocationsRequest]) (*connect.Response[v1alpha1.ListInvocationsResponse], error)
+	// GetJournal returns one past invocation whole - header plus every event - which is the
+	// same message the offline `#data=` URL fragment carries, so a browsed run and a shared
+	// one render from identical bytes.
+	GetJournal(context.Context, *connect.Request[v1alpha1.GetJournalRequest]) (*connect.Response[v1alpha1.Journal], error)
 }
 
 // NewViewerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -159,6 +246,30 @@ func NewViewerServiceHandler(svc ViewerServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(viewerServiceMethods.ByName("StreamEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
+	viewerServiceListOutputsHandler := connect.NewUnaryHandler(
+		ViewerServiceListOutputsProcedure,
+		svc.ListOutputs,
+		connect.WithSchema(viewerServiceMethods.ByName("ListOutputs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	viewerServiceGetOutputHandler := connect.NewUnaryHandler(
+		ViewerServiceGetOutputProcedure,
+		svc.GetOutput,
+		connect.WithSchema(viewerServiceMethods.ByName("GetOutput")),
+		connect.WithHandlerOptions(opts...),
+	)
+	viewerServiceListInvocationsHandler := connect.NewUnaryHandler(
+		ViewerServiceListInvocationsProcedure,
+		svc.ListInvocations,
+		connect.WithSchema(viewerServiceMethods.ByName("ListInvocations")),
+		connect.WithHandlerOptions(opts...),
+	)
+	viewerServiceGetJournalHandler := connect.NewUnaryHandler(
+		ViewerServiceGetJournalProcedure,
+		svc.GetJournal,
+		connect.WithSchema(viewerServiceMethods.ByName("GetJournal")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/magus.viewer.v1alpha1.ViewerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ViewerServiceGetInvocationProcedure:
@@ -167,6 +278,14 @@ func NewViewerServiceHandler(svc ViewerServiceHandler, opts ...connect.HandlerOp
 			viewerServiceListEventsHandler.ServeHTTP(w, r)
 		case ViewerServiceStreamEventsProcedure:
 			viewerServiceStreamEventsHandler.ServeHTTP(w, r)
+		case ViewerServiceListOutputsProcedure:
+			viewerServiceListOutputsHandler.ServeHTTP(w, r)
+		case ViewerServiceGetOutputProcedure:
+			viewerServiceGetOutputHandler.ServeHTTP(w, r)
+		case ViewerServiceListInvocationsProcedure:
+			viewerServiceListInvocationsHandler.ServeHTTP(w, r)
+		case ViewerServiceGetJournalProcedure:
+			viewerServiceGetJournalHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -186,4 +305,20 @@ func (UnimplementedViewerServiceHandler) ListEvents(context.Context, *connect.Re
 
 func (UnimplementedViewerServiceHandler) StreamEvents(context.Context, *connect.Request[v1alpha1.StreamEventsRequest], *connect.ServerStream[v1alpha1.StreamEventsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("magus.viewer.v1alpha1.ViewerService.StreamEvents is not implemented"))
+}
+
+func (UnimplementedViewerServiceHandler) ListOutputs(context.Context, *connect.Request[v1alpha1.ListOutputsRequest]) (*connect.Response[v1alpha1.ListOutputsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.viewer.v1alpha1.ViewerService.ListOutputs is not implemented"))
+}
+
+func (UnimplementedViewerServiceHandler) GetOutput(context.Context, *connect.Request[v1alpha1.GetOutputRequest]) (*connect.Response[v1alpha1.GetOutputResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.viewer.v1alpha1.ViewerService.GetOutput is not implemented"))
+}
+
+func (UnimplementedViewerServiceHandler) ListInvocations(context.Context, *connect.Request[v1alpha1.ListInvocationsRequest]) (*connect.Response[v1alpha1.ListInvocationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.viewer.v1alpha1.ViewerService.ListInvocations is not implemented"))
+}
+
+func (UnimplementedViewerServiceHandler) GetJournal(context.Context, *connect.Request[v1alpha1.GetJournalRequest]) (*connect.Response[v1alpha1.Journal], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.viewer.v1alpha1.ViewerService.GetJournal is not implemented"))
 }

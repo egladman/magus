@@ -393,6 +393,18 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 /* The trail toolbar belongs with the POPULATED trail, not floating over the empty card; main.ts hides it
    via the hidden attribute (honored globally in overrides.css). */
 
+/* The event index's leaf rows. PF lays node-content out as a COLUMN - its slot for a title over a
+   description - so the two spans stack, which is what makes the break fall between the action name
+   and its timestamp. The failure dot rides INSIDE the title span rather than beside it: appended as
+   a third child of node-content it took a row of its own and sat on the line above the name it
+   marks. The timestamp is subdued because the action is what a reader scans for. */
+.console-activity-index__action {
+  overflow: hidden; text-overflow: ellipsis;
+}
+.console-activity-index__when {
+  font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle);
+}
+
 /* --- Run browser (the log viewer's left master-detail tree; runtree.ts) --------------------------
    A collapsible aside down the left of the viewer, below the shared toolbar: a PF TreeView of prior
    runs (project -> target -> run) read from the daemon's /api/v1/outputs. Selecting a run loads its

@@ -22,19 +22,19 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Source is the narrow consumer contract this handler needs: assemble every insight lens.
+// insightSource is the narrow consumer contract this handler needs: assemble every insight lens.
 // Satisfied by *console.Service; the handler package holds no concrete service.
-type Source interface {
+type insightSource interface {
 	Insight(ctx context.Context) (types.InsightView, error)
 }
 
 // Service implements insightv1alpha1connect.InsightServiceHandler over src.
 type Service struct {
-	src Source
+	src insightSource
 }
 
 // NewService builds the InsightService Connect handler reading from src.
-func NewService(src Source) *Service { return &Service{src: src} }
+func NewService(src insightSource) *Service { return &Service{src: src} }
 
 var _ insightv1alpha1connect.InsightServiceHandler = (*Service)(nil)
 

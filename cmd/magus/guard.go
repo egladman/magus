@@ -201,7 +201,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Context = context
 		}
 	default:
-		switch v := evaluateBashGuard(input.Value); {
+		// The sibling-checkout rule ranks with the throwaway-copy deny it generalizes,
+		// but reads the filesystem, so it cannot live inside evaluateBashGuard's pure
+		// rule set. Ranking the two is pure, and is where the ordering is tested.
+		switch v := rankSiblingCheckout(evaluateBashGuard(input.Value), denySiblingCheckout(input.Value)); {
 		case v.Deny != "":
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny

@@ -29,23 +29,24 @@ import (
 
 func main() {
 	out := flag.String("out", "", "Directory to write the skill reference into (required)")
-	// The skill bodies are embedded in cmd/magus, and go:embed cannot reach across
-	// package directories - so they are read from the tree, exactly as
-	// magus-spelldocs reads -spells. The path is the directory CONTAINING skills/,
-	// because that is what the catalog's body paths are relative to.
-	src := flag.String("src", "../cmd/magus", "Directory containing the skills/ tree")
 	flag.Parse()
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "magus-skilldocs: -out is required")
 		os.Exit(2)
 	}
-	if err := run(*out, *src); err != nil {
+	if err := run(*out); err != nil {
 		fmt.Fprintf(os.Stderr, "magus-skilldocs: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// run binds the embedded skill sources the same way cmd/magus does.
+// run renders the pages from the SAME embedded catalog `magus agent install` writes, which is
+// what makes a documented skill and an installed one the same bytes by construction rather than
+// by discipline.
+//
+// It used to read the bodies off disk through a `-src ../cmd/magus` relative path, because the
+// assets lived beside the CLI and go:embed cannot reach across package directories. They live in
+// internal/agent now, so this imports them.
 //
 // The real KnowledgeSchemaVersion is threaded through, not zero. It used to be
 // zero on the grounds that it only feeds the install stamp and these pages did
@@ -53,15 +54,8 @@ func main() {
 // claiming `knowledge-schema-version: 0` would be documenting a stamp no install
 // ever writes. A generated page showing a value that cannot occur is worse than
 // no page.
-func run(outDir, srcDir string) error {
-	// The agents section is part of the content digest, so it has to be the REAL
-	// one. Passing "" produced a digest no install ever writes, which the stamp
-	// table would then have published as fact.
-	section, err := os.ReadFile(filepath.Join(srcDir, "agents-section.md"))
-	if err != nil {
-		return fmt.Errorf("read agents-section.md: %w", err)
-	}
-	cat := agent.NewCatalog(os.DirFS(srcDir), string(section), types.KnowledgeSchemaVersion)
+func run(outDir string) error {
+	cat := agent.Default(types.KnowledgeSchemaVersion)
 	defs, err := cat.EmbeddedSkills()
 	if err != nil {
 		return err
@@ -149,7 +143,7 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 	for _, old := range agent.FormerNames(full.Name) {
 		aliases += fmt.Sprintf("aliases:\n  - reference/skills/%s\n", old)
 	}
-	fmt.Fprintf(&b, "---\ntitle: %s\ngenerated_from: cmd/magus/skills/%s/SKILL.md\ndescription: %q\ntags: [agents, skills, %s]\n%s"+
+	fmt.Fprintf(&b, "---\ntitle: %s\ngenerated_from: internal/agent/skills/%s/SKILL.md\ndescription: %q\ntags: [agents, skills, %s]\n%s"+
 		"skill_full_bytes: %d\nskill_simple_bytes: %d\n---\n\n",
 		full.Name, full.Name, firstSentence(full.Description), full.Name, aliases, len(full.Body), len(simple.Body))
 	fmt.Fprintf(&b, "# %s\n\n", full.Name)

@@ -111,6 +111,34 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 	return ns
 }
 
+// buildReviewNS assembles magus\review for a magusfile. provider() wires an imported spell as
+// the place this workspace's changes are discussed:
+//
+//	import "spells/github" as github
+//	magus\review.provider(github)
+//
+// One function, deliberately. Everything else a review needs - opening one, reading its
+// threads, publishing drafts, replying - is a reserved name ON the spell (see spells/review.go),
+// not a member here. A magusfile says WHERE reviews live; it does not conduct one.
+//
+// Wiring none is the ordinary state and never an error: the workspace reviews locally, and
+// nothing about the diff surface changes.
+func buildReviewNS(_ context.Context, obs buzz.DirectObserver) vm.Value {
+	ns := vm.NewMap()
+	ns.MapSet("provider", directVal(obs, "magus.review.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf(`magus\review.provider: expected an imported spell handle`)
+		}
+		nv, ok := args[0].MapGet("name")
+		if !ok || !nv.IsStr() || nv.AsString() == "" {
+			return vm.Null, fmt.Errorf(`magus\review.provider: argument is not a spell handle (no name)`)
+		}
+		SetReviewProvider(nv.AsString())
+		return vm.Null, nil
+	}))
+	return ns
+}
+
 // buildSecretNS assembles magus\secret for a magusfile. provider() wires an imported
 // spell as this workspace's secret backend; read() reads one credential through it:
 //

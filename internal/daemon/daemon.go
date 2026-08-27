@@ -22,16 +22,20 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
+	attentionhandler "github.com/egladman/magus/internal/handler/attention"
+	diffhandler "github.com/egladman/magus/internal/handler/diff"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
+	ledgerhandler "github.com/egladman/magus/internal/handler/ledger"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	memoryhandler "github.com/egladman/magus/internal/handler/memory"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	noteshandler "github.com/egladman/magus/internal/handler/notes"
+	planhandler "github.com/egladman/magus/internal/handler/plan"
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
 	toolhandler "github.com/egladman/magus/internal/handler/tool"
@@ -52,6 +56,7 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1/toolv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -266,34 +271,43 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// identical read logic.
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
-			insightH := status.NewInsightHandler(svc, log)
-			patchH := status.NewPatchHandler(svc, log)
-			contextH := status.NewContextHandler(opts.Magus.Root(), svc, log)
+			insightH := insighthandler.NewHandler(svc, log)
+			patchH := diffhandler.NewPatchHandler(svc, log)
+			contextH := diffhandler.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The daemon-wide session store, constructed by the caller so the console routes
 			// below and the magus_diff MCP tool read the SAME object - that sharing is the
 			// pairing. A caller that supplied none gets a local one rather than a nil panic;
 			// pairing is then per-process, which is the honest degradation.
 			diffSessions := opts.DiffSessions
 			if diffSessions == nil {
-				diffSessions = diff.NewStore(opts.Magus.CacheDir())
+				diffSessions = changeset.NewStore(opts.Magus.CacheDir())
 			}
 			diffRoot := opts.Magus.Root()
-			diffH := status.NewDiffHandler(svc, diffSessions, diffRoot, log)
-			diffSessionH := status.NewDiffSessionHandler(diffSessions, diffRoot, log)
-			outputsH := viewer.NewOutputsHandler(outputStore, log)
-			outputH := viewer.NewOutputHandler(outputStore, log)
-			runsH := viewer.NewRunsHandler(outputStore, log)
-			runH := viewer.NewRunHandler(outputStore, log)
+			diffH := diffhandler.NewHandler(svc, diffSessions, diffRoot, log)
+			diffOpts := diffhandler.SessionOptions{
+				Sessions:  diffSessions,
+				Workspace: svc,
+				Root:      diffRoot,
+				CacheDir:  opts.Magus.CacheDir(),
+			}
+			diffSessionH := diffhandler.NewSessionHandler(diffOpts, log)
+			diffReviewH := diffhandler.NewReviewHandler(svc, log)
+			// The session store lets the review response say which threads the reader has not
+			// seen before; without it the conversation still serves, just unmarked.
+			diffReviewH.Sessions = diffSessions
+			diffReviewH.Root = opts.Magus.Root()
+			diffBranchesH := diffhandler.NewBranchesHandler(svc, log)
+			diffRunH := diffhandler.NewRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
 			// the same two sources the console already trusts - the service for structure and
 			// live pool state, the output store for each node's last outcome and its ref - so
 			// it introduces no third notion of what ran.
-			planH := status.NewPlanHandler(svc, outputStore, opts.Magus.Root(), log)
-			ledgerH := status.NewLedgerHandler(opts.Ledger, log)
+			planH := planhandler.NewHandler(svc, outputStore, opts.Magus.Root(), log)
+			ledgerH := ledgerhandler.NewHandler(opts.Ledger, log)
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
 			// checkout, so the console lists what `magus session attention` lists from any worktree.
-			attentionH := status.NewAttentionHandler(opts.Magus.Root(), opts.Version, log)
+			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log)
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route
@@ -313,27 +327,27 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			bridgeMux.Handle("/api/v1/diff/patch", cors(patchH))
 			bridgeMux.Handle("/api/v1/diff/context", cors(contextH))
 			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
-			// from /api/v1/diff/patch because it is far more expensive - see DiffHandler.
+			// from /api/v1/diff/patch because it is far more expensive - see Handler.
 			bridgeMux.Handle("/api/v1/diff", cors(diffH))
 			// The human's half of a paired review. Reachable only from the console and the
 			// CLI, which is what lets it stamp every write as human without trusting the
 			// payload - an agent reaches the session through MCP, never through here.
 			bridgeMux.Handle("/api/v1/diff/session", cors(diffSessionH))
-			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
-			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
-			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
-			bridgeMux.Handle("/api/v1/outputs", cors(outputsH))
-			bridgeMux.Handle("/api/v1/output", cors(outputH))
-			// The invocation half of the same browser: /api/v1/runs lists the retained run journals by
-			// the command that produced them, and /api/v1/run?inv= serves one back as the same Journal
-			// protobuf a `#data=` link carries, so a browsed run renders structurally rather than as a
-			// wall of text. It reaches no further than /api/v1/output already does - the journal holds
-			// the bytes that route serves, plus the argv, which a `magus query output --open` link has
-			// always carried in its fragment.
-			bridgeMux.Handle("/api/v1/runs", cors(runsH))
-			bridgeMux.Handle("/api/v1/run", cors(runH))
+			// Which review this branch has open, and what colleagues have already said on it.
+			// Its own route because it crosses the network to a forge: a reader must never wait
+			// on somebody else's outage to see their own diff.
+			bridgeMux.Handle("/api/v1/diff/review", cors(diffReviewH))
+			// The other branches changing these files. Its own route because it forks per branch:
+			// a reader must not wait on it to see their own diff, and it reads only what has
+			// already been fetched rather than going to the network for more.
+			bridgeMux.Handle("/api/v1/diff/branches", cors(diffBranchesH))
+			// Does this still pass? Asked of the machine the code is on, which is the one review
+			// question a forge structurally cannot answer. Loopback only and MUTATING - it starts
+			// work - so it sits with the diff routes rather than in the LAN share subset, and the
+			// work it can start is bounded by what the magusfile declares.
+			bridgeMux.Handle("/api/v1/diff/run", cors(diffRunH))
 			// Human run view: every plain run has a plan, and an agent-declared one is not the
-			// only shape worth showing. Loopback only, like the diff routes and unlike /api/v1/outputs:
+			// only shape worth showing. Loopback only, unlike the run browser's ViewerService:
 			// this one names every target in the workspace, which a share link handed to a phone
 			// has no business enumerating.
 			bridgeMux.Handle("/api/v1/plan", cors(planH))
@@ -359,10 +373,6 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			shareGuarded := map[string]http.Handler{
 				"/api/v1/events":  eventsH,
 				"/api/v1/insight": insightH,
-				"/api/v1/outputs": outputsH,
-				"/api/v1/output":  outputH,
-				"/api/v1/runs":    runsH,
-				"/api/v1/run":     runH,
 			}
 
 			// Derived-metrics Connect service for the /dashboard. Mounted only when the
@@ -443,6 +453,20 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			shareGuarded[insightPath] = insightConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] insight service mounted", slog.String("path", insightPath))
 
+			// Viewer Connect service: the typed twin of the four JSON run-browser routes
+			// (/api/v1/outputs, /output, /runs, /run), reading the SAME two stores. The contract
+			// has existed in magus/viewer/v1alpha1 since the log viewer shipped and nothing served
+			// it; the JSON routes stay mounted until the console reads this instead, and retiring
+			// them is its own breaking change (docs/concepts/compatibility.md).
+			//
+			// Read-only, so it takes the read bearer and joins the share surface exactly as its
+			// JSON twins do - a shared phone renders the run browser, and it must keep reaching
+			// the same runs whichever route the page settles on.
+			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore))
+			httpServer.Handle(viewerPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, viewerConnectHandler))))
+			shareGuarded[viewerPath] = viewerConnectHandler
+			log.InfoContext(ctx, "[BRIDGE] viewer service mounted", slog.String("path", viewerPath))
+
 			// The four plain-JSON read routes are ALSO mounted here individually, on the
 			// viewer-accepting guard. They are already reachable through the /api/ mux above,
 			// but that mux is mixed (it carries the diff session's mutating ops), so it must
@@ -455,10 +479,6 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			for path, h := range map[string]http.Handler{
 				"/api/v1/events":  eventsH,
 				"/api/v1/insight": insightH,
-				"/api/v1/outputs": outputsH,
-				"/api/v1/output":  outputH,
-				"/api/v1/runs":    runsH,
-				"/api/v1/run":     runH,
 			} {
 				httpServer.Handle(path, httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyConsoleReadBearer, h)))
 			}

@@ -1,6 +1,6 @@
 ---
 title: magus clean
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Delete the files each selected project declares as Outputs, optionally dropping the matching cache entries so the next run rebuilds from scratch.
 tags: [cli, magus clean, outputs, cache, artifacts, rebuild]
 ---

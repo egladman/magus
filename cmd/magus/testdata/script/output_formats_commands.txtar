@@ -34,11 +34,22 @@ stdout 'telemetry:'
 # Nonzero here (a minimal fixture does not satisfy every check), so assert the shape
 # of the rendering rather than the verdict.
 ! exec magus doctor
-stdout 'stale worktrees'
+stdout 'stale-worktrees'
 ! exec magus doctor -o json
 stdout '"checks"'
 ! exec magus doctor -o yaml
 stdout 'checks:'
+
+# --list runs no check, so unlike the report above it exits zero even here. Its formats
+# are the listing's, not the report's: the same names, with nothing run to produce them.
+exec magus doctor --list
+stdout 'stale-worktrees'
+exec magus doctor --list -o json
+stdout '"needs_workspace"'
+exec magus doctor --list -o yaml
+stdout 'needs_workspace:'
+exec magus doctor --list -o name
+stdout '^stale-worktrees$'
 
 -- magus.yaml --
 concurrency: 2

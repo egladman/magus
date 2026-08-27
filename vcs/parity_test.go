@@ -62,6 +62,18 @@ func jjInitRepo(t *testing.T, dir string, files map[string]string) {
 	vcsTestRun(t, dir, "jj", "new")
 }
 
+// appendRepoFile adds to a file the backend already wrote, rather than replacing it.
+func appendRepoFile(t *testing.T, dir, name, body string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(name))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	fh, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	defer fh.Close()
+	_, werr := fh.WriteString(body)
+	require.NoError(t, werr)
+}
+
 func writeRepoFile(t *testing.T, dir, name, body string) {
 	t.Helper()
 	path := filepath.Join(dir, filepath.FromSlash(name))
@@ -551,4 +563,82 @@ func removePath(t *testing.T, b parityBackend, dir, path string) {
 	case "jj":
 		require.NoError(t, os.Remove(filepath.Join(dir, filepath.FromSlash(path))))
 	}
+}
+
+// forceColor writes each backend's "colorize even when not a terminal" setting into the
+// repository's own config, which is where a real user's would live.
+func forceColor(t *testing.T, b parityBackend, dir string) {
+	t.Helper()
+	switch b.bin {
+	case "git":
+		vcsTestRun(t, dir, "git", "config", "color.ui", "always")
+	case "hg":
+		writeRepoFile(t, dir, ".hg/hgrc", "[ui]\ncolor = always\n")
+	case "sl":
+		// Sapling's repo config is .sl/config, NOT .sl/hgrc, and slInitRepo has already
+		// written a username into it - so this appends. Pointing at the hg path instead
+		// makes this helper do nothing, and the subtest then passes without ever forcing
+		// color, which is exactly how it first went green against a colorizing Sapling.
+		appendRepoFile(t, dir, ".sl/config", "\n[ui]\ncolor = always\n")
+	case "jj":
+		vcsTestRun(t, dir, "jj", "config", "set", "--repo", "ui.color", "always")
+	}
+}
+
+// A colorized diff is not a cosmetic problem: the escape sequence lands in FRONT of the
+// `diff --git` header, so the header no longer begins a line and every reader of the patch
+// misses the file entirely. Measured before the fix, with `color.ui = always` in an ordinary
+// gitconfig: `magus diff` listed the untracked files - which magus synthesizes itself, and
+// so never colorizes - and silently dropped every tracked modification, at exit 0.
+//
+// Each backend needs a DIFFERENT switch and they are not interchangeable: NO_COLOR loses to
+// git's explicit config, and Sapling ignores HGPLAIN even though Mercurial honors it. That is
+// what this test is really pinning - one switch per backend, verified against the real binary
+// rather than assumed from the family.
+func TestParityDirtyDiffIsNeverColorized(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"f.txt": "a\nb\n"})
+		forceColor(t, b, dir)
+		writeRepoFile(t, dir, "f.txt", "a\nB\n")
+
+		patch, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+		require.NotEmpty(t, patch, "the tracked edit must show up at all")
+		assert.NotContains(t, patch, "\x1b[", "an escape sequence hides the header that follows it")
+	})
+}
+
+// vcsMove renames a tracked file using the backend's own command, so the backend records it
+// as a rename rather than seeing an unrelated delete and add.
+func vcsMove(t *testing.T, b parityBackend, dir, from, to string) {
+	t.Helper()
+	switch b.bin {
+	case "git", "hg", "sl":
+		vcsTestRun(t, dir, b.bin, "mv", from, to)
+	case "jj":
+		// jj has no index: the working copy IS the change, so an ordinary move is recorded.
+		require.NoError(t, os.Rename(filepath.Join(dir, from), filepath.Join(dir, to)))
+	}
+}
+
+// A rename must not arrive as a delete plus an add. Mercurial's own diff format renders one
+// exactly that way, so a renamed 2000-line file reached this tool as 4000 changed lines whose
+// content nobody touched - and every consumer treats DirtyDiff as "what a person has to
+// review", so that inflates the ranking, the counts, and the hunks a read receipt is keyed by.
+//
+// Asserted on CONTENT rather than on the word "rename", because the backends spell the header
+// differently and the property that matters is the absence of churn, not the spelling.
+func TestParityRenameIsNotDeletePlusAdd(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"old.txt": "alpha\nbeta\ngamma\n"})
+		vcsMove(t, b, dir, "old.txt", "new.txt")
+
+		patch, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+		require.NotEmpty(t, patch, "the rename must show up at all")
+		assert.NotContains(t, patch, "+alpha", "content re-added means the rename was lost")
+		assert.NotContains(t, patch, "-alpha", "content removed means the rename was lost")
+	})
 }

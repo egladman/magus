@@ -1,6 +1,6 @@
 ---
 title: magus events
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Stream magus events as JSONL - one event per line - so an editor plugin, a status bar, or any other integration can react to runs, results, and diagnostics.
 tags: [cli, magus events, events, integration, editor, plugin, jsonl, subscribe]
 ---

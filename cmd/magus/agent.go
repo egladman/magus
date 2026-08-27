@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"embed"
 	"flag"
 	"fmt"
 	"io"
@@ -17,22 +16,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// skillFS holds provider-neutral skill bodies embedded at build time.
-//
-//go:embed skills
-var skillFS embed.FS
-
-// agentsSection is the distilled always-on block installed into AGENTS.md for
-// hosts that read that contract instead of skill directories. Same rules as the
-// skills, compressed.
-//
-//go:embed agents-section.md
-var agentsSection string
-
-// agentSkills binds the command's embedded source assets to the reusable
-// provider-neutral catalog. The CLI owns embedding and presentation; internal/agent
-// owns the artifact's rendering, provenance, installation, and verification.
-var agentSkills = agent.NewCatalog(skillFS, agentsSection, types.KnowledgeSchemaVersion)
+// agentSkills is the catalog of skills magus ships. Sources, rendering, provenance, installation
+// and verification all live in internal/agent now; the CLI owns only presentation.
+var agentSkills = agent.Default(types.KnowledgeSchemaVersion)
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
 //

@@ -55,7 +55,7 @@ func usedProjectOptions(projects []*types.Project) []string {
 // predates the floor key never gets far enough to evaluate one. That gap is covered
 // separately, by the upgrade hint on an unrecognized magus.project key.
 func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
-	const name = "required version covers schema"
+	const name = "required-version-covers-schema"
 	used := usedProjectOptions(projects)
 	if len(used) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK,

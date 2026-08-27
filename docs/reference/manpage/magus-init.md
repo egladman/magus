@@ -1,6 +1,6 @@
 ---
 title: magus init
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.
 tags: [cli, magus init, bootstrap, setup, magus.yaml, magusfile, workspace]
 ---

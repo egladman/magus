@@ -34,7 +34,8 @@
 // host and returns the controller for that mount.
 
 import { createClient } from "@connectrpc/connect";
-import { StatusService, type Status } from "../../gen/magus/status/v1alpha1/status_pb";
+import { ViewerService } from "@wire/viewer/v1alpha1/viewer_pb";
+import { StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
 import {
   adoptDaemonOrigin,
   authHeaders,
@@ -55,7 +56,7 @@ import { h } from "../view";
 // same rows the drawer shows - a second projection would be a second answer to "what is running".
 // The protobuf its Status read pulls in is a cost this bundle pays anyway for its own live read.
 import {
-  parseDescriptors,
+  wireDescriptors,
   recentRows,
   runningRows,
   type ActivityRow,
@@ -381,13 +382,9 @@ async function fetchRuns(
   signal: AbortSignal,
 ): Promise<{ runs: RunDescriptor[] | null; failed: string }> {
   try {
-    const res = await fetch("http://" + host + "/api/v1/outputs", {
-      headers: authHeaders(),
-      cache: "no-store",
-      signal: deadline(signal),
-    });
-    if (!res.ok) return { runs: null, failed: "HTTP " + res.status };
-    return { runs: parseDescriptors(await res.json()), failed: "" };
+    const client = createClient(ViewerService, createDaemonTransport(host, getLiveToken()));
+    const resp = await client.listOutputs({}, { signal: deadline(signal) });
+    return { runs: wireDescriptors(resp.outputs), failed: "" };
   } catch (e) {
     return { runs: null, failed: why(e) };
   }

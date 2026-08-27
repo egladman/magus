@@ -18,7 +18,7 @@ import (
 // check, which is the one outcome that makes it worthless.
 func TestCheckTerminalUnderTest(t *testing.T) {
 	c := (&runner{}).checkTerminal()
-	assert.Equal(t, "terminal capabilities", c.Name)
+	assert.Equal(t, "terminal-capabilities", c.Name)
 	assert.Equal(t, types.DoctorOK, c.Status, "a pipe is not a fault")
 	assert.Contains(t, c.Message, "plain output")
 	require.NotEmpty(t, c.Details, "it still reports what it saw, so the reason is legible")
