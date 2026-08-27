@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	json "github.com/egladman/magus/internal/json"
 )
 
@@ -38,7 +38,7 @@ func runDiffDemo(args []string) error {
 	if err != nil {
 		return fmt.Errorf("diffdemo: %w", err)
 	}
-	files := diff.Parse(string(patch))
+	files := changeset.Parse(string(patch))
 	if len(files) == 0 {
 		// A fixture that parses to nothing would render an empty showcase, which reads as a
 		// broken surface rather than as a broken fixture.

@@ -1,4 +1,4 @@
-package diff
+package changeset
 
 // Span is a half-open [Start, End) range of a line to emphasize. The zero Span means there is
 // nothing to emphasize on that side; emphasize never returns a span that marks nothing, so the

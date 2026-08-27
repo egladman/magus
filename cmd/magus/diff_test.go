@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
-	session "github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
@@ -184,7 +184,7 @@ func TestDiffTUIFilesJoinKeepsTheAnnotationOrder(t *testing.T) {
 		"@@ -9 +9 @@\n" +
 		"+func G() {}\n"
 
-	files := diffTUIFiles(rev, session.ParseHunks(patch))
+	files := diffTUIFiles(rev, changeset.ParseHunks(patch))
 	require.Len(t, files, 2)
 	assert.Equal(t, "core.go", files[0].Path)
 	assert.False(t, files[0].Generated)
@@ -2112,8 +2112,8 @@ func TestDiffTouchesWithoutATrail(t *testing.T) {
 	assert.Nil(t, diffTouches(t.TempDir(), t.TempDir(), []string{"a.go"}))
 }
 
-// changeset returns a diff of n files, for exercising the hint's threshold.
-func changeset(n int) types.Diff {
+// diffFiles returns a diff of n files, for exercising the hint's threshold.
+func diffFiles(n int) types.Diff {
 	rev := types.Diff{Base: "main"}
 	for i := range n {
 		rev.Files = append(rev.Files, types.DiffFile{Path: strings.Repeat("a", i+1) + ".go"})
@@ -2127,8 +2127,8 @@ func changeset(n int) types.Diff {
 // the feature, so both are pinned.
 func TestReviewPromptHintFiresOnlyOnALargeChangeset(t *testing.T) {
 	var small, large strings.Builder
-	hintReviewPrompt(&small, changeset(promptHintFiles-1), &gen.DiffFlags{})
-	hintReviewPrompt(&large, changeset(promptHintFiles), &gen.DiffFlags{})
+	hintReviewPrompt(&small, diffFiles(promptHintFiles-1), &gen.DiffFlags{})
+	hintReviewPrompt(&large, diffFiles(promptHintFiles), &gen.DiffFlags{})
 
 	assert.Empty(t, small.String(), "an ordinary changeset gets no hint")
 	assert.Contains(t, large.String(), "--prompt")
@@ -2141,7 +2141,7 @@ func TestReviewPromptHintFiresOnlyOnALargeChangeset(t *testing.T) {
 // how a surface teaches people to ignore its hints.
 func TestReviewPromptHintIsSilentWhenAlreadyAsked(t *testing.T) {
 	var out strings.Builder
-	hintReviewPrompt(&out, changeset(promptHintFiles+50), &gen.DiffFlags{Prompt: true})
+	hintReviewPrompt(&out, diffFiles(promptHintFiles+50), &gen.DiffFlags{Prompt: true})
 
 	assert.Empty(t, out.String())
 }
@@ -2244,7 +2244,7 @@ func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 func TestHintSinceLastReview(t *testing.T) {
 	t.Setenv("MAGUS_HINTS", "1")
 	rangeSrc := diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}
-	changeset := func(at types.VCSCheckpoint, files int) types.Diff {
+	reviewed := func(at types.VCSCheckpoint, files int) types.Diff {
 		rev := types.Diff{Files: []types.DiffFile{{Path: "a.go"}, {Path: "b.go"}}}
 		rev.AttachReviewed(at, files)
 		return rev
@@ -2252,7 +2252,7 @@ func TestHintSinceLastReview(t *testing.T) {
 
 	t.Run("an earlier pass names the revision and the command", func(t *testing.T) {
 		var out strings.Builder
-		hintSinceLastReview(&out, changeset(types.VCSCheckpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
+		hintSinceLastReview(&out, reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
 
 		got := out.String()
 		assert.Contains(t, got, "you last reviewed 1 of these 2 files")
@@ -2262,19 +2262,19 @@ func TestHintSinceLastReview(t *testing.T) {
 
 	t.Run("nothing to subtract prints nothing", func(t *testing.T) {
 		var out strings.Builder
-		hintSinceLastReview(&out, changeset(types.VCSCheckpoint{}, 0), rangeSrc)
+		hintSinceLastReview(&out, reviewed(types.VCSCheckpoint{}, 0), rangeSrc)
 		assert.Empty(t, out.String(), "a first pass has no earlier one")
 	})
 
 	t.Run("already looking at the reviewed revision prints nothing", func(t *testing.T) {
 		var out strings.Builder
-		hintSinceLastReview(&out, changeset(types.VCSCheckpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
+		hintSinceLastReview(&out, reviewed(types.VCSCheckpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
 		assert.Empty(t, out.String(), "the reader is already seeing exactly the delta")
 	})
 
 	t.Run("a working-tree review has no earlier revision to name", func(t *testing.T) {
 		var out strings.Builder
-		hintSinceLastReview(&out, changeset(types.VCSCheckpoint{Revision: "0123456789abcdef0123"}, 1),
+		hintSinceLastReview(&out, reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123"}, 1),
 			diffInput{kind: inputWorkingTree, label: "the working tree"})
 		assert.Empty(t, out.String())
 	})
@@ -2300,7 +2300,7 @@ func TestDiffTUIFilesHandsTheViewerTheEscapedForm(t *testing.T) {
 		" ok\n" +
 		"+\tif admin { // " + rlo + " } trap\n"
 
-	files := diffTUIFiles(rev, session.ParseHunks(patch))
+	files := diffTUIFiles(rev, changeset.ParseHunks(patch))
 
 	require.Len(t, files, 1)
 	require.Len(t, files[0].Hunks, 1)
@@ -2318,7 +2318,7 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 	rev := types.Diff{Files: []types.DiffFile{{Path: "a.go", Role: types.DiffRoleSource}}}
 	patch := "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-old\n+new\n"
 
-	files := diffTUIFiles(rev, session.ParseHunks(patch))
+	files := diffTUIFiles(rev, changeset.ParseHunks(patch))
 
 	require.Len(t, files, 1)
 	require.Len(t, files[0].Hunks, 1)

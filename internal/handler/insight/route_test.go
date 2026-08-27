@@ -1,4 +1,4 @@
-package status
+package insight
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeInsightSource is an insightSource returning a canned view or a fixed error.
+// fakeInsightSource is an Source returning a canned view or a fixed error.
 type fakeInsightSource struct {
 	view       types.InsightView
 	insightErr error
@@ -22,7 +22,7 @@ func (f fakeInsightSource) Insight(context.Context) (types.InsightView, error) {
 	return f.view, f.insightErr
 }
 
-// --- InsightHandler ---
+// --- Handler ---
 
 func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 	// The folded shape: the four VCS lenses plus the volatility lens under one view.
@@ -30,7 +30,7 @@ func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 		Hotspots:   types.HotspotOutput{Commits: 42},
 		Volatility: &types.VolatilityReport{Threshold: 0.05, Targets: []types.VolatilityTarget{{Project: "p", Target: "test", Volatile: true}}},
 	}}
-	h := NewInsightHandler(src, nil)
+	h := NewHandler(src, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
 	if w.Code != http.StatusOK {
@@ -52,7 +52,7 @@ func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 }
 
 func TestInsightHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewInsightHandler(fakeInsightSource{insightErr: console.ErrNoWorkspace}, nil)
+	h := NewHandler(fakeInsightSource{insightErr: console.ErrNoWorkspace}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
 	if w.Code != http.StatusServiceUnavailable {
@@ -61,7 +61,7 @@ func TestInsightHandler_NoWorkspaceReturns503(t *testing.T) {
 }
 
 func TestInsightHandler_ErrorReturns500(t *testing.T) {
-	h := NewInsightHandler(fakeInsightSource{insightErr: errors.New("scan boom")}, nil)
+	h := NewHandler(fakeInsightSource{insightErr: errors.New("scan boom")}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
 	if w.Code != http.StatusInternalServerError {
@@ -70,7 +70,7 @@ func TestInsightHandler_ErrorReturns500(t *testing.T) {
 }
 
 func TestInsightHandler_MethodNotAllowed(t *testing.T) {
-	h := NewInsightHandler(fakeInsightSource{}, nil)
+	h := NewHandler(fakeInsightSource{}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/insight", nil))
 	if w.Code != http.StatusMethodNotAllowed {
@@ -79,7 +79,7 @@ func TestInsightHandler_MethodNotAllowed(t *testing.T) {
 }
 
 func TestInsightHandler_OptionsNoContent(t *testing.T) {
-	h := NewInsightHandler(fakeInsightSource{}, nil)
+	h := NewHandler(fakeInsightSource{}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, "/api/v1/insight", nil))
 	if w.Code != http.StatusNoContent {

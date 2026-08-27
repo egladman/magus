@@ -22,7 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	diffhandler "github.com/egladman/magus/internal/handler/diff"
@@ -267,7 +267,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// identical read logic.
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
-			insightH := status.NewInsightHandler(svc, log)
+			insightH := insighthandler.NewHandler(svc, log)
 			patchH := diffhandler.NewPatchHandler(svc, log)
 			contextH := diffhandler.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The daemon-wide session store, constructed by the caller so the console routes
@@ -276,7 +276,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// pairing is then per-process, which is the honest degradation.
 			diffSessions := opts.DiffSessions
 			if diffSessions == nil {
-				diffSessions = diff.NewStore(opts.Magus.CacheDir())
+				diffSessions = changeset.NewStore(opts.Magus.CacheDir())
 			}
 			diffRoot := opts.Magus.Root()
 			diffH := diffhandler.NewHandler(svc, diffSessions, diffRoot, log)

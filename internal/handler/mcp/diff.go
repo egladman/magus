@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -16,7 +16,7 @@ import (
 // diffTool is the AGENT's half of a paired review: read the shared session, say something
 // about a hunk, and ask for the human's attention.
 //
-// It reads and writes the same *diff.Store the console route does, which is the whole point
+// It reads and writes the same *changeset.Store the console route does, which is the whole point
 // - three transports over one object, so an agent can see where the person is looking and be
 // useful about it instead of narrating blindly.
 //
@@ -35,7 +35,7 @@ import (
 // can make, and an agent ticking it off would erase the human's own account of what they have
 // actually looked at.
 type diffTool struct {
-	sessions *diff.Store
+	sessions *changeset.Store
 	root     string
 	// src recomputes the changeset. Without it the tool can only replay whatever a browser
 	// last attached, which is how an agent came to comment on a file that had no uncommitted
@@ -71,7 +71,7 @@ type diffState struct {
 	// Patch is the unified diff the hunks below index into.
 	Patch string `json:"patch"`
 	// Hunks are the addressable coordinates, with the same content digests Viewed holds.
-	Hunks []diff.FileHunks `json:"hunks"`
+	Hunks []changeset.FileHunks `json:"hunks"`
 	// Recomputed reports that the tree had moved since the session was attached and this
 	// answer is freshly computed rather than replayed.
 	Recomputed bool `json:"recomputed,omitempty"`
@@ -127,12 +127,12 @@ type diffConversation struct {
 // diffPatch is op=state's projection=patch shape: the unified diff and its addressable hunks,
 // without the annotated changeset or the conversation.
 type diffPatch struct {
-	ID         string           `json:"id"`
-	Base       string           `json:"base"`
-	AsOf       string           `json:"as_of,omitempty"`
-	Recomputed bool             `json:"recomputed,omitempty"`
-	Patch      string           `json:"patch"`
-	Hunks      []diff.FileHunks `json:"hunks"`
+	ID         string                `json:"id"`
+	Base       string                `json:"base"`
+	AsOf       string                `json:"as_of,omitempty"`
+	Recomputed bool                  `json:"recomputed,omitempty"`
+	Patch      string                `json:"patch"`
+	Hunks      []changeset.FileHunks `json:"hunks"`
 }
 
 // projectDiffState narrows st to the fields the named projection asks for. The empty string
@@ -189,7 +189,7 @@ func projectDiffState(st diffState, projection string) (any, error) {
 
 // totalHunks sums the per-file hunk counts in a parsed patch, for the summary projection's
 // "hunks" count - st.Hunks is one entry per FILE, each carrying its own hunk slice.
-func totalHunks(files []diff.FileHunks) int {
+func totalHunks(files []changeset.FileHunks) int {
 	n := 0
 	for _, f := range files {
 		n += len(f.Hunks)
@@ -310,8 +310,8 @@ func (t *diffTool) state(ctx context.Context, sess *types.DiffSession, withThrea
 	if err != nil {
 		return diffState{}, err
 	}
-	st := diffState{DiffSession: sess, Patch: patch, Hunks: diff.ParseHunks(patch)}
-	if now := diff.PatchDigest(patch); now != sess.AsOf {
+	st := diffState{DiffSession: sess, Patch: patch, Hunks: changeset.ParseHunks(patch)}
+	if now := changeset.PatchDigest(patch); now != sess.AsOf {
 		rev, rerr := t.src.Diff(ctx, changedPaths(st.Hunks))
 		if rerr != nil {
 			return diffState{}, rerr
@@ -330,7 +330,7 @@ func (t *diffTool) state(ctx context.Context, sess *types.DiffSession, withThrea
 // Silent on failure and bounded by its own deadline. The changeset is what the agent asked
 // for, and holding it behind somebody else's forge is the reason the console gave this a
 // separate route.
-func (t *diffTool) reviewThreads(ctx context.Context, hunks []diff.FileHunks) []types.ReviewThread {
+func (t *diffTool) reviewThreads(ctx context.Context, hunks []changeset.FileHunks) []types.ReviewThread {
 	ctx, cancel := context.WithTimeout(ctx, reviewLookupTimeout)
 	defer cancel()
 	from := t.src.ReviewOrigin(ctx)
@@ -342,7 +342,7 @@ func (t *diffTool) reviewThreads(ctx context.Context, hunks []diff.FileHunks) []
 	// read alongside it, and a malformed remark is no reason to hide the rest of a conversation
 	// from the agent working on it.
 	threads, _ := bindings.ReviewThreads(ctx, at)
-	return diff.PlaceThreads(hunks, threads)
+	return changeset.PlaceThreads(hunks, threads)
 }
 
 // validateAnchor refuses a coordinate the changeset does not contain.
@@ -361,7 +361,7 @@ func (t *diffTool) validateAnchor(ctx context.Context, path string, hunk int) er
 	if err != nil {
 		return err
 	}
-	counts := diff.HunkCounts(patch)
+	counts := changeset.HunkCounts(patch)
 	n, ok := counts[path]
 	if !ok {
 		return errors.New("mcp: " + path + " has no changes in this diff; read op=state for the paths that do")
@@ -373,7 +373,7 @@ func (t *diffTool) validateAnchor(ctx context.Context, path string, hunk int) er
 }
 
 // changedPaths lists the files a parsed patch touches, in patch order.
-func changedPaths(files []diff.FileHunks) []string {
+func changedPaths(files []changeset.FileHunks) []string {
 	out := make([]string, 0, len(files))
 	for _, f := range files {
 		if f.Path != "" {

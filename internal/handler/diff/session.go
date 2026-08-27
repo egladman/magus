@@ -3,9 +3,6 @@
 // Separate from handler/status, which maps one thing - the live status report - onto
 // StatusService's two RPCs. These routes ride no proto service at all, and every constructor
 // here was named NewDiff* while living there, which is the package boundary announcing itself.
-//
-// The internal/diff import is aliased `session` because this package shares its name. That
-// collision goes away when internal/diff is split into its parser and session halves.
 package diff
 
 import (
@@ -20,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	session "github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
@@ -59,14 +56,14 @@ type diffSource interface {
 type Handler struct {
 	handler.Base
 	src      diffSource
-	sessions *session.Store
+	sessions *changeset.Store
 	root     string
 }
 
 // NewHandler returns the GET /api/v1/diff handler reading from src. sessions and root
 // may be nil/empty, which serves a session-less review - the shape is identical, so a client
 // needs no branch for a daemon that is not pairing.
-func NewHandler(src diffSource, sessions *session.Store, root string, log *slog.Logger) *Handler {
+func NewHandler(src diffSource, sessions *changeset.Store, root string, log *slog.Logger) *Handler {
 	h := &Handler{src: src, sessions: sessions, root: root}
 	h.Base = handler.New(h.serve, log)
 	return h
@@ -100,7 +97,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 		// one, but far better than refusing to pair because a second git call failed.
 		asOf := ""
 		if patch, perr := h.src.WorkingDiff(r.Context(), nil); perr == nil {
-			asOf = session.PatchDigest(patch)
+			asOf = changeset.PatchDigest(patch)
 			// The same read also gives the hunk-to-file mapping, which is the only thing
 			// that lets a later viewed mark say it FINISHED a file rather than just landing
 			// somewhere.
@@ -108,7 +105,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 			// Fingerprints each changed file HERE, at the content the reader is about to
 			// look at, so a receipt minted later attests to what they saw. See
 			// Store.ContentAt for why the file moving mid-session is the expected case.
-			h.sessions.TrackHunks(h.root, session.ParseHunks(patch), func(p string) string {
+			h.sessions.TrackHunks(h.root, changeset.ParseHunks(patch), func(p string) string {
 				return review.DigestFile(filepath.Join(h.root, filepath.FromSlash(p)))
 			})
 		}
@@ -193,12 +190,12 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "context snapshot error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if session.PatchDigest(patch) != asOf {
+	if changeset.PatchDigest(patch) != asOf {
 		http.Error(w, "review snapshot is stale; refresh the diff", http.StatusConflict)
 		return
 	}
 	changed := false
-	for _, file := range session.ParseHunks(patch) {
+	for _, file := range changeset.ParseHunks(patch) {
 		if file.Path == path {
 			changed = true
 			break
@@ -272,7 +269,7 @@ func NewPatchHandler(src patchSource, log *slog.Logger) *PatchHandler {
 type diffResponse struct {
 	// Files is the changeset already parsed. The console renders from this and does not read
 	// Patch at all; see PatchHandler for why the daemon parses rather than the browser.
-	Files []session.File `json:"files"`
+	Files []changeset.File `json:"files"`
 	// Patch is the same changeset as raw text, kept for a caller that wants the interchange
 	// format itself - a script piping it onward, or a reader diffing it against another tool's.
 	Patch string `json:"patch"`
@@ -297,9 +294,9 @@ func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handler.WriteJSON(w, diffResponse{
-		Files:  session.Parse(patch),
+		Files:  changeset.Parse(patch),
 		Patch:  patch,
-		Digest: session.PatchDigest(patch),
+		Digest: changeset.PatchDigest(patch),
 		Clean:  strings.TrimSpace(patch) == "",
 	})
 }
@@ -339,7 +336,7 @@ type SessionHandler struct {
 // A struct because the alternative was five positional arguments with Root and CacheDir
 // adjacent and both string.
 type SessionOptions struct {
-	Sessions *session.Store
+	Sessions *changeset.Store
 	// Workspace answers where this tree's changes are discussed and reads the working patch.
 	// Nil serves everything except the review.
 	Workspace reviewSource
@@ -643,7 +640,7 @@ type ReviewHandler struct {
 	// handler can say which threads the reader has not seen before, and without them it serves
 	// the conversation unmarked. A caller that has no session store is not a caller with an
 	// empty one, so the marking is skipped rather than every thread being called new.
-	Sessions *session.Store
+	Sessions *changeset.Store
 	Root     string
 }
 
@@ -666,7 +663,7 @@ func (h *ReviewHandler) place(ctx context.Context, threads []types.ReviewThread)
 	if err != nil {
 		return threads
 	}
-	return session.PlaceThreads(session.ParseHunks(patch), threads)
+	return changeset.PlaceThreads(changeset.ParseHunks(patch), threads)
 }
 
 // diffReviewResponse is the wire shape: the target, flattened, plus its threads.

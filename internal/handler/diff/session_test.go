@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	session "github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
@@ -133,7 +133,7 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 	src := &fakePatchSource{patch: "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"}
 	h := NewContextHandler(root, src, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+session.PatchDigest(src.patch)+"&start=3&end=3&radius=1", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(src.patch)+"&start=3&end=3&radius=1", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -141,7 +141,7 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.AsOf != session.PatchDigest(src.patch) || out.Start != 2 || len(out.Lines) != 3 || out.Lines[0] != "two" || out.Lines[2] != "four" {
+	if out.AsOf != changeset.PatchDigest(src.patch) || out.Start != 2 || len(out.Lines) != 3 || out.Lines[0] != "two" || out.Lines[2] != "four" {
 		t.Fatalf("unexpected context: %#v", out)
 	}
 }
@@ -167,7 +167,7 @@ func TestContextHandler_RejectsPathsOutsideTheReviewedSnapshot(t *testing.T) {
 	src := &fakePatchSource{patch: "diff --git a/reviewed.go b/reviewed.go\n@@ -1 +1 @@\n-old\n+new\n"}
 	h := NewContextHandler(root, src, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=private.go&as_of="+session.PatchDigest(src.patch)+"&start=1&end=1", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=private.go&as_of="+changeset.PatchDigest(src.patch)+"&start=1&end=1", nil))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d: %s", w.Code, w.Body.String())
 	}
@@ -207,7 +207,7 @@ func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *tes
 		// snapshot must be rejected before it reveals whether it is a directory or a large file.
 		src.patch = "diff --git a/" + tc.name + " b/" + tc.name + "\n@@ -1 +1 @@\n-old\n+new\n"
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path="+tc.name+"&as_of="+session.PatchDigest(src.patch)+"&start=1&end=1", nil))
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path="+tc.name+"&as_of="+changeset.PatchDigest(src.patch)+"&start=1&end=1", nil))
 		if w.Code != tc.want {
 			t.Fatalf("%s: want %d, got %d: %s", tc.name, tc.want, w.Code, w.Body.String())
 		}
@@ -216,7 +216,7 @@ func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *tes
 
 func TestDiffSessionHandler_GetReadsAttachedSessionWithoutMutatingIt(t *testing.T) {
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 
 	missing := httptest.NewRecorder()
@@ -255,7 +255,7 @@ func post(t *testing.T, h *SessionHandler, body string) *httptest.ResponseRecord
 // it did not have would leave a reader believing their review landed when it never left.
 func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "why"}, types.DiffAuthorHuman)
@@ -280,7 +280,7 @@ func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 // made no mistake and gets the session back unchanged.
 func TestPublishingNothingIsNotAnError(t *testing.T) {
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
@@ -294,7 +294,7 @@ func TestPublishingNothingIsNotAnError(t *testing.T) {
 // widen it - an agent's remark going out under the human's name is the failure this prevents.
 func TestAnAgentCommentIsNotPublishable(t *testing.T) {
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 2, Body: "agent"}, types.DiffAuthorAgent)
@@ -365,7 +365,7 @@ func TestReviewLookupWithoutAWorkspace(t *testing.T) {
 // finished, and the colleague waiting on it hears nothing.
 func TestReplyFailsLoudlyWithNoProvider(t *testing.T) {
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
@@ -383,7 +383,7 @@ func TestReplyFailsLoudlyWithNoProvider(t *testing.T) {
 // their network.
 func TestAnEmptyReplyIsRefusedBeforeTheHostIsAsked(t *testing.T) {
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
@@ -463,7 +463,7 @@ func TestReviewRouteKeepsThreadsWhenThePatchCannotBeRead(t *testing.T) {
 // twice: never sent, and never eligible again, because publish only considers unpublished ones.
 func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Body: "no line"}, types.DiffAuthorHuman)
@@ -510,7 +510,7 @@ func withReviewProvider(t *testing.T, threads []any) {
 func TestPublishMarksExactlyTheDraftsThatLeft(t *testing.T) {
 	withReviewProvider(t, nil)
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorHuman)
@@ -541,7 +541,7 @@ func TestPublishMarksExactlyTheDraftsThatLeft(t *testing.T) {
 func TestPublishingWithEverythingAlreadySentIsNotAnError(t *testing.T) {
 	withReviewProvider(t, nil)
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorHuman)
@@ -557,7 +557,7 @@ func TestReplySucceedsWithNoSessionAttached(t *testing.T) {
 	withReviewProvider(t, nil)
 	root := t.TempDir()
 	h := NewSessionHandler(SessionOptions{
-		Sessions: session.NewStore(""), Workspace: fakeReview{}, Root: root,
+		Sessions: changeset.NewStore(""), Workspace: fakeReview{}, Root: root,
 	}, nil)
 
 	w := post(t, h, `{"op":"reply","id":"th1","body":"agreed"}`)
@@ -567,7 +567,7 @@ func TestReplySucceedsWithNoSessionAttached(t *testing.T) {
 func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 	withReviewProvider(t, nil)
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
@@ -641,7 +641,7 @@ func TestRemoteHostNamesTheDestination(t *testing.T) {
 // copy, and an agent's is not theirs to remove.
 func TestDiscardRemovesOnlyAnUnsentHumanDraft(t *testing.T) {
 	root := t.TempDir()
-	store := session.NewStore("")
+	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	mine := store.AddComment(root, types.DiffComment{Path: "a.go", Line: 1, Body: "mine"}, types.DiffAuthorHuman)
@@ -715,7 +715,7 @@ func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
 		map[string]any{"id": "t1", "path": "a.go", "line": 1, "body": "first", "author": "priya"},
 	})
 	root := t.TempDir()
-	store := session.NewStore(t.TempDir())
+	store := changeset.NewStore(t.TempDir())
 	store.Attach(root, "", types.Diff{}, "")
 
 	h := NewReviewHandler(fakeReview{}, nil)

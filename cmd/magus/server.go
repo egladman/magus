@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/jobs"
@@ -667,7 +667,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// The PERSISTED watermark, not a session. This runs in its own process, so the store's
 	// in-memory session map is empty by construction - reading it was a gate that could never
 	// open, and the job was a guaranteed no-op until this was fixed.
-	store := diff.NewStore(m.CacheDir())
+	store := changeset.NewStore(m.CacheDir())
 	seen := store.LoadSeenThreads()
 	drafts := store.LoadDrafts()
 	if len(seen) == 0 && len(drafts) == 0 {

@@ -20,8 +20,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
-	session "github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
@@ -666,7 +666,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	if err != nil {
 		return err
 	}
-	files := diffTUIFiles(rev, session.ParseHunks(patch))
+	files := diffTUIFiles(rev, changeset.ParseHunks(patch))
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
 	// always explicit; this is what makes them outlive the session.
 	earned := newEarnedSync(sync, content, m.CacheDir(), files, sess.Viewed)
@@ -682,7 +682,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
 	threads, _ := daemonReviewThreads(ctx)
-	threads = session.PlaceThreads(session.ParseHunks(patch), threads)
+	threads = changeset.PlaceThreads(changeset.ParseHunks(patch), threads)
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
@@ -725,7 +725,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the daemon's own store would have written.
 func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string) (types.Diff, *types.DiffSession, diffSync, error) {
-	asOf := session.PatchDigest(patch)
+	asOf := changeset.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
 	}
@@ -737,7 +737,7 @@ func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedCont
 	// because there is no daemon: with one running it owns this file, and two writers would
 	// each persist their own idea of the whole set. Attach is what loads the marks a previous
 	// session left AND what makes MarkViewed below have a session to write to.
-	store := session.NewStore(m.CacheDir())
+	store := changeset.NewStore(m.CacheDir())
 	sess := store.Attach(m.Root(), base, rev, asOf)
 	return rev, sess, diffStoreSync{store: store, root: m.Root()}, nil
 }
@@ -747,8 +747,8 @@ func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedCont
 //
 // The annotation order is authoritative and is never recomputed here - types.Diff.
 // SortForReading is the single definition of review order.
-func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []difftui.File {
-	byPath := make(map[string][]session.Hunk, len(parsed))
+func diffTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.File {
+	byPath := make(map[string][]changeset.Hunk, len(parsed))
 	for _, f := range parsed {
 		byPath[f.Path] = f.Hunks
 	}
@@ -768,7 +768,7 @@ func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []difftui.File {
 				// otherwise. The viewer never sees the raw form of a deceptive line.
 				Index: h.Index, Header: h.Header, Lines: displayOr(h), Digest: h.Digest,
 				NewStart: h.NewStart, Declaration: h.Declaration,
-				Emph: session.RawLineEmphasis(h),
+				Emph: changeset.RawLineEmphasis(h),
 			})
 		}
 		out = append(out, file)
@@ -780,7 +780,7 @@ func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []difftui.File {
 //
 // The fallback is the common case: displayLines returns nil unless a line carried a character a
 // renderer obeys but a reader cannot see, so an honest patch reaches the viewer untouched.
-func displayOr(h session.Hunk) []string {
+func displayOr(h changeset.Hunk) []string {
 	if h.Display != nil {
 		return h.Display
 	}
@@ -798,7 +798,7 @@ type diffSync interface {
 // diffStoreSync persists the reader's progress with no daemon in the picture. There is no
 // cursor to publish: nobody is listening.
 type diffStoreSync struct {
-	store *session.Store
+	store *changeset.Store
 	root  string
 }
 
@@ -1950,7 +1950,7 @@ func impactDuration(ms int64) string {
 func changedPathsFromPatch(patch string) []string {
 	var out []string
 	seen := map[string]bool{}
-	for _, f := range session.ParseHunks(patch) {
+	for _, f := range changeset.ParseHunks(patch) {
 		if f.Path != "" && !seen[f.Path] {
 			seen[f.Path] = true
 			out = append(out, f.Path)
@@ -2026,7 +2026,7 @@ type earnedSync struct {
 	// file has. A receipt is per FILE, so a file is earned only once every hunk it
 	// contributes is marked - reading four hunks of six is not reading the file.
 	fileOf map[string]string
-	// hunksOf counts DISTINCT hunk digests per file, for the reason session.Store.TrackHunks
+	// hunksOf counts DISTINCT hunk digests per file, for the reason changeset.Store.TrackHunks
 	// gives: counting occurrences sets a total the marked set can never reach.
 	hunksOf map[string]int
 	// digestAt is each file's content fingerprint as it was when the reader started, taken
@@ -2034,7 +2034,7 @@ type earnedSync struct {
 	//
 	// A receipt must attest to the bytes somebody SAW; fingerprinting at close would stamp
 	// whatever the file holds by then, and the next report would not call it stale. See
-	// session.Store.ContentAt.
+	// changeset.Store.ContentAt.
 	digestAt map[string]string
 	viewed   map[string]bool
 	// live are the hunks marked in THIS session, as opposed to seeded from the store.

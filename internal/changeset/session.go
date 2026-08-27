@@ -1,5 +1,9 @@
-// Package diff holds the shared diff session: the one object a console tab, an MCP
-// agent, and the CLI all read while a change is being reviewed.
+// Package changeset holds a change under review: the patch parsed into files, hunks and rows,
+// and the shared session every surface reads while somebody works through it.
+//
+// Named for the whole rather than either half. It was `diff`, which described the parsing and
+// not the session, collided with the handler package serving /api/v1/diff and the terminal
+// viewer, and had four callers aliasing it `session` to say what the name did not.
 //
 // One object rather than three, because the daemon already multiplexes those transports over
 // one workspace and three privately-rebuilt reviews would be three diverging opinions of the
@@ -21,7 +25,7 @@
 //     whose whole value is surviving an interruption. It is keyed by CONTENT DIGEST, so the
 //     mark survives a rebase that did not touch the hunk - which is the failing of every
 //     viewed-checkbox that resets on force-push.
-package diff
+package changeset
 
 import (
 	"crypto/sha256"

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -49,9 +49,9 @@ func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error
 
 func newDiffTool(t *testing.T, src *fakeDiffSrc) *diffTool {
 	t.Helper()
-	store := diff.NewStore(t.TempDir())
+	store := changeset.NewStore(t.TempDir())
 	// The human's act: a console fetch is what creates the session an agent may join.
-	store.Attach("/w", "working", types.Diff{Base: "working"}, diff.PatchDigest(src.patch))
+	store.Attach("/w", "working", types.Diff{Base: "working"}, changeset.PatchDigest(src.patch))
 	return &diffTool{sessions: store, root: "/w", src: src}
 }
 
@@ -166,7 +166,7 @@ func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 	// Built the same way op=state has always built its answer, independent of
 	// projectDiffState - the reference every case below is pinned against.
 	sess := tool.sessions.Get(tool.root)
-	want, err := json.Marshal(diffState{DiffSession: sess, Patch: agentPatch, Hunks: diff.ParseHunks(agentPatch)})
+	want, err := json.Marshal(diffState{DiffSession: sess, Patch: agentPatch, Hunks: changeset.ParseHunks(agentPatch)})
 	require.NoError(t, err)
 
 	cases := []struct {
@@ -200,7 +200,7 @@ func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
 	_, err := invoke(t, tool, map[string]any{"op": "state"})
 	require.NoError(t, err)
 
-	hunks := diff.ParseHunks(agentPatch)
+	hunks := changeset.ParseHunks(agentPatch)
 	tool.sessions.MarkViewed(tool.root, hunks[0].Hunks[0].Digest, true)
 	_, err = invoke(t, tool, map[string]any{"op": "comment", "path": "a.go", "body": "note"})
 	require.NoError(t, err)
