@@ -173,7 +173,7 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 		return 0, true
 	}
 
-	pid, logPath, err := spawnDetachedDaemon()
+	pid, logPath, err := spawnDetachedDaemon(os.Args[1:])
 	if err != nil {
 		slog.ErrorContext(ctx, "server start: could not background the daemon", slog.String("error", err.Error()))
 		return 1, true
@@ -187,11 +187,16 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 }
 
 // spawnDetachedDaemon re-execs this binary as a detached foreground daemon and returns its
-// pid and the log file its stdio is redirected to. It preserves the caller's original args
-// (so any --daemon-address the user set is honored) and marks the child via daemonDetachEnv
+// pid and the log file its stdio is redirected to. It marks the child via daemonDetachEnv
 // so it runs the daemon rather than backgrounding again. The child is fully detached (its own
 // session on unix) and Release()d so this process never waits on it.
-func spawnDetachedDaemon() (pid int, logPath string, err error) {
+//
+// args is the child's argument vector. `server start` passes its own args through, so any
+// --daemon-address the user set is honored. A caller that is NOT `server start` must pass an
+// explicit `server start --foreground` vector instead: daemonDetachEnv is only consulted on
+// the server-start path, so re-execing some other command with it set would rerun that
+// command rather than start a daemon.
+func spawnDetachedDaemon(args []string) (pid int, logPath string, err error) {
 	exe, err := os.Executable()
 	if err != nil {
 		exe = os.Args[0]
@@ -203,7 +208,7 @@ func spawnDetachedDaemon() (pid int, logPath string, err error) {
 	}
 	defer func() { _ = logf.Close() }()
 
-	cmd := exec.Command(exe, os.Args[1:]...) //nolint:gosec // G702: re-execs this same magus binary with the caller's own args to detach the daemon
+	cmd := exec.Command(exe, args...) //nolint:gosec // G702: re-execs this same magus binary to detach the daemon
 	cmd.Env = append(os.Environ(), daemonDetachEnv+"=1")
 	cmd.Stdin = nil
 	cmd.Stdout = logf
@@ -215,6 +220,62 @@ func spawnDetachedDaemon() (pid int, logPath string, err error) {
 	pid = cmd.Process.Pid
 	_ = cmd.Process.Release() // detach: the child outlives us, so never wait/reap it
 	return pid, logPath, nil
+}
+
+// consoleReadyTimeout bounds how long ensureConsoleDaemon waits for a freshly spawned
+// daemon to start serving the console. It covers process start, socket bind, and bridge
+// mount together, so it is longer than daemonReadyTimeout, which covers only the socket.
+const consoleReadyTimeout = 20 * time.Second
+
+// ensureConsoleDaemon brings the daemon up when a command needs the console, and reports why
+// it could not when that fails.
+//
+// This is the narrow exception to magus's rule that the daemon is an accelerant and never a
+// capability gate. The console IS the daemon's own surface - something connects to it over a
+// socket - so a command like `graph export --follow` is a plain request for a server, and
+// starting one is doing what was asked rather than a side effect. Commands that merely run
+// FASTER with a daemon never call this and never mention one, which is why an ordinary build
+// (and therefore CI) still starts nothing.
+//
+// A daemon that is already up but whose console is not serving is NOT restarted: spawning a
+// second one cannot fix a bridge that is disabled by config or bound to another address, and
+// it would leave two daemons where the user asked for none.
+func ensureConsoleDaemon(ctx context.Context, addr string) error {
+	probe := func() error {
+		pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
+		defer cancel()
+		return probeLiveBridge(pctx, addr)
+	}
+	if err := probe(); err == nil {
+		return nil
+	}
+	if sock, ok := proc.LookupStableSocket(ctx); ok {
+		return fmt.Errorf("the daemon is running on %s but its console is not serving at %s; check console.enabled and mcp.address", sock, addr)
+	}
+
+	fmt.Fprintln(os.Stderr, "magus: starting the daemon to serve the console.")
+	pid, logPath, err := spawnDetachedDaemon([]string{"server", "start", "--foreground"})
+	if err != nil {
+		return fmt.Errorf("could not start the daemon: %w", err)
+	}
+	// A serving console is the only readiness signal worth waiting on here: it proves the
+	// socket bound AND the bridge mounted, so waiting on the socket first would add a
+	// failure mode without adding information.
+	deadline := time.Now().Add(consoleReadyTimeout)
+	for {
+		if err := probe(); err == nil {
+			fmt.Fprintf(os.Stderr, "magus: daemon started (pid %d); logs at %s\n", pid, logPath)
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("daemon (pid %d) started but its console did not serve at %s within %s; see %s", pid, addr, consoleReadyTimeout, logPath)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 // waitDaemonReady polls the daemon socket until it answers a status query or the timeout

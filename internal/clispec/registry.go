@@ -17,6 +17,7 @@ var All = []Command{
 	pathCommand,
 	refsCommand,
 	watchCommand,
+	eventsCommand,
 	statusCommand,
 	cleanCommand,
 	vcsCommand,
@@ -556,6 +557,44 @@ Subcommands (the first argument):
 		{"Open target dependency graph", "magus graph export --open --targets"},
 		{"Scope target graph to one project", "magus graph export --open --targets docs"},
 		{"Print the URL instead of opening", "magus graph export --open --targets --print"},
+	},
+}
+
+var eventsCommand = Command{
+	Name:        "events",
+	Short:       "Stream workspace events as JSONL for an integration to consume",
+	Description: "Stream magus events as JSONL - one event per line - so an editor plugin, a status bar, or any other integration can react to runs, results, and diagnostics.",
+	Tags:        []string{"cli", "magus events", "events", "integration", "editor", "plugin", "jsonl", "subscribe"},
+	Long: `Stream workspace events as JSONL, one event per line. This is the surface
+third-party integrations build against: an Emacs or Vim plugin, a status bar,
+a notifier.
+
+Every magus process in the workspace feeds the stream, so a run started in
+another terminal shows up here. It needs no daemon, no token, and no loadable
+magusfile - an editor can attach to a repository whose magusfile is mid-edit.
+
+The stream is outbound only. Nothing a subscriber does can change a magus
+verdict; the inbound counterpart is the session hook.
+
+target.output is excluded unless named with --type: it is the one event type
+that scales with build size rather than project count. To read a target's full
+log, take the ref from its target.result event and pass it to query output.
+
+A subscriber must ignore event types and fields it does not recognize. That is
+what lets the taxonomy grow without breaking clients built against an earlier
+schema.`,
+	Usage: "magus events [flags]",
+	Flags: []Flag{
+		{Name: "follow", Kind: FlagBool, Doc: "Keep streaming as events occur instead of exiting after the replay"},
+		{Name: "f", Kind: FlagBool, AliasOf: "follow", Doc: "Short for --follow"},
+		{Name: "type", Kind: FlagString, Doc: "Restrict to these event types (comma-separated); default is every type except target.output"},
+		{Name: "limit", Kind: FlagInt, Default: 20, Doc: "Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run"},
+		{Name: "interval", Kind: FlagDuration, Default: 250 * time.Millisecond, Doc: "How often --follow polls the run log for new events"},
+	},
+	Examples: []Example{
+		{"Watch a workspace live", "magus events --follow"},
+		{"Only what an editor needs for diagnostics", "magus events --follow --type target.result,diagnostic.emitted"},
+		{"What did the last run do", "magus events --limit 1"},
 	},
 }
 

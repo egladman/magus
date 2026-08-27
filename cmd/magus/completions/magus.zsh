@@ -53,6 +53,7 @@ _magus() {
                 'refs:list where an ingested code symbol is defined and referenced'
                 'graph:the graphs as objects\: deps (project DAG), export (knowledge graph), stats (shape)'
                 'watch:emit changed file paths (pipe into affected --stdin)'
+                'events:stream workspace events as JSONL for an editor plugin or other integration'
                 'status:inspect the concurrency pool of a running parent magus'
                 'clean:remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]'
                 'vcs:staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)'

@@ -208,6 +208,8 @@ guides/integrations/agents/skills/
 guides/integrations/ci/
 guides/integrations/daemon/
 guides/integrations/editor/
+guides/integrations/editor/design/
+guides/integrations/editor/events/
 guides/integrations/git/
 guides/integrations/github-actions/
 guides/integrations/mcp/
@@ -395,6 +397,7 @@ reference/codes/magusfile/MGS1026/
 reference/codes/magusfile/MGS1027/
 reference/codes/magusfile/MGS1028/
 reference/codes/magusfile/MGS1029/
+reference/codes/magusfile/MGS1030/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -449,6 +452,7 @@ reference/manpage/magus-config/
 reference/manpage/magus-describe/
 reference/manpage/magus-diff/
 reference/manpage/magus-doctor/
+reference/manpage/magus-events/
 reference/manpage/magus-explain/
 reference/manpage/magus-graph/
 reference/manpage/magus-hook/
@@ -465,6 +469,7 @@ reference/manpage/magus-refs/
 reference/manpage/magus-run/
 reference/manpage/magus-self/
 reference/manpage/magus-server/
+reference/manpage/magus-session/
 reference/manpage/magus-sessions/
 reference/manpage/magus-status/
 reference/manpage/magus-tail/
@@ -596,11 +601,13 @@ tags/documentation/
 tags/download/
 tags/drift/
 tags/ed-25519/
+tags/editor/
 tags/env/
 tags/environment/
 tags/error-codes/
 tags/errors/
 tags/eslint/
+tags/events/
 tags/exec/
 tags/explain/
 tags/extension/
@@ -641,6 +648,7 @@ tags/interpreter/
 tags/journal/
 tags/json-patch/
 tags/json/
+tags/jsonl/
 tags/keep-warm/
 tags/knowledge-graph/
 tags/landlock/
@@ -749,6 +757,7 @@ tags/spell/
 tags/spells/
 tags/status/
 tags/stdlib/
+tags/subscribe/
 tags/supply-chain/
 tags/supported/
 tags/symbols/

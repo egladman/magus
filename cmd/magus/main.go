@@ -754,17 +754,19 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "affected":
 		return affected(ctx, root, rc, subArgs)
 	case "query":
-		return queryCmd(ctx, root, subArgs)
+		return hintWarmGraph(ctx, queryCmd(ctx, root, subArgs))
 	case "explain":
-		return explainCmd(ctx, root, subArgs)
+		return hintWarmGraph(ctx, explainCmd(ctx, root, subArgs))
 	case "path":
-		return pathCmd(ctx, root, subArgs)
+		return hintWarmGraph(ctx, pathCmd(ctx, root, subArgs))
 	case "refs":
-		return refsCmd(ctx, root, subArgs)
+		return hintWarmGraph(ctx, refsCmd(ctx, root, subArgs))
 	case "graph":
-		return graphCmd(ctx, root, subArgs)
+		return hintWarmGraph(ctx, graphCmd(ctx, root, subArgs))
 	case "watch":
 		return watchCmd(ctx, root, rc, subArgs)
+	case "events":
+		return eventsCmd(ctx, root, subArgs)
 	case "status":
 		return status(ctx, subArgs)
 	case "clean":

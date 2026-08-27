@@ -53,9 +53,23 @@ every command fails at workspace load with:
 magus: workspace://.: magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./tools/toolchain": [BZZ2001] buzz: import "proc": module not found
 ```
 
-So build one - `magus run go_build .` - and use `./magus`. This is a temporary state that
-ends when the next release ships; re-check it by running `magus ls` before assuming
-either way, because the guidance flips back the moment a release carries the key.
+So build one and use `./magus`. `magus run go_build .` CANNOT do it from a fresh
+worktree, and that instruction stood here until it was measured on 2026-08-27: the
+released binary is missing `proc`, `io`, `serialize`, and `std`, so it fails at
+workspace load before it can run any target, go_build included. The escape is one raw
+`go build`, which is the single sanctioned exception to the guard's deny:
+
+```sh
+go build -o ./magus ./cmd/magus
+```
+
+That binary loads this tree fine, after which everything normal works - including
+`./magus run go_build .` to produce a properly stamped one, which is worth doing
+because the raw build carries no version ldflags.
+
+This is a temporary state that ends when the next release ships; re-check it by
+running `magus ls` before assuming either way, because the guidance flips back the
+moment a release carries the key.
 
 The DEFAULT, whenever the PATH binary can load the tree, is to use it and NOT build.
 Building is the exception, and it needs a reason:
@@ -281,11 +295,14 @@ deliberately instead:
   SW and clear caches before trusting what you see.
 - Leftover `.claude/worktrees/` copies duplicate spell sources and trip
   MGS1002 when running magus at the repo root; remove dead worktrees first.
-- `magus affected ci` has one known local-environment failure that is NOT your
-  change: the doctor console check needs a running daemon. `magus run lint .` is
-  otherwise GREEN as of 2026-08-02 - the "pre-existing lint findings" this file
-  used to warn about are gone, so treat a lint failure as yours rather than
-  assuming it is background noise.
+- `magus affected ci` has NO known local-environment failure any more. The
+  doctor console check used to need a running daemon and made this red on every
+  machine with the daemon stopped; `probeBridgeReachability` now skips instead,
+  under the standing rule that the daemon is an accelerant and never a
+  capability gate (see `docs/guides/integrations/editor/design.md`).
+  `magus run lint .` is GREEN as of 2026-08-02 - the "pre-existing lint
+  findings" this file used to warn about are gone - so treat any failure in the
+  gate as yours rather than assuming it is background noise.
 - Need one value out of a magus command? ASK MAGUS FOR IT: `-o name` (ids, one
   per line), `-o json` (the record), `-o template='{{.Field}}'` (one field).
   Never reach for a filter - the guard denies piping AND redirecting magus

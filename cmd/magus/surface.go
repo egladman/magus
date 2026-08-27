@@ -33,6 +33,7 @@ var subcommands = []subcommand{
 	{Name: "refs", Short: "list where an ingested code symbol is defined and referenced"},
 	{Name: "graph", Short: "the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)"},
 	{Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
+	{Name: "events", Short: "stream workspace events as JSONL for an editor plugin or other integration"},
 	{Name: "status", Short: "inspect the concurrency pool of a running parent magus"},
 	{Name: "clean", Short: "remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]"},
 	{Name: "vcs", Short: "staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)"},

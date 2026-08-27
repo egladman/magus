@@ -191,7 +191,28 @@ func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	_, _ = h.w.Write(line)
-	return h.w.WriteByte('\n')
+	if err := h.w.WriteByte('\n'); err != nil {
+		return err
+	}
+	// Flush everything except output lines. The run log is not only a durable record -
+	// it is what a live follower reads (`magus events --follow` tails <cacheDir>/runs/),
+	// and a purely buffered handler makes that stream lag by up to a bufio page, so a
+	// short run delivers nothing until it ends.
+	//
+	// The flush is NOT free, and the number is the reason the split is where it is:
+	// BenchmarkEmitResultFile 775ns -> 2005ns/op, +159% (benchstat, n=12) - about 1.2us
+	// of write(2) per event. That is paid once per TARGET, so a few hundred times in a
+	// large run: well under a millisecond against a build measured in minutes. Output is
+	// the one kind that scales with build size rather than project count, and flushing it
+	// would pay that microsecond tens of thousands of times, so it stays buffered and a
+	// follower that asks for it gets chunks.
+	//
+	// BenchmarkEmitOutput is unchanged (p=0.80, n=12), and allocations are identical on
+	// every path (4 allocs/op, all samples equal) - the flush allocates nothing.
+	if e.Kind != KindOutput {
+		return h.w.Flush()
+	}
+	return nil
 }
 
 func (h *FileHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
