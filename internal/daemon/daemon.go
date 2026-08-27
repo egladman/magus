@@ -25,14 +25,17 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
+	attentionhandler "github.com/egladman/magus/internal/handler/attention"
 	diffhandler "github.com/egladman/magus/internal/handler/diff"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
+	ledgerhandler "github.com/egladman/magus/internal/handler/ledger"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	memoryhandler "github.com/egladman/magus/internal/handler/memory"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	noteshandler "github.com/egladman/magus/internal/handler/notes"
+	planhandler "github.com/egladman/magus/internal/handler/plan"
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
 	toolhandler "github.com/egladman/magus/internal/handler/tool"
@@ -302,12 +305,12 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// the same two sources the console already trusts - the service for structure and
 			// live pool state, the output store for each node's last outcome and its ref - so
 			// it introduces no third notion of what ran.
-			planH := status.NewPlanHandler(svc, outputStore, opts.Magus.Root(), log)
-			ledgerH := status.NewLedgerHandler(opts.Ledger, log)
+			planH := planhandler.NewHandler(svc, outputStore, opts.Magus.Root(), log)
+			ledgerH := ledgerhandler.NewHandler(opts.Ledger, log)
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
 			// checkout, so the console lists what `magus session attention` lists from any worktree.
-			attentionH := status.NewAttentionHandler(opts.Magus.Root(), opts.Version, log)
+			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log)
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route

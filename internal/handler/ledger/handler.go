@@ -1,4 +1,4 @@
-package status
+package ledger
 
 import (
 	"log/slog"
@@ -8,14 +8,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ledgerSource is the narrow repository contract the ledger handler needs: read every
+// Source is the narrow repository contract the ledger handler needs: read every
 // declared delegation row. Satisfied by *ledger.Store, so this package holds no store
 // logic - it serves what the store already knows.
-type ledgerSource interface {
+type Source interface {
 	List() ([]types.Delegation, error)
 }
 
-// LedgerHandler serves GET /api/v1/ledger: the orchestrating agent's declared plan as
+// Handler serves GET /api/v1/ledger: the orchestrating agent's declared plan as
 // JSON ({"units":[...],"overlaps":[...]}), in the order the rows were recorded, so the
 // console's delegation drawer can join them to agent activity by delegation id.
 //
@@ -25,19 +25,19 @@ type ledgerSource interface {
 // Read-only, and the rows it serves are DECLARATIONS. Nothing magus does is gated on
 // them; the console renders what an agent said it intended, never a verdict magus
 // reached. See types.Delegation.
-type LedgerHandler struct {
+type Handler struct {
 	handler.Base
-	src ledgerSource
+	src Source
 }
 
-// NewLedgerHandler returns the GET /api/v1/ledger handler reading from src.
-func NewLedgerHandler(src ledgerSource, log *slog.Logger) *LedgerHandler {
-	h := &LedgerHandler{src: src}
+// NewHandler returns the GET /api/v1/ledger handler reading from src.
+func NewHandler(src Source, log *slog.Logger) *Handler {
+	h := &Handler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
 
-func (h *LedgerHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	if !handler.AllowGet(w, r) {
 		return
 	}

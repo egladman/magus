@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/internal/handler/status"
+	ledgerhandler "github.com/egladman/magus/internal/handler/ledger"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/spells"
@@ -298,7 +298,7 @@ func TestLedgerDoorsAgreeOnAnEmptyLedger(t *testing.T) {
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
-	status.NewLedgerHandler(store, nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
+	ledgerhandler.NewHandler(store, nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 
 	var route, toolBody any

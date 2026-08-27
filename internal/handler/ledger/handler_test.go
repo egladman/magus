@@ -1,4 +1,4 @@
-package status
+package ledger
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeLedgerSource is a ledgerSource returning canned rows or a fixed error.
+// fakeLedgerSource is a Source returning canned rows or a fixed error.
 type fakeLedgerSource struct {
 	delegations []types.Delegation
 	err         error
@@ -28,7 +28,7 @@ func TestLedgerHandler_Returns200WithDelegations(t *testing.T) {
 		},
 		{ID: "scout", ReadOnly: true, State: types.StateNoReturn},
 	}}
-	h := NewLedgerHandler(src, nil)
+	h := NewHandler(src, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
 	if w.Code != http.StatusOK {
@@ -72,7 +72,7 @@ func TestLedgerHandler_ReportsOverlappingOwnedPaths(t *testing.T) {
 		{ID: "delegation-b", OwnedPaths: []string{"internal/ledger/store.go"}, State: types.StateDeclared},
 		{ID: "delegation-done", OwnedPaths: []string{"internal/ledger"}, State: types.StatePass},
 	}}
-	h := NewLedgerHandler(src, nil)
+	h := NewHandler(src, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
 
@@ -97,7 +97,7 @@ func TestLedgerHandler_ReportsOverlappingOwnedPaths(t *testing.T) {
 }
 
 func TestLedgerHandler_EmptyLedgerServesEmptyList(t *testing.T) {
-	h := NewLedgerHandler(fakeLedgerSource{}, nil)
+	h := NewHandler(fakeLedgerSource{}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
 	if w.Code != http.StatusOK {
@@ -110,7 +110,7 @@ func TestLedgerHandler_EmptyLedgerServesEmptyList(t *testing.T) {
 }
 
 func TestLedgerHandler_ErrorReturns500(t *testing.T) {
-	h := NewLedgerHandler(fakeLedgerSource{err: errors.New("corrupt ledger")}, nil)
+	h := NewHandler(fakeLedgerSource{err: errors.New("corrupt ledger")}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
 	if w.Code != http.StatusInternalServerError {
@@ -119,7 +119,7 @@ func TestLedgerHandler_ErrorReturns500(t *testing.T) {
 }
 
 func TestLedgerHandler_MethodGate(t *testing.T) {
-	h := NewLedgerHandler(fakeLedgerSource{}, nil)
+	h := NewHandler(fakeLedgerSource{}, nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, "/api/v1/ledger", nil))

@@ -1,4 +1,4 @@
-package status
+package attention
 
 import (
 	"errors"
@@ -23,7 +23,7 @@ import (
 // docs/doctrine.md's "Manual on purpose" row turns on.
 const consoleSessionHost = "console"
 
-// AttentionHandler serves /api/v1/attention: the blocks agents have raised in this repository
+// Handler serves /api/v1/attention: the blocks agents have raised in this repository
 // and waiting on a person, plus the one write that closes one.
 //
 // GET answers {"requests":[...],"store":"<dir>"} - the same shape `magus session attention -o json`
@@ -41,19 +41,19 @@ const consoleSessionHost = "console"
 // Authorship rides the ROUTE, never the payload, the same rule DiffSessionHandler states: an
 // agent reaches magus through MCP and cannot arrive here, so a write that lands here came from
 // the console and is stamped [consoleSessionHost] without trusting anything the caller sent.
-type AttentionHandler struct {
+type Handler struct {
 	handler.Base
 	root    string
 	version string
 }
 
-// NewAttentionHandler returns the /api/v1/attention handler for the repository at root.
+// NewHandler returns the /api/v1/attention handler for the repository at root.
 //
 // The store is resolved per request from root rather than once here: sessions.Dir is a hash
 // and a path join, and resolving it live keeps the handler saying what the CLI would say from
 // the same checkout even if the state directory moves under a long-lived daemon.
-func NewAttentionHandler(root, version string, log *slog.Logger) *AttentionHandler {
-	h := &AttentionHandler{root: root, version: version}
+func NewHandler(root, version string, log *slog.Logger) *Handler {
+	h := &Handler{root: root, version: version}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -77,7 +77,7 @@ type disposeRequestBody struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-func (h *AttentionHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodOptions:
 		w.WriteHeader(http.StatusNoContent)
@@ -90,7 +90,7 @@ func (h *AttentionHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *AttentionHandler) list(w http.ResponseWriter) {
+func (h *Handler) list(w http.ResponseWriter) {
 	dir, err := sessions.Dir(h.root)
 	if err != nil {
 		http.Error(w, "attention error: "+err.Error(), http.StatusInternalServerError)
@@ -107,7 +107,7 @@ func (h *AttentionHandler) list(w http.ResponseWriter) {
 	handler.WriteJSON(w, attentionView{Requests: sessions.AttentionQueue(fold), Store: dir})
 }
 
-func (h *AttentionHandler) dispose(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 	var body disposeRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)

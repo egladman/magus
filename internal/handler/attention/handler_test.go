@@ -1,4 +1,4 @@
-package status
+package attention
 
 import (
 	"net/http"
@@ -47,7 +47,7 @@ func raise(t *testing.T, dir, agentSession, message string) string {
 	return id
 }
 
-func getQueue(t *testing.T, h *AttentionHandler) (int, attentionView) {
+func getQueue(t *testing.T, h *Handler) (int, attentionView) {
 	t.Helper()
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/attention", nil))
@@ -60,7 +60,7 @@ func getQueue(t *testing.T, h *AttentionHandler) (int, attentionView) {
 	return w.Code, out
 }
 
-func postDispose(t *testing.T, h *AttentionHandler, payload string) *httptest.ResponseRecorder {
+func postDispose(t *testing.T, h *Handler, payload string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/attention", strings.NewReader(payload)))
@@ -71,7 +71,7 @@ func TestAttentionHandler_ServesTheOpenQueue(t *testing.T) {
 	root, dir := plantStore(t)
 	raise(t, dir, "agent-1", "needs the deploy key")
 
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 	code, out := getQueue(t, h)
 	if code != http.StatusOK {
 		t.Fatalf("want 200, got %d", code)
@@ -93,7 +93,7 @@ func TestAttentionHandler_ServesTheOpenQueue(t *testing.T) {
 
 func TestAttentionHandler_EmptyQueueServesEmptyList(t *testing.T) {
 	root, _ := plantStore(t)
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/attention", nil))
@@ -110,7 +110,7 @@ func TestAttentionHandler_EmptyQueueServesEmptyList(t *testing.T) {
 func TestAttentionHandler_DisposeClosesTheRequest(t *testing.T) {
 	root, dir := plantStore(t)
 	id := raise(t, dir, "agent-1", "needs the deploy key")
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	w := postDispose(t, h, `{"id":"`+id+`","reason":"handed it over"}`)
 	if w.Code != http.StatusOK {
@@ -136,7 +136,7 @@ func TestAttentionHandler_DisposeClosesTheRequest(t *testing.T) {
 func TestAttentionHandler_DisposeAcceptsAnUnambiguousPrefix(t *testing.T) {
 	root, dir := plantStore(t)
 	id := raise(t, dir, "agent-1", "needs the deploy key")
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	if w := postDispose(t, h, `{"id":"`+id[:8]+`"}`); w.Code != http.StatusOK {
 		t.Fatalf("want 200 for an unambiguous prefix, got %d; body %s", w.Code, w.Body.String())
@@ -150,7 +150,7 @@ func TestAttentionHandler_DisposeAcceptsAnUnambiguousPrefix(t *testing.T) {
 func TestAttentionHandler_DisposeStampsTheConsoleAsTheSurface(t *testing.T) {
 	root, dir := plantStore(t)
 	id := raise(t, dir, "agent-1", "needs the deploy key")
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	if w := postDispose(t, h, `{"id":"`+id+`"}`); w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d; body %s", w.Code, w.Body.String())
@@ -187,7 +187,7 @@ func TestAttentionHandler_AmbiguousPrefixIsRefused(t *testing.T) {
 	root, dir := plantStore(t)
 	raise(t, dir, "agent-1", "needs the deploy key")
 	raise(t, dir, "agent-2", "needs review on the migration")
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	w := postDispose(t, h, `{"id":"att-"}`)
 	if w.Code != http.StatusBadRequest {
@@ -205,7 +205,7 @@ func TestAttentionHandler_AmbiguousPrefixIsRefused(t *testing.T) {
 
 func TestAttentionHandler_UnknownIDReturns404(t *testing.T) {
 	root, _ := plantStore(t)
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	if w := postDispose(t, h, `{"id":"att-000000000000"}`); w.Code != http.StatusNotFound {
 		t.Errorf("want 404 for an id that names nothing, got %d", w.Code)
@@ -217,7 +217,7 @@ func TestAttentionHandler_UnknownIDReturns404(t *testing.T) {
 func TestAttentionHandler_SecondDisposeReturns409(t *testing.T) {
 	root, dir := plantStore(t)
 	id := raise(t, dir, "agent-1", "needs the deploy key")
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	if w := postDispose(t, h, `{"id":"`+id+`"}`); w.Code != http.StatusOK {
 		t.Fatalf("want the first disposal to succeed, got %d", w.Code)
@@ -230,7 +230,7 @@ func TestAttentionHandler_SecondDisposeReturns409(t *testing.T) {
 
 func TestAttentionHandler_MalformedBodyReturns400(t *testing.T) {
 	root, _ := plantStore(t)
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	if w := postDispose(t, h, `{`); w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -239,7 +239,7 @@ func TestAttentionHandler_MalformedBodyReturns400(t *testing.T) {
 
 func TestAttentionHandler_MethodGate(t *testing.T) {
 	root, _ := plantStore(t)
-	h := NewAttentionHandler(root, "v0.0.0-test", nil)
+	h := NewHandler(root, "v0.0.0-test", nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, "/api/v1/attention", nil))

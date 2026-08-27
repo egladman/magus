@@ -1,4 +1,4 @@
-package status
+package plan
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// planSource is the narrow consumer contract the plan handler needs from the console
+// Source is the narrow consumer contract the plan handler needs from the console
 // service: the statically extracted target graph (the plan's STRUCTURE) and the live status
 // report (its STATE). Both are satisfied by *console.Service; the handler package holds no
 // concrete service, matching insightSource and diffSource above.
@@ -22,7 +22,7 @@ import (
 // TargetGraph is the same call `magus describe graph -o json` makes and the same bytes
 // gen/target-graph.json holds, read from the loaded workspace rather than from that file -
 // a generated snapshot is only as fresh as the last `generate`, and this route reports live.
-type planSource interface {
+type Source interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)
 	StatusReport(ctx context.Context) types.StatusReport
 }
@@ -88,7 +88,7 @@ type planResponse struct {
 	Edges  []planEdge `json:"edges"`
 }
 
-// PlanHandler serves GET /api/v1/plan: the target DAG magus derives for plain work, with
+// Handler serves GET /api/v1/plan: the target DAG magus derives for plain work, with
 // live per-node state. Every run has a plan - the engine computes one to dispatch at all -
 // and this is that plan, not a document anybody authored.
 //
@@ -99,24 +99,24 @@ type planResponse struct {
 // and a misspelled target render identically and only one of them is the reader's mistake.
 //
 // It REPORTS and never gates: a red node is a fact on the wire, not a reason to refuse.
-type PlanHandler struct {
+type Handler struct {
 	handler.Base
-	src     planSource
+	src     Source
 	outputs planOutputs
 	root    string
 }
 
-// NewPlanHandler returns the GET /api/v1/plan handler. root is the workspace this daemon
+// NewHandler returns the GET /api/v1/plan handler. root is the workspace this daemon
 // fronts, used to drop pool entries belonging to another workspace; empty disables that
 // filter (every pool entry then counts, which is the honest degradation for a caller that
 // cannot say which tree it is serving).
-func NewPlanHandler(src planSource, outputs planOutputs, root string, log *slog.Logger) *PlanHandler {
-	h := &PlanHandler{src: src, outputs: outputs, root: root}
+func NewHandler(src Source, outputs planOutputs, root string, log *slog.Logger) *Handler {
+	h := &Handler{src: src, outputs: outputs, root: root}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
 
-func (h *PlanHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	if !handler.AllowGet(w, r) {
 		return
 	}
@@ -150,7 +150,7 @@ func (h *PlanHandler) serve(w http.ResponseWriter, r *http.Request) {
 // caller's spelling back for the message); a DERIVED candidate that no project defines is
 // silently skipped instead, so `magus x <ref>` running in the pool falls through to the
 // most recent output rather than serving an empty graph while a build is visibly in flight.
-func (h *PlanHandler) resolveAnchor(raw string, index planTargets, report types.StatusReport, descs []cache.OutputDescriptor) (target, anchor string, ok bool) {
+func (h *Handler) resolveAnchor(raw string, index planTargets, report types.StatusReport, descs []cache.OutputDescriptor) (target, anchor string, ok bool) {
 	if raw != "" {
 		t, err := types.ParseTarget(raw)
 		if err != nil || !index.defines(t.Name) {
