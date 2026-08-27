@@ -320,6 +320,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkUndeclaredSeedingFiles,
 	},
 	{
+		Name:           "output-is-another-projects-source",
+		Doc:            "a file one project generates that another project declares as a source",
+		Code:           types.OutputIsAnotherProjectsSource,
+		Evidence:       types.EvidenceInferred,
+		NeedsWorkspace: true,
+		run:            (*runner).checkOutputIsAnotherProjectsSource,
+	},
+	{
 		Name:           "unmatchable-source-globs",
 		Doc:            "a source glob rooted inside a tree the expansion walk prunes, so it matches nothing",
 		Code:           types.UnmatchableSourceGlob,

@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2404,
-  "edge_count": 6139,
+  "node_count": 2406,
+  "edge_count": 6147,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -300,6 +300,14 @@
       "label": "MGS1030",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1030/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1031",
+      "kind": "diagnostic",
+      "label": "MGS1031",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1031/"
       }
     },
     {
@@ -910,7 +918,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "220",
+        "dir_files": "221",
         "dir_languages": "markdown"
       }
     },
@@ -1180,7 +1188,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "90",
+        "dir_files": "91",
         "dir_languages": "markdown"
       }
     },
@@ -1230,7 +1238,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "31",
+        "dir_files": "32",
         "dir_languages": "markdown"
       }
     },
@@ -4301,6 +4309,18 @@
         "section": "reference",
         "tags": "MGS1030,memory_mb,doctor,memory,declarations,admission",
         "title": "MGS1030: memory declaration disagrees with what was measured"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1031.md",
+      "source": "docs/reference/codes/magusfile/MGS1031.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1031,magusfile,sources,outputs,generated,doctor",
+        "title": "MGS1031: a project's output is another project's source"
       }
     },
     {
@@ -24260,6 +24280,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -35793,6 +35821,62 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/reference/codes/magusfile/MGS1030.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "diagnostic:MGS1028",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "diagnostic:MGS1031",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "diagnostic:MGS4002",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "diagnostic:MGS4007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1028.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "doc:docs/reference/codes/race/MGS4002.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1031.md",
+      "target": "doc:docs/reference/codes/race/MGS4007.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1031.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
