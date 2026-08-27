@@ -125,7 +125,7 @@ magus\project({
         // A hit would report yesterday's CVEs against today's image.
         // ctx.observes is the successor, and it is not usable here YET: it keys on a value
         // the magusfile STATES, and nothing states trivy's DB id without probing for it,
-        // which cannot run before the key is minted. See plans/ctx-observes-reconstruction.md.
+        // which cannot run before the key is minted.
         "image-scan": {"skip_cache": "reads trivy's vulnerability database, which changes independently of this tree"},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
@@ -2083,8 +2083,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // missing when `unlabeled` reached main through CHANGELOG.md. It surfaced one shard
     // over, in the docs project, because docs/changelog.md is a GENERATED MIRROR of the
     // root file - so the error pointed at generated output while the fix belonged here.
-    final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md"];
-    ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md");
+    final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md"];
+    ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md");
     proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
 }

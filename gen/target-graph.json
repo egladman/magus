@@ -1149,10 +1149,6 @@
             {
               "project": ".",
               "glob": "AGENTS.md"
-            },
-            {
-              "project": ".",
-              "glob": "TODO.md"
             }
           ],
           "reads_secrets": false
