@@ -821,6 +821,41 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 	}
 }
 
+// rootOnlyMagusLookup matches resolving magus as `./magus` - the workspace root's copy,
+// and only when the process already stands in the root.
+var rootOnlyMagusLookup = regexp.MustCompile(`-x\s+\.?/?\./magus\b|-x\s+"\./magus"`)
+
+// TestGuideExamplesDoNotResolveMagusFromTheProcessDirectory covers the copy-paste hook
+// commands that are inline JSON rather than shipped files.
+//
+// They carry no `magus-guard-template:` marker and cannot: the marker is graded by
+// reading the file a host config points at, and an inline command is not a file. So
+// neither the staleness check nor TestHookTemplatesAreEmbeddedInTheGuide sees them, and
+// the resolution logic they duplicate drifted out of step with the templates exactly
+// once already - the templates learned to walk up to the magusfile and these did not,
+// which is silent: the hook still exits 0 and the events just stop arriving.
+//
+// Asserted over EVERY page, not just the two commands that had the bug, because the
+// next copy of this pattern will be pasted somewhere else.
+func TestGuideExamplesDoNotResolveMagusFromTheProcessDirectory(t *testing.T) {
+	pages, err := filepath.Glob(filepath.Join(hookTemplateDir, "*.md"))
+	require.NoError(t, err)
+	require.NotEmpty(t, pages, "the agent guide pages must be discoverable")
+
+	for _, page := range pages {
+		body, err := os.ReadFile(page)
+		require.NoError(t, err, "read %s", page)
+		for i, line := range strings.Split(string(body), "\n") {
+			assert.NotRegexp(t, rootOnlyMagusLookup, line,
+				"%s:%d resolves magus as ./magus, which only finds it when the hook happens to\n"+
+					"run in the workspace root. Walk up to the magusfile instead, the way the shipped\n"+
+					"templates do:\n"+
+					`  d=$PWD; while [ -n "$d" ] && [ ! -f "$d/magusfile.buzz" ]; do d=${d%%/*}; done`,
+				page, i+1)
+		}
+	}
+}
+
 // rootSourcesBlock captures the root project's declared source globs: everything
 // between `"sources": [` and the closing bracket. One `"sources"` key exists in this
 // magusfile (the root project's), so the first match is it.

@@ -78,7 +78,14 @@ var guardSurfaces = []string{"command", "path"}
 // Suppression is opt-in per host (GUARD_NO_ADVISE), so the rendered response for a
 // host that keeps the arm is byte-identical to version 6. Which hosts need it is
 // recorded in their own guide pages, not here.
-const GuardTemplateVersion = 7
+//
+// 8: the templates find the binary by walking UP to the magusfile instead of testing
+// `./magus` in the process's own directory. A hook runs in the host's SESSION
+// directory, which is not always the workspace root, and every copy that predates
+// this silently judges with PATH's binary there - or, where PATH's copy cannot load
+// the workspace, does not judge at all. Version 4 established preferring the
+// workspace's binary; this is the half of it that was only true from the root.
+const GuardTemplateVersion = 8
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.
