@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeRuns is a RunSource stub: a fixed run-log list, an inv->events map, and a ref->descriptor map,
+// fakeRuns is a runSource stub: a fixed run-log list, an inv->events map, and a ref->descriptor map,
 // so the invocation handlers are exercised without a real on-disk store.
 type fakeRuns struct {
 	logs   []cache.RunLog

@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeInsightSource is an Source returning a canned view or a fixed error.
+// fakeInsightSource is an insightSource returning a canned view or a fixed error.
 type fakeInsightSource struct {
 	view       types.InsightView
 	insightErr error

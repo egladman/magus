@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeOutputs is an OutputSource stub: a fixed descriptor list plus a ref->bytes map, so the handler
+// fakeOutputs is an outputSource stub: a fixed descriptor list plus a ref->bytes map, so the handler
 // tests exercise wire behavior without a real on-disk store.
 type fakeOutputs struct {
 	descs []cache.OutputDescriptor

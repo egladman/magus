@@ -143,8 +143,9 @@ type Step struct {
 	// Outputs, and hashing either would change every existing key. They exist so
 	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
 	Updates []string // ctx.modifiesExistingFiles globs
-	// OwnedOutputs spans EVERY target in the project, not the running one, because
-	// ctx.needs puts a chained target's writes inside this step's window.
+	// OwnedOutputs spans EVERY target in EVERY project, not the running one, because
+	// ctx.needs puts a chained target's writes inside this step's window and a workspace
+	// target does the same across projects.
 	OwnedOutputs []string
 
 	Deps          []string // upstream project hashes folded into the key

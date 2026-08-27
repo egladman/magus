@@ -538,7 +538,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("server rotate-logs: %w", err)
 	}
-	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns)
+	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
 	return nil
 }

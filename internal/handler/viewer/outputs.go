@@ -11,10 +11,10 @@ import (
 	json "github.com/egladman/magus/internal/json"
 )
 
-// OutputSource is the narrow repository contract the run-browser handlers need: list the stored run
+// outputSource is the narrow repository contract the run-browser handlers need: list the stored run
 // descriptors, and read one run's captured bytes by ref. Satisfied by *cache.OutputStore, so the
 // handler package never grows its own store logic - it just serves what the store already knows.
-type OutputSource interface {
+type outputSource interface {
 	ListDescriptors() []cache.OutputDescriptor
 	ByRef(ref string) ([]byte, cache.OutputDescriptor, error)
 }
@@ -41,11 +41,11 @@ type runSummary struct {
 // + bearer guards as the rest of the bridge.
 type OutputsHandler struct {
 	handler.Base
-	src OutputSource
+	src outputSource
 }
 
 // NewOutputsHandler returns the GET /api/v1/outputs handler reading from src.
-func NewOutputsHandler(src OutputSource, log *slog.Logger) *OutputsHandler {
+func NewOutputsHandler(src outputSource, log *slog.Logger) *OutputsHandler {
 	h := &OutputsHandler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h
@@ -85,11 +85,11 @@ func (h *OutputsHandler) serve(w http.ResponseWriter, r *http.Request) {
 // tree selection fails honestly rather than silently.
 type OutputHandler struct {
 	handler.Base
-	src OutputSource
+	src outputSource
 }
 
 // NewOutputHandler returns the GET /api/v1/output handler reading from src.
-func NewOutputHandler(src OutputSource, log *slog.Logger) *OutputHandler {
+func NewOutputHandler(src outputSource, log *slog.Logger) *OutputHandler {
 	h := &OutputHandler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h

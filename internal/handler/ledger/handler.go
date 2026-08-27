@@ -8,10 +8,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Source is the narrow repository contract the ledger handler needs: read every
+// ledgerSource is the narrow repository contract the ledger handler needs: read every
 // declared delegation row. Satisfied by *ledger.Store, so this package holds no store
 // logic - it serves what the store already knows.
-type Source interface {
+type ledgerSource interface {
 	List() ([]types.Delegation, error)
 }
 
@@ -27,11 +27,11 @@ type Source interface {
 // reached. See types.Delegation.
 type Handler struct {
 	handler.Base
-	src Source
+	src ledgerSource
 }
 
 // NewHandler returns the GET /api/v1/ledger handler reading from src.
-func NewHandler(src Source, log *slog.Logger) *Handler {
+func NewHandler(src ledgerSource, log *slog.Logger) *Handler {
 	h := &Handler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h

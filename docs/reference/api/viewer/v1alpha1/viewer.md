@@ -37,6 +37,38 @@ StreamEvents streams a running invocation's events as they are produced. Reconne
 
 Takes [StreamEventsRequest](#streameventsrequest), returns [StreamEventsResponse](#streameventsresponse).
 
+### ListOutputs
+
+ListOutputs returns the stored runs' descriptors, newest first, so a viewer can browse recent runs grouped project -> target -> run.
+
+`POST /magus.viewer.v1alpha1.ViewerService/ListOutputs`: unary. Source: [viewer.proto:134](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L134).
+
+Takes [ListOutputsRequest](#listoutputsrequest), returns [ListOutputsResponse](#listoutputsresponse).
+
+### GetOutput
+
+GetOutput returns one stored run's captured output VERBATIM - the bytes the subprocess wrote, unparsed and unstyled. Bytes rather than string: a captured log is whatever the tool emitted, which is not guaranteed to be valid UTF-8.
+
+`POST /magus.viewer.v1alpha1.ViewerService/GetOutput`: unary. Source: [viewer.proto:138](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L138).
+
+Takes [GetOutputRequest](#getoutputrequest), returns [GetOutputResponse](#getoutputresponse).
+
+### ListInvocations
+
+ListInvocations returns the retained run journals by the command that produced them. The run browser's other axis: ListOutputs is per target, this is per `magus` command.
+
+`POST /magus.viewer.v1alpha1.ViewerService/ListInvocations`: unary. Source: [viewer.proto:141](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L141).
+
+Takes [ListInvocationsRequest](#listinvocationsrequest), returns [ListInvocationsResponse](#listinvocationsresponse).
+
+### GetJournal
+
+GetJournal returns one past invocation whole - header plus every event - which is the same message the offline `#data=` URL fragment carries, so a browsed run and a shared one render from identical bytes.
+
+`POST /magus.viewer.v1alpha1.ViewerService/GetJournal`: unary. Source: [viewer.proto:145](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L145).
+
+Takes [GetJournalRequest](#getjournalrequest), returns [Journal](#journal).
+
 ## Messages
 
 ### Command
@@ -53,7 +85,7 @@ Source: [viewer.proto:73](https://github.com/egladman/magus/blob/main/proto/magu
 
 _Reserved: 2._
 
-Used by: [GetInvocation (response)](viewer.md#getinvocation), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
+Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [ListInvocations (response)](viewer.md#listinvocations), [StreamEvents (response)](viewer.md#streamevents).
 
 ### Event
 
@@ -76,13 +108,13 @@ Source: [viewer.proto:95](https://github.com/egladman/magus/blob/main/proto/magu
 | `command` | [Command](#command) | 11 | set only on the KIND\_STARTED event |
 | `magus_version` | string | 12 | set only on the KIND\_STARTED event |
 
-Used by: [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
+Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
 
 ### EventQuery
 
 EventQuery filters an invocation's events server-side (for a large log). It is the viewer's OWN typed query, composed from the shared query primitives plus the viewer's event fields - log fields (target/stream/level) are not graph fields, so there is no generic shared Query. Set fields AND together; repeated values within a field OR; matching is case-insensitive. The time window (including its since resume cursor) lives here too, so one message carries the whole filter.
 
-Source: [viewer.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L148).
+Source: [viewer.proto:162](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L162).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -99,13 +131,43 @@ Used by: [ListEvents (request)](viewer.md#listevents), [StreamEvents (request)](
 
 ### GetInvocationRequest
 
-Source: [viewer.proto:134](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L134).
+Source: [viewer.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L148).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `name` | string | 1 | _string.pattern: `^(out[0-9a-f]+\|inv[0-9a-z]+)$`_ A run's resource name: an output ref ("out<hex>") or an invocation id ("inv<base36>"). One field rather than a oneof because the two patterns are disjoint, so a single string still identifies exactly one run - and this service spelled the same identity three ways before (a oneof here, the same oneof on ListEvents, a bare string on StreamEvents). |
 
 Used by: [GetInvocation (request)](viewer.md#getinvocation).
+
+### GetJournalRequest
+
+Source: [viewer.proto:238](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L238).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `name` | string | 1 | _string.pattern: `^(out[0-9a-f]+\|inv[0-9a-z]+)$`_ The run to fetch whole: an output ref or an invocation id, the same identity GetInvocation takes. |
+
+Used by: [GetJournal (request)](viewer.md#getjournal).
+
+### GetOutputRequest
+
+Source: [viewer.proto:220](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L220).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `name` | string | 1 | _string.pattern: `^out[0-9a-f]+$`_ The output to read, by its ref. |
+
+Used by: [GetOutput (request)](viewer.md#getoutput).
+
+### GetOutputResponse
+
+Source: [viewer.proto:224](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L224).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `body` | bytes | 1 | The captured bytes, exactly as the subprocess wrote them. |
+
+Used by: [GetOutput (response)](viewer.md#getoutput).
 
 ### Invocation
 
@@ -121,11 +183,24 @@ Source: [viewer.proto:84](https://github.com/egladman/magus/blob/main/proto/magu
 | `end_time` | Timestamp | 4 | unset while still running |
 | `magus_version` | string | 5 |  |
 
-Used by: [GetInvocation (response)](viewer.md#getinvocation).
+Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (response)](viewer.md#getjournal), [ListInvocations (response)](viewer.md#listinvocations).
+
+### Journal
+
+Journal bundles an invocation header with its events - the whole thing for the offline URL fragment, or a page of events from ListEvents.
+
+Source: [viewer.proto:113](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L113).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `invocation` | [Invocation](#invocation) | 1 |  |
+| `events` | [repeated Event](#event) | 2 |  |
+
+Used by: [GetJournal (response)](viewer.md#getjournal).
 
 ### ListEventsRequest
 
-Source: [viewer.proto:159](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L159).
+Source: [viewer.proto:173](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L173).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -138,7 +213,7 @@ Used by: [ListEvents (request)](viewer.md#listevents).
 
 ### ListEventsResponse
 
-Source: [viewer.proto:166](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L166).
+Source: [viewer.proto:180](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L180).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -147,9 +222,72 @@ Source: [viewer.proto:166](https://github.com/egladman/magus/blob/main/proto/mag
 
 Used by: [ListEvents (response)](viewer.md#listevents).
 
+### ListInvocationsRequest
+
+Source: [viewer.proto:229](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L229).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `page_size` | int32 | 1 | _int32.lte: 5000; int32.gte: 0_ |
+| `page_token` | string | 2 |  |
+
+Used by: [ListInvocations (request)](viewer.md#listinvocations).
+
+### ListInvocationsResponse
+
+Source: [viewer.proto:233](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L233).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `invocations` | [repeated Invocation](#invocation) | 1 |  |
+| `next_page_token` | string | 2 | set when more invocations remain |
+
+Used by: [ListInvocations (response)](viewer.md#listinvocations).
+
+### ListOutputsRequest
+
+Source: [viewer.proto:211](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L211).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `page_size` | int32 | 1 | _int32.lte: 5000; int32.gte: 0_ |
+| `page_token` | string | 2 |  |
+
+Used by: [ListOutputs (request)](viewer.md#listoutputs).
+
+### ListOutputsResponse
+
+Source: [viewer.proto:215](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L215).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `outputs` | [repeated Output](#output) | 1 |  |
+| `next_page_token` | string | 2 | set when more outputs remain |
+
+Used by: [ListOutputs (response)](viewer.md#listoutputs).
+
+### Output
+
+Output is one stored run's descriptor: what it was, how it went, and the ref that fetches its captured bytes. The wire twin of cache.OutputDescriptor.
+
+Source: [viewer.proto:197](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L197).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `ref` | string | 1 | The key-derived portable id shared by every attempt of the step. |
+| `project` | string | 2 |  |
+| `target` | string | 3 |  |
+| `invocation` | string | 4 | The invocation that produced this output, empty when the run predates journalling. |
+| `failed` | bool | 5 |  |
+| `error` | string | 6 | Failure message; empty on success. |
+| `create_time` | Timestamp | 7 |  |
+| `duration` | Duration | 8 |  |
+
+Used by: [ListOutputs (response)](viewer.md#listoutputs).
+
 ### StreamEventsRequest
 
-Source: [viewer.proto:171](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L171).
+Source: [viewer.proto:185](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L185).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -160,7 +298,7 @@ Used by: [StreamEvents (request)](viewer.md#streamevents).
 
 ### StreamEventsResponse
 
-Source: [viewer.proto:177](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L177).
+Source: [viewer.proto:191](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L191).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -190,7 +328,7 @@ Source: [viewer.proto:22](https://github.com/egladman/magus/blob/main/proto/magu
 
 _Reserved: 3, 5._
 
-Used by: [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
+Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
 
 ### Status
 
@@ -205,7 +343,7 @@ Source: [viewer.proto:53](https://github.com/egladman/magus/blob/main/proto/magu
 | `STATUS_FAIL` | 2 |  |
 | `STATUS_CACHED` | 3 |  |
 
-Used by: [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
+Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
 
 ### Stream
 
@@ -219,7 +357,7 @@ Source: [viewer.proto:46](https://github.com/egladman/magus/blob/main/proto/magu
 | `STREAM_STDOUT` | 1 |  |
 | `STREAM_STDERR` | 2 |  |
 
-Used by: [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
+Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
 
 ### Trigger
 
@@ -237,5 +375,5 @@ Source: [viewer.proto:62](https://github.com/egladman/magus/blob/main/proto/magu
 | `TRIGGER_WATCH` | 5 | magus watch |
 | `TRIGGER_DIRECT` | 6 | a directly invoked spell/op |
 
-Used by: [GetInvocation (response)](viewer.md#getinvocation), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
+Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [ListInvocations (response)](viewer.md#listinvocations), [StreamEvents (response)](viewer.md#streamevents).
 
