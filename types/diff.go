@@ -328,6 +328,10 @@ const (
 	// AnchorMoved is the text found somewhere else in the file. The remark is placed there and
 	// says so, because a reader who is not told will read the new position as the original one.
 	AnchorMoved CommentAnchorRung = "moved"
+	// AnchorDeclaration is the quoted line gone, but the DECLARATION it sat in still present. The
+	// remark keeps its path and moves to that declaration's hunk, saying it lost the exact line -
+	// which is the rung Gerrit spells "file level", one step narrower.
+	AnchorDeclaration CommentAnchorRung = "declaration"
 	// AnchorLost is the text gone from the file. The remark keeps its path and loses its line,
 	// which is the degradation Gerrit's comment porter makes for the same reason: a remark that
 	// lands on the wrong code is worse than one that admits it lost the thread.
@@ -363,6 +367,19 @@ type CommentAnchor struct {
 	// the same trick the web-annotation model uses under the name prefix/suffix.
 	Before []string `json:"before,omitempty" yaml:"before,omitempty"`
 	After  []string `json:"after,omitempty"  yaml:"after,omitempty"`
+	// Declaration is the enclosing declaration git named in the hunk header: the text after the
+	// second @@, which is "func (r Diff) AttachChurn(...)" or "type Diff struct {".
+	//
+	// GIT'S OWN funcname, not a symbol from the knowledge graph, and the difference is what makes
+	// this rung fire at all. A SCIP symbol is a better identifier - it survives a rename of the
+	// surrounding file and carries real structure - and it is absent unless somebody has run
+	// `magus graph build`, which in this very workspace they have not. An anchor that needs an
+	// index nobody built is an anchor that never resolves. This one is in every patch already,
+	// in every language git has a funcname pattern for, and costs nothing to keep.
+	//
+	// It is the WEAKEST of the three and deliberately last: a declaration says which function a
+	// remark was about, never which line, so it is what remains when the quote is gone.
+	Declaration string `json:"declaration,omitempty" yaml:"declaration,omitempty"`
 }
 
 // AnchorContextLines is how many lines of context each side of the quote carries.

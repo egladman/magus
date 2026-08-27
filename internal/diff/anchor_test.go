@@ -1,6 +1,7 @@
 package diff
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -119,4 +120,64 @@ func TestLocateAnchorPrefersTheNearerOfEquallyGoodMatches(t *testing.T) {
 
 	far, _ := LocateAnchor(a, hunks, 7)
 	assert.Equal(t, 5, far)
+}
+
+// hunkDeclaring builds a hunk whose header carries git's own funcname, the way a real patch does.
+func hunkDeclaring(start int, decl string, body ...string) Hunk {
+	h := hunkAt(start, body...)
+	h.Header = fmt.Sprintf("@@ -%d,%d +%d,%d @@ %s", start, len(body), start, len(body), decl)
+	return h
+}
+
+// TestLocateAnchorFallsBackToTheDeclaration is the rung that fires where the other two cannot: the
+// body was rewritten, so the quote is gone, and the function it was about is still there.
+//
+// It uses git's funcname rather than a knowledge-graph symbol on purpose. A SCIP symbol is the
+// better identifier and is absent unless somebody ran `magus graph build`; this is in every patch
+// already, so the rung resolves instead of being unavailable.
+func TestLocateAnchorFallsBackToTheDeclaration(t *testing.T) {
+	original := []Hunk{hunkDeclaring(10, "func F() error", "\tx := compute()", "\treturn check(x)")}
+	a := CaptureAnchor(original, 11)
+	require.Equal(t, "func F() error", a.Declaration)
+
+	// The body rewritten wholesale: nothing of the remembered line survives.
+	rewritten := []Hunk{hunkDeclaring(40, "func F() error", "\treturn nil // rewritten")}
+
+	line, rung := LocateAnchor(a, rewritten, 11)
+
+	assert.Equal(t, types.AnchorDeclaration, rung)
+	assert.Equal(t, 40, line, "the declaration's hunk, never a guessed line inside it")
+}
+
+// The ladder's order: a quote that still matches beats the declaration, because it names a line
+// and the declaration only names a function.
+func TestLocateAnchorPrefersTheQuoteOverTheDeclaration(t *testing.T) {
+	original := []Hunk{hunkDeclaring(10, "func F() error", "\tx := compute()", "\treturn check(x)")}
+	a := CaptureAnchor(original, 11)
+
+	moved := []Hunk{hunkDeclaring(40, "func F() error", "\tx := compute()", "\treturn check(x)")}
+
+	line, rung := LocateAnchor(a, moved, 11)
+
+	assert.Equal(t, types.AnchorMoved, rung)
+	assert.Equal(t, 41, line, "the quoted line itself, not the declaration's start")
+}
+
+// A declaration gone too is the bottom of the ladder. Nothing is invented there.
+func TestLocateAnchorIsLostWhenTheDeclarationWentWithIt(t *testing.T) {
+	a := CaptureAnchor([]Hunk{hunkDeclaring(10, "func F() error", "\treturn check(x)")}, 10)
+
+	line, rung := LocateAnchor(a, []Hunk{hunkDeclaring(10, "func Other() error", "\treturn nil")}, 10)
+
+	assert.Zero(t, line)
+	assert.Equal(t, types.AnchorLost, rung)
+}
+
+// A patch with no funcname - the top of a file, or a language git has no pattern for - captures no
+// declaration, which is honest rather than a rung that silently never fires.
+func TestCaptureAnchorTakesNoDeclarationWhereGitNamedNone(t *testing.T) {
+	a := CaptureAnchor([]Hunk{hunkAt(1, "package main", "")}, 1)
+
+	assert.Empty(t, a.Declaration)
+	assert.NotEmpty(t, a.Quote, "the quote rung still works without one")
 }

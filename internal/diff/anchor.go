@@ -23,10 +23,11 @@ func CaptureAnchor(hunks []Hunk, line int) types.CommentAnchor {
 	}
 	body := newSideBody(h)
 	return types.CommentAnchor{
-		Digest: h.Digest,
-		Quote:  body[idx],
-		Before: window(body, idx-types.AnchorContextLines, idx),
-		After:  window(body, idx+1, idx+1+types.AnchorContextLines),
+		Digest:      h.Digest,
+		Quote:       body[idx],
+		Before:      window(body, idx-types.AnchorContextLines, idx),
+		After:       window(body, idx+1, idx+1+types.AnchorContextLines),
+		Declaration: declarationOf(h),
 	}
 }
 
@@ -69,12 +70,50 @@ func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, typ
 		}
 	}
 	if !found {
+		// The quote is gone. The declaration it sat in may not be, and "this remark was about
+		// AttachChurn, which is here" is worth more to a reader than nothing at all.
+		if line, ok := declarationLine(a, hunks); ok {
+			return line, types.AnchorDeclaration
+		}
 		return 0, types.AnchorLost
 	}
 	if best == remembered {
 		return best, types.AnchorExact
 	}
 	return best, types.AnchorMoved
+}
+
+// declarationOf is the enclosing declaration git named in a hunk header: everything after the
+// second @@. Empty where git named none, which is ordinary - the top of a file, a language with no
+// funcname pattern, or a hunk that spans a declaration boundary.
+func declarationOf(h Hunk) string {
+	_, after, ok := strings.Cut(h.Header, "@@")
+	if !ok {
+		return ""
+	}
+	_, decl, ok := strings.Cut(after, "@@")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(decl)
+}
+
+// declarationLine finds the first hunk still declaring what the remark sat in, and returns the
+// line that hunk starts at.
+//
+// The START of the hunk rather than a line within it, because the remark's own line is gone by the
+// time this is reached: pointing at the declaration is a claim magus can support, and pointing at a
+// line inside it would be the guess this whole ladder exists to refuse.
+func declarationLine(a types.CommentAnchor, hunks []Hunk) (int, bool) {
+	if a.Declaration == "" {
+		return 0, false
+	}
+	for _, h := range hunks {
+		if declarationOf(h) == a.Declaration {
+			return h.NewStart, true
+		}
+	}
+	return 0, false
 }
 
 // contextScore counts how many of the remembered surrounding lines still surround this candidate.
