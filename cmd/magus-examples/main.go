@@ -76,7 +76,11 @@ var examples = []example{
 	// The review prompt is captured rather than transcribed for the reason every example here is:
 	// it is prose magus assembles, so a hand-typed copy in the docs would describe a version
 	// nobody gets. It reads the fixture's patch file, so it needs no repository to review.
-	{docs: reviewDoc, slug: "diff-prompt", argv: []string{"diff", "--prompt", "change.patch"}},
+	//
+	// --patch, not a positional: a positional narrows the changeset to a PATH, so the old spelling
+	// reviewed a clean working tree filtered to a file named change.patch and captured
+	// "clean: every change is committed" into the docs.
+	{docs: reviewDoc, slug: "diff-prompt", argv: []string{"diff", "--prompt", "--patch", "change.patch"}},
 }
 
 func main() {

@@ -11,7 +11,7 @@ Read the working tree's changes in the order they deserve attention
 
 ## Synopsis
 
-**magus** diff [--generated] [--impact] [--no-tui] [--watch] [\<patch-file\>|-] [flags]
+**magus** diff [--generated] [--impact] [--no-tui] [--watch] [--rev \<base\>...\<head\>] [--patch \<file\>|-] [\<path\>...] [flags]
 
 ## Description
 
@@ -36,6 +36,27 @@ The viewer stands aside on its own wherever it cannot draw: no terminal, -o json
 report printing instead, so a script or an agent needs no flag. --no-tui is for
 a person who wants the report at a terminal anyway, and
 "magus config set key=diff.tui,value=false" makes that the standing preference.
+
+One rule decides what a word on the command line means: the CHANGESET is always
+named by a flag - --rev, --patch, or the working tree by default - and every
+positional is a PATH that narrows it. So "magus diff internal/ledger/" reads only
+that subtree, and it means the same thing whichever source it is narrowing.
+
+The patch source moved behind --patch for that rule. A bare - still reads stdin,
+because it is unambiguous and it is what every pipe in the world already types.
+
+--rev reads a committed range as base...head rather than the working tree, which
+is how you review a branch: a colleague's, or the one your own agent just
+finished. It is the half a working-tree diff cannot reach, and it keeps the
+viewer, the navigation and the marks, because a revision is a tree state magus
+can address rather than a patch somebody handed it. Three dots: the answer is
+what head added since it diverged, never what the base gained meanwhile.
+
+A receipt earned against a range attests to the blob at that revision, so it
+survives the working tree moving underneath and does not follow the branch when
+somebody force-pushes it. That is the whole difference from a working-tree
+receipt, and it is why --ack takes --rev where it refuses a patch: magus can name
+what a range receipt covers, and cannot name what a patch on stdin covers.
 
 Each file carries the evidence behind its rank: how many files reference the
 widest changed symbol it defines, whether any of those referents cross a project
@@ -100,11 +121,17 @@ performance metric, and a performance metric gets gamed rather than met.
 **--no-tui**
 : Print the report instead of opening the interactive viewer
 
+**--patch** *-*
+: Review a patch somebody handed you instead of the working tree; \`-\` reads stdin
+
 **--prompt**
 : Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction
 
 **--reason** *string*
 : An optional note kept with an --ack, for the next reader of the report
+
+**--rev** *string*
+: Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work
 
 **--watch**
 : Re-read and re-render whenever the working tree changes
@@ -126,6 +153,18 @@ performance metric, and a performance metric gets gamed rather than met.
 
 ```sh
 magus diff
+```
+
+*Review a branch somebody else pushed*
+
+```sh
+magus diff --rev main...feat/audience
+```
+
+*Narrow it to one subtree*
+
+```sh
+magus diff internal/ledger/
 ```
 
 *Include the generated files too*
