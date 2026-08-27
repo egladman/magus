@@ -12,9 +12,9 @@
 // unreachable daemon just means the poll no-ops until the next tick.
 
 import { createClient } from "@connectrpc/connect";
-import { ActivityService, Kind } from "../gen/magus/activity/v1alpha1/activity_pb";
-import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
-import { TokenService, TokenScope } from "../gen/magus/token/v1alpha1/token_pb";
+import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
+import { StatusService } from "@wire/status/v1alpha1/status_pb";
+import { TokenService, TokenScope } from "@wire/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, resolveDaemonHost } from "./daemon";
 import { showToast } from "./refresh-toast";
 import { mergedNotice, saidNotice } from "./review-notice";

@@ -39,7 +39,7 @@ import {
   type Note,
   type Anchor,
   type StoreStatus,
-} from "../../gen/magus/notes/v1alpha1/notes_pb";
+} from "@wire/notes/v1alpha1/notes_pb";
 
 interface AnchorSpec {
   kind: AnchorKind;

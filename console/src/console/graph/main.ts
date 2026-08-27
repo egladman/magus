@@ -51,8 +51,8 @@ import {
   parseHash,
 } from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
-import { StatusService } from "../../gen/magus/status/v1alpha1/status_pb";
-import { GraphService } from "../../gen/magus/graph/v1alpha1/graph_pb";
+import { StatusService } from "@wire/status/v1alpha1/status_pb";
+import { GraphService } from "@wire/graph/v1alpha1/graph_pb";
 import {
   type GLink,
   type GNode,

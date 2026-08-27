@@ -19,7 +19,7 @@
 // nothing to do. That is also why a failure here is never an error the user sees.
 
 import { createClient } from "@connectrpc/connect";
-import { TokenScope, TokenService } from "../gen/magus/token/v1alpha1/token_pb";
+import { TokenScope, TokenService } from "@wire/token/v1alpha1/token_pb";
 import {
   createDaemonTransport,
   getLiveToken,
