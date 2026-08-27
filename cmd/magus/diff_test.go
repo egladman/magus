@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	session "github.com/egladman/magus/internal/diff"
-	"github.com/egladman/magus/internal/interactive/diff"
+	"github.com/egladman/magus/internal/interactive/difftui"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
@@ -856,7 +856,7 @@ func (r *recordingSync) SetCursor(types.DiffCursor)       {}
 func (r *recordingSync) SetViewed(digest string, on bool) { r.marks = append(r.marks, digest) }
 func (r *recordingSync) close()                           { r.closed = true }
 
-func earnedFixture(t *testing.T, files map[string]string) (root, cache string, tui []diff.File) {
+func earnedFixture(t *testing.T, files map[string]string) (root, cache string, tui []difftui.File) {
 	t.Helper()
 	root, cache = t.TempDir(), t.TempDir()
 	for path, body := range files {
@@ -865,10 +865,10 @@ func earnedFixture(t *testing.T, files map[string]string) (root, cache string, t
 	return root, cache, tui
 }
 
-func tuiFile(path string, generated bool, digests ...string) diff.File {
-	f := diff.File{Path: path, Generated: generated}
+func tuiFile(path string, generated bool, digests ...string) difftui.File {
+	f := difftui.File{Path: path, Generated: generated}
 	for _, d := range digests {
-		f.Hunks = append(f.Hunks, diff.Hunk{Digest: d})
+		f.Hunks = append(f.Hunks, difftui.Hunk{Digest: d})
 	}
 	return f
 }
@@ -876,7 +876,7 @@ func tuiFile(path string, generated bool, digests ...string) diff.File {
 func TestEarnedSyncMintsWhenEveryHunkIsMarked(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	inner := &recordingSync{}
-	e := newEarnedSync(inner, reviewedContent{root: root}, cache, []diff.File{tuiFile("a.go", false, "h1", "h2")}, nil)
+	e := newEarnedSync(inner, reviewedContent{root: root}, cache, []difftui.File{tuiFile("a.go", false, "h1", "h2")}, nil)
 
 	e.SetViewed("h1", true)
 	e.close()
@@ -884,7 +884,7 @@ func TestEarnedSyncMintsWhenEveryHunkIsMarked(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, store, "one of two hunks read is not a file read")
 
-	e = newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []diff.File{tuiFile("a.go", false, "h1", "h2")}, nil)
+	e = newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []difftui.File{tuiFile("a.go", false, "h1", "h2")}, nil)
 	e.SetViewed("h1", true)
 	e.SetViewed("h2", true)
 	e.close()
@@ -901,7 +901,7 @@ func TestEarnedSyncRefusesToMintFromASeededSetAlone(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	// Every hunk already "read", exactly as a forged store would present them.
 	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache,
-		[]diff.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1", "h2"})
+		[]difftui.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1", "h2"})
 	e.close()
 
 	store, err := review.Load(cache)
@@ -914,7 +914,7 @@ func TestEarnedSyncRefusesToMintFromASeededSetAlone(t *testing.T) {
 func TestEarnedSyncLetsASeededSetFinishALiveReading(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache,
-		[]diff.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1"})
+		[]difftui.File{tuiFile("a.go", false, "h1", "h2")}, []string{"h1"})
 
 	e.SetViewed("h2", true)
 	e.close()
@@ -929,7 +929,7 @@ func TestEarnedSyncLetsASeededSetFinishALiveReading(t *testing.T) {
 // the file list folds generated output away by default too.
 func TestEarnedSyncIgnoresGeneratedFiles(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"gen.json": "{}\n"})
-	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []diff.File{tuiFile("gen.json", true, "g1")}, nil)
+	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []difftui.File{tuiFile("gen.json", true, "g1")}, nil)
 
 	e.SetViewed("g1", true)
 	e.close()
@@ -944,7 +944,7 @@ func TestEarnedSyncIgnoresGeneratedFiles(t *testing.T) {
 func TestEarnedSyncForwardsEveryMarkAndClosesTheInnerSync(t *testing.T) {
 	root, cache, _ := earnedFixture(t, map[string]string{"a.go": "package a\n"})
 	inner := &recordingSync{}
-	e := newEarnedSync(inner, reviewedContent{root: root}, cache, []diff.File{tuiFile("a.go", false, "h1")}, nil)
+	e := newEarnedSync(inner, reviewedContent{root: root}, cache, []difftui.File{tuiFile("a.go", false, "h1")}, nil)
 
 	e.SetViewed("h1", true)
 	e.SetViewed("unknown-digest", true)
@@ -958,7 +958,7 @@ func TestEarnedSyncForwardsEveryMarkAndClosesTheInnerSync(t *testing.T) {
 // content, which Covers would then satisfy for every unreadable file forever.
 func TestEarnedSyncMintsNothingForAFileItCannotRead(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
-	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []diff.File{tuiFile("gone.go", false, "h1")}, nil)
+	e := newEarnedSync(&recordingSync{}, reviewedContent{root: root}, cache, []difftui.File{tuiFile("gone.go", false, "h1")}, nil)
 	e.now = func() time.Time { return time.Unix(0, 0) }
 
 	e.SetViewed("h1", true)

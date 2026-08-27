@@ -24,7 +24,7 @@ import (
 	session "github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/diff"
+	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
@@ -683,11 +683,11 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// file, because the viewer presents it with no hedge.
 	threads, _ := daemonReviewThreads(ctx)
 	threads = session.PlaceThreads(session.ParseHunks(patch), threads)
-	return diff.Run(ctx, diff.Options{
+	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
 		Probe: tty.SystemProbe,
-		Input: diff.Input{
+		Input: difftui.Input{
 			Files:       files,
 			Unranked:    !rev.Ranked(),
 			Viewed:      sess.Viewed,
@@ -747,23 +747,23 @@ func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedCont
 //
 // The annotation order is authoritative and is never recomputed here - types.Diff.
 // SortForReading is the single definition of review order.
-func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []diff.File {
+func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []difftui.File {
 	byPath := make(map[string][]session.Hunk, len(parsed))
 	for _, f := range parsed {
 		byPath[f.Path] = f.Hunks
 	}
-	out := make([]diff.File, 0, len(rev.Files))
+	out := make([]difftui.File, 0, len(rev.Files))
 	for _, f := range rev.Files {
 		// Settled is READ-AND-UNMOVED, never merely read: DiffReadStale means a receipt exists at
 		// DIFFERENT content, which is the file that most needs a second look rather than the least.
-		file := diff.File{
+		file := difftui.File{
 			Path:      f.Path,
 			Settled:   f.ReadState == types.DiffReadRead,
 			Generated: f.Generated(),
 			Facts:     diffFileFacts(f),
 		}
 		for _, h := range byPath[f.Path] {
-			file.Hunks = append(file.Hunks, diff.Hunk{
+			file.Hunks = append(file.Hunks, difftui.Hunk{
 				// Display when the parser found something a renderer would obey, Lines
 				// otherwise. The viewer never sees the raw form of a deceptive line.
 				Index: h.Index, Header: h.Header, Lines: displayOr(h), Digest: h.Digest,
@@ -787,11 +787,11 @@ func displayOr(h session.Hunk) []string {
 	return h.Lines
 }
 
-// diffSync is a diff.Sync with a shutdown. The two implementations get their writes out
+// diffSync is a difftui.Sync with a shutdown. The two implementations get their writes out
 // differently - one to a local file, one over a goroutine that has to be drained - and the
 // viewer must not have to know which it was handed.
 type diffSync interface {
-	diff.Sync
+	difftui.Sync
 	close()
 }
 
@@ -951,7 +951,7 @@ func (b *diffBridge) SetViewed(digest string, on bool) {
 }
 
 // queueCursor hands the newest cursor to the sender, evicting the OLDEST when the queue is
-// full. It never blocks: the key loop is what calls it, and diff.Sync promises best-effort
+// full. It never blocks: the key loop is what calls it, and difftui.Sync promises best-effort
 // delivery precisely so a slow daemon costs the reader nothing.
 //
 // A plain non-blocking send drops the ARRIVING op instead, which keeps exactly the positions
@@ -2051,7 +2051,7 @@ type earnedSync struct {
 
 // newEarnedSync wraps sync with receipt minting, seeded with the marks the session already
 // carried so a reader who finishes a file across two sittings still earns it.
-func newEarnedSync(inner diffSync, content reviewedContent, cacheDir string, files []diff.File, seen []string) *earnedSync {
+func newEarnedSync(inner diffSync, content reviewedContent, cacheDir string, files []difftui.File, seen []string) *earnedSync {
 	e := &earnedSync{
 		diffSync: inner,
 		content:  content,

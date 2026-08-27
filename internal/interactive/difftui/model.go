@@ -1,4 +1,4 @@
-// Package diff is the terminal client of the shared diff session: the same changeset
+// Package difftui is the terminal client of the shared diff session: the same changeset
 // the console's Diff surface renders and an agent joins over MCP, read with a keyboard.
 //
 // The CLI already shared the review COMPUTATION; what it did not share was the
@@ -9,7 +9,7 @@
 // The model in this file owns navigation, the generated fold, the viewed set and the
 // viewport window, and it touches no terminal at all: rows in, rows out. render.go turns
 // it into a frame and run.go feeds it keys, so the state machine is testable without a pty.
-package diff
+package difftui
 
 import (
 	"cmp"
