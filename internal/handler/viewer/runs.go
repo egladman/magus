@@ -15,10 +15,10 @@ import (
 	json "github.com/egladman/magus/internal/json"
 )
 
-// RunSource is the narrow repository contract the invocation routes need: list the retained run
+// runSource is the narrow repository contract the invocation routes need: list the retained run
 // journals, read one back as events, and resolve an output ref to the run that produced it.
-// Satisfied by *cache.OutputStore, like [OutputSource] beside it.
-type RunSource interface {
+// Satisfied by *cache.OutputStore, like [outputSource] beside it.
+type runSource interface {
 	ListRunLogs(limit int) []cache.RunLog
 	InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error)
 	DescriptorByRef(ref string) (cache.OutputDescriptor, error)
@@ -48,11 +48,11 @@ type runLog struct {
 // the target-addressed half, and the console joins the two on each row's inv id.
 type RunsHandler struct {
 	handler.Base
-	src RunSource
+	src runSource
 }
 
 // NewRunsHandler returns the GET /api/v1/runs handler reading from src.
-func NewRunsHandler(src RunSource, log *slog.Logger) *RunsHandler {
+func NewRunsHandler(src runSource, log *slog.Logger) *RunsHandler {
 	h := &RunsHandler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h
@@ -106,11 +106,11 @@ func (h *RunsHandler) serve(w http.ResponseWriter, r *http.Request) {
 // fall back to /api/v1/output, which keeps the verbatim bytes for longer.
 type RunHandler struct {
 	handler.Base
-	src RunSource
+	src runSource
 }
 
 // NewRunHandler returns the GET /api/v1/run handler reading from src.
-func NewRunHandler(src RunSource, log *slog.Logger) *RunHandler {
+func NewRunHandler(src runSource, log *slog.Logger) *RunHandler {
 	h := &RunHandler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h

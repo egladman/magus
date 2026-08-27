@@ -15,11 +15,11 @@ import (
 // with no workspace yields 503, not 500.
 type Handler struct {
 	handler.Base
-	src Source
+	src insightSource
 }
 
 // NewHandler returns the GET /api/v1/insight handler reading from src.
-func NewHandler(src Source, log *slog.Logger) *Handler {
+func NewHandler(src insightSource, log *slog.Logger) *Handler {
 	h := &Handler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h
