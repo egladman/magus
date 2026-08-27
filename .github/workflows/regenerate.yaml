@@ -1,6 +1,14 @@
-name: Auto-fix
+name: Regenerate
 
-# Settles what magus can settle on a pull request, when a human asks for it by label.
+# Regenerates a pull request's generated files, when a human asks for it by label.
+#
+# Both fixers do the same one thing: regenerate generated output and push it. One reaches
+# that point by merging the base branch in first, the other by finding the output stale
+# against the PR's own commits. Neither can touch hand-written code, which is the bound the
+# name has to carry: this repairs nothing in general, it regenerates in particular.
+#
+# It MERGES the base branch. It never rebases: merging needs no force-push, so anything
+# stacked on the branch stays valid.
 #
 # Separate from ci.yaml on three counts. TRIGGER: ci runs on push, so a conflict created by
 # main moving under an open PR never reaches it - which is the case worth automating.
@@ -34,7 +42,7 @@ permissions:
 env:
   MISE_SAFE: '1'
   GOEXPERIMENT: jsonv2
-  FIX_LABEL: 'magus:auto-fix:requested'
+  FIX_LABEL: 'magus:regenerate:requested'
 
 jobs:
   # Which pull requests want settling, as one list whatever the event was. Cheap on purpose:
@@ -101,7 +109,7 @@ jobs:
           echo "prs=$(cat prs.json)" >> "$GITHUB_OUTPUT"
 
   fix:
-    name: magus auto-fix
+    name: magus regenerate
     needs: targets
     if: needs.targets.outputs.prs != '[]'
     runs-on: ubuntu-latest
@@ -114,7 +122,7 @@ jobs:
       matrix:
         pr: ${{ fromJSON(needs.targets.outputs.prs) }}
     concurrency:
-      group: auto-fix-${{ matrix.pr.number }}
+      group: regenerate-${{ matrix.pr.number }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

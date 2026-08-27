@@ -224,8 +224,8 @@ test "conflictBody names the conflicts magus will not touch, and says nothing wh
 // Every other assertion here reads a substring that CONCATENATION produced, so an
 // interpolation that stopped firing and rendered literal braces would leave this file green.
 test "conflictBody offers the label only where the fixer is enabled" {
-    final offered = conflictBody("main", files: ["MAGUS.md"], mine: mut [], label: "magus:auto-fix:requested");
-    std\assert(offered.indexOf("`magus:auto-fix:requested`") != null, message: "names the label");
+    final offered = conflictBody("main", files: ["MAGUS.md"], mine: mut [], label: "magus:regenerate:requested");
+    std\assert(offered.indexOf("`magus:regenerate:requested`") != null, message: "names the label");
     std\assert(offered.indexOf("removing it stops magus") != null, message: "says how to revoke");
 
     final silent = conflictBody("main", files: ["MAGUS.md"], mine: mut [], label: "");

@@ -173,7 +173,7 @@ inputs:
       here", not "run this script". STANDING - it is never retired, so the same PR is
       settled again the next time main breaks it. Remove it to stop.
     required: false
-    default: 'magus:auto-fix:requested'
+    default: 'magus:regenerate:requested'
   pr-number:
     description: The pull request to comment on.
     required: false
