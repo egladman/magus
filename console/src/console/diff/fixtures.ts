@@ -57,6 +57,9 @@ export function patchFixture(patch: string): DiffFile[] {
     if (!cur || !head) return;
     cur.hunks.push({
       digest: "",
+      // Empty for the same reason digest is: the daemon parses it out of the header, and nothing
+      // in the browser may mint one. fromWire defaults it the same way.
+      declaration: "",
       index: cur.hunks.length,
       header: head.header,
       oldStart: head.o,
