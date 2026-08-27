@@ -70,6 +70,14 @@ type Hunk struct {
 	// position so a caller that filters hunks cannot silently renumber them.
 	Index  int    `json:"index"`
 	Header string `json:"header"`
+	// Declaration is the enclosing declaration git named in Header: the text after the second
+	// @@, which is "func (r Diff) AttachChurn(...)" or "type Diff struct {". Empty where git
+	// named none - the top of a file, or a language it has no funcname pattern for.
+	//
+	// Parsed HERE rather than by each surface, for the reason the digest and the intra-line
+	// emphasis are: two readers of one header is two chances to disagree about what a hunk is
+	// called, and nothing would ever report the disagreement.
+	Declaration string `json:"declaration,omitempty"`
 	// Lines is the body EXACTLY as it arrived, markers included, because that is what Digest
 	// hashes. Rows carries the same body parsed for rendering; the two are not interchangeable,
 	// since a context line whose producer dropped the trailing space arrives as "" and would
@@ -214,12 +222,13 @@ func (p *parser) openHunk(line string, m []string) {
 	}
 	oldStart, newStart := atoi(m[1], 0), atoi(m[3], 0)
 	p.hunk = &Hunk{
-		Index:    len(p.cur.Hunks),
-		Header:   line,
-		OldStart: oldStart,
-		OldCount: atoi(m[2], 1),
-		NewStart: newStart,
-		NewCount: atoi(m[4], 1),
+		Index:       len(p.cur.Hunks),
+		Header:      line,
+		Declaration: DeclarationOf(line),
+		OldStart:    oldStart,
+		OldCount:    atoi(m[2], 1),
+		NewStart:    newStart,
+		NewCount:    atoi(m[4], 1),
 	}
 	p.raw = nil
 	p.oldNo, p.newNo = oldStart, newStart

@@ -690,7 +690,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const el = h("div", "console-diff-row console-diff-row--hunk");
       const digest = state.digestByRow.get(index);
       if (digest && state.viewed.has(digest)) el.dataset.viewed = "";
-      el.append(h("span", "console-diff-row__text", row.hunk.header));
+      // The @@ coordinates are wire syntax, and this surface already prints line numbers in its
+      // gutters, so what the heading says is what a reader wanted from it: the declaration they
+      // are inside of. A hunk git could name none for keeps its position alone.
+      el.append(
+        h(
+          "span",
+          "console-diff-row__text",
+          row.hunk.declaration || `line ${row.hunk.newStart}`,
+        ),
+      );
       if (!demo && !row.file.binary && row.file.status !== "deleted") {
         const peek = h(
           "button",

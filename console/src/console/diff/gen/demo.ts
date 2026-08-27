@@ -17,6 +17,7 @@ export const DEMO_FILES: readonly WireFile[] = [
       {
         "index": 0,
         "header": "@@ -14,10 +14,14 @@ type Claims struct {",
+        "declaration": "type Claims struct {",
         "lines": [
           " \t// Subject is the account the token was minted for.",
           " \tSubject string `json:\"sub\"`",
@@ -142,6 +143,7 @@ export const DEMO_FILES: readonly WireFile[] = [
       {
         "index": 1,
         "header": "@@ -41,8 +45,13 @@ func (c Claims) Valid(now time.Time) error {",
+        "declaration": "func (c Claims) Valid(now time.Time) error {",
         "lines": [
           " \tif c.Subject == \"\" {",
           " \t\treturn fmt.Errorf(\"authkit: claims carry no subject\")",
@@ -513,6 +515,7 @@ export const DEMO_FILES: readonly WireFile[] = [
       {
         "index": 0,
         "header": "@@ -28,11 +28,13 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (*authkit.Claims, error) {",
+        "declaration": "func (v *Verifier) Verify(ctx context.Context, raw string) (*authkit.Claims, error) {",
         "lines": [
           " \tif err := claims.Valid(v.clock.Now()); err != nil {",
           " \t\treturn nil, fmt.Errorf(\"token: %w\", err)",
@@ -641,6 +644,7 @@ export const DEMO_FILES: readonly WireFile[] = [
       {
         "index": 0,
         "header": "@@ -52,14 +52,10 @@ func (m *Minter) For(ctx context.Context, sub string, svcs []string) (string, error) {",
+        "declaration": "func (m *Minter) For(ctx context.Context, sub string, svcs []string) (string, error) {",
         "lines": [
           " \tnow := m.clock.Now()",
           " \tclaims := authkit.Claims{",
@@ -892,6 +896,7 @@ export const DEMO_FILES: readonly WireFile[] = [
       {
         "index": 0,
         "header": "@@ -38,7 +38,7 @@ export interface SessionClaims {",
+        "declaration": "export interface SessionClaims {",
         "lines": [
           "   readonly sub: string;",
           "   readonly iss: string;",
@@ -984,6 +989,7 @@ export const DEMO_FILES: readonly WireFile[] = [
       {
         "index": 1,
         "header": "@@ -61,2 +61,3 @@ export function canReach(claims: SessionClaims, service: string): boolean {",
+        "declaration": "export function canReach(claims: SessionClaims, service: string): boolean {",
         "lines": [
           "-  return claims.scope.split(\" \").includes(service);",
           "+  const aud = typeof claims.aud === \"string\" ? [claims.aud] : claims.aud;",
@@ -1035,6 +1041,7 @@ export const DEMO_FILES: readonly WireFile[] = [
       {
         "index": 0,
         "header": "@@ -140,6 +140,15 @@ func TestVerifyAudienceMismatch(t *testing.T) {",
+        "declaration": "func TestVerifyAudienceMismatch(t *testing.T) {",
         "lines": [
           " \tv := newVerifier(t, \"identity\")",
           "-\traw := mintFor(t, \"ledger\")",
@@ -1437,6 +1444,7 @@ export const DEMO_FILES: readonly WireFile[] = [
       {
         "index": 0,
         "header": "@@ -211,5 +211,6 @@ func (x *Token) GetClaims() *Claims {",
+        "declaration": "func (x *Token) GetClaims() *Claims {",
         "lines": [
           " \tif x != nil {",
           " \t\treturn x.Claims",

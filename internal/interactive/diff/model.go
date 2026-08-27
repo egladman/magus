@@ -25,6 +25,11 @@ import (
 // set is keyed by - the same one internal/diff computes, passed in rather than recomputed
 // so the CLI and the console mark the same hunk.
 type Hunk struct {
+	// NewStart is the hunk's first line on the new side, and Declaration is the enclosing
+	// declaration git named in its header. Together they are what the heading row says, in place
+	// of the raw @@ coordinates: where the reader is, and what they are inside of.
+	NewStart    int
+	Declaration string
 	// Index is the hunk's position in the PATCH, which is the coordinate a comment and a
 	// suggestion are anchored by (see session.Hunk.Index). Carried rather than taken from the
 	// position in Hunks, so a caller that ever hands over a subset cannot silently renumber
@@ -428,6 +433,21 @@ func (m *Model) OverviewRows() []OverviewRow {
 	return out
 }
 
+// hunkHeading is what a hunk's row says, in place of the raw @@ line.
+//
+// The @@ coordinates are WIRE SYNTAX. "-743,6 +762,14" is four numbers a reader has to decode to
+// learn one thing they wanted (where am I) and three they did not. What is useful in that line is
+// the position and the declaration git named, so those are what it says.
+//
+// A hunk git could name no declaration for keeps the position alone rather than inventing one.
+func hunkHeading(h *Hunk) string {
+	at := fmt.Sprintf("line %d", h.NewStart)
+	if h.Declaration == "" {
+		return at
+	}
+	return at + "  " + h.Declaration
+}
+
 // foldReason says WHY a file is folded, because the two reasons send the reader to different
 // places: a generated file's source edit is elsewhere, and a settled file has already been read.
 //
@@ -503,7 +523,7 @@ func (m *Model) rebuild() {
 			if m.viewed[h.Digest] {
 				mark = "[x]"
 			}
-			m.rows = append(m.rows, Row{Kind: RowHunk, File: i, Hunk: hi, Text: mark + " " + h.Header})
+			m.rows = append(m.rows, Row{Kind: RowHunk, File: i, Hunk: hi, Text: mark + " " + hunkHeading(h)})
 			for li, l := range h.Lines {
 				var emph session.Span
 				if li < len(h.Emph) {

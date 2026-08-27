@@ -59,6 +59,10 @@ export interface Hunk {
   // internal/diff/parse.go. This is the browser's half of that rule.
   readonly index: number;
   readonly header: string; // the raw @@ line, including any trailing section heading
+  // declaration is the enclosing declaration git named in header, parsed by the daemon. Empty
+  // where git named none. It is what the heading RENDERS, because the @@ coordinates are wire
+  // syntax and this surface already prints line numbers in its gutters.
+  readonly declaration: string;
   readonly oldStart: number;
   readonly oldCount: number;
   readonly newStart: number;
@@ -111,6 +115,7 @@ interface WireSpan {
 
 interface WireHunk {
   header: string;
+  declaration?: string;
   digest: string;
   // index is what an agent addresses a hunk by over MCP, and what keys a remark to its hunk
   // here; see Hunk.index above for why the array position will not do.
@@ -160,6 +165,7 @@ export function fromWire(files: readonly WireFile[] | null | undefined): DiffFil
     ...(f.new_mode === undefined ? {} : { newMode: f.new_mode }),
     hunks: (f.hunks ?? []).map((h) => ({
       header: h.header,
+      declaration: h.declaration ?? "",
       digest: h.digest,
       index: h.index,
       oldStart: h.old_start,

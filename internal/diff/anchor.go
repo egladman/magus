@@ -27,7 +27,7 @@ func CaptureAnchor(hunks []Hunk, line int) types.CommentAnchor {
 		Quote:       body[idx],
 		Before:      window(body, idx-types.AnchorContextLines, idx),
 		After:       window(body, idx+1, idx+1+types.AnchorContextLines),
-		Declaration: declarationOf(h),
+		Declaration: h.Declaration,
 	}
 }
 
@@ -83,11 +83,16 @@ func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, typ
 	return best, types.AnchorMoved
 }
 
-// declarationOf is the enclosing declaration git named in a hunk header: everything after the
-// second @@. Empty where git named none, which is ordinary - the top of a file, a language with no
-// funcname pattern, or a hunk that spans a declaration boundary.
-func declarationOf(h Hunk) string {
-	_, after, ok := strings.Cut(h.Header, "@@")
+// DeclarationOf is the enclosing declaration git named in a hunk header line: everything after
+// the second @@. Empty where git named none, which is ordinary - the top of a file, a language with
+// no funcname pattern, or a hunk that spans a declaration boundary.
+//
+// Exported because it is what a SURFACE renders in place of the raw header. The @@ coordinates are
+// wire syntax: the console already prints line numbers in its gutters, so they are redundant there,
+// and they are unreadable everywhere. What a reader wants from a hunk heading is where they are and
+// what they are inside of.
+func DeclarationOf(header string) string {
+	_, after, ok := strings.Cut(header, "@@")
 	if !ok {
 		return ""
 	}
@@ -109,7 +114,7 @@ func declarationLine(a types.CommentAnchor, hunks []Hunk) (int, bool) {
 		return 0, false
 	}
 	for _, h := range hunks {
-		if declarationOf(h) == a.Declaration {
+		if h.Declaration == a.Declaration {
 			return h.NewStart, true
 		}
 	}

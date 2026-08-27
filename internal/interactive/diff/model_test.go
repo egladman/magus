@@ -20,7 +20,7 @@ import (
 func testFiles() []File {
 	return []File{
 		{Path: "a.go", Facts: []string{"PUBLIC SURFACE", "in root"}, Hunks: []Hunk{
-			{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-one", "+two"}, Digest: "da0"},
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "da0"},
 			{Index: 1, Header: "@@ -9 +9 @@", Lines: []string{"-three", "+four"}, Digest: "da1"},
 		}},
 		{Path: "b.go", Hunks: []Hunk{
@@ -58,7 +58,7 @@ func at(path string, hunk int) types.DiffCursor { return types.DiffCursor{Path: 
 func TestCursorPublishesThePatchIndexNotTheRowPosition(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Index: 4, Header: "@@ -1 +1 @@", Lines: []string{"+one"}, Digest: "d0"},
+		{Index: 4, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"+one"}, Digest: "d0"},
 		{Index: 7, Header: "@@ -9 +9 @@", Lines: []string{"+two"}, Digest: "d1"},
 	}}}})
 	assert.Equal(t, at("a.go", -1), m.Cursor(), "a heading names no hunk")
@@ -330,7 +330,7 @@ func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 func TestAGivenEmphasisSpanReachesItsRow(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{{
-		Header: "@@ -1 +1 @@",
+		Header: "@@ -1 +1 @@", NewStart: 1,
 		Lines:  []string{" ctx", "-call(a, b)", "+call(a, c)"},
 		Emph:   []session.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
 		Digest: "d0",
@@ -343,7 +343,7 @@ func TestAGivenEmphasisSpanReachesItsRow(t *testing.T) {
 func TestNoEmphasisSliceIsNotAnIndexError(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{"-one", "+two"}, Digest: "d0"},
+		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "d0"},
 	}}}})
 	assert.Equal(t, []string{"", ""}, emphasisOf(m))
 }
@@ -351,7 +351,7 @@ func TestNoEmphasisSliceIsNotAnIndexError(t *testing.T) {
 func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{" ctx", "-call(a, b)", "+call(a, c)"}, Digest: "d0"},
+		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{" ctx", "-call(a, b)", "+call(a, c)"}, Digest: "d0"},
 	}}}})
 	m.Resize(5)
 
@@ -360,11 +360,11 @@ func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 	// assertion is that no palette may move a single byte of it.
 	want := strings.Join([]string{
 		"▸ a.go  1 hunk, 0 read",
-		"  [ ] @@ -1 +1 @@",
+		"  [ ] line 1",
 		"   ctx",
 		"  -call(a, b)",
 		"  +call(a, c)",
-		"]/[ hunk   }/{ file   v read   . generated   esc overview   q quit",
+		"]/[ hunk   }/{ file   v read   n read-already   . generated   esc overview   q quit",
 	}, "\n")
 	assert.Equal(t, want, Frame(m, false))
 
@@ -400,7 +400,7 @@ func TestNoColorSilencesTheWholeFrame(t *testing.T) {
 func TestColourDrawsTheChangedPartHarderThanItsLine(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{{
-		Header: "@@ -1 +1 @@",
+		Header: "@@ -1 +1 @@", NewStart: 1,
 		Lines:  []string{" ctx", "-call(a, b)", "+call(a, c)"},
 		Emph:   []session.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
 		Digest: "d0",
@@ -410,16 +410,16 @@ func TestColourDrawsTheChangedPartHarderThanItsLine(t *testing.T) {
 	require.Len(t, lines, 6)
 
 	assert.Equal(t, "▸ \x1b[1ma.go  1 hunk, 0 read\x1b[0m", lines[0], "a file heading is bold")
-	assert.Equal(t, "  \x1b[2m[ ] @@ -1 +1 @@\x1b[0m", lines[1], "a hunk heading is dim")
+	assert.Equal(t, "  \x1b[2m[ ] line 1\x1b[0m", lines[1], "a hunk heading is dim")
 	assert.Equal(t, "   ctx", lines[2], "a context line is left alone")
 	assert.Equal(t, "  \x1b[31m-call(a, \x1b[0m\x1b[1;31mb\x1b[0m\x1b[31m)\x1b[0m", lines[3])
 	assert.Equal(t, "  \x1b[32m+call(a, \x1b[0m\x1b[1;32mc\x1b[0m\x1b[32m)\x1b[0m", lines[4])
-	assert.Equal(t, "]/[ hunk   }/{ file   v read   . generated   esc overview   q quit", lines[5])
+	assert.Equal(t, "]/[ hunk   }/{ file   v read   n read-already   . generated   esc overview   q quit", lines[5])
 
 	// A whole-line change carries the row colour and nothing else: emphasising everything would
 	// say no more than the colour already did.
 	whole := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
-		{Header: "@@ -1 +1 @@", Lines: []string{"-one", "+two"}, Digest: "d0"},
+		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "d0"},
 	}}}})
 	whole.Resize(4)
 	styled := strings.Split(Frame(whole, true), "\n")
@@ -530,7 +530,7 @@ func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
-			{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-old", "+new"}, Digest: "d0"},
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+new"}, Digest: "d0"},
 		}}},
 		Comments: []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorHuman, Body: "mine"}},
 		Threads:  []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "theirs"}},
@@ -549,7 +549,7 @@ func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
 func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
-		Files:   []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
+		Files:   []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
 		Threads: []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: -1, Author: "marcus", Body: "moved away"}},
 	})
 	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "moved away"))
@@ -562,7 +562,7 @@ func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
 func TestAThreadOutsideTheChangesetIsListedRatherThanDropped(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
-		Files: []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
+		Files: []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
 		Threads: []types.ReviewThread{
 			{ID: "t1", Path: "elsewhere.go", Line: 12, Hunk: -1, Author: "priya", Body: "on another file"},
 		},
@@ -583,7 +583,7 @@ func TestAThreadOnAFoldedFileIsListedRatherThanDropped(t *testing.T) {
 		Files: []File{{
 			Path:      "gen/api.go",
 			Generated: true,
-			Hunks:     []Hunk{{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-x", "+y"}, Digest: "d0"}},
+			Hunks:     []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}},
 		}},
 		Threads: []types.ReviewThread{
 			{ID: "t1", Path: "gen/api.go", Line: 3, Hunk: 0, Author: "marcus", Body: "regenerate this"},

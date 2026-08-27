@@ -126,6 +126,8 @@ func TestLocateAnchorPrefersTheNearerOfEquallyGoodMatches(t *testing.T) {
 func hunkDeclaring(start int, decl string, body ...string) Hunk {
 	h := hunkAt(start, body...)
 	h.Header = fmt.Sprintf("@@ -%d,%d +%d,%d @@ %s", start, len(body), start, len(body), decl)
+	// Set the way the parser sets it, so these hunks are shaped like real ones.
+	h.Declaration = DeclarationOf(h.Header)
 	return h
 }
 
