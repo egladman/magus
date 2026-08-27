@@ -1,4 +1,4 @@
-// Package clispec is the declarative specification of the magus CLI: every
+// Package cli is the declarative specification of the magus CLI: every
 // subcommand, its flags, usage, examples and prose, as data.
 //
 // It is the single source those facts have. The CLI binds its flags from it (via
@@ -7,11 +7,12 @@
 // from it, the shell completions are generated from it, and the browser terminal
 // reads it to complete and explain commands it cannot run.
 //
-// It was called "manpage" while the man pages were its only consumer. The name
-// outlived that by five consumers: a package a WASM terminal imports to learn the
-// CLI should not be named after one of its renderings. The roff rendering lives
-// here still, as one output among several rather than as the package's purpose.
-package clispec
+// It holds the declaration, not the behavior: the CLI itself is cmd/magus, and a
+// package a WASM terminal imports to learn the CLI must stay free of the machinery
+// that runs it. Nor is it named for a consumer - it was "manpage" while the man
+// pages were the only one, and the roff rendering here is one output among several
+// rather than the package's purpose.
+package cli
 
 import (
 	"flag"

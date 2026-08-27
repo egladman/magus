@@ -1,6 +1,6 @@
 ---
 title: magus watch
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.
 tags: [cli, magus watch, watch, filesystem, fsnotify, continuous build]
 ---

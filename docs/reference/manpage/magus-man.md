@@ -1,6 +1,6 @@
 ---
 title: magus man
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Write magus section 1 man pages from the running binary to a user-selected manpath.
 tags: [cli, magus man, manpage, documentation, install]
 ---

@@ -1,6 +1,6 @@
 //go:build !noselfupdate
 
-package clispec
+package cli
 
 // selfCommand (default build) documents the `magus self` surface: update and
 // install-shorthand. The update child is omitted from binaries built with -tags

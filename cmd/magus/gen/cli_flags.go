@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Flag names declared by internal/clispec's command registry, one constant
+// Flag names declared by internal/cli's command registry, one constant
 // each so a caller never spells a flag as a literal.
 //
 // Regenerate with: cd magus && go generate ./cmd/magus/...

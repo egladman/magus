@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/internal/clispec"
+	"github.com/egladman/magus/internal/cli"
 )
 
 func manCmd(args []string) error {
@@ -34,7 +34,7 @@ func manCmd(args []string) error {
 	if fs.NArg() != 0 {
 		return fmt.Errorf("magus man install: unexpected argument %q", fs.Arg(0))
 	}
-	pages := clispec.RoffPages("", version)
+	pages := cli.RoffPages("", version)
 	// Before MkdirAll: the destination is usually outside the repo, so describing
 	// it must not create it.
 	if *dryRun {

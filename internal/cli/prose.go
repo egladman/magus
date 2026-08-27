@@ -1,4 +1,4 @@
-package clispec
+package cli
 
 const (
 	MainDescription = `magus is a standalone build orchestrator and content-addressed cache for

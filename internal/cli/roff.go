@@ -1,7 +1,7 @@
 // Writer (this file) emits the groff_man(7) subset that magus's man pages use;
 // the Escape* helpers handle roff special characters. Free of magus-specific types.
 
-package clispec
+package cli
 
 import (
 	"fmt"
