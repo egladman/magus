@@ -113,3 +113,64 @@ func paths(d Diff) []string {
 	}
 	return out
 }
+
+// TestPermittedVerdictRefusesToApproveYourOwnChange is the rule the whole approval flow rests on.
+// The provider API is perfectly happy to let a change approve itself, which is exactly why the
+// refusal lives in Go rather than in a workspace-authored spell.
+func TestPermittedVerdictRefusesToApproveYourOwnChange(t *testing.T) {
+	mine := ReviewTarget{Author: "ada", Viewer: "ada"}
+
+	assert.Equal(t, VerdictComment, mine.PermittedVerdict(VerdictApprove))
+}
+
+// TestPermittedVerdictAllowsApprovingSomebodyElsesChange is the positive control. Without it the
+// test above passes just as happily against a function that downgrades everything, which would
+// be a feature that never works rather than a rule that holds.
+func TestPermittedVerdictAllowsApprovingSomebodyElsesChange(t *testing.T) {
+	theirs := ReviewTarget{Author: "grace", Viewer: "ada"}
+
+	for _, want := range []ReviewVerdict{VerdictApprove, VerdictRequestChanges} {
+		assert.Equal(t, want, theirs.PermittedVerdict(want))
+	}
+}
+
+// TestPermittedVerdictTreatsUnknownAuthorshipAsUnsafe. A provider that names neither party has not
+// said the review belongs to someone else, and "we could not tell" resolving to "go ahead" is the
+// failure OpenedByViewer reports its own certainty to prevent.
+func TestPermittedVerdictTreatsUnknownAuthorshipAsUnsafe(t *testing.T) {
+	for _, at := range []ReviewTarget{
+		{},
+		{Author: "grace"},
+		{Viewer: "ada"},
+	} {
+		assert.Equal(t, VerdictComment, at.PermittedVerdict(VerdictApprove), "%+v", at)
+	}
+}
+
+// TestPermittedVerdictLeavesARemarkAlone: asking for the thing you got is not a
+// downgrade, and reporting one would make the surface announce a refusal that never happened.
+func TestPermittedVerdictLeavesARemarkAlone(t *testing.T) {
+	// An unrecognized word lands here too, which is what makes the handler's unchecked
+	// conversion from client input safe: only the two asserting words can ever assert.
+	for _, at := range []ReviewTarget{{}, {Author: "ada", Viewer: "ada"}, {Author: "grace", Viewer: "ada"}} {
+		for _, want := range []ReviewVerdict{"", VerdictComment, "APPROVE", "lgtm"} {
+			assert.Equal(t, VerdictComment, at.PermittedVerdict(want), "%+v asking %q", at, want)
+		}
+	}
+}
+
+// TestVerdictLimitCarriesItsCodeOnlyForTheGap. Two refusals, and only one is a capability gap:
+// "you opened this" is how review is meant to work and has no page to send anyone to, while
+// "magus could not tell" is something a provider could fix. A code on both would make the
+// ordinary case look like a defect.
+func TestVerdictLimitCarriesItsCodeOnlyForTheGap(t *testing.T) {
+	unknown := ReviewTarget{}.VerdictLimit()
+	assert.Contains(t, unknown, string(ReviewAuthorshipUnknown))
+
+	mine := ReviewTarget{Author: "ada", Viewer: "ada"}.VerdictLimit()
+	assert.NotContains(t, mine, "MGS")
+	assert.NotEmpty(t, mine, "the reason is still said, it just is not a gap")
+
+	theirs := ReviewTarget{Author: "grace", Viewer: "ada"}.VerdictLimit()
+	assert.Empty(t, theirs, "nothing is limited, so nothing is explained")
+}

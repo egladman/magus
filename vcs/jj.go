@@ -32,7 +32,7 @@ func (v jjVCS) IsSecondaryCheckout(dir string) bool {
 }
 
 func (v jjVCS) Root(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "jj", "workspace", "root")
+	cmd := vcsExec(ctx, "jj", "workspace", "root")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -52,7 +52,7 @@ func (v jjVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, er
 	// Run from the workspace ROOT. See DirtyFiles for why; the same rebasing applies here,
 	// and this method feeds `magus affected`, where a mis-based path means a project is
 	// silently not rebuilt.
-	cmd := exec.CommandContext(ctx, "jj", "diff", "--name-only", "--from", base)
+	cmd := vcsExec(ctx, "jj", "diff", "--name-only", "--from", base)
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {
@@ -62,7 +62,7 @@ func (v jjVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, er
 }
 
 func (v jjVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
-	cmd := exec.CommandContext(ctx, "jj", "log", "-r", "@", "--no-graph", "-T", "commit_id")
+	cmd := vcsExec(ctx, "jj", "log", "-r", "@", "--no-graph", "-T", "commit_id")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -223,6 +223,46 @@ func (v jjVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 	return out, nil
 }
 
+// RangeDiff returns the unified diff from base to head.
+//
+// Implemented here and not only for git because jj is probed FIRST in the builtin list, so a
+// colocated repository resolves to this backend: a git-only range diff would report the capability
+// missing to exactly the users who have both.
+//
+// --git for the reason DirtyDiff passes it: the review surface parses a unified body, and jj's
+// native format is not one. From the workspace root for the reason ChangedFiles and DirtyDiff are,
+// which is that the a/ and b/ headers otherwise name paths relative to a subdirectory nobody is
+// standing in.
+//
+// jj has no three-dot spelling and needs none: --from is the merge base of the two revisions
+// already, which is the symmetric difference git's three dots have to ask for.
+func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
+	if err := checkRef(base); err != nil {
+		return "", err
+	}
+	if err := checkRef(head); err != nil {
+		return "", err
+	}
+	root, prefix, err := repoPathPrefix(ctx, v, dir)
+	if err != nil {
+		return "", err
+	}
+	args := []string{"diff", "--git", "--from", base, "--to", head}
+	if len(paths) > 0 {
+		// Prefixed for the reason DirtyDiff prefixes: the command runs from the workspace root,
+		// so a path relative to the caller's directory would name the wrong file.
+		args = append(args, "--")
+		for _, pth := range paths {
+			args = append(args, prefix+pth)
+		}
+	}
+	out, err := vcsOutputRaw(ctx, root, "jj", args...)
+	if err != nil {
+		return "", fmt.Errorf("jj diff --from %s --to %s: %w", base, head, err)
+	}
+	return out, nil
+}
+
 // ConflictResolver for jj. The mapping is NOT a transliteration of the git one, because
 // jj's conflict model differs at the root: an operation never pauses. `jj rebase` and a
 // merge both complete, recording conflicts INSIDE the resulting commit, and the working
@@ -318,7 +358,7 @@ func (v jjVCS) KeepIncoming(ctx context.Context, root string, paths []string) er
 		return fmt.Errorf("jj: no parent revision to restore conflicted paths from")
 	}
 	argv := append([]string{"restore", "--from", parents[0], "--"}, paths...)
-	cmd := exec.CommandContext(ctx, "jj", argv...)
+	cmd := vcsExec(ctx, "jj", argv...)
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("jj restore: %w\n%s", err, out)
@@ -584,7 +624,7 @@ func (v jjVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, 
 	if err := checkRef(rev); err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(ctx, "jj", "file", "show", "-r", rev, path)
+	cmd := vcsExec(ctx, "jj", "file", "show", "-r", rev, path)
 	cmd.Dir = root
 	return revFileOutput(cmd, fmt.Sprintf("jj file show -r %s %s", rev, path))
 }
@@ -618,7 +658,7 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 		_ = cmd.Run()
 	}()
 
-	cmd := exec.CommandContext(ctx, "jj", "workspace", "add",
+	cmd := vcsExec(ctx, "jj", "workspace", "add",
 		"-r", rev, "--sparse-patterns", "full", "--name", name, target)
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -657,7 +697,7 @@ func (v jjVCS) StartMerge(ctx context.Context, root, ref string) error {
 	if underway {
 		return fmt.Errorf("jj new @ %s: the working copy is already a merge; conclude or abandon it first", ref)
 	}
-	cmd := exec.CommandContext(ctx, "jj", "new", "@", ref)
+	cmd := vcsExec(ctx, "jj", "new", "@", ref)
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("jj new @ %s: %w\n%s", ref, err, strings.TrimSpace(string(out)))
@@ -690,7 +730,7 @@ func (v jjVCS) AbortMerge(ctx context.Context, root string) error {
 	if !underway {
 		return errors.New("jj: the working copy is not a merge, so there is nothing to abort")
 	}
-	cmd := exec.CommandContext(ctx, "jj", "abandon", "@")
+	cmd := vcsExec(ctx, "jj", "abandon", "@")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("jj abandon @: %w\n%s", err, strings.TrimSpace(string(out)))

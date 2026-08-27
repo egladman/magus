@@ -65,7 +65,7 @@ func (v saplingVCS) ParentRef() string { return "p1(.)" }
 func (v saplingVCS) IsSecondaryCheckout(_ string) bool { return false }
 
 func (v saplingVCS) Root(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "sl", "root")
+	cmd := vcsExec(ctx, "sl", "root")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -81,7 +81,7 @@ func (v saplingVCS) ChangedFiles(ctx context.Context, dir, base string) ([]strin
 	// --root-relative: see DirtyFiles. Without it this is worse than cwd-relative - a
 	// sibling of the cwd comes back as "../root.txt", a path that escapes the directory
 	// the caller is reasoning about.
-	cmd := exec.CommandContext(ctx, "sl", "status", "--root-relative",
+	cmd := vcsExec(ctx, "sl", "status", "--root-relative",
 		"--no-status", "--added", "--modified", "--removed", "--rev", base)
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -92,7 +92,7 @@ func (v saplingVCS) ChangedFiles(ctx context.Context, dir, base string) ([]strin
 }
 
 func (v saplingVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
-	out, err := exec.CommandContext(ctx, "sl", "-R", dir, "log", "-r", ".", "--template", "{node}").Output()
+	out, err := vcsExec(ctx, "sl", "-R", dir, "log", "-r", ".", "--template", "{node}").Output()
 	if err != nil {
 		return types.DiffCommandHints{}, fmt.Errorf("sl log: %w", err)
 	}
@@ -291,7 +291,7 @@ func (v saplingVCS) TrackedFiles(ctx context.Context, dir string, paths []string
 	var tracked []string
 	for _, chunk := range gitPathChunks(paths) {
 		args := append([]string{"files", "--"}, chunk...)
-		cmd := exec.CommandContext(ctx, "sl", args...)
+		cmd := vcsExec(ctx, "sl", args...)
 		cmd.Dir = dir
 		out, err := cmd.Output()
 		if err != nil {
@@ -470,7 +470,7 @@ func (v saplingVCS) ReadFileAt(ctx context.Context, root, rev, path string) (str
 	if err := checkRef(rev); err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(ctx, "sl", "cat", "-r", rev, path)
+	cmd := vcsExec(ctx, "sl", "cat", "-r", rev, path)
 	cmd.Dir = root
 	return revFileOutput(cmd, fmt.Sprintf("sl cat -r %s %s", rev, path))
 }
@@ -489,7 +489,7 @@ func (v saplingVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string)
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 
-	cmd := exec.CommandContext(ctx, "sl", "archive", "-r", rev, "-t", "files",
+	cmd := vcsExec(ctx, "sl", "archive", "-r", rev, "-t", "files",
 		"-I", "glob:**", "-X", saplingArchivalMeta, staging)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -554,7 +554,7 @@ func copyTree(src, dst string) error {
 // repository under bisect rather than the process cwd, the dir-scoping the VCSDriver
 // contract requires for correctness under concurrent runs.
 func (v saplingVCS) isAncestor(ctx context.Context, dir, sha string) error {
-	out, err := exec.CommandContext(ctx, "sl", "-R", dir, "log",
+	out, err := vcsExec(ctx, "sl", "-R", dir, "log",
 		"-r", "("+sha+") and (ancestors(.) or .)",
 		"--template", "{node}").Output()
 	if err != nil {
@@ -569,7 +569,7 @@ func (v saplingVCS) isAncestor(ctx context.Context, dir, sha string) error {
 func (v saplingVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
 	// The date() predicate requires a date string, not an epoch integer.
 	revset := fmt.Sprintf("max(date('<%s'))", t.UTC().Format("2006-01-02 15:04:05"))
-	out, err := exec.CommandContext(ctx, "sl", "-R", dir, "log", "-r", revset, "--template", "{node}").Output()
+	out, err := vcsExec(ctx, "sl", "-R", dir, "log", "-r", revset, "--template", "{node}").Output()
 	if err != nil {
 		return "", fmt.Errorf("sl log: %w", err)
 	}
@@ -581,7 +581,7 @@ func (v saplingVCS) commitBeforeTime(ctx context.Context, dir string, t time.Tim
 }
 
 func (v saplingVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
-	out, err := exec.CommandContext(ctx, "sl", "-R", dir, "log", "-r", sha,
+	out, err := vcsExec(ctx, "sl", "-R", dir, "log", "-r", sha,
 		"--template", "{desc|firstline}  ({author|user}, {date|shortdate})").Output()
 	if err != nil {
 		return "", err
@@ -591,7 +591,7 @@ func (v saplingVCS) commitInfo(ctx context.Context, dir, sha string) (string, er
 
 func (v saplingVCS) start(ctx context.Context, dir, bad, good string) error {
 	run := func(args ...string) error {
-		cmd := exec.CommandContext(ctx, "sl", args...)
+		cmd := vcsExec(ctx, "sl", args...)
 		cmd.Dir = dir
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
@@ -607,7 +607,7 @@ func (v saplingVCS) start(ctx context.Context, dir, bad, good string) error {
 }
 
 func (v saplingVCS) run(ctx context.Context, dir, shellCmd string) error {
-	cmd := exec.CommandContext(ctx, "sl", "bisect", "--command", shellCmd)
+	cmd := vcsExec(ctx, "sl", "bisect", "--command", shellCmd)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -615,7 +615,7 @@ func (v saplingVCS) run(ctx context.Context, dir, shellCmd string) error {
 }
 
 func (v saplingVCS) reset(ctx context.Context, dir string) error {
-	cmd := exec.CommandContext(ctx, "sl", "bisect", "--reset")
+	cmd := vcsExec(ctx, "sl", "bisect", "--reset")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -623,7 +623,7 @@ func (v saplingVCS) reset(ctx context.Context, dir string) error {
 }
 
 func (v saplingVCS) culprit(ctx context.Context, dir string) (string, error) {
-	out, err := exec.CommandContext(ctx, "sl", "-R", dir, "log",
+	out, err := vcsExec(ctx, "sl", "-R", dir, "log",
 		"-r", "bisect(bad)", "--template", "{node}\n").Output()
 	if err != nil {
 		return "", fmt.Errorf("sl log bisect(bad): %w", err)
@@ -739,7 +739,7 @@ func runSaplingBatched(ctx context.Context, root string, args []string, paths []
 		argv := append([]string{}, args...)
 		argv = append(argv, "--")
 		argv = append(argv, chunk...)
-		cmd := exec.CommandContext(ctx, "sl", argv...)
+		cmd := vcsExec(ctx, "sl", argv...)
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("sl %s: %w\n%s", strings.Join(args, " "), err, out)
@@ -965,7 +965,7 @@ func (v saplingVCS) StartMerge(ctx context.Context, root, ref string) error {
 	} else if underway {
 		return fmt.Errorf("sl merge %s: a merge is already in progress; conclude or abandon it first", ref)
 	}
-	cmd := exec.CommandContext(ctx, "sl", "--noninteractive", "merge", ref)
+	cmd := vcsExec(ctx, "sl", "--noninteractive", "merge", ref)
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -1007,7 +1007,7 @@ func (v saplingVCS) AbortMerge(ctx context.Context, root string) error {
 	if !underway {
 		return errors.New("sl: no merge is in progress to abort")
 	}
-	cmd := exec.CommandContext(ctx, "sl", "--noninteractive", "goto", "--clean", ".")
+	cmd := vcsExec(ctx, "sl", "--noninteractive", "goto", "--clean", ".")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("sl goto --clean: %w\n%s", err, strings.TrimSpace(string(out)))

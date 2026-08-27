@@ -938,7 +938,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-utils", "mockassert"]);
 }
 
-// Reinstalls the agent skills from their embedded sources in cmd/magus/skills.
+// Reinstalls the agent skills from their embedded sources in internal/agent/skills.
 //
 // The installed copies are GENERATED, and declaring them says so: without this
 // they classified as ordinary source, so `magus describe file .claude/skills/...`
@@ -966,7 +966,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // invisible to it, flagged as a computed footprint argument rather than silently
 // accepted. So the name list is written out per destination, and
 // TestSkillsGenerateDeclaresEveryShippedSkill keeps it in step with
-// cmd/magus/skills: adding a skill without touching this fails there rather than
+// internal/agent/skills: adding a skill without touching this fails there rather than
 // shipping an installed file magus calls hand-editable.
 //
 // One pattern per skill per destination, rather than one brace alternation per
@@ -2111,9 +2111,9 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // dprint.json still apply, so MAGUS.md and CHANGELOG.md stay out. Keep this list in
     // step with that file's `includes`.
     ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "tapes/**/*.md",
-        "cmd/magus/agents-section.md");
+        "internal/agent/agents-section.md");
     markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
-        "./cmd/magus/agents-section.md"]});
+        "./internal/agent/agents-section.md"]});
 }
 
 // Runs the CI gates through their declared dependencies.

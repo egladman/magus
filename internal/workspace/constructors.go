@@ -100,6 +100,29 @@ func WithNoLanguage(reason string) ProjectOption {
 	return func(p *types.Project) error { p.NoLanguage = reason; return nil }
 }
 
+// WithReviewRequired declares the globs where an unread change is worth reporting.
+//
+// A glob escaping the workspace root is REFUSED, the same way WithSources refuses one, and
+// for a sharper reason: a source glob that escapes merely fails to key a cache entry, while
+// this one silently matches nothing and the project goes on believing it has marked its
+// riskiest paths. A feature whose whole job is to say "read this one" must not fail quiet.
+func WithReviewRequired(globs ...string) ProjectOption {
+	return func(p *types.Project) error {
+		cleaned := make([]string, 0, len(globs))
+		for _, raw := range globs {
+			glob := path.Clean(raw)
+			rooted := types.RootGlob(p.Path, glob)
+			if rooted == ".." || strings.HasPrefix(rooted, "../") {
+				return fmt.Errorf("magus: project %q: review_required glob %q escapes the workspace root "+
+					"(it resolves to %q); it would match nothing and silently mark no paths at all", p.Path, raw, rooted)
+			}
+			cleaned = append(cleaned, glob)
+		}
+		p.ReviewRequired = append(p.ReviewRequired, cleaned...)
+		return nil
+	}
+}
+
 // WithWatchIgnore appends patterns to the project's watch ignore list.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return func(p *types.Project) error {

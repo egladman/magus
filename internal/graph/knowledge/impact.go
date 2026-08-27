@@ -108,3 +108,64 @@ func coverageOf(n types.KnowledgeNode) *CoverageFacts {
 	total, _ := strconv.Atoi(n.Attrs[AttrTotalStmts])
 	return &CoverageFacts{Ratio: ratio, Covered: covered, Total: total}
 }
+
+// SymbolSpan is one symbol's identity and the lines it occupies in its defining file.
+//
+// EndLine is 0 when the indexer emitted no enclosing range, which several do not. That is the
+// honest answer rather than a guessed extent, and a caller expanding a hunk to "the whole symbol"
+// has to decide what to do with a start and no end rather than being handed a fabricated one.
+type SymbolSpan struct {
+	ID        string
+	Label     string
+	StartLine int
+	EndLine   int
+}
+
+// SymbolAt returns the symbol whose definition encloses a 1-based line of a workspace-relative
+// file, by the nearest-preceding-definition rule.
+//
+// The exported form of a lookup this package had written twice, unexported and single-purpose:
+// once to attribute coverage blocks and once inside the SCIP parser to attribute calls. Both
+// answered the same question, and neither could be asked from outside - so the review surface,
+// which wants "which function is this hunk in", had no way to find out.
+//
+// Nearest-preceding rather than range-containment BECAUSE the end line is often missing. A
+// containment test would answer "no symbol" for every indexer that emits no enclosing range,
+// which is the commoner case and the one where a reader still wants an answer. Where EndLine IS
+// known a caller can check it and decide; where it is not, this still names the declaration the
+// line belongs to.
+//
+// The zero value means no symbol covers the line: a file with no ingested symbols, a line above
+// the first definition, or a graph whose symbol shards were never merged. All three are "magus
+// does not know", never "this line belongs to nothing".
+func (g *Graph) SymbolAt(relPath string, line int) SymbolSpan {
+	g.ensureAdj()
+	var best SymbolSpan
+	for _, e := range g.out[fileID(relPath)] {
+		if e.Relation != types.RelationDefines {
+			continue
+		}
+		sn, ok := g.node(e.Target)
+		if !ok || sn.Kind != types.KindSymbol {
+			continue
+		}
+		_, start, ok := splitPathLine(sn.Source)
+		if !ok || start > line || start < best.StartLine {
+			continue
+		}
+		best = SymbolSpan{ID: sn.ID, Label: sn.Label, StartLine: start, EndLine: defEndLine(sn)}
+	}
+	return best
+}
+
+// defEndLine reads AttrDefEndLine, or 0 where the indexer emitted no enclosing range.
+//
+// An unparseable value is 0 for the same reason a missing one is: the attr bounds a symbol, and a
+// bound magus cannot read is a bound it does not have.
+func defEndLine(n types.KnowledgeNode) int {
+	end, err := strconv.Atoi(n.Attrs[AttrDefEndLine])
+	if err != nil {
+		return 0
+	}
+	return end
+}

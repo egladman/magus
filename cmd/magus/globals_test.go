@@ -333,3 +333,15 @@ func runCLIQuietly(t *testing.T, argv ...string) {
 	defer func() { _ = recover() }()
 	runCLI()
 }
+
+func TestFlagValueOfAndIsFlagNamedAgreeOnTheSameFlag(t *testing.T) {
+	// The two halves must not disagree about what counts as the flag: `--explain` is the
+	// bare form and only isFlagNamed sees it, `--explain=web` carries a value and only
+	// flagValueOf sees it. A scanner that accepted both from one helper would read the
+	// next positional as the value.
+	require.True(t, isFlagNamed("--explain", "explain"))
+	require.Empty(t, flagValueOf("--explain", "explain"))
+
+	require.False(t, isFlagNamed("--explain=web", "explain"))
+	require.Equal(t, "web", flagValueOf("--explain=web", "explain"))
+}

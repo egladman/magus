@@ -45,6 +45,7 @@ packages:
       MergeDriverInstaller:
       RefreshHookInstaller:
       RemoteReporter:
+      RevTimeReporter:
       DefaultRefReporter:
       TrackedFileReporter:
       IgnoredFileReporter:

@@ -30,6 +30,19 @@ export interface Command {
   group?: string;
   run: (arg?: unknown) => void;
   targets?: () => CommandTarget[];
+  // key is a SURFACE-LOCAL binding the surface dispatches itself, declared here only so the
+  // cheat sheet can show it.
+  //
+  // Distinct from a keymap chord, which the console dispatches globally and a person may
+  // rebind. These are bare keys that mean something only while their surface has focus - the
+  // diff viewer's ] and [ walk hunks, and would be hostile bound console-wide. They were
+  // therefore in no keymap, and the cheat sheet renders from the keymap, so the surface with
+  // the most keys in the product showed none of them.
+  //
+  // NOT rebindable, and it wins over a keymap entry for the same id wherever both appear.
+  // The surface dispatches from its own table and never reads the keymap, so an override
+  // there would change what is displayed and nothing about what happens.
+  key?: string;
 }
 
 // A chord is a canonical modifier+key string: modifiers in the fixed order mod, alt, shift, then

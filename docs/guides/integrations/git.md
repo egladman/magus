@@ -242,3 +242,101 @@ than swept in, which is the difference between it and `git add -A`.
 It also skips generated output that nothing in the change accounts for - output that moved
 with no declared input behind it, which means either a different magus build produced it
 or a generator is not deterministic. Name such a path explicitly to stage it anyway.
+
+## Reading a change through git
+
+`magus diff` reads a changeset the way this repository's conventions rank it: declared
+outputs folded away, the rest ordered by what they can break. Nothing about that
+requires leaving git.
+[Reviewing your changes](../reviewing-changes.md) covers what it reports; this section is
+only how to reach it without typing a magus command.
+
+Wire it as git's pager for `diff`, and plain `git diff` renders through magus:
+
+```sh
+git config pager.diff 'magus diff -'
+```
+
+That is the whole integration. `git diff`, `git diff <ref>`, and `git diff --staged`
+all work, because git hands its pager the entire patch on stdin and `magus diff -`
+reads a patch on stdin. Nothing is intercepted that you cannot get back:
+`git --no-pager diff` prints the raw patch, and `git -c pager.diff=cat diff` does the
+same for one invocation.
+
+Prefer to opt in per command rather than always? An alias costs one line and leaves
+`git diff` alone:
+
+```sh
+git config alias.reading '!f(){ git diff "$@" | magus diff -; }; f'
+```
+
+Then `git reading` and `git reading main` read through magus, and `git diff` does not.
+
+### Why not an external diff or a difftool
+
+`GIT_EXTERNAL_DIFF` and `diff.external` are for a program that renders ONE file's diff:
+git calls them once per file, with seven arguments. Almost everything magus has to say
+is a property of the whole changeset - which projects rebuild, who owns them, what it
+costs, what to read first - so per-file invocation would mean printing the report once
+per file, or not at all. Wire magus there and it refuses, naming the pager setting
+above; it does not half-answer.
+
+`git difftool --dir-diff` has the opposite problem. It copies the changeset into two
+temporary directories and runs the tool against those. magus refuses to run inside a
+temporary copy of a tree on purpose: the verdict would describe a workspace nobody
+ships, and anything regenerated would land in the copy. Per-file `difftool` is the
+external-diff mismatch again, with a prompt between each file.
+
+The pager is the one git integration point whose contract already matches: the whole
+diff, once, on stdin.
+
+### The same shape in the other backends
+
+This is not a git quirk. Every backend magus supports offers a diff-tool slot and a
+pager, and in each of them the tool slot is the wrong shape for the same reason -
+measured against the installed versions:
+
+| backend   | diff-tool slot hands the tool                                                                              | pager hands the tool                  |
+| --------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| git       | seven arguments, once per file (`GIT_EXTERNAL_DIFF`), or two temp directories (`difftool --dir-diff`)      | the whole unified diff on stdin       |
+| Mercurial | two directories - a temp snapshot and the working dir (`extdiff`)                                          | the whole unified diff on stdin       |
+| Sapling   | two file paths, once per file (`extdiff`)                                                                  | the whole unified diff on stdin       |
+| Jujutsu   | two directories, `$left` and `$right` (`ui.diff-formatter`, or `file-by-file` with `diff-invocation-mode`) | whatever `ui.diff-formatter` produced |
+
+So the pager is the portable answer, and two settings make it work everywhere:
+
+```sh
+hg config --edit    # [pager] pager = magus diff -   and   [color] mode = off
+sl config --user pager.pager 'magus diff -'
+jj config set --repo ui.diff-formatter ':git'
+jj config set --repo ui.pager '["magus", "diff", "-"]'
+```
+
+Jujutsu needs the extra line because its default diff is a side-by-side rendering
+rather than a patch; `:git` makes `jj diff` emit the unified form its pager then hands
+over. With that set, jj behaves like the rest.
+
+**Turn color off for the diff being handed over.** A VCS colorizes when it believes it
+is writing to a terminal, and paging is exactly that case. A colorized patch has escape
+sequences in front of every header, so the headers no longer begin a line and nothing
+parses. magus refuses such a patch and names this as the cause rather than reporting an
+empty changeset, but the fix is upstream: `--color=never`, `hg --config color.mode=off`,
+or `jj --config ui.color=never`. git does not colorize into a pager by default and needs
+nothing.
+
+Every temp-directory variant above is refused for one reason: magus declines to run
+against a copy of a tree, because the verdict would describe a workspace nobody ships
+and anything regenerated would land in the copy.
+
+### Reading a patch you did not produce
+
+The same input works from anywhere a patch comes from - a colleague, a mail
+attachment, a stash, a code-review tool:
+
+```sh
+gh pr diff 123 | magus diff -
+```
+
+Both patch dialects parse: git's `diff --git a/x b/x` headers, and the bare
+`--- a/x` / `+++ b/x` pair that GNU `diff -u` and `patch` speak. A patch magus cannot
+read is refused rather than reported as an empty changeset.

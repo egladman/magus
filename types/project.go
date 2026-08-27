@@ -205,7 +205,21 @@ type Project struct {
 	// never trigger a VM load and recurse; an exported VALUE there reads as null and
 	// this key would be silently skipped. A policy several projects share is a shared
 	// module, not a side effect of one project's magusfile.
-	ToolBounds     map[string]spells.VersionBounds
+	ToolBounds map[string]spells.VersionBounds
+	// ReviewRequired are the globs where a person actually reading a change matters, from
+	// magus.project's "review_required" key. Empty is the default and means magus reports
+	// read receipts without singling anything out.
+	//
+	// It exists so the finding can be QUIET. "Nobody read this" is true of nearly every
+	// file in nearly every changeset, and a report that says so everywhere is one people
+	// learn to skip - taking the signing code and the cache-key logic with it. Naming the
+	// few places where an unread change is a real risk is what makes the report worth
+	// reading, and only the workspace knows which those are.
+	//
+	// Declared, never inferred. magus could guess from churn or from a security-sounding
+	// path, and a guess here would be magus asserting whose code is dangerous - which is
+	// the judgment this key exists to leave with the people who own it.
+	ReviewRequired []string
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via

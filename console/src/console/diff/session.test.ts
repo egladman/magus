@@ -1,31 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fetchContext, hunkDigest, patchDigest } from "./session";
+import { fetchContext } from "./session";
 
 // The SAME golden vector internal/diff/session_test.go asserts.
 //
 // If these two drift the feature silently half-works: a hunk the person marked read in the
 // browser still looks unread to an agent reading the same session, and neither side reports
 // an error. Two tests over one literal turns that into a build failure.
-test("hunkDigest matches the Go golden vector", async () => {
-  assert.equal(await hunkDigest("a.go", [" ctx", "-old", "+new"]), "9a0125a4f7864894");
-});
-
-test("hunkDigest separates identical hunks in different files", async () => {
-  const body = [" ctx", "-old", "+new"];
-  assert.notEqual(await hunkDigest("a.go", body), await hunkDigest("b.go", body));
-});
-
-test("hunkDigest changes when the body does", async () => {
-  assert.notEqual(
-    await hunkDigest("a.go", ["-old", "+new"]),
-    await hunkDigest("a.go", ["-old", "+newer"]),
-  );
-});
-
-test("patchDigest matches the daemon's SHA-256 first-16-byte identity", async () => {
-  assert.equal(await patchDigest("abc"), "ba7816bf8f01cfea414140de5dae2223");
-});
+// The digest tests that were here are gone with the code they covered. hunkDigest and
+// patchDigest were TypeScript reimplementations of internal/diff's, kept in step by a golden
+// vector pasted from Go - which is the arrangement that let the two readers drift in the first
+// place. The daemon computes both now and ships them, so there is nothing here to pin.
 
 test("context requests carry the reviewed patch identity", async () => {
   const realFetch = globalThis.fetch;

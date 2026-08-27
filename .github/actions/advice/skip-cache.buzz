@@ -6,7 +6,6 @@
 // leaving it to be discovered by whoever wonders why the cache never hits.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
-import "os";
 import "proc";
 import "advice";
 import "std";
@@ -27,9 +26,9 @@ export fun optedOut(diff: str) > [str] {
 }
 
 fun body(entries: [str]) > str {
-    var text = "**This pull request opts a target out of the cache:**\n\n";
-    foreach (e in entries) { text = text + "- `" + e + "`\n"; }
-    return text
+    final parts = mut ["**This pull request opts a target out of the cache:**\n\n"];
+    foreach (e in entries) { parts.append("- `" + e + "`\n"); }
+    return parts.join("")
         + "\nA target with `skip_cache` re-runs on every invocation, for every "
         + "contributor and every CI run - it never replays and never contributes to a "
         + "cache hit downstream. That is the right call for anything whose answer depends "
@@ -65,8 +64,8 @@ fun main() > void !> any {
     }
 
     advice\fetchBase(base, refspec: false);
-    final diff = proc\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "*.buzz"],
-        dir: ".", opts: {"allow_failure": true}).stdout;
+    final diff = proc\exec("git", args: ["diff", advice\diffRange(base, head: head), "--", "*.buzz"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
     final entries = optedOut(diff);
     if (entries.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "A target opted out of the cache", body: "");

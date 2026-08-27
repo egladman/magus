@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/std"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCtxAttrHandlerInjectsDir verifies the working directory carried on the
@@ -81,4 +83,20 @@ func TestExpandVerbosityArgsNoSeparator(t *testing.T) {
 			t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
 		}
 	}
+}
+
+func TestEffectiveLevelQuietWinsOverVerbose(t *testing.T) {
+	assert.Equal(t, slog.LevelError, effectiveLevel(0, true))
+	assert.Equal(t, slog.LevelError, effectiveLevel(3, true))
+	assert.Equal(t, slog.LevelInfo, effectiveLevel(0, false))
+	assert.Equal(t, slog.LevelDebug, effectiveLevel(1, false))
+	assert.Equal(t, slog.LevelDebug, effectiveLevel(2, false))
+	assert.Equal(t, config.LevelTrace, effectiveLevel(3, false))
+}
+
+func TestLevelNameNamesTraceItself(t *testing.T) {
+	assert.Equal(t, "trace", levelName(config.LevelTrace))
+	assert.Equal(t, "DEBUG", levelName(slog.LevelDebug))
+	assert.Equal(t, "INFO", levelName(slog.LevelInfo))
+	assert.Equal(t, "ERROR", levelName(slog.LevelError))
 }

@@ -3,6 +3,7 @@ package record
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,19 +19,38 @@ type owner struct {
 	Skipped string    // untagged: never persisted
 }
 
-// The contract with whoever is debugging at 2am: one file per field, holding the
-// bare value. This is the whole reason records exist rather than a json.Marshal.
-func TestWriteIsOneFilePerField(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "lock.owner")
-	require.NoError(t, Write(dir, owner{PID: 41221, Command: "magus run ci .", Started: time.Now()}))
+// The contract with whoever is debugging at 2am: one cat shows the whole record, as
+// name-then-value lines. This is the whole reason records exist rather than a json.Marshal.
+//
+// It used to be one FILE per field, which cost a mkdir, a create per field, a RemoveAll of the
+// previous record and a rename - about 26 syscalls, measured at 670us. This shape is a create
+// and a rename. The per-field cat became a whole-record cat, which is the better one to have
+// when something is stuck: every field at once rather than five reads to assemble them.
+func TestARecordIsOneCattableFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock.owner")
+	require.NoError(t, Write(path, owner{PID: 41221, Command: "magus run ci .", Started: time.Now()}))
 
-	b, err := os.ReadFile(filepath.Join(dir, "pid"))
+	b, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.Equal(t, "41221\n", string(b), "a bare value with a trailing newline, so cat reads cleanly")
+	got := string(b)
+	assert.Contains(t, got, "pid\t41221\n")
+	assert.Contains(t, got, "command\tmagus run ci .\n")
+	// Sorted, so an unchanged record rewrites to identical bytes rather than to a new
+	// permutation that reads as a change to anyone diffing or watching it.
+	assert.Less(t, strings.Index(got, "command\t"), strings.Index(got, "pid\t"))
+}
 
-	b, err = os.ReadFile(filepath.Join(dir, "command"))
-	require.NoError(t, err)
-	assert.Equal(t, "magus run ci .\n", string(b))
+// A value holding a newline or a tab is what would otherwise be read back as a different field
+// or a truncated one. A command line is one of these fields and nothing stops an argument
+// containing either.
+func TestValuesSurviveNewlinesAndTabs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rec")
+	want := owner{PID: 1, Command: "magus run x\t-flag\nsecond line", Started: time.Now()}
+	require.NoError(t, Write(path, want))
+
+	var got owner
+	require.NoError(t, Read(path, &got))
+	assert.Equal(t, want.Command, got.Command)
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -50,19 +70,23 @@ func TestRoundTrip(t *testing.T) {
 // An untagged field never reaches disk, so renaming a Go field cannot silently
 // rename a file other processes are reading.
 func TestUntaggedFieldsAreNotPersisted(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "rec")
-	require.NoError(t, Write(dir, owner{PID: 1, Skipped: "secret"}))
-	assert.NoFileExists(t, filepath.Join(dir, "Skipped"))
-	assert.NoFileExists(t, filepath.Join(dir, "skipped"))
+	path := filepath.Join(t.TempDir(), "rec")
+	require.NoError(t, Write(path, owner{PID: 1, Skipped: "secret"}))
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "secret")
+	assert.NotContains(t, string(b), "kipped")
 }
 
-func TestOmitEmptyLeavesTheFileOut(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "rec")
-	require.NoError(t, Write(dir, owner{PID: 1}))
-	assert.NoFileExists(t, filepath.Join(dir, "invocation"))
+func TestOmitEmptyLeavesTheLineOut(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rec")
+	require.NoError(t, Write(path, owner{PID: 1}))
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "invocation")
 
 	var got owner
-	require.NoError(t, Read(dir, &got), "an absent omitempty field is not a missing record")
+	require.NoError(t, Read(path, &got), "an absent omitempty field is not a missing record")
 	assert.Empty(t, got.Inv)
 }
 
@@ -71,14 +95,14 @@ func TestOmitEmptyLeavesTheFileOut(t *testing.T) {
 func TestAbsentIsNotFoundButUnreadableIsAnError(t *testing.T) {
 	assert.ErrorIs(t, Read(filepath.Join(t.TempDir(), "nope"), &owner{}), ErrNotFound)
 
-	dir := filepath.Join(t.TempDir(), "rec")
-	require.NoError(t, Write(dir, owner{PID: 1, Started: time.Now()}))
-	require.NoError(t, os.Remove(filepath.Join(dir, "pid")))
-	assert.ErrorIs(t, Read(dir, &owner{}), ErrNotFound,
-		"a record missing a required field is mid-removal, not corrupt")
+	path := filepath.Join(t.TempDir(), "rec")
+	require.NoError(t, Write(path, owner{PID: 1, Started: time.Now()}))
+	require.NoError(t, os.WriteFile(path, []byte("command\tx\n"), 0o644))
+	assert.ErrorIs(t, Read(path, &owner{}), ErrNotFound,
+		"a record missing a required field is incomplete, not corrupt")
 
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "pid"), []byte("not-a-number\n"), 0o644))
-	err := Read(dir, &owner{})
+	require.NoError(t, os.WriteFile(path, []byte("pid\tnot-a-number\ncommand\tx\nstarted\t2026-01-01T00:00:00Z\n"), 0o644))
+	err := Read(path, &owner{})
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrNotFound)
 }
@@ -86,12 +110,12 @@ func TestAbsentIsNotFoundButUnreadableIsAnError(t *testing.T) {
 // Write replaces rather than merges: a stale field from a previous holder would
 // otherwise read as belonging to the current one.
 func TestWriteReplacesTheWholeRecord(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "rec")
-	require.NoError(t, Write(dir, owner{PID: 1, Inv: "old", Started: time.Now()}))
-	require.NoError(t, Write(dir, owner{PID: 2, Started: time.Now()}))
+	path := filepath.Join(t.TempDir(), "rec")
+	require.NoError(t, Write(path, owner{PID: 1, Inv: "old", Started: time.Now()}))
+	require.NoError(t, Write(path, owner{PID: 2, Started: time.Now()}))
 
 	var got owner
-	require.NoError(t, Read(dir, &got))
+	require.NoError(t, Read(path, &got))
 	assert.Equal(t, 2, got.PID)
 	assert.Empty(t, got.Inv)
 }

@@ -41,7 +41,7 @@ export fun delegationLoopDiagram() > Diagram {
                   x = 528, y = 88, w = 200, h = 64 },
             Node{ id = "work", label = "Workers edit", sub = "one write set each",
                   role = "external", x = 744, y = 192, w = 200, h = 64 },
-            Node{ id = "verify", anchor = "internal/diff", label = "Verify each unit",
+            Node{ id = "verify", anchor = "internal/changeset", label = "Verify each unit",
                   sub = "diff since its checkpoint",
                   x = 744, y = 440, w = 200, h = 64 },
             Node{ id = "integrate", anchor = "cmd/magus", label = "Integrate",

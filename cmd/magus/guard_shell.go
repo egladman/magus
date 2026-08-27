@@ -39,6 +39,22 @@ type bashGuardVerdict struct {
 // case.
 const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 
+// guardChainedRunRe matches a second `magus run` on the same line.
+//
+// Targets COMPOSE through ctx.needs, so a chain is usually one invocation that already did
+// the whole thing: in this workspace `lint` needs `format` needs `generate`, which makes
+// `magus run generate . ; magus run format . ; magus run lint .` three workspace loads to
+// produce what the third one produces alone.
+//
+// It matches the SHAPE rather than parsed commands because the mistake is the chaining, and
+// every spelling of it - ; && || - is the same mistake.
+// `affected` counts as a second one: the gate runs the whole pipeline over everything the diff
+// reaches, so building a project immediately before it is asking for the same work twice. That
+// spelling slipped past the first version of this rule, which only looked for `run`, and the
+// author of the rule then made exactly that mistake within the hour.
+var guardChainedRunRe = regexp.MustCompile(
+	cmdPos + `(?:\./)?magus\s+(?:run|affected)\s[^;&|]*[;&|]+\s*(?:\./)?magus\s+(?:run|affected)\s`)
+
 // guardToolMatch is one command spell operation Magus can run on the caller's
 // behalf. It is derived from the registered spell catalog, never a hand-kept
 // list in the guard: adding a spell operation automatically teaches the hook
@@ -351,6 +367,18 @@ var (
 	// however the write is spelled.
 	guardNotesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+edit\b`)
 
+	// guardReadAckRe matches an invocation that would mint a read receipt.
+	//
+	// A receipt is a claim that a PERSON read something, and it is the only fact in a
+	// review no analysis can supply. An agent that can mint one turns the whole measure
+	// into a formality it satisfies on the way past - and it would, because stamping the
+	// changeset is the obvious tidy-up at the end of a task.
+	//
+	// The guard is the right place precisely because of what it sees: it is wired into
+	// agent hosts, so every command reaching it came from an agent by construction. A
+	// person at a terminal never meets this rule.
+	guardReadAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
+
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
 	// The flag is not portable and the two spellings silently destroy each other's work:
@@ -452,6 +480,11 @@ const (
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `magus affected ci` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
+	denyReadAck = "A read receipt records that a PERSON read a change, so only a person can record one.\n" +
+		"This is not a permission you are missing - there is no spelling of it an agent may use, and an agent stamping the changeset would make the measure mean nothing for everybody, including the human relying on it.\n" +
+		"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on.\n" +
+		"If you were asked to mark the change reviewed, say that you cannot and hand back the unread list."
+
 	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled.\n" +
 		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
@@ -475,6 +508,14 @@ const (
 	// four collection methods.
 	denyStageAll = "Classify the dirty tree first: `magus describe file $(git diff --name-only)`. Then stage only the reviewed paths with `git add -- <paths>`, and confirm the selection with `git diff --cached --stat` before committing.\n" +
 		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. There is deliberately no `magus vcs` wrapper; load the magus-vcs-hygiene skill if not already loaded."
+
+	// An ADVISORY, not a deny: two genuinely independent targets in one line is real work
+	// (`magus run build api ; magus run test docs`), and only the dependency graph knows
+	// which case this is. What the guard can see is that the chain is worth questioning.
+	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `magus run lint .` alone runs all three in order.\n" +
+		"Check what a target already pulls in before chaining: `magus run <target> <project> --dry-run` prints the plan without executing it.\n" +
+		"`magus affected ci` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice - and the second run can trip MGS4007 on an output the first one left behind.\n" +
+		"Each extra invocation reloads the workspace and re-evaluates every magusfile. And `magus run` takes one TARGET and many PROJECTS (`magus run build api web`), so two targets never belong in one call either."
 
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
@@ -573,6 +614,11 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	if guardNotesWriteRe.MatchString(command) {
 		return bashGuardVerdict{Deny: denyNotesAuthor}
 	}
+	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
+	// human's statement, and both have to hold however the command is spelled.
+	if guardReadAckRe.MatchString(command) {
+		return bashGuardVerdict{Deny: denyReadAck}
+	}
 	if guardSedInPlaceRe.MatchString(command) {
 		return bashGuardVerdict{Deny: denySedInPlace}
 	}
@@ -580,6 +626,11 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Deny: denyScriptedRewrite}
 	}
 	var advisory bashGuardVerdict
+	// Held rather than returned, like the git advisories below: a deny found later on the
+	// same line outranks it.
+	if guardChainedRunRe.MatchString(command) {
+		advisory = bashGuardVerdict{Context: adviseChainedRun}
+	}
 	cmds, parsed := parseGuardCommands(command)
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {

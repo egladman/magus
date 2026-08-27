@@ -49,3 +49,47 @@ func TestServerStopNoDaemonExitsNonzero(t *testing.T) {
 	require.ErrorAs(t, err, &silent)
 	assert.NotZero(t, silent.exitCode, "stopping nothing must exit non-zero")
 }
+
+func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {
+	assert.True(t, isServerStartHelp([]string{"start", "-h"}))
+	assert.True(t, isServerStartHelp([]string{"start", "--foreground", "--help"}))
+	assert.True(t, isServerStartHelp([]string{"start", "help"}))
+	assert.False(t, isServerStartHelp([]string{"start"}))
+	assert.False(t, isServerStartHelp([]string{"start", "--foreground"}))
+	assert.False(t, isServerStartHelp([]string{"help"}), "the subcommand itself is not a help flag")
+}
+
+func TestWantsForeground(t *testing.T) {
+	assert.True(t, wantsForeground([]string{"start", "--foreground"}))
+	assert.True(t, wantsForeground([]string{"start", "-foreground"}))
+	// A pre-parse scanner takes only the bare spellings; an =value form is not a bool.
+	assert.False(t, wantsForeground([]string{"start", "--foreground=true"}))
+	assert.False(t, wantsForeground([]string{"start"}))
+}
+
+func TestConsoleURLsDegradeToEmpty(t *testing.T) {
+	prev := globalCfg.Console.Enabled
+	t.Cleanup(func() { globalCfg.Console.Enabled = prev })
+
+	off := false
+	globalCfg.Console.Enabled = &off
+	assert.Equal(t, "", consoleWatchURL())
+	assert.Equal(t, "", consoleDiffURL())
+}
+
+// The message exists because "already running" answered a question nobody asked. A second
+// worktree's `server start` returns 0 having loaded nothing from that tree, and the console then
+// shows the tree the daemon was started in - which reads as success.
+func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
+	st := &proc.StatusReply{Workspaces: []proc.Workspace{
+		{Root: "/repo/worktrees/b"},
+		{Root: "/repo"},
+	}}
+
+	// Sorted, so two runs of the same daemon do not print the list two ways.
+	assert.Equal(t, ", serving /repo, /repo/worktrees/b", servingSuffix(st))
+
+	// A daemon that has loaded nothing yet says nothing rather than "serving " with an empty
+	// list, which would read as a daemon that is serving something unnameable.
+	assert.Empty(t, servingSuffix(&proc.StatusReply{}))
+}

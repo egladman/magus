@@ -1,11 +1,11 @@
 import { must } from "../lib/guards";
 // demo-scenario.ts - the ONE fabricated workspace every console surface's demo derives from.
 //
-// The console has four daemon-free showcases (logs waterfall, recent-runs tree, activity trail,
-// dashboard) that each used to invent their own disjoint fixture. A reader who opened two of them
-// side by side saw contradictions - a Linux-kernel build in the log viewer, unrelated runs in the
-// tree, a third cast of MCP calls in the activity trail. This module is the single source of truth
-// those surfaces now share: one plausible product monorepo ("acme") and one scripted three-hour
+// The console's daemon-free showcases (logs waterfall, recent-runs tree, activity trail, dashboard,
+// diff, notes) each used to invent their own disjoint fixture. A reader who opened two of them side
+// by side saw contradictions - a Linux-kernel build in the log viewer, unrelated runs in the tree, a
+// third cast of MCP calls in the activity trail, and notes about magus's own cache in a workspace
+// called acme. This module is the single source of truth those surfaces now share: one plausible product monorepo ("acme") and one scripted three-hour
 // timeline of runs, MCP calls, a background job, a sandbox denial, and VCS insight, so the surfaces
 // corroborate each other the way a real workspace would.
 //
@@ -68,6 +68,28 @@ export const WORKSPACE_ROOTS: string[] = [WORKSPACE_ROOT, "~/Repos/magus"];
 // The Go module path the workspace's packages live under, so `go test` package lines read the way
 // they do in a real repo (the grafana/grafana shape: one module, many nested packages).
 const GOMOD = "github.com/acme/acme";
+
+// The files the story turns on, named once so every surface spells them the same way.
+//
+// They were retyped as string literals in each fixture before this, and the Notes surface shows why
+// that does not hold: its notes were about magus's own cache and lockfile, in a workspace called
+// acme, because nothing connected the two. A reader who clicked from Diff to Notes met a different
+// fictional company one tab over.
+//
+// A note anchored to CLAIMS is the payoff of the whole showcase: the reader meets the change in the
+// diff, then finds the colleague who wrote down why it was made.
+export const STORY_FILES = {
+  /** The shared contract every other beat follows from. */
+  CLAIMS: "libs/authkit/claims.go",
+  /** The type that replaced the single-audience stub. */
+  AUDIENCE: "libs/authkit/audience.go",
+  /** The Go consumer whose test broke. */
+  VERIFY: "services/identity/internal/token/verify.go",
+  /** The TypeScript consumer whose typecheck broke. */
+  SESSION: "apps/dashboard/src/api/session.ts",
+  /** Renamed in the same change, which is why it reads as one file and not two. */
+  TOKENS_DOC: "docs/auth/tokens.md",
+} as const;
 
 // ---- runs ------------------------------------------------------------------
 
@@ -237,7 +259,7 @@ export function scenarioRuns(now: number): ScenarioRun[] {
       trigger: "mcp",
       state: "failed",
       ...at(92, 4200),
-      error: "2 tests failed in internal/token: TestVerifyExpiredToken, TestVerifyAudienceMismatch",
+      error: "2 tests failed in internal/token: TestVerifyAudienceMismatch, TestVerifyExpiredToken",
       execs: ["go build ./...", "go test -race -count=1 ./..."],
       stdout:
         "ok  \t" +
@@ -247,10 +269,10 @@ export function scenarioRuns(now: number): ScenarioRun[] {
         GOMOD +
         "/services/identity/internal/store\t1.021s",
       stderr:
+        "--- FAIL: TestVerifyAudienceMismatch (0.01s)\n" +
+        '    verify_test.go:143: claims.Audience = "", want "identity"\n' +
         "--- FAIL: TestVerifyExpiredToken (0.02s)\n" +
         "    verify_test.go:118: Verify(expired) error = <nil>, want token: expired\n" +
-        "--- FAIL: TestVerifyAudienceMismatch (0.01s)\n" +
-        '    verify_test.go:143: claims.Audience = "", want "acme-dashboard"\n' +
         "FAIL\t" +
         GOMOD +
         "/services/identity/internal/token\t0.412s\n" +
@@ -479,8 +501,8 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
       error: "services/identity:test failed: 2 assertions",
       preview:
         "[fail] services/identity test (ran, 4.2s)\n" +
-        "--- FAIL: TestVerifyExpiredToken (0.02s)\n" +
-        "    verify_test.go:118: Verify(expired) error = <nil>, want token: expired",
+        "--- FAIL: TestVerifyAudienceMismatch (0.01s)\n" +
+        '    verify_test.go:143: claims.Audience = "", want "identity"',
       workspace: WORKSPACE,
     },
     {

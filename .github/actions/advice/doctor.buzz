@@ -18,18 +18,18 @@ final section = "doctor";
 // summarize renders the failing and advisory checks. Pure over plain lists so the
 // wording is testable: the magus namespace's types annotate but do not construct.
 export fun summarize(fails: [str], advisories: [str]) > str {
-    var text = "";
+    final parts = mut [<str>];
     if (fails.len() != 0) {
-        text = text + "**`magus doctor` reports " + "{fails.len()}" + " failing check(s):**\n\n";
-        foreach (f in fails) { text = text + "- " + f + "\n"; }
+        parts.append("**`magus doctor` reports " + "{fails.len()}" + " failing check(s):**\n\n");
+        foreach (f in fails) { parts.append("- " + f + "\n"); }
     }
     if (advisories.len() != 0) {
-        if (text != "") { text = text + "\n"; }
-        text = text + "**Advice** (worth knowing, never a gate):\n\n";
-        foreach (a in advisories) { text = text + "- " + a + "\n"; }
+        if (parts.len() != 0) { parts.append("\n"); }
+        parts.append("**Advice** (worth knowing, never a gate):\n\n");
+        foreach (a in advisories) { parts.append("- " + a + "\n"); }
     }
-    if (text == "") { return ""; }
-    return text + "\nRun `magus doctor` locally for the detail behind each one.\n";
+    if (parts.len() == 0) { return ""; }
+    return parts.join("") + "\nRun `magus doctor` locally for the detail behind each one.\n";
 }
 
 fun main() > void !> any {

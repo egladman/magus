@@ -56,13 +56,14 @@ var remediationSections = map[string]bool{
 // domain that routes a code nowhere; that branch is unreachable through the real one,
 // which is the point of guarding it.
 func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func(types.DiagnosticCode) string) types.DoctorCheck {
-	const name = "diagnostic docs"
+	const name = "diagnostic-docs"
 
 	if _, err := os.Stat(codeDocsRoot(root)); err != nil {
 		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorOK,
-			Message: "no docs" + codeDocsMarker + " tree; skipped (the MGS pages ship with magus's own sources)",
+			Name:     name,
+			Status:   types.DoctorOK,
+			Evidence: types.EvidenceUnknown,
+			Message:  "no docs" + codeDocsMarker + " tree; skipped (the MGS pages ship with magus's own sources)",
 		}
 	}
 

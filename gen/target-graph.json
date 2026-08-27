@@ -335,7 +335,7 @@
         {
           "name": "skills-generate",
           "declared": "skills_generate",
-          "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.",
+          "doc": "Reinstalls the agent skills from their embedded sources in internal/agent/skills.",
           "reads_secrets": false,
           "writes_files": [
             {
@@ -1204,7 +1204,7 @@
               "glob": "tapes/**/*.md"
             },
             {
-              "glob": "cmd/magus/agents-section.md"
+              "glob": "internal/agent/agents-section.md"
             }
           ]
         },
@@ -1354,10 +1354,21 @@
           ]
         },
         {
-          "name": "build",
+          "name": "diffdemo-generate",
+          "declared": "diffdemo_generate",
           "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "src/console/diff/gen/*.ts"
+            }
+          ]
+        },
+        {
+          "name": "build",
           "dependencies": [
-            "preflight"
+            "preflight",
+            "diffdemo-generate"
           ],
           "charms": [
             "rw"
@@ -1371,6 +1382,9 @@
           "chain": [
             {
               "target": "preflight"
+            },
+            {
+              "target": "diffdemo-generate"
             },
             {
               "project": ".",
@@ -1611,7 +1625,7 @@
             },
             {
               "project": ".",
-              "glob": "cmd/magus/skills/**/*.md"
+              "glob": "internal/agent/skills/**/*.md"
             },
             {
               "project": ".",
@@ -1660,6 +1674,9 @@
             },
             {
               "glob": "concepts/knowledge.md"
+            },
+            {
+              "glob": "concepts/review.md"
             }
           ]
         },
@@ -1814,7 +1831,18 @@
               "target": "diagrams-generate"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "concepts/spells.md"
+            },
+            {
+              "glob": "concepts/knowledge.md"
+            },
+            {
+              "glob": "concepts/review.md"
+            }
+          ]
         },
         {
           "name": "format",

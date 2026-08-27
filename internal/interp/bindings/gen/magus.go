@@ -896,6 +896,7 @@ func buzzValueMagusDiffFile(v types.DiffFile) vm.Value {
 		itemsTouches[indexTouches] = buzzValueMagusDiffTouch(v.Touches[indexTouches])
 	}
 	out.MapSet("touches", vm.ListValue(itemsTouches))
+	out.MapSet("readState", vm.StrValue(v.ReadState))
 	optChurn := vm.Null
 	if v.Churn != nil {
 		optChurn = buzzValueMagusDiffChurn((*v.Churn))
@@ -907,6 +908,23 @@ func buzzValueMagusDiffFile(v types.DiffFile) vm.Value {
 		optReach = vm.IntValue(int64((*v.Reach)))
 	}
 	out.MapSet("reach", optReach)
+	return out
+}
+
+func buzzValueMagusVCSCheckpoint(v types.VCSCheckpoint) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("revision", vm.StrValue(v.Revision))
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	out.MapSet("dirty", vm.BoolValue(v.Dirty))
+	out.MapSet("patchDigest", vm.StrValue(v.PatchDigest))
+	out.MapSet("vcs", vm.StrValue(v.VCS))
+	return out
+}
+
+func buzzValueMagusDiffReviewed(v types.DiffReviewed) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("at", buzzValueMagusVCSCheckpoint(v.At))
+	out.MapSet("files", vm.IntValue(int64(v.Files)))
 	return out
 }
 
@@ -933,6 +951,7 @@ func buzzValueMagusDiff(v types.Diff) vm.Value {
 		itemsNotes[indexNotes] = vm.StrValue(v.Notes[indexNotes])
 	}
 	out.MapSet("notes", vm.ListValue(itemsNotes))
+	out.MapSet("reviewed", buzzValueMagusDiffReviewed(v.Reviewed))
 	return out
 }
 
@@ -946,6 +965,7 @@ func buzzValueMagusDoctorCheck(v types.DoctorCheck) vm.Value {
 		itemsDetails[indexDetails] = vm.StrValue(v.Details[indexDetails])
 	}
 	out.MapSet("details", vm.ListValue(itemsDetails))
+	out.MapSet("evidence", vm.StrValue(string(v.Evidence)))
 	itemsFix := make([]vm.Value, len(v.Fix))
 	for indexFix := range v.Fix {
 		itemsFix[indexFix] = vm.StrValue(v.Fix[indexFix])
@@ -959,6 +979,7 @@ func buzzValueMagusDoctorSummary(v types.DoctorSummary) vm.Value {
 	out.MapSet("ok", vm.IntValue(int64(v.OK)))
 	out.MapSet("fail", vm.IntValue(int64(v.Fail)))
 	out.MapSet("advice", vm.IntValue(int64(v.Advice)))
+	out.MapSet("unknown", vm.IntValue(int64(v.Unknown)))
 	return out
 }
 

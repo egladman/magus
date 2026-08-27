@@ -139,14 +139,30 @@ const (
 	FlagDescribeTargetInputs = "inputs"
 	// describe target: --no-default-charms
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
-	// diff: --cost
-	FlagDiffCost = "cost"
+	// diff: --ack
+	FlagDiffAck = "ack"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
-	// diff: --tui
-	FlagDiffTui = "tui"
+	// diff: --impact
+	FlagDiffImpact = "impact"
+	// diff: --no-tui
+	FlagDiffNoTui = "no-tui"
+	// diff: --patch
+	FlagDiffPatch = "patch"
+	// diff: --prompt
+	FlagDiffPrompt = "prompt"
+	// diff: --reason
+	FlagDiffReason = "reason"
+	// diff: --rev
+	FlagDiffRev = "rev"
 	// diff: --watch
 	FlagDiffWatch = "watch"
+	// doctor: --fix
+	FlagDoctorFix = "fix"
+	// doctor: --list
+	FlagDoctorList = "list"
+	// doctor: --probe
+	FlagDoctorProbe = "probe"
 	// explain: --global
 	FlagExplainGlobal = "global"
 	// explain: --refresh
@@ -772,6 +788,22 @@ func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	return &f
 }
 
+// DoctorFlags are the flags declared for `magus doctor`.
+type DoctorFlags struct {
+	Probe bool // --probe
+	Fix   bool // --fix
+	List  bool // --list
+}
+
+// BindDoctor registers `magus doctor`'s flags on fs and returns the destination.
+func BindDoctor(fs *flag.FlagSet) *DoctorFlags {
+	var f DoctorFlags
+	fs.BoolVar(&f.Probe, FlagDoctorProbe, false, "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
+	fs.BoolVar(&f.Fix, FlagDoctorFix, false, "Run the remedy each finding names, where one exists (see --dry-run to list them first)")
+	fs.BoolVar(&f.List, FlagDoctorList, false, "Print every check magus would run - name, subject, and MGS code - without running any of them")
+	return &f
+}
+
 // ConfigSetFlags are the flags declared for `magus config set`.
 type ConfigSetFlags struct {
 	Global bool // --global
@@ -983,19 +1015,29 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 
 // DiffFlags are the flags declared for `magus diff`.
 type DiffFlags struct {
-	Generated bool // --generated
-	Cost      bool // --cost
-	Tui       bool // --tui
-	Watch     bool // --watch
+	Generated bool   // --generated
+	Impact    bool   // --impact
+	NoTui     bool   // --no-tui
+	Watch     bool   // --watch
+	Ack       bool   // --ack
+	Reason    string // --reason
+	Prompt    bool   // --prompt
+	Rev       string // --rev
+	Patch     string // --patch
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
 func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	var f DiffFlags
 	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
-	fs.BoolVar(&f.Cost, FlagDiffCost, false, "Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
-	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
+	fs.BoolVar(&f.Impact, FlagDiffImpact, false, "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
+	fs.BoolVar(&f.NoTui, FlagDiffNoTui, false, "Print the report instead of opening the interactive viewer")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
+	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
+	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
+	fs.BoolVar(&f.Prompt, FlagDiffPrompt, false, "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction")
+	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
+	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
 	return &f
 }
 

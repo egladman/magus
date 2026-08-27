@@ -10,7 +10,6 @@
 // already made, and re-litigating it on every unrelated push is how a bot gets muted.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
-import "os";
 import "proc";
 import "advice";
 import "magus";
@@ -45,9 +44,9 @@ fun existed(name: str, base: str) > bool !> any {
 }
 
 fun body(targets: [str]) > str {
-    var text = "**New targets that declare no outputs:**\n\n";
-    foreach (t in targets) { text = text + "- `" + t + "`\n"; }
-    return text
+    final parts = mut ["**New targets that declare no outputs:**\n\n"];
+    foreach (t in targets) { parts.append("- `" + t + "`\n"); }
+    return parts.join("")
         + "\nA target with no declared outputs never replays from cache - magus has "
         + "nothing to snapshot, so it re-runs every time, and `magus clean` cannot "
         + "remove what it wrote. If it produces a file, declare it:\n\n"
@@ -77,8 +76,8 @@ fun main() > void !> any {
     }
 
     advice\fetchBase(base, refspec: false);
-    final diff = proc\exec("git", args: ["diff", "-U0", "origin/" + base + "..." + head, "--", "*.buzz"],
-        dir: ".", opts: {"allow_failure": true}).stdout;
+    final diff = proc\exec("git", args: ["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
     final names = added(diff);
     if (names.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");

@@ -26,6 +26,19 @@ import (
 // repo happens to contain).
 var fixtureFiles = map[string]string{
 	"magus.yaml": "concurrency: 4\n",
+	// The changeset the review example describes, as a PATCH rather than a repository.
+	// `magus diff <patch-file>` is an input magus already documents, so the fixture needs no
+	// git init, no commit and no working-tree edit to have something to review. The patch's
+	// content never shows in the docs - the prompt names paths and annotations, not lines.
+	"change.patch": `diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -1,3 +1,3 @@
+ package main
+
+-func main() {}
++func main() { println("hello") }
+`,
 	"magusfile.buzz": `import "magus";
 import "magus/spell/go";
 magus.project({ "spells": [go] });
@@ -41,31 +54,57 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 `,
 }
 
-// example is one worked example: its marker slug and the magus argv to run. The
-// displayed command line is derived from the argv, so the two never disagree.
+// example is one worked example: the page it belongs on, its marker slug, and the magus argv to
+// run. The displayed command line is derived from the argv, so the two never disagree.
 type example struct {
+	docs string // the Markdown file, relative to -dir, carrying this example's markers
 	slug string
 	argv []string
 }
 
 func (e example) command() string { return "magus " + strings.Join(e.argv, " ") }
 
+const (
+	knowledgeDoc = "concepts/knowledge.md"
+	reviewDoc    = "concepts/review.md"
+)
+
 var examples = []example{
-	{slug: "explain-tool-go", argv: []string{"explain", "tool:go"}},
-	{slug: "explain-target-test", argv: []string{"explain", "target:.:test"}},
-	{slug: "path-test-to-tool", argv: []string{"path", "target:.:test", "tool:go"}},
+	{docs: knowledgeDoc, slug: "explain-tool-go", argv: []string{"explain", "tool:go"}},
+	{docs: knowledgeDoc, slug: "explain-target-test", argv: []string{"explain", "target:.:test"}},
+	{docs: knowledgeDoc, slug: "path-test-to-tool", argv: []string{"path", "target:.:test", "tool:go"}},
+	// The review prompt is captured rather than transcribed for the reason every example here is:
+	// it is prose magus assembles, so a hand-typed copy in the docs would describe a version
+	// nobody gets. It reads the fixture's patch file, so it needs no repository to review.
+	//
+	// --patch, not a positional: a positional narrows the changeset to a PATH, so the old spelling
+	// reviewed a clean working tree filtered to a file named change.patch and captured
+	// "clean: every change is committed" into the docs.
+	{docs: reviewDoc, slug: "diff-prompt", argv: []string{"diff", "--prompt", "--patch", "change.patch"}},
 }
 
 func main() {
-	docsPath := flag.String("docs", "docs/knowledge.md", "the Markdown file whose <!-- example:<slug> --> blocks to fill")
+	docsDir := flag.String("dir", "docs", "the directory holding the Markdown files whose <!-- example:<slug> --> blocks to fill")
 	flag.Parse()
 
 	rendered, err := renderExamples()
 	if err != nil {
 		fatalf("%v", err)
 	}
-	if err := inject(*docsPath, rendered); err != nil {
-		fatalf("%v", err)
+	// Grouped by page, because inject treats a rendered example with no marker as a hard error -
+	// which is what keeps the docs and the example set in lockstep, and would otherwise fire for
+	// every example that belongs on a different page.
+	byDoc := map[string]map[string]string{}
+	for _, ex := range examples {
+		if byDoc[ex.docs] == nil {
+			byDoc[ex.docs] = map[string]string{}
+		}
+		byDoc[ex.docs][ex.slug] = rendered[ex.slug]
+	}
+	for doc, snippets := range byDoc {
+		if err := inject(filepath.Join(*docsDir, doc), snippets); err != nil {
+			fatalf("%v", err)
+		}
 	}
 }
 
@@ -86,7 +125,16 @@ func renderExamples() (map[string]string, error) {
 	// Build HEAD's magus so the captured output reflects the current renderer, not a
 	// release on PATH - the whole point of the drift gate. The module path (not a
 	// relative ./cmd/magus) so this works whatever directory the generator runs from.
-	bin := filepath.Join(dir, "magus-bin")
+	//
+	// It builds because the output being documented is CLI stdout and cmd/magus is package
+	// main, so no sibling tool can import its rendering. Into its OWN directory, not the
+	// fixture: a binary sitting in the fixture is a file the fixture's own commands can see.
+	binDir, err := os.MkdirTemp("", "magus-examples-bin-")
+	if err != nil {
+		return nil, fmt.Errorf("temp bin dir: %w", err)
+	}
+	defer os.RemoveAll(binDir)
+	bin := filepath.Join(binDir, "magus-bin")
 	build := exec.Command("go", "build", "-o", bin, "github.com/egladman/magus/cmd/magus")
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -157,7 +205,11 @@ func inject(path string, rendered map[string]string) error {
 			return fmt.Errorf("%s: marker %q has no closing %q", path, start, end)
 		}
 		ei := after + rel
-		content = content[:after] + "\n" + snippet + content[ei:]
+		// A BLANK line on BOTH sides of the fence, not just a newline: dprint's markdown formatter
+		// wants one between an HTML comment and an adjacent fenced block, and without them the
+		// generator and the formatter each undo the other on every run - the oscillation that
+		// makes a page a hybrid nobody can gate.
+		content = content[:after] + "\n\n" + snippet + "\n" + content[ei:]
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)

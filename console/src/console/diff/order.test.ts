@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { order, visibleFiles, stats, riskChips } from "./order";
+import { order, visibleFiles, settled, stats, riskChips } from "./order";
 import type { DiffFile } from "./parse";
 import type { DiffAnnotation, DiffSession } from "./session";
 
@@ -212,4 +212,91 @@ test("unmeasured coverage renders no coverage chip", () => {
     ann("x.go", { coverage: { ratio: 0, covered_stmts: 0, total_stmts: 0 } }),
   );
   assert.equal(chips.filter((c) => c.text.includes("covered")).length, 0);
+});
+
+// Read state is a FINDING, not a progress bar. "stale" is the one nothing else can tell the
+// reader: those files look finished, so they are the ones a scroll will skip.
+test("a file that changed after it was read leads its chips", () => {
+  const chips = riskChips(ann("x.go", { read_state: "stale", surface: "public" }));
+  assert.equal(chips[0]?.text, "changed since read");
+  assert.equal(chips[0]?.tone, "danger");
+  assert.match(chips[0]?.title ?? "", /not the version you are about to land/);
+});
+
+test("a file covered by a receipt says so quietly", () => {
+  const chips = riskChips(ann("x.go", { read_state: "read" }));
+  assert.equal(chips[0]?.text, "read");
+  assert.equal(chips[0]?.tone, "ok");
+});
+
+// In a viewer the reader is working THROUGH a list, so an outstanding row says so - the same
+// job GitHub's per-file Viewed checkbox does. The terminal report names only the finding,
+// because there nobody is navigating.
+test("an unread file says so, quietly", () => {
+  const chips = riskChips(ann("x.go", { read_state: "unread" }));
+  assert.equal(chips[0]?.text, "unread");
+  assert.equal(chips[0]?.tone, "neutral");
+  assert.match(chips[0]?.title ?? "", /--ack/);
+});
+
+// An ABSENT state is a different claim: nobody checked. Rendering it as unread would turn
+// "unmeasured" into an accusation, which is the collapse the state constants exist to refuse.
+test("an unmeasured file shows no read chip at all", () => {
+  assert.deepEqual(
+    riskChips(ann("x.go", {})).map((c) => c.text),
+    [],
+  );
+});
+
+// settled is spelled the same way in the terminal viewer (diff.File.Settled), against the same
+// read_state the daemon computes once. TestSettledFilesFoldByDefault is its counterpart there.
+test("settled is read-and-unmoved, never merely read", () => {
+  assert.equal(settled(ann("a.ts", { read_state: "read" })), true);
+  // The control that keeps the fold honest: stale is read, then EDITED, which is the file that
+  // most needs a second look rather than the least.
+  assert.equal(settled(ann("a.ts", { read_state: "stale" })), false);
+  assert.equal(settled(ann("a.ts", { read_state: "unread" })), false);
+  assert.equal(settled(undefined), false);
+});
+
+test("a generated file stays with the generated group", () => {
+  // Both apply to a read generated file; claiming it here would take it out of the group whose
+  // control the reader would actually reach for.
+  //
+  // Asserted against the ANNOTATION's role. This used to spread `generated: true` onto a DiffFile
+  // and cast it, which no wire payload ever carries - so the fixture passed while the guard it
+  // covers could not fire on a real changeset.
+  assert.equal(settled(ann("gen.ts", { read_state: "read", role: "output" })), false);
+});
+
+test("already-reviewed files fold by default, and show on request", () => {
+  const cs = order(
+    [file("read.ts"), file("moved.ts")],
+    session([ann("read.ts", { read_state: "read" }), ann("moved.ts", { read_state: "stale" })]),
+  );
+
+  assert.deepEqual(
+    visibleFiles(cs, false, false).map((f) => f.path),
+    ["moved.ts"],
+  );
+  assert.deepEqual(
+    visibleFiles(cs, false, true).map((f) => f.path),
+    ["read.ts", "moved.ts"],
+  );
+});
+
+test("stats counts what the fold hides, so the toolbar can say it", () => {
+  const cs = order(
+    [file("read.ts"), file("moved.ts"), file("fresh.ts")],
+    session([
+      ann("read.ts", { read_state: "read" }),
+      ann("moved.ts", { read_state: "stale" }),
+      ann("fresh.ts", { read_state: "unread" }),
+    ]),
+  );
+
+  const s = stats(cs);
+  assert.equal(s.settled, 1);
+  // The denominator is unchanged: folding is a view, not a smaller changeset.
+  assert.equal(s.files, 3);
 });

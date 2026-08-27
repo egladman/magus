@@ -171,6 +171,15 @@ type Delegation struct {
 	// worker announces a release by shrinking OwnedPaths, and the digest is what the
 	// next agent needs to tell whether it inherited the file the releaser left.
 	Releases []DelegationRelease `json:"releases,omitempty" yaml:"releases,omitempty"`
+	// Unattributed are paths this delegation owns that somebody outside it wrote, newest last,
+	// at most MaxUnattributedWrites of them and one row per path.
+	//
+	// Store-computed and output-only like Releases, and recorded by the AGENT GUARD, which is
+	// the only thing positioned to notice: it already grades every write against these declared
+	// boundaries and already tells the writer to coordinate. It threw the observation away
+	// afterwards, so the delegation on the other side - the one whose file moved - was the one
+	// party never told.
+	Unattributed []DelegationUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
 	// ReportedBase is the checkpoint token the delegation's WORKER reported it actually landed
 	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
 	// what the orchestrator handed out; this is what the worker found. Two fields rather
@@ -230,6 +239,28 @@ type DelegationRelease struct {
 	Digest string `json:"digest" yaml:"digest"`
 	// ReleasedAt is unix seconds, stamped by the store on the put that dropped the path.
 	ReleasedAt int64 `json:"released_at" yaml:"released_at"`
+}
+
+// DelegationUnattributedWrite is one path a delegation owns that somebody outside it wrote, and
+// the content that writer left behind.
+//
+// The inverse of DelegationRelease, and the half that was missing. A release is a worker saying
+// "I am done with this, here is what I left"; this is magus saying "somebody who is not you
+// changed this, here is what is there now" - so a delegation that read the file earlier can find
+// out by ASKING rather than by being told, and a digest that no longer matches what it read is the
+// whole signal.
+//
+// UNATTRIBUTED is the honest word and the reason this is not called a handback. magus knows only
+// that the writer named no live delegation; a person editing in their own checkout and an agent
+// that forgot to export its id are indistinguishable here, and the guard says so in as many words.
+// Naming a human would be a claim magus cannot support.
+type DelegationUnattributedWrite struct {
+	Path string `json:"path"   yaml:"path"`
+	// Digest is the content AFTER the write, on the same three-marker vocabulary as
+	// DelegationRelease.Digest: a hash, or DigestAbsent / DigestDir / DigestUnreadable.
+	Digest string `json:"digest" yaml:"digest"`
+	// At is unix seconds, stamped by the store.
+	At int64 `json:"at" yaml:"at"`
 }
 
 // DelegationOverlap is two delegations whose declared OwnedPaths intersect. A FACT the

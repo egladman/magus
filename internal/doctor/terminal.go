@@ -30,7 +30,7 @@ const minInteractiveHeight = 15
 // them. What a reader needs is to know WHICH way it degraded before they wonder
 // why the colors or the mouse are missing.
 func (r *runner) checkTerminal() types.DoctorCheck {
-	const name = "terminal capabilities"
+	const name = "terminal-capabilities"
 
 	// The FORMAT decides this before the terminal gets a say. pretty and plain
 	// install the handler that owns the pinned band; text and json install a

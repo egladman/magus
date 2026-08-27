@@ -339,3 +339,21 @@ func TestTabTogglesWhichViewIsLarge(t *testing.T) {
 	dispatchFailureKeys(feed(click, key(tty.KeyEscape)), b, fakeHints{5: cache.HintKeyFocus}, &sel)
 	assert.Equal(t, cache.PaneFocus(1), b.focus, "and so did clicking [tab] focus")
 }
+
+func TestClampIndexStopsAtTheEnds(t *testing.T) {
+	assert.Equal(t, 0, clampIndex(5, 0))
+	assert.Equal(t, 0, clampIndex(-3, 4))
+	assert.Equal(t, 3, clampIndex(9, 4))
+	assert.Equal(t, 2, clampIndex(2, 4))
+}
+
+func TestIndexOfFailureMatchesOnIdentity(t *testing.T) {
+	items := []cache.Failure{
+		{Project: "web", Target: "build", OutputRef: "out1"},
+		{Project: "api", Target: "test", OutputRef: "out2"},
+	}
+
+	assert.Equal(t, 1, indexOfFailure(items, cache.Failure{Project: "api", Target: "test", OutputRef: "different"}))
+	assert.Equal(t, -1, indexOfFailure(items, cache.Failure{Project: "api", Target: "build"}))
+	assert.Equal(t, -1, indexOfFailure(nil, cache.Failure{Project: "api", Target: "test"}))
+}

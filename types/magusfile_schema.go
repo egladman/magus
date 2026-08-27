@@ -36,6 +36,7 @@ var ProjectOptions = []ProjectOption{
 	{Key: "targets"},
 	{Key: "no_language", Since: "0.4.0"},
 	{Key: "tools", Since: "0.4.0"},
+	{Key: "review_required", Since: "0.5.0"},
 }
 
 // ProjectOptionKeys returns just the key names, for the unknown-key rejection both the

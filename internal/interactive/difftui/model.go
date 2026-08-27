@@ -12,10 +12,12 @@
 package difftui
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/types"
 )
 
@@ -23,21 +25,41 @@ import (
 // set is keyed by - the same one internal/diff computes, passed in rather than recomputed
 // so the CLI and the console mark the same hunk.
 type Hunk struct {
+	// NewStart is the hunk's first line on the new side, and Declaration is the enclosing
+	// declaration git named in its header. Together they are what the heading row says, in place
+	// of the raw @@ coordinates: where the reader is, and what they are inside of.
+	NewStart    int
+	Declaration string
 	// Index is the hunk's position in the PATCH, which is the coordinate a comment and a
-	// suggestion are anchored by (see diff.Hunk.Index). Carried rather than taken from the
+	// suggestion are anchored by (see changeset.Hunk.Index). Carried rather than taken from the
 	// position in Hunks, so a caller that ever hands over a subset cannot silently renumber
 	// every anchor in the file.
 	Index  int
 	Header string
 	Lines  []string
 	Digest string
+	// Emph is, per line of Lines, which part of it changed - as byte offsets into the RAW
+	// line, marker included, because that is what the renderer slices. Empty or short is fine
+	// and means no emphasis, which is what a caller that does not compute it gets.
+	//
+	// Passed in rather than derived here, like Digest above and for the same reason: the
+	// parser works it out once and both surfaces read the one answer.
+	Emph []changeset.Span
 }
 
 // File is one changed file. Facts are the annotation lines ALREADY RENDERED by the caller,
 // because `magus diff` owns that vocabulary and two renderings of "12 files reference its
 // widest changed symbol" would drift.
 type File struct {
-	Path      string
+	Path string
+	// Settled is a file a receipt covers at exactly its current content: read, and unmoved since.
+	//
+	// Folded by default for the same reason Generated is - it is not what the reader is here for -
+	// but for a different reason, so it is a separate flag and a separate key. A generated file is
+	// a machine's restatement of an edit made elsewhere; a settled file is one this reader already
+	// weighed. Conflating them would fold a colleague's unreviewed generated file and a reader's
+	// own finished work under one word.
+	Settled   bool
 	Generated bool
 	Facts     []string
 	Hunks     []Hunk
@@ -52,6 +74,11 @@ type Input struct {
 	Viewed      []string
 	Comments    []types.DiffComment
 	Suggestions []types.DiffSuggestion
+	// Threads are the remarks already on the host's review, with Hunk resolved by
+	// changeset.PlaceThreads. A thread whose line this changeset does not contain (Hunk < 0) renders
+	// under the file heading rather than being dropped: a colleague said it, and a viewer that
+	// silently withheld it would be telling the reader nobody had.
+	Threads []types.ReviewThread
 	// Unfolded starts with generated files expanded, which is what --generated asks for.
 	Unfolded bool
 	// Link decorates a path for display (an OSC 8 hyperlink). Nil renders it plain.
@@ -90,7 +117,7 @@ type Row struct {
 	// Emph is which PART of Text changed, in BYTES of Text, on a RowLine that could be paired
 	// with its counterpart. The zero span means there is nothing to draw harder than the rest -
 	// the line has no partner, or the whole of it changed and the row color already says so.
-	Emph diff.Span
+	Emph changeset.Span
 }
 
 // Model is the navigation, fold and progress state machine.
@@ -100,9 +127,15 @@ type Model struct {
 	unranked bool
 
 	unfolded bool
-	viewed   map[string]bool
-	comments map[hunkRef][]types.DiffComment
-	suggests map[hunkRef][]types.DiffSuggestion
+	// unsettled shows the already-reviewed files that are folded away by default.
+	unsettled bool
+	viewed    map[string]bool
+	comments  map[hunkRef][]types.DiffComment
+	suggests  map[hunkRef][]types.DiffSuggestion
+	// threads is the host's remarks by hunk; unplaced holds, per path, the ones whose line this
+	// changeset does not contain.
+	threads  map[hunkRef][]types.ReviewThread
+	unplaced map[string][]types.ReviewThread
 
 	// file and hunk are where the HUMAN is. hunk is -1 on a file heading.
 	file, hunk int
@@ -132,6 +165,8 @@ func New(in Input) *Model {
 		viewed:   make(map[string]bool, len(in.Viewed)),
 		comments: map[hunkRef][]types.DiffComment{},
 		suggests: map[hunkRef][]types.DiffSuggestion{},
+		threads:  map[hunkRef][]types.ReviewThread{},
+		unplaced: map[string][]types.ReviewThread{},
 		hunk:     -1,
 		height:   1,
 	}
@@ -153,6 +188,14 @@ func New(in Input) *Model {
 		}
 		k := hunkRef{path: s.Path, hunk: s.Hunk}
 		m.suggests[k] = append(m.suggests[k], s)
+	}
+	for _, t := range in.Threads {
+		if t.Hunk < 0 {
+			m.unplaced[t.Path] = append(m.unplaced[t.Path], t)
+			continue
+		}
+		k := hunkRef{path: t.Path, hunk: t.Hunk}
+		m.threads[k] = append(m.threads[k], t)
 	}
 	m.rebuild()
 	return m
@@ -181,6 +224,9 @@ func (m *Model) Unranked() bool { return m.unranked }
 
 // Unfolded reports whether generated files are showing their hunks.
 func (m *Model) Unfolded() bool { return m.unfolded }
+
+// Unsettled reports whether already-reviewed files are being shown.
+func (m *Model) Unsettled() bool { return m.unsettled }
 
 // Overview reports whether the file-list overview is open.
 func (m *Model) Overview() bool { return m.overview }
@@ -300,6 +346,23 @@ func (m *Model) ToggleViewed() (change ViewedChange, ok bool) {
 // Viewed reports whether a digest is marked read.
 func (m *Model) Viewed(digest string) bool { return m.viewed[digest] }
 
+// ToggleSettled folds or unfolds every already-reviewed file at once.
+//
+// This is what makes a second pass cost only the second pass. A reviewer who asked for changes
+// comes back to a changeset where most files are exactly what they already read, and nothing
+// distinguishes those from the ones that moved - so they re-read everything, find the same things,
+// and learn that re-reviewing is not worth doing carefully.
+//
+// Folded by DEFAULT, and the count is always stated, because a hidden file nobody was told about
+// is the one failure this surface cannot have.
+func (m *Model) ToggleSettled() {
+	m.unsettled = !m.unsettled
+	if len(m.files) > 0 && !m.expanded(m.file) {
+		m.hunk = -1
+	}
+	m.rebuild()
+}
+
 // ToggleGenerated folds or unfolds every generated file at once, and recomputes the rows.
 // A cursor sitting inside a file that just folded retreats to its heading rather than
 // pointing at a row that no longer exists.
@@ -370,12 +433,42 @@ func (m *Model) OverviewRows() []OverviewRow {
 	return out
 }
 
+// hunkHeading is what a hunk's row says, in place of the raw @@ line.
+//
+// The @@ coordinates are WIRE SYNTAX. "-743,6 +762,14" is four numbers a reader has to decode to
+// learn one thing they wanted (where am I) and three they did not. What is useful in that line is
+// the position and the declaration git named, so those are what it says.
+//
+// A hunk git could name no declaration for keeps the position alone rather than inventing one.
+func hunkHeading(h *Hunk) string {
+	at := fmt.Sprintf("line %d", h.NewStart)
+	if h.Declaration == "" {
+		return at
+	}
+	return at + "  " + h.Declaration
+}
+
+// foldReason says WHY a file is folded, because the two reasons send the reader to different
+// places: a generated file's source edit is elsewhere, and a settled file has already been read.
+//
+// Generated wins where both apply. A generated file is not worth reading whether or not this
+// reader got to it, so its reason is the more useful of the two.
+func foldReason(f *File) string {
+	if f.Generated {
+		return "a target rewrites this, so the source edit is what to read"
+	}
+	return "you read this already and it has not changed since; press n to show it"
+}
+
 // expanded reports whether file i shows its hunks.
 func (m *Model) expanded(i int) bool {
 	if i < 0 || i >= len(m.files) {
 		return false
 	}
-	return !m.files[i].Generated || m.unfolded
+	if m.files[i].Generated && !m.unfolded {
+		return false
+	}
+	return !m.files[i].Settled || m.unsettled
 }
 
 // readCount is how many of a file's hunks are marked read.
@@ -399,6 +492,10 @@ func (m *Model) setCursor(file, hunk int) {
 // visible goes through here, so there is one definition of the picture.
 func (m *Model) rebuild() {
 	m.rows = m.rows[:0]
+	// The paths this pass actually draws a body for. A folded file is NOT one of them: its hunks
+	// are stood in for by a single row, so a remark anchored inside it has nowhere to sit here
+	// either.
+	shown := make(map[string]bool, len(m.files))
 	for i := range m.files {
 		f := &m.files[i]
 		if i > 0 {
@@ -408,12 +505,17 @@ func (m *Model) rebuild() {
 		if !m.expanded(i) {
 			n := len(f.Hunks)
 			m.rows = append(m.rows, Row{Kind: RowFold, File: i, Hunk: -1,
-				Text: fmt.Sprintf("  %d %s folded - a target rewrites this, so the source edit is what to read",
-					n, plural(n, "hunk", "hunks"))})
+				Text: fmt.Sprintf("  %d %s folded - %s", n, plural(n, "hunk", "hunks"), foldReason(f))})
 			continue
 		}
+		shown[f.Path] = true
 		for _, fact := range f.Facts {
 			m.rows = append(m.rows, Row{Kind: RowFact, File: i, Hunk: -1, Text: "  " + fact})
+		}
+		// Threads whose line this changeset no longer contains, under the heading rather than
+		// dropped. The line moved after a colleague wrote; what they said still stands.
+		for _, t := range m.unplaced[f.Path] {
+			m.rows = append(m.rows, threadRows(t, i, -1)...)
 		}
 		for hi := range f.Hunks {
 			h := &f.Hunks[hi]
@@ -421,16 +523,67 @@ func (m *Model) rebuild() {
 			if m.viewed[h.Digest] {
 				mark = "[x]"
 			}
-			m.rows = append(m.rows, Row{Kind: RowHunk, File: i, Hunk: hi, Text: mark + " " + h.Header})
-			emph := lineEmphasis(h.Lines)
+			m.rows = append(m.rows, Row{Kind: RowHunk, File: i, Hunk: hi, Text: mark + " " + hunkHeading(h)})
 			for li, l := range h.Lines {
-				m.rows = append(m.rows, Row{Kind: RowLine, File: i, Hunk: hi, Text: l, Emph: emph[li]})
+				var emph changeset.Span
+				if li < len(h.Emph) {
+					emph = h.Emph[li]
+				}
+				m.rows = append(m.rows, Row{Kind: RowLine, File: i, Hunk: hi, Text: l, Emph: emph})
 			}
 			m.rows = append(m.rows, m.talkRows(i, hi, h)...)
 		}
 	}
+	m.rows = append(m.rows, m.elsewhereRows(shown)...)
 	m.locate()
 	m.follow()
+}
+
+// elsewhereRows are the remarks this pass has nowhere to put: on a file the changeset does not
+// contain, or on one folded away.
+//
+// Listed rather than dropped, which is the whole rule the placement follows - "your colleague
+// said nothing" is the one thing a review surface must never say by accident. A pull request
+// covers commits a working diff does not, so a thread landing outside it is ordinary rather than
+// exceptional, and until this existed the terminal viewer discarded every one of them in silence
+// while the console listed them.
+//
+// Sorted, because they are gathered from maps and an unsorted read would reorder the tail of the
+// changeset between frames.
+func (m *Model) elsewhereRows(shown map[string]bool) []Row {
+	var out []types.ReviewThread
+	for path, ts := range m.unplaced {
+		if !shown[path] {
+			out = append(out, ts...)
+		}
+	}
+	for k, ts := range m.threads {
+		if !shown[k.path] {
+			out = append(out, ts...)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	slices.SortFunc(out, func(a, b types.ReviewThread) int {
+		if c := strings.Compare(a.Path, b.Path); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.Line, b.Line); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	rows := []Row{
+		{Kind: RowBlank, File: -1, Hunk: -1},
+		{Kind: RowFile, File: -1, Hunk: -1, Text: fmt.Sprintf("said on the review, elsewhere (%d)", len(out))},
+	}
+	for _, t := range out {
+		rows = append(rows, Row{Kind: RowFact, File: -1, Hunk: -1,
+			Text: fmt.Sprintf("  %s:%d", t.Path, t.Line)})
+		rows = append(rows, threadRows(t, -1, -1)...)
+	}
+	return rows
 }
 
 // talkRows are the comments and pending suggestions anchored to one hunk.
@@ -442,6 +595,11 @@ func (m *Model) rebuild() {
 func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 	k := hunkRef{path: m.files[file].Path, hunk: h.Index}
 	var out []Row
+	// The host's threads first. What a colleague already said is context for the remark you are
+	// about to write, not a footnote to it - the same order the console renders.
+	for _, t := range m.threads[k] {
+		out = append(out, threadRows(t, file, row)...)
+	}
 	for _, c := range m.comments[k] {
 		who := string(c.Author)
 		if c.AgentName != "" {
@@ -465,54 +623,26 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 	return out
 }
 
-// lineEmphasis reports, per line of one hunk, which part of it changed.
+// threadRows renders one remark from the host's review, wrapped the way a comment is.
 //
-// A line diff only says the line is different, which on a rename or a changed argument leaves
-// the reader to find the difference by eye across two nearly identical rows. This is what lets
-// the renderer draw the changed part harder than the rest.
-//
-// The pairing is the state machine console/src/console/diff/main.ts runs before it paints: each
-// run of removed lines against the run of added lines that follows it. The two surfaces have to
-// emphasize the same bytes, or one changeset reads as two. diff.PairForEmphasis is what refuses
-// a run whose halves are different lengths, so a rewrite is emphasized and an insertion is left
-// alone rather than paired with whatever line happens to sit above it.
-//
-// The spans returned index the RAW line, marker byte included, because that is what the renderer
-// slices. diff.Emphasize is fed the text AFTER the marker, so a '-' and a '+' are never
-// themselves counted as the difference between two lines.
-func lineEmphasis(lines []string) []diff.Span {
-	out := make([]diff.Span, len(lines))
-	var dels, adds []int
-	flush := func() {
-		for _, p := range diff.PairForEmphasis(dels, adds) {
-			before, after := diff.Emphasize(lines[p.Del][1:], lines[p.Add][1:])
-			out[p.Del], out[p.Add] = shiftPastMarker(before), shiftPastMarker(after)
-		}
-		dels, adds = nil, nil
+// It says "on the review" rather than naming the author alone, because the reader has to be
+// able to tell what the world has already seen from what is still theirs to send. The console
+// draws the same distinction with a colour it cannot use here.
+func threadRows(t types.ReviewThread, file, hunk int) []Row {
+	who := t.Author
+	if who == "" {
+		who = "review"
 	}
-	for i, l := range lines {
-		switch {
-		case isDel(l) && len(adds) == 0:
-			dels = append(dels, i)
-		case isAdd(l) && len(dels) > 0:
-			adds = append(adds, i)
-		default:
-			flush()
-			if isDel(l) {
-				dels = append(dels, i)
-			}
+	lines := strings.Split(t.Body, "\n")
+	out := make([]Row, 0, len(lines))
+	for j, line := range lines {
+		text := "  | " + line
+		if j == 0 {
+			text = fmt.Sprintf("  | %s, on the review: %s", who, line)
 		}
+		out = append(out, Row{Kind: RowComment, File: file, Hunk: hunk, Text: text})
 	}
-	flush()
 	return out
-}
-
-// shiftPastMarker moves a span computed on the text after the marker back onto the raw line.
-func shiftPastMarker(s diff.Span) diff.Span {
-	if s.Empty() {
-		return diff.Span{}
-	}
-	return diff.Span{Start: s.Start + 1, End: s.End + 1}
 }
 
 func isDel(line string) bool { return strings.HasPrefix(line, "-") }

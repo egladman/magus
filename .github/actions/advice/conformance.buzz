@@ -55,15 +55,10 @@ export fun signature(ops: [str]) > str {
     if (ops.len() == 0) { return ""; }
     // Copied before sorting: sort mutates in place, so sorting the argument directly
     // would reorder the caller's list and reject an immutable one outright.
-    var copy = mut [];
+    final copy = mut [<str>];
     foreach (op in ops) { copy.append(op); }
     final ordered = copy.sort(fun (a: str, b: str) > bool { return a < b; });
-    var joined = "";
-    foreach (op in ordered) {
-        if (joined != "") { joined = joined + ","; }
-        joined = joined + op;
-    }
-    return joined;
+    return ordered.join(",");
 }
 
 // majority returns the most common name in names, and how many carry it. Ties break on
@@ -149,15 +144,15 @@ export fun keepEdited(all: [{str: str}], edited: [str]) > [{str: str}] {
 }
 
 fun body(items: [{str: str}]) > str {
-    var text = "**This adds a target whose name differs from what the rest of the "
+    final parts = mut ["**This adds a target whose name differs from what the rest of the "
         + "workspace calls the same work.**\n\n"
-        + "| target | runs | the rest of the workspace calls this |\n| --- | --- | --- |\n";
+        + "| target | runs | the rest of the workspace calls this |\n| --- | --- | --- |\n"];
     foreach (f in items) {
-        text = text + "| `" + (f["name"] ?? "") + "` in `" + (f["project"] ?? "") + "` | `"
+        parts.append("| `" + (f["name"] ?? "") + "` in `" + (f["project"] ?? "") + "` | `"
             + (f["ops"] ?? "") + "` | `" + (f["majority"] ?? "") + "` ("
-            + (f["evidence"] ?? "") + ") |\n";
+            + (f["evidence"] ?? "") + ") |\n");
     }
-    return text
+    return parts.join("")
         + "\nNobody wrote this convention down. magus derived it by grouping every target "
         + "in the workspace by the ops it invokes and looking at what those targets are "
         + "named, so the count above is what other teams already do, not a rule imposed "

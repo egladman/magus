@@ -9,7 +9,7 @@ import (
 // The keys, stated on screen. A viewer whose bindings are only in the documentation is a
 // viewer nobody drives with anything but the arrow keys.
 const (
-	readHelp     = "]/[ hunk   }/{ file   v read   . generated   esc overview   q quit"
+	readHelp     = "]/[ hunk   }/{ file   v read   n read-already   . generated   esc overview   q quit"
 	overviewHelp = "up/down file   enter jump   esc back"
 )
 

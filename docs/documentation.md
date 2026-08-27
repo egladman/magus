@@ -90,6 +90,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [Profiling](guides/profiling.md) - find the magusfile line filling memory, read the low-headroom warning, and fix the string-building pattern that costs gigabytes.
 - [Tips and tricks](guides/tips.md) - non-obvious ways to combine subcommands.
 - [MCP](guides/mcp.md) - drive magus from agents over the Model Context Protocol.
+- [Review](concepts/review.md) - read a change, draft remarks as you go, and send them to the pull request they belong to, with the review's own conversation rendered beside the code.
 - [Telemetry](concepts/telemetry.md) - OpenTelemetry traces and metrics.
 
 ## Coming from other tools

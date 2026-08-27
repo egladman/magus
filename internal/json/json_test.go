@@ -64,7 +64,15 @@ func TestDurationRoundTrips(t *testing.T) {
 	assert.Equal(t, 6*time.Hour, got.TTL)
 }
 
-func TestProductionCodeUsesSharedJSON(t *testing.T) {
+// TestNoDirectEncodingJSONImport is the whole-tree rule: every Go file marshals through
+// this package, so which codec magus uses is one decision in one place.
+//
+// The allowlist is the codecs themselves - they are what wraps encoding/json - and nothing
+// else. Test files are deliberately in scope: a test that marshals through the stdlib is
+// asserting the behaviour of a codec the binary does not use, which is how a GOEXPERIMENT
+// this package exists to absorb (see TestDurationRoundTrips) passes its tests and breaks
+// the CLI.
+func TestNoDirectEncodingJSONImport(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
@@ -74,12 +82,12 @@ func TestProductionCodeUsesSharedJSON(t *testing.T) {
 		"libs/gopherbuzz/internal/codec/json.go":    true,
 		"libs/gopherbuzz/internal/codec/json_v2.go": true,
 	}
-	bypasses, err := productionJSONBypasses(root, allowed)
+	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)
-	assert.Empty(t, bypasses, "JSON must use the shared JSON package")
+	assert.Empty(t, importers, "JSON must use the shared JSON package")
 }
 
-func TestProductionJSONBypassesSkipsDependencyAndBuildTrees(t *testing.T) {
+func TestEncodingJSONImportersSkipsDependencyAndBuildTrees(t *testing.T) {
 	root := t.TempDir()
 	for _, path := range []string{
 		"cmd/magus/main.go",
@@ -94,19 +102,21 @@ func TestProductionJSONBypassesSkipsDependencyAndBuildTrees(t *testing.T) {
 		require.NoError(t, os.WriteFile(fullPath, []byte("package example\nimport _ \"encoding/json\"\n"), 0o644))
 	}
 
-	bypasses, err := productionJSONBypasses(root, nil)
+	importers, err := encodingJSONImporters(root, nil)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"cmd/magus/main.go"}, bypasses)
+	assert.Equal(t, []string{"cmd/magus/main.go"}, importers)
 }
 
-func productionJSONBypasses(root string, allowed map[string]bool) ([]string, error) {
-	var bypasses []string
+// encodingJSONImporters returns every Go file under root that imports encoding/json,
+// workspace-relative and sorted, minus the allowed set.
+func encodingJSONImporters(root string, allowed map[string]bool) ([]string, error) {
+	var importers []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			if skipProductionJSONDir(d.Name()) {
+			if skipJSONScanDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -124,16 +134,16 @@ func productionJSONBypasses(root string, allowed map[string]bool) ([]string, err
 		}
 		for _, imp := range f.Imports {
 			if strings.HasPrefix(strings.Trim(imp.Path.Value, "\""), "encoding/json") {
-				bypasses = append(bypasses, rel)
+				importers = append(importers, rel)
 			}
 		}
 		return nil
 	})
-	slices.Sort(bypasses)
-	return bypasses, err
+	slices.Sort(importers)
+	return importers, err
 }
 
-func skipProductionJSONDir(name string) bool {
+func skipJSONScanDir(name string) bool {
 	switch name {
 	case ".git", ".hg", ".svn", ".cache", ".magus", ".quad", ".claude", "node_modules", "vendor", "third_party", "third-party", "build", "dist", "out":
 		return true

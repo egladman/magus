@@ -49,7 +49,7 @@ func (v hgVCS) IsSecondaryCheckout(dir string) bool {
 }
 
 func (v hgVCS) Root(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "hg", "root")
+	cmd := vcsExec(ctx, "hg", "root")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -62,7 +62,7 @@ func (v hgVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, er
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, "hg", "status",
+	cmd := vcsExec(ctx, "hg", "status",
 		"--no-status", "--added", "--modified", "--removed", "--rev", base)
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -73,7 +73,7 @@ func (v hgVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, er
 }
 
 func (v hgVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
-	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log", "-r", ".", "--template", "{node}").Output()
+	out, err := vcsExec(ctx, "hg", "-R", dir, "log", "-r", ".", "--template", "{node}").Output()
 	if err != nil {
 		return types.DiffCommandHints{}, fmt.Errorf("hg log: %w", err)
 	}
@@ -170,7 +170,16 @@ func (v hgVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]st
 
 // DirtyDiff implements types.VCSDriver: uncommitted changes against the working parent.
 func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (string, error) {
-	args := []string{"diff", "-U", "1"}
+	// --git because Mercurial's own format renders a RENAME as a full delete plus a full add:
+	// a renamed 2000-line file arrives as 4000 changed lines whose content did not change at
+	// all. Every consumer here reads this as "what a person has to review", so that is not a
+	// formatting preference - it is the ranking, the line counts, and the hunks a read receipt
+	// is keyed by, all describing work nobody did. git format states the rename in three lines
+	// and carries copy, mode, and binary markers Mercurial's format drops.
+	//
+	// It also puts hg on the same dialect as the other three backends. Sapling already emits
+	// this format and jj is asked for it explicitly.
+	args := []string{"diff", "--git", "-U", "1"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, hgFamilyGlobs(paths)...)
@@ -269,7 +278,7 @@ func (v hgVCS) History(ctx context.Context, dir string, limit int) ([]types.Comm
 // the repository under bisect, not the process cwd: the dir-scoping the VCSDriver
 // contract requires for correctness under concurrent runs.
 func (v hgVCS) isAncestor(ctx context.Context, dir, sha string) error {
-	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log",
+	out, err := vcsExec(ctx, "hg", "-R", dir, "log",
 		"-r", "("+sha+") and (ancestors(.) or .)",
 		"--template", "{node}").Output()
 	if err != nil {
@@ -284,7 +293,7 @@ func (v hgVCS) isAncestor(ctx context.Context, dir, sha string) error {
 func (v hgVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
 	// hg date() predicate requires a date string, not an epoch integer.
 	revset := fmt.Sprintf("max(date('<%s'))", t.UTC().Format("2006-01-02 15:04:05"))
-	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log", "-r", revset, "--template", "{node}").Output()
+	out, err := vcsExec(ctx, "hg", "-R", dir, "log", "-r", revset, "--template", "{node}").Output()
 	if err != nil {
 		return "", fmt.Errorf("hg log: %w", err)
 	}
@@ -296,7 +305,7 @@ func (v hgVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (s
 }
 
 func (v hgVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
-	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log", "-r", sha,
+	out, err := vcsExec(ctx, "hg", "-R", dir, "log", "-r", sha,
 		"--template", "{desc|firstline}  ({author|user}, {date|shortdate})").Output()
 	if err != nil {
 		return "", err
@@ -306,7 +315,7 @@ func (v hgVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) 
 
 func (v hgVCS) start(ctx context.Context, dir, bad, good string) error {
 	run := func(args ...string) error {
-		cmd := exec.CommandContext(ctx, "hg", args...)
+		cmd := vcsExec(ctx, "hg", args...)
 		cmd.Dir = dir
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
@@ -322,7 +331,7 @@ func (v hgVCS) start(ctx context.Context, dir, bad, good string) error {
 }
 
 func (v hgVCS) run(ctx context.Context, dir, shellCmd string) error {
-	cmd := exec.CommandContext(ctx, "hg", "bisect", "--command", shellCmd)
+	cmd := vcsExec(ctx, "hg", "bisect", "--command", shellCmd)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -330,7 +339,7 @@ func (v hgVCS) run(ctx context.Context, dir, shellCmd string) error {
 }
 
 func (v hgVCS) reset(ctx context.Context, dir string) error {
-	cmd := exec.CommandContext(ctx, "hg", "bisect", "--reset")
+	cmd := vcsExec(ctx, "hg", "bisect", "--reset")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -338,7 +347,7 @@ func (v hgVCS) reset(ctx context.Context, dir string) error {
 }
 
 func (v hgVCS) culprit(ctx context.Context, dir string) (string, error) {
-	out, err := exec.CommandContext(ctx, "hg", "-R", dir, "log",
+	out, err := vcsExec(ctx, "hg", "-R", dir, "log",
 		"-r", "bisect(bad)", "--template", "{node}\n").Output()
 	if err != nil {
 		return "", fmt.Errorf("hg log bisect(bad): %w", err)
@@ -453,7 +462,7 @@ func runHgBatched(ctx context.Context, root string, args []string, paths []strin
 		argv := append([]string{}, args...)
 		argv = append(argv, "--")
 		argv = append(argv, chunk...)
-		cmd := exec.CommandContext(ctx, "hg", argv...)
+		cmd := vcsExec(ctx, "hg", argv...)
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("hg %s: %w\n%s", strings.Join(args, " "), err, out)
@@ -689,7 +698,7 @@ func (v hgVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]
 	var tracked []string
 	for _, chunk := range gitPathChunks(paths) {
 		args := append([]string{"files", "--"}, chunk...)
-		cmd := exec.CommandContext(ctx, "hg", args...)
+		cmd := vcsExec(ctx, "hg", args...)
 		cmd.Dir = dir
 		out, err := cmd.Output()
 		if err != nil {
@@ -821,7 +830,7 @@ func (v hgVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, 
 	if err := checkRef(rev); err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(ctx, "hg", "cat", "-r", rev, path)
+	cmd := vcsExec(ctx, "hg", "cat", "-r", rev, path)
 	cmd.Dir = root
 	return revFileOutput(cmd, fmt.Sprintf("hg cat -r %s %s", rev, path))
 }
@@ -839,7 +848,7 @@ func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 
-	cmd := exec.CommandContext(ctx, "hg", "archive", "-r", rev, "-t", "files",
+	cmd := vcsExec(ctx, "hg", "archive", "-r", rev, "-t", "files",
 		"-X", hgArchivalMeta, staging)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -882,7 +891,7 @@ func (v hgVCS) StartMerge(ctx context.Context, root, ref string) error {
 	} else if underway {
 		return fmt.Errorf("hg merge %s: a merge is already in progress; conclude or abandon it first", ref)
 	}
-	cmd := exec.CommandContext(ctx, "hg", "--noninteractive", "merge", "--tool", "internal:merge", ref)
+	cmd := vcsExec(ctx, "hg", "--noninteractive", "merge", "--tool", "internal:merge", ref)
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -920,7 +929,7 @@ func (v hgVCS) AbortMerge(ctx context.Context, root string) error {
 	if !underway {
 		return errors.New("hg: no merge is in progress to abort")
 	}
-	cmd := exec.CommandContext(ctx, "hg", "--noninteractive", "merge", "--abort")
+	cmd := vcsExec(ctx, "hg", "--noninteractive", "merge", "--abort")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("hg merge --abort: %w\n%s", err, strings.TrimSpace(string(out)))

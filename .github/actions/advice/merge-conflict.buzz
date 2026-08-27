@@ -40,7 +40,7 @@ fun conflicted(base: str, head: str) > [str] !> str {
     // author as their file.
     final res = proc\exec("git", args: ["-c", "core.quotePath=false", "merge-tree",
         "--write-tree", "--name-only", "--no-messages", "origin/" + base, head], dir: ".",
-        opts: {"allow_failure": true});
+        opts: {"quiet": true, "allow_failure": true});
     if (res.code == 0) { return mut [<str>]; }
     if (res.code != 1) { throw "merge-conflict-advice: git merge-tree: " + res.stderr; }
 
@@ -117,7 +117,7 @@ fun conflictTitle(n: int) > str {
 // Both lists are named, because "conflicts in hand-written files are still yours" was true
 // and useless - the merge that produced this comment already knows which files those are.
 fun conflictBody(base: str, files: [str], mine: [str], label: str) > str {
-    var body = "These conflicts are in build output. Nothing here has to be reconciled by "
+    final parts = mut ["These conflicts are in build output. Nothing here has to be reconciled by "
         + "hand, because the correct merge of a generated file is not a blend of two byte "
         + "streams - it is whatever regenerating produces.\n\n"
         + "```sh\ngit merge origin/" + base + "\nmagus vcs resolve\ngit push\n```\n\n"
@@ -129,20 +129,20 @@ fun conflictBody(base: str, files: [str], mine: [str], label: str) > str {
         + "three-way merge can settle at all, and the deletions no merge driver is ever "
         + "called for. It also stages what regeneration touched, so a following `git commit` "
         + "or `git rebase --continue` does not refuse on a dirty tree.\n\n"
-        + "**magus settles these {files.len()}:**\n\n";
-    foreach (f in files) { body = body + "- `" + f + "`\n"; }
+        + "**magus settles these {files.len()}:**\n\n"];
+    foreach (f in files) { parts.append("- `" + f + "`\n"); }
     if (mine.len() > 0) {
-        body = body + "\n**These {mine.len()} are yours** - nothing in this "
+        parts.append("\n**These {mine.len()} are yours** - nothing in this "
             + "workspace generates them, so `magus vcs resolve` reports them and leaves "
-            + "them alone:\n\n";
-        foreach (f in mine) { body = body + "- `" + f + "`\n"; }
+            + "them alone:\n\n");
+        foreach (f in mine) { parts.append("- `" + f + "`\n"); }
     }
     if (label != "") {
-        body = body + "\nOr label this pull request **`" + label + "`** and magus does exactly "
+        parts.append("\nOr label this pull request **`" + label + "`** and magus does exactly "
             + "the above on a runner and pushes the result. The label is the consent, so "
-            + "removing it stops magus touching the branch again.\n";
+            + "removing it stops magus touching the branch again.\n");
     }
-    return body + "\nWhy a conflict is reported at all when your own clone would settle it: "
+    return parts.join("") + "\nWhy a conflict is reported at all when your own clone would settle it: "
         + "a merge driver has to be registered per clone and cannot be committed, so "
         + "github.com computes mergeability with a plain three-way merge. "
         + "[Git integration](https://eli.gladman.cc/magus/guides/integrations/git/) has the "

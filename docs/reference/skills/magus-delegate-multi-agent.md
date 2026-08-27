@@ -1,12 +1,12 @@
 ---
 title: magus-delegate-multi-agent
-generated_from: cmd/magus/skills/magus-delegate-multi-agent/SKILL.md
+generated_from: internal/agent/skills/magus-delegate-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the delegations cannot collide, bound fan-out depth, and match each delegation's model to the work it needs."
 tags: [agents, skills, magus-delegate-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
-skill_full_bytes: 21443
-skill_simple_bytes: 16016
+skill_full_bytes: 21445
+skill_simple_bytes: 16018
 ---
 
 # magus-delegate-multi-agent
@@ -32,7 +32,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `43` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `449173d03a52` |
+| `skill-content` | `2d141a22781d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -403,7 +403,7 @@ As delegations finish:
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
-6. Read the integrated changeset with `magus diff --cost` before landing it: what
+6. Read the integrated changeset with `magus diff --impact` before landing it: what
    the fleet's combined edit reaches, who else has been changing it, an estimate of
    the rebuild from recorded run times, what the advisors say, and any note anchored
    to a file it touched. Context, never a verdict - nothing gates on it and
@@ -713,7 +713,7 @@ As delegations finish:
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
-6. Read the integrated changeset with `magus diff --cost` before landing it: what
+6. Read the integrated changeset with `magus diff --impact` before landing it: what
    the fleet's combined edit reaches, who else has been changing it, an estimate of
    the rebuild from recorded run times, what the advisors say, and any note anchored
    to a file it touched. Context, never a verdict, and an empty section means nobody

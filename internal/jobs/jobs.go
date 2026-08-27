@@ -26,6 +26,7 @@ const (
 	NameRotateActivities = "rotate-activities"
 	NameRotateLogs       = "rotate-logs"
 	NameClearCache       = "clear-cache"
+	NameCheckReview      = "check-review"
 )
 
 // Job is one named background job: a stable Name (the CLI leaf and the wire identity) and the
@@ -60,6 +61,11 @@ var registry = []Job{
 		Name: NameClearCache,
 		Desc: "invalidate cached build entries for the workspace",
 		Argv: []string{"clean", "--cache"},
+	},
+	{
+		Name: NameCheckReview,
+		Desc: "note when a review this tree took part in has merged",
+		Argv: []string{"server", NameCheckReview},
 	},
 }
 

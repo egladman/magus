@@ -65,7 +65,7 @@ func TestCacheYieldExemptsSkipCacheTargets(t *testing.T) {
 	got := r.checkCacheYield(projects)
 
 	assert.Equal(t, types.DoctorCheck{
-		Name:    "cache yield",
+		Name:    "cache-yield",
 		Status:  types.DoctorOK,
 		Message: "no target is running uncached (1 declared skip_cache)",
 	}, got, "the charm suffix must not defeat the policy lookup, and the exemption stays visible")
@@ -164,7 +164,7 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(repo)})
 
 	assert.Equal(t, types.DoctorCheck{
-		Name:    "dead output globs",
+		Name:    "dead-output-globs",
 		Status:  types.DoctorOK,
 		Message: "no dead output globs",
 	}, got, "a committed generated tree is not evidence the project was built")
@@ -234,7 +234,7 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 			},
 		}})
 		assert.Equal(t, types.DoctorCheck{
-			Name:    "output ownership",
+			Name:    "output-ownership",
 			Status:  types.DoctorOK,
 			Message: "every declared output has one owning target",
 		}, got, "distinct globs are not an overlap, even nested ones")
@@ -428,7 +428,7 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "api", Spell: "go"},
 		})
 		assert.Equal(t, types.DoctorCheck{
-			Name:    "language coverage",
+			Name:    "language-coverage",
 			Status:  types.DoctorOK,
 			Message: "every project matched a spell or declared no_language (1 exempt)",
 		}, got)

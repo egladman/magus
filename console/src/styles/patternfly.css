@@ -17,6 +17,10 @@
 
 @import "@patternfly/patternfly/patternfly-base.css";
 @import "@patternfly/patternfly/components/Button/button.css";
+/* Icon - the wrapper an inline svg needs beside button text. PF's own icons are a FONT, so a
+ * button centres its contents on the text baseline; a bare svg baselines on its bottom edge and
+ * rides high. This sheet applies the -0.125em nudge that puts one back on the optical centre. */
+@import "@patternfly/patternfly/components/Icon/icon.css";
 @import "@patternfly/patternfly/components/Tabs/tabs.css";
 @import "@patternfly/patternfly/components/Card/card.css";
 @import "@patternfly/patternfly/layouts/Gallery/gallery.css";

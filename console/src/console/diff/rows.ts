@@ -11,7 +11,7 @@
 // the kind of index arithmetic that is wrong until it is tested.
 
 import type { DiffFile, DiffLine, Hunk } from "./parse";
-import type { DiffComment, DiffTouch } from "./session";
+import type { DiffComment, DiffTouch, ReviewThread } from "./session";
 
 export type ViewMode = "unified" | "split";
 
@@ -38,6 +38,97 @@ export function byHunk(comments: readonly DiffComment[]): Map<string, DiffCommen
   return out;
 }
 
+// anchorLine picks the new-side line a remark about this hunk should hang on.
+//
+// The last ADDED line when there is one, else the last line that exists on the new side. A
+// reader commenting on a hunk is nearly always commenting on what the change introduced, and
+// the last one is where their eye finished.
+//
+// Undefined for a hunk that only DELETES: it has no new-side line, and every line it does have
+// is gone from the file the host would anchor against. Left unset rather than guessed, so the
+// composer can say the remark cannot be placed instead of the host silently refusing it or,
+// worse, accepting it against the wrong code.
+export function anchorLine(hunk: Hunk): number | undefined {
+  let lastAdd: number | undefined;
+  let lastOnNewSide: number | undefined;
+  for (const line of hunk.lines) {
+    if (line.newLine === null) continue;
+    lastOnNewSide = line.newLine;
+    if (line.kind === "add") lastAdd = line.newLine;
+  }
+  return lastAdd ?? lastOnNewSide;
+}
+
+// PlacedThreads is where each of the host's comment threads belongs in THIS changeset.
+//
+// Three buckets because a thread is anchored to a line of the review, and the review is not
+// the changeset in front of the reader: the working tree has moved since a colleague wrote
+// their remark, and a pull request covers commits this diff does not. So a thread lands on a
+// hunk when the line is one the reader can see, falls back to the file when it is not, and
+// otherwise names a file that is not in this changeset at all.
+//
+// The third bucket is the one that matters. Silently dropping those threads would make the
+// surface claim a colleague said nothing, which is the single worst thing a review reader can
+// be told, so the caller lists them instead.
+export interface PlacedThreads {
+  readonly atHunk: Map<string, ReviewThread[]>;
+  readonly atFile: Map<string, ReviewThread[]>;
+  readonly elsewhere: readonly ReviewThread[];
+}
+
+// narrowToHunk re-buckets a placement for a stream that renders exactly ONE hunk, moving every
+// remark that hunk will not show into the elsewhere listing.
+//
+// placeThreads buckets against the FILE, which is right when the whole file is on screen. Narrow
+// the stream to one hunk and a remark on hunk 3 of the file being read at hunk 1 stays in atHunk
+// under a key the row builder never emits: no row, no chip, no overview entry. "Your colleague
+// said nothing" is the one thing this surface must never say by accident, and that is exactly
+// what it said until this existed.
+//
+// A remark under the FILE heading stays there - the heading is still on screen.
+export function narrowToHunk(placed: PlacedThreads, keep: string): PlacedThreads {
+  const atHunk = new Map<string, ReviewThread[]>();
+  const spilled: ReviewThread[] = [];
+  for (const [key, threads] of placed.atHunk) {
+    if (key === keep) atHunk.set(key, threads);
+    else spilled.push(...threads);
+  }
+  if (spilled.length === 0) return placed;
+  return { atHunk, atFile: placed.atFile, elsewhere: [...placed.elsewhere, ...spilled] };
+}
+
+// placeThreads sorts already-placed threads into the three buckets this surface renders.
+//
+// The line-to-hunk ARITHMETIC is not here: the daemon does it once (diff.PlaceThreads) and
+// ships `hunk` on each thread, for the reason the parser and the intra-line emphasis moved
+// there. Two surfaces computing it independently is the same remark sitting against different
+// code in the terminal and the browser, and nothing would ever have reported the disagreement.
+//
+// What is left is a grouping that depends on what THIS surface is showing: a thread magus could
+// not place belongs under its file when that file is on screen, and is elsewhere when it is not.
+export function placeThreads(
+  files: readonly DiffFile[],
+  threads: readonly ReviewThread[],
+): PlacedThreads {
+  const atHunk = new Map<string, ReviewThread[]>();
+  const atFile = new Map<string, ReviewThread[]>();
+  const elsewhere: ReviewThread[] = [];
+  const shown = new Set(files.map((f) => f.path));
+
+  for (const t of threads) {
+    if (t.hunk >= 0 && shown.has(t.path)) push(atHunk, commentKey(t.path, t.hunk), t);
+    else if (shown.has(t.path)) push(atFile, t.path, t);
+    else elsewhere.push(t);
+  }
+  return { atHunk, atFile, elsewhere };
+}
+
+function push(into: Map<string, ReviewThread[]>, key: string, t: ReviewThread): void {
+  const at = into.get(key);
+  if (at) at.push(t);
+  else into.set(key, [t]);
+}
+
 // Row is one rendered line of the stream. `file` and `hunk` rows are the headings; `line` is
 // unified content; `pair` is split content, where either side may be absent because an
 // add-only or delete-only run has nothing to sit opposite it.
@@ -46,6 +137,7 @@ export type Row =
   | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk; readonly index: number }
   | { readonly kind: "line"; readonly file: DiffFile; readonly hunk: Hunk; readonly line: DiffLine }
   | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: DiffComment }
+  | { readonly kind: "thread"; readonly file: DiffFile; readonly thread: ReviewThread }
   | { readonly kind: "story"; readonly file: DiffFile; readonly touch: DiffTouch }
   | {
       readonly kind: "pair";
@@ -67,24 +159,40 @@ export function buildRows(
   mode: ViewMode,
   comments?: Map<string, DiffComment[]>,
   touches?: Map<string, readonly DiffTouch[]>,
+  threads?: PlacedThreads,
 ): Row[] {
   const rows: Row[] = [];
   for (const file of files) {
     rows.push({ kind: "file", file });
+    // A thread whose line this changeset does not contain still belongs to this file, so it
+    // sits under the heading rather than being dropped. A colleague said it; the reader hears
+    // it, even when the line it was about has since moved.
+    for (const thread of threads?.atFile.get(file.path) ?? []) {
+      rows.push({ kind: "thread", file, thread });
+    }
     // The story sits under the FILE heading rather than under a hunk, because that is the
     // granularity the trail records: an agent wrote the file, and what it had read applies to
     // the edit as a whole. Pinning it to one hunk would claim a precision the data lacks.
     for (const touch of touches?.get(file.path) ?? []) {
       rows.push({ kind: "story", file, touch });
     }
-    file.hunks.forEach((hunk, index) => {
+    // The hunk's OWN index, never its position in the array handed in. A caller rendering a
+    // subset of a file passes a shorter list, and keying by position would look that slice's
+    // remarks up under the wrong hunk - a remark against code nobody wrote it about.
+    for (const hunk of file.hunks) {
+      const index = hunk.index;
       rows.push({ kind: "hunk", file, hunk, index });
+      // The host's threads first, then this session's own remarks. What a colleague already
+      // said is context for what you are about to write, not a footnote to it.
+      for (const thread of threads?.atHunk.get(commentKey(file.path, index)) ?? []) {
+        rows.push({ kind: "thread", file, thread });
+      }
       for (const c of comments?.get(commentKey(file.path, index)) ?? []) {
         rows.push({ kind: "comment", file, comment: c });
       }
       if (mode === "split") pushSplit(rows, file, hunk);
       else for (const line of hunk.lines) rows.push({ kind: "line", file, hunk, line });
-    });
+    }
   }
   return rows;
 }

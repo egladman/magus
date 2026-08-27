@@ -213,7 +213,7 @@ const (
 	// into .gitattributes.
 	rootMagusfile = "magusfile.buzz"
 	// embeddedSkillDir is the shipped set: one directory per skill magus installs.
-	embeddedSkillDir = "cmd/magus/skills"
+	embeddedSkillDir = "internal/agent/skills"
 )
 
 // handAuthoredSkills live beside the installed ones and are NOT written by

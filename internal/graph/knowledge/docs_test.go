@@ -187,7 +187,7 @@ func TestDocsCommandReferences(t *testing.T) {
 }
 
 // A doc under a VCS-ignored path must not become a graph node. The concrete case
-// this exists for: `magus agent install` writes rendered copies of cmd/magus/skills/
+// this exists for: `magus agent install` writes rendered copies of internal/agent/skills/
 // into .agents/, .opencode/, and .claude/, all three declared generated in
 // .gitignore. Indexing them made the committed graph depend on which provider trees
 // the person regenerating it happened to have installed, so the drift gate failed

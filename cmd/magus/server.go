@@ -10,13 +10,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
@@ -49,6 +51,8 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverRotateActivities(ctx, root, rest)
 	case jobs.NameRotateLogs:
 		return serverRotateLogs(ctx, root, rest)
+	case jobs.NameCheckReview:
+		return serverCheckReview(ctx, root, rest)
 	default:
 		return usagef("magus server: unknown target %q (want start, stop, reload, or job); use `%s` to inspect daemon state", sub, clihint.Status)
 	}
@@ -166,7 +170,8 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 	// Idempotent start: a daemon already accepting on the socket means there is nothing to do.
 	if proc.SocketLive(ctx, addr) {
 		if st, err := proc.QueryStatus(ctx, addr); err == nil && st.ParentPID != 0 {
-			fmt.Fprintf(os.Stderr, "magus: daemon already running (pid %d) on %s\n", st.ParentPID, addr)
+			fmt.Fprintf(os.Stderr, "magus: daemon already running (pid %d) on %s%s\n",
+				st.ParentPID, addr, servingSuffix(st))
 		} else {
 			fmt.Fprintf(os.Stderr, "magus: daemon already running on %s\n", addr)
 		}
@@ -191,6 +196,29 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 // (so any --daemon-address the user set is honored) and marks the child via daemonDetachEnv
 // so it runs the daemon rather than backgrounding again. The child is fully detached (its own
 // session on unix) and Release()d so this process never waits on it.
+// servingSuffix names the workspaces a running daemon has loaded, or "" when it has none yet.
+//
+// One socket per user serves every workspace, so "already running" answered the question the
+// caller asked and not the one they meant. Starting the daemon from a second worktree returns 0
+// with nothing loaded from THIS tree, and the console then shows the tree it was started in -
+// which reads as the command having worked. The roots are already on the status wire; the message
+// simply never said them.
+//
+// The workspace this call was made from is not marked, deliberately: a daemon loads a workspace
+// lazily on first use, so "not listed" means "not loaded yet" far more often than it means
+// "wrong daemon", and flagging it would raise an alarm about the ordinary case.
+func servingSuffix(st *proc.StatusReply) string {
+	if st == nil || len(st.Workspaces) == 0 {
+		return ""
+	}
+	roots := make([]string, 0, len(st.Workspaces))
+	for _, w := range st.Workspaces {
+		roots = append(roots, w.Root)
+	}
+	slices.Sort(roots)
+	return ", serving " + strings.Join(roots, ", ")
+}
+
 func spawnDetachedDaemon() (pid int, logPath string, err error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -407,17 +435,24 @@ func serverJob(ctx context.Context, args []string) error {
 	return nil
 }
 
-// printJobWatchHint prints a link to watch jobs in the console dashboard, but ONLY when w is an
-// interactive terminal. The link carries the daemon host and bearer token in its fragment (live
-// mode), so it must never reach a non-interactive caller - notably the VCS refresh hook, which
-// runs `server job sync-graph` on every history change and would otherwise write the token into
-// hook logs. Best-effort: a disabled console or an unreadable token means no hint.
+// printJobWatchHint prints a link to watch jobs in the console dashboard.
+//
+// The link is UNAUTHENTICATED and the token stays one shell substitution away, which is the
+// same call liveExplorerLink already made and for the same reason: a fragment is never
+// transmitted on the document GET, so embedding the token read as safe, but the line is
+// still a credential written to stdout - and stdout is scrollback, a captured run log, a
+// termcast, and the context of whatever agent ran the command. This repository has already
+// rotated tokens that escaped that way.
+//
+// The terminal check stays, but it is no longer a secrecy measure - it is that this line
+// invites somebody to go look at something, and the VCS refresh hook is not somebody. A
+// suggestion nobody can act on is noise in a log.
 func printJobWatchHint(w *os.File) {
 	if !tty.IsTerminalWriter(w, tty.SystemProbe) {
 		return
 	}
 	if u := consoleWatchURL(); u != "" {
-		fmt.Fprintf(w, "magus: watch it in the console dashboard: %s\n", u)
+		fmt.Fprintf(w, "magus: watch it in the console dashboard: %s\n%s\n", u, authHint)
 	}
 }
 
@@ -425,32 +460,26 @@ func printJobWatchHint(w *os.File) {
 // daemon from its own loopback origin (http://<host>/console/dashboard/): the browser
 // loads the page and connects back to this daemon over that one loopback origin and shows
 // the running pool, where a submitted job appears and deep-links to its live log. Returns
-// "" when the console is disabled or no token can be loaded. The token rides the fragment,
-// so callers must gate on an interactive terminal (see printJobWatchHint).
+// "" when the console is disabled.
+//
+// It NEVER embeds the bearer token - see printJobWatchHint - so it also no longer depends on
+// a token being loadable. It used to return "" when auth.Load failed, which meant a reader
+// with no token yet was shown nothing at all rather than the URL plus the command that mints
+// one.
 func consoleWatchURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	token, err := auth.Load()
-	if err != nil || token == "" {
-		return ""
-	}
-	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "dashboard", Token: token})
+	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "dashboard"})
 }
 
-// consoleDiffURL builds the console Diff surface URL for the working changeset, with the
-// same degrade as consoleWatchURL: "" when the console is disabled or no token loads, so
-// a caller never prints a dead link. The token rides the fragment, so callers must gate
-// on an interactive terminal (see printJobWatchHint).
+// consoleDiffURL builds the console Diff surface URL for the working changeset, with the same
+// degrade as consoleWatchURL: "" when the console is disabled, and never a token in the link.
 func consoleDiffURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	token, err := auth.Load()
-	if err != nil || token == "" {
-		return ""
-	}
-	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "diff", Token: token})
+	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "diff"})
 }
 
 func serverJobUsage() {
@@ -601,5 +630,105 @@ func serverReload(ctx context.Context, args []string) error {
 	default:
 		fmt.Fprintf(os.Stderr, "magus: reloaded %d workspace(s); the next command against each reads the current config\n", dropped)
 	}
+	return nil
+}
+
+// serverCheckReview is the worker for the check-review job: it notes, once, that a review this
+// tree took part in has merged, so the conversation can be kept before it becomes only a page on
+// somebody else's website.
+//
+// A JOB rather than a poll in the browser, because the console is optional and a merge does not
+// wait for it to be open. Being a job also buys what a hand-rolled timer had to fake: coalescing,
+// a configured interval, a last-run the schedule reads back from the trail so it survives a
+// restart, and idle-gating so it never competes with a build.
+//
+// The gate is the SESSION, and it is what keeps this from being a tracker: no review session for
+// this tree means the reader never opened a review here, and no forge is asked anything at all.
+// Opening a review is the opt-in.
+//
+// It records rather than notifies. The event is the durable fact; the console's watcher reads the
+// trail for it, exactly as it already does for a share being opened. Normally reached via
+// `magus server job check-review`.
+func serverCheckReview(ctx context.Context, root string, args []string) error {
+	if _, err := cmdParse("server "+jobs.NameCheckReview, args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus server check-review")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Note when a review this tree took part in has merged. This is the worker")
+			fmt.Fprintln(os.Stderr, "for `magus server job check-review`; prefer that form.")
+		}
+	}); err != nil {
+		return err
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return fmt.Errorf("server %s: %w", jobs.NameCheckReview, err)
+	}
+	// The PERSISTED watermark, not a session. This runs in its own process, so the store's
+	// in-memory session map is empty by construction - reading it was a gate that could never
+	// open, and the job was a guaranteed no-op until this was fixed.
+	store := changeset.NewStore(m.CacheDir())
+	seen := store.LoadSeenThreads()
+	drafts := store.LoadDrafts()
+	if len(seen) == 0 && len(drafts) == 0 {
+		// Nothing persisted means nobody has read or drafted anything in a review here, which is
+		// the opt-in: no forge is asked about a workspace whose reviews were never opened.
+		return nil
+	}
+	from := m.ReviewOrigin(ctx)
+	at := bindings.FindReview(ctx, from.Branch, from.Remote)
+	if !at.Open() {
+		return nil
+	}
+	// The error is READ here, unlike on the surfaces that render what they could get. An
+	// unreachable forge answers with an EMPTY list, and every number below is derived from that
+	// list - so reporting anyway meant "3 remarks live only on the host" when the true figure was
+	// fifteen, or silence about a merge whose whole conversation was unreadable. "Nothing was
+	// said" and "I could not ask" are opposite facts, and this is the one place that can still
+	// tell them apart.
+	threads, err := bindings.ReviewThreads(ctx, at)
+	if err != nil {
+		// Not the job's failure to report: a forge that could not be reached is a fact about the
+		// network, and raising it would mark this job failed on the trail every fifteen minutes
+		// for as long as the reader is offline. The next tick asks again.
+		return nil //nolint:nilerr // an unreachable forge is a retry, not a job failure
+	}
+
+	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
+	// because a deleted remark plus a new one nets zero and the new one would never be reported.
+	// The watermark is the READER's - see DiffSession.SeenThreads for why it cannot be the job's.
+	if unseen := (types.DiffSession{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
+		trail.Append(ctx, m.CacheDir(), trail.Event{
+			Ts:        time.Now().UnixMilli(),
+			Kind:      trail.KindJob,
+			Actor:     "daemon",
+			Workspace: m.Root(),
+			Action:    "review.said",
+			Outcome:   trail.OutcomeOK,
+			// The ids ride along so the console can key its notification on exactly this set: the
+			// job running again before the reader looks must not say the same thing twice.
+			Preview: fmt.Sprintf("%s: %d: %s", at.Repo, len(unseen), strings.Join(unseen, ",")),
+		})
+	}
+
+	if !at.Merged() {
+		return nil
+	}
+	said := len(threads) + len(drafts)
+	if said == 0 {
+		// Merged with nothing said on it. There is no conversation to keep, and an event here
+		// would train the reader to ignore the ones that matter. A forge that could not be
+		// reached returned above rather than landing here, so this really is "nothing was said".
+		return nil
+	}
+	trail.Append(ctx, m.CacheDir(), trail.Event{
+		Ts:        time.Now().UnixMilli(),
+		Kind:      trail.KindJob,
+		Actor:     "daemon",
+		Workspace: m.Root(),
+		Action:    "review.merged",
+		Outcome:   trail.OutcomeOK,
+		Preview:   fmt.Sprintf("%s: %d", at.Repo, said),
+	})
 	return nil
 }

@@ -11,7 +11,7 @@
 # does not satisfy every check), so these assert on THIS check's line rather than on
 # the overall status - the alternative is a fixture that has to stay perfect forever.
 ! exec magus doctor
-stdout 'stale worktrees: no \.claude/worktrees directory'
+stdout 'stale-worktrees: no \.claude/worktrees directory'
 
 # A LIVE worktree carries .git and is counted, not flagged.
 mkdir .claude/worktrees/live

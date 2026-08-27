@@ -1,28 +1,37 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEMO_PATCH, demoSession, applyDemoOp } from "./demo";
-import { parsePatch } from "./parse";
-import { order, stats, visibleFiles } from "./order";
+import { demoSession, applyDemoOp } from "./demo";
+import { fromWire } from "./parse";
+import { DEMO_FILES } from "./gen/demo";
+import { modeChange, order, stats, visibleFiles } from "./order";
+import { scenarioInsight, STORY_FILES } from "../demo-scenario";
 import { buildRows, byHunk } from "./rows";
 
-// The fixture is data a person edits by hand, so what is pinned here is the ways it can go
+// demo.patch is data a person edits by hand, so what is pinned here is the ways it can go
 // quietly wrong: an annotation for a path the patch does not carry (the file then renders with
-// no chips and no ranking, and nothing says so), a hunk index a comment cannot reach, or a
-// hand-counted @@ header that has drifted from the lines under it.
+// no chips and no ranking, and nothing says so), or a hunk index a comment cannot reach.
+//
+// It reads the GENERATED changeset rather than the patch, because that is what the showcase
+// actually renders. A hand-counted @@ header no longer needs pinning here - the same Go reader
+// the product uses produces this, so a header that disagrees with its body is its problem now.
 
-const files = parsePatch(DEMO_PATCH);
+const files = fromWire(DEMO_FILES);
 const session = demoSession();
 
-test("the demo patch parses into the changeset it claims", () => {
+test("the generated changeset holds the files the showcase claims", () => {
   assert.deepEqual(
     files.map((f) => f.path),
     [
       "libs/authkit/claims.go",
-      "services/identity/internal/token/verify.go",
-      "apps/dashboard/src/api/session.ts",
       "libs/authkit/audience.go",
+      "libs/authkit/testdata/claims.golden",
+      "services/identity/internal/token/verify.go",
+      "services/gateway/internal/mint/token.go",
       "services/identity/internal/token/legacy_audience.go",
+      "apps/dashboard/src/api/session.ts",
       "services/identity/internal/token/verify_test.go",
+      "services/gateway/internal/mint/token_test.go",
+      "tools/migrate/backfill.sh",
       "docs/auth/tokens.md",
       "libs/protocol/gen/token_pb.go",
       "apps/dashboard/src/gen/session_pb.ts",
@@ -40,9 +49,29 @@ test("the demo patch parses into the changeset it claims", () => {
   assert.equal(doc?.oldPath, "docs/auth/jwt.md");
 });
 
-// Every hand-written @@ header states a line count. parsePatch does not check them, so a header
-// that has drifted from its body is invisible until a reader notices the gutter numbers are
-// wrong - which is exactly the kind of detail the showcase is read closely for.
+// The two files that carry NO hunks, for two different reasons. Both render as an empty entry
+// unless the surface reads why they are empty, and "nothing changed" is false in both cases.
+test("the changeset exercises the states that produce no hunks", () => {
+  const byPath = new Map(files.map((f) => [f.path, f]));
+
+  const golden = byPath.get("libs/authkit/testdata/claims.golden");
+  assert.equal(golden?.binary, true, "a binary file the surface must name as binary");
+  assert.deepEqual(golden?.hunks, []);
+
+  const script = byPath.get("tools/migrate/backfill.sh");
+  assert.equal(script?.binary, false, "a mode change is not a binary payload");
+  assert.deepEqual(script?.hunks, []);
+  assert.equal(script?.oldMode, "100644");
+  assert.equal(script?.newMode, "100755");
+});
+
+// Every hand-written @@ header states a line count. Nothing in the reader verifies them - Go
+// parses the body and takes the header's word for the numbers - so a header that has drifted
+// from its body is invisible until a reader notices the gutter numbers are wrong, which is
+// exactly the kind of detail the showcase is read closely for.
+//
+// It has caught two now: a hand-counted header, and the SCRIPT written to stop hand-counting
+// them, which read the trailing newline as a context line.
 test("every hunk header's counts match the lines under it", () => {
   const wrong: string[] = [];
   for (const f of files) {
@@ -91,7 +120,7 @@ test("the demo changeset folds its generated files and leads with the widest one
   );
   assert.equal(cs.primary[0]?.file.path, "libs/authkit/claims.go");
   const s = stats(cs);
-  assert.equal(s.files, 7);
+  assert.equal(s.files, 11);
   assert.equal(s.generated, 3);
   assert.equal(s.publicSurface, 1);
   assert.equal(s.untested, 1);
@@ -118,9 +147,9 @@ test("demo mode builds rows from the demo payload", () => {
   );
   // A story row for each file the trail says an agent wrote, and a comment row under each
   // annotated hunk - both are rows, which is what makes them scroll with the code.
-  assert.equal(rows.filter((r) => r.kind === "story").length, 3);
+  assert.equal(rows.filter((r) => r.kind === "story").length, 4);
   assert.equal(rows.filter((r) => r.kind === "comment").length, 3);
-  assert.ok(rows.some((r) => r.kind === "line" && r.line.text.includes("Audience []string")));
+  assert.ok(rows.some((r) => r.kind === "line" && r.line.text.includes("Audience Audience")));
 });
 
 test("the ranking key is present, so the surface may claim an order", () => {
@@ -155,4 +184,57 @@ test("applyDemoOp resolves a comment and answers a suggestion", () => {
   const sg1 = (skipped.suggestions ?? []).find((s) => s.id === "sg1");
   assert.equal(sg1?.declined, true);
   assert.equal(sg1?.accepted, false);
+});
+
+// The annotations here restate figures that demo-scenario.ts also publishes, and until now the
+// only thing keeping them equal was a comment saying they were. That is the arrangement this
+// session spent its day removing everywhere else: a stated invariant with nothing enforcing it.
+//
+// It matters because the two are shown side by side. The Insight surface reports libs/authkit as
+// the workspace's top hotspot with 46 commits across 2 authors; the Diff surface annotates the
+// same file in the same session. A reader who compares them and finds different numbers has
+// caught the showcase lying, and will reasonably assume the product does too.
+test("the diff annotations agree with the figures every other surface reports", () => {
+  const insight = scenarioInsight(Date.now());
+  const claims = insight.hotspots.find((h) => h.name === STORY_FILES.CLAIMS);
+  assert.ok(claims, "the scenario no longer ranks the file the story turns on");
+
+  const annotated = files.find((f) => f.path === STORY_FILES.CLAIMS);
+  assert.ok(annotated, "the changeset no longer carries the file the story turns on");
+
+  const note = (session.diff.files ?? []).find((a) => a.path === STORY_FILES.CLAIMS);
+  assert.ok(note, "the annotations no longer cover the file the story turns on");
+  assert.equal(note.churn?.commits, claims.churn, "churn disagrees with the Insight surface");
+  assert.equal(
+    note.churn?.authors,
+    claims.authors,
+    "author count disagrees with the Insight surface",
+  );
+  assert.equal(
+    note.reach,
+    claims.blastRadius,
+    "reach disagrees with the blast radius the Insight surface reports",
+  );
+});
+
+// A mode change carries NO hunks, so its row is a filename and a churn count unless the
+// surface says why the file is there - which reads as the surface having dropped something.
+// Found by rendering the demo: the binary file beside it already said "binary" and this one
+// said nothing at all.
+//
+// Pinned here rather than in a DOM test because the row lives in a virtualized list, where a
+// DOM test only sees what happens to be on screen - it reported the file "missing from the
+// changeset" when it was simply below the fold.
+test("a mode change is named, since it has no hunks to speak for it", () => {
+  const script = files.find((f) => f.path === "tools/migrate/backfill.sh");
+  assert.ok(script, "the changeset no longer carries a mode-only change");
+  assert.deepEqual(script.hunks, [], "a mode change has nothing to render as a diff");
+  assert.equal(modeChange(script), "mode 100644 -> 100755");
+
+  // Every other file must stay quiet: a chip on a row that did not change mode is noise.
+  const noisy = files.filter((f) => f.path !== script.path && modeChange(f) !== null);
+  assert.deepEqual(
+    noisy.map((f) => f.path),
+    [],
+  );
 });

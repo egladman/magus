@@ -9,7 +9,7 @@
 # Nothing installed is ADVICE rather than a failure: a checkout with no skills is a
 # choice, and the finding names the command that changes it.
 ! exec magus doctor
-stdout 'agent skills: not installed'
+stdout 'agent-skills: not installed'
 stdout 'magus agent install'
 
 # After an install every location reports current. AGENTS.md is PASTED rather than
@@ -19,7 +19,7 @@ exec magus agent install .claude/skills
 exec magus agent sample
 cp stdout AGENTS.md
 ! exec magus doctor
-stdout 'agent skills: 2 install location\(s\) current'
+stdout 'agent-skills: 2 install location\(s\) current'
 
 # A stale install fails, and unlike the verb this replaced it carries a remedy magus
 # can run. The remedy names the RESOLVED workspace root: install resolves a
@@ -27,13 +27,13 @@ stdout 'agent skills: 2 install location\(s\) current'
 # second skill tree wherever doctor happened to be invoked from.
 cp stale.md .claude/skills/magus-query/SKILL.md
 ! exec magus doctor
-stdout 'agent skills: installed skills are behind this binary: \.claude/skills'
+stdout 'agent-skills: installed skills are behind this binary: \.claude/skills'
 #
 # The path itself is not asserted - the root resolves through symlinks, so it is
 # /private/var where $WORK is /var - only that an ABSOLUTE one is there at all. The
 # spelling this pins is the one that shipped a bare `--dir` with nothing after it.
 exec magus doctor --fix --dry-run
-stdout 'would fix agent skills: magus agent install \.claude/skills --force --dir /'
+stdout 'would fix agent-skills: magus agent install \.claude/skills --force --dir /'
 
 # A skill a RENAME orphaned is different, and the difference is the whole reason this
 # check declares no Fix for it. magus wrote the file, so it is graded; but --force

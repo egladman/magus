@@ -797,3 +797,40 @@ func TestColsSkipsHyperlinkURI(t *testing.T) {
 	assert.Equal(t, cols("out8518ac44"), cols(linked),
 		"linking text must not change how wide it measures")
 }
+
+// TestTerminalResetsRespectDumbTerm is the TERM=dumb regression.
+//
+// Both resets run on every exit path, including commands with no interactive component at
+// all, and both gated on a bare descriptor check. A pty with TERM=dumb IS a terminal, so
+// plain `magus diff` under Emacs shell-mode opened and closed with
+// `^[7^[[r^[8^[[?1006l^[[?1003l^[[?1000l` rendered as literal garbage - the exact
+// artifacting CanRender exists to prevent, and the one gap left after hyperlinks were
+// fixed.
+//
+// Nothing is lost by skipping them: Input refuses to open unless CanRender passes, so
+// tracking was never enabled and no margin was ever reserved.
+func TestTerminalResetsRespectDumbTerm(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+
+	var margins ttyBuf
+	require.NoError(t, ResetScrollMargins(&margins, terminal(80, 24)))
+	assert.Empty(t, margins.String(), "TERM=dumb understands no escape, including a scroll-margin reset")
+
+	var mouse ttyBuf
+	require.NoError(t, ResetMouseTracking(&mouse, terminal(80, 24)))
+	assert.Empty(t, mouse.String(), "TERM=dumb never had mouse tracking to disable")
+}
+
+// ...and a terminal that DOES render still gets both, because a process that died with
+// tracking on leaves the user unable to select text in their own shell.
+func TestTerminalResetsStillFireOnACapableTerminal(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+
+	var margins ttyBuf
+	require.NoError(t, ResetScrollMargins(&margins, terminal(80, 24)))
+	assert.Equal(t, cursorSave+decstbmReset+cursorRestore, margins.String())
+
+	var mouse ttyBuf
+	require.NoError(t, ResetMouseTracking(&mouse, terminal(80, 24)))
+	assert.Equal(t, mouseTrackOff, mouse.String())
+}

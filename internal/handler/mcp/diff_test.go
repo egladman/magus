@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -32,6 +32,12 @@ type fakeDiffSrc struct {
 
 func (f *fakeDiffSrc) WorkingDiff(context.Context, []string) (string, error) { return f.patch, nil }
 
+// No branch and no remote, so no provider is consulted and the tool reports no threads. That
+// is the ordinary state of most workspaces and is what these tests exercise around.
+func (f *fakeDiffSrc) ReviewOrigin(context.Context) types.ReviewOrigin {
+	return types.ReviewOrigin{}
+}
+
 func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error) {
 	f.calls++
 	files := make([]types.DiffFile, 0, len(paths))
@@ -43,9 +49,9 @@ func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error
 
 func newDiffTool(t *testing.T, src *fakeDiffSrc) *diffTool {
 	t.Helper()
-	store := diff.NewStore(t.TempDir())
+	store := changeset.NewStore(t.TempDir())
 	// The human's act: a console fetch is what creates the session an agent may join.
-	store.Attach("/w", "working", types.Diff{Base: "working"}, diff.PatchDigest(src.patch))
+	store.Attach("/w", "working", types.Diff{Base: "working"}, changeset.PatchDigest(src.patch))
 	return &diffTool{sessions: store, root: "/w", src: src}
 }
 
@@ -160,7 +166,7 @@ func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 	// Built the same way op=state has always built its answer, independent of
 	// projectDiffState - the reference every case below is pinned against.
 	sess := tool.sessions.Get(tool.root)
-	want, err := json.Marshal(diffState{DiffSession: sess, Patch: agentPatch, Hunks: diff.ParseHunks(agentPatch)})
+	want, err := json.Marshal(diffState{DiffSession: sess, Patch: agentPatch, Hunks: changeset.ParseHunks(agentPatch)})
 	require.NoError(t, err)
 
 	cases := []struct {
@@ -194,7 +200,7 @@ func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
 	_, err := invoke(t, tool, map[string]any{"op": "state"})
 	require.NoError(t, err)
 
-	hunks := diff.ParseHunks(agentPatch)
+	hunks := changeset.ParseHunks(agentPatch)
 	tool.sessions.MarkViewed(tool.root, hunks[0].Hunks[0].Digest, true)
 	_, err = invoke(t, tool, map[string]any{"op": "comment", "path": "a.go", "body": "note"})
 	require.NoError(t, err)
@@ -275,4 +281,23 @@ func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
 	require.NoError(t, err)
 	_, ok := resp.Data.(*types.DiffSession)
 	assert.True(t, ok, "comment always returns the full session regardless of projection")
+}
+
+// An agent's words must never become a REPLY to a person.
+//
+// This is the sharpest form of "agents draft, humans send": a remark on a hunk is addressed to
+// whoever reads the review, but a reply is addressed to the colleague who asked, by name, and
+// receiving a wall of generated text where you asked a question is how the human half of a review
+// dies. The protection is structural rather than advisory - there is simply no agent-reachable op
+// that produces one - and this pins it, because the failure mode of a missing test here is a
+// future op named "reply" that nobody notices has crossed the line.
+//
+// publish is refused for the same reason it is refused everywhere else: an agent cannot make
+// anything leave the machine.
+func TestNoAgentReachableOpSpeaksToAPerson(t *testing.T) {
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
+	for _, op := range []string{"reply", "publish", "approve"} {
+		_, err := invoke(t, tool, map[string]any{"op": op, "id": "t1", "body": "on it"})
+		require.Error(t, err, "op %q must not be reachable from the agent surface", op)
+	}
 }

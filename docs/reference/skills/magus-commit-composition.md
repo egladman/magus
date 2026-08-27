@@ -1,6 +1,6 @@
 ---
 title: magus-commit-composition
-generated_from: cmd/magus/skills/magus-commit-composition/SKILL.md
+generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
 skill_full_bytes: 4448

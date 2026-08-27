@@ -65,7 +65,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
 | . | 44 | `magus query project:.` | `generate`, `buzz-test`, `lint` |
-| console | 7 | `magus query project:console` | `preflight`, `ci`, `build` |
+| console | 8 | `magus query project:console` | `preflight`, `build`, `ci` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `lint` |

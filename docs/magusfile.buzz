@@ -106,7 +106,7 @@ magus\project({
                 // its page must regenerate, or the site documents a version nobody
                 // installs - the exact drift this generator exists to prevent.
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
-                "../cmd/magus/skills/**/*.md"],
+                "../internal/agent/skills/**/*.md"],
     // The committed Markdown that content-generate derives from the Go tree
     // (buzz/modules, spells, manpage) is declared per-target in content-generate's own
     // magus.outputs, not here, so that generator's cache entry snapshots exactly its
@@ -207,7 +207,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace.file("cmd/magus-docs/**/*.go"), workspace.file("cmd/magus-spelldocs/**/*.go"),
         workspace.file("cmd/magus-manpage/**/*.go"), workspace.file("cmd/magus-examples/**/*.go"),
         workspace.file("cmd/magus-skilldocs/**/*.go"), workspace.file("internal/agent/**/*.go"),
-        workspace.file("cmd/magus/skills/**/*.md"), workspace.file("cmd/magus-protodocs/**/*.go"),
+        workspace.file("internal/agent/skills/**/*.md"), workspace.file("cmd/magus-protodocs/**/*.go"),
         // The DESCRIPTOR, not the .proto sources: it is the proto project's declared output, so
         // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
         // directly would drag a network-bound buf step into this project's cache boundary,
@@ -234,13 +234,14 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     // carrying a small generated region between HTML markers, which magus-spelldocs and
     // magus-examples replace in place and hard-error on if the markers are missing.
     // Declared as outputs they were deletable, and excluded from the source hash.
-    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md");
+    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md",
+        "concepts/review.md");
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills", "-src", "../cmd/magus"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
     // The changelog as a docs page. CHANGELOG.md is generated at the repo ROOT (magus-utils,
@@ -305,7 +306,16 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs generate refreshes the committed derived content; `magus run build docs` renders the site itself, and `magus run render docs` is the fast docs/blog preview");
     ctx.needs(preflight);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
-        "concepts/knowledge.md", "reference/manpage", "reference/skills", "reference/api", "changelog.md"];
+        "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
+        "reference/api", "changelog.md"];
+    // The three pages content-generate INJECTS into rather than writes whole. It declares them
+    // itself, but the write is attributed to this composed target as well, so the declaration has
+    // to exist in both places or a run that actually changes one trips MGS4007.
+    //
+    // This was latent until an example was added to review.md: knowledge.md and spells.md rarely
+    // change in the same run that regenerates them, so the composed target almost never wrote one
+    // and the missing declaration never fired.
+    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md");
     // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md, the root
     // CHANGELOG.md, assets/gen (the README's diagram pair), and the derived Markdown in
     // CONTENT. gen/ is absent because it is ignored, and an ignored path is never dirty, so

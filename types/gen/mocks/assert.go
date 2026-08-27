@@ -21,6 +21,7 @@ var (
 	_ iface.Observer             = (*MockObserver)(nil)
 	_ iface.RefreshHookInstaller = (*MockRefreshHookInstaller)(nil)
 	_ iface.RemoteReporter       = (*MockRemoteReporter)(nil)
+	_ iface.RevTimeReporter      = (*MockRevTimeReporter)(nil)
 	_ iface.RevisionExporter     = (*MockRevisionExporter)(nil)
 	_ iface.TargetExpander       = (*MockTargetExpander)(nil)
 	_ iface.TrackedFileReporter  = (*MockTrackedFileReporter)(nil)

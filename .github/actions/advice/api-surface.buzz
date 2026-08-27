@@ -64,9 +64,9 @@ fun line(path: str, exports: [str], across: [str], reach: int) > str {
 fun body(count: int, lines: [str]) > str {
     var noun = " changed files touch";
     if (count == 1) { noun = " changed file touches"; }
-    var text = "**" + "{count}" + noun + " API surface.**\n\n";
-    foreach (l in lines) { text = text + l; }
-    return text
+    final parts = mut ["**" + "{count}" + noun + " API surface.**\n\n"];
+    foreach (l in lines) { parts.append(l); }
+    return parts.join("")
         + "\nThese symbols are reachable from outside the project that defines them, or "
         + "exported from the module, so a consumer can see them. That is what a version bump "
         + "is about.\n\n"

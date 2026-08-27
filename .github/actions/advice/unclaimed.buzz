@@ -9,7 +9,6 @@
 // directory nobody declared as a project yet.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
-import "os";
 import "proc";
 import "advice";
 import "magus";
@@ -19,8 +18,8 @@ final section = "unclaimed";
 
 fun changed(base: str, head: str) > [str] !> any {
     advice\fetchBase(base, refspec: false);
-    final res = proc\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
-        dir: ".", opts: {"allow_failure": true});
+    final res = proc\exec("git", args: ["diff", "--name-only", advice\diffRange(base, head: head)],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
     var paths = mut [];
     foreach (line in res.stdout.split("\n")) {
         if (line != "") { paths.append(line); }
@@ -29,10 +28,10 @@ fun changed(base: str, head: str) > [str] !> any {
 }
 
 fun body(files: [str], total: int) > str {
-    var text = "**" + "{files.len()}" + " of the " + "{total}" + " files in this pull "
-        + "request are claimed by no project:**\n\n";
-    foreach (f in files) { text = text + "- `" + f + "`\n"; }
-    return text
+    final parts = mut ["**" + "{files.len()}" + " of the " + "{total}" + " files in this pull "
+        + "request are claimed by no project:**\n\n"];
+    foreach (f in files) { parts.append("- `" + f + "`\n"); }
+    return parts.join("")
         + "\nNo project declares them as sources, so they invalidate no cache key and "
         + "feed no target. Whatever the checks below report, they did not check these.\n\n"
         + "If that is wrong, widen the owning project's `sources` in its magusfile - or "

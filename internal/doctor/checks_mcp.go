@@ -22,7 +22,7 @@ const expiringSoon = 14 * 24 * time.Hour
 // (it simply stops authenticating), so neither should fail the CI preflight. The
 // check exists to make credential state and upcoming expiries visible.
 func (*runner) checkMCPTokens() types.DoctorCheck {
-	const name = "mcp tokens"
+	const name = "mcp-tokens"
 
 	cliMsg := "cli token: absent (the daemon mints one on start)"
 	if tok, err := auth.Load(); err == nil {
@@ -75,9 +75,9 @@ func (*runner) checkMCPTokens() types.DoctorCheck {
 // independent of whether the proc daemon is reachable (the bridge lives on the
 // MCP HTTP server, which has a distinct lifecycle from the proc socket).
 func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorCheck {
-	const name = "console"
+	const name = "bridge-reachability"
 	if d == nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "daemon info unavailable; bridge check skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "daemon info unavailable; bridge check skipped"}
 	}
 	if !d.BridgeEnabled {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "bridge disabled via console.enabled: false"}
@@ -90,16 +90,17 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 	// once as a failure, is noise rather than information.
 	if !d.Reachable {
 		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorOK,
-			Message: "daemon not running, so the bridge is not expected; skipped",
-			Details: []string{"start it to serve the console: magus server start"},
+			Name:     name,
+			Status:   types.DoctorOK,
+			Evidence: types.EvidenceUnknown,
+			Message:  "daemon not running, so the bridge is not expected; skipped",
+			Details:  []string{"start it to serve the console: magus server start"},
 		}
 	}
 	if d.MCPAddr == "" {
 		// Belt-and-suspenders: mcpAddrString normally falls back to the default
 		// address, so this only trips if daemonInfo was built without one.
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "MCP address unknown; bridge check skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "MCP address unknown; bridge check skipped"}
 	}
 
 	url := fmt.Sprintf("http://%s/api/v1/graph", d.MCPAddr)

@@ -100,6 +100,163 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 	return append(files, splitLines([]byte(untracked))...), nil
 }
 
+// BranchChanges reports what OTHER remote-tracking branches are changing, most recently updated
+// first, so a reader can be told the file in front of them is also being edited elsewhere.
+//
+// Remote-tracking refs only, and it does NOT fetch. The answer is exactly as fresh as the reader's
+// last fetch - going and getting more would be a network act nobody asked for, on a path that
+// exists to annotate a diff. A caller has to say "as of your last fetch" rather than implying the
+// answer is live.
+//
+// One fork lists the refs and one more diffs each of them, so the cost is limit+1 forks and the
+// cap belongs here rather than in the caller: git applies it to the ref listing and no diff is
+// ever run for a branch that was going to be discarded. The three-dot form computes the merge base
+// internally, which is what keeps it to one fork per branch rather than two.
+func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) ([]types.BranchChange, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	if err := checkRef(base); err != nil {
+		return nil, err
+	}
+	// Deliberately over-asked. FOUR kinds of ref are dropped below - <remote>/HEAD, the reader's
+	// own branch, one whose diff fails, and one whose diff is empty (which always includes base
+	// itself) - and a budget of limit+1 covered exactly one of them, so a repository with a few
+	// stale remotes silently returned fewer branches than asked with no sign the list was short.
+	// Listing refs is one fork whatever the count; only the per-branch diffs are paid per entry,
+	// and the loop stops at limit.
+	// Both ref spaces, and the FULL refname rather than the short one, because the short form
+	// throws away the single fact the caller needs to caption the answer: whether this branch is
+	// here or is a copy of somebody else's as of the last fetch.
+	refs, err := vcsOutput(ctx, dir, "git", "for-each-ref",
+		"--sort=-committerdate", "--count", strconv.Itoa(limit*2+8),
+		"--format=%(refname)", "refs/heads/", "refs/remotes/")
+	if err != nil {
+		return nil, fmt.Errorf("git for-each-ref: %w", err)
+	}
+	mine, err := vcsOutput(ctx, dir, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse: %w", err)
+	}
+	out := make([]types.BranchChange, 0, limit)
+	// A local branch and its remote-tracking copy are ONE line of work under two names, and
+	// reporting both would tell the reader two people are editing a file when one is. Local wins:
+	// it is the current answer, where the tracking copy is only as new as the last fetch. Sorted
+	// by committerdate, so the copy git listed first is not reliably the fresher one - the name
+	// decides, not the order.
+	seen := make(map[string]bool, limit)
+	for _, pass := range []bool{true, false} {
+		for _, ref := range splitLines([]byte(refs)) {
+			if len(out) == limit {
+				break
+			}
+			local := strings.HasPrefix(ref, headsPrefix)
+			if local != pass {
+				continue // locals first, so a tracking copy of one already taken is skipped below
+			}
+			short, ok := shortBranchName(ref)
+			if !ok || seen[short] {
+				continue
+			}
+			// <remote>/HEAD is a symbolic pointer at the default branch, so it duplicates
+			// whatever it aims at and names no line of work of its own.
+			if short == "HEAD" {
+				continue
+			}
+			// A detached HEAD reports the literal "HEAD" here and matches nothing, which is
+			// right: there is no branch of the reader's own to exclude.
+			if short == strings.TrimSpace(mine) {
+				continue
+			}
+			if err := checkRef(ref); err != nil {
+				// A ref git itself listed, so this is not the caller-supplied case checkRef
+				// exists for - but a name that cannot be passed safely is skipped rather
+				// than trusted.
+				continue
+			}
+			// core.quotePath=false for the reason ChangedFiles sets it: a non-ASCII path
+			// otherwise arrives C-quoted, matches no source glob, and the overlap silently
+			// never reports.
+			paths, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false",
+				"diff", "--name-only", base+"..."+ref)
+			if err != nil {
+				// One unreachable branch is not a reason to report none: a ref can vanish
+				// between the listing and the diff, and the rest of the answer is still true.
+				continue
+			}
+			lines := splitLines([]byte(paths))
+			if len(lines) == 0 {
+				continue
+			}
+			seen[short] = true
+			out = append(out, types.BranchChange{Ref: short, Paths: lines, Local: local})
+		}
+	}
+	return out, nil
+}
+
+// headsPrefix and remotesPrefix are the two ref spaces BranchChanges reads.
+const (
+	headsPrefix   = "refs/heads/"
+	remotesPrefix = "refs/remotes/"
+)
+
+// shortBranchName reduces a full refname to the name a reader would use, and reports whether it
+// was a branch ref at all.
+//
+// The remote segment comes off, whatever it is called. Trimming the literal "origin/" was wrong in
+// the ordinary fork setup: an `upstream/feat/x` kept its prefix, so it never matched the reader's
+// own branch name and came back as somebody else competing on the very files they were editing.
+//
+// Dropping it is also what lets a local branch and its remote-tracking copy compare equal, which
+// is how BranchChanges tells one line of work under two names from two lines of work.
+func shortBranchName(ref string) (string, bool) {
+	switch {
+	case strings.HasPrefix(ref, headsPrefix):
+		name := strings.TrimPrefix(ref, headsPrefix)
+		return name, name != ""
+	case strings.HasPrefix(ref, remotesPrefix):
+		remote, name, ok := strings.Cut(strings.TrimPrefix(ref, remotesPrefix), "/")
+		return name, ok && remote != "" && name != ""
+	default:
+		return "", false
+	}
+}
+
+// RangeDiff returns the unified diff of what head added since it diverged from base.
+//
+// Three dots, so the answer is the symmetric difference and never charges the reader for commits
+// that landed on base while the branch was open. That is the same form BranchChanges uses, and for
+// the same reason: both questions are about somebody's branch, not about how far the base has moved.
+//
+// A non-existent revision is reported rather than swallowed. BranchChanges skips a ref whose diff
+// fails because it holds many and the rest are still true; here the range IS the request, and a
+// caller handed "" would read it as a branch that changed nothing.
+func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
+	if err := checkRef(base); err != nil {
+		return "", err
+	}
+	if err := checkRef(head); err != nil {
+		return "", err
+	}
+	// core.quotePath=false for the reason ChangedFiles and BranchChanges set it: a non-ASCII path
+	// otherwise arrives C-quoted and matches no source glob.
+	//
+	// Histogram rather than the default myers because this patch is what remarks anchor into: myers
+	// reports a moved function as a delete plus an unrelated insert, while histogram anchors on
+	// lines unique to both sides and keeps the move legible as a move.
+	args := []string{"-c", "core.quotePath=false", "diff", "--histogram", base + "..." + head}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	out, err := vcsOutput(ctx, dir, "git", args...)
+	if err != nil {
+		return "", fmt.Errorf("git diff %s...%s: %w", base, head, err)
+	}
+	return out, nil
+}
+
 // recoverMergeBase fetches history until base and HEAD share an ancestor in a shallow
 // clone, returning that merge base, or "" when it cannot get one.
 //
@@ -349,6 +506,27 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 		CommitDate: commitDate,
 		IsDirty:    dirtyOut != "",
 	}, nil
+}
+
+// RevTime reads rev's commit date with `git log -1 --format=%ct`, which prints a Unix
+// timestamp and so needs no layout guess the way Metadata's %ci would.
+//
+// A rev git cannot resolve exits non-zero, so the probe's error is discarded the way
+// Metadata discards its optional reads: asking about `origin/main` in a clone that has
+// never fetched it is how a fresh checkout legitimately answers, and reporting that as a
+// failure would make the caller unable to tell "not here" from "the probe broke". The one
+// error left is a %ct that did not parse, which means git answered something this code
+// does not understand.
+func (v gitVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	out, _ := vcsOutput(ctx, dir, "git", "log", "-1", "--format=%ct", rev, "--")
+	if out == "" {
+		return time.Time{}, false, nil
+	}
+	secs, err := strconv.ParseInt(out, 10, 64)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("git log %s: parse %q: %w", rev, out, err)
+	}
+	return time.Unix(secs, 0), true, nil
 }
 
 // Dirty reports whether the working tree (optionally scoped to paths) has
@@ -1345,15 +1523,53 @@ func gitEnviron() []string {
 // the caller named. Use it instead of exec.CommandContext for every git invocation; the
 // caller still sets cmd.Dir or passes -C as before.
 func gitExec(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", uncolored("git", args)...)
 	cmd.Env = gitEnviron()
 	return cmd
+}
+
+// uncolored prepends the switch that stops a backend emitting ANSI, so magus never parses
+// output it has to strip first.
+//
+// Not defensive: a user with `color.ui = always` in their gitconfig - a common setting, since
+// it is how you keep color when piping to a pager - made `magus diff` list every UNTRACKED
+// file and silently drop every tracked one, at exit 0. The escape sequence lands in front of
+// the `diff --git` header, so the header stops beginning a line and no reader sees it. magus
+// synthesizes the untracked half itself, uncolored, which is why output still appeared and
+// the failure looked like a clean answer.
+//
+// hg, Sapling and jj all take a global `--color=never`. git is the exception: it has no such
+// top-level flag (only a per-subcommand `--color`, which not every subcommand accepts), so it
+// gets the config override, which covers diff, log and status alike.
+//
+// Environment variables are NOT an option here, measured against all four with color forced
+// on in repository config: NO_COLOR, HGPLAIN and TERM=dumb each failed to suppress it. An
+// explicit config value outranks every one of them, and an explicit flag is what outranks the
+// config. That is the whole reason this prepends a flag rather than scrubbing an env.
+//
+// The switch goes FIRST because each is a global option that must precede the subcommand.
+func uncolored(name string, args []string) []string {
+	switch name {
+	case "git":
+		return append([]string{"-c", "color.ui=false"}, args...)
+	case "hg", "sl", "jj":
+		return append([]string{"--color=never"}, args...)
+	default:
+		return args
+	}
+}
+
+// vcsExec builds a VCS subprocess with color already suppressed. Use it instead of
+// exec.CommandContext for every hg, Sapling, and jj invocation; git has gitExec, which also
+// scrubs the environment. The caller still sets cmd.Dir or passes the backend's -R/-C flag.
+func vcsExec(ctx context.Context, name string, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, name, uncolored(name, args)...)
 }
 
 // vcsOutput runs a VCS subcommand in dir and returns its trimmed stdout.
 // An empty dir uses the process working directory (the exec.Cmd.Dir convention).
 func vcsOutput(ctx context.Context, dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, uncolored(name, args)...)
 	cmd.Dir = dir
 	if name == "git" {
 		cmd.Env = gitEnviron()
@@ -1370,7 +1586,7 @@ func vcsOutput(ctx context.Context, dir, name string, args ...string) (string, e
 // the first is a space for an unstaged edit (" M path"); TrimSpace ate it on the first
 // line only, so exactly one path per status came back missing its first character.
 func vcsOutputRaw(ctx context.Context, dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, uncolored(name, args)...)
 	cmd.Dir = dir
 	if name == "git" {
 		cmd.Env = gitEnviron()

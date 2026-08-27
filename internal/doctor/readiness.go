@@ -51,7 +51,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 	}
 	if len(gates) == 0 {
 		return types.DoctorCheck{
-			Name:    "tool readiness",
+			Name:    "tool-readiness",
 			Status:  types.DoctorOK,
 			Message: "no spell gates an op on a tool being reachable",
 		}
@@ -83,9 +83,14 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 		}
 		details = append(details, fmt.Sprintf("%s: %s ready (`%s`)", g.spell, g.tool, g.cmd))
 	}
+	// Without --probe this check repeats what the spells DECLARE; with it, magus ran
+	// every gate and is reporting what it saw. That is a different claim, and the
+	// registry's default cannot know which one this run made.
 	msg := fmt.Sprintf("%d tool(s) gated on a readiness probe", len(gates))
+	evidence := types.EvidenceDeclared
 	if r.opts.probe {
 		msg = fmt.Sprintf("%d of %d gated tool(s) not ready", down, len(gates))
+		evidence = types.EvidenceMeasured
 	}
-	return types.DoctorCheck{Name: "tool readiness", Status: status, Message: msg, Details: details}
+	return types.DoctorCheck{Name: "tool-readiness", Status: status, Evidence: evidence, Message: msg, Details: details}
 }

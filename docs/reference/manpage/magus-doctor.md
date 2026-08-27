@@ -35,12 +35,39 @@ convention magus recommends, such as target naming or language coverage; it
 is reported and exits zero, because ci is the one target name magus reserves
 and the rest of the layout is yours. No flag promotes advice to failure.
 
+Every finding is reported under a stable check name (vcs-base-ref,
+cacheable-secret-reads). --list prints them all with what each looks at,
+without running any, so the name can be looked up rather than provoked.
+
+## Options
+
+**--fix**
+: Run the remedy each finding names, where one exists (see --dry-run to list them first)
+
+**--list**
+: Print every check magus would run - name, subject, and MGS code - without running any of them
+
+**--probe**
+: Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)
+
 ## Examples
 
 *Run all checks*
 
 ```sh
 magus doctor
+```
+
+*Name every check without running one*
+
+```sh
+magus doctor --list
+```
+
+*The check names alone, for scripting*
+
+```sh
+magus doctor --list -o name
 ```
 
 *JSON report*
