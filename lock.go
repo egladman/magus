@@ -509,7 +509,7 @@ func (l *projectLocker) recordOwner(ctx context.Context, projectPath string) {
 // waiter sidecars carry. Stored one file per field, so a stuck run is diagnosable
 // with cat alone:
 //
-//	$ cat .magus/locks/*/lock.owner/command
+//	$ cat .magus/locks/*/lock.owner
 //	magus run ci .
 func selfRecord(ctx context.Context) processRecord {
 	dir, _ := os.Getwd()
@@ -628,15 +628,14 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 	dir := filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot))
 	var out []types.StatusLock
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		// The sidecar is a DIRECTORY of single-value files, so this matches on the name
-		// and skips descending into it - its own field files must not be walked as if
-		// each were another sidecar.
-		if err != nil || !d.IsDir() || !strings.HasSuffix(path, lockFileName+ownerSuffix) {
+		// The sidecar is a FILE holding the whole record, so this matches on the name and
+		// takes only files: a directory of that name is not one of ours.
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, lockFileName+ownerSuffix) {
 			return nil //nolint:nilerr // a walk error on one entry must not abort the report
 		}
 		o := readRecord(path)
 		if o.PID == 0 {
-			return fs.SkipDir // unreadable or malformed: skipped, not fatal to the report
+			return nil // unreadable or malformed: skipped, not fatal to the report
 		}
 		rel, rerr := filepath.Rel(dir, filepath.Dir(path))
 		if rerr != nil {
@@ -722,7 +721,7 @@ func readWaiters(dir string) []types.StatusLockWaiter {
 	}
 	var out []types.StatusLockWaiter
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), lockFileName+waiterInfix) {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), lockFileName+waiterInfix) {
 			continue
 		}
 		o := readRecord(filepath.Join(dir, e.Name()))
