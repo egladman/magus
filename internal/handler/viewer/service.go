@@ -13,10 +13,6 @@ import (
 
 // Service implements viewerv1alpha1connect.ViewerServiceHandler over the same two stores the
 // plain-JSON run-browser routes read.
-//
-// The typed replacement for /api/v1/outputs, /api/v1/output, /api/v1/runs and /api/v1/run. Those
-// four were hand-written strings with no proto behind them while this service sat defined in
-// magus/viewer/v1alpha1 and unmounted - the contract existed, nothing served it.
 type Service struct {
 	outputs outputSource
 	runs    runSource
@@ -73,11 +69,8 @@ func (s *Service) GetJournal(_ context.Context, req *connect.Request[viewerv1.Ge
 	return connect.NewResponse(journalToProto(header, events)), nil
 }
 
-// ListEvents returns a page of one run's events.
-//
-// Paging is over the slice the store already returns whole: the journal is read per invocation,
-// so a page token is an offset into it rather than a cursor the store could resume from. Honest
-// about what it is - the alternative is a token that implies a streaming read nothing performs.
+// ListEvents returns a page of one run's events. The store returns the journal whole, so the page
+// token is an offset into it rather than a cursor it could resume from.
 func (s *Service) ListEvents(_ context.Context, req *connect.Request[viewerv1.ListEventsRequest]) (*connect.Response[viewerv1.ListEventsResponse], error) {
 	inv, err := s.resolveInvocation(req.Msg.GetParent())
 	if err != nil {
@@ -101,11 +94,8 @@ func (s *Service) ListEvents(_ context.Context, req *connect.Request[viewerv1.Li
 	return connect.NewResponse(out), nil
 }
 
-// StreamEvents is not served by this handler.
-//
-// The live stream is the SSE route in live.go, which multiplexes a running invocation's events
-// onto the connection the console already holds open. Answering Unimplemented here is the honest
-// report: a second live path would be a second thing to keep correct, and nothing asks for one.
+// StreamEvents is not served here: live events ride the SSE route in live.go, which multiplexes
+// them onto the connection the console already holds open.
 func (s *Service) StreamEvents(_ context.Context, _ *connect.Request[viewerv1.StreamEventsRequest], _ *connect.ServerStream[viewerv1.StreamEventsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("viewer: live events stream over the SSE route, not this RPC"))
 }
@@ -146,10 +136,8 @@ func (s *Service) GetOutput(_ context.Context, req *connect.Request[viewerv1.Get
 
 // ListInvocations returns the retained run journals, newest first.
 func (s *Service) ListInvocations(_ context.Context, req *connect.Request[viewerv1.ListInvocationsRequest]) (*connect.Response[viewerv1.ListInvocationsResponse], error) {
-	// 0 means every journal the store kept. NOT cache.DefaultMaxRuns: that constant is the
-	// RETENTION bound, and borrowing it here would silently change what this RPC returns the day
-	// somebody tunes how much history the daemon keeps. Cheap either way - ListRunLogs reads
-	// headers, not bodies - and the page bounds what is sent.
+	// 0 is every journal kept. NOT cache.DefaultMaxRuns: that is the RETENTION bound, and
+	// borrowing it would change what this returns the day somebody tunes how much history to keep.
 	logs := s.runs.ListRunLogs(0)
 	from, to, next, err := page(len(logs), req.Msg.GetPageToken(), int(req.Msg.GetPageSize()))
 	if err != nil {
@@ -158,9 +146,8 @@ func (s *Service) ListInvocations(_ context.Context, req *connect.Request[viewer
 
 	out := &viewerv1.ListInvocationsResponse{NextPageToken: next}
 	for _, l := range logs[from:to] {
-		// The same Invocation message InvocationEventsByID produces, so a listed run and a
-		// fetched one are one shape. A RunLog carries no cwd - the header is read without
-		// opening the journal - so Command holds the argv and the trigger only.
+		// A RunLog carries no cwd - the header is read without opening the journal - so Command
+		// holds the argv and the trigger only.
 		out.Invocations = append(out.Invocations, &viewerv1.Invocation{
 			Id: l.Inv,
 			Command: &viewerv1.Command{
