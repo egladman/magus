@@ -347,7 +347,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// work it can start is bounded by what the magusfile declares.
 			bridgeMux.Handle("/api/v1/diff/run", cors(diffRunH))
 			// Human run view: every plain run has a plan, and an agent-declared one is not the
-			// only shape worth showing. Loopback only, like the diff routes and unlike /api/v1/outputs:
+			// only shape worth showing. Loopback only, unlike the run browser's ViewerService:
 			// this one names every target in the workspace, which a share link handed to a phone
 			// has no business enumerating.
 			bridgeMux.Handle("/api/v1/plan", cors(planH))
