@@ -594,3 +594,29 @@ test("#demo gives no reason when nothing narrowed the verdicts", async () => {
 
   dispose.deactivate();
 });
+
+// The toolbar STACKS, and that is the whole reason this is pinned structurally. An item appended
+// straight to it is stretched to the toolbar's full width, so a button lands as a centred caption
+// in a row of its own - which is how the verdict and the focus toggle each took a full row, and
+// how the key legend's "sits at the trailing edge" auto margin ended up with no row to sit in.
+// jsdom computes no layout, so the sibling relationship is what a test can hold; it is also the
+// thing that was actually wrong.
+test("the toolbar's controls share one row rather than stacking", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const controls = document.querySelector(".console-diff-toolbar__controls");
+  assert.ok(controls, "the controls row exists");
+  for (const cls of [
+    "console-diff-toolbar__verdict",
+    "console-diff-toolbar__focus",
+    "console-diff-toolbar__keys",
+  ]) {
+    const el = document.querySelector(`.${cls}`);
+    assert.ok(el, `${cls} is rendered`);
+    assert.equal(el.parentElement, controls, `${cls} is in the controls row, not the stack`);
+  }
+
+  dispose.deactivate();
+});

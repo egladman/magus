@@ -415,12 +415,26 @@
   white-space: nowrap;
 }
 
-.console-diff-toolbar__focus {
+/* One row for the verdict, the focus toggle and the key legend, so the legend's auto margin below
+   has a row to push it to the trailing edge of. */
+.console-diff-toolbar__controls {
+  display: flex;
+  /* BASELINE: the buttons are bordered boxes and the legend is bare text, so centering the
+     boxes leaves the two sets of words a pixel apart. */
+  align-items: baseline;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.console-diff-toolbar__focus,
+.console-diff-toolbar__verdict {
   flex: 0 0 auto;
 }
 
-.console-diff-toolbar__verdict {
-  flex: 0 0 auto;
+/* svgGlyph draws at a fixed pixel size; 1em hands sizing back to the icon tokens PF's wrapper
+   already carries. */
+.console-diff-toolbar__controls .pf-v6-c-icon__content svg {
+  width: 1em;
+  height: 1em;
 }
 
 /* Colour is the glance; the words beside it are what actually says which state this is. The
@@ -445,7 +459,9 @@
 
 .console-diff-toolbar__keys {
   display: flex;
-  gap: var(--pf-t--global--spacer--md);
+  /* Groups separate wider than a group holds together; at equal gaps the row reads as one run
+     of punctuation. */
+  gap: var(--pf-t--global--spacer--lg);
   margin-inline-start: auto;
   color: var(--pf-t--global--text--color--subtle);
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -459,6 +475,16 @@
   display: inline-flex;
   gap: var(--pf-t--global--spacer--xs);
   align-items: center;
+}
+
+.console-diff-toolbar__keycombo {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.console-diff-toolbar__keyor {
+  color: var(--pf-t--global--text--color--subtle);
 }
 
 /* A border is what separates a key from the prose around it: `}` and `{` set as running text read
@@ -879,10 +905,16 @@
   display: none;
 }
 
+/* Three fields - the agent, the path, the thing it says - and each boundary crosses a typeface:
+   proportional, mono, proportional. At one shared 4px gap they read as a single run that changes
+   font twice, so `claude-code services/...` runs together. */
 .console-diff-rail__item {
   display: flex;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--xs);
+  /* BASELINE, not center: system-ui and ui-monospace put their baselines at different heights in
+     the same line box, so centering the boxes leaves the path above the words either side of it.
+     The two buttons opt back out - they are boxes, not text, and want their own centre. */
+  align-items: baseline;
+  gap: var(--pf-t--global--spacer--md);
   font-size: var(--pf-t--global--font--size--sm);
 }
 
@@ -909,6 +941,7 @@
 .console-diff-rail__go,
 .console-diff-rail__skip {
   display: inline-flex;
+  align-self: center;
   align-items: center;
   gap: 0.3rem;
   border: 1px solid var(--pf-t--global--border--color--default);

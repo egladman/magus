@@ -75,6 +75,7 @@ import {
   type ReviewInfo,
   type ReviewThread,
   type ReviewVerdict,
+  type BranchChange,
 } from "./session";
 import { setMarkdown } from "./markdown";
 import { mergedNotice } from "../../lib/review-notice";
@@ -91,6 +92,36 @@ import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
+import { svgGlyph } from "../../ui/glyph";
+
+// Marks for this surface's two toolbar controls. Kept here rather than in ui/glyph.ts, which holds
+// only the ones a second surface also draws.
+//
+// PLAY is the run control's: the conventional right-pointing triangle for "start this".
+const PLAY: readonly string[] = ["M8 5l11 7-11 7z"];
+
+// CROSSHAIR is focus mode's: aim at one thing. Not corner brackets, which every other UI spends on
+// fullscreen - they promise a bigger pane rather than a narrower one.
+// buttonIcon wraps a mark in the structure PF's Icon component renders, which carries the -0.125em
+// nudge that sits an svg on the optical centre of the text beside it. Spelled out because this
+// console consumes PF as plain CSS.
+function buttonIcon(paths: readonly string[]): HTMLElement {
+  const slot = h("span", "pf-v6-c-button__icon");
+  const icon = h("span", "pf-v6-c-icon pf-m-inline");
+  const content = h("span", "pf-v6-c-icon__content");
+  content.append(svgGlyph(paths));
+  icon.append(content);
+  slot.append(icon);
+  return slot;
+}
+
+const CROSSHAIR: readonly string[] = [
+  "M19 12a7 7 0 1 1-14 0 7 7 0 1 1 14 0",
+  "M12 2v3",
+  "M12 19v3",
+  "M2 12h3",
+  "M19 12h3",
+];
 import type { SurfaceInstance } from "../standalone";
 
 // Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
@@ -474,8 +505,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
     [["Esc"], "overview"],
   ] as [string[], string][]) {
     const group = h("span", "console-diff-toolbar__key");
-    for (const key of keys) group.append(h("kbd", undefined, key));
-    group.append(h("span", "console-diff-toolbar__keyname", what));
+    // Wrapping the alternatives lets them bind tighter to each other than to the label. Flat, every
+    // gap is the same width and `] [ hunk` reads as three peers instead of two keys and their job.
+    const combo = h("span", "console-diff-toolbar__keycombo");
+    keys.forEach((key, i) => {
+      // "]/[", the spelling the terminal viewer's legend uses. Two bare boxes read as a sequence to
+      // press; the slash says either one will do.
+      if (i > 0) combo.append(h("span", "console-diff-toolbar__keyor", "/"));
+      combo.append(h("kbd", undefined, key));
+    });
+    group.append(combo, h("span", "console-diff-toolbar__keyname", what));
     keysEl.append(group);
   }
   // The progress of the pass, shown only while reading one hunk at a time. A bar for the glance
@@ -491,8 +530,15 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const progressText = h("span", "console-diff-progress__text");
   progressEl.append(progressBar, progressText);
 
-  const focusButton = h("button", "pf-v6-c-button pf-m-link console-diff-toolbar__focus");
+  const focusButton = h(
+    "button",
+    "pf-v6-c-button pf-m-secondary pf-m-small console-diff-toolbar__focus",
+  );
   focusButton.type = "button";
+  // The label alternates between Focus and Leave focus, so it lives in its own span - assigning
+  // textContent to the button would take the icon with it.
+  const focusText = h("span");
+  focusButton.append(buttonIcon(CROSSHAIR), focusText);
   focusButton.addEventListener("click", () => setFocus(!state.focus));
 
   // ONE run control, for the project of the file in view - not one per file heading. The question
@@ -501,13 +547,23 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // turn the surface into a control panel.
   const verdictButton = h(
     "button",
-    "pf-v6-c-button pf-m-link console-diff-toolbar__verdict",
+    "pf-v6-c-button pf-m-secondary pf-m-small console-diff-toolbar__verdict",
   ) as HTMLButtonElement;
   verdictButton.type = "button";
   verdictButton.hidden = true;
+  // Play, because the button's job is to RUN the target. The words and colour beside it carry what
+  // the run decided, so the mark stays the same across verdicts.
+  const verdictText = h("span");
+  verdictButton.append(buttonIcon(PLAY), verdictText);
   verdictButton.addEventListener("click", () => void startRun());
 
-  toolbar.append(statsEl, collaborationNotice, progressEl, verdictButton, focusButton, keysEl);
+  // The two controls and the legend share a row. The toolbar stacks, so an item appended straight
+  // to it stretches to the full width and PF centres its label in all that space, which reads as a
+  // caption rather than a control.
+  const controls = h("div", "console-diff-toolbar__controls");
+  controls.append(verdictButton, focusButton, keysEl);
+
+  toolbar.append(statsEl, collaborationNotice, progressEl, controls);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
   context.hidden = true;
@@ -641,21 +697,21 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (file.deletions > 0) el.append(label(`-${file.deletions}`, "pf-m-red"));
 
     // branchTooltip names the branches and says WHEN each answer was true.
-  //
-  // Two captions rather than one, because the freshness differs and a single line would overstate
-  // half of them: nothing here fetches, so a remote-tracking answer is as old as the last fetch,
-  // while a local branch is simply current. Before local branches were scanned at all, every
-  // answer was the remote kind and one caption was honest.
-  const branchTooltip = (alsoOn: readonly BranchChange[]): string => {
-    const local = alsoOn.filter((b) => b.local).map((b) => b.ref);
-    const remote = alsoOn.filter((b) => !b.local).map((b) => b.ref);
-    const parts: string[] = [];
-    if (local.length > 0) parts.push(`${local.join(", ")} - here now`);
-    if (remote.length > 0) parts.push(`${remote.join(", ")} - as of your last fetch`);
-    return parts.join("; ");
-  };
+    //
+    // Two captions rather than one, because the freshness differs and a single line would overstate
+    // half of them: nothing here fetches, so a remote-tracking answer is as old as the last fetch,
+    // while a local branch is simply current. Before local branches were scanned at all, every
+    // answer was the remote kind and one caption was honest.
+    const branchTooltip = (alsoOn: readonly BranchChange[]): string => {
+      const local = alsoOn.filter((b) => b.local).map((b) => b.ref);
+      const remote = alsoOn.filter((b) => !b.local).map((b) => b.ref);
+      const parts: string[] = [];
+      if (local.length > 0) parts.push(`${local.join(", ")} - here now`);
+      if (remote.length > 0) parts.push(`${remote.join(", ")} - as of your last fetch`);
+      return parts.join("; ");
+    };
 
-  // Who else is editing this file. Reported, never predicted: two branches touching one file is
+    // Who else is editing this file. Reported, never predicted: two branches touching one file is
     // ordinary and usually fine, so this says what is true and leaves the conclusion alone -
     // "conflict likely" would be magus guessing at an outcome it cannot see.
     const alsoOn = state.branches?.get(file.path) ?? [];
@@ -694,11 +750,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       // gutters, so what the heading says is what a reader wanted from it: the declaration they
       // are inside of. A hunk git could name none for keeps its position alone.
       el.append(
-        h(
-          "span",
-          "console-diff-row__text",
-          row.hunk.declaration || `line ${row.hunk.newStart}`,
-        ),
+        h("span", "console-diff-row__text", row.hunk.declaration || `line ${row.hunk.newStart}`),
       );
       if (!demo && !row.file.binary && row.file.status !== "deleted") {
         const peek = h(
@@ -1612,7 +1664,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (v?.undeclared) {
       // A gap in what the workspace declares, not a failure. Said plainly, because "no tests ran"
       // rendered as silence reads as "nothing to worry about".
-      verdictButton.textContent = `${project}: no ${RUN_TARGET} target`;
+      verdictText.textContent = `${project}: no ${RUN_TARGET} target`;
       verdictButton.title = v.undeclared;
       verdictButton.disabled = true;
       return;
@@ -1620,11 +1672,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const secs = v?.durationMs ? ` ${(v.durationMs / 1000).toFixed(1)}s` : "";
     switch (v?.state) {
       case "running":
-        verdictButton.textContent = `Testing ${project}...`;
+        verdictText.textContent = `Testing ${project}...`;
         verdictButton.title = `magus run ${RUN_TARGET} ${project} is in flight`;
         break;
       case "passed":
-        verdictButton.textContent = stale
+        verdictText.textContent = stale
           ? `${project} passed - since edited`
           : `${project} passed${secs}`;
         verdictButton.title = stale
@@ -1632,13 +1684,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
           : "Run again";
         break;
       case "failed":
-        verdictButton.textContent = stale
-          ? `${project} failed - since edited`
-          : `${project} failed`;
+        verdictText.textContent = stale ? `${project} failed - since edited` : `${project} failed`;
         verdictButton.title = v.error || "Run again";
         break;
       default:
-        verdictButton.textContent = `Test ${project}`;
+        verdictText.textContent = `Test ${project}`;
         verdictButton.title = `Run ${RUN_TARGET} for ${project} on this machine`;
     }
   };
@@ -1703,7 +1753,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // this with its "n/m hunks read" chip, and two counts of the same thing in one row is how a
   // reader stops believing either.
   const renderProgress = (): void => {
-    focusButton.textContent = state.focus ? "Leave focus" : "Focus";
+    focusText.textContent = state.focus ? "Leave focus" : "Focus";
     focusButton.title = state.focus
       ? "Show the whole changeset again (f)"
       : "Read one hunk at a time (f)";
