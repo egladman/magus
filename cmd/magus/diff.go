@@ -764,7 +764,9 @@ func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []diff.File {
 		}
 		for _, h := range byPath[f.Path] {
 			file.Hunks = append(file.Hunks, diff.Hunk{
-				Index: h.Index, Header: h.Header, Lines: h.Lines, Digest: h.Digest,
+				// Display when the parser found something a renderer would obey, Lines
+				// otherwise. The viewer never sees the raw form of a deceptive line.
+				Index: h.Index, Header: h.Header, Lines: displayOr(h), Digest: h.Digest,
 				NewStart: h.NewStart, Declaration: h.Declaration,
 				Emph: session.RawLineEmphasis(h),
 			})
@@ -772,6 +774,17 @@ func diffTUIFiles(rev types.Diff, parsed []session.FileHunks) []diff.File {
 		out = append(out, file)
 	}
 	return out
+}
+
+// displayOr is a hunk's render-safe lines, falling back to its real ones.
+//
+// The fallback is the common case: displayLines returns nil unless a line carried a character a
+// renderer obeys but a reader cannot see, so an honest patch reaches the viewer untouched.
+func displayOr(h session.Hunk) []string {
+	if h.Display != nil {
+		return h.Display
+	}
+	return h.Lines
 }
 
 // diffSync is a diff.Sync with a shutdown. The two implementations get their writes out

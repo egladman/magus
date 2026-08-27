@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -78,6 +79,14 @@ type Hunk struct {
 	// emphasis are: two readers of one header is two chances to disagree about what a hunk is
 	// called, and nothing would ever report the disagreement.
 	Declaration string `json:"declaration,omitempty"`
+	// Display is Lines with the characters a renderer obeys but a reader cannot see escaped, or
+	// NIL when no line carried one - which is every ordinary hunk, so this costs nothing to ship
+	// and nothing to hold.
+	//
+	// Computed here so the two surfaces cannot disagree about it. A sanitizer in the terminal and
+	// not the browser would leave one of them rendering the deception, and the reader has no way
+	// to tell which they are looking at.
+	Display []string `json:"display,omitempty"`
 	// Lines is the body EXACTLY as it arrived, markers included, because that is what Digest
 	// hashes. Rows carries the same body parsed for rendering; the two are not interchangeable,
 	// since a context line whose producer dropped the trailing space arrives as "" and would
@@ -303,7 +312,11 @@ func (p *parser) closeHunk() {
 	// precedes the first @@, so Path is already settled by the time any hunk closes.
 	p.hunk.Digest = HunkDigest(p.identity(), p.raw)
 	p.hunk.Lines = p.raw
+	// AFTER the digest, never before: the digest is the hunk's identity and must address the
+	// file as it really is, so a line rewritten for safe display cannot become a different hunk.
+	p.hunk.Display = displayLines(p.raw)
 	markEmphasis(p.hunk.Rows)
+	sanitizeRows(p.hunk.Rows)
 	p.cur.Hunks = append(p.cur.Hunks, *p.hunk)
 	p.hunk, p.raw = nil, nil
 }
@@ -460,6 +473,43 @@ func stripPathPrefix(raw string) string {
 type FileHunks struct {
 	Path  string `json:"path"`
 	Hunks []Hunk `json:"hunks"`
+}
+
+// sanitizeRows escapes the deceptive characters in each row's text, which is what the browser
+// draws - Lines is what the terminal draws, and both have to be covered or one surface renders a
+// deception the other caught.
+//
+// AFTER markEmphasis, and the row's emphasis is DROPPED where the text changed. Emph is an offset
+// into the text, so escaping would shift what it points at; and a line carrying a bidirectional
+// override does not want a subtle intra-line highlight anyway. The escape is the signal.
+func sanitizeRows(rows []Row) {
+	for i := range rows {
+		safe, changed := SanitizeBidi(rows[i].Text)
+		if !changed {
+			continue
+		}
+		rows[i].Text = safe
+		rows[i].Emph = nil
+	}
+}
+
+// displayLines returns lines with deceptive characters escaped, or nil when none carried any.
+//
+// Nil rather than a copy for the common case: every hunk in an honest patch takes this path, and a
+// second slice per hunk would double what a large changeset holds to say nothing.
+func displayLines(lines []string) []string {
+	var out []string
+	for i, l := range lines {
+		safe, changed := SanitizeBidi(l)
+		if !changed {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(lines)
+		}
+		out[i] = safe
+	}
+	return out
 }
 
 // ParseHunks is the identity view of a patch: paths and hunk digests, without the rendering
