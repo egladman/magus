@@ -13,8 +13,8 @@ import { must } from "../../lib/guards";
 // is a no-op if the scaffold is absent.
 
 import { fromBinary } from "@bufbuild/protobuf";
-import { JournalSchema } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
-import type { Journal } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import { JournalSchema } from "@wire/viewer/v1alpha1/viewer_pb";
+import type { Journal } from "@wire/viewer/v1alpha1/viewer_pb";
 import {
   parseHash,
   wantsDemo,

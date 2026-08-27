@@ -343,12 +343,19 @@ func (x *Command) GetTrigger() Trigger {
 // the command + start; KIND_FINISHED supplies the end), offered as a parsed header so a
 // viewer need not dig through the events for the command.
 type Invocation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Command       *Command               `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
-	StartTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"` // unset while still running
-	MagusVersion  string                 `protobuf:"bytes,5,opt,name=magus_version,json=magusVersion,proto3" json:"magus_version,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Command      *Command               `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	StartTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"` // unset while still running
+	MagusVersion string                 `protobuf:"bytes,5,opt,name=magus_version,json=magusVersion,proto3" json:"magus_version,omitempty"`
+	// Outcome, when the run reached one. The events carry this too (KIND_FINISHED), but a listing
+	// reads run HEADERS without opening any journal, so a browser that had to decide pass from fail
+	// would otherwise open every file it lists.
+	Status Status `protobuf:"varint,6,opt,name=status,proto3,enum=magus.viewer.v1alpha1.Status" json:"status,omitempty"`
+	// On-disk size of this run's journal. What a retention view needs to say which runs are worth
+	// keeping, and the same reason as above: available from the header alone.
+	SizeBytes     int64 `protobuf:"varint,7,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -416,6 +423,20 @@ func (x *Invocation) GetMagusVersion() string {
 		return x.MagusVersion
 	}
 	return ""
+}
+
+func (x *Invocation) GetStatus() Status {
+	if x != nil {
+		return x.Status
+	}
+	return Status_STATUS_UNSPECIFIED
+}
+
+func (x *Invocation) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
 }
 
 // Event is one line of a structured invocation log - the atom of the stream. Most events
@@ -1437,7 +1458,7 @@ const file_magus_viewer_v1alpha1_viewer_proto_rawDesc = "" +
 	"\aCommand\x12\x1c\n" +
 	"\targuments\x18\x01 \x03(\tR\targuments\x12\x10\n" +
 	"\x03cwd\x18\x03 \x01(\tR\x03cwd\x128\n" +
-	"\atrigger\x18\x04 \x01(\x0e2\x1e.magus.viewer.v1alpha1.TriggerR\atriggerJ\x04\b\x02\x10\x03\"\xed\x01\n" +
+	"\atrigger\x18\x04 \x01(\x0e2\x1e.magus.viewer.v1alpha1.TriggerR\atriggerJ\x04\b\x02\x10\x03\"\xc3\x02\n" +
 	"\n" +
 	"Invocation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
@@ -1445,7 +1466,10 @@ const file_magus_viewer_v1alpha1_viewer_proto_rawDesc = "" +
 	"\n" +
 	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
 	"\bend_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12#\n" +
-	"\rmagus_version\x18\x05 \x01(\tR\fmagusVersion\"\xda\x03\n" +
+	"\rmagus_version\x18\x05 \x01(\tR\fmagusVersion\x125\n" +
+	"\x06status\x18\x06 \x01(\x0e2\x1d.magus.viewer.v1alpha1.StatusR\x06status\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\a \x01(\x03R\tsizeBytes\"\xda\x03\n" +
 	"\x05Event\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x18\n" +
 	"\aproject\x18\x02 \x01(\tR\aproject\x12\x16\n" +
@@ -1615,43 +1639,44 @@ var file_magus_viewer_v1alpha1_viewer_proto_depIdxs = []int32{
 	4,  // 1: magus.viewer.v1alpha1.Invocation.command:type_name -> magus.viewer.v1alpha1.Command
 	22, // 2: magus.viewer.v1alpha1.Invocation.start_time:type_name -> google.protobuf.Timestamp
 	22, // 3: magus.viewer.v1alpha1.Invocation.end_time:type_name -> google.protobuf.Timestamp
-	22, // 4: magus.viewer.v1alpha1.Event.time:type_name -> google.protobuf.Timestamp
-	0,  // 5: magus.viewer.v1alpha1.Event.kind:type_name -> magus.viewer.v1alpha1.Kind
-	1,  // 6: magus.viewer.v1alpha1.Event.stream:type_name -> magus.viewer.v1alpha1.Stream
-	2,  // 7: magus.viewer.v1alpha1.Event.status:type_name -> magus.viewer.v1alpha1.Status
-	23, // 8: magus.viewer.v1alpha1.Event.duration:type_name -> google.protobuf.Duration
-	4,  // 9: magus.viewer.v1alpha1.Event.command:type_name -> magus.viewer.v1alpha1.Command
-	5,  // 10: magus.viewer.v1alpha1.Journal.invocation:type_name -> magus.viewer.v1alpha1.Invocation
-	6,  // 11: magus.viewer.v1alpha1.Journal.events:type_name -> magus.viewer.v1alpha1.Event
-	24, // 12: magus.viewer.v1alpha1.EventQuery.text:type_name -> magus.query.v1alpha1.StringMatch
-	25, // 13: magus.viewer.v1alpha1.EventQuery.time:type_name -> magus.query.v1alpha1.TimeRange
-	9,  // 14: magus.viewer.v1alpha1.ListEventsRequest.filter:type_name -> magus.viewer.v1alpha1.EventQuery
-	6,  // 15: magus.viewer.v1alpha1.ListEventsResponse.events:type_name -> magus.viewer.v1alpha1.Event
-	9,  // 16: magus.viewer.v1alpha1.StreamEventsRequest.filter:type_name -> magus.viewer.v1alpha1.EventQuery
-	6,  // 17: magus.viewer.v1alpha1.StreamEventsResponse.event:type_name -> magus.viewer.v1alpha1.Event
-	22, // 18: magus.viewer.v1alpha1.Output.create_time:type_name -> google.protobuf.Timestamp
-	23, // 19: magus.viewer.v1alpha1.Output.duration:type_name -> google.protobuf.Duration
-	14, // 20: magus.viewer.v1alpha1.ListOutputsResponse.outputs:type_name -> magus.viewer.v1alpha1.Output
-	5,  // 21: magus.viewer.v1alpha1.ListInvocationsResponse.invocations:type_name -> magus.viewer.v1alpha1.Invocation
-	8,  // 22: magus.viewer.v1alpha1.ViewerService.GetInvocation:input_type -> magus.viewer.v1alpha1.GetInvocationRequest
-	10, // 23: magus.viewer.v1alpha1.ViewerService.ListEvents:input_type -> magus.viewer.v1alpha1.ListEventsRequest
-	12, // 24: magus.viewer.v1alpha1.ViewerService.StreamEvents:input_type -> magus.viewer.v1alpha1.StreamEventsRequest
-	15, // 25: magus.viewer.v1alpha1.ViewerService.ListOutputs:input_type -> magus.viewer.v1alpha1.ListOutputsRequest
-	17, // 26: magus.viewer.v1alpha1.ViewerService.GetOutput:input_type -> magus.viewer.v1alpha1.GetOutputRequest
-	19, // 27: magus.viewer.v1alpha1.ViewerService.ListInvocations:input_type -> magus.viewer.v1alpha1.ListInvocationsRequest
-	21, // 28: magus.viewer.v1alpha1.ViewerService.GetJournal:input_type -> magus.viewer.v1alpha1.GetJournalRequest
-	5,  // 29: magus.viewer.v1alpha1.ViewerService.GetInvocation:output_type -> magus.viewer.v1alpha1.Invocation
-	11, // 30: magus.viewer.v1alpha1.ViewerService.ListEvents:output_type -> magus.viewer.v1alpha1.ListEventsResponse
-	13, // 31: magus.viewer.v1alpha1.ViewerService.StreamEvents:output_type -> magus.viewer.v1alpha1.StreamEventsResponse
-	16, // 32: magus.viewer.v1alpha1.ViewerService.ListOutputs:output_type -> magus.viewer.v1alpha1.ListOutputsResponse
-	18, // 33: magus.viewer.v1alpha1.ViewerService.GetOutput:output_type -> magus.viewer.v1alpha1.GetOutputResponse
-	20, // 34: magus.viewer.v1alpha1.ViewerService.ListInvocations:output_type -> magus.viewer.v1alpha1.ListInvocationsResponse
-	7,  // 35: magus.viewer.v1alpha1.ViewerService.GetJournal:output_type -> magus.viewer.v1alpha1.Journal
-	29, // [29:36] is the sub-list for method output_type
-	22, // [22:29] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	2,  // 4: magus.viewer.v1alpha1.Invocation.status:type_name -> magus.viewer.v1alpha1.Status
+	22, // 5: magus.viewer.v1alpha1.Event.time:type_name -> google.protobuf.Timestamp
+	0,  // 6: magus.viewer.v1alpha1.Event.kind:type_name -> magus.viewer.v1alpha1.Kind
+	1,  // 7: magus.viewer.v1alpha1.Event.stream:type_name -> magus.viewer.v1alpha1.Stream
+	2,  // 8: magus.viewer.v1alpha1.Event.status:type_name -> magus.viewer.v1alpha1.Status
+	23, // 9: magus.viewer.v1alpha1.Event.duration:type_name -> google.protobuf.Duration
+	4,  // 10: magus.viewer.v1alpha1.Event.command:type_name -> magus.viewer.v1alpha1.Command
+	5,  // 11: magus.viewer.v1alpha1.Journal.invocation:type_name -> magus.viewer.v1alpha1.Invocation
+	6,  // 12: magus.viewer.v1alpha1.Journal.events:type_name -> magus.viewer.v1alpha1.Event
+	24, // 13: magus.viewer.v1alpha1.EventQuery.text:type_name -> magus.query.v1alpha1.StringMatch
+	25, // 14: magus.viewer.v1alpha1.EventQuery.time:type_name -> magus.query.v1alpha1.TimeRange
+	9,  // 15: magus.viewer.v1alpha1.ListEventsRequest.filter:type_name -> magus.viewer.v1alpha1.EventQuery
+	6,  // 16: magus.viewer.v1alpha1.ListEventsResponse.events:type_name -> magus.viewer.v1alpha1.Event
+	9,  // 17: magus.viewer.v1alpha1.StreamEventsRequest.filter:type_name -> magus.viewer.v1alpha1.EventQuery
+	6,  // 18: magus.viewer.v1alpha1.StreamEventsResponse.event:type_name -> magus.viewer.v1alpha1.Event
+	22, // 19: magus.viewer.v1alpha1.Output.create_time:type_name -> google.protobuf.Timestamp
+	23, // 20: magus.viewer.v1alpha1.Output.duration:type_name -> google.protobuf.Duration
+	14, // 21: magus.viewer.v1alpha1.ListOutputsResponse.outputs:type_name -> magus.viewer.v1alpha1.Output
+	5,  // 22: magus.viewer.v1alpha1.ListInvocationsResponse.invocations:type_name -> magus.viewer.v1alpha1.Invocation
+	8,  // 23: magus.viewer.v1alpha1.ViewerService.GetInvocation:input_type -> magus.viewer.v1alpha1.GetInvocationRequest
+	10, // 24: magus.viewer.v1alpha1.ViewerService.ListEvents:input_type -> magus.viewer.v1alpha1.ListEventsRequest
+	12, // 25: magus.viewer.v1alpha1.ViewerService.StreamEvents:input_type -> magus.viewer.v1alpha1.StreamEventsRequest
+	15, // 26: magus.viewer.v1alpha1.ViewerService.ListOutputs:input_type -> magus.viewer.v1alpha1.ListOutputsRequest
+	17, // 27: magus.viewer.v1alpha1.ViewerService.GetOutput:input_type -> magus.viewer.v1alpha1.GetOutputRequest
+	19, // 28: magus.viewer.v1alpha1.ViewerService.ListInvocations:input_type -> magus.viewer.v1alpha1.ListInvocationsRequest
+	21, // 29: magus.viewer.v1alpha1.ViewerService.GetJournal:input_type -> magus.viewer.v1alpha1.GetJournalRequest
+	5,  // 30: magus.viewer.v1alpha1.ViewerService.GetInvocation:output_type -> magus.viewer.v1alpha1.Invocation
+	11, // 31: magus.viewer.v1alpha1.ViewerService.ListEvents:output_type -> magus.viewer.v1alpha1.ListEventsResponse
+	13, // 32: magus.viewer.v1alpha1.ViewerService.StreamEvents:output_type -> magus.viewer.v1alpha1.StreamEventsResponse
+	16, // 33: magus.viewer.v1alpha1.ViewerService.ListOutputs:output_type -> magus.viewer.v1alpha1.ListOutputsResponse
+	18, // 34: magus.viewer.v1alpha1.ViewerService.GetOutput:output_type -> magus.viewer.v1alpha1.GetOutputResponse
+	20, // 35: magus.viewer.v1alpha1.ViewerService.ListInvocations:output_type -> magus.viewer.v1alpha1.ListInvocationsResponse
+	7,  // 36: magus.viewer.v1alpha1.ViewerService.GetJournal:output_type -> magus.viewer.v1alpha1.Journal
+	30, // [30:37] is the sub-list for method output_type
+	23, // [23:30] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_magus_viewer_v1alpha1_viewer_proto_init() }

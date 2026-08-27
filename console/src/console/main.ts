@@ -73,7 +73,7 @@ import {
   type ReadinessComponent,
 } from "../lib/daemon";
 import { createClient } from "@connectrpc/connect";
-import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
+import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { mountSharePanel } from "./share";
 import { mountActivityDrawer } from "./activityDrawer";
 import {

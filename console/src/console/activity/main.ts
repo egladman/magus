@@ -15,7 +15,7 @@ import {
   Kind,
   Outcome,
   type ActivityEvent,
-} from "../../gen/magus/activity/v1alpha1/activity_pb";
+} from "@wire/activity/v1alpha1/activity_pb";
 import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
 import { notify } from "../../lib/notifications";
 import { buildSection } from "../render/sections";

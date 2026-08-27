@@ -5,12 +5,7 @@
 // is the one function that reads across the whole state (the static journal, a multi list,
 // and the live buffer) to produce the invocation-sources every view is built from.
 
-import type {
-  Command,
-  Event,
-  Invocation,
-  Journal,
-} from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import type { Command, Event, Invocation, Journal } from "@wire/viewer/v1alpha1/viewer_pb";
 // Section/RenderModel are lifted to the shared render module so the activity view builds the
 // same shape; re-exported here so the log viewer's modules keep their one import path.
 import type { RenderModel, Section } from "../render/model";

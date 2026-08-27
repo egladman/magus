@@ -31,7 +31,8 @@
 
 import { createClient } from "@connectrpc/connect";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { StatusService, type Status } from "../gen/magus/status/v1alpha1/status_pb";
+import { StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
+import { ViewerService, type Output } from "@wire/viewer/v1alpha1/viewer_pb";
 import { authHeaders, createDaemonTransport, getLiveToken, resolveDaemonHost } from "../lib/daemon";
 
 // The refresh cadence, and the deadline each read inside one refresh gets. Deliberately NOT the
@@ -94,41 +95,19 @@ function finite(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-// parseDescriptors normalizes the outputs feed the way plan/ledger.ts's parseUnits normalizes the
-// ledger: every field is the type it claims, so nothing downstream has to re-check. A cast alone
-// (`as { outputs?: RunDescriptor[] }`) checks nothing at all - it is a promise about a network
-// response, made by the code that reads it.
-//
-// Two things are DROPPED rather than coerced, and the drop is the point. A timestamp_ms that is not
-// a number reaches the section's comparator as NaN, and a comparator returning NaN leaves the order
-// undefined for EVERY row rather than just that one; a duration_ms that is not a number renders as
-// "NaNms". Neither can be repaired with a zero either - fmtMs and relAge read zero as "unknown", but
-// only after a run that genuinely reported nothing, which this is not. A row with no ref goes for
-// the reason parseUnits drops a unit with no id: it is the row's identity and there is nothing to
-// open without it.
-export function parseDescriptors(body: unknown): RunDescriptor[] {
-  const list = (body as { outputs?: unknown } | null)?.outputs;
-  if (!Array.isArray(list)) return [];
-  const out: RunDescriptor[] = [];
-  for (const raw of list) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const r = raw as Record<string, unknown>;
-    const ref = str(r.ref);
-    const timestampMs = finite(r.timestamp_ms);
-    const durationMs = finite(r.duration_ms);
-    if (!ref || timestampMs === null || durationMs === null) continue;
-    out.push({
-      ref,
-      project: str(r.project),
-      target: str(r.target),
-      inv: str(r.inv),
-      failed: r.failed === true,
-      error: str(r.error),
-      timestamp_ms: timestampMs,
-      duration_ms: durationMs,
-    });
-  }
-  return out;
+// wireDescriptors maps the ViewerService feed onto the rows this panel and the plan surface both
+// render. Both work in unix millis, which is the unit the store itself records.
+export function wireDescriptors(outputs: readonly Output[]): RunDescriptor[] {
+  return outputs.map((o) => ({
+    ref: o.ref,
+    project: o.project,
+    target: o.target,
+    inv: o.invocation,
+    failed: o.failed,
+    error: o.error,
+    timestamp_ms: tsMillis(o.createTime),
+    duration_ms: o.duration ? Number(o.duration.seconds) * 1000 + o.duration.nanos / 1e6 : 0,
+  }));
 }
 
 // tsMillis converts a protobuf Timestamp to epoch milliseconds, or 0 when the field is absent. It is
@@ -515,13 +494,9 @@ async function fetchStatus(host: string, signal: AbortSignal): Promise<StatusRea
 // wondering why the panel is blank.
 async function fetchRuns(host: string, signal: AbortSignal): Promise<RunsRead> {
   try {
-    const res = await fetch("http://" + host + "/api/v1/outputs", {
-      headers: authHeaders(),
-      cache: "no-store",
-      signal: deadline(signal),
-    });
-    if (!res.ok) return { kind: "unreadable", detail: "HTTP " + res.status };
-    return { kind: "ok", runs: parseDescriptors(await res.json()) };
+    const client = createClient(ViewerService, createDaemonTransport(host, getLiveToken()));
+    const resp = await client.listOutputs({}, { signal: deadline(signal) });
+    return { kind: "ok", runs: wireDescriptors(resp.outputs) };
   } catch (e) {
     return { kind: "unreadable", detail: why(e) };
   }

@@ -14,7 +14,7 @@ trivially correlated:
 
 | handler subpackage        | proto package     | owns                                                                                         |
 | ------------------------- | ----------------- | -------------------------------------------------------------------------------------------- |
-| `internal/handler/viewer` | `magus.viewer.v1alpha1` | domain-event -> proto mapping, fragment/SSE encode, the log-viewer live SSE server           |
+| `internal/handler/viewer` | `magus.viewer.v1alpha1` | ViewerService (the run browser and one run's journal), domain-event -> proto mapping, fragment/SSE encode, the live SSE server |
 | `internal/handler/status` | `magus.status.v1alpha1` | status-report -> proto mapping + encoder, the GET /api/v1/status and /api/v1/events handlers    |
 | `internal/handler/graph`  | `magus.graph.v1alpha1`  | knowledge-graph -> proto mapping, the GET /api/v1/graph handler                              |
 
@@ -48,7 +48,7 @@ namespace outright.
 | handler subpackage           | serves                                            |
 | ---------------------------- | ------------------------------------------------- |
 | `internal/handler/diff`      | `/api/v1/diff` and everything under it            |
-| `internal/handler/plan`      | `/api/v1/plan`, `/api/v1/outputs`                 |
+| `internal/handler/plan`      | `/api/v1/plan`                                    |
 | `internal/handler/attention` | `/api/v1/attention`                               |
 | `internal/handler/ledger`    | `/api/v1/ledger`                                  |
 

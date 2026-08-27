@@ -7,7 +7,7 @@
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Duration } from "@bufbuild/protobuf/wkt";
-import { Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1alpha1/activity_pb";
+import { Kind, Outcome, type ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
 import type { RenderModel, Section } from "../render/model";
 
 // kindLabel is the short source tag shown in the head (the enum's stable, terse name).

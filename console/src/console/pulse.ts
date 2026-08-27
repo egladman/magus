@@ -4,7 +4,7 @@
 // dashboard already owns /api/v1/events and drives the connection dot from it, and the rail has to
 // survive with no tab open, so it cannot use the dashboard's store.
 import { createClient, Code, ConnectError } from "@connectrpc/connect";
-import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
+import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { createDaemonTransport, getLiveToken } from "../lib/daemon";
 
 export interface PulseView {

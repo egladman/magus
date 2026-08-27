@@ -5,7 +5,7 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { getLiveToken, parseHash, wantsDemo } from "../../lib/daemon";
-import { EventSchema, JournalSchema, Kind } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import { EventSchema, JournalSchema, Kind } from "@wire/viewer/v1alpha1/viewer_pb";
 import { state, waterfallSource } from "./state";
 import { flashBtnLabel } from "./dom";
 import { encodeFragmentBytes } from "./fragment";
