@@ -1,4 +1,12 @@
-package status
+// Package diff serves the review session's plain-JSON routes under /api/v1/diff.
+//
+// Separate from handler/status, which maps one thing - the live status report - onto
+// StatusService's two RPCs. These routes ride no proto service at all, and every constructor
+// here was named NewDiff* while living there, which is the package boundary announcing itself.
+//
+// The internal/diff import is aliased `session` because this package shares its name. That
+// collision goes away when internal/diff is split into its parser and session halves.
+package diff
 
 import (
 	"context"
@@ -12,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/diff"
+	session "github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
@@ -36,7 +44,7 @@ type diffSource interface {
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
 }
 
-// DiffHandler serves GET /api/v1/diff: the changed files annotated with what the
+// Handler serves GET /api/v1/diff: the changed files annotated with what the
 // workspace knows - role (generated or not), owning project, changed-symbol reach, observed
 // coverage - in the order magus recommends reading them.
 //
@@ -48,24 +56,24 @@ type diffSource interface {
 // The caller passes the paths it is actually reviewing, repeated as `path`. That is not an
 // optimization: re-deriving the changed set here would race an edit made since the patch was
 // read and annotate a file the reader cannot see.
-type DiffHandler struct {
+type Handler struct {
 	handler.Base
 	src      diffSource
-	sessions *diff.Store
+	sessions *session.Store
 	root     string
 }
 
-// NewDiffHandler returns the GET /api/v1/diff handler reading from src. sessions and root
+// NewHandler returns the GET /api/v1/diff handler reading from src. sessions and root
 // may be nil/empty, which serves a session-less review - the shape is identical, so a client
 // needs no branch for a daemon that is not pairing.
-func NewDiffHandler(src diffSource, sessions *diff.Store, root string, log *slog.Logger) *DiffHandler {
-	h := &DiffHandler{src: src, sessions: sessions, root: root}
+func NewHandler(src diffSource, sessions *session.Store, root string, log *slog.Logger) *Handler {
+	h := &Handler{src: src, sessions: sessions, root: root}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
 
-func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if !allowGet(w, r) {
+func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	paths := scopePaths(r)
@@ -92,7 +100,7 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 		// one, but far better than refusing to pair because a second git call failed.
 		asOf := ""
 		if patch, perr := h.src.WorkingDiff(r.Context(), nil); perr == nil {
-			asOf = diff.PatchDigest(patch)
+			asOf = session.PatchDigest(patch)
 			// The same read also gives the hunk-to-file mapping, which is the only thing
 			// that lets a later viewed mark say it FINISHED a file rather than just landing
 			// somewhere.
@@ -100,14 +108,14 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 			// Fingerprints each changed file HERE, at the content the reader is about to
 			// look at, so a receipt minted later attests to what they saw. See
 			// Store.ContentAt for why the file moving mid-session is the expected case.
-			h.sessions.TrackHunks(h.root, diff.ParseHunks(patch), func(p string) string {
+			h.sessions.TrackHunks(h.root, session.ParseHunks(patch), func(p string) string {
 				return review.DigestFile(filepath.Join(h.root, filepath.FromSlash(p)))
 			})
 		}
-		writeJSON(w, h.sessions.Attach(h.root, out.Base, out, asOf))
+		handler.WriteJSON(w, h.sessions.Attach(h.root, out.Base, out, asOf))
 		return
 	}
-	writeJSON(w, types.DiffSession{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})
+	handler.WriteJSON(w, types.DiffSession{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})
 }
 
 // PatchHandler serves GET /api/v1/diff/patch: the working tree's uncommitted changes as one unified
@@ -150,7 +158,7 @@ type contextResponse struct {
 }
 
 func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if !allowGet(w, r) {
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	path := strings.TrimSpace(r.URL.Query().Get("path"))
@@ -185,12 +193,12 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "context snapshot error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if diff.PatchDigest(patch) != asOf {
+	if session.PatchDigest(patch) != asOf {
 		http.Error(w, "review snapshot is stale; refresh the diff", http.StatusConflict)
 		return
 	}
 	changed := false
-	for _, file := range diff.ParseHunks(patch) {
+	for _, file := range session.ParseHunks(patch) {
 		if file.Path == path {
 			changed = true
 			break
@@ -245,10 +253,10 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	from := max(1, start-radius)
 	to := min(len(lines), end+radius)
 	if from > len(lines) {
-		writeJSON(w, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: []string{}})
+		handler.WriteJSON(w, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: []string{}})
 		return
 	}
-	writeJSON(w, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: lines[from-1 : to]})
+	handler.WriteJSON(w, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: lines[from-1 : to]})
 }
 
 // NewPatchHandler returns the GET /api/v1/diff/patch handler reading from src.
@@ -264,7 +272,7 @@ func NewPatchHandler(src patchSource, log *slog.Logger) *PatchHandler {
 type diffResponse struct {
 	// Files is the changeset already parsed. The console renders from this and does not read
 	// Patch at all; see PatchHandler for why the daemon parses rather than the browser.
-	Files []diff.File `json:"files"`
+	Files []session.File `json:"files"`
 	// Patch is the same changeset as raw text, kept for a caller that wants the interchange
 	// format itself - a script piping it onward, or a reader diffing it against another tool's.
 	Patch string `json:"patch"`
@@ -276,7 +284,7 @@ type diffResponse struct {
 }
 
 func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if !allowGet(w, r) {
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	patch, err := h.src.WorkingDiff(r.Context(), scopePaths(r))
@@ -288,10 +296,10 @@ func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "diff error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, diffResponse{
-		Files:  diff.Parse(patch),
+	handler.WriteJSON(w, diffResponse{
+		Files:  session.Parse(patch),
 		Patch:  patch,
-		Digest: diff.PatchDigest(patch),
+		Digest: session.PatchDigest(patch),
 		Clean:  strings.TrimSpace(patch) == "",
 	})
 }
@@ -310,7 +318,7 @@ func scopePaths(r *http.Request) []string {
 	return paths
 }
 
-// DiffSessionHandler serves the live paired-review session.
+// SessionHandler serves the live paired-review session.
 //
 // Every write here is stamped DiffAuthorHuman, because this route is only reachable from
 // the console and the CLI. The agent's half lives on the MCP surface and is stamped
@@ -321,17 +329,17 @@ func scopePaths(r *http.Request) []string {
 // It is one route with an `op` rather than five, because these are all small mutations of one
 // object and a client applies them from one place - a keypress handler. Five routes would be
 // five fetch wrappers for no gain in clarity.
-type DiffSessionHandler struct {
+type SessionHandler struct {
 	handler.Base
-	DiffSessionOptions
+	SessionOptions
 }
 
-// DiffSessionOptions is what both review routes need from the daemon.
+// SessionOptions is what both review routes need from the daemon.
 //
 // A struct because the alternative was five positional arguments with Root and CacheDir
 // adjacent and both string.
-type DiffSessionOptions struct {
-	Sessions *diff.Store
+type SessionOptions struct {
+	Sessions *session.Store
 	// Workspace answers where this tree's changes are discussed and reads the working patch.
 	// Nil serves everything except the review.
 	Workspace reviewSource
@@ -348,9 +356,9 @@ type reviewSource interface {
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 }
 
-// NewDiffSessionHandler returns the paired-review handler.
-func NewDiffSessionHandler(opts DiffSessionOptions, log *slog.Logger) *DiffSessionHandler {
-	h := &DiffSessionHandler{DiffSessionOptions: opts}
+// NewSessionHandler returns the paired-review handler.
+func NewSessionHandler(opts SessionOptions, log *slog.Logger) *SessionHandler {
+	h := &SessionHandler{SessionOptions: opts}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -399,7 +407,7 @@ type reviewSessionRequest struct {
 // A draft with no line stays a draft. A provider anchors an inline comment to a line and drops
 // one that has none, so including it would mark it published against a send that never
 // happened - and publish only considers unpublished drafts, so it could never go again.
-func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
+func (h *SessionHandler) publish(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
 	sess := h.Sessions.Get(h.Root)
 	if sess == nil {
 		return nil, errors.New("no review session attached")
@@ -455,7 +463,7 @@ func (h *DiffSessionHandler) publish(ctx context.Context, req reviewSessionReque
 
 // reply answers one thread on the host's review. It writes no session state: the reply belongs
 // to the host's record, and the client re-reads the review to see it.
-func (h *DiffSessionHandler) reply(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
+func (h *SessionHandler) reply(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
 	at, err := h.findReview(ctx)
 	if err != nil {
 		return nil, err
@@ -475,7 +483,7 @@ func (h *DiffSessionHandler) reply(ctx context.Context, req reviewSessionRequest
 // findReview resolves the review publish and reply both need, or the reason there is none.
 // The reason travels, because "no provider wired" and "no pull request for this branch" send
 // the reader to different places.
-func (h *DiffSessionHandler) findReview(ctx context.Context) (types.ReviewTarget, error) {
+func (h *SessionHandler) findReview(ctx context.Context) (types.ReviewTarget, error) {
 	if h.Workspace == nil {
 		return types.ReviewTarget{}, errors.New("this daemon has no workspace to publish from")
 	}
@@ -492,7 +500,7 @@ func (h *DiffSessionHandler) findReview(ctx context.Context) (types.ReviewTarget
 	return at, nil
 }
 
-func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -503,7 +511,7 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no review session attached; GET /api/v1/diff first", http.StatusConflict)
 			return
 		}
-		writeJSON(w, sess)
+		handler.WriteJSON(w, sess)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -589,7 +597,7 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no review session attached; GET /api/v1/diff first", http.StatusConflict)
 		return
 	}
-	writeJSON(w, sess)
+	handler.WriteJSON(w, sess)
 }
 
 // mintReceipt records that a person read path, at the content it holds right now.
@@ -598,7 +606,7 @@ func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 // file should not meet an error about bookkeeping on their next keypress. A path that cannot
 // be fingerprinted - deleted since the patch was read - records nothing rather than recording
 // a receipt against no content.
-func (h *DiffSessionHandler) mintReceipt(ctx context.Context, path string) {
+func (h *SessionHandler) mintReceipt(ctx context.Context, path string) {
 	if path == "" || h.CacheDir == "" || h.Root == "" {
 		return
 	}
@@ -616,7 +624,7 @@ func (h *DiffSessionHandler) mintReceipt(ctx context.Context, path string) {
 	}
 }
 
-// DiffReviewHandler serves GET /api/v1/diff/review: which review is open for this tree, and
+// ReviewHandler serves GET /api/v1/diff/review: which review is open for this tree, and
 // the comment threads already on it.
 //
 // Beside the session handler because they are two halves of one conversation, but a SEPARATE
@@ -628,21 +636,21 @@ func (h *DiffSessionHandler) mintReceipt(ctx context.Context, path string) {
 // It never fails. No provider wired, no pull request, an unreachable host: all of them are a
 // closed target with a reason, because the reader's options are identical in every case and a
 // surface that rendered them as errors would be accusing them of something they did not do.
-type DiffReviewHandler struct {
+type ReviewHandler struct {
 	handler.Base
 	workspace reviewSource
 	// Sessions and Root are OPTIONAL, set by the daemon wiring after construction: with them the
 	// handler can say which threads the reader has not seen before, and without them it serves
 	// the conversation unmarked. A caller that has no session store is not a caller with an
 	// empty one, so the marking is skipped rather than every thread being called new.
-	Sessions *diff.Store
+	Sessions *session.Store
 	Root     string
 }
 
-// NewDiffReviewHandler returns the review-lookup handler. A nil workspace reports no review,
+// NewReviewHandler returns the review-lookup handler. A nil workspace reports no review,
 // which is what a daemon with no workspace has.
-func NewDiffReviewHandler(workspace reviewSource, log *slog.Logger) *DiffReviewHandler {
-	h := &DiffReviewHandler{workspace: workspace}
+func NewReviewHandler(workspace reviewSource, log *slog.Logger) *ReviewHandler {
+	h := &ReviewHandler{workspace: workspace}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -650,7 +658,7 @@ func NewDiffReviewHandler(workspace reviewSource, log *slog.Logger) *DiffReviewH
 // place resolves each thread onto the hunk holding its line, so both surfaces read one answer
 // instead of computing it twice. An unreadable patch leaves them at -1, which renders against
 // the file rather than against the wrong hunk.
-func (h *DiffReviewHandler) place(ctx context.Context, threads []types.ReviewThread) []types.ReviewThread {
+func (h *ReviewHandler) place(ctx context.Context, threads []types.ReviewThread) []types.ReviewThread {
 	if len(threads) == 0 {
 		return threads
 	}
@@ -658,7 +666,7 @@ func (h *DiffReviewHandler) place(ctx context.Context, threads []types.ReviewThr
 	if err != nil {
 		return threads
 	}
-	return diff.PlaceThreads(diff.ParseHunks(patch), threads)
+	return session.PlaceThreads(session.ParseHunks(patch), threads)
 }
 
 // diffReviewResponse is the wire shape: the target, flattened, plus its threads.
@@ -710,7 +718,7 @@ func remoteHost(remote string) string {
 	return s
 }
 
-func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -743,7 +751,7 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 			out.Reason = err.Error()
 		}
 	}
-	writeJSON(w, out)
+	handler.WriteJSON(w, out)
 }
 
 // markNew flags the threads the reader has not had on screen before. It READS the watermark and
@@ -753,7 +761,7 @@ func (h *DiffReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 // mid-flight, or a second tab silently consumed the marks - and the notification with them, since
 // the job that raises it compares against this same watermark. The surface says when it has shown
 // them, through the session's `seen` op; until it does, the same threads keep arriving marked.
-func (h *DiffReviewHandler) markNew(threads []types.ReviewThread) {
+func (h *ReviewHandler) markNew(threads []types.ReviewThread) {
 	if h.Sessions == nil || len(threads) == 0 {
 		return
 	}
@@ -776,7 +784,7 @@ func (h *DiffReviewHandler) markNew(threads []types.ReviewThread) {
 	}
 }
 
-func (h *DiffReviewHandler) lookup(ctx context.Context) types.ReviewTarget {
+func (h *ReviewHandler) lookup(ctx context.Context) types.ReviewTarget {
 	if h.workspace == nil {
 		return types.ReviewTarget{Reason: "no workspace"}
 	}
@@ -790,7 +798,7 @@ type branchSource interface {
 	BranchChanges(ctx context.Context, limit int) ([]types.BranchChange, error)
 }
 
-// DiffBranchesHandler serves GET /api/v1/diff/branches: the other branches changing the files
+// BranchesHandler serves GET /api/v1/diff/branches: the other branches changing the files
 // this changeset changes, so a reader learns about a collision before the merge does.
 //
 // Its own route rather than a field on the changeset, for the reason the review lookup has one:
@@ -800,7 +808,7 @@ type branchSource interface {
 // It reads what has already been fetched and never fetches. The answer is therefore as fresh as
 // the reader's last fetch and no fresher, which the surface says out loud rather than implying
 // it is live.
-type DiffBranchesHandler struct {
+type BranchesHandler struct {
 	handler.Base
 	workspace branchSource
 }
@@ -811,10 +819,10 @@ type DiffBranchesHandler struct {
 // daemon on a repository with a hundred stale branches.
 const branchLimit = 20
 
-// NewDiffBranchesHandler returns the branch-overlap handler. A nil workspace reports none, which
+// NewBranchesHandler returns the branch-overlap handler. A nil workspace reports none, which
 // is what a daemon with no workspace has.
-func NewDiffBranchesHandler(workspace branchSource, log *slog.Logger) *DiffBranchesHandler {
-	h := &DiffBranchesHandler{workspace: workspace}
+func NewBranchesHandler(workspace branchSource, log *slog.Logger) *BranchesHandler {
+	h := &BranchesHandler{workspace: workspace}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -832,7 +840,7 @@ type diffBranchesResponse struct {
 	Unsupported string `json:"unsupported,omitempty"`
 }
 
-func (h *DiffBranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *BranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -856,5 +864,5 @@ func (h *DiffBranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
 			out.Branches = append(out.Branches, got...)
 		}
 	}
-	writeJSON(w, out)
+	handler.WriteJSON(w, out)
 }

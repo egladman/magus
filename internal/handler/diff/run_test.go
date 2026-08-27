@@ -1,4 +1,4 @@
-package status
+package diff
 
 import (
 	"context"
@@ -25,9 +25,9 @@ func (f fakeRunSource) ProjectTargets(_ context.Context, project string) []strin
 
 // newTestRunHandler wires a handler over a declared target set, recording what it submits and
 // reporting nothing in flight. Callers override socket/statusFn per case.
-func newTestRunHandler(t *testing.T, cacheDir string, submitted *[][]string) *DiffRunHandler {
+func newTestRunHandler(t *testing.T, cacheDir string, submitted *[][]string) *RunHandler {
 	t.Helper()
-	h := NewDiffRunHandler(fakeRunSource{targets: map[string][]string{
+	h := NewRunHandler(fakeRunSource{targets: map[string][]string{
 		"libs/authkit": {"test", "lint"},
 	}}, cacheDir, "v0-test", nil)
 	h.socket = func() string { return "test-socket" }
@@ -41,7 +41,7 @@ func newTestRunHandler(t *testing.T, cacheDir string, submitted *[][]string) *Di
 	return h
 }
 
-func postRun(t *testing.T, h *DiffRunHandler, body string) diffRunResponse {
+func postRun(t *testing.T, h *RunHandler, body string) diffRunResponse {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/diff/run", strings.NewReader(body)))

@@ -38,7 +38,7 @@ func NewLedgerHandler(src ledgerSource, log *slog.Logger) *LedgerHandler {
 }
 
 func (h *LedgerHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if !allowGet(w, r) {
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	delegations, err := h.src.List()
@@ -49,5 +49,5 @@ func (h *LedgerHandler) serve(w http.ResponseWriter, r *http.Request) {
 	// An unwritten ledger serves "units":[] rather than null - the drawer renders a list,
 	// and a workspace where nobody has delegated yet is empty, not broken. Normalized by
 	// the constructor, so this route and the MCP tool cannot disagree about the shape.
-	writeJSON(w, types.NewDelegationReport(delegations))
+	handler.WriteJSON(w, types.NewDelegationReport(delegations))
 }

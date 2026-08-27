@@ -1,4 +1,4 @@
-package status
+package diff
 
 import (
 	"context"
@@ -22,7 +22,7 @@ type runSource interface {
 	ProjectTargets(ctx context.Context, project string) []string
 }
 
-// DiffRunHandler serves /api/v1/diff/run: the reader asks a question about the change in front
+// RunHandler serves /api/v1/diff/run: the reader asks a question about the change in front
 // of them - does this still pass? - and gets the answer from the machine the code is on.
 //
 // This is the one review capability that cannot have a provider gap. It asks the local workspace
@@ -34,7 +34,7 @@ type runSource interface {
 // project, so the console can ask for work the workspace already defines and cannot ask for
 // anything else. That is strictly less than a terminal's `magus run`, which is the bar a browser-
 // reachable surface has to clear.
-type DiffRunHandler struct {
+type RunHandler struct {
 	handler.Base
 	workspace runSource
 	// cacheDir is where the activity trail lives: the durable record of what a finished run
@@ -49,10 +49,10 @@ type DiffRunHandler struct {
 	statusFn func(ctx context.Context, addr string) (*proc.StatusReply, error)
 }
 
-// NewDiffRunHandler returns the inline-run handler. A nil workspace declares no targets, so every
+// NewRunHandler returns the inline-run handler. A nil workspace declares no targets, so every
 // request is refused as undeclared - which is what a daemon with no workspace can honestly say.
-func NewDiffRunHandler(workspace runSource, cacheDir, version string, log *slog.Logger) *DiffRunHandler {
-	h := &DiffRunHandler{
+func NewRunHandler(workspace runSource, cacheDir, version string, log *slog.Logger) *RunHandler {
+	h := &RunHandler{
 		workspace: workspace,
 		cacheDir:  cacheDir,
 		version:   version,
@@ -98,7 +98,7 @@ type diffRunResponse struct {
 	Available  []string `json:"available,omitempty"`
 }
 
-func (h *DiffRunHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *RunHandler) serve(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodOptions:
 		w.WriteHeader(http.StatusNoContent)
@@ -124,7 +124,7 @@ func (h *DiffRunHandler) serve(w http.ResponseWriter, r *http.Request) {
 // answer reports the state of req's target, submitting it first when start is set. Both verbs
 // share it because a submit's useful reply IS the poll's reply: the surface renders one shape
 // whether it just started the run or is watching one somebody else did.
-func (h *DiffRunHandler) answer(ctx context.Context, w http.ResponseWriter, req diffRunRequest, start bool) {
+func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diffRunRequest, start bool) {
 	out := diffRunResponse{Target: req.Target, Project: req.Project, State: "unknown"}
 	if req.Target == "" || req.Project == "" {
 		http.Error(w, "target and project are required", http.StatusBadRequest)
@@ -137,7 +137,7 @@ func (h *DiffRunHandler) answer(ctx context.Context, w http.ResponseWriter, req 
 	if !slices.Contains(declared, req.Target) {
 		out.Undeclared = req.Project + " declares no target named " + req.Target
 		out.Available = declared
-		writeJSON(w, out)
+		handler.WriteJSON(w, out)
 		return
 	}
 
@@ -147,14 +147,14 @@ func (h *DiffRunHandler) answer(ctx context.Context, w http.ResponseWriter, req 
 		if err := h.submit(ctx, argv); err != nil {
 			out.State = "failed"
 			out.Error = err.Error()
-			writeJSON(w, out)
+			handler.WriteJSON(w, out)
 			return
 		}
 		out.Started, running = true, true
 	}
 	if running {
 		out.State = "running"
-		writeJSON(w, out)
+		handler.WriteJSON(w, out)
 		return
 	}
 	// Not in flight, so the trail holds whatever the last run of this exact target decided.
@@ -172,12 +172,12 @@ func (h *DiffRunHandler) answer(ctx context.Context, w http.ResponseWriter, req 
 		out.FinishedMs = ev.Ts + ev.DurMs
 		out.DurationMs = ev.DurMs
 	}
-	writeJSON(w, out)
+	handler.WriteJSON(w, out)
 }
 
 // submit hands argv to the daemon's own proc socket, the same self-dial the JobService uses, so
 // an inline run rides the identical coalescing and journal path a terminal's run does.
-func (h *DiffRunHandler) submit(ctx context.Context, argv []string) error {
+func (h *RunHandler) submit(ctx context.Context, argv []string) error {
 	addr := h.socket()
 	if addr == "" {
 		return errors.New("no daemon socket to submit to")
@@ -189,7 +189,7 @@ func (h *DiffRunHandler) submit(ctx context.Context, argv []string) error {
 // isRunning reports whether argv is already in flight in the daemon. A failed status query
 // reports not-running: the submit that follows coalesces anyway, so the worst case is an
 // accurate reply built from one extra round trip, never a duplicate run.
-func (h *DiffRunHandler) isRunning(ctx context.Context, argv []string) bool {
+func (h *RunHandler) isRunning(ctx context.Context, argv []string) bool {
 	st, err := h.statusFn(ctx, h.socket())
 	if err != nil || st == nil {
 		return false

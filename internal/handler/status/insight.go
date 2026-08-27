@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/egladman/magus/internal/handler"
-	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
@@ -37,7 +36,7 @@ func NewInsightHandler(src insightSource, log *slog.Logger) *InsightHandler {
 }
 
 func (h *InsightHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if !allowGet(w, r) {
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	view, err := h.src.Insight(r.Context())
@@ -49,32 +48,5 @@ func (h *InsightHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "insight error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, view)
-}
-
-// allowGet answers a CORS preflight (204) and rejects non-GET methods (405), returning false
-// when the caller should stop. It mirrors the method gate the other read handlers use.
-func allowGet(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return false
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return false
-	}
-	return true
-}
-
-// writeJSON marshals v and writes it as an uncached JSON body, matching the read handlers'
-// no-store posture (these reads reflect live daemon state).
-func writeJSON(w http.ResponseWriter, v any) {
-	body, err := json.Marshal(v)
-	if err != nil {
-		http.Error(w, "marshal error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(body)
+	handler.WriteJSON(w, view)
 }

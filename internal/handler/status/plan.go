@@ -117,7 +117,7 @@ func NewPlanHandler(src planSource, outputs planOutputs, root string, log *slog.
 }
 
 func (h *PlanHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if !allowGet(w, r) {
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	graph, err := h.src.TargetGraph(r.Context())
@@ -142,7 +142,7 @@ func (h *PlanHandler) serve(w http.ResponseWriter, r *http.Request) {
 
 	nodes, edges := planClosure(index, graph.Projects, target)
 	overlayPlanState(nodes, report, descs, h.root)
-	writeJSON(w, planResponse{Target: target, Anchor: anchor, Nodes: nodes, Edges: edges})
+	handler.WriteJSON(w, planResponse{Target: target, Anchor: anchor, Nodes: nodes, Edges: edges})
 }
 
 // resolveAnchor picks the target this plan is about and says how it was picked. An explicit

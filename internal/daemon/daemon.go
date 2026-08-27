@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
+	diffhandler "github.com/egladman/magus/internal/handler/diff"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
@@ -267,8 +268,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
 			insightH := status.NewInsightHandler(svc, log)
-			patchH := status.NewPatchHandler(svc, log)
-			contextH := status.NewContextHandler(opts.Magus.Root(), svc, log)
+			patchH := diffhandler.NewPatchHandler(svc, log)
+			contextH := diffhandler.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The daemon-wide session store, constructed by the caller so the console routes
 			// below and the magus_diff MCP tool read the SAME object - that sharing is the
 			// pairing. A caller that supplied none gets a local one rather than a nil panic;
@@ -278,21 +279,21 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				diffSessions = diff.NewStore(opts.Magus.CacheDir())
 			}
 			diffRoot := opts.Magus.Root()
-			diffH := status.NewDiffHandler(svc, diffSessions, diffRoot, log)
-			diffOpts := status.DiffSessionOptions{
+			diffH := diffhandler.NewHandler(svc, diffSessions, diffRoot, log)
+			diffOpts := diffhandler.SessionOptions{
 				Sessions:  diffSessions,
 				Workspace: svc,
 				Root:      diffRoot,
 				CacheDir:  opts.Magus.CacheDir(),
 			}
-			diffSessionH := status.NewDiffSessionHandler(diffOpts, log)
-			diffReviewH := status.NewDiffReviewHandler(svc, log)
+			diffSessionH := diffhandler.NewSessionHandler(diffOpts, log)
+			diffReviewH := diffhandler.NewReviewHandler(svc, log)
 			// The session store lets the review response say which threads the reader has not
 			// seen before; without it the conversation still serves, just unmarked.
 			diffReviewH.Sessions = diffSessions
 			diffReviewH.Root = opts.Magus.Root()
-			diffBranchesH := status.NewDiffBranchesHandler(svc, log)
-			diffRunH := status.NewDiffRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
+			diffBranchesH := diffhandler.NewBranchesHandler(svc, log)
+			diffRunH := diffhandler.NewRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 			runsH := viewer.NewRunsHandler(outputStore, log)
@@ -326,7 +327,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			bridgeMux.Handle("/api/v1/diff/patch", cors(patchH))
 			bridgeMux.Handle("/api/v1/diff/context", cors(contextH))
 			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
-			// from /api/v1/diff/patch because it is far more expensive - see DiffHandler.
+			// from /api/v1/diff/patch because it is far more expensive - see Handler.
 			bridgeMux.Handle("/api/v1/diff", cors(diffH))
 			// The human's half of a paired review. Reachable only from the console and the
 			// CLI, which is what lets it stamp every write as human without trusting the

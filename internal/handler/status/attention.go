@@ -104,7 +104,7 @@ func (h *AttentionHandler) list(w http.ResponseWriter) {
 	// A repository nobody has raised a block in serves "requests":[] rather than null - an
 	// empty queue is the GOOD state and the surface renders a list either way. AttentionQueue
 	// already returns an empty slice rather than a nil one, so this needs no normalizing.
-	writeJSON(w, attentionView{Requests: sessions.AttentionQueue(fold), Store: dir})
+	handler.WriteJSON(w, attentionView{Requests: sessions.AttentionQueue(fold), Store: dir})
 }
 
 func (h *AttentionHandler) dispose(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +131,7 @@ func (h *AttentionHandler) dispose(w http.ResponseWriter, r *http.Request) {
 	// The disposed request as the store now reads it, matching what `magus session dispose
 	// -o json` prints. The caller re-reads the queue on its next poll; answering with the row
 	// that closed lets it say WHICH one closed without waiting for that.
-	writeJSON(w, req)
+	handler.WriteJSON(w, req)
 }
 
 // disposeStatus maps a refusal from sessions.DisposeRequest onto the status a client can act
