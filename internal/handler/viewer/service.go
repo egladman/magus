@@ -157,6 +157,8 @@ func (s *Service) ListInvocations(_ context.Context, req *connect.Request[viewer
 			StartTime:    tsFromMs(l.StartedMs),
 			EndTime:      tsFromMs(l.FinishedMs),
 			MagusVersion: l.MagusVersion,
+			Status:       statusToProto(l.Status),
+			SizeBytes:    l.SizeBytes,
 		})
 	}
 	return connect.NewResponse(out), nil

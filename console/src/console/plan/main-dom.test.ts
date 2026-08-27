@@ -79,10 +79,13 @@ function serve(routes: {
         json: () => Promise.resolve({}),
       } as unknown as Response);
     }
-    if (routes.feeds && url.includes("/api/v1/outputs")) {
+    if (routes.feeds && url.includes("ViewerService")) {
+      // The run feed, over Connect now rather than GET /api/v1/outputs. Empty for the same reason
+      // the status frame above is: these tests need the read to SUCCEED, not to carry rows.
       return Promise.resolve({
         ok: true,
         status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
         json: () => Promise.resolve({ outputs: [] }),
       } as unknown as Response);
     }

@@ -87,6 +87,13 @@ message Invocation {
   google.protobuf.Timestamp start_time = 3;
   google.protobuf.Timestamp end_time = 4;  // unset while still running
   string magus_version = 5;
+  // Outcome, when the run reached one. The events carry this too (KIND_FINISHED), but a listing
+  // reads run HEADERS without opening any journal, so a browser that had to decide pass from fail
+  // would otherwise open every file it lists.
+  Status status = 6;
+  // On-disk size of this run's journal. What a retention view needs to say which runs are worth
+  // keeping, and the same reason as above: available from the header alone.
+  int64 size_bytes = 7;
 }
 
 // Event is one line of a structured invocation log - the atom of the stream. Most events
