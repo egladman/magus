@@ -170,16 +170,10 @@ inputs:
   fix-label:
     description: >
       The label REQUESTING a fix. One label for both fixers: "magus, settle what you can
-      here", not "run this script". Present means outstanding - it is retired for
-      `done-label` once they run, so a PR fixed last week stops reading as asking.
+      here", not "run this script". STANDING - it is never retired, so the same PR is
+      settled again the next time main breaks it. Remove it to stop.
     required: false
     default: 'magus:auto-fix:requested'
-  done-label:
-    description: >
-      Records that the fixers ran. Added, and `fix-label` removed, after BOTH finish -
-      never by a fixer itself, which would withdraw consent from the one after it.
-    required: false
-    default: 'magus:auto-fix:done'
   pr-number:
     description: The pull request to comment on.
     required: false
@@ -195,6 +189,19 @@ inputs:
       with the head - testing that against the base would find nothing.
     required: false
     default: ${{ github.event.pull_request.head.sha }}
+  head-ref:
+    description: >
+      The PR's head BRANCH, which is what a fixer pushes to. Defaults to the pull_request
+      payload; a caller driven by any other event has to pass it, because the fixers refuse
+      to push when they cannot confirm the checkout is this PR's branch.
+    required: false
+    default: ${{ github.event.pull_request.head.ref }}
+  head-repo:
+    description: >
+      The repository owning `head-ref`, as owner/name. Compared against the base repository
+      to recognise a fork, which this token cannot push to.
+    required: false
+    default: ${{ github.event.pull_request.head.repo.full_name }}
   token:
     description: >
       Token used to read and post the comment, and to push when fix-generated-drift is
@@ -385,8 +392,8 @@ runs:
         GITHUB_RUN_ID: ${{ github.run_id }}
         PR_NUMBER: ${{ inputs.pr-number }}
         PR_BASE: ${{ inputs.base-ref }}
-        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        PR_HEAD_REF: ${{ inputs.head-ref }}
+        PR_HEAD_REPO: ${{ inputs.head-repo }}
         FIX_CONFLICTS: ${{ inputs.fix-merge-conflict }}
         FIX_LABEL: ${{ inputs.fix-label }}
       run: magus buzz "$GITHUB_ACTION_PATH/fix-merge-conflict.buzz"
@@ -400,22 +407,9 @@ runs:
         REPO: ${{ github.repository }}
         GITHUB_RUN_ID: ${{ github.run_id }}
         PR_NUMBER: ${{ inputs.pr-number }}
-        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        PR_HEAD_REF: ${{ inputs.head-ref }}
+        PR_HEAD_REPO: ${{ inputs.head-repo }}
         FIX_DRIFT: ${{ inputs.fix-generated-drift }}
         FIX_LABEL: ${{ inputs.fix-label }}
       run: magus buzz "$GITHUB_ACTION_PATH/fix-generated-drift.buzz"
 
-    # After BOTH fixers, never inside one: each reads fix-label as consent. always() so a
-    # failed fixer still retires the request, rather than re-running the same failure.
-    - name: Settle the auto-fix labels
-      if: always() && (inputs.fix-merge-conflict == 'true' || inputs.fix-generated-drift == 'true')
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        GH_TOKEN: ${{ inputs.token }}
-        REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        FIX_LABEL: ${{ inputs.fix-label }}
-        DONE_LABEL: ${{ inputs.done-label }}
-      run: magus buzz "$GITHUB_ACTION_PATH/settle-fix-labels.buzz"

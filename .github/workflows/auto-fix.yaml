@@ -8,15 +8,25 @@ name: Auto-fix
 # COST: labelling would otherwise rerun the whole CI matrix.
 #
 # Nothing here gates a merge. A failure leaves the PR in the state it was already in.
+#
+# The label is STANDING, not one-shot: present means "keep this branch settled against main",
+# so the same PR is fixed again the next time main breaks it. Three triggers, because the work
+# arrives three ways and only one of them is a human asking:
+#
+#   labeled      - the request itself
+#   synchronize  - the PR's own commits left generated output stale
+#   push to main - the case in the paragraph above, and the reason for the targets job:
+#                  a base branch moving fires NO pull_request event, so nothing else can see it
+#
+# The fixers push with the Actions token, and GitHub deliberately starts no workflow run from
+# such a push, so a fix cannot trigger the synchronize that would fix it again.
 
 on:
   pull_request:
     branches: [main]
-    types: [labeled]
-
-concurrency:
-  group: auto-fix-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+    types: [labeled, synchronize]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -24,25 +34,95 @@ permissions:
 env:
   MISE_SAFE: '1'
   GOEXPERIMENT: jsonv2
+  FIX_LABEL: 'magus:auto-fix:requested'
 
 jobs:
+  # Which pull requests want settling, as one list whatever the event was. Cheap on purpose:
+  # it runs on every push to main, so it may not build magus or check out a workspace.
+  targets:
+    name: pull requests asking to be settled
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.list.outputs.prs }}
+    steps:
+      - id: list
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # The matrix only needs these five, and naming them here keeps the checkout below
+          # from reaching into two different payload shapes.
+          shape='map({
+            number,
+            headRef: .headRefName,
+            headSha: .headRefOid,
+            baseRef: .baseRefName,
+            headRepo: (.headRepositoryOwner.login + "/" + .headRepository.name)
+          })'
+
+          if [ "$EVENT" = "push" ]; then
+            # mergeable is GitHub's own answer to "did main just break this", recomputed when
+            # the base moves. Filtering on it here is what stops a push to main from building
+            # magus once per labelled PR to discover there was nothing to do.
+            #
+            # UNKNOWN means the answer is still being computed, so poll rather than read it as
+            # "fine". Generated drift is deliberately NOT chased here: it comes from the PR's
+            # own commits, which arrive as synchronize.
+            for _ in 1 2 3 4 5 6; do
+              gh pr list --repo "$REPO" --state open --base main \
+                --label "$FIX_LABEL" --limit 50 \
+                --json number,headRefName,headRefOid,baseRefName,headRepositoryOwner,headRepository,mergeable \
+                > all.json
+              if [ "$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' all.json)" = "0" ]; then
+                break
+              fi
+              sleep 10
+            done
+            jq -c "[.[] | select(.mergeable == \"CONFLICTING\")] | $shape" all.json > prs.json
+            echo "labelled and open: $(jq length all.json)"
+            echo "still UNKNOWN (skipped this run): $(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' all.json)"
+          else
+            gh pr view "$PR" --repo "$REPO" \
+              --json number,headRefName,headRefOid,baseRefName,headRepositoryOwner,headRepository,labels,state \
+              > one.json
+            jq -c "[ select((.labels | map(.name) | index(\"$FIX_LABEL\")) and .state == \"OPEN\") ] | $shape" \
+              one.json > prs.json
+          fi
+
+          echo "settling: $(jq -c 'map(.number)' prs.json)"
+          echo "prs=$(cat prs.json)" >> "$GITHUB_OUTPUT"
+
   fix:
-    # The cheap gate, so labelling a PR `bug` does not build magus from source. The
-    # advisors re-check through the API, which is the authoritative one.
-    if: github.event.label.name == 'magus:auto-fix:requested'
     name: magus auto-fix
+    needs: targets
+    if: needs.targets.outputs.prs != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.targets.outputs.prs) }}
+    concurrency:
+      group: auto-fix-${{ matrix.pr.number }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The head BRANCH by name. The default refs/pull/N/merge is base-already-merged,
           # and for a conflicting PR - this workflow's whole reason - stale or missing.
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ matrix.pr.headRef }}
+          repository: ${{ matrix.pr.headRepo }}
           # The fixer merges the base in; a shallow clone has no merge base.
           fetch-depth: 0
           filter: blob:none
@@ -68,6 +148,10 @@ jobs:
         with:
           fix-merge-conflict: 'true'
           fix-generated-drift: 'true'
+          fix-label: ${{ env.FIX_LABEL }}
+          pr-number: ${{ matrix.pr.number }}
+          base-ref: ${{ matrix.pr.baseRef }}
+          head-sha: ${{ matrix.pr.headSha }}
           merge-conflicts: 'false'
           hand-edited-generated: 'false'
           target-outputs: 'false'
