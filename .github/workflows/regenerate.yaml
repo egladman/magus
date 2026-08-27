@@ -1,0 +1,173 @@
+name: Regenerate
+
+# Regenerates a pull request's generated files, when a human asks for it by label.
+#
+# Both fixers do the same one thing: regenerate generated output and push it. One reaches
+# that point by merging the base branch in first, the other by finding the output stale
+# against the PR's own commits. Neither can touch hand-written code, which is the bound the
+# name has to carry: this repairs nothing in general, it regenerates in particular.
+#
+# It MERGES the base branch. It never rebases: merging needs no force-push, so anything
+# stacked on the branch stays valid.
+#
+# Separate from ci.yaml on three counts. TRIGGER: ci runs on push, so a conflict created by
+# main moving under an open PR never reaches it - which is the case worth automating.
+# WRITE: this is the only workflow needing contents: write, and ci stays read-only.
+# COST: labelling would otherwise rerun the whole CI matrix.
+#
+# Nothing here gates a merge. A failure leaves the PR in the state it was already in.
+#
+# The label is STANDING, not one-shot: present means "keep this branch settled against main",
+# so the same PR is fixed again the next time main breaks it. Three triggers, because the work
+# arrives three ways and only one of them is a human asking:
+#
+#   labeled      - the request itself
+#   synchronize  - the PR's own commits left generated output stale
+#   push to main - the case in the paragraph above, and the reason for the targets job:
+#                  a base branch moving fires NO pull_request event, so nothing else can see it
+#
+# The fixers push with the Actions token, and GitHub deliberately starts no workflow run from
+# such a push, so a fix cannot trigger the synchronize that would fix it again.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled, synchronize]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+  FIX_LABEL: 'magus:regenerate:requested'
+
+jobs:
+  # Which pull requests want settling, as one list whatever the event was. Cheap on purpose:
+  # it runs on every push to main, so it may not build magus or check out a workspace.
+  targets:
+    name: pull requests asking to be settled
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.list.outputs.prs }}
+    steps:
+      - id: list
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # The matrix only needs these five, and naming them here keeps the checkout below
+          # from reaching into two different payload shapes.
+          shape='map({
+            number,
+            headRef: .headRefName,
+            headSha: .headRefOid,
+            baseRef: .baseRefName,
+            headRepo: (.headRepositoryOwner.login + "/" + .headRepository.name)
+          })'
+
+          if [ "$EVENT" = "push" ]; then
+            # mergeable is GitHub's own answer to "did main just break this", recomputed when
+            # the base moves. Filtering on it here is what stops a push to main from building
+            # magus once per labelled PR to discover there was nothing to do.
+            #
+            # UNKNOWN means the answer is still being computed, so poll rather than read it as
+            # "fine". Generated drift is deliberately NOT chased here: it comes from the PR's
+            # own commits, which arrive as synchronize.
+            for _ in 1 2 3 4 5 6; do
+              gh pr list --repo "$REPO" --state open --base main \
+                --label "$FIX_LABEL" --limit 50 \
+                --json number,headRefName,headRefOid,baseRefName,headRepositoryOwner,headRepository,mergeable \
+                > all.json
+              if [ "$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' all.json)" = "0" ]; then
+                break
+              fi
+              sleep 10
+            done
+            jq -c "[.[] | select(.mergeable == \"CONFLICTING\")] | $shape" all.json > prs.json
+            echo "labelled and open: $(jq length all.json)"
+            echo "still UNKNOWN (skipped this run): $(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' all.json)"
+          else
+            gh pr view "$PR" --repo "$REPO" \
+              --json number,headRefName,headRefOid,baseRefName,headRepositoryOwner,headRepository,labels,state \
+              > one.json
+            jq -c "[ select((.labels | map(.name) | index(\"$FIX_LABEL\")) and .state == \"OPEN\") ] | $shape" \
+              one.json > prs.json
+          fi
+
+          echo "settling: $(jq -c 'map(.number)' prs.json)"
+          echo "prs=$(cat prs.json)" >> "$GITHUB_OUTPUT"
+
+  fix:
+    name: magus regenerate
+    needs: targets
+    if: needs.targets.outputs.prs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.targets.outputs.prs) }}
+    concurrency:
+      group: regenerate-${{ matrix.pr.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The head BRANCH by name. The default refs/pull/N/merge is base-already-merged,
+          # and for a conflicting PR - this workflow's whole reason - stale or missing.
+          ref: ${{ matrix.pr.headRef }}
+          repository: ${{ matrix.pr.headRepo }}
+          # The fixer merges the base in; a shallow clone has no merge base.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # Only the writing advisors: the read-only ones ran on the last push and a label is
+      # not new information for them.
+      - uses: ./.github/actions/advice
+        with:
+          fix-merge-conflict: 'true'
+          fix-generated-drift: 'true'
+          fix-label: ${{ env.FIX_LABEL }}
+          pr-number: ${{ matrix.pr.number }}
+          base-ref: ${{ matrix.pr.baseRef }}
+          head-sha: ${{ matrix.pr.headSha }}
+          merge-conflicts: 'false'
+          hand-edited-generated: 'false'
+          target-outputs: 'false'
+          doctor: 'false'
+          version-floor: 'false'
+          blast-radius: 'false'
+          unclaimed: 'false'
+          skip-cache: 'false'
+          conformance: 'false'
+          missing-target: 'false'
+          first-contribution: 'false'
