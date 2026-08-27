@@ -99,6 +99,12 @@ try {
     });
 
   await send("Page.enable");
+  // The console's theme defaults to "auto" - the OS preference - and headless Chrome inherits the
+  // machine's appearance, so the committed gallery would flip theme with whoever ran this last.
+  // Pinned light to match the gallery it feeds.
+  await send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: "light" }],
+  });
   await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor, mobile });
   if (mobile) {
     await send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
