@@ -2279,3 +2279,48 @@ func TestHintSinceLastReview(t *testing.T) {
 		assert.Empty(t, out.String())
 	})
 }
+
+// TestDiffTUIFilesHandsTheViewerTheEscapedForm covers the wiring rather than the sanitizer.
+//
+// internal/diff pins that Parse escapes both rendered forms, and that is where the sanitizing is
+// tested. What NOTHING held until here is that the terminal viewer is handed the escaped one: the
+// whole defence is a single displayOr call in the join below, and writing h.Lines there leaves
+// every bidi test green while the viewer draws the deception. A control with one enforcement site
+// and no test on that site is the shape this changeset kept finding.
+func TestDiffTUIFilesHandsTheViewerTheEscapedForm(t *testing.T) {
+	// Written as an escape, never as the character: bidichk gates this repo's own source, and a
+	// test file carrying a raw override is one where the deception is invisible to its reviewer.
+	const rlo = "\u202e"
+	rev := types.Diff{Files: []types.DiffFile{
+		{Path: "auth.go", Role: types.DiffRoleSource},
+	}}
+	patch := "diff --git a/auth.go b/auth.go\n" +
+		"--- a/auth.go\n+++ b/auth.go\n" +
+		"@@ -1,2 +1,2 @@ func Check()\n" +
+		" ok\n" +
+		"+\tif admin { // " + rlo + " } trap\n"
+
+	files := diffTUIFiles(rev, session.ParseHunks(patch))
+
+	require.Len(t, files, 1)
+	require.Len(t, files[0].Hunks, 1)
+	lines := files[0].Hunks[0].Lines
+	require.Len(t, lines, 2)
+	assert.Contains(t, lines[1], "<U+202E>", "the viewer is shown where the reordering was")
+	for _, l := range lines {
+		assert.NotContains(t, l, rlo, "no line reaches the viewer able to reorder itself")
+	}
+}
+
+// The control for the one above: an honest patch reaches the viewer byte for byte. Display is nil
+// for every ordinary hunk, so a join that read it unconditionally would hand the viewer nothing.
+func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
+	rev := types.Diff{Files: []types.DiffFile{{Path: "a.go", Role: types.DiffRoleSource}}}
+	patch := "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-old\n+new\n"
+
+	files := diffTUIFiles(rev, session.ParseHunks(patch))
+
+	require.Len(t, files, 1)
+	require.Len(t, files[0].Hunks, 1)
+	assert.Equal(t, []string{"-old", "+new"}, files[0].Hunks[0].Lines)
+}
