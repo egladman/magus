@@ -91,8 +91,10 @@ export function order(files: readonly DiffFile[], session: DiffSession | null): 
 //
 // The predicate is spelled the same way in the terminal viewer (diff.File.Settled), against the
 // same read_state the daemon computes once. The STATE is shared; only the folding is per surface.
-export function settled(file: DiffFile, annotation: DiffAnnotation | undefined): boolean {
-  return annotation?.read_state === "read" && !file.generated;
+export function settled(annotation: DiffAnnotation | undefined): boolean {
+  // role, not a field on the patch file: DiffFile is the PATCH, and whether a path is generated is
+  // something only the annotation knows - the same a.role === "output" the grouping above uses.
+  return annotation?.read_state === "read" && annotation.role !== "output";
 }
 
 // visibleFiles is the file list the stream renders: primary always, plus the generated group and
@@ -107,9 +109,7 @@ export function visibleFiles(
   showGenerated: boolean,
   showSettled = true,
 ): DiffFile[] {
-  const out = cs.primary
-    .filter((o) => showSettled || !settled(o.file, o.annotation))
-    .map((o) => o.file);
+  const out = cs.primary.filter((o) => showSettled || !settled(o.annotation)).map((o) => o.file);
   if (showGenerated) out.push(...cs.generated.map((o) => o.file));
   return out;
 }
@@ -142,7 +142,7 @@ export function stats(cs: OrderedChangeset): ReviewStats {
   let untested = 0;
   let settledCount = 0;
   for (const { file, annotation } of cs.primary) {
-    if (settled(file, annotation)) settledCount++;
+    if (settled(annotation)) settledCount++;
     additions += file.additions;
     deletions += file.deletions;
     if (annotation?.surface === "public") publicSurface++;
