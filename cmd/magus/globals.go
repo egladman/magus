@@ -194,7 +194,7 @@ func flagValueOf(arg, name string) string {
 // ---- what each command actually bound, for the man page's parity gate ----
 
 // The man page's flag list is a SECOND copy of every command's flags, hand-written in
-// internal/clispec/registry.go because the real ones are bound in closures inside this
+// internal/cli/registry.go because the real ones are bound in closures inside this
 // package, which nothing outside `package main` can import. A second copy drifts: the
 // registry advertised --simple for months after that flag was deleted, and it has never
 // mentioned most of what `run` and `affected` actually accept.

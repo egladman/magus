@@ -1,6 +1,6 @@
 ---
 title: magus affected
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.
 tags: [cli, magus affected, affected, changed files, vcs, git, bisect, ci]
 ---

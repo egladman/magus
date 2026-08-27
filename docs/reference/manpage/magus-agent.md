@@ -1,6 +1,6 @@
 ---
 title: magus agent
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: "Render the embedded agent skills into a repository's skill directories, or print a starter AGENTS.md; it never writes the AGENTS.md you own."
 tags: [cli, magus agent, skills, agents, AGENTS.md, install]
 ---

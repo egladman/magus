@@ -1,6 +1,6 @@
 ---
 title: magus doctor
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.
 tags: [cli, magus doctor, diagnostics, troubleshooting, validation, workspace]
 ---

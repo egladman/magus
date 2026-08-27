@@ -1,6 +1,6 @@
 ---
 title: magus self
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.
 tags: [cli, magus self, self update, self install-shorthand, updates, versioning, install, mgs]
 ---

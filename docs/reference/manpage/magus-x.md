@@ -1,6 +1,6 @@
 ---
 title: magus x
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: Reproduces the invocation an output ref recorded, or opens a TTY picker for project and target when given filters instead.
 tags: [cli, magus x, interactive, picker, shorthand, run, tty, reproduce, output ref]
 ---

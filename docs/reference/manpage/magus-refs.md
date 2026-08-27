@@ -1,6 +1,6 @@
 ---
 title: magus refs
-generated_from: internal/clispec/registry.go
+generated_from: internal/cli/registry.go
 description: "List a symbol's definition and every file that references it as file:line rows, read from the declared SCIP index rather than found by text search."
 tags: [cli, magus refs, symbols, scip, references, knowledge graph]
 ---

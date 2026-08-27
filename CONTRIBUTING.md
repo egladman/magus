@@ -70,14 +70,14 @@ promise forbids, and the answer is a second name rather than a redefinition.
 
 **Three gates catch a break before review does**, one per surface:
 
-| Surface        | Gate                                                                                                           |
-| -------------- | -------------------------------------------------------------------------------------------------------------- |
-| CLI            | `internal/clispec/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
-| protobuf       | `buf breaking`, composed into `lint`                                                                           |
-| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                                   |
+| Surface        | Gate                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| CLI            | `internal/cli/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
+| protobuf       | `buf breaking`, composed into `lint`                                                                       |
+| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                               |
 
 A diff to `api.lock` is the signal to read carefully: a line removed there is a
-removed public surface. Regenerate it with `go generate ./internal/clispec/...`
+removed public surface. Regenerate it with `go generate ./internal/cli/...`
 after an intentional addition, and treat a deletion as a question rather than a
 regeneration.
 

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/egladman/magus/internal/clispec"
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/generate/emit"
 )
@@ -20,7 +20,7 @@ func runAPI(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	data := []byte(strings.Join(clispec.API(config.KnownKeys()), "\n") + "\n")
+	data := []byte(strings.Join(cli.API(config.KnownKeys()), "\n") + "\n")
 	if *out == "" {
 		_, err := os.Stdout.Write(data)
 		return err

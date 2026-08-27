@@ -1,4 +1,4 @@
-package clispec
+package cli
 
 import (
 	"fmt"
