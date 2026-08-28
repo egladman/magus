@@ -201,11 +201,14 @@ reader can find in the repository.
 
 Two things under `docs/` stay tracked on purpose:
 
-- `docs/vendor/playground/` holds the playground wasm and its TinyGo glue. They
-  are the only published bytes CI cannot reproduce, because it has no TinyGo.
-  The render copies them into `gen/`. Rebuild with `magus run build-playground docs`.
+- `docs/vendor/casts/` holds the recorded terminal sessions the guides embed:
+  captured bytes a rebuild cannot reproduce.
 - `docs/active.urls.lock` is the ledger proving a previously published URL never
   starts 404-ing. That gate only works if the ledger outlives a single build.
+
+The playground wasm used to be a third, vendored because CI had no TinyGo to
+rebuild it. CI's stock Go builds it now, so it is ordinary render output under
+`gen/` (`magus run build-playground docs`).
 
 Pages use extensionless URLs (`/magus/documentation/`, served from
 `docs/gen/documentation/index.html`). If you rename or move a page, keep the old URL alive

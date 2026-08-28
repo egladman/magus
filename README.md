@@ -470,7 +470,7 @@ Full docs live at **[eli.gladman.cc/magus](https://eli.gladman.cc/magus/)**.[^do
 
 - Core concepts: [Targets](docs/concepts/targets.md), [Spells](docs/concepts/spells.md), [Charms](docs/concepts/charms.md), [Operations](docs/concepts/operations.md), [Services](docs/concepts/services.md)
 - Running at scale: [CI](docs/concepts/targets/ci.md), [CI providers](docs/concepts/ci/providers.md), [Daemon](docs/guides/integrations/daemon.md), [Remote caching](docs/concepts/cache/remote.md), [MCP](docs/guides/integrations/mcp.md), [Telemetry](docs/concepts/telemetry.md)
-- Reference: [Man pages](docs/reference/manpage/magus.md), [Standard library modules](docs/reference/buzz/index.md), [Testing](docs/guides/testing.md), [Debugging](docs/guides/debugging.md), [Output references](docs/concepts/output-refs.md), [Tips and tricks](docs/guides/tips.md)
+- Reference: [Man pages](docs/reference/manpage/magus.md), [Standard library modules](docs/reference/buzz/index.md), [Testing](docs/guides/testing.md), [Debugging](docs/guides/debugging.md), [Output references](docs/concepts/cache/output-refs.md), [Tips and tricks](docs/guides/tips.md)
 
 Inside a workspace, the entry point is the committed [`MAGUS.md`](https://github.com/egladman/magus/blob/main/MAGUS.md): a
 generated routing index of the workspace's projects, targets, and the exact
@@ -531,7 +531,7 @@ magus run ci
 
 [^app-graph]: The same graph the CLI queries, drawn. See [`magus graph`](docs/reference/manpage/magus-graph.md) for the verbs and [knowledge graph](docs/concepts/knowledge.md) for the schema.
 
-[^app-logs]: A run's output is addressed by a short reference ID, which is what `<ref>` is above. See [output references](docs/concepts/output-refs.md).
+[^app-logs]: A run's output is addressed by a short reference ID, which is what `<ref>` is above. See [output references](docs/concepts/cache/output-refs.md).
 
 [^mcp]: Tool list, transport, and how to connect an agent: [MCP](docs/guides/integrations/mcp.md).
 

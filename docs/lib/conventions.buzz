@@ -7,8 +7,9 @@
 namespace conventions;
 
 import "assert";
-import "lib/text" as _;       // escapeAttr
+import "lib/text" as _;       // escapeAttr, splitPath
 import "lib/glossary" as _;   // glossarySlug, for the goldmark anchors
+import "lib/html" as _;       // resolvePath, to resolve a relative link against its file's dir
 
 // Convention is one section of conventions.md: the heading, its goldmark anchor, and the
 // lead paragraph as a one-line description for the popover. The conventions page is prose
@@ -329,26 +330,71 @@ fun trimTrailingSlash(s: str) > str {
     return s;
 }
 
-// pathCheckApplies reports whether a page's inline paths are claims about THIS repository.
-// Two trees are exempt because their whole job is describing someone else's workspace: the
-// diagnostic explainers under reference/codes/ walk through an example project (`api/`,
-// `pkg/build.go`), and the guides walk through the reader's own machine and config. Scoping
-// this by tree rather than by pattern keeps the rule honest - the exemption is a statement
-// about what those pages are for, not a list of strings to suppress.
+// pathCheckApplies reports whether a page's inline paths and link targets are claims about
+// THIS repository. The diagnostic explainers under reference/codes/ are exempt because their
+// whole job is describing someone else's workspace (`api/`, `pkg/build.go`). Measuring the
+// old blanket docs/guides/ exemption against the corpus found exactly one guide that needs
+// it: pr-advice.md names `refs/remotes/`, a git-internal path inside the READER's own clone,
+// not a claim about this repository. Every other guide's inline paths and links already
+// resolve on their own, so scoping this to the one page that needs it - rather than the
+// whole tree - keeps the rule honest instead of quietly swallowing real breakage.
 export fun pathCheckApplies(file: str) > bool {
     if (file.startsWith("docs/reference/codes/")) { return false; }
-    if (file.startsWith("docs/guides/")) { return false; }
+    if (file == "docs/guides/integrations/pr-advice.md") { return false; }
     return true;
 }
 
-// pathReferences collects every repo path named in inline code OUTSIDE a fenced block,
-// with the line it sits on. Prose is where a path claim is load-bearing - a reader follows
-// it - whereas a path inside a command block is often illustrative, so scanning only prose
-// keeps this honest without keeping it noisy.
+// fileDir returns the directory portion of a repo-root-relative file path (splitPath drops
+// "" and "." segments), so a relative link target can be resolved against it.
+fun fileDir(file: str) > str {
+    final segs = splitPath(file);
+    if (segs.len() <= 1) { return ""; }
+    return segs.sub(0, segs.len() - 1).join("/");
+}
+
+// linkTargets returns every `](target)` markdown-link target on a line, in order. A link
+// with no closing paren on the line is dropped rather than guessed at.
+fun linkTargets(line: str) > [str] {
+    final found: mut [str] = mut [<str>];
+    var rest = line;
+    var idx = rest.indexOf("](");
+    while (idx != null) {
+        final afterOpen = rest.sub(idx + 2);   // 2 = len("](")
+        final closeAt = afterOpen.indexOf(")");
+        if (closeAt == null) { return found; }
+        found.append(afterOpen.sub(0, len: closeAt));
+        rest = afterOpen.sub(closeAt + 1);
+        idx = rest.indexOf("](");
+    }
+    return found;
+}
+
+// relativeMarkdownLinkBody reports the target's path with any "#fragment" stripped, or null
+// if the target is not a same-repo relative .md claim: an anchor-only target, an http(s) or
+// mailto URL, and a site-absolute link (leading "/") are not filesystem references.
+fun relativeMarkdownLinkBody(target: str) > str? {
+    if (target == "" or target.startsWith("#")) { return null; }
+    if (target.startsWith("http://") or target.startsWith("https://")
+        or target.startsWith("mailto:")) { return null; }
+    if (target.startsWith("/")) { return null; }
+    var body = target;
+    final hash = target.indexOf("#");
+    if (hash != null) { body = target.sub(0, len: hash); }
+    if (body.endsWith(".md") == false) { return null; }
+    return body;
+}
+
+// pathReferences collects every repo path named in inline code OUTSIDE a fenced block, and
+// every relative markdown link target, with the line each sits on. Prose is where a path
+// claim is load-bearing - a reader follows it - whereas a path inside a command block is
+// often illustrative, so scanning only prose keeps this honest without keeping it noisy.
+// A link target is resolved against its own file's directory, so `f.path` is repo-root
+// relative for both kinds of finding, like the caller already expects.
 //
 // The caller decides which of these are broken; this half cannot touch the filesystem.
 export fun pathReferences(file: str, md: str) > [ConventionFinding] {
     final found: mut [ConventionFinding] = mut [<ConventionFinding>];
+    final dir = fileDir(file);
     var marker = "";
     var n = 0;
     foreach (line in md.split("\n")) {
@@ -370,6 +416,14 @@ export fun pathReferences(file: str, md: str) > [ConventionFinding] {
                     message = "`" + tok + "` does not exist in the repository", path = tok });
             }
             i = i + 2;
+        }
+
+        foreach (target in linkTargets(line)) {
+            final body = relativeMarkdownLinkBody(target);
+            if (body == null) { continue; }
+            found.append(ConventionFinding{ file = file, line = n, rule = "missing-link",
+                message = "link target `" + target + "` does not resolve to a file in the repository",
+                path = resolvePath(dir, body!) });
         }
     }
     return found;
@@ -485,8 +539,10 @@ test "pathCheckApplies exempts the trees that document someone else's workspace"
     assert\equal(pathCheckApplies("README.md"), true, "repo-root prose");
     assert\equal(pathCheckApplies("docs/reference/codes/race/MGS4004.md"), false,
         "diagnostic explainers walk through an example project");
-    assert\equal(pathCheckApplies("docs/guides/integrations/agents.md"), false,
-        "guides walk through the reader's machine");
+    assert\equal(pathCheckApplies("docs/guides/integrations/agents.md"), true,
+        "guides are checked like any other page now that the blanket exemption is gone");
+    assert\equal(pathCheckApplies("docs/guides/integrations/pr-advice.md"), false,
+        "names refs/remotes/, a git-internal path in the reader's own clone");
 }
 
 test "pathReferences reads prose only, never a command block" {
@@ -496,4 +552,26 @@ test "pathReferences reads prose only, never a command block" {
     assert\equal(refs[0].path, "internal/gone/x.go", "the first reference");
     assert\equal(refs[0].line, 1, "line number");
     assert\equal(refs[1].path, "docs/render.buzz", "the second reference");
+}
+
+test "pathReferences resolves a relative markdown link against its own file's directory" {
+    final md = "See [daemon.md](../guides/integrations/daemon.md) for the daemon.\n";
+    final refs = pathReferences("docs/concepts/concurrency.md", md);
+    assert\equal(refs.len(), 1, "one link finding");
+    assert\equal(refs[0].rule, "missing-link", "rule name");
+    assert\equal(refs[0].path, "docs/guides/integrations/daemon.md", "resolved repo-root relative");
+    assert\equal(refs[0].line, 1, "line number");
+}
+
+test "pathReferences skips link targets that are not same-repo relative .md claims" {
+    final md = "[anchor](#section) [ext](https://example.com/x.md) [mail](mailto:a@b.co) "
+        + "[abs](/reference/faq.md) [asset](../img/logo.png) [ok](../glossary.md#term)\n";
+    final refs = pathReferences("docs/guides/tips.md", md);
+    assert\equal(refs.len(), 1, "only the relative .md link with a fragment is a claim");
+    assert\equal(refs[0].path, "docs/glossary.md", "fragment stripped before resolving");
+}
+
+test "pathReferences ignores a markdown link written inside a fenced block" {
+    final md = "```md\n[example](../not-real.md)\n```\n";
+    assert\equal(pathReferences("docs/guides/tips.md", md).len(), 0, "fenced example, not a claim");
 }

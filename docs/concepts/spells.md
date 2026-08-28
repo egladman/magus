@@ -229,7 +229,7 @@ sits and how to write in-file `test "..." {}` blocks.
 
 `mgs_listIgnoreDirs` names the non-source directories your ecosystem generates (a Rust spell returns `[Path{value = "target", isDir = true}]`; a Node spell, `[Path{value = "node_modules", isDir = true}]`). magus prunes them from the input-hashing walk of any project this spell resolves, so a build tree never counts toward the cache key. Dot-directories are always skipped, so only non-dot names belong here.
 
-Buzz (`spells/ruby.buzz`):
+Buzz (a `ruby.buzz` spell source):
 
 ```buzz
 export fun mgs_getName() > str { return "ruby"; }
