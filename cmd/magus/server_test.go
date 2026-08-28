@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/proc"
@@ -92,4 +95,36 @@ func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
 	// A daemon that has loaded nothing yet says nothing rather than "serving " with an empty
 	// list, which would read as a daemon that is serving something unnameable.
 	assert.Empty(t, servingSuffix(&proc.StatusReply{}))
+}
+
+// TestEnsureConsoleDaemonReturnsWithoutSpawning pins the early return: a console that is
+// already serving must not start a second daemon. Nothing else in the test suite reaches
+// ensureConsoleDaemon, and the spawn path it guards is the one that leaves a process behind.
+func TestEnsureConsoleDaemonReturnsWithoutSpawning(t *testing.T) {
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized) // a bound bridge answers; 401 is reachable
+	}))
+	defer srv.Close()
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	globalCfg.MCP.Address = addr
+
+	require.NoError(t, ensureConsoleDaemon(t.Context(), addr, t.TempDir()))
+}
+
+// TestDaemonChildEnvDropsTheInheritedSocket pins the scrub. A child that inherits
+// MAGUS_DAEMON_SOCKET decides it is already adopted, binds no socket of its own, and then
+// reports the parent's - leaving a daemon `server stop` cannot find.
+func TestDaemonChildEnvDropsTheInheritedSocket(t *testing.T) {
+	t.Setenv("MAGUS_DAEMON_SOCKET", "/tmp/magus-parent.sock")
+	t.Setenv("MAGUS_KEEP_ME", "1")
+
+	env := daemonChildEnv()
+
+	for _, kv := range env {
+		assert.False(t, strings.HasPrefix(kv, "MAGUS_DAEMON_SOCKET="), "child inherited %q", kv)
+	}
+	assert.Contains(t, env, "MAGUS_KEEP_ME=1", "the scrub must drop one variable, not the environment")
 }
