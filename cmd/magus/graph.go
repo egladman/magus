@@ -661,7 +661,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 		}
 	}
 	if follow {
-		return graphOpenFollow(ctx, printOnly, useTargets)
+		return graphOpenFollow(ctx, root, printOnly, useTargets)
 	}
 
 	// The explorer shows the domain graph; symbol shards would bloat it, so exclude them.
@@ -950,17 +950,27 @@ func liveBridgeReachable(ctx context.Context) bool {
 // The token is loaded from the on-disk token file written by auth.Save/SaveNew.
 // It is embedded in the URL fragment (which browsers do not transmit in HTTP
 // requests) and is stripped from the fragment by the page on first load.
-func graphOpenFollow(ctx context.Context, printOnly, useTargets bool) error {
+func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets bool) error {
 	hostPort := mcpAddrString()
 
-	// Probe the ACTUAL console (not just the proc socket) so we never emit a
-	// URL and token for a transport nothing is listening on. Explicit --follow
-	// with no reachable bridge is an error; magus never auto-starts a daemon.
-	pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
-	defer cancel()
-	if err := probeLiveBridge(pctx, hostPort); err != nil {
-		fmt.Fprintln(os.Stderr, "magus graph export --open --follow: the console is not reachable.")
-		fmt.Fprintf(os.Stderr, "start it: %s\n", clihint.ServerStart)
+	// The ACTUAL console is probed (not just the proc socket) so we never emit a URL and
+	// token for a transport nothing is listening on. When nothing serves it, the daemon is
+	// started rather than refused: --follow is a request for the console, and the console
+	// is the daemon's own surface.
+	//
+	// --print is exempt. It is the scriptable "just give me the URL" form, and a command
+	// that only prints must not leave a background process behind as a side effect.
+	if printOnly {
+		pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
+		defer cancel()
+		if err := probeLiveBridge(pctx, hostPort); err != nil {
+			fmt.Fprintln(os.Stderr, "magus graph export --open --follow --print: the console is not reachable.")
+			fmt.Fprintf(os.Stderr, "start it: %s\n", clihint.ServerStart)
+			return errSilent{exitCode: 1}
+		}
+	} else if err := ensureConsoleDaemon(ctx, hostPort, root); err != nil {
+		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: %v\n", err)
+		fmt.Fprintf(os.Stderr, "start it yourself to see the daemon's own output: %s\n", clihint.ServerStart)
 		return errSilent{exitCode: 1}
 	}
 

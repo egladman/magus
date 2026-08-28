@@ -219,22 +219,29 @@ IS asking for the daemon and starting it is doing what was asked rather than a
 side effect. CI never spawns one under this rule - not by a special case, but
 because CI never asks for a console. That absence of a conditional is the point.
 
-NOT BUILT HERE. An implementation of this landed on the event-stream branch and
-was pulled back out before merge. It reused `spawnDetachedDaemon` on the theory
-that the machinery was already shipped, and the theory was wrong: that function
-was safe only because its one caller ran under a dispatch profile that never
-hosts a per-process proc server. Called from one that does, the detached child
-inherited `MAGUS_DAEMON_SOCKET`, decided it was already adopted, bound no socket
-of its own, and reported its PARENT's socket as the one it was listening on -
-leaving a daemon `magus server stop` could not find and only `kill` could remove.
+`graph export --open --follow` does this, via `ensureConsoleDaemon`. A first
+implementation was reverted before merge and rebuilt, and the three failures that
+review found are the specification for anyone touching it again:
 
-Two further problems, neither of which the implementation addressed: every
-failure path leaked the process it had spawned, and promoting one worktree's
-binary to a long-lived per-user service is the thing the checkout guard exists to
-prevent, by a route the guard cannot see because there is no `cd` in the command
-line. Whoever builds this next should start from those three and from a test -
-the reverted version had none, which is why a review found all of it rather than
-a gate.
+- **The child must not inherit `MAGUS_DAEMON_SOCKET`.** `spawnDetachedDaemon` was
+  safe only because its one caller ran under a dispatch profile that never hosts a
+  per-process proc server. Called from one that does, the child decided it was
+  already adopted, bound no socket, and reported its PARENT's - leaving a daemon
+  `magus server stop` could not find and only `kill` could remove.
+  `daemonChildEnv` scrubs it.
+- **Every failure path must reap what it spawned.** With `console.enabled=false`
+  the wait times out by construction, so each attempt leaked one more process.
+  `reapDaemon` kills it on both the timeout and the cancellation path.
+- **It must say which tree it came up in.** One socket per user serves every
+  workspace, so a daemon started here is authoritative for whoever connects next.
+  This is the same hazard `servingSuffix` exists for on the `server start` path.
+
+`--print` is exempt: the scriptable "just give me the URL" form must not leave a
+background process behind.
+
+Still open: promoting one worktree's binary to a long-lived per-user service is
+what the checkout guard exists to prevent, by a route the guard cannot see
+because there is no `cd` in the command line.
 
 ### This was already the de facto rule
 
@@ -246,10 +253,9 @@ Two sites decided it independently before it was stated:
 - `cmd/magus/graph.go` refuses `--follow` with `clihint.ServerStart` rather than
   starting one, under a comment reading "magus never auto-starts a daemon".
 
-The second is the site this decision would REVERSE: `--follow` is a plain request
-for the console, so it should start the daemon rather than refuse. It still
-refuses today - see the note above. The first stays as it is and becomes the
-worked example of the rule.
+The second is the site this decision REVERSES: `--follow` is a plain request for
+the console, so it starts the daemon rather than refusing. The first stays as it
+is and becomes the worked example of the rule.
 
 ### The event stream needs none of this
 
