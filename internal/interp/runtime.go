@@ -411,8 +411,19 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	// cycle diagnostic the pool produces one level deeper.
 	ctx = buzz.WithAncestors(ctx, []string{key})
 	val, err := fn(ctx, buzzArgs)
+	// The typed error is the answer whenever it survived the VM; the capture is only the
+	// fallback for an engine that stringifies ExitError away. Consulting the capture
+	// before err was looked at at all let an earlier os\exit(0) - an op's clean early
+	// return - report success for a genuine failure raised after it, so a captured ZERO
+	// is never taken as that fallback: the error in hand says the run did not succeed.
 	if code, ok := exitCode(); ok {
-		return nil, types.ExitError{Code: code}
+		var ex types.ExitError
+		switch {
+		case errors.As(err, &ex):
+			return nil, ex
+		case err == nil, code != 0:
+			return nil, types.ExitError{Code: code}
+		}
 	}
 	if err != nil {
 		// Deliberately unwrapped: every caller reaches a user through

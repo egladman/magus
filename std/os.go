@@ -229,6 +229,7 @@ func OsSleep(ctx context.Context, ms float64) error {
 // also records the code on ctx (types.CaptureExit) so it survives when the engine
 // stringifies the error type away; the interpreter reads it back. See types.ExitError.
 func OsExit(ctx context.Context, code int) error {
+	code = types.NormalizeExitCode(code)
 	types.CaptureExit(ctx, code)
 	return types.ExitError{Code: code}
 }

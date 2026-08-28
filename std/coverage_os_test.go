@@ -184,6 +184,22 @@ func TestOsExit(t *testing.T) {
 	assert.Equal(t, 1, exitErr.Code)
 }
 
+// TestOsExitClampsToAProcessStatus pins the clamp at the source, so the CLI, the daemon
+// reply and the out-of-band capture cannot disagree. Unclamped, os.exit(256) truncated
+// to 0 in os.Exit and a failing run reported success.
+func TestOsExitClampsToAProcessStatus(t *testing.T) {
+	ctx, readExit := types.WithExitCapture(context.Background())
+
+	err := OsExit(ctx, 256)
+	var exitErr types.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 1, exitErr.Code, "a failure that would truncate to 0 fails as 1")
+
+	code, set := readExit()
+	require.True(t, set)
+	assert.Equal(t, 1, code, "the capture must agree with the error")
+}
+
 func TestOsPlatform(t *testing.T) {
 	osName, arch, variant, err := OsPlatform(context.Background())
 	require.NoError(t, err)

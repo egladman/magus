@@ -34,3 +34,19 @@ func TestExitError(t *testing.T) {
 	require.ErrorAs(t, wrapped, &ex)
 	assert.Equal(t, 2, ex.Code)
 }
+
+// TestNormalizeExitCode pins the truncation guard: os.Exit keeps the low 8 bits, so an
+// unclamped os.exit(256) reported success and `magus run x && deploy` deployed.
+func TestNormalizeExitCode(t *testing.T) {
+	for code, want := range map[int]int{
+		0: 0, 1: 1, 2: 2, 255: 255,
+		256:  1,   // truncates to 0; a failure must not read as success
+		512:  1,   // same
+		257:  1,   // truncates to a legal 1 already
+		300:  44,  // 300 & 0xff
+		-1:   255, // negatives fold the way a shell folds them
+		-256: 1,
+	} {
+		assert.Equal(t, want, NormalizeExitCode(code), "NormalizeExitCode(%d)", code)
+	}
+}
