@@ -148,7 +148,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay (default: false). Equivalent magus.yaml key: **cache.include.os.enabled**.
 
 **MAGUS_CACHE_INCLUDE_ARCH_ENABLED**
-: When false (or 0), the host architecture is left out of every cache key (default: true). Equivalent magus.yaml key: **cache.include.arch.enabled**.
+: When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay (default: false). Equivalent magus.yaml key: **cache.include.arch.enabled**.
 
 **MAGUS_CACHE_SIZE_MB**
 : Cache disk usage cap in MB (binary, 1\<\<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: **cache.size_mb**.

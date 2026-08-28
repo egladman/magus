@@ -20,6 +20,36 @@ func TestDefaults_VolatilityEnabled(t *testing.T) {
 	assert.True(t, cfg.Volatility.Enabled, "Defaults().Volatility.Enabled should be true")
 }
 
+// TestCacheIncludeDefaultsOff pins the OFF default deliberately, against the pull to
+// "fix" it toward the safe-looking direction. Keying the host platform is not what makes
+// a replay safe - Manifest.Platform refuses a cross-platform hit whatever these say - and
+// a key free of host facts is what lets an output ref name the same run on every machine
+// (see internal/cache's TestCacheKeyUnaffectedByPlatform). Turning these on by default
+// would break that and rekey every existing entry.
+func TestCacheIncludeDefaultsOff(t *testing.T) {
+	t.Parallel()
+	cfg := Defaults()
+	assert.False(t, cfg.Cache.IncludeOS(), "cache.include.os.enabled must default off")
+	assert.False(t, cfg.Cache.IncludeArch(), "cache.include.arch.enabled must default off")
+}
+
+func TestCacheIncludeExplicit(t *testing.T) {
+	t.Parallel()
+	on := Cache{Include: CacheInclude{
+		OS:   CacheIncludeFlag{Enabled: boolPtr(true)},
+		Arch: CacheIncludeFlag{Enabled: boolPtr(true)},
+	}}
+	assert.True(t, on.IncludeOS())
+	assert.True(t, on.IncludeArch())
+
+	off := Cache{Include: CacheInclude{
+		OS:   CacheIncludeFlag{Enabled: boolPtr(false)},
+		Arch: CacheIncludeFlag{Enabled: boolPtr(false)},
+	}}
+	assert.False(t, off.IncludeOS())
+	assert.False(t, off.IncludeArch())
+}
+
 // TestSave_Concurrent verifies that 10 goroutines concurrently calling Save
 // on the same path do not panic and leave a valid YAML file behind.
 func TestSave_Concurrent(t *testing.T) {

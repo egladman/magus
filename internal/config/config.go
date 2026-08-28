@@ -241,12 +241,14 @@ type CacheInclude struct {
 	Arch CacheIncludeFlag `json:"arch" yaml:"arch"`
 }
 
-// CacheIncludeFlag is one host fact's switch. Both default to enabled: excluding one
-// is a claim that the artifact does not vary along that axis, and being wrong that way
-// replays a foreign artifact out of a shared cache, where being wrong the other way
-// only costs hits.
+// CacheIncludeFlag is one host fact's switch. Both default to DISABLED, and neither
+// holds correctness: Manifest.Platform refuses a cross-platform replay whatever these
+// say, so on one machine they are constants that discriminate nothing. Keeping them out
+// is what lets an output ref name the same run on every machine. Turn one on for a cache
+// shared across platforms, where one key per platform beats every platform colliding on
+// one key and taking the guard's miss.
 type CacheIncludeFlag struct {
-	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default true
+	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default false
 }
 
 // WriteEnabled reports whether this run may produce cache entries.
@@ -577,7 +579,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
 		{"MAGUS_CACHE_WRITE_ENABLED", "cache.write.enabled", "true", "When false (or 0), replay cache hits but never write new entries, locally or to a remote"},
 		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "false", "When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
-		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "true", "When false (or 0), the host architecture is left out of every cache key"},
+		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "false", "When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},
 		{"MAGUS_CACHE_REMOTE_INSECURE", "cache.remote.insecure", "false", "Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only"},
 		{"MAGUS_LOG_FORMAT", "log.format", "pretty", "Output format: pretty, plain, text, or json"},

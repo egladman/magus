@@ -145,12 +145,12 @@ the `Step`. magus writes these lines, in this order, into one hash:
   fields changes) forces a global rebuild.
 - **`os`** and **`arch`** - the host platform, each independently switchable with
   [`cache.include.os.enabled`](../reference/config.md) and
-  `cache.include.arch.enabled`. Both default to on, so a macOS laptop and a Linux runner
-  mint different keys for identical sources. That is the safe direction - the alternative
-  is sharing an artifact between platforms that may not agree - but it does mean an
-  output ref is **not** comparable across machines by default. Turning one off is a claim
-  that the artifact does not vary along that axis, and being wrong that way replays a
-  foreign artifact out of a shared cache, where being wrong the other way only costs hits.
+  `cache.include.arch.enabled`. Both default to **off**, so a macOS laptop and a Linux
+  runner mint the same key for identical sources, and an output ref names the same run
+  on both. Neither switch carries correctness: every entry records the platform it was
+  built on, and a replay onto a different one is refused as a miss whatever these say.
+  Turn them on for a cache shared across platforms, where one key per platform beats
+  every platform colliding on one key and taking that miss.
 - **`projectPath`** and **`target`** - so the same sources under different targets
   key separately.
 - **`spell`** - the explicit `spell::op` filter, written only on such runs. An

@@ -93,12 +93,12 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 	// Stated HERE rather than arriving through a spell. Several toolchains print their
 	// platform inside their version (`go version go1.26.0 linux/amd64`), so magus was
 	// keying on it by accident for whichever projects bound such a spell; extraction
-	// strips that deliberately, which would leave a darwin/arm64 machine free to replay
-	// a linux/amd64 artifact from a shared cache.
+	// strips that deliberately, so platform reaches the key only through these lines.
 	//
-	// OS and arch are SEPARATE lines because they vary independently. Omitting one is a
-	// claim the caller makes (cache.include.*.enabled), never something magus infers:
-	// wrong that way replays a foreign artifact, wrong the other way only costs hits.
+	// OS and arch are SEPARATE lines because they vary independently. Both default off
+	// (cache.include.*.enabled) so a ref stays comparable across machines; replay
+	// correctness never rests on them, because the manifest's Platform field refuses a
+	// cross-platform hit regardless. Keying one on splits the key space per platform.
 	//
 	// These are HOST facts. The platform an artifact is built FOR travels as GOOS/GOARCH
 	// through the environment allowlist.
