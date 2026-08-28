@@ -14,12 +14,17 @@ import (
 
 // Schema is the on-disk schema version; bump on field renames or removals.
 // v3 unified the per-target cache.hit/cache.miss/cache.error events into a single
-// target.result event (see TargetResult).
-const Schema = 3
+// target-result event (see TargetResult).
+// v4 renamed that event and the diagnostic one to carry a "run." prefix: they had
+// collided by name with types.StreamEvent's taxonomy, which stamps its own schema
+// number on lines of nearly the same shape. Two surfaces spelling one type string
+// under two independent version counters is worse than two unrelated names, so the
+// analytics stream took the prefix and the integration stream kept the plain name.
+const Schema = 4
 
 // Type values stamped on every event line; stable across versions.
 const (
-	TypeTargetResult          = "target.result"
+	TypeTargetResult          = "run.target.result"
 	TypeGraphBuild            = "graph.build"
 	TypeGraphQuery            = "graph.query"
 	TypeGraphError            = "graph.error"
@@ -30,7 +35,7 @@ const (
 	TypeOutputOverlapDetected = "race.output_overlap"
 	TypeDeterminismMismatch   = "race.determinism_mismatch"
 	TypeMissingDependency     = "race.missing_dependency"
-	TypeDiagnosticEmitted     = "diagnostic.emitted"
+	TypeDiagnosticEmitted     = "run.diagnostic"
 )
 
 // TargetResult reports the outcome of one target run — the single per-target event

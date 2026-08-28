@@ -491,7 +491,7 @@ On a run, magus computes the key, then looks for a manifest stored under it:
 
 This is why the target result is _emitted, not returned_. A return value can't
 exist on a hit, since the body never ran - but a hit is exactly what you most want
-to report. So the dispatcher emits a **`target.result`** event
+to report. So the dispatcher emits a **`run.target.result`** event
 (`{project, target, status, cache_hit, duration_ms}`) for **both** the ran and the
 cached case, sourced from the cache's per-run callback. See
 [Results](operations.md#results-what-each-layer-produces) for how the event fits
@@ -798,14 +798,14 @@ on.
 | **Blob**              | One unique output content, stored once under `cas/`, sharded by the first two hex chars of its hash.                              |
 | **Replay**            | Restoring a manifest's outputs on a hit (reflink then copy) without running the target body.                                      |
 | **Snapshot**          | Recording a miss's outputs into the store and writing its manifest.                                                               |
-| **target.result**     | The emitted report event for one target run (`{project, target, status, cache_hit, duration_ms}`); fires on both hits and misses. |
+| **run.target.result** | The emitted report event for one target run (`{project, target, status, cache_hit, duration_ms}`); fires on both hits and misses. |
 | **`.magus/`**         | The on-disk cache in the workspace root: `cas/` + `manifests/` + `logs/` + the mtime memo.                                        |
 
 ## See also
 
 - [spells.md](spells.md): where `needs`/`provides` are declared, and what a bound spell contributes.
 - [dependencies.md](dependencies.md): how `depends_on`'s `dep:` propagation and a `magus\needs` call each interact with this cache key.
-- [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
+- [operations.md](operations.md): the run hierarchy and the `run.target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
 - [charms.md](charms.md): the execution modifiers that key into the cache as `charm:` lines.
 - [cache/output-refs.md](cache/output-refs.md): how the key's hex digest becomes a
