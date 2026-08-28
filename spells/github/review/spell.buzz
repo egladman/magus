@@ -232,7 +232,11 @@ export fun find_review(target: magus\Target, cb: fun(any)) > any !> any {
     if (res["status"] != 200) {
         return {"id": "", "reason": "github: HTTP {res["status"]}"};
     }
-    final list = serialize\jsonDecode(res["body"]);
+    // .listValue(), never the boxed value itself - see decodeThreads. Without it len() is the
+    // accessor count (16) whatever the response, so this branch was taken even for an EMPTY
+    // array and list[0] was null: the op threw on every call, and the contract rendered that
+    // as "no pull request for this branch".
+    final list = serialize\jsonDecode(res["body"]).listValue();
     if (list.len() > 0) {
         // Rendered as a string: magus treats a review id as opaque so a provider whose changes are
         // named by a hash stays writable. GitHub's is a number and reads as one either way.
@@ -252,7 +256,7 @@ export fun find_review(target: magus\Target, cb: fun(any)) > any !> any {
     if (all["status"] != 200) {
         return {"id": "", "reason": "no pull request for this branch"};
     }
-    final closed = serialize\jsonDecode(all["body"]);
+    final closed = serialize\jsonDecode(all["body"]).listValue();
     if (closed.len() == 0) {
         return {"id": "", "reason": "no pull request for this branch"};
     }
@@ -331,12 +335,37 @@ export fun publish_review(target: magus\Target, cb: fun(any)) > any !> any {
     return {"id": decoded.q("id").integerValue(), "count": payload["comments"].len()};
 }
 
+// decodeThreads turns one page of GitHub's review-comment JSON into thread records.
+//
+// jsonDecode returns a boxed value: a map of accessors over the payload. An array must be read
+// through .listValue(), or the foreach walks the accessors instead of the rows.
+fun decodeThreads(body: str) > [any] !> any {
+    final threads = mut [<any>];
+    foreach (c in serialize\jsonDecode(body).listValue()) {
+        threads.append({
+            "id": "{c.q("id").integerValue()}",
+            "path": c.q("path").stringValue(),
+            "line": c.q("line").integerValue(),
+            "author": c.q("user").q("login").stringValue(),
+            "body": c.q("body").stringValue(),
+            // Key is "created" to match the Go decoder, which ignores it until thread aging lands.
+            "created": c.q("created_at").stringValue(),
+        });
+    }
+    return threads;
+}
+
 // review_threads lists the inline comment threads already on the review, so a reader never
 // leaves for the browser to find out what a colleague said.
 //
 // This is the one function that makes magus depend on a host being reachable. Every failure
 // returns an EMPTY list rather than throwing: a diff that will not open because GitHub is slow
 // is a worse tool than one that shows the change and says nothing about the conversation.
+//
+// Paged, because the default page holds 30 and a truncation here reads as "nobody commented
+// after the thirtieth". A page that fails discards the pages before it for the same reason:
+// the return has no way to say "incomplete", so a short list would read as a finished
+// conversation. The 10-page cap bounds an unbounded loop against a paging bug.
 export fun review_threads(target: magus\Target, cb: fun(any)) > [any] !> any {
     final io = {<str: any>};
     cb(io);
@@ -345,19 +374,22 @@ export fun review_threads(target: magus\Target, cb: fun(any)) > [any] !> any {
     if (!has_token() or repo == "" or id == "") {
         return [<any>];
     }
-    final res = http\get(apiBase() + "/repos/" + repo + "/pulls/" + id + "/comments", headers: headers());
-    if (res["status"] != 200) {
-        return [<any>];
-    }
+    final base = apiBase() + "/repos/" + repo + "/pulls/" + id + "/comments?per_page=100&page=";
     final threads = mut [<any>];
-    foreach (c in serialize\jsonDecode(res["body"])) {
-        threads.append({
-            "id": "{c.q("id").integerValue()}",
-            "path": c.q("path").stringValue(),
-            "line": c.q("line").integerValue(),
-            "author": c.q("user").q("login").stringValue(),
-            "body": c.q("body").stringValue(),
-        });
+    var page = 1;
+    while (page <= 10) {
+        final res = http\get(base + "{page}", headers: headers());
+        if (res["status"] != 200) {
+            return [<any>];
+        }
+        final got = decodeThreads(res["body"]);
+        foreach (t in got) {
+            threads.append(t);
+        }
+        if (got.len() < 100) {
+            return threads;
+        }
+        page = page + 1;
     }
     return threads;
 }
@@ -429,4 +461,61 @@ test "a draft with no line is dropped rather than detached from its code" {
     assert\equal(body["comments"].len(), want: 1, message: "only the anchored draft survives");
     assert\equal(body["comments"][0]["path"], want: "a.go", message: "and it is the right one");
     assert\equal(body["comments"][0]["side"], want: "RIGHT", message: "anchored to the new side");
+}
+
+// The bug this file shipped with, pinned. serialize\jsonDecode returns a BOXED value: iterating
+// it walks accessor methods, and .len() counts them. Both ops read a JSON ARRAY, so both were
+// reading 16 accessors instead of the rows, and both threw on every response - which the
+// contract renders as an ordinary "no pull request" / "no conversation".
+//
+// One comment must decode to exactly ONE thread. That single assertion is the whole regression.
+test "one comment decodes to one thread, not to the decoder's accessor count" {
+    final threads = decodeThreads(`[{"id":1,"path":"a.go","line":4,"user":{"login":"priya"},"body":"why","created_at":"2026-08-27T10:00:00Z"}]`);
+    assert\equal(threads.len(), want: 1, message: "a one-comment page is one thread; 16 means the boxed map was walked");
+    assert\equal(threads[0]["path"], want: "a.go", message: "the row's own fields survive");
+    assert\equal(threads[0]["author"], want: "priya", message: "a nested object still resolves");
+    assert\equal(threads[0]["created"], want: "2026-08-27T10:00:00Z", message: "the timestamp rides along for aging");
+}
+
+test "an empty page decodes to no threads" {
+    // The case that made the old code worst: an empty array still reported 16, so the caller
+    // believed it had rows and reached for a null one.
+    assert\equal(decodeThreads(`[]`).len(), want: 0, message: "no comments is no threads");
+}
+
+test "every comment on a page is kept" {
+    final threads = decodeThreads(`[{"id":1,"path":"a.go","line":1,"user":{"login":"a"},"body":"one","created_at":"t1"},{"id":2,"path":"b.go","line":2,"user":{"login":"b"},"body":"two","created_at":"t2"},{"id":3,"path":"c.go","line":3,"user":{"login":"c"},"body":"three","created_at":"t3"}]`);
+    assert\equal(threads.len(), want: 3, message: "three comments, three threads");
+    assert\equal(threads[2]["body"], want: "three", message: "and the last one is not dropped");
+}
+
+// find_review's half of the same bug. Its list is pull requests rather than comments, and it
+// reads .len() before indexing - which on the boxed value was 16 even for an empty array, so the
+// branch was entered and the null element threw.
+test "a decoded pull-request list has the length of the list" {
+    final list = serialize\jsonDecode(`[{"number":109},{"number":110}]`).listValue();
+    assert\equal(list.len(), want: 2, message: "two pull requests, not the accessor count");
+    assert\equal(list[0].q("number").integerValue(), want: 109, message: "an element, not a method");
+    assert\equal(serialize\jsonDecode(`[]`).listValue().len(), want: 0, message: "and an empty list is empty");
+}
+
+// A MERGED pull request wins over a merely closed one, whatever the sort said - the reader is
+// asking "did my work land", not "what happened last". The pick is inline in find_review because
+// a helper's `[any]` element is not field-accessible, so this pins the rule separately.
+test "a merged pull request is found however the list is ordered" {
+    final closed = serialize\jsonDecode(`[
+        {"number":52,"merged_at":null,"user":{"login":"eli"}},
+        {"number":41,"merged_at":"2026-08-20T10:00:00Z","user":{"login":"eli"}}
+    ]`).listValue();
+    var picked = 0;
+    var state = "closed";
+    foreach (pr in closed) {
+        if ("{pr.q("merged_at").stringValue()}" != "") {
+            picked = pr.q("number").integerValue();
+            state = "merged";
+            break;
+        }
+    }
+    assert\equal(state, want: "merged", message: "a merge is what the reader is asking about");
+    assert\equal(picked, want: 41, message: "the merged one, not the newest");
 }
