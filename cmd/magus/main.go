@@ -114,18 +114,19 @@ func runCLI() int {
 
 	if exitCode >= 0 {
 		cleanup()
-		return withInterrupt(exitCode, interrupted)
+		return withInterrupt(exitCode, nil, interrupted)
 	}
 
-	code := 0
+	var dispatchErr error
 	switch res.sub {
 	case "help", "-h", "--help":
 		usage()
 	case "version", "-v", "--version":
-		code = exitCodeOf(runVersion(res.rootCtx, res.subArgs))
+		dispatchErr = runVersion(res.rootCtx, res.subArgs)
 	default:
-		code = exitCodeOf(dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs))
+		dispatchErr = dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs)
 	}
+	code := exitCodeOf(dispatchErr)
 	// Offer the run's pinned failures for rerun or inspection, while they are
 	// still on screen. A no-op unless a run left failures on a terminal, so
 	// every other command reaches it and returns immediately.
@@ -141,7 +142,7 @@ func runCLI() int {
 		}
 	}
 	cleanup()
-	return withInterrupt(code, interrupted)
+	return withInterrupt(code, dispatchErr, interrupted)
 }
 
 // withInterrupt reports a signal-stopped run as the conventional 128+N.
@@ -150,10 +151,14 @@ func runCLI() int {
 // [exitCodeOf] as a nil error - so without this the process printed [fail] and
 // exited 0, and `magus run test . && deploy` deployed after a Ctrl+C.
 //
-// Only when code == 0, so a command that already failed for its own reason
-// keeps the more specific code.
-func withInterrupt(code int, interrupted func() (syscall.Signal, bool)) int {
-	if code != 0 {
+// Only when code == 0, so a command that already failed for its own reason keeps
+// the more specific code - with one exception. A command that RETURNS the
+// cancellation instead of swallowing it (awaitInvocation returns ctx.Err()) reached
+// exitCodeOf as a generic failure and reported 1, which says the WORK failed about a
+// run the user stopped. Still gated on interrupted(), so a deadline or a
+// caller-cancelled context - neither of which is a signal - keeps its own code.
+func withInterrupt(code int, err error, interrupted func() (syscall.Signal, bool)) int {
+	if code != 0 && !errors.Is(err, context.Canceled) {
 		return code
 	}
 	if sig, ok := interrupted(); ok {

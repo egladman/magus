@@ -144,10 +144,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		defer cancel()
 	}
 
-	if rf.Step && !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
-		return errSilent{exitCode: 2}
-	}
 	if rf.Step {
 		ctx = withStepGate(ctx)
 	}

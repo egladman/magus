@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -138,18 +137,28 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	// workspace-relative slash-separated path before emitting.
 	// Sentinel tokens (e.g. magus.StreamAllSentinel) and any path that
 	// escapes the workspace root are passed through verbatim.
-	writeBatch := func(paths []string) {
+	//
+	// The flush is the whole point of the function - stdout is block-buffered when
+	// piped, so an unflushed batch never reaches `magus affected --stdin` - which is
+	// why its error is returned rather than dropped: a closed pipe downstream ends the
+	// watch, it does not become a stream that silently emits nothing.
+	writeBatch := func(paths []string) error {
 		for _, p := range paths {
 			rel := toWorkspaceRel(ws.Root(), p)
 			fmt.Fprint(out, rel, sep)
 		}
 		fmt.Fprint(out, batchSep)
-		_ = out.Flush() // critical: stdout is block-buffered when piped
+		if err := out.Flush(); err != nil {
+			return fmt.Errorf("magus watch: write batch: %w", err)
+		}
+		return nil
 	}
 
 	if wf.Initial {
 		// Sentinel consumed by `magus affected --stdin` to trigger a full build.
-		writeBatch([]string{magus.StreamAllSentinel})
+		if err := writeBatch([]string{magus.StreamAllSentinel}); err != nil {
+			return err
+		}
 	}
 
 	for {
@@ -157,12 +166,17 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 		case <-ctx.Done():
 			return nil
 		case err := <-w.Errors():
-			slog.ErrorContext(ctx, "watch", slog.String("error", err.Error()))
+			// A watcher error is the watch failing, not a note about it: the backend has
+			// stopped seeing some or all of the tree, so continuing prints an empty
+			// stream and exits 0 - a build pipeline reads that as "nothing changed".
+			return fmt.Errorf("magus watch: %w", err)
 		case batch, ok := <-w.Events():
 			if !ok {
 				return nil
 			}
-			writeBatch(batch.Paths)
+			if err := writeBatch(batch.Paths); err != nil {
+				return err
+			}
 		}
 	}
 }
