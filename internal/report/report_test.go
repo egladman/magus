@@ -207,7 +207,7 @@ func (b *blockingWriter) Write(p []byte) (int, error) {
 // TestFilterIncludeOnly admits only listed types.
 func TestFilterIncludeOnly(t *testing.T) {
 	t.Parallel()
-	f, err := ParseFilter([]string{"+target.result"})
+	f, err := ParseFilter([]string{"+" + TypeTargetResult})
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	w := NewWriter(&buf, WithBlockOnFull(), WithFilter(f))

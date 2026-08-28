@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2406,
-  "edge_count": 6146,
+  "node_count": 2399,
+  "edge_count": 6192,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -878,7 +878,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "19",
+        "dir_files": "22",
         "dir_languages": "markdown"
       }
     },
@@ -888,7 +888,17 @@
       "label": "docs/guides/integrations",
       "source": "docs/guides/integrations",
       "attrs": {
-        "dir_files": "9",
+        "dir_files": "12",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/guides/integrations/editor",
+      "kind": "dir",
+      "label": "docs/guides/integrations/editor",
+      "source": "docs/guides/integrations/editor",
+      "attrs": {
+        "dir_files": "2",
         "dir_languages": "markdown"
       }
     },
@@ -918,7 +928,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "221",
+        "dir_files": "222",
         "dir_languages": "markdown"
       }
     },
@@ -1288,7 +1298,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "30",
+        "dir_files": "31",
         "dir_languages": "markdown"
       }
     },
@@ -1620,16 +1630,6 @@
       "attrs": {
         "dir_files": "7",
         "dir_languages": "buzz,markdown"
-      }
-    },
-    {
-      "id": "dir:plans",
-      "kind": "dir",
-      "label": "plans",
-      "source": "plans",
-      "attrs": {
-        "dir_files": "9",
-        "dir_languages": "markdown"
       }
     },
     {
@@ -2143,15 +2143,6 @@
       "source": "README.md",
       "attrs": {
         "role": "readme"
-      }
-    },
-    {
-      "id": "doc:TODO.md",
-      "kind": "doc",
-      "label": "TODO.md",
-      "source": "TODO.md",
-      "attrs": {
-        "role": "doc"
       }
     },
     {
@@ -3014,6 +3005,30 @@
         "section": "guides",
         "tags": "editor,lsp,language-server,completion,hover,neovim,vscode,helix",
         "title": "Editor setup"
+      }
+    },
+    {
+      "id": "doc:docs/guides/integrations/editor/design.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/editor/design.md",
+      "source": "docs/guides/integrations/editor/design.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "events,integration,design,decisions,editor,plugin,daemon",
+        "title": "Event stream design notes"
+      }
+    },
+    {
+      "id": "doc:docs/guides/integrations/editor/events.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/editor/events.md",
+      "source": "docs/guides/integrations/editor/events.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "events,integration,editor,plugin,emacs,vim,jsonl,subscribe,stream",
+        "title": "The event stream"
       }
     },
     {
@@ -4948,6 +4963,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/manpage/magus-events.md",
+      "kind": "doc",
+      "label": "docs/reference/manpage/magus-events.md",
+      "source": "docs/reference/manpage/magus-events.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "cli,magus events,events,integration,editor,plugin,jsonl,subscribe",
+        "title": "magus events"
+      }
+    },
+    {
       "id": "doc:docs/reference/manpage/magus-explain.md",
       "kind": "doc",
       "label": "docs/reference/manpage/magus-explain.md",
@@ -5844,88 +5871,6 @@
       "source": "libs/testlayout/readme.md",
       "attrs": {
         "role": "readme"
-      }
-    },
-    {
-      "id": "doc:plans/attention-requests-design-note.md",
-      "kind": "doc",
-      "label": "plans/attention-requests-design-note.md",
-      "source": "plans/attention-requests-design-note.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/ctx-observes-reconstruction.md",
-      "kind": "doc",
-      "label": "plans/ctx-observes-reconstruction.md",
-      "source": "plans/ctx-observes-reconstruction.md",
-      "attrs": {
-        "role": "doc",
-        "title": "ctx.observes - reconstruction"
-      }
-    },
-    {
-      "id": "doc:plans/delegation-and-diff-surface-execution-2026-08-15.md",
-      "kind": "doc",
-      "label": "plans/delegation-and-diff-surface-execution-2026-08-15.md",
-      "source": "plans/delegation-and-diff-surface-execution-2026-08-15.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/delegation-lessons-from-deepseek-harness.md",
-      "kind": "doc",
-      "label": "plans/delegation-lessons-from-deepseek-harness.md",
-      "source": "plans/delegation-lessons-from-deepseek-harness.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/delegation-surface-implementation-plan.md",
-      "kind": "doc",
-      "label": "plans/delegation-surface-implementation-plan.md",
-      "source": "plans/delegation-surface-implementation-plan.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/diff-surface-implementation-handoff.md",
-      "kind": "doc",
-      "label": "plans/diff-surface-implementation-handoff.md",
-      "source": "plans/diff-surface-implementation-handoff.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/handoff-cli-command-registry.md",
-      "kind": "doc",
-      "label": "plans/handoff-cli-command-registry.md",
-      "source": "plans/handoff-cli-command-registry.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/protobuf-api-docs-improvement.md",
-      "kind": "doc",
-      "label": "plans/protobuf-api-docs-improvement.md",
-      "source": "plans/protobuf-api-docs-improvement.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/stateless-mcp-design-note.md",
-      "kind": "doc",
-      "label": "plans/stateless-mcp-design-note.md",
-      "source": "plans/stateless-mcp-design-note.md",
-      "attrs": {
-        "role": "doc"
       }
     },
     {
@@ -23016,6 +22961,14 @@
     },
     {
       "source": "dir:docs/guides/integrations",
+      "target": "dir:docs/guides/integrations/editor",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor"
+    },
+    {
+      "source": "dir:docs/guides/integrations",
       "target": "doc:docs/guides/integrations/agents.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -23085,6 +23038,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/pr-advice.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations/editor",
+      "target": "doc:docs/guides/integrations/editor/design.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/design.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations/editor",
+      "target": "doc:docs/guides/integrations/editor/events.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
     },
     {
       "source": "dir:docs/lib",
@@ -24656,6 +24625,14 @@
     },
     {
       "source": "dir:docs/reference/manpage",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "dir:docs/reference/manpage",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -26005,78 +25982,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz/std/testing.buzz"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/attention-requests-design-note.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/attention-requests-design-note.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/ctx-observes-reconstruction.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/ctx-observes-reconstruction.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/delegation-and-diff-surface-execution-2026-08-15.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/delegation-and-diff-surface-execution-2026-08-15.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/delegation-lessons-from-deepseek-harness.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/delegation-lessons-from-deepseek-harness.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/delegation-surface-implementation-plan.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/delegation-surface-implementation-plan.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/diff-surface-implementation-handoff.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/diff-surface-implementation-handoff.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/handoff-cli-command-registry.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/handoff-cli-command-registry.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/protobuf-api-docs-improvement.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/protobuf-api-docs-improvement.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/stateless-mcp-design-note.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/stateless-mcp-design-note.md"
     },
     {
       "source": "dir:schema",
@@ -27733,62 +27638,6 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "README.md"
-    },
-    {
-      "source": "doc:TODO.md",
-      "target": "diagnostic:MGS1008",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "TODO.md"
-    },
-    {
-      "source": "doc:TODO.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "TODO.md"
-    },
-    {
-      "source": "doc:TODO.md",
-      "target": "doc:docs/reference/manpage/magus-describe.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "TODO.md"
-    },
-    {
-      "source": "doc:TODO.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "TODO.md"
-    },
-    {
-      "source": "doc:TODO.md",
-      "target": "doc:docs/reference/manpage/magus-query.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "TODO.md"
-    },
-    {
-      "source": "doc:TODO.md",
-      "target": "doc:docs/reference/manpage/magus-refs.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "TODO.md"
-    },
-    {
-      "source": "doc:TODO.md",
-      "target": "spell:go",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "TODO.md"
     },
     {
       "source": "doc:benchmarks/README.md",
@@ -32389,6 +32238,118 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/design.md",
+      "target": "diagnostic:MGS1021",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor/design.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/design.md",
+      "target": "doc:docs/guides/integrations/editor/events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/design.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/design.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor/design.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/design.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor/design.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/design.md",
+      "target": "doc:docs/reference/manpage/magus-watch.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor/design.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/guides/integrations/agents/guard-templates.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/guides/integrations/agents/guard.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/guides/integrations/editor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/guides/integrations/editor/design.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/reference/console.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor/events.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/events.md",
+      "target": "doc:docs/scope.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/events.md"
     },
     {
       "source": "doc:docs/guides/integrations/git.md",
@@ -37280,6 +37241,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-affected.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-affected.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -37505,6 +37474,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-agent.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-agent.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -37744,6 +37721,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-buzz.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-buzz.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-buzz.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -37969,6 +37954,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-clean.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-clean.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-clean.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -38208,6 +38201,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-completion.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-completion.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-completion.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -38433,6 +38434,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-config.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-config.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-config.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -38672,6 +38681,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-describe.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-describe.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-describe.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -38897,6 +38914,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-diff.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-diff.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-diff.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -39136,6 +39161,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-doctor.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-doctor.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-doctor.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -39303,6 +39336,246 @@
       "provenance": "docs/reference/manpage/magus-doctor.md"
     },
     {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-agent.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-clean.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-completion.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-config.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-explain.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-graph.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-init.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-path.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-query.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-self.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-server.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-vcs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-version.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-watch.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-where.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-x.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
       "source": "doc:docs/reference/manpage/magus-explain.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
@@ -39369,6 +39642,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-explain.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-explain.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-explain.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -39601,6 +39882,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-graph.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-graph.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-graph.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -39833,6 +40122,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-init.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-init.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-init.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40065,6 +40362,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-ls.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-ls.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-ls.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40297,6 +40602,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-man.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40529,6 +40842,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-memory.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-memory.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-memory.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40761,6 +41082,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-notes.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-notes.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-notes.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -41008,6 +41337,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-path.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-path.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-path.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -41240,6 +41577,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-query.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-query.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-query.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -41465,6 +41810,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-refs.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-refs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-refs.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -41720,6 +42073,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-run.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-run.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-run.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -41945,6 +42306,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-self.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-self.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-self.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -42184,6 +42553,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-server.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-server.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-server.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -42409,6 +42786,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-session.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-session.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-session.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -42648,6 +43033,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-status.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-status.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-status.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -42873,6 +43266,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-vcs.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-vcs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-vcs.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -43112,6 +43513,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-version.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-version.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-version.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -43337,6 +43746,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-watch.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-watch.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-watch.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -43576,6 +43993,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-where.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-where.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-where.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
@@ -43801,6 +44226,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-x.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-x.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-x.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -44041,6 +44474,14 @@
     {
       "source": "doc:docs/reference/manpage/magus.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -45469,118 +45910,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz/std/README.md"
-    },
-    {
-      "source": "doc:plans/attention-requests-design-note.md",
-      "target": "doc:plans/stateless-mcp-design-note.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/attention-requests-design-note.md"
-    },
-    {
-      "source": "doc:plans/delegation-and-diff-surface-execution-2026-08-15.md",
-      "target": "doc:plans/delegation-lessons-from-deepseek-harness.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/delegation-and-diff-surface-execution-2026-08-15.md"
-    },
-    {
-      "source": "doc:plans/delegation-and-diff-surface-execution-2026-08-15.md",
-      "target": "doc:plans/delegation-surface-implementation-plan.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/delegation-and-diff-surface-execution-2026-08-15.md"
-    },
-    {
-      "source": "doc:plans/delegation-lessons-from-deepseek-harness.md",
-      "target": "doc:plans/delegation-surface-implementation-plan.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/delegation-lessons-from-deepseek-harness.md"
-    },
-    {
-      "source": "doc:plans/delegation-surface-implementation-plan.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/delegation-surface-implementation-plan.md"
-    },
-    {
-      "source": "doc:plans/delegation-surface-implementation-plan.md",
-      "target": "doc:plans/delegation-lessons-from-deepseek-harness.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/delegation-surface-implementation-plan.md"
-    },
-    {
-      "source": "doc:plans/diff-surface-implementation-handoff.md",
-      "target": "doc:docs/reference/manpage/magus-diff.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/diff-surface-implementation-handoff.md"
-    },
-    {
-      "source": "doc:plans/diff-surface-implementation-handoff.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/diff-surface-implementation-handoff.md"
-    },
-    {
-      "source": "doc:plans/handoff-cli-command-registry.md",
-      "target": "diagnostic:MGS1020",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/handoff-cli-command-registry.md"
-    },
-    {
-      "source": "doc:plans/handoff-cli-command-registry.md",
-      "target": "diagnostic:MGS1022",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/handoff-cli-command-registry.md"
-    },
-    {
-      "source": "doc:plans/handoff-cli-command-registry.md",
-      "target": "diagnostic:MGS3006",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/handoff-cli-command-registry.md"
-    },
-    {
-      "source": "doc:plans/handoff-cli-command-registry.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/handoff-cli-command-registry.md"
-    },
-    {
-      "source": "doc:plans/handoff-cli-command-registry.md",
-      "target": "spell:buzz",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "plans/handoff-cli-command-registry.md"
-    },
-    {
-      "source": "doc:plans/stateless-mcp-design-note.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/stateless-mcp-design-note.md"
     },
     {
       "source": "doc:schema/README.md",
@@ -63952,14 +64281,6 @@
     },
     {
       "source": "project:.",
-      "target": "dir:plans",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans"
-    },
-    {
-      "source": "project:.",
       "target": "dir:schema",
       "relation": "contains",
       "confidence": "extracted",
@@ -64037,14 +64358,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "README.md"
-    },
-    {
-      "source": "project:.",
-      "target": "doc:TODO.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "TODO.md"
     },
     {
       "source": "project:.",
@@ -67556,14 +67869,6 @@
     },
     {
       "source": "target:.:lint",
-      "target": "doc:TODO.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:lint",
       "target": "op:bash:shellcheck",
       "relation": "uses",
       "confidence": "extracted",
@@ -68605,6 +68910,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

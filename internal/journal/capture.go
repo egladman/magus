@@ -191,7 +191,22 @@ func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	_, _ = h.w.Write(line)
-	return h.w.WriteByte('\n')
+	if err := h.w.WriteByte('\n'); err != nil {
+		return err
+	}
+	// Flush everything except output lines. The run log is not only a durable record -
+	// it is what a live follower reads (`magus events --follow` tails <cacheDir>/runs/),
+	// and a purely buffered handler makes that stream lag by up to a bufio page, so a
+	// short run delivers nothing until it ends.
+	//
+	// The flush costs a write(2), about 1.2us; BenchmarkEmitResult (io.Discard) against
+	// BenchmarkEmitResultFile (a real file) prices it. Flushed kinds are bounded by
+	// SUBPROCESS count, so a large run pays single-digit milliseconds. Output scales
+	// with build size instead, so it stays buffered and a follower gets chunks.
+	if e.Kind != KindOutput {
+		return h.w.Flush()
+	}
+	return nil
 }
 
 func (h *FileHandler) WithAttrs([]slog.Attr) slog.Handler { return h }

@@ -38,7 +38,7 @@ func TestWriter_RecordAndClose(t *testing.T) {
 	require.NoError(t, w.Close())
 	out := buf.String()
 	assert.Contains(t, out, `"schema"`, "output missing schema field")
-	assert.Contains(t, out, "target.result", "output missing event type")
+	assert.Contains(t, out, TypeTargetResult, "output missing event type")
 }
 
 func TestWriter_WithQueueSize(t *testing.T) {

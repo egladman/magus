@@ -122,6 +122,11 @@ flag diff/watch
 flag doctor/fix
 flag doctor/list
 flag doctor/probe
+flag events/f
+flag events/follow
+flag events/interval
+flag events/limit
+flag events/type
 flag explain/global
 flag explain/refresh
 flag init/dry-run
@@ -184,6 +189,7 @@ subcommand config
 subcommand describe
 subcommand diff
 subcommand doctor
+subcommand events
 subcommand explain
 subcommand graph
 subcommand init

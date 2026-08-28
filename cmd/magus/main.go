@@ -322,6 +322,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// OS notifier rather than one on the daemon's host, and a listing is one
 		// directory read with no warm daemon state to reuse.
 		return dispatchProfile{needsConfig: true}
+	case "events":
+		// Reads the run-log directory; the magusfile never. Loading the workspace would
+		// refresh the merge-driver registration, and a subscriber an editor spawns must
+		// not write .gitattributes.
+		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
 	case "server":
@@ -808,6 +813,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return graphCmd(ctx, root, subArgs)
 	case "watch":
 		return watchCmd(ctx, root, rc, subArgs)
+	case "events":
+		return eventsCmd(ctx, root, subArgs)
 	case "status":
 		return status(ctx, subArgs)
 	case "clean":
@@ -855,9 +862,12 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Subcommands:")
+	group := ""
 	for _, sc := range subcommands {
+		if sc.Group != group {
+			group = sc.Group
+			fmt.Fprintf(os.Stderr, "\n%s:\n", group)
+		}
 		fmt.Fprintf(os.Stderr, "  %-14s %s\n", sc.Name, sc.Short)
 	}
 	fmt.Fprintln(os.Stderr, "")
