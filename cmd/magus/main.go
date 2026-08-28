@@ -862,9 +862,12 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Subcommands:")
+	group := ""
 	for _, sc := range subcommands {
+		if sc.Group != group {
+			group = sc.Group
+			fmt.Fprintf(os.Stderr, "\n%s:\n", group)
+		}
 		fmt.Fprintf(os.Stderr, "  %-14s %s\n", sc.Name, sc.Short)
 	}
 	fmt.Fprintln(os.Stderr, "")
