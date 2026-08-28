@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2400,
-  "edge_count": 6194,
+  "node_count": 2403,
+  "edge_count": 6224,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -8073,7 +8073,7 @@
       "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "doc": "'ci' is the conventional anchor that `magus affected ci` keys off. magus does not hardcode its steps — compose them here with magus.needs. magus runs ci read-only. Each stage declares its own prerequisites so the DAG is expressed as edges: ci fans out lint/build/test in parallel; they each wait for format, which waits for generate, which waits for preflight. Shared deps run once.",
+      "doc": "'ci' is the conventional anchor that `magus affected ci` keys off. magus does not hardcode its steps — compose them here with ctx.needs. magus runs ci read-only. Each stage declares its own prerequisites so the DAG is expressed as edges: ci fans out lint/build/test in parallel; they each wait for format, which waits for generate, which waits for preflight. Shared deps run once.",
       "source": "cmd/magus/starter/magusfile.tmpl.buzz:36",
       "attrs": {
         "exported": "true"
@@ -8396,8 +8396,8 @@
       "id": "function:docs/engine/gates.buzz:collectFindings",
       "kind": "function",
       "label": "collectFindings",
-      "doc": "collectFindings runs both halves over one file and sorts what they report into the tier that throws and the tier that prints.",
-      "source": "docs/engine/gates.buzz:531"
+      "doc": "collectFindings runs both halves over one file into the single tier that throws.",
+      "source": "docs/engine/gates.buzz:522"
     },
     {
       "id": "function:docs/engine/gates.buzz:collectMarkdown",
@@ -8410,8 +8410,8 @@
       "id": "function:docs/engine/gates.buzz:conventionsCheck",
       "kind": "function",
       "label": "conventionsCheck",
-      "doc": "conventionsCheck holds the docs corpus to the conventions page it ships. It runs from `lint`, NOT from the render, on purpose: a prose nit must not fail `build`. A gate that fails the wrong target teaches people that the failing target is unreliable, and the next real breakage in it gets waved through.  Two tiers, the same split assetIntegrityCheck and axisReport already draw here:  THROWS on the objective rules. A `$ ` prompt in a command block and a pinned version standing in for example output are facts",
-      "source": "docs/engine/gates.buzz:490",
+      "doc": "conventionsCheck holds the docs corpus to the conventions page it ships. It runs from `lint`, NOT from the render, on purpose: a prose nit must not fail `build`. A gate that fails the wrong target teaches people that the failing target is unreliable, and the next real breakage in it gets waved through.  Every finding THROWS: a `$ ` prompt in a command block, a pinned version standing in for example output, a backticked path that has since moved, and a markdown link that no longer resolves are all facts abou",
+      "source": "docs/engine/gates.buzz:487",
       "attrs": {
         "exported": "true"
       }
@@ -9048,41 +9048,48 @@
       "kind": "function",
       "label": "cleanConventionDef",
       "doc": "cleanConventionDef reduces a section's lead paragraph to a short plain-text blurb: drop backticks and bold markers, and a trailing colon.",
-      "source": "docs/lib/conventions.buzz:50"
+      "source": "docs/lib/conventions.buzz:51"
     },
     {
       "id": "function:docs/lib/conventions.buzz:closesFence",
       "kind": "function",
       "label": "closesFence",
       "doc": "closesFence reports whether the line is a closing fence for an open marker: the same character, at least as long, and nothing else on the line.",
-      "source": "docs/lib/conventions.buzz:214"
+      "source": "docs/lib/conventions.buzz:215"
     },
     {
       "id": "function:docs/lib/conventions.buzz:conventionHint",
       "kind": "function",
       "label": "conventionHint",
-      "source": "docs/lib/conventions.buzz:70"
+      "source": "docs/lib/conventions.buzz:71"
     },
     {
       "id": "function:docs/lib/conventions.buzz:fenceLang",
       "kind": "function",
       "label": "fenceLang",
       "doc": "fenceLang is the first word of the info string after the opening marker, lowercased.",
-      "source": "docs/lib/conventions.buzz:205"
+      "source": "docs/lib/conventions.buzz:206"
     },
     {
       "id": "function:docs/lib/conventions.buzz:fenceMarker",
       "kind": "function",
       "label": "fenceMarker",
       "doc": "fenceMarker returns the fence marker a line opens with, or \"\". CommonMark counts the marker's LENGTH, which is what lets a four-backtick fence hold three-backtick fences inside it - the conventions page does exactly that to show how a runnable block is authored, and a naive toggle would read the inner fence as a close and mis-attribute every rule after it.",
-      "source": "docs/lib/conventions.buzz:197"
+      "source": "docs/lib/conventions.buzz:198"
+    },
+    {
+      "id": "function:docs/lib/conventions.buzz:fileDir",
+      "kind": "function",
+      "label": "fileDir",
+      "doc": "fileDir returns the directory portion of a repo-root-relative file path (splitPath drops \"\" and \".\" segments), so a relative link target can be resolved against it.",
+      "source": "docs/lib/conventions.buzz:349"
     },
     {
       "id": "function:docs/lib/conventions.buzz:injectConventionHints",
       "kind": "function",
       "label": "injectConventionHints",
       "doc": "injectConventionHints adds a \"?\" hint into each rendered convention marker: an admonition title and a code-block caption. It runs after the content transforms, so it sees the final <p class=\"admonition-title\"> / <figcaption> markup. The conventions page itself is skipped by the caller (it defines these). A marker whose section is missing from the corpus is left untouched.",
-      "source": "docs/lib/conventions.buzz:86",
+      "source": "docs/lib/conventions.buzz:87",
       "attrs": {
         "exported": "true"
       }
@@ -9092,41 +9099,48 @@
       "kind": "function",
       "label": "injectFirstPlaceholderHint",
       "doc": "injectFirstPlaceholderHint appends a \"?\" hint after the FIRST inline <code> on the page that holds an angle-bracket placeholder (&lt;...&gt;), linking to the placeholders convention. First occurrence only - like the glossary linker - so a page that uses the syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced block by having no newline, so a multi-line code block is never hinted.",
-      "source": "docs/lib/conventions.buzz:101"
+      "source": "docs/lib/conventions.buzz:102"
     },
     {
       "id": "function:docs/lib/conventions.buzz:insertBeforeClose",
       "kind": "function",
       "label": "insertBeforeClose",
       "doc": "insertBeforeClose inserts `ins` just before the first `close` following each `open` marker. Returns html unchanged when ins is \"\" (the section was not in the corpus).",
-      "source": "docs/lib/conventions.buzz:125"
+      "source": "docs/lib/conventions.buzz:126"
     },
     {
       "id": "function:docs/lib/conventions.buzz:isCommentLine",
       "kind": "function",
       "label": "isCommentLine",
       "doc": "isCommentLine reports whether a line inside a fence is a comment - the form the docs use to show a command's expected output.",
-      "source": "docs/lib/conventions.buzz:255"
+      "source": "docs/lib/conventions.buzz:256"
     },
     {
       "id": "function:docs/lib/conventions.buzz:isDigit",
       "kind": "function",
       "label": "isDigit",
       "doc": "isDigit reports whether byte b is ASCII 0-9.",
-      "source": "docs/lib/conventions.buzz:228"
+      "source": "docs/lib/conventions.buzz:229"
     },
     {
       "id": "function:docs/lib/conventions.buzz:isShellLang",
       "kind": "function",
       "label": "isShellLang",
-      "source": "docs/lib/conventions.buzz:220"
+      "source": "docs/lib/conventions.buzz:221"
+    },
+    {
+      "id": "function:docs/lib/conventions.buzz:linkTargets",
+      "kind": "function",
+      "label": "linkTargets",
+      "doc": "linkTargets returns every `](target)` markdown-link target on a line, in order. A link with no closing paren on the line is dropped rather than guessed at.",
+      "source": "docs/lib/conventions.buzz:357"
     },
     {
       "id": "function:docs/lib/conventions.buzz:lintMarkdown",
       "kind": "function",
       "label": "lintMarkdown",
       "doc": "lintMarkdown checks one page against the conventions it can be checked against, and returns every violation rather than the first: a run that reports one nit per invocation trains people to fix one thing and re-run, which is the slowest possible loop.",
-      "source": "docs/lib/conventions.buzz:262",
+      "source": "docs/lib/conventions.buzz:263",
       "attrs": {
         "exported": "true"
       }
@@ -9136,7 +9150,7 @@
       "kind": "function",
       "label": "looksLikeRepoPath",
       "doc": "looksLikeRepoPath reports whether an inline-code token is claiming a file in THIS repository. The bar is deliberately high, and it was raised by running the rule over the corpus: the first draft produced 67 hits of which about eight were real. Everything the exclusions below remove is a path this repo legitimately writes about without owning - a reader's own workspace, their home directory, a cache tree that only exists at runtime.  Two limits are worth knowing, because they are the price of a quiet rule:",
-      "source": "docs/lib/conventions.buzz:304",
+      "source": "docs/lib/conventions.buzz:305",
       "attrs": {
         "exported": "true"
       }
@@ -9146,7 +9160,7 @@
       "kind": "function",
       "label": "namesPinnedVersion",
       "doc": "namesPinnedVersion reports whether s pins a magus version literally - \"magus 0.4.2\", \"magus v0.4.2\". Sample output in the docs is supposed to show the SHAPE of what a command prints, because a pasted-in version goes stale the next release and nothing notices. This is the rule that caught `# magus 0.4.2` under \"Shell commands\", which was two releases behind AND the wrong format.",
-      "source": "docs/lib/conventions.buzz:235",
+      "source": "docs/lib/conventions.buzz:236",
       "attrs": {
         "exported": "true"
       }
@@ -9156,7 +9170,7 @@
       "kind": "function",
       "label": "parseConventions",
       "doc": "parseConventions reads conventions.md into its sections: each \"## Heading\" becomes a Convention with its anchor and the paragraph under it (markup stripped, trailing colon dropped since a lead line often ends in \":\" before an example).",
-      "source": "docs/lib/conventions.buzz:25",
+      "source": "docs/lib/conventions.buzz:26",
       "attrs": {
         "exported": "true"
       }
@@ -9165,8 +9179,8 @@
       "id": "function:docs/lib/conventions.buzz:pathCheckApplies",
       "kind": "function",
       "label": "pathCheckApplies",
-      "doc": "pathCheckApplies reports whether a page's inline paths are claims about THIS repository. Two trees are exempt because their whole job is describing someone else's workspace: the diagnostic explainers under reference/codes/ walk through an example project (`api/`, `pkg/build.go`), and the guides walk through the reader's own machine and config. Scoping this by tree rather than by pattern keeps the rule honest - the exemption is a statement about what those pages are for, not a list of strings to suppress.",
-      "source": "docs/lib/conventions.buzz:338",
+      "doc": "pathCheckApplies reports whether a page's inline paths and link targets are claims about THIS repository. The diagnostic explainers under reference/codes/ are exempt because their whole job is describing someone else's workspace (`api/`, `pkg/build.go`). Measuring the old blanket docs/guides/ exemption against the corpus found exactly one guide that needs it: pr-advice.md names `refs/remotes/`, a git-internal path inside the READER's own clone, not a claim about this repository. Every other guide's inline p",
+      "source": "docs/lib/conventions.buzz:341",
       "attrs": {
         "exported": "true"
       }
@@ -9175,24 +9189,31 @@
       "id": "function:docs/lib/conventions.buzz:pathReferences",
       "kind": "function",
       "label": "pathReferences",
-      "doc": "pathReferences collects every repo path named in inline code OUTSIDE a fenced block, with the line it sits on. Prose is where a path claim is load-bearing - a reader follows it - whereas a path inside a command block is often illustrative, so scanning only prose keeps this honest without keeping it noisy.  The caller decides which of these are broken; this half cannot touch the filesystem.",
-      "source": "docs/lib/conventions.buzz:350",
+      "doc": "pathReferences collects every repo path named in inline code OUTSIDE a fenced block, and every relative markdown link target, with the line each sits on. Prose is where a path claim is load-bearing - a reader follows it - whereas a path inside a command block is often illustrative, so scanning only prose keeps this honest without keeping it noisy. A link target is resolved against its own file's directory, so `f.path` is repo-root relative for both kinds of finding, like the caller already expects.  The cal",
+      "source": "docs/lib/conventions.buzz:395",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:docs/lib/conventions.buzz:relativeMarkdownLinkBody",
+      "kind": "function",
+      "label": "relativeMarkdownLinkBody",
+      "doc": "relativeMarkdownLinkBody reports the target's path with any \"#fragment\" stripped, or null if the target is not a same-repo relative .md claim: an anchor-only target, an http(s) or mailto URL, and a site-absolute link (leading \"/\") are not filesystem references.",
+      "source": "docs/lib/conventions.buzz:375"
     },
     {
       "id": "function:docs/lib/conventions.buzz:runOf",
       "kind": "function",
       "label": "runOf",
       "doc": "runOf returns the leading run of byte `ch` in s (\"```buzz\" -> \"```\").",
-      "source": "docs/lib/conventions.buzz:186"
+      "source": "docs/lib/conventions.buzz:187"
     },
     {
       "id": "function:docs/lib/conventions.buzz:trimTrailingSlash",
       "kind": "function",
       "label": "trimTrailingSlash",
-      "source": "docs/lib/conventions.buzz:327"
+      "source": "docs/lib/conventions.buzz:328"
     },
     {
       "id": "function:docs/lib/csp.buzz:computeCSP",
@@ -10913,7 +10934,7 @@
       "id": "function:docs/tour/07-globs.buzz:generate",
       "kind": "function",
       "label": "generate",
-      "doc": "The umbrella: magus.glob collects every current AND future *-generate target as handles, and magus.needs depends on them. glob(\"name\") with no wildcard is shorthand for \"anything ending in -name\", so glob(\"generate\") would read the same as glob(\"*-generate\") here. A pattern matching nothing yields no handles, so needs of it is just a no-op.",
+      "doc": "The umbrella: ctx.glob collects every current AND future *-generate target as handles, and ctx.needs depends on them. glob(\"name\") with no wildcard is shorthand for \"anything ending in -name\", so glob(\"generate\") would read the same as glob(\"*-generate\") here. A pattern matching nothing yields no handles, so needs of it is just a no-op.",
       "source": "docs/tour/07-globs.buzz:29",
       "attrs": {
         "exported": "true"
@@ -10961,7 +10982,7 @@
       "id": "function:docs/tour/07-globs.buzz:proto_lint",
       "kind": "function",
       "label": "proto_lint",
-      "doc": "When a set is not a clean suffix family, skip the pattern and pass the target functions to magus.needs directly. proto-all gathers just the proto- family (its generate and its lint), and nothing else - the handles say exactly which. Either way needs only ever takes handles: a function, or the handles glob resolves a pattern to.",
+      "doc": "When a set is not a clean suffix family, skip the pattern and pass the target functions to ctx.needs directly. proto-all gathers just the proto- family (its generate and its lint), and nothing else - the handles say exactly which. Either way needs only ever takes handles: a function, or the handles glob resolves a pattern to.",
       "source": "docs/tour/07-globs.buzz:82",
       "attrs": {
         "exported": "true"
@@ -11030,7 +11051,7 @@
       "id": "function:docs/tour/09-services.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "doc": "serve returns a Service, so magus treats it as a long-running, shared op: command   - the process magus forks in the foreground and supervises readiness - a probe polled until it exits 0 (the Kubernetes exec-probe model), so dependents wait for \"actually up\", not a fixed sleep stop      - a graceful shutdown, replayed to reap orphans after a crash Reached as a dependency (some target's magus.needs), it runs in the background, shared by config fingerprint; run directly, it runs in the foreground.",
+      "doc": "serve returns a Service, so magus treats it as a long-running, shared op: command   - the process magus forks in the foreground and supervises readiness - a probe polled until it exits 0 (the Kubernetes exec-probe model), so dependents wait for \"actually up\", not a fixed sleep stop      - a graceful shutdown, replayed to reap orphans after a crash Reached as a dependency (some target's ctx.needs), it runs in the background, shared by config fingerprint; run directly, it runs in the foreground.",
       "source": "docs/tour/09-services.buzz:26"
     },
     {
@@ -11118,7 +11139,7 @@
       "id": "function:docs/tour/12-magusfile.buzz:generate",
       "kind": "function",
       "label": "generate",
-      "doc": "The umbrella `generate` target pulls in every `*-generate` target with ONE pattern instead of listing each by hand: ctx.glob(\"*-generate\") resolves to every target ending in -generate, and magus.needs depends on those handles, so adding a `sql-generate` later needs no edit here. (glob is the pattern resolver; needs itself only ever takes handles. A pattern with no `*` is suffix shorthand, so \"generate\" would read the same here.) That is the payoff of naming targets by a shared convention. Try `run generate`",
+      "doc": "The umbrella `generate` target pulls in every `*-generate` target with ONE pattern instead of listing each by hand: ctx.glob(\"*-generate\") resolves to every target ending in -generate, and ctx.needs depends on those handles, so adding a `sql-generate` later needs no edit here. (glob is the pattern resolver; needs itself only ever takes handles. A pattern with no `*` is suffix shorthand, so \"generate\" would read the same here.) That is the payoff of naming targets by a shared convention. Try `run generate`.",
       "source": "docs/tour/12-magusfile.buzz:94",
       "attrs": {
         "exported": "true"
@@ -11241,7 +11262,7 @@
       "id": "function:docs/tour/13-custom-targets.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "doc": "The conventional anchor, wired with magus.needs like always.",
+      "doc": "The conventional anchor, wired with ctx.needs like always.",
       "source": "docs/tour/13-custom-targets.buzz:22",
       "attrs": {
         "exported": "true"
@@ -11261,7 +11282,7 @@
       "id": "function:docs/tour/13-custom-targets.buzz:release",
       "kind": "function",
       "label": "release",
-      "doc": "A bespoke phase. It depends on ci through the same magus.needs edge the canonical targets use, then does its own extra work.",
+      "doc": "A bespoke phase. It depends on ci through the same ctx.needs edge the canonical targets use, then does its own extra work.",
       "source": "docs/tour/13-custom-targets.buzz:28",
       "attrs": {
         "exported": "true"
@@ -27408,6 +27429,14 @@
     },
     {
       "source": "doc:README.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
       "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28080,6 +28109,14 @@
     },
     {
       "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/guides/integrations/mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
       "target": "doc:docs/reference/codes/outputref/MGS8001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28464,6 +28501,14 @@
     },
     {
       "source": "doc:docs/concepts/concurrency.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
       "confidence": "inferred",
@@ -28521,6 +28566,14 @@
     {
       "source": "doc:docs/concepts/dependencies.md",
       "target": "doc:docs/concepts/workspace.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/dependencies.md"
+    },
+    {
+      "source": "doc:docs/concepts/dependencies.md",
+      "target": "doc:docs/concepts/workspace/affected.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -28680,6 +28733,22 @@
     },
     {
       "source": "doc:docs/concepts/knowledge.md",
+      "target": "doc:docs/guides/integrations/agents.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge.md"
+    },
+    {
+      "source": "doc:docs/concepts/knowledge.md",
+      "target": "doc:docs/guides/integrations/mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge.md"
+    },
+    {
+      "source": "doc:docs/concepts/knowledge.md",
       "target": "doc:docs/reference/codes/knowledge/MGS7001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28769,6 +28838,14 @@
     {
       "source": "doc:docs/concepts/knowledge/insight.md",
       "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge/insight.md"
+    },
+    {
+      "source": "doc:docs/concepts/knowledge/insight.md",
+      "target": "doc:docs/concepts/workspace/affected.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -28953,6 +29030,14 @@
     {
       "source": "doc:docs/concepts/sandbox.md",
       "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/sandbox.md"
+    },
+    {
+      "source": "doc:docs/concepts/sandbox.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29257,6 +29342,14 @@
     {
       "source": "doc:docs/concepts/services.md",
       "target": "doc:docs/concepts/spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/services.md"
+    },
+    {
+      "source": "doc:docs/concepts/services.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29984,6 +30077,14 @@
     },
     {
       "source": "doc:docs/concepts/volatility.md",
+      "target": "doc:docs/concepts/workspace/affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/volatility.md"
+    },
+    {
+      "source": "doc:docs/concepts/volatility.md",
       "target": "doc:docs/guides/debugging.md",
       "relation": "references",
       "confidence": "extracted",
@@ -30648,6 +30749,38 @@
     },
     {
       "source": "doc:docs/documentation.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
+      "target": "doc:docs/guides/integrations/editor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
+      "target": "doc:docs/guides/integrations/git.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
+      "target": "doc:docs/guides/integrations/mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
       "target": "doc:docs/guides/integrations/nx.md",
       "relation": "references",
       "confidence": "extracted",
@@ -30928,6 +31061,22 @@
     },
     {
       "source": "doc:docs/glossary.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
@@ -30945,6 +31094,14 @@
     {
       "source": "doc:docs/glossary.md",
       "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
+      "target": "doc:docs/concepts/knowledge/insight.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31024,6 +31181,14 @@
     },
     {
       "source": "doc:docs/glossary.md",
+      "target": "doc:docs/concepts/workspace/affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
       "target": "doc:docs/conventions.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31033,6 +31198,14 @@
     {
       "source": "doc:docs/glossary.md",
       "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32849,6 +33022,14 @@
     {
       "source": "doc:docs/guides/tips.md",
       "target": "doc:docs/guides/debugging.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/tips.md"
+    },
+    {
+      "source": "doc:docs/guides/tips.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -37096,6 +37277,14 @@
     },
     {
       "source": "doc:docs/reference/faq.md",
+      "target": "doc:docs/concepts/workspace/affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/faq.md"
+    },
+    {
+      "source": "doc:docs/reference/faq.md",
       "target": "doc:docs/conventions.md",
       "relation": "references",
       "confidence": "extracted",
@@ -37105,6 +37294,22 @@
     {
       "source": "doc:docs/reference/faq.md",
       "target": "doc:docs/guides/getting-started.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/faq.md"
+    },
+    {
+      "source": "doc:docs/reference/faq.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/faq.md"
+    },
+    {
+      "source": "doc:docs/reference/faq.md",
+      "target": "doc:docs/guides/integrations/editor.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -48032,6 +48237,14 @@
     },
     {
       "source": "file:docs/lib/conventions.buzz",
+      "target": "function:docs/lib/conventions.buzz:fileDir",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/conventions.buzz"
+    },
+    {
+      "source": "file:docs/lib/conventions.buzz",
       "target": "function:docs/lib/conventions.buzz:injectConventionHints",
       "relation": "contains",
       "confidence": "extracted",
@@ -48073,6 +48286,14 @@
     {
       "source": "file:docs/lib/conventions.buzz",
       "target": "function:docs/lib/conventions.buzz:isShellLang",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/conventions.buzz"
+    },
+    {
+      "source": "file:docs/lib/conventions.buzz",
+      "target": "function:docs/lib/conventions.buzz:linkTargets",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -48128,6 +48349,14 @@
     },
     {
       "source": "file:docs/lib/conventions.buzz",
+      "target": "function:docs/lib/conventions.buzz:relativeMarkdownLinkBody",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/conventions.buzz"
+    },
+    {
+      "source": "file:docs/lib/conventions.buzz",
       "target": "function:docs/lib/conventions.buzz:runOf",
       "relation": "contains",
       "confidence": "extracted",
@@ -48153,6 +48382,14 @@
     {
       "source": "file:docs/lib/conventions.buzz",
       "target": "import:lib/glossary",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/lib/conventions.buzz"
+    },
+    {
+      "source": "file:docs/lib/conventions.buzz",
+      "target": "import:lib/html",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -59208,7 +59445,31 @@
     },
     {
       "source": "function:docs/lib/conventions.buzz:pathReferences",
+      "target": "function:docs/lib/conventions.buzz:fileDir",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/conventions.buzz"
+    },
+    {
+      "source": "function:docs/lib/conventions.buzz:pathReferences",
+      "target": "function:docs/lib/conventions.buzz:linkTargets",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/conventions.buzz"
+    },
+    {
+      "source": "function:docs/lib/conventions.buzz:pathReferences",
       "target": "function:docs/lib/conventions.buzz:looksLikeRepoPath",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/conventions.buzz"
+    },
+    {
+      "source": "function:docs/lib/conventions.buzz:pathReferences",
+      "target": "function:docs/lib/conventions.buzz:relativeMarkdownLinkBody",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
