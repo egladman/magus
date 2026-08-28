@@ -19,6 +19,8 @@ sh install.sh
 
 Read the script before you run it. It downloads the current release, checks the signature, and installs the binary, the man pages, and the [`mgs` shorthand](setup/shell-setup.md#mgs-shorthand) under `~/.local`. `--dry-run` prints the whole plan without writing anything.
 
+The only dependency is on the verification step: the script needs OpenSSL 3 with Ed25519 support on `PATH` to check the release signature. Stock macOS does not have it by default - see [macOS](setup/macos.md#openssl-3) for the fix.
+
 In a hurry, and willing to give a network response your shell? `curl ... | sh` works too:
 
 ```sh

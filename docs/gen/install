@@ -55,11 +55,19 @@ require() {
 }
 
 require_ed25519_openssl() {
+    fix="Install one and put it ahead of the current openssl on PATH."
+    case "$TARGET_OS" in
+        Darwin)
+            fix="macOS ships LibreSSL as /usr/bin/openssl, which this check rejects. Install real OpenSSL 3 with 'brew install openssl@3' and put its bin directory ahead of /usr/bin on PATH."
+            ;;
+    esac
+    hint="OpenSSL 3 with Ed25519 support is required to verify releases. $fix See https://eli.gladman.cc/magus/setup/verify/ to verify by hand instead."
+
     algorithms="$(openssl list -public-key-algorithms 2>/dev/null)" ||
-        die "OpenSSL 3 with Ed25519 support is required to verify releases"
+        die "$hint"
     case "$algorithms" in
         *ED25519*) ;;
-        *) die "OpenSSL 3 with Ed25519 support is required to verify releases" ;;
+        *) die "$hint" ;;
     esac
 }
 

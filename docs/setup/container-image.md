@@ -69,6 +69,8 @@ need `inotify-tools`, which only the dynamic image ships.
   `__MAGUS_VERSION__-dynamic`. Pin a version in CI so a run stays reproducible.
 
 ```sh
+# The hosted docs substitute the latest release tag below; on GitHub it reads
+# literally - get the real value from https://github.com/egladman/magus/releases
 docker pull ghcr.io/egladman/magus:__MAGUS_VERSION__
 ```
 

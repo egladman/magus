@@ -31,9 +31,14 @@ The trust chain runs through your already-trusted binary. Nothing else to do.
 3. Only if the signature verifies, check the artifact hash:
 
    ```sh
-   sha256sum -c SHA256SUMS 2>/dev/null | grep magus_
-   # macOS: shasum -a 256 -c SHA256SUMS
+   sha256sum --ignore-missing -c SHA256SUMS
+   # macOS: shasum -a 256 --ignore-missing -c SHA256SUMS
    ```
+
+   `--ignore-missing` skips manifest entries for artifacts you did not download,
+   so the output stays limited to the file you fetched - without piping through
+   `grep`, which would replace the command's exit status with `grep`'s and let a
+   failed check report success.
 
 Order matters. Checking a hash against an unverified manifest proves nothing.
 

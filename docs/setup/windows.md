@@ -23,6 +23,8 @@ magus ships as a single self-contained binary. Download it with `curl.exe`, extr
 ## Quick install
 
 ```powershell
+# The hosted docs substitute the latest release tag below; on GitHub it reads
+# literally - get the real value from https://github.com/egladman/magus/releases
 $VERSION = "__MAGUS_VERSION__"
 $ARCH = "amd64"       # or arm64 on Windows on ARM
 curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_${ARCH}_static.tar.gz"
