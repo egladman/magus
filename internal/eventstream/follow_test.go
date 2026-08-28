@@ -103,6 +103,30 @@ func TestFollowerReplayLimitKeepsNewest(t *testing.T) {
 	assert.Equal(t, "inv3", got[1].Inv)
 }
 
+// TestFollowerReplayLimitSurvivesTheFirstFollowTick is the regression the limit
+// test above cannot catch on its own: Replay honoured the window, and then Follow
+// re-listed the whole directory and drained every log the window had excluded from
+// offset zero. Attaching to a workspace with months of history replayed all of it
+// one tick later, which is the failure --limit exists to prevent.
+func TestFollowerReplayLimitSurvivesTheFirstFollowTick(t *testing.T) {
+	dir := t.TempDir()
+	for _, inv := range []string{"inv1", "inv2", "inv3"} {
+		writeLog(t, dir, inv, `{"ts":1,"inv":"`+inv+`","kind":"finished","status":"pass"}`+"\n")
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	f := NewFollower(dir, "/repo")
+	var replayed []types.StreamEvent
+	require.NoError(t, f.Replay(1, collect(&replayed)))
+	require.Len(t, replayed, 1)
+
+	var followed []types.StreamEvent
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	require.NoError(t, f.Follow(ctx, 10*time.Millisecond, collect(&followed)))
+	assert.Empty(t, followed, "the excluded logs must stay excluded once Follow starts")
+}
+
 // TestFollowerSkipDeliversOnlyWhatHappensNext covers plain `--follow`: history
 // is positioned past, not replayed.
 func TestFollowerSkipDeliversOnlyWhatHappensNext(t *testing.T) {

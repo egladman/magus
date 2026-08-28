@@ -64,6 +64,10 @@ func (f *Follower) Replay(limit int, emit func(types.StreamEvent) error) error {
 		return err
 	}
 	if limit > 0 && len(logs) > limit {
+		// Position past the logs the window excludes. Follow re-lists the whole
+		// directory, so a log left at offset zero is drained in full on the first
+		// tick and the replay window means nothing.
+		f.skip(logs[:len(logs)-limit])
 		logs = logs[len(logs)-limit:]
 	}
 	for _, name := range logs {
@@ -84,14 +88,20 @@ func (f *Follower) Skip() error {
 	if err != nil {
 		return err
 	}
-	for _, name := range logs {
+	f.skip(logs)
+	return nil
+}
+
+// skip positions the Follower past the current end of each named log. A log it
+// cannot stat is left unpositioned, so it replays whole rather than being lost.
+func (f *Follower) skip(names []string) {
+	for _, name := range names {
 		info, err := os.Stat(filepath.Join(f.dir, name))
 		if err != nil {
 			continue
 		}
 		f.offsets[name] = info.Size()
 	}
-	return nil
 }
 
 // Follow polls the run-log directory every interval and emits what appears,
