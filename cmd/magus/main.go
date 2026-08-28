@@ -322,6 +322,15 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// OS notifier rather than one on the daemon's host, and a listing is one
 		// directory read with no warm daemon state to reuse.
 		return dispatchProfile{needsConfig: true}
+	case "events":
+		// Reads the run-log directory and nothing else, so it needs the cache dir from
+		// magus.yaml but never the magusfile. Loading the workspace would refresh the
+		// merge-driver registration, and a subscribe command an editor spawns must not
+		// write .gitattributes. It must also stay usable when the workspace does not
+		// load: attaching to a repository whose magusfile is mid-edit is exactly when
+		// someone wants to watch what runs are doing. Never forwarded - the directory
+		// is the bus, and a daemon on another host reads the wrong one.
+		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
 	case "server":
