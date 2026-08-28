@@ -323,13 +323,9 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// directory read with no warm daemon state to reuse.
 		return dispatchProfile{needsConfig: true}
 	case "events":
-		// Reads the run-log directory and nothing else, so it needs the cache dir from
-		// magus.yaml but never the magusfile. Loading the workspace would refresh the
-		// merge-driver registration, and a subscribe command an editor spawns must not
-		// write .gitattributes. It must also stay usable when the workspace does not
-		// load: attaching to a repository whose magusfile is mid-edit is exactly when
-		// someone wants to watch what runs are doing. Never forwarded - the directory
-		// is the bus, and a daemon on another host reads the wrong one.
+		// Reads the run-log directory; the magusfile never. Loading the workspace would
+		// refresh the merge-driver registration, and a subscriber an editor spawns must
+		// not write .gitattributes.
 		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}

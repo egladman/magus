@@ -15,11 +15,9 @@ import (
 // Schema is the on-disk schema version; bump on field renames or removals.
 // v3 unified the per-target cache.hit/cache.miss/cache.error events into a single
 // target-result event (see TargetResult).
-// v4 renamed that event and the diagnostic one to carry a "run." prefix: they had
-// collided by name with types.StreamEvent's taxonomy, which stamps its own schema
-// number on lines of nearly the same shape. Two surfaces spelling one type string
-// under two independent version counters is worse than two unrelated names, so the
-// analytics stream took the prefix and the integration stream kept the plain name.
+// v4 prefixed that event and the diagnostic one with "run.": both collided by name
+// with types.StreamEvent, which stamps its own schema number on a line of nearly the
+// same shape.
 const Schema = 4
 
 // Type values stamped on every event line; stable across versions.

@@ -148,9 +148,8 @@ func TestWriterIsConcurrencySafe(t *testing.T) {
 	}
 }
 
-// TestFromJournalCarriesTheFailureReason pins the error text onto the stream. The
-// journal puts a failed target's run error in Text, and a subscriber told only
-// "failed" has to go fetch the log to learn anything at all.
+// TestFromJournalCarriesTheFailureReason pins the run error onto the stream; the
+// journal carries it in Text.
 func TestFromJournalCarriesTheFailureReason(t *testing.T) {
 	got, ok := FromJournal("/repo", journal.Event{
 		Kind: journal.KindResult, Project: "api", Target: "build",

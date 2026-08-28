@@ -103,11 +103,9 @@ func TestFollowerReplayLimitKeepsNewest(t *testing.T) {
 	assert.Equal(t, "inv3", got[1].Inv)
 }
 
-// TestFollowerReplayLimitSurvivesTheFirstFollowTick is the regression the limit
-// test above cannot catch on its own: Replay honoured the window, and then Follow
-// re-listed the whole directory and drained every log the window had excluded from
-// offset zero. Attaching to a workspace with months of history replayed all of it
-// one tick later, which is the failure --limit exists to prevent.
+// TestFollowerReplayLimitSurvivesTheFirstFollowTick covers what the limit test above
+// cannot: Follow re-lists the directory, so a log the window excluded drained in full
+// on the first tick.
 func TestFollowerReplayLimitSurvivesTheFirstFollowTick(t *testing.T) {
 	dir := t.TempDir()
 	for _, inv := range []string{"inv1", "inv2", "inv3"} {

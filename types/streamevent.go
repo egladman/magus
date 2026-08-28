@@ -72,16 +72,12 @@ const StreamSchema = 1
 // switches on it; an unrecognized value must be skipped, not treated as an error.
 type StreamEventType string
 
-// The taxonomy. Every type here has a live producer: all four are mapped from the
-// run journal by internal/eventstream.
+// The taxonomy, all four mapped from the run journal by internal/eventstream.
 //
-// It is deliberately smaller than the set of facts magus knows. Diagnostics, file
-// changes, attention requests and guard verdicts all have stores already, and each
-// is a candidate - but a type a subscriber can name and never receive is worse than
-// one that does not exist yet, because a silent stream and a wrong filter look
-// identical. They land here when their producer does, which is additive and needs
-// no schema bump. See docs/guides/integrations/editor/design.md for what each one
-// costs.
+// Diagnostics, file changes, attention requests and guard verdicts have stores but no
+// adapter, and are absent rather than silent: a type a subscriber can name and never
+// receive is indistinguishable from a broken filter. Adding one is additive and does
+// not bump [StreamSchema]. See docs/guides/integrations/editor/design.md.
 const (
 	// StreamRunStarted opens an invocation. Carries the command lineage, so a
 	// subscriber can tell `magus run build` from `magus affected ci`.
@@ -131,10 +127,8 @@ type StreamRun struct {
 	// MagusVersion is the binary that produced the run. Set on the started phase.
 	MagusVersion string `json:"magus_version,omitempty"`
 	// Status is the overall outcome, "pass" or "fail". Set on the finished phase.
-	//
-	// There is deliberately no duration here: the journal's finished event carries
-	// none, and a subscriber that wants one subtracts the started event's Ts, which
-	// it must hold anyway to correlate the pair.
+	// No duration: the journal's finished event carries none, so a subscriber
+	// subtracts the started event's Ts.
 	Status string `json:"status,omitempty"`
 }
 
@@ -245,13 +239,8 @@ func (e StreamEvent) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalJSON decodes one wire line, so json.Unmarshal into a StreamEvent means
-// what a caller expects.
-//
-// Without it the type marshals but does not unmarshal: every field is tagged "-",
-// so the natural spelling would report no error and leave a zero event with a nil
-// Body, and a subscriber's type switch would silently match nothing. A decoder that
-// refuses is recoverable; one that returns emptiness is not.
+// UnmarshalJSON decodes one wire line. Without it every field is tagged "-", so
+// json.Unmarshal would report no error and leave a zero event with a nil Body.
 func (e *StreamEvent) UnmarshalJSON(line []byte) error {
 	got, err := DecodeStreamEvent(line)
 	if err != nil {

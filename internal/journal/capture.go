@@ -199,13 +199,10 @@ func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
 	// and a purely buffered handler makes that stream lag by up to a bufio page, so a
 	// short run delivers nothing until it ends.
 	//
-	// The flush is NOT free: it costs a write(2), about 1.2us. BenchmarkEmitResult
-	// writes to io.Discard and BenchmarkEmitResultFile to a real file, so the pair is
-	// what prices it. The flushed kinds are bounded by SUBPROCESS count, not by output
-	// volume - exec fires once per subprocess, result once per target, the rest are
-	// rarer - so a large run pays single-digit milliseconds. Output is the one kind that
-	// scales with build size, and flushing it would pay that microsecond tens of
-	// thousands of times, so it stays buffered and a follower asking for it gets chunks.
+	// The flush costs a write(2), about 1.2us; BenchmarkEmitResult (io.Discard) against
+	// BenchmarkEmitResultFile (a real file) prices it. Flushed kinds are bounded by
+	// SUBPROCESS count, so a large run pays single-digit milliseconds. Output scales
+	// with build size instead, so it stays buffered and a follower gets chunks.
 	if e.Kind != KindOutput {
 		return h.w.Flush()
 	}

@@ -703,12 +703,8 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 // result to the ref's JSONL file, and emits the result to the capture logger (for the
 // invocation log / live stream). Persistence is best-effort: a store error logs a
 // warning and yields an empty ref, so the run's own outcome never hinges on it. runErr
-// nil means the step passed; non-nil means it failed.
-//
-// cacheHit is a separate axis from runErr and must be passed by the caller: "did this
-// end up green" and "did work run" are different questions, and the result event has a
-// distinct status for a replay. Deriving it here is not possible - by this point a hit
-// and a fresh pass look identical.
+// nil means the step passed; non-nil means it failed. cacheHit is a separate axis and
+// must come from the caller: by this point a hit and a fresh pass look identical.
 func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, dur time.Duration, runErr error, cacheHit bool) string {
 	nowMs := time.Now().UnixMilli()
 	inv := journal.InvocationIDFromContext(ctx)

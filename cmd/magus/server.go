@@ -219,13 +219,9 @@ func servingSuffix(st *proc.StatusReply) string {
 // (so any --daemon-address the user set is honored) and marks the child via daemonDetachEnv
 // so it runs the daemon rather than backgrounding again. The child is fully detached (its own
 // session on unix) and Release()d so this process never waits on it.
-// daemonChildEnv returns this process's environment with MAGUS_DAEMON_SOCKET removed.
-//
-// A caller that hosts its own per-process proc server exports that socket (see main.go's
-// dispatch), and a detached child inheriting it comes up believing it is already adopted:
-// proc.New refuses to bind, the daemon runs with no socket of its own, and `server start`
-// then reports the PARENT's socket as the one it is listening on. That daemon is invisible
-// to LookupStableSocket, so `magus server stop` cannot find it and only kill removes it.
+// daemonChildEnv returns this process's environment with MAGUS_DAEMON_SOCKET removed. A
+// child inheriting it believes it is already adopted, binds no socket, and reports the
+// parent's - leaving a daemon `server stop` cannot find.
 func daemonChildEnv() []string {
 	env := os.Environ()
 	out := make([]string, 0, len(env))

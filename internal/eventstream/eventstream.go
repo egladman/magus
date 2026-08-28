@@ -1,21 +1,14 @@
 // Package eventstream maps magus's internal producers onto the single
 // [types.StreamEvent] envelope external integrations subscribe to.
 //
-// It is an ADAPTER layer, not a replacement. The producers it reads keep their
-// own on-disk schemas - each is a shipped contract with its own consumers - and
-// nothing here rewrites them.
+// It is an ADAPTER layer: the producers it reads keep their own on-disk schemas,
+// and nothing here rewrites them.
 //
-// The run journal is the ONLY source today, and it covers the whole taxonomy: it
-// brackets an invocation with lifecycle events and carries per-target results and
-// per-line output. It is also a stdlib-only leaf, so adapting it costs this
-// package no dependency on the engine.
-//
-// The report writer, the attention store and the activity trail hold facts a
-// subscriber would plausibly want, and each would need its own adapter and its
-// own reader - they are different files in different directories, not one bus.
-// docs/guides/integrations/editor/design.md prices each; none is wired, and the
-// taxonomy deliberately omits the types they would carry rather than advertising
-// a type that can never arrive.
+// The run journal is the only source today, and it covers the whole taxonomy. It is
+// a stdlib-only leaf, so adapting it costs this package no dependency on the engine.
+// The report writer, the attention store and the trail hold facts a subscriber would
+// want, but each is a different file in a different directory rather than one bus;
+// docs/guides/integrations/editor/design.md prices them.
 package eventstream
 
 import (
@@ -62,8 +55,7 @@ func FromJournal(workspace string, e journal.Event) (types.StreamEvent, bool) {
 			CacheHit:   cached,
 			Ref:        e.Ref,
 			DurationMs: e.DurMs,
-			// A failed result carries the run error in Text; without it a subscriber
-			// gets "failed" and no reason, with the reason sitting in the same event.
+			// A failed result carries the run error in Text.
 			Error: e.Text,
 		}
 	case journal.KindOutput:

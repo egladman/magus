@@ -39,15 +39,12 @@ command -v jq >/dev/null 2>&1 || {
 	exit 127
 }
 
-# --unbuffered makes jq flush each line as it arrives. Without it a long quiet
-# period holds finished events in jq's own buffer, which looks exactly like a
-# build that never ran.
+# --unbuffered makes jq flush each line as it arrives; without it a quiet period
+# holds finished events in jq's buffer and looks like a build that never ran.
 #
-# The status file is not ceremony. A pipeline exits with its LAST stage, so a
-# `magus events` that dies - a bad --type, a workspace that vanished - would
-# reach jq as a clean EOF and this script would exit 0. A supervisor would see a
-# healthy subscriber that had stopped subscribing. POSIX sh has no pipefail, so
-# the producer records its own status and the script exits with that.
+# A pipeline exits with its LAST stage, so a `magus events` that dies reaches jq
+# as a clean EOF and this would exit 0 - a supervisor sees a healthy subscriber
+# that stopped subscribing. POSIX sh has no pipefail, hence the status file.
 rc=$(mktemp) || exit 1
 trap 'rm -f "$rc"' EXIT INT TERM
 
