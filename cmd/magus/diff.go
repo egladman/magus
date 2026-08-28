@@ -677,11 +677,11 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// Ctrl-C read as a key, a cancelled context. A raw SIGINT unwinds nothing, and the reader
 	// loses the queue along with the restored terminal.
 	defer sync.close()
-	// Re-placed against THIS patch. The daemon resolved each thread's hunk against the working
-	// tree, which is not what the viewer is showing when the patch came from a file or stdin -
+	// Re-placed against THIS patch. A thread arrives placed against the working tree or not
+	// placed at all, and neither is what the viewer is showing when the patch came from a file -
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
-	threads, _ := daemonReviewThreads(ctx)
+	threads, _ := reviewThreads(ctx, m)
 	threads = changeset.PlaceThreads(changeset.ParseHunks(patch), threads)
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
