@@ -21,7 +21,7 @@ export fun mgs_getName() > str { return "postgres"; }
 //   readiness - a probe polled until it exits 0 (the Kubernetes exec-probe model),
 //               so dependents wait for "actually up", not a fixed sleep
 //   stop      - a graceful shutdown, replayed to reap orphans after a crash
-// Reached as a dependency (some target's magus.needs), it runs in the background,
+// Reached as a dependency (some target's ctx.needs), it runs in the background,
 // shared by config fingerprint; run directly, it runs in the foreground.
 fun serve(t: Target) > Service {
     return Service{

@@ -1,5 +1,5 @@
 // title: Targets: wire the dependencies
-// desc: Wire a pipeline with magus.needs; ci is the conventional anchor it all keys off.
+// desc: Wire a pipeline with ctx.needs; ci is the conventional anchor it all keys off.
 // doc: concepts/targets|Targets
 //
 // Targets depend on other targets. ctx.needs(build) declares an edge - you pass

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/interp"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,11 +20,28 @@ func TestWriteMagusfileStub(t *testing.T) {
 	body := string(data)
 	for _, want := range []string{
 		`import "magus"`,
-		"magus.project",
+		`magus\project`,
 		`export fun preflight`,
 		`export fun test`,
 	} {
 		assert.Contains(t, body, want, "magusfile.buzz missing %q", want)
+	}
+}
+
+// TestStarterMagusfileNoRemovedAPI guards P3-23/P3-24: starterMagusfileBuzz is the
+// canonical example magusfile referenced from the docs (see its doc comment in
+// init.go), so a removed spelling here doesn't just fail to load - it teaches new
+// users something MGS1025 will reject. RemovedAPINames comes from
+// removedMagusfileAPI in internal/interp/runtime.go, the same table MGS1025 checks
+// against, so this list can't drift out of sync with what actually fires the
+// diagnostic. The scan covers comments too, since a real magusfile parse would
+// ignore a removed name inside one (see MGS1025.md's Detection section) but the
+// starter's comments are exactly what a new user reads.
+func TestStarterMagusfileNoRemovedAPI(t *testing.T) {
+	for _, name := range interp.RemovedAPINames() {
+		removed := "magus." + name
+		assert.NotContains(t, starterMagusfileBuzz, removed,
+			"starter magusfile.buzz uses removed API %q (see MGS1025)", removed)
 	}
 }
 

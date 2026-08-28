@@ -18,12 +18,12 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     go["go-build"](ctx);
 }
 
-// The conventional anchor, wired with magus.needs like always.
+// The conventional anchor, wired with ctx.needs like always.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
 }
 
-// A bespoke phase. It depends on ci through the same magus.needs edge the
+// A bespoke phase. It depends on ci through the same ctx.needs edge the
 // canonical targets use, then does its own extra work.
 export fun release(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ci);

@@ -64,8 +64,8 @@ fun ldflags(version: str) > str {
 // later is fine, since bodies run after the whole file loads). Because it is a
 // plain identifier, a typo is an undefined variable caught at load, and magus can
 // recover the whole DAG statically, without running the bodies. For a family of
-// targets by name pattern, magus.glob resolves the pattern to the matching
-// handles that magus.needs depends on (below). magus runs the dependencies
+// targets by name pattern, ctx.glob resolves the pattern to the matching
+// handles that ctx.needs depends on (below). magus runs the dependencies
 // first, deduplicated, and in parallel wherever the graph allows.
 //
 // A spell's ops are its contributed targets, keyed by the kebab-case CLI name
@@ -86,7 +86,7 @@ export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-gener
 
 // The umbrella `generate` target pulls in every `*-generate` target with ONE
 // pattern instead of listing each by hand: ctx.glob("*-generate") resolves to
-// every target ending in -generate, and magus.needs depends on those handles, so
+// every target ending in -generate, and ctx.needs depends on those handles, so
 // adding a `sql-generate` later needs no edit here. (glob is the pattern resolver;
 // needs itself only ever takes handles. A pattern with no `*` is suffix shorthand,
 // so "generate" would read the same here.) That is the payoff of naming targets by
