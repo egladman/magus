@@ -637,6 +637,128 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 	}
 }
 
+// failOpenArmRe matches the tests a shipped template makes before answering
+// WITHOUT a verdict from magus: the binary is missing or not executable, or it
+// ran and left nothing to report. Both spellings the templates use, sh and TS.
+var failOpenArmRe = regexp.MustCompile(`! -x "\$GUARD_MAGUS_BIN"|-z "\$verdict"|stdout === null`)
+
+// failOpenRetryRe marks a block that re-invokes magus rather than answering. Two
+// of the templates test the same `-z "$verdict"` condition twice - once to retry
+// without the attribution flags, once to give up - and only the second is a
+// fail-open arm.
+var failOpenRetryRe = regexp.MustCompile(`\$\(guard\b|runOnce\(`)
+
+// failOpenNoticeRe matches an arm SAYING it did not judge the call: prose on
+// stderr, a console warning, or one of the GUARD_*_RESPONSE envelopes.
+var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$GUARD_[A-Z_]+_RESPONSE`)
+
+// failOpenOptInRe matches the shape that makes a notice OPT-IN: the arm prints
+// only when the reader has set the variable, so by default it prints nothing.
+var failOpenOptInRe = regexp.MustCompile(`^\[ -n "\$GUARD_[A-Z_]+" \] &&`)
+
+// failOpenDefaultRe extracts the variable an arm's notice comes from, so the
+// default assigned to it can be checked for emptiness.
+var failOpenDefaultRe = regexp.MustCompile(`\$(GUARD_[A-Z_]+_RESPONSE)`)
+
+// failOpenSilentByDesign records the verdict-carrying templates whose fail-open
+// arms deliberately announce NOTHING, and where that decision is written down.
+//
+// An exemption rather than a fix, because the decision is recorded with its
+// tradeoff named and pinned by an executed case: cmd/magus/testdata/script/
+// guard_templates.txtar asserts the path template's silence under a missing
+// magus, on the grounds that an empty response on that surface already means
+// allow for most hosts and an announcement on every file edit was judged the
+// worse noise. Overturning that is a decision for whoever made it; leaving it
+// undeclared here is what this table refuses.
+var failOpenSilentByDesign = map[string]string{
+	"magus-guard-path.sh": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; GUARD_UNAVAILABLE_RESPONSE and GUARD_FAILED_RESPONSE are the opt-in",
+}
+
+// TestFailOpenArmsAnnounceThemselves is the doctrine's enforcement point: a
+// template that cannot judge a call must SAY so.
+//
+// Silence and a clean session are the same observation. Every other gate here
+// checks what a template does with a verdict it received; this one checks the
+// case where it received none, which is the case a reader never notices - the
+// guard stops enforcing and the transcript looks exactly as it did before.
+//
+// Structural on purpose: it finds the arms by the conditions the templates test
+// and asks each one for an unconditional notice, so rewording a message costs
+// nothing and DELETING one fails. A template with no coverage declaration is not
+// asked, which is how magus-guard-observe.sh is exempt - it carries no verdict,
+// so it has no fail-open to announce.
+func TestFailOpenArmsAnnounceThemselves(t *testing.T) {
+	for _, name := range hookTemplates {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+		doc := string(body)
+		if !strings.Contains(doc, guardCoverageMarker) {
+			continue
+		}
+
+		lines := strings.Split(doc, "\n")
+		arms := 0
+		for i, line := range lines {
+			if !failOpenArmRe.MatchString(line) {
+				continue
+			}
+			block := lines[i:failOpenArmEnd(lines, i)]
+			if failOpenRetryRe.MatchString(strings.Join(block, "\n")) {
+				continue
+			}
+			arms++
+			if why, exempt := failOpenSilentByDesign[name]; exempt {
+				t.Logf("%s: fail-open arm at line %d is silent by design (%s)", name, i+1, why)
+				continue
+			}
+			assertFailOpenNotice(t, name, doc, block, i+1)
+		}
+		assert.NotZero(t, arms,
+			"%s carries a verdict but no fail-open arm was recognized in it.\n"+
+				"Either it now answers some other way - update failOpenArmRe - or it blocks when magus\n"+
+				"is unavailable, which is a change this gate should have been told about.", name)
+	}
+}
+
+// failOpenArmEnd returns the line index just past the block opened at start: the
+// next `fi` or bare `}` at any indent. Adequate for these templates, which never
+// nest a block inside a fail-open arm.
+func failOpenArmEnd(lines []string, start int) int {
+	for i := start + 1; i < len(lines); i++ {
+		switch strings.TrimSpace(lines[i]) {
+		case "fi", "}":
+			return i + 1
+		}
+	}
+	return len(lines)
+}
+
+// assertFailOpenNotice requires one arm to emit a notice unconditionally, and
+// requires whatever variable carries that notice to have a non-empty default.
+// The second half is the half that matters: an arm printing a variable nobody
+// assigned is silent, and reads like an announcement.
+func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line int) {
+	t.Helper()
+	for _, l := range block {
+		trimmed := strings.TrimSpace(l)
+		if failOpenOptInRe.MatchString(trimmed) || !failOpenNoticeRe.MatchString(trimmed) {
+			continue
+		}
+		for _, m := range failOpenDefaultRe.FindAllStringSubmatch(trimmed, -1) {
+			assert.Regexp(t, `\|\| `+m[1]+`='.+'`, doc,
+				"%s prints $%s on its fail-open arm at line %d, but assigns it no non-empty default,\n"+
+					"so the arm is silent unless the reader sets it.", name, m[1], line)
+		}
+		return
+	}
+	assert.Fail(t, "fail-open arm says nothing",
+		"%s answers without a magus verdict at line %d and emits no default notice.\n"+
+			"A guard that stopped enforcing looks exactly like a clean session, so every fail-open arm\n"+
+			"announces itself (see magus-guard-command.sh's GUARD_UNAVAILABLE_RESPONSE). Add a notice,\n"+
+			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
+		name, line)
+}
+
 // transportCorpus is the testscript that executes the sh templates against real
 // host events. Its cases are labeled so the contract can demand one per cell.
 const transportCorpus = "cmd/magus/testdata/script/guard_templates.txtar"

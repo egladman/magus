@@ -226,8 +226,8 @@ printf '%s' 'MAGUS.md' | magus session hook --path -o name
 ```
 
 A deny exits 2 with the verdict on stdout; a pass and an advise exit 0. An
-unreadable event fails open as a `pass`, because a guard that errors on every
-tool call is worse than no guard.
+empty event passes, but one the hook cannot read fails closed as a deny:
+nothing was judged, so the call is blocked rather than cleared.
 
 A host integration is therefore a few lines of configuration you own, with no
 host-specific code in magus.

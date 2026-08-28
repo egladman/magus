@@ -74,7 +74,11 @@ event=$(cat)
 case "$event" in
 *'"file_path"'*)
 	# afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
+	# It still SAYS so, on the same stderr channel this arm already uses for a
+	# verdict. Exiting quietly here is indistinguishable from a clean edit, and an
+	# unguarded session you know about beats one you do not.
 	if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+		printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its rules did not judge this edit. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard." >&2
 		exit 0
 	fi
 	# Ask for the MESSAGE, not the bare decision word. Several rules judge this
@@ -99,7 +103,12 @@ esac
 # hook crash or malformed JSON unless the hook sets failClosed, so pretending
 # otherwise would give false assurance. For strict behavior, set failClosed on
 # the hook and change this to a deny.
+#
+# The allow is announced on stderr, which Cursor logs. Cursor delivers no message
+# on an allow, so this is the only channel left, and a silent fail-open on the
+# shell surface is the one outcome nobody can tell from a guarded session.
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+	printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard." >&2
 	printf '%s' '{"permission":"allow"}'
 	exit 0
 fi
@@ -111,6 +120,14 @@ fi
 # channel is the JSON on stdout; this exits 0 so that JSON is what it acts on.
 verdict=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" session hook --agent-name cursor \
 	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}' 2>/dev/null)
-[ -n "$verdict" ] || verdict='{"permission":"allow"}'
+# An empty verdict is a BROKEN guard, never a pass: the template above renders
+# {"permission":"allow"} for every decision that is not a deny, so nothing but a
+# magus that could not run leaves this empty - too old for `session hook`, unable
+# to load the workspace, half-written by a concurrent build. Allowing is still
+# right (Cursor fails open on a crash anyway), announcing it is what was missing.
+if [ -z "$verdict" ]; then
+	printf '%s\n' "magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the session hook subcommand, or cannot load this workspace - run magus session hook by hand to see the error, then rebuild or update it to restore the guard." >&2
+	verdict='{"permission":"allow"}'
+fi
 printf '%s' "$verdict"
 exit 0

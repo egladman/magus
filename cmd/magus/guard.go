@@ -68,8 +68,10 @@ type guardVerdict struct {
 // from stdin and emit a verdict. The caller owns extraction from its
 // host-specific event shape; magus owns only the host-neutral policy.
 //
-// A guard must FAIL OPEN: an empty or unreadable input is a pass, never an error
-// that would block every tool call.
+// An EMPTY stdin fails OPEN: a wrapper that hands the hook nothing must not have
+// every tool call blocked. A stdin that fails to READ is the opposite case and
+// fails CLOSED, because bytes were on their way and were lost, so the guard has
+// judged nothing and the command it never saw must not be reported as cleared.
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
@@ -113,7 +115,27 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// whichever registration above owns the flag. Goes with the TODO there.
 	actingDelegation := hf.Delegation
 
-	input, hasInput := readGuardInput(in)
+	input, hasInput, readErr := readGuardInput(in)
+	// A failed read is not an empty stdin, and collapsing the two cleared every
+	// command whose payload arrived truncated. Answered as a deny so the exit is 2,
+	// which is what the manpage promises: deny and unreadable input share the code,
+	// so a host that blocks on 2 fails closed in both cases. --observe is exempt
+	// because it carries no verdict - there is nothing to fail closed about, and the
+	// documented contract is that it always exits 0.
+	if readErr != nil && !hf.Observe {
+		verdict := guardVerdict{
+			SchemaVersion: agent.GuardSchemaVersion,
+			Decision:      "deny",
+			Reason: "magus session hook could not read its input from stdin: " + readErr.Error() + "\n\n" +
+				"Nothing was judged, so this call is blocked rather than cleared. Retry it; if it keeps " +
+				"failing, run the hook by hand with the same input to see the error, and check the hook " +
+				"wiring in your agent host.",
+		}
+		if err := writeGuardVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		return enforceVerdict(opts, verdict)
+	}
 	who := hookAttribution{Host: hf.AgentName, Session: hf.Session, Transcript: hf.Transcript, Event: hf.Event}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
@@ -312,13 +334,21 @@ type guardInput struct {
 	Value string
 }
 
-func readGuardInput(in io.Reader) (guardInput, bool) {
+// readGuardInput reports the payload, whether one arrived, and the read failure
+// separately. The failure is its own return rather than folded into the boolean:
+// "no input" is a host that sent nothing and "the read broke" is a payload magus
+// was supposed to receive, and only the second one means the command about to run
+// is not the command the guard was shown.
+func readGuardInput(in io.Reader) (guardInput, bool, error) {
 	b, err := io.ReadAll(in)
-	value := strings.TrimSpace(string(b))
-	if err != nil || value == "" {
-		return guardInput{}, false
+	if err != nil {
+		return guardInput{}, false, err
 	}
-	return guardInput{Value: value}, true
+	value := strings.TrimSpace(string(b))
+	if value == "" {
+		return guardInput{}, false, nil
+	}
+	return guardInput{Value: value}, true, nil
 }
 
 // hookEnvelope is the JSON an agent host writes to a hook's stdin: which tool is about to
