@@ -380,7 +380,7 @@ jobs:
       # action so other workspaces get them with one `uses:` line; turn one off by name
       # (merge-conflicts: 'false') rather than by editing this step.
       #
-      # The fixers are not here: they write, and this job is contents: read. auto-fix.yaml
+      # The fixers are not here: they write, and this job is contents: read. regenerate.yaml
       # runs them on the label - offer-fix-label is what tells the conflict comment that
       # workflow exists.
       - uses: ./.github/actions/advice
