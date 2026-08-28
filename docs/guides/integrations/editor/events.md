@@ -15,17 +15,18 @@ status bar, a notifier, a dashboard.
 magus events --follow
 ```
 
-Every magus process in the workspace feeds the stream, so a run started in
-another terminal shows up here. It needs no daemon, no token, and no loadable
-magusfile - an editor can attach to a repository whose magusfile is mid-edit,
-which is exactly when someone wants it.
+Every magus RUN in the workspace feeds the stream, so a build started in another
+terminal shows up here. Commands that are not runs - `ls`, `query`, `doctor` -
+write no run log and so produce no events. It needs no daemon, no token, and no
+loadable magusfile: an editor can attach to a repository whose magusfile is
+mid-edit, which is exactly when someone wants it.
 
 ## The line shape
 
 Envelope fields and the event's own fields sit at one level:
 
 ```json
-{"schema":1,"type":"target.result","ts":1756312800000,"workspace":"/repo","inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"failed","cache_hit":false,"ref":"out_abc","duration_ms":1200}
+{"schema":1,"type":"target.result","ts":1756312800000,"workspace":"/repo","inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"failed","cache_hit":false,"ref":"out267cbdc9baba","duration_ms":1200,"error":"exit status 2"}
 ```
 
 | field       | meaning                                                          |
@@ -38,16 +39,22 @@ Envelope fields and the event's own fields sit at one level:
 
 ## The types
 
-| type                 | when                          | key fields                                     |
-| -------------------- | ----------------------------- | ---------------------------------------------- |
-| `run.started`        | an invocation opens           | `command`, `trigger`, `magus_version`          |
-| `run.finished`       | it closes                     | `status`, `duration_ms`                        |
-| `target.result`      | one target finishes           | `project`, `target`, `status`, `cache_hit`, `ref` |
-| `target.output`      | a subprocess writes a line    | `stream`, `text` - opt-in, see below           |
-| `diagnostic.emitted` | a coded finding               | `code`, `message`, `file`, `line`              |
-| `workspace.changed`  | source files move on disk     | `paths`                                        |
-| `attention.raised`   | something is blocked on a person | `id`, `request`                             |
-| `guard.verdict`      | the guard judged a command    | `verdict`, `surface`, `subject`, `reason`      |
+| type             | when                       | key fields                                                 |
+| ---------------- | -------------------------- | ---------------------------------------------------------- |
+| `run.started`    | an invocation opens        | `phase`, `command`, `trigger`, `magus_version`             |
+| `run.finished`   | it closes                  | `phase`, `status`                                          |
+| `target.result`  | one target finishes        | `project`, `target`, `status`, `cache_hit`, `ref`, `error` |
+| `target.output`  | a subprocess writes a line | `stream`, `text` - opt-in, see below                       |
+
+Four types, and that is the whole taxonomy today. Diagnostics, file changes,
+attention requests and guard verdicts are all facts magus records somewhere, and
+each is a candidate - but a type you can name and never receive is worse than one
+that does not exist, because a silent stream and a wrong filter look identical.
+They arrive when their producer does. Adding a type is additive and does not bump
+`schema`, so nothing you write today breaks when they land.
+
+`run.finished` carries no duration. Correlate it with its `run.started` by `inv`
+and subtract the two `ts` values; you are holding the pair anyway.
 
 ### status and cache_hit are separate questions
 
@@ -69,13 +76,13 @@ Usually you do not want to. A `target.result` carries `ref`, the address of that
 execution's captured log, so a subscriber fetches the one log it cares about:
 
 ```sh
-magus query output out_abc
+magus query output out267cbdc9baba
 ```
 
 ## Filtering
 
 ```sh
-magus events --follow --type target.result,diagnostic.emitted
+magus events --follow --type target.result,run.finished
 ```
 
 An unknown type name is an error, not an empty match. A typo would otherwise
@@ -131,9 +138,9 @@ evaluates, auditable in a diff.
 
 ## Latency
 
-`--follow` polls the run log. Lifecycle, result, and diagnostic events are
-flushed as they happen; `target.output` is buffered and arrives in chunks, or at
-the end of the run. Tune the poll with `--interval`.
+`--follow` polls the run log. Lifecycle and result events are flushed as they
+happen; `target.output` is buffered and arrives in chunks, or at the end of the
+run. Tune the poll with `--interval`.
 
 ## A reference client
 
@@ -149,8 +156,7 @@ It is a TEMPLATE you own, not a package magus releases - the same arrangement as
 the [agent guard templates](../agents/guard-templates.md), and for the same
 reason ("The host wiring is yours" in [doctrine](../../../doctrine.md)).
 
-POSIX sh and jq, nothing else. The interesting part is that there is no
-interesting part:
+POSIX sh and jq, nothing else. Reduced to its core it is one pipeline:
 
 ```sh
 magus events --follow --limit 0 --type target.result | jq -r --unbuffered '
@@ -160,6 +166,15 @@ magus events --follow --limit 0 --type target.result | jq -r --unbuffered '
 
 `--limit 0` replays nothing, which is what a notifier wants: waking up and
 announcing yesterday's failure is worse than staying quiet.
+
+The shipped script is that plus two things the reduction leaves out, and both are
+worth copying. It also handles `run.finished`, so a run that fails without any
+single target failing still reports. And it does not let the pipeline swallow the
+exit status: a shell pipeline exits with its LAST stage, so a `magus events` that
+dies reaches jq as a clean EOF and the script would otherwise exit 0 - a
+supervisor would see a healthy subscriber that had stopped subscribing. POSIX sh
+has no `pipefail`, so the producer records its own status and the script exits
+with that.
 
 That loop is the whole contract. An editor plugin is the same thing plus a way
 to draw on a screen.
@@ -197,7 +212,11 @@ independent: the language server is edit time, this stream is run time.
 - [editor.md](../editor.md): the language server for `*.buzz` files.
 - [daemon.md](../daemon.md): the daemon, and why this stream does not need one.
 - [console.md](../../../reference/console.md): the browser surface reading the
-  same underlying state.
+  same underlying state. Note it documents a route called `/api/v1/events`, which
+  is NOT this stream and shares nothing with it: that one is the console's own
+  server-sent-events feed, bearer-gated, carrying base64 protobuf status and
+  metrics frames for the dashboard. It is daemon-internal. This page is the
+  integration surface; do not build against the route because the names match.
 
 ## Stopping a follower
 

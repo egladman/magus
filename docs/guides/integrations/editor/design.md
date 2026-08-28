@@ -22,7 +22,7 @@ not compose, and no integrator can be pointed at a single thing.
 
 | producer          | schema                                          | transport                                    | consumer today  |
 | ----------------- | ----------------------------------------------- | -------------------------------------------- | --------------- |
-| `internal/report` | `{"schema":3,"type":"target.result",...}` JSONL | stdout of `magus run -o jsonl`               | CI post-process |
+| `internal/report` | `{"schema":4,"type":"run.target.result",...}` JSONL | stdout of `magus run -o jsonl`           | CI post-process |
 | `internal/journal`| `{ts,inv,kind,stream,text,ref}` JSONL           | per-invocation file; loopback SSE with `--open` | browser viewer  |
 | `types.Event`     | `{schema_version,outcome,severity,source,where}`| `session notify`, attention store            | humans          |
 | `internal/trail`  | Kind + JSONL + blob refs                        | `/api/v1/activity` Connect                   | governance      |
@@ -88,60 +88,72 @@ denial live without anything being able to influence one.
 ```text
                   types.StreamEvent  (one envelope, one taxonomy)
                            |
-        +------------------+------------------+
-        |                                     |
-   proc socket bus                      stdout JSONL
-   events.subscribe frame               magus events -o jsonl
-   workspace-wide, cross-process        degrades with no daemon
-        |                                     |
-        +------------------+------------------+
-                           |
+                     stdout JSONL
                   magus events --follow
+                           |
+              <cacheDir>/runs/*.jsonl  (the bus)
 ```
 
-`internal/proc` is already a JSONL-framed Unix socket in a 0700 directory, and
-`proc.DiscoverSocket` finds a live daemon with no env var and no token: the
-filesystem permissions ARE the authentication. That is the right bus for a local
-editor, and far cheaper to consume than the bearer-gated protobuf HTTP surface.
-What it lacks is one frame - every call in `internal/proc/client.go` is
-request/reply. `events.subscribe` is the addition that turns a control plane
-into a bus, and it is what lets an editor learn that the run you started in a
-terminal just failed.
+The transport question answered itself. Every magus run already appends to
+`<cacheDir>/runs/<inv>.jsonl`, so a follower polling that DIRECTORY sees runs
+from any terminal with no daemon, no socket, and no token. The directory IS the
+bus.
+
+`internal/proc` was the candidate before that: a JSONL-framed Unix socket in a
+0700 directory where the filesystem permissions ARE the authentication, and
+`proc.DiscoverSocket` finds a live daemon with no env var. It lacks a subscribe
+frame - every call in `internal/proc/client.go` is request/reply - and adding one
+turns a control plane into a bus. That work was not done and is not needed: it
+would buy latency over a 250ms poll, and it would make the stream depend on a
+daemon the design deliberately does not require.
 
 The CLI stays the front door because the daemon is optional by design
 (`docs/scope.md` names the daemon dependency as a standing strain) and because a
-subprocess pipe is available in every editor, while a Unix socket is not. An
-integrator that wants the socket directly gets a documented frame; it is not the
-recommended path.
+subprocess pipe is available in every editor, while a Unix socket is not. There
+is no socket frame for this stream and no plan to add one until something needs
+the latency: an earlier draft of this section promised integrators "a documented
+frame", which was never built.
 
 ## The taxonomy
 
-Every type maps onto a producer that already exists. Nothing here is invented.
+SHIPPED. All four come from the run journal, which is what let the adapter stay a
+leaf with no dependency on the engine.
 
-| type                 | from                              | why an integration wants it            |
-| -------------------- | --------------------------------- | -------------------------------------- |
-| `run.started`        | journal `KindStarted`             | show a spinner, record lineage         |
-| `run.finished`       | journal `KindFinished`            | clear the spinner, report the outcome  |
-| `target.started`     | journal `KindExec` / scope        | per-project progress                   |
-| `target.result`      | report `TargetResult`             | pass/fail/cached, with a fetchable ref |
-| `target.output`      | journal `KindOutput`              | live log tailing (opt-in; high volume) |
-| `diagnostic.emitted` | report `DiagnosticEmitted`        | populate flycheck / compilation-mode   |
-| `workspace.changed`  | `internal/file/watch`             | invalidate a cached target list        |
-| `attention.raised`   | `types.Event` via `session notify`| surface a block that needs a person    |
-| `guard.verdict`      | trail `KindAgentCommand`          | show a denial as it happens            |
+| type            | from                   | why an integration wants it            |
+| --------------- | ---------------------- | -------------------------------------- |
+| `run.started`   | journal `KindStarted`  | show a spinner, record lineage         |
+| `run.finished`  | journal `KindFinished` | clear the spinner, report the outcome  |
+| `target.result` | journal `KindResult`   | pass/fail/cached, with a fetchable ref |
+| `target.output` | journal `KindOutput`   | live log tailing (opt-in; high volume) |
 
-`target.output` is the one high-volume type and is off unless asked for, reusing
-the filter `internal/report` already has. An editor that subscribes to
-everything by default drowns.
+`target.output` is the one high-volume type and is off unless asked for. An
+editor that subscribes to everything by default drowns.
+
+NOT SHIPPED, and deliberately absent from `StreamEventTypes()` rather than
+present and silent. Each has a store; none has an adapter. The cost column is
+what the review of this branch measured, not an estimate made while designing.
+
+| type                 | store                              | what it costs                                                                                                                |
+| -------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `diagnostic.emitted` | `diagCollector`, already fanning to report + the graph's runtime shard | smallest: a new `journal.Kind` plus one adapter arm. `file`/`line` need a wider change - `types.DiagnosticEvent` carries only unit, code, message |
+| `guard.verdict`      | trail `agent_command`, verdict in a payload blob    | the trail lives in `activity/`, not `runs/`, so this needs a second reader with an unrelated line schema and blob dereferencing. The hook is its own short-lived process, so `inv` would be empty |
+| `attention.raised`   | sessions `attention_open`          | a third file, in XDG state rather than the cache dir. The store FLATTENS `types.Event` to strings on the way in, so the body cannot be reconstructed from it without a second record |
+| `workspace.changed`  | none - `magus watch` persists nothing | largest, and it breaks the design's central property: there is no store to adapt, so either a long-running watcher writes to `runs/` (which is not what that directory means) or `magus events` grows a watcher and stops being a pure reader of the bus |
+
+An earlier draft of this table listed a `target.started` type sourced from
+`KindExec`. It was dropped - `KindExec` is per subprocess, not per target - and
+the row outlived the decision by several commits. It is recorded here because a
+taxonomy table that describes intentions as facts is the specific way this
+document went wrong.
 
 ## What a first implementation covers
 
 1. `types/streamevent.go` - the envelope, the taxonomy, the per-type bodies.
    This is the contract, and it is the deliverable that has to be right.
-2. `internal/eventstream` - adapters mapping journal, report, attention, and
-   trail records onto `StreamEvent`. The existing producers keep their on-disk
-   schemas; nothing is rewritten. Mapping the remaining producers is mechanical
-   once the contract exists.
+2. `internal/eventstream` - the adapter mapping journal records onto
+   `StreamEvent`, plus the cross-process follower over the run-log directory.
+   Journal is the ONLY producer adapted; the table above says what the others
+   cost. The existing producers keep their on-disk schemas; nothing is rewritten.
 3. `magus events` - replay plus `--follow`, `--type`, `--limit`.
 4. `internal/proc` - the `events.subscribe` frame and the daemon-side bus.
    NOT built: the run-log directory turned out to serve as the bus without it,
@@ -158,9 +170,10 @@ everything by default drowns.
   where? The journal store is per-invocation and already rotated; the trail caps
   at 10000 and rotates on a schedule. A replay window that spans producers needs
   one answer, and inventing a sixth durable log to get it would be the wrong one.
-- `target.started` has no exact producer. journal emits `KindExec` per
-  subprocess, not per target. Either the engine emits one, or the type is
-  dropped and consumers infer start from the first `target.output`.
+- `target.started` was dropped: journal emits `KindExec` per subprocess, not per
+  target, so there was no producer to adapt. A consumer that wants per-target
+  progress infers start from the first `target.output`. Reopen this only if the
+  engine grows a per-target start event for its own reasons.
 - Windows. `SockDir` has a Windows variant but the socket bus needs checking
   there; the CLI front door is unaffected.
 
@@ -201,13 +214,27 @@ them over a socket. The shared concurrency pool and background jobs are
 cross-process by definition. Nobody is surprised that asking for a server needs a
 server, so these are not a capability split; they are the daemon's own surface.
 
-For those, a command auto-starts the daemon, because asking for the console IS
-asking for the daemon and starting it is doing what was asked rather than a side
-effect. `spawnDetachedDaemon` (cmd/magus/server.go) already backgrounds and waits
-for readiness, so this reuses shipped machinery.
+For those, a command SHOULD auto-start the daemon, because asking for the console
+IS asking for the daemon and starting it is doing what was asked rather than a
+side effect. CI never spawns one under this rule - not by a special case, but
+because CI never asks for a console. That absence of a conditional is the point.
 
-CI never spawns a daemon under this rule - not by a special case, but because CI
-never asks for a console. That absence of a conditional is the point.
+NOT BUILT HERE. An implementation of this landed on the event-stream branch and
+was pulled back out before merge. It reused `spawnDetachedDaemon` on the theory
+that the machinery was already shipped, and the theory was wrong: that function
+was safe only because its one caller ran under a dispatch profile that never
+hosts a per-process proc server. Called from one that does, the detached child
+inherited `MAGUS_DAEMON_SOCKET`, decided it was already adopted, bound no socket
+of its own, and reported its PARENT's socket as the one it was listening on -
+leaving a daemon `magus server stop` could not find and only `kill` could remove.
+
+Two further problems, neither of which the implementation addressed: every
+failure path leaked the process it had spawned, and promoting one worktree's
+binary to a long-lived per-user service is the thing the checkout guard exists to
+prevent, by a route the guard cannot see because there is no `cd` in the command
+line. Whoever builds this next should start from those three and from a test -
+the reverted version had none, which is why a review found all of it rather than
+a gate.
 
 ### This was already the de facto rule
 
@@ -219,9 +246,10 @@ Two sites decided it independently before it was stated:
 - `cmd/magus/graph.go` refuses `--follow` with `clihint.ServerStart` rather than
   starting one, under a comment reading "magus never auto-starts a daemon".
 
-The second is the site this decision REVERSES: `--follow` is a plain request for
-the console, so it should start the daemon rather than refuse. The first stays as
-it is and becomes the worked example of the rule.
+The second is the site this decision would REVERSE: `--follow` is a plain request
+for the console, so it should start the daemon rather than refuse. It still
+refuses today - see the note above. The first stays as it is and becomes the
+worked example of the rule.
 
 ### The event stream needs none of this
 
@@ -243,9 +271,10 @@ than degrading or starting one.
 Five things only showed up once real events flowed. Each is recorded because the
 design as written would have shipped wrong without it.
 
-**The run-log directory is the bus.** Every magus process already appends to
+**The run-log directory is the bus.** Every magus RUN already appends to
 `<cacheDir>/runs/<inv>.jsonl`, so a follower reading that directory sees runs
-from any terminal with no daemon, no socket, and no token. Verified end to end: a
+from any terminal with no daemon, no socket, and no token. Only runs: commands
+that open no invocation write no log and produce no events. Verified end to end: a
 follower process picked up runs started by a separate process, live. This demotes
 the `proc` `events.subscribe` frame from REQUIRED to a latency optimization, and
 it is what lets the stream satisfy the daemon invariant above rather than

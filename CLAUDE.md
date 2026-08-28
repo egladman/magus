@@ -57,7 +57,9 @@ So build one and use `./magus`. `magus run go_build .` CANNOT do it from a fresh
 worktree, and that instruction stood here until it was measured on 2026-08-27: the
 released binary is missing `proc`, `io`, `serialize`, and `std`, so it fails at
 workspace load before it can run any target, go_build included. The escape is one raw
-`go build`, which is the single sanctioned exception to the guard's deny:
+`go build`. The guard DENIES it - there is no exception, and `TestEvaluateBashGuard`
+pins the deny at every output path, `-o ./magus` included - so this is a command you
+have to get the guard overridden for, not one it will let through:
 
 ```sh
 go build -o ./magus ./cmd/magus

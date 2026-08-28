@@ -199,16 +199,13 @@ func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
 	// and a purely buffered handler makes that stream lag by up to a bufio page, so a
 	// short run delivers nothing until it ends.
 	//
-	// The flush is NOT free, and the number is the reason the split is where it is:
-	// BenchmarkEmitResultFile 775ns -> 2005ns/op, +159% (benchstat, n=12) - about 1.2us
-	// of write(2) per event. That is paid once per TARGET, so a few hundred times in a
-	// large run: well under a millisecond against a build measured in minutes. Output is
-	// the one kind that scales with build size rather than project count, and flushing it
-	// would pay that microsecond tens of thousands of times, so it stays buffered and a
-	// follower that asks for it gets chunks.
-	//
-	// BenchmarkEmitOutput is unchanged (p=0.80, n=12), and allocations are identical on
-	// every path (4 allocs/op, all samples equal) - the flush allocates nothing.
+	// The flush is NOT free: it costs a write(2), about 1.2us. BenchmarkEmitResult
+	// writes to io.Discard and BenchmarkEmitResultFile to a real file, so the pair is
+	// what prices it. The flushed kinds are bounded by SUBPROCESS count, not by output
+	// volume - exec fires once per subprocess, result once per target, the rest are
+	// rarer - so a large run pays single-digit milliseconds. Output is the one kind that
+	// scales with build size, and flushing it would pay that microsecond tens of
+	// thousands of times, so it stays buffered and a follower asking for it gets chunks.
 	if e.Kind != KindOutput {
 		return h.w.Flush()
 	}
