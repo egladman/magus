@@ -318,6 +318,23 @@ type reportedErr struct{}
 func (reportedErr) Error() string         { return "silent exit" }
 func (reportedErr) AlreadyReported() bool { return true }
 
+// misuseErr stands in for cmd/magus's errUsage: a command-line misuse, documented as 2.
+type misuseErr struct{}
+
+func (misuseErr) Error() string { return "no such target" }
+func (misuseErr) ExitCode() int { return 2 }
+
+// TestRunHonorsTheErrorsOwnExitCode pins the 1-vs-2 split through adoption. Every
+// non-ExitError failure used to reply 1, so a misuse reported 2 with no daemon running
+// and 1 with one.
+func TestRunHonorsTheErrorsOwnExitCode(t *testing.T) {
+	var reply RunReply
+	s := newJobService(func(context.Context, []string) error { return misuseErr{} })
+	require.NoError(t, s.run(RunRequest{Args: []string{"run", "bogus-target"}}, &reply))
+	assert.Equal(t, 2, reply.ExitCode, "a misuse stays a misuse when the daemon adopts it")
+	assert.Equal(t, "no such target", reply.Err, "and it still says why")
+}
+
 // TestShutdownClosesServer pins the fix for the silent `server stop` no-op: a shutdown RPC
 // must actually tear the server down, not just acknowledge. It asserts the observable
 // signals a blocking daemon loop and `server stop`'s verification rely on - Done() closing

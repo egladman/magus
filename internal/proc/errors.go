@@ -72,6 +72,19 @@ func AlreadyReported(err error) bool {
 	return errors.As(err, &e) && e.AlreadyReported()
 }
 
+// ExitCode reports the process status err - or any error it wraps - asks for, and
+// whether it asked at all. Same shape as NotAdopted and AlreadyReported above, and for
+// the same reason: the classification has to cross a process boundary that erases the
+// Go type. The CLI's own error types (a usage misuse exits 2, never 1) are in another
+// package proc must not import, so the daemon asks the error rather than naming them.
+func ExitCode(err error) (int, bool) {
+	var e interface{ ExitCode() int }
+	if !errors.As(err, &e) {
+		return 0, false
+	}
+	return e.ExitCode(), true
+}
+
 // decodeWireError rebuilds a typed proc error from the message string a server sent
 // over the wire. The error crossed the daemon->client process boundary as plain text,
 // losing its Go type; matching that text back to the known sentinel restores errors.Is

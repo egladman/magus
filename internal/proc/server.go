@@ -610,6 +610,12 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 			return nil
 		}
 		reply.ExitCode = 1
+		// A failure that names its own status keeps it. Collapsing everything to 1 made
+		// the documented split (1 the work failed, 2 the invocation was wrong) depend on
+		// whether a daemon happened to be running.
+		if code, ok := ExitCode(err); ok {
+			reply.ExitCode = code
+		}
 		// Withheld when the handler already explained the failure: the client PRINTS this
 		// text, so sending a sentinel's placeholder would report "silent exit" as the
 		// reason a run failed.
