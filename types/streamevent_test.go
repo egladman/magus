@@ -41,14 +41,10 @@ func TestStreamEventMarshalsFlat(t *testing.T) {
 // wiring its decode arm a test failure rather than a runtime surprise.
 func TestStreamEventRoundTrips(t *testing.T) {
 	bodies := map[StreamEventType]StreamBody{
-		StreamRunStarted:       StreamRun{Phase: "started", Command: []string{"run", "build"}, Trigger: "run", MagusVersion: "0.5.0"},
-		StreamRunFinished:      StreamRun{Phase: "finished", Status: "pass", DurationMs: 4200},
-		StreamTargetResult:     StreamTarget{Project: "api", Target: "test", Status: "ok", CacheHit: true, Ref: "out_x"},
-		StreamTargetOutput:     StreamOutput{Project: "api", Target: "test", Stream: "stderr", Text: "FAIL"},
-		StreamDiagnostic:       StreamDiagnosticBody{Code: "MGS1002", Message: "spell shadowed", Unit: "api:build", File: "spells/x/spell.buzz", Line: 3},
-		StreamWorkspaceChanged: StreamChange{Paths: []string{"api/main.go"}},
-		StreamAttentionRaised:  StreamAttention{ID: "att1", Request: Event{SchemaVersion: EventSchemaVersion, Outcome: OutcomeWaiting, Severity: SeverityNotice, Message: "blocked"}},
-		StreamGuardVerdict:     StreamGuard{Verdict: "deny", Surface: "command", Subject: "go build ./...", Reason: "use magus run", Agent: "claude-code"},
+		StreamRunStarted:   StreamRun{Phase: "started", Command: []string{"run", "build"}, Trigger: "run", MagusVersion: "0.5.0"},
+		StreamRunFinished:  StreamRun{Phase: "finished", Status: "pass"},
+		StreamTargetResult: StreamTarget{Project: "api", Target: "test", Status: "ok", CacheHit: true, Ref: "outx", DurationMs: 12, Error: ""},
+		StreamTargetOutput: StreamOutput{Project: "api", Target: "test", Stream: "stderr", Text: "FAIL"},
 	}
 
 	for _, typ := range StreamEventTypes() {

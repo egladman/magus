@@ -148,27 +148,17 @@ func TestWriterIsConcurrencySafe(t *testing.T) {
 	}
 }
 
-// TestHandlerForwardsCapturedEvents wires the handler the way a run does, through
-// the journal capture logger, rather than calling Handle directly - the coupling
-// worth testing is that a real capture record still carries an event this
-// handler recognizes.
-func TestHandlerForwardsCapturedEvents(t *testing.T) {
-	var buf bytes.Buffer
-	w := NewWriter(&buf, types.StreamFilter{})
-	log := journal.NewLogger(NewHandler(w, "/repo"))
-	ctx := journal.WithLogger(t.Context(), log)
-
-	journal.Emit(ctx, journal.Event{
-		Kind: journal.KindResult, Project: "api", Target: "build", Status: journal.StatusPass, Ref: "out_1",
+// TestFromJournalCarriesTheFailureReason pins the error text onto the stream. The
+// journal puts a failed target's run error in Text, and a subscriber told only
+// "failed" has to go fetch the log to learn anything at all.
+func TestFromJournalCarriesTheFailureReason(t *testing.T) {
+	got, ok := FromJournal("/repo", journal.Event{
+		Kind: journal.KindResult, Project: "api", Target: "build",
+		Status: journal.StatusFail, Text: "exit status 2",
 	})
-	require.NoError(t, w.Close())
-
-	got, err := types.DecodeStreamEvent([]byte(strings.TrimSpace(buf.String())))
-	require.NoError(t, err)
+	require.True(t, ok)
 	body, ok := got.Body.(types.StreamTarget)
 	require.True(t, ok)
-	assert.Equal(t, "api", body.Project)
-	assert.Equal(t, "ok", body.Status)
-	assert.Equal(t, "out_1", body.Ref)
-	assert.Equal(t, "/repo", got.Workspace)
+	assert.Equal(t, "failed", body.Status)
+	assert.Equal(t, "exit status 2", body.Error)
 }

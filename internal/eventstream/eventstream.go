@@ -1,27 +1,30 @@
 // Package eventstream maps magus's internal producers onto the single
 // [types.StreamEvent] envelope external integrations subscribe to.
 //
-// It is an ADAPTER layer, not a replacement. The run journal, the report writer,
-// the attention store, and the activity trail keep their own on-disk schemas -
-// each is a shipped contract with its own consumers - and this package is where
-// they converge for a subscriber that should not have to learn four of them.
+// It is an ADAPTER layer, not a replacement. The producers it reads keep their
+// own on-disk schemas - each is a shipped contract with its own consumers - and
+// nothing here rewrites them.
 //
-// The run journal is the primary source: it already brackets an invocation with
-// lifecycle events and carries per-target results and per-line output, which is
-// four of the eight taxonomy types and the four an editor needs most. It is also
-// a stdlib-only leaf, so adapting it costs this package no dependency on the
-// engine.
+// The run journal is the ONLY source today, and it covers the whole taxonomy: it
+// brackets an invocation with lifecycle events and carries per-target results and
+// per-line output. It is also a stdlib-only leaf, so adapting it costs this
+// package no dependency on the engine.
+//
+// The report writer, the attention store and the activity trail hold facts a
+// subscriber would plausibly want, and each would need its own adapter and its
+// own reader - they are different files in different directories, not one bus.
+// docs/guides/integrations/editor/design.md prices each; none is wired, and the
+// taxonomy deliberately omits the types they would carry rather than advertising
+// a type that can never arrive.
 package eventstream
 
 import (
 	"bufio"
-	"context"
-	json "github.com/egladman/magus/internal/json"
 	"io"
-	"log/slog"
 	"sync"
 
 	"github.com/egladman/magus/internal/journal"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -59,6 +62,9 @@ func FromJournal(workspace string, e journal.Event) (types.StreamEvent, bool) {
 			CacheHit:   cached,
 			Ref:        e.Ref,
 			DurationMs: e.DurMs,
+			// A failed result carries the run error in Text; without it a subscriber
+			// gets "failed" and no reason, with the reason sitting in the same event.
+			Error: e.Text,
 		}
 	case journal.KindOutput:
 		out.Body = types.StreamOutput{
@@ -143,48 +149,3 @@ func (w *Writer) Close() error {
 	defer w.mu.Unlock()
 	return w.bw.Flush()
 }
-
-// Handler adapts a [Writer] into the journal's capture fan-out, so attaching the
-// stream to a run is one more handler beside the JSONL log and the live
-// broadcaster rather than a second traversal of the engine.
-//
-// Emit errors are dropped, matching journal.FileHandler: capture is best-effort
-// and must never fail or slow a build. A subscriber whose pipe has closed is the
-// common case - the editor quit - and it is not the run's problem.
-type Handler struct {
-	w         *Writer
-	workspace string
-}
-
-// NewHandler returns a capture handler forwarding journal events to w.
-func NewHandler(w *Writer, workspace string) *Handler {
-	return &Handler{w: w, workspace: workspace}
-}
-
-// Enabled implements [slog.Handler]. It is always true: filtering is by event
-// type in [types.StreamFilter], not by log level, and the two vocabularies are
-// deliberately unrelated.
-func (h *Handler) Enabled(context.Context, slog.Level) bool { return true }
-
-// Handle implements [slog.Handler], forwarding the journal event a capture
-// record carries. A record with no event attached is not ours and is ignored.
-func (h *Handler) Handle(_ context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok {
-		return nil
-	}
-	se, ok := FromJournal(h.workspace, e)
-	if !ok {
-		return nil
-	}
-	_ = h.w.Emit(se)
-	return nil
-}
-
-// WithAttrs implements [slog.Handler]. Attributes carry no stream meaning, so
-// the handler is returned unchanged.
-func (h *Handler) WithAttrs([]slog.Attr) slog.Handler { return h }
-
-// WithGroup implements [slog.Handler]. Groups carry no stream meaning, so the
-// handler is returned unchanged.
-func (h *Handler) WithGroup(string) slog.Handler { return h }

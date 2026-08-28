@@ -72,9 +72,16 @@ const StreamSchema = 1
 // switches on it; an unrecognized value must be skipped, not treated as an error.
 type StreamEventType string
 
-// The taxonomy. Every type maps onto a producer magus already has - the run
-// journal, the report writer, the file watcher, the attention store, the activity
-// trail - so nothing here required the engine to learn something new.
+// The taxonomy. Every type here has a live producer: all four are mapped from the
+// run journal by internal/eventstream.
+//
+// It is deliberately smaller than the set of facts magus knows. Diagnostics, file
+// changes, attention requests and guard verdicts all have stores already, and each
+// is a candidate - but a type a subscriber can name and never receive is worse than
+// one that does not exist yet, because a silent stream and a wrong filter look
+// identical. They land here when their producer does, which is additive and needs
+// no schema bump. See docs/guides/integrations/editor/design.md for what each one
+// costs.
 const (
 	// StreamRunStarted opens an invocation. Carries the command lineage, so a
 	// subscriber can tell `magus run build` from `magus affected ci`.
@@ -90,21 +97,6 @@ const (
 	// only high-volume type in the taxonomy and is off unless a subscriber asks
 	// for it; see [StreamFilter].
 	StreamTargetOutput StreamEventType = "target.output"
-	// StreamDiagnostic reports a coded magus finding (MGS####). This is what an
-	// editor turns into flycheck or compilation-mode entries.
-	StreamDiagnostic StreamEventType = "diagnostic.emitted"
-	// StreamWorkspaceChanged reports source files changing on disk. A subscriber
-	// uses it to invalidate a cached target list, not to trigger a build: magus
-	// does not build on save, and a plugin that does so is making that choice.
-	StreamWorkspaceChanged StreamEventType = "workspace.changed"
-	// StreamAttentionRaised reports that something is blocked on a person. It is
-	// the one type addressed to a human, forwarded so an editor can surface it;
-	// disposing it stays manual (docs/doctrine.md, "Manual on purpose").
-	StreamAttentionRaised StreamEventType = "attention.raised"
-	// StreamGuardVerdict reports a decision `magus session hook` already made. It
-	// is an observation of a sealed verdict: a subscriber learns that a command
-	// was denied and cannot affect the denial.
-	StreamGuardVerdict StreamEventType = "guard.verdict"
 )
 
 // StreamBody is the per-type payload of a [StreamEvent]. Implementations are the
@@ -139,10 +131,11 @@ type StreamRun struct {
 	// MagusVersion is the binary that produced the run. Set on the started phase.
 	MagusVersion string `json:"magus_version,omitempty"`
 	// Status is the overall outcome, "pass" or "fail". Set on the finished phase.
+	//
+	// There is deliberately no duration here: the journal's finished event carries
+	// none, and a subscriber that wants one subtracts the started event's Ts, which
+	// it must hold anyway to correlate the pair.
 	Status string `json:"status,omitempty"`
-	// DurationMs is the wall-clock span of the whole invocation, in milliseconds.
-	// Set on the finished phase.
-	DurationMs int64 `json:"duration_ms,omitzero"`
 }
 
 // StreamType reports [StreamRunStarted] or [StreamRunFinished] from Phase. An
@@ -202,89 +195,6 @@ type StreamOutput struct {
 // StreamType implements [StreamBody].
 func (StreamOutput) StreamType() StreamEventType { return StreamTargetOutput }
 
-// StreamDiagnosticBody is the body of [StreamDiagnostic]: a coded magus finding.
-//
-// The name carries the Body suffix because [StreamDiagnostic] is the type
-// constant and Go has one namespace for both. Code is an MGS#### documented at
-// docs/reference/diagnostics.md, which is what lets a subscriber deep-link a
-// finding rather than only printing it.
-type StreamDiagnosticBody struct {
-	// Code is the MGS#### identifier.
-	Code string `json:"code"`
-	// Message is the human-readable finding.
-	Message string `json:"message,omitempty"`
-	// URL points at the code's documentation page, when the producer knew it.
-	URL string `json:"url,omitempty"`
-	// Unit is "<project>:<target>", or a bare project path when the finding is
-	// not target-scoped. It is the producer's own addressing and is NOT split
-	// into Project and Target here: some diagnostics are raised before a target
-	// is resolved, and inventing an empty Target would claim more than magus knows.
-	Unit string `json:"unit,omitempty"`
-	// File is the workspace-relative path the finding concerns, when there is one.
-	// Line is 1-indexed and 0 means "no line", which is what an editor needs to
-	// decide between a buffer annotation and a project-level message.
-	File string `json:"file,omitempty"`
-	Line int    `json:"line,omitzero"`
-}
-
-// StreamType implements [StreamBody].
-func (StreamDiagnosticBody) StreamType() StreamEventType { return StreamDiagnostic }
-
-// StreamChange is the body of [StreamWorkspaceChanged]: source files that moved
-// on disk.
-//
-// Paths are batched rather than sent one per event because an editor save, a
-// branch switch, and a generator run all produce bursts, and a subscriber that
-// rebuilds per path would do the work N times.
-type StreamChange struct {
-	// Paths are workspace-relative, matching `magus watch` output so the two
-	// surfaces agree.
-	Paths []string `json:"paths"`
-}
-
-// StreamType implements [StreamBody].
-func (StreamChange) StreamType() StreamEventType { return StreamWorkspaceChanged }
-
-// StreamAttention is the body of [StreamAttentionRaised]: the human-facing
-// [Event] forwarded onto the machine stream.
-//
-// It embeds the whole Event rather than flattening the interesting fields,
-// because the attention record is a shipped contract with its own schema version
-// and a renderer already reasons over its axes. Flattening would fork it.
-type StreamAttention struct {
-	// ID addresses the request for `magus session dispose`.
-	ID string `json:"id"`
-	// Request is the attention record as raised.
-	Request Event `json:"request"`
-}
-
-// StreamType implements [StreamBody].
-func (StreamAttention) StreamType() StreamEventType { return StreamAttentionRaised }
-
-// StreamGuard is the body of [StreamGuardVerdict]: a decision the guard has
-// already made.
-//
-// It reports, it does not ask. The verdict reached the agent host through
-// `magus session hook`'s reply before this event was emitted, and nothing a
-// subscriber does can revisit it.
-type StreamGuard struct {
-	// Verdict is "deny", "advise", or "pass".
-	Verdict string `json:"verdict"`
-	// Surface is what was judged: "command" or "path".
-	Surface string `json:"surface"`
-	// Subject is the command line or file path the verdict was about.
-	Subject string `json:"subject,omitempty"`
-	// Reason is the explanation the guard gave, the same text the host relayed.
-	Reason string `json:"reason,omitempty"`
-	// Agent names the host that asked, when it sent one. Empty is normal: not
-	// every host has a name to send, and an absent agent is missing attribution
-	// rather than a missing verdict.
-	Agent string `json:"agent,omitempty"`
-}
-
-// StreamType implements [StreamBody].
-func (StreamGuard) StreamType() StreamEventType { return StreamGuardVerdict }
-
 // streamHead is the envelope half of a marshalled line. It exists so
 // [StreamEvent.MarshalJSON] can encode the fixed fields with the standard
 // marshaller and splice the body beside them, rather than hand-writing JSON.
@@ -292,7 +202,7 @@ type streamHead struct {
 	Schema    int             `json:"schema"`
 	Type      StreamEventType `json:"type"`
 	Ts        int64           `json:"ts"`
-	Workspace string          `json:"workspace,omitempty"`
+	Workspace string          `json:"workspace"`
 	Inv       string          `json:"inv,omitempty"`
 }
 
@@ -335,6 +245,22 @@ func (e StreamEvent) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// UnmarshalJSON decodes one wire line, so json.Unmarshal into a StreamEvent means
+// what a caller expects.
+//
+// Without it the type marshals but does not unmarshal: every field is tagged "-",
+// so the natural spelling would report no error and leave a zero event with a nil
+// Body, and a subscriber's type switch would silently match nothing. A decoder that
+// refuses is recoverable; one that returns emptiness is not.
+func (e *StreamEvent) UnmarshalJSON(line []byte) error {
+	got, err := DecodeStreamEvent(line)
+	if err != nil {
+		return err
+	}
+	*e = got
+	return nil
+}
+
 // DecodeStreamEvent parses one wire line back into a [StreamEvent].
 //
 // It is the counterpart to [StreamEvent.MarshalJSON] for Go subscribers and for
@@ -373,39 +299,14 @@ func DecodeStreamEvent(line []byte) (StreamEvent, error) {
 			return StreamEvent{}, err
 		}
 		body = b
-	case StreamDiagnostic:
-		var b StreamDiagnosticBody
-		if err := json.Unmarshal(line, &b); err != nil {
-			return StreamEvent{}, err
-		}
-		body = b
-	case StreamWorkspaceChanged:
-		var b StreamChange
-		if err := json.Unmarshal(line, &b); err != nil {
-			return StreamEvent{}, err
-		}
-		body = b
-	case StreamAttentionRaised:
-		var b StreamAttention
-		if err := json.Unmarshal(line, &b); err != nil {
-			return StreamEvent{}, err
-		}
-		body = b
-	case StreamGuardVerdict:
-		var b StreamGuard
-		if err := json.Unmarshal(line, &b); err != nil {
-			return StreamEvent{}, err
-		}
-		body = b
 	default:
 		return StreamEvent{}, fmt.Errorf("types: decode stream event: unknown type %q", head.Type)
 	}
 	return StreamEvent{Ts: head.Ts, Workspace: head.Workspace, Inv: head.Inv, Body: body}, nil
 }
 
-// StreamEventTypes lists the taxonomy in wire order for `magus events --help`,
-// for flag validation, and for the drift gate that fails when a type is added
-// without being documented.
+// StreamEventTypes lists the taxonomy in wire order for `magus events --help` and
+// for flag validation. Every entry has a producer; see the const block.
 //
 // It is a function returning a fresh slice rather than an exported slice var so a
 // caller cannot reorder or truncate the canonical list for everyone else.
@@ -415,10 +316,6 @@ func StreamEventTypes() []StreamEventType {
 		StreamRunFinished,
 		StreamTargetResult,
 		StreamTargetOutput,
-		StreamDiagnostic,
-		StreamWorkspaceChanged,
-		StreamAttentionRaised,
-		StreamGuardVerdict,
 	}
 }
 
