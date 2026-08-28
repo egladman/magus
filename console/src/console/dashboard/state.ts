@@ -12,7 +12,7 @@ import {
   type Pool,
   type Run,
   type TargetRun,
-} from "../../gen/magus/status/v1alpha1/status_pb";
+} from "@wire/status/v1alpha1/status_pb";
 import type {
   Snapshot,
   Latency,
@@ -22,8 +22,8 @@ import type {
   Buzz,
   Sandbox,
   Sample as ProtoSample,
-} from "../../gen/magus/metrics/v1alpha1/metrics_pb";
-import type { Insight } from "../../gen/magus/insight/v1alpha1/insight_pb";
+} from "@wire/metrics/v1alpha1/metrics_pb";
+import type { Insight } from "@wire/insight/v1alpha1/insight_pb";
 import type { ConnState } from "../../lib/daemon";
 
 // ---- formatters ------------------------------------------------------------

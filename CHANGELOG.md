@@ -11,6 +11,13 @@ https://github.com/egladman/magus/compare/v0.4.0...main
 
 ### Removed
 
+- The four JSON run-browser routes are gone: `GET /api/v1/outputs`,
+  `/api/v1/output?ref=`, `/api/v1/runs` and `/api/v1/run?inv=`. The typed
+  `magus.viewer.v1alpha1.ViewerService` replaces them - `ListOutputs`,
+  `GetOutput`, `ListInvocations` and `GetJournal` read the same two stores, and
+  the contract they speak is generated rather than hand-marshaled. The service
+  had been defined since the log viewer shipped and was never mounted; the JSON
+  routes were hand-written strings with no schema behind them.
 - `magus.FailOnDrift()` is gone, with no replacement alias. It named the
   response rather than the decision, so it could not carry "warn" or "off", and
   what it checked - whether the working tree was dirty after the target - was

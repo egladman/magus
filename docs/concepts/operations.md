@@ -15,7 +15,7 @@ two words magus overloads, _op_ and _Target_.
 > **Status.** The hierarchy, the `ExecResult` value type, and the `spellruntime.Op` (née
 > `spellruntime.Target`) Operation type all exist today. A per-op `OpResult`/`TargetResult`
 > consolidation was prototyped and removed as speculative (no consumer); the run
-> path reports at the **target** level only, via the `target.result` event
+> path reports at the **target** level only, via the `run.target.result` event
 > (`internal/report`). The Operation-layer rows below are kept as the conceptual
 > model, marked **(not built)**.
 
@@ -58,7 +58,7 @@ Spell ──exposes──▶ Operation (op)              go-build, eslint, golan
 Target (export fun) ──composes──▶ Operations  +  ──needs──▶ other Targets
   │
   ▼ run by the dispatcher (cacheable, charm-modified)
-target.result event   (per target; no per-op breakdown)
+run.target.result event   (per target; no per-op breakdown)
 ```
 
 | Layer         | Entity                  | Cardinality                     | Identity                             |
@@ -73,11 +73,11 @@ Operation's argv (_in what manner_ it runs), it is not a layer of its own.
 
 ## Results: what each layer produces
 
-| Result              | Layer     | Shape                                               | Returned or emitted                                                                        | Status          |
-| ------------------- | --------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------- |
-| **`ExecResult`**    | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `proc\exec`, `magus\cmd`/`run`/`describe`/`insight`/`doctor`, a Capture op | exists          |
-| `OpResult`          | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                        | **(not built)** |
-| **`target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                          | exists          |
+| Result                  | Layer     | Shape                                               | Returned or emitted                                                                        | Status          |
+| ----------------------- | --------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------- |
+| **`ExecResult`**        | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `proc\exec`, `magus\cmd`/`run`/`describe`/`insight`/`doctor`, a Capture op | exists          |
+| `OpResult`              | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                        | **(not built)** |
+| **`run.target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                          | exists          |
 
 - **`ExecResult` exists in both worlds.** It is the Go `run.ExecResult` and the
   spell-op **capture record** a `Capture: true` op returns "instead of void": the
@@ -87,7 +87,7 @@ Operation's argv (_in what manner_ it runs), it is not a layer of its own.
   **cache hit the body never runs**: outputs are replayed without executing the
   `export fun`. A return value cannot exist on a hit, yet a cache hit is exactly
   what you most want to report. So the dispatcher assembles and emits a
-  `target.result` event from `cache.OnResult`, which fires for both the ran and the
+  `run.target.result` event from `cache.OnResult`, which fires for both the ran and the
   cached case. It reports at the **target** level; a per-op `[OpResult]` breakdown
   was prototyped and removed as speculative (no consumer, and it misattributed ops
   across the cross-project boundary).
@@ -139,14 +139,14 @@ function - there is no intermediate query value.
 
 ## Glossary
 
-| Term               | Meaning                                                                                               |
-| ------------------ | ----------------------------------------------------------------------------------------------------- |
-| **Spell**          | A library of tool-native Operations for one toolchain ([spells.md](spells.md)).                       |
-| **Operation (op)** | One tool-native action a spell exposes, named after its CLI command. The unit a target composes.      |
-| **Target**         | A runnable `export fun`; the work-unit `Path + Name` you invoke ([targets.md](targets.md)).           |
-| **Charm**          | A named modifier of an Operation's argv ([charms.md](charms.md)).                                     |
-| **ExecResult**     | The result of one process: `{stdout, stderr, code, ok}`.                                              |
-| **target.result**  | The dispatcher-emitted report event for one target run: project, target, status, cache hit, duration. |
+| Term                  | Meaning                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Spell**             | A library of tool-native Operations for one toolchain ([spells.md](spells.md)).                       |
+| **Operation (op)**    | One tool-native action a spell exposes, named after its CLI command. The unit a target composes.      |
+| **Target**            | A runnable `export fun`; the work-unit `Path + Name` you invoke ([targets.md](targets.md)).           |
+| **Charm**             | A named modifier of an Operation's argv ([charms.md](charms.md)).                                     |
+| **ExecResult**        | The result of one process: `{stdout, stderr, code, ok}`.                                              |
+| **run.target.result** | The dispatcher-emitted report event for one target run: project, target, status, cache hit, duration. |
 
 ## See also
 

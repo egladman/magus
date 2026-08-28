@@ -7,31 +7,32 @@ function __magus_subcommands
 # magus-utils:subcommands:begin
         ls         'list all discovered projects' \
         describe   'define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)' \
-        run        'run a target for selected projects' \
-        x          'interactive shorthand: pick project + target (TTY only)' \
         where      'print the absolute path of a project (fuzzy match)' \
+        run        'run a target for selected projects' \
         affected   'run a target for VCS-diff affected projects' \
+        x          'interactive shorthand: pick project + target (TTY only)' \
+        clean      'remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]' \
         query      'search the knowledge graph and show a node\'s neighborhood' \
+        refs       'list where an ingested code symbol is defined and referenced' \
         explain    'show one knowledge-graph node: its edges, provenance, blast radius' \
         path       'show the shortest path between two knowledge-graph nodes' \
-        refs       'list where an ingested code symbol is defined and referenced' \
         graph      'the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)' \
-        watch      'emit changed file paths (pipe into affected --stdin)' \
-        status     'inspect the concurrency pool of a running parent magus' \
-        clean      'remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]' \
+        diff       'read uncommitted changes in the order they deserve attention, generated folded' \
         vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)' \
-        doctor     'validate the workspace' \
-        config     'view or update magus configuration' \
         session    'what sessions did and what they are blocked on: humans read (ls, attention) and dispose; hosts write (hook, notify)' \
         memory     'durable cross-session project memory (ls, get, put, delete, verify)' \
         notes      'human-authored notes committed to the repo (ls, get, edit, verify)' \
-        diff       'read uncommitted changes in the order they deserve attention, generated folded' \
+        watch      'emit changed file paths (pipe into affected --stdin)' \
+        events     'stream workspace events as JSONL for an editor plugin or other integration' \
         server     'manage the persistent daemon (start / stop / status; MCP starts with it)' \
+        status     'inspect the concurrency pool of a running parent magus' \
         buzz       'run a Buzz script (Buzz stdlib + every magus host module)' \
+        agent      'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
+        init       'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
+        doctor     'validate the workspace' \
+        config     'view or update magus configuration' \
         completion 'print a shell completion script (bash, zsh, fish)' \
         man        'install the man pages embedded in this binary' \
-        init       'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
-        agent      'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
         self       'manage the magus binary (self update / install)' \
         version    'print version, commit, and build date' \
         help       'show this message'

@@ -125,7 +125,7 @@ magus\project({
         // A hit would report yesterday's CVEs against today's image.
         // ctx.observes is the successor, and it is not usable here YET: it keys on a value
         // the magusfile STATES, and nothing states trivy's DB id without probing for it,
-        // which cannot run before the key is minted. See plans/ctx-observes-reconstruction.md.
+        // which cannot run before the key is minted.
         "image-scan": {"skip_cache": "reads trivy's vulnerability database, which changes independently of this tree"},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
@@ -820,7 +820,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // artifact - the .1 source the `man` command reads, shipped with releases - so they
 // stay owned here at the root, NOT in the docs project. The docs project owns the
 // Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the
-// same internal/clispec registry by cmd/magus-manpage (see its -format flag).
+// same internal/cli registry by cmd/magus-manpage (see its -format flag).
 //
 // It also refreshes api.lock, the drift-gated snapshot of the public CLI surface,
 // because that is serialized from the SAME registry - the two can only disagree if
@@ -828,10 +828,10 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
 // never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("manpage/*.1", "internal/clispec/testdata/api.lock");
+    ctx.writesFiles("manpage/*.1", "internal/cli/testdata/api.lock");
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
-    proc\exec("go", ["generate", "./internal/clispec/..."]);
+    proc\exec("go", ["generate", "./internal/cli/..."]);
 }
 
 // CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a
@@ -869,7 +869,7 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Regenerates the magusfile API surface lock: every member a magusfile can call on the
 // magus namespace, one dotted name per line. Named for the magusfile surface rather
 // than "api" alone, because two other things in this repo are also an API surface -
-// internal/clispec/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
+// internal/cli/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
 // completions.
 //
 // The regeneration route is a TEST, not a generator, which is why this target exists:
@@ -2083,8 +2083,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // missing when `unlabeled` reached main through CHANGELOG.md. It surfaced one shard
     // over, in the docs project, because docs/changelog.md is a GENERATED MIRROR of the
     // root file - so the error pointed at generated output while the fix belonged here.
-    final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md"];
-    ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md");
+    final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md"];
+    ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md");
     proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
 }

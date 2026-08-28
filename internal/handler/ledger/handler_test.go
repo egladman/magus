@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeLedgerSource is a Source returning canned rows or a fixed error.
+// fakeLedgerSource is a ledgerSource returning canned rows or a fixed error.
 type fakeLedgerSource struct {
 	delegations []types.Delegation
 	err         error

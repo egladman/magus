@@ -12,7 +12,7 @@
 // as HTML, so a token name can carry no markup into the page.
 
 import { createClient, type Client } from "@connectrpc/connect";
-import { TokenService, TokenScope, type TokenInfo } from "../../gen/magus/token/v1alpha1/token_pb";
+import { TokenService, TokenScope, type TokenInfo } from "@wire/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";

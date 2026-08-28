@@ -722,3 +722,46 @@ func TestCheckAgentSkills(t *testing.T) {
 		assert.Empty(t, got.Fix, "install into WHICH directory is the developer's choice, so there is nothing to apply")
 	})
 }
+
+// The case this was written for: the root claims **/*.md through the markdown spell, which sweeps
+// in a nested project's generated MAGUS.md. Harmless until the content changes, and then the root
+// reports the nested project's own generate as an undeclared source mutation.
+func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
+	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	projects := []*types.Project{
+		{Path: ".", Name: "root", Sources: []string{"**/*.md"}},
+		{Path: "libs/leaf", Name: "leaf", Outputs: []string{"MAGUS.md"}},
+	}
+
+	got := r.checkOutputIsAnotherProjectsSource(projects)
+
+	require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
+	assert.Equal(t, []string{"libs/leaf/MAGUS.md is libs/leaf's output and .'s source"}, got.Details)
+}
+
+// A project claiming its OWN output is not the finding: writing what you declared you write is what
+// generate is for, and reporting it would make the check fire on every project in the workspace.
+func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
+	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	projects := []*types.Project{
+		{Path: "docs", Name: "docs", Sources: []string{"**/*.md"}, Outputs: []string{"MAGUS.md"}},
+	}
+
+	got := r.checkOutputIsAnotherProjectsSource(projects)
+
+	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+}
+
+// A pattern output is not reported, which is the decidability line MGS4002 draws: whether two globs
+// can overlap is undecidable in general, whether a glob matches one literal path is not.
+func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
+	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	projects := []*types.Project{
+		{Path: ".", Name: "root", Sources: []string{"**/*.md"}},
+		{Path: "libs/leaf", Name: "leaf", Outputs: []string{"docs/**"}},
+	}
+
+	got := r.checkOutputIsAnotherProjectsSource(projects)
+
+	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+}

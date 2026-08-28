@@ -1,3 +1,14 @@
+import { createClient } from "@connectrpc/connect";
+import { toBinary } from "@bufbuild/protobuf";
+import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  JournalSchema,
+  Status,
+  Trigger,
+  ViewerService,
+  type Output,
+} from "@wire/viewer/v1alpha1/viewer_pb";
+import { createDaemonTransport } from "../../lib/daemon";
 import { must } from "../../lib/guards";
 // runtree.ts - the Log Viewer's run browser: a PatternFly TreeView down the left of the viewer
 // that lists prior runs so a reader can find one WITHOUT a ref somebody printed on a terminal.
@@ -55,16 +66,31 @@ export interface RunBrowserDeps {
 // fetchRuns reads the daemon's run list. Resolves to [] on any failure (no daemon, auth, an old
 // daemon without the route) so the browser degrades to empty rather than throwing - the viewer's
 // other load paths never depend on it.
+// The wire carries a Timestamp and a Duration; this viewer works in unix millis, which is the unit
+// the store records. Absent reads as 0, never NaN - a NaN reaching a comparator leaves the whole
+// list in an order nobody promised.
+function tsMillis(ts: Timestamp | undefined): number {
+  return ts ? Number(ts.seconds) * 1000 + ts.nanos / 1e6 : 0;
+}
+
+function durMillis(d: Duration | undefined): number {
+  return d ? Number(d.seconds) * 1000 + d.nanos / 1e6 : 0;
+}
+
 export async function fetchRuns(host: string, token: string | null): Promise<RunSummary[]> {
   try {
-    const res = await fetch("http://" + host + "/api/v1/outputs", {
-      headers: authHeaders(token),
-      cache: "no-store",
-      signal: AbortSignal.timeout(4000),
-    });
-    if (!res.ok) return [];
-    const body = (await res.json()) as { outputs?: RunSummary[] };
-    return Array.isArray(body.outputs) ? body.outputs : [];
+    const client = createClient(ViewerService, createDaemonTransport(host, token));
+    const resp = await client.listOutputs({}, { signal: AbortSignal.timeout(4000) });
+    return resp.outputs.map((o) => ({
+      ref: o.ref,
+      project: o.project,
+      target: o.target,
+      inv: o.invocation,
+      failed: o.failed,
+      error: o.error,
+      timestamp_ms: tsMillis(o.createTime),
+      duration_ms: durMillis(o.duration),
+    }));
   } catch {
     return [];
   }
@@ -78,13 +104,11 @@ export async function fetchRunOutput(
   ref: string,
 ): Promise<string | null> {
   try {
-    const res = await fetch("http://" + host + "/api/v1/output?ref=" + encodeURIComponent(ref), {
-      headers: authHeaders(token),
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
-    return await res.text();
+    const client = createClient(ViewerService, createDaemonTransport(host, token));
+    const resp = await client.getOutput({ name: ref }, { signal: AbortSignal.timeout(8000) });
+    // bytes, not string: a captured log is whatever the tool wrote, which is not guaranteed to be
+    // valid UTF-8. Decoded here because this viewer renders text.
+    return new TextDecoder().decode(resp.body);
   } catch {
     return null;
   }
@@ -95,14 +119,18 @@ export async function fetchRunOutput(
 // mixed-version pair falls back to the project ordering rather than showing an error.
 export async function fetchRunLogs(host: string, token: string | null): Promise<RunLog[]> {
   try {
-    const res = await fetch("http://" + host + "/api/v1/runs", {
-      headers: authHeaders(token),
-      cache: "no-store",
-      signal: AbortSignal.timeout(4000),
-    });
-    if (!res.ok) return [];
-    const body = (await res.json()) as { runs?: RunLog[] };
-    return Array.isArray(body.runs) ? body.runs : [];
+    const client = createClient(ViewerService, createDaemonTransport(host, token));
+    const resp = await client.listInvocations({}, { signal: AbortSignal.timeout(4000) });
+    return resp.invocations.map((i) => ({
+      inv: i.id,
+      arguments: i.command?.arguments,
+      trigger: Trigger[i.command?.trigger ?? Trigger.UNSPECIFIED].toLowerCase(),
+      started_ms: tsMillis(i.startTime),
+      finished_ms: tsMillis(i.endTime),
+      status: Status[i.status].toLowerCase(),
+      magus_version: i.magusVersion,
+      size_bytes: Number(i.sizeBytes),
+    }));
   } catch {
     return [];
   }
@@ -118,17 +146,13 @@ export async function fetchRunJournal(
   token: string | null,
   q: { inv?: string; ref?: string },
 ): Promise<Uint8Array | null> {
-  const param = q.inv
-    ? "inv=" + encodeURIComponent(q.inv)
-    : "ref=" + encodeURIComponent(q.ref ?? "");
   try {
-    const res = await fetch("http://" + host + "/api/v1/run?" + param, {
-      headers: authHeaders(token),
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
-    return new Uint8Array(await res.arrayBuffer());
+    const client = createClient(ViewerService, createDaemonTransport(host, token));
+    const journal = await client.getJournal(
+      { name: q.inv ?? q.ref ?? "" },
+      { signal: AbortSignal.timeout(8000) },
+    );
+    return toBinary(JournalSchema, journal);
   } catch {
     return null;
   }

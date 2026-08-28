@@ -133,3 +133,21 @@ func TestDiscardHandler_NeverEnabled(t *testing.T) {
 	assert.IsType(t, discardHandler{}, h.WithAttrs(nil))
 	assert.IsType(t, discardHandler{}, h.WithGroup("g"))
 }
+
+// TestFileHandlerFlushesEverythingButOutput pins what makes `magus events
+// --follow` able to fire at all: a live follower tails this file, so a result
+// still sitting in the bufio page is a result the subscriber never sees on a run
+// short enough to end before the page fills. Output stays buffered on purpose -
+// it is the one high-volume kind, and a follower opts into it.
+func TestFileHandlerFlushesEverythingButOutput(t *testing.T) {
+	var sink bytes.Buffer
+	h := NewFileHandler(&sink)
+	ctx := WithLogger(t.Context(), NewLogger(h))
+
+	Emit(ctx, Event{Kind: KindOutput, Text: "buffered"})
+	require.Empty(t, sink.String(), "output must not force a flush")
+
+	Emit(ctx, Event{Kind: KindResult, Project: "api", Target: "build", Status: StatusPass})
+	assert.Contains(t, sink.String(), `"kind":"result"`, "a result must reach a follower before the run ends")
+	assert.Contains(t, sink.String(), "buffered", "the flush carries the buffered output with it")
+}

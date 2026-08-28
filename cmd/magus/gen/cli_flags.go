@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Flag names declared by internal/clispec's command registry, one constant
+// Flag names declared by internal/cli's command registry, one constant
 // each so a caller never spells a flag as a literal.
 //
 // Regenerate with: cd magus && go generate ./cmd/magus/...
@@ -163,6 +163,16 @@ const (
 	FlagDoctorList = "list"
 	// doctor: --probe
 	FlagDoctorProbe = "probe"
+	// events: --f
+	FlagEventsF = "f"
+	// events: --follow
+	FlagEventsFollow = "follow"
+	// events: --interval
+	FlagEventsInterval = "interval"
+	// events: --limit
+	FlagEventsLimit = "limit"
+	// events: --type
+	FlagEventsType = "type"
 	// explain: --global
 	FlagExplainGlobal = "global"
 	// explain: --refresh
@@ -725,6 +735,25 @@ func BindWatch(fs *flag.FlagSet) *WatchFlags {
 	fs.BoolVar(&f.Initial, FlagWatchInitial, true, "Emit an --all batch on startup before watching")
 	fs.BoolVar(&f.Null, FlagWatchNull, false, "NUL-separate paths; double-NUL between batches")
 	fs.StringVar(&f.Backend, FlagWatchBackend, "fsnotify", "Notification backend: fsnotify or poll")
+	return &f
+}
+
+// EventsFlags are the flags declared for `magus events`.
+type EventsFlags struct {
+	Follow   bool          // --follow, -f
+	Type     string        // --type
+	Limit    int           // --limit
+	Interval time.Duration // --interval
+}
+
+// BindEvents registers `magus events`'s flags on fs and returns the destination.
+func BindEvents(fs *flag.FlagSet) *EventsFlags {
+	var f EventsFlags
+	fs.BoolVar(&f.Follow, FlagEventsFollow, false, "Keep streaming as events occur instead of exiting after the replay")
+	fs.BoolVar(&f.Follow, FlagEventsF, false, "Short for --follow")
+	fs.StringVar(&f.Type, FlagEventsType, "", "Restrict to these event types (comma-separated); default is every type except target.output")
+	fs.IntVar(&f.Limit, FlagEventsLimit, 20, "Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run")
+	fs.DurationVar(&f.Interval, FlagEventsInterval, time.Duration(250000000), "How often --follow polls the run log for new events")
 	return &f
 }
 

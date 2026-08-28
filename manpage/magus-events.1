@@ -1,0 +1,94 @@
+.TH MAGUS-EVENTS 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-events \- Stream workspace events as JSONL for an integration to consume
+.SH SYNOPSIS
+.B magus
+.RI "events [flags]"
+.SH DESCRIPTION
+Stream workspace events as JSONL, one event per line. This is the surface
+third\-party integrations build against: an Emacs or Vim plugin, a status bar,
+a notifier.
+.PP
+Every magus process in the workspace feeds the stream, so a run started in
+another terminal shows up here. It needs no daemon, no token, and no loadable
+magusfile \- an editor can attach to a repository whose magusfile is mid\-edit.
+.PP
+The stream is outbound only. Nothing a subscriber does can change a magus
+verdict; the inbound counterpart is the session hook.
+.PP
+target.output is excluded unless named with \-\-type: it is the one event type
+that scales with build size rather than project count. To read a target's full
+log, take the ref from its target.result event and pass it to query output.
+.PP
+A subscriber must ignore event types and fields it does not recognize. That is
+what lets the taxonomy grow without breaking clients built against an earlier
+schema.
+.SH OPTIONS
+.RS
+.TP
+\fB\-f\fR
+Short for \-\-follow
+.TP
+\fB\-\-follow\fR
+Keep streaming as events occur instead of exiting after the replay
+.TP
+\fB\-\-interval\fR \fIduration\fR (default: 250ms)
+How often \-\-follow polls the run log for new events
+.TP
+\fB\-\-limit\fR \fIint\fR (default: 20)
+Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run
+.TP
+\fB\-\-type\fR \fIstring\fR
+Restrict to these event types (comma\-separated); default is every type except target.output
+.RE
+.SH EXAMPLES
+\fIWatch a workspace live\fR
+.PP
+.EX
+magus events --follow
+.EE
+.PP
+\fIOnly what an editor needs for diagnostics\fR
+.PP
+.EX
+magus events --follow --type target.result,diagnostic.emitted
+.EE
+.PP
+\fIWhat did the last run do\fR
+.PP
+.EX
+magus events --limit 1
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

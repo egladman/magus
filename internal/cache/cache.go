@@ -143,8 +143,9 @@ type Step struct {
 	// Outputs, and hashing either would change every existing key. They exist so
 	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
 	Updates []string // ctx.modifiesExistingFiles globs
-	// OwnedOutputs spans EVERY target in the project, not the running one, because
-	// ctx.needs puts a chained target's writes inside this step's window.
+	// OwnedOutputs spans EVERY target in EVERY project, not the running one, because
+	// ctx.needs puts a chained target's writes inside this step's window and a workspace
+	// target does the same across projects.
 	OwnedOutputs []string
 
 	Deps          []string // upstream project hashes folded into the key
@@ -507,7 +508,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 					}
 				}
 				if ref == "" {
-					ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil)
+					ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil, true)
 				} else {
 					// The ref already exists, so recordOutput is skipped and nothing reaches the
 					// journal. A cache hit is still a target OUTCOME, so emit a cached result event
@@ -573,7 +574,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		c.errs.Add(1)
 		// The captured output is persisted verbatim under a ref so the exact failing
 		// output stays retrievable via `magus query ref`.
-		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, runErr)
+		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, runErr, false)
 		result.Ref = ref
 		c.log.ErrorContext(ctx,
 			"cache.error",
@@ -612,7 +613,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if mutErr := c.checkSourceMutation(ctx, rc.step, preSources); mutErr != nil {
 		result.Duration = time.Since(start)
 		c.errs.Add(1)
-		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, mutErr)
+		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, mutErr, false)
 		result.Ref = ref
 		c.log.ErrorContext(ctx,
 			"cache.error",
@@ -642,7 +643,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			// without this the journal and any observer never see the step finish -
 			// it just vanishes mid-run instead of failing loudly.
 			c.errs.Add(1)
-			ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, snapErr)
+			ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, snapErr, false)
 			result.Ref = ref
 			c.log.ErrorContext(ctx,
 				"cache.error",
@@ -665,7 +666,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 
 	result.Duration = time.Since(start)
 	c.misses.Add(1)
-	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil)
+	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil, false)
 	result.Ref = ref
 
 	// Push AFTER recordOutput, never before: the artifact ships this run's output
@@ -702,8 +703,9 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 // result to the ref's JSONL file, and emits the result to the capture logger (for the
 // invocation log / live stream). Persistence is best-effort: a store error logs a
 // warning and yields an empty ref, so the run's own outcome never hinges on it. runErr
-// nil means the step passed (or was a cache hit); non-nil means it failed.
-func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, dur time.Duration, runErr error) string {
+// nil means the step passed; non-nil means it failed. cacheHit is a separate axis and
+// must come from the caller: by this point a hit and a fresh pass look identical.
+func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, dur time.Duration, runErr error, cacheHit bool) string {
 	nowMs := time.Now().UnixMilli()
 	inv := journal.InvocationIDFromContext(ctx)
 	target := reproTarget(s)
@@ -768,6 +770,9 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 	result := journal.Event{
 		Ts: nowMs, Project: s.ProjectPath, Target: target, Kind: journal.KindResult,
 		Level: "info", Status: journal.StatusPass, DurMs: dur.Milliseconds(), Inv: inv, Ref: ref,
+	}
+	if cacheHit {
+		result.Status = journal.StatusCached
 	}
 	if runErr != nil {
 		result.Status = journal.StatusFail

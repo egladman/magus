@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/clispec"
+	"github.com/egladman/magus/internal/cli"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -146,7 +146,7 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 // TestManpageFlagsMatchTheCLI is the gate on the man page's copy of every command's
 // flags.
 //
-// internal/clispec/registry.go restates each command's flags because the real ones are
+// internal/cli/registry.go restates each command's flags because the real ones are
 // bound in closures inside package main, which nothing outside it can import. That copy
 // drifted for as long as it existed: it advertised --simple for months after the flag was
 // deleted, and it still omitted most of what several commands accept. Nothing reported
@@ -164,7 +164,7 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 func TestManpageFlagsMatchTheCLI(t *testing.T) {
 	globals := globalFlagNames()
 
-	for _, cmd := range clispec.All {
+	for _, cmd := range cli.All {
 		for _, probe := range flagProbes(cmd) {
 			t.Run(strings.ReplaceAll(probe.name, " ", "_"), func(t *testing.T) {
 				documented := documentedFlagNames(probe.name, probe.buildFlags, globals)
@@ -189,7 +189,7 @@ func TestManpageFlagsMatchTheCLI(t *testing.T) {
 
 				assert.Equal(t, documented, actual,
 					"the man page's flag list for %q disagrees with what the command binds.\n"+
-						"Fix internal/clispec/registry.go - it is a hand-written copy of the real\n"+
+						"Fix internal/cli/registry.go - it is a hand-written copy of the real\n"+
 						"flags, and this is the only thing that notices when it goes stale.",
 					probe.name)
 			})
@@ -260,7 +260,7 @@ func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 // flagProbes expands one man-page command into the invocations that actually bind flags.
 // A command with subcommands binds nothing itself - `magus server -h` prints its own
 // usage and parses nothing - so its children are what get probed.
-func flagProbes(cmd clispec.Command) []flagProbe {
+func flagProbes(cmd cli.Command) []flagProbe {
 	if len(cmd.Children) == 0 {
 		if !cmd.HasFlags() {
 			return nil

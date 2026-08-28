@@ -87,6 +87,13 @@ message Invocation {
   google.protobuf.Timestamp start_time = 3;
   google.protobuf.Timestamp end_time = 4;  // unset while still running
   string magus_version = 5;
+  // Outcome, when the run reached one. The events carry this too (KIND_FINISHED), but a listing
+  // reads run HEADERS without opening any journal, so a browser that had to decide pass from fail
+  // would otherwise open every file it lists.
+  Status status = 6;
+  // On-disk size of this run's journal. What a retention view needs to say which runs are worth
+  // keeping, and the same reason as above: available from the header alone.
+  int64 size_bytes = 7;
 }
 
 // Event is one line of a structured invocation log - the atom of the stream. Most events
@@ -129,6 +136,20 @@ service ViewerService {
   // StreamEvents streams a running invocation's events as they are produced. Reconnect
   // with start_time set to the last seen time to resume.
   rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse);
+  // ListOutputs returns the stored runs' descriptors, newest first, so a viewer can browse
+  // recent runs grouped project -> target -> run.
+  rpc ListOutputs(ListOutputsRequest) returns (ListOutputsResponse);
+  // GetOutput returns one stored run's captured output VERBATIM - the bytes the subprocess
+  // wrote, unparsed and unstyled. Bytes rather than string: a captured log is whatever the
+  // tool emitted, which is not guaranteed to be valid UTF-8.
+  rpc GetOutput(GetOutputRequest) returns (GetOutputResponse);
+  // ListInvocations returns the retained run journals by the command that produced them.
+  // The run browser's other axis: ListOutputs is per target, this is per `magus` command.
+  rpc ListInvocations(ListInvocationsRequest) returns (ListInvocationsResponse);
+  // GetJournal returns one past invocation whole - header plus every event - which is the
+  // same message the offline `#data=` URL fragment carries, so a browsed run and a shared
+  // one render from identical bytes.
+  rpc GetJournal(GetJournalRequest) returns (Journal);
 }
 
 message GetInvocationRequest {
@@ -176,4 +197,53 @@ message StreamEventsRequest {
 }
 message StreamEventsResponse {
   Event event = 1;
+}
+
+// Output is one stored run's descriptor: what it was, how it went, and the ref that fetches
+// its captured bytes. The wire twin of cache.OutputDescriptor.
+message Output {
+  // The key-derived portable id shared by every attempt of the step.
+  string ref = 1;
+  string project = 2;
+  string target = 3;
+  // The invocation that produced this output, empty when the run predates journalling.
+  string invocation = 4;
+  bool failed = 5;
+  // Failure message; empty on success.
+  string error = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Duration duration = 8;
+}
+
+message ListOutputsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 5000}];
+  string page_token = 2;
+}
+message ListOutputsResponse {
+  repeated Output outputs = 1;
+  string next_page_token = 2;  // set when more outputs remain
+}
+
+message GetOutputRequest {
+  // The output to read, by its ref.
+  string name = 1 [(buf.validate.field).string.pattern = "^out[0-9a-f]+$"];
+}
+message GetOutputResponse {
+  // The captured bytes, exactly as the subprocess wrote them.
+  bytes body = 1;
+}
+
+message ListInvocationsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 5000}];
+  string page_token = 2;
+}
+message ListInvocationsResponse {
+  repeated Invocation invocations = 1;
+  string next_page_token = 2;  // set when more invocations remain
+}
+
+message GetJournalRequest {
+  // The run to fetch whole: an output ref or an invocation id, the same identity
+  // GetInvocation takes.
+  string name = 1 [(buf.validate.field).string.pattern = "^(out[0-9a-f]+|inv[0-9a-z]+)$"];
 }

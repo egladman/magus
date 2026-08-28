@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeSource is a Source returning a canned view or a fixed error.
+// fakeSource is a insightSource returning a canned view or a fixed error.
 type fakeSource struct {
 	view types.InsightView
 	err  error
@@ -24,7 +24,7 @@ type fakeSource struct {
 
 func (f fakeSource) Insight(context.Context) (types.InsightView, error) { return f.view, f.err }
 
-func get(t *testing.T, src Source) (*insightv1.Insight, error) {
+func get(t *testing.T, src insightSource) (*insightv1.Insight, error) {
 	t.Helper()
 	resp, err := NewService(src).GetInsight(context.Background(), connect.NewRequest(&insightv1.GetInsightRequest{}))
 	if err != nil {

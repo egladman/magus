@@ -100,7 +100,7 @@ installed.
 # the two lines say exactly where: an advise on a shell command is delivered
 # nowhere (Cursor sends nothing on an allow), and an advise on a file write
 # reaches the person via stderr but never the model.
-# magus-guard-template: 7
+# magus-guard-template: 8
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=human advise=human pass=none
 
@@ -110,7 +110,22 @@ installed.
 # warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
 # 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
 # the knowledge.notes key while `magus doctor` reported the guard as fine.
-[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
+#
+# Found by walking UP to the magusfile, not by testing ./magus alone. A hook runs in the
+# host's session directory, and that is not always the workspace root: a session opened in
+# a subdirectory, or opened in one checkout while the work happens in another, tests a
+# ./magus that is not there and falls through to PATH. Where PATH's copy cannot load the
+# workspace at all, that is the entire guard failing open - measured 2026-08-27, when a
+# piped `magus affected ci` that the rules DO deny ran unjudged. Same upward search for a
+# project root that every other ecosystem's runner does.
+guard_root=$PWD
+while [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ]; do
+  if [ -f "$guard_root/magusfile.buzz" ]; then
+    [ -x "$guard_root/magus" ] && GUARD_MAGUS_BIN=$guard_root/magus
+    break
+  fi
+  guard_root=${guard_root%/*}
+done
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 event=$(cat)

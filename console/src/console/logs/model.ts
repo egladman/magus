@@ -4,8 +4,8 @@
 // regex-guessed). Both produce the SAME model shape so render()/search/fold/copy work unchanged.
 // Pure: no DOM, no shared-state mutation - it takes its inputs as arguments.
 
-import { Kind, Status } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
-import type { Command } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import { Kind, Status } from "@wire/viewer/v1alpha1/viewer_pb";
+import type { Command } from "@wire/viewer/v1alpha1/viewer_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 import type { BuiltModel, InvocationView, RenderModel, Section, Source } from "./state";
 import { stripAnsi } from "../render/ansi";

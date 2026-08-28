@@ -116,10 +116,6 @@ func (h *FactHandler) WithGroup(string) slog.Handler      { return h }
 // pass/fail axis. A cache hit is a PASS that was replayed, not a third outcome: "did
 // this target end up green" and "did work run" are different questions, and
 // [TargetResult.Replayed] answers the second.
-//
-// Note the known imprecision on the way in: a cache hit whose ref is missing from the
-// output store is reported as StatusPass, so Replayed under-reports rather than
-// over-reports cache hits.
 func factOutcome(status string) string {
 	if status == journal.StatusFail {
 		return OutcomeFail

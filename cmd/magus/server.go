@@ -191,11 +191,6 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 	return 0, true
 }
 
-// spawnDetachedDaemon re-execs this binary as a detached foreground daemon and returns its
-// pid and the log file its stdio is redirected to. It preserves the caller's original args
-// (so any --daemon-address the user set is honored) and marks the child via daemonDetachEnv
-// so it runs the daemon rather than backgrounding again. The child is fully detached (its own
-// session on unix) and Release()d so this process never waits on it.
 // servingSuffix names the workspaces a running daemon has loaded, or "" when it has none yet.
 //
 // One socket per user serves every workspace, so "already running" answered the question the
@@ -219,6 +214,26 @@ func servingSuffix(st *proc.StatusReply) string {
 	return ", serving " + strings.Join(roots, ", ")
 }
 
+// spawnDetachedDaemon re-execs this binary as a detached foreground daemon and returns its
+// pid and the log file its stdio is redirected to. It preserves the caller's original args
+// (so any --daemon-address the user set is honored) and marks the child via daemonDetachEnv
+// so it runs the daemon rather than backgrounding again. The child is fully detached (its own
+// session on unix) and Release()d so this process never waits on it.
+// daemonChildEnv returns this process's environment with MAGUS_DAEMON_SOCKET removed. A
+// child inheriting it believes it is already adopted, binds no socket, and reports the
+// parent's - leaving a daemon `server stop` cannot find.
+func daemonChildEnv() []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "MAGUS_DAEMON_SOCKET=") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
 func spawnDetachedDaemon() (pid int, logPath string, err error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -232,7 +247,7 @@ func spawnDetachedDaemon() (pid int, logPath string, err error) {
 	defer func() { _ = logf.Close() }()
 
 	cmd := exec.Command(exe, os.Args[1:]...) //nolint:gosec // G702: re-execs this same magus binary with the caller's own args to detach the daemon
-	cmd.Env = append(os.Environ(), daemonDetachEnv+"=1")
+	cmd.Env = append(daemonChildEnv(), daemonDetachEnv+"=1")
 	cmd.Stdin = nil
 	cmd.Stdout = logf
 	cmd.Stderr = logf
@@ -538,7 +553,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("server rotate-logs: %w", err)
 	}
-	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns)
+	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
 	return nil
 }

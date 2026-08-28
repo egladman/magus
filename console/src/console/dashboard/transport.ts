@@ -16,15 +16,11 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { createClient, type Client } from "@connectrpc/connect";
-import {
-  StatusSchema,
-  StatusService,
-  type Status,
-} from "../../gen/magus/status/v1alpha1/status_pb";
-import { MetricsService } from "../../gen/magus/metrics/v1alpha1/metrics_pb";
-import { ActivityService, Kind } from "../../gen/magus/activity/v1alpha1/activity_pb";
-import { InsightService } from "../../gen/magus/insight/v1alpha1/insight_pb";
-import { ToolService, Verdict } from "../../gen/magus/tool/v1alpha1/tool_pb";
+import { StatusSchema, StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
+import { MetricsService } from "@wire/metrics/v1alpha1/metrics_pb";
+import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
+import { InsightService } from "@wire/insight/v1alpha1/insight_pb";
+import { ToolService, Verdict } from "@wire/tool/v1alpha1/tool_pb";
 import {
   authHeaders,
   createDaemonTransport,

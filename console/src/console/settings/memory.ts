@@ -17,7 +17,7 @@ import {
   MemoryType,
   MemoryRefKind,
   type Memory,
-} from "../../gen/magus/memory/v1alpha1/memory_pb";
+} from "@wire/memory/v1alpha1/memory_pb";
 import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";

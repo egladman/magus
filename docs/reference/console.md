@@ -55,10 +55,6 @@ Every route on the console's `/api/v1/` surface, enumerated:
 | `GET /api/v1/diff`                 | Working-tree changes annotated with role, blast radius, changed-symbol reach, and coverage ([`magus diff`](manpage/magus-diff.md)) |
 | `GET /api/v1/diff/patch`           | The same changes as one unified patch, without the annotation (much cheaper)                                                       |
 | `POST /api/v1/diff/session`        | The human's half of a paired review: cursor, viewed marks, comments                                                                |
-| `GET /api/v1/outputs`              | The run browser's tree: prior runs, newest first                                                                                   |
-| `GET /api/v1/output?ref=<ref>`     | One run's verbatim captured output, by [output reference](../concepts/cache/output-refs.md)                                        |
-| `GET /api/v1/runs`                 | The run browser's other axis: the retained invocation journals, newest first (`?limit=N`)                                          |
-| `GET /api/v1/run?inv=<id>`         | One past run's whole journal as a `magus.viewer.v1alpha1.Journal` (protobuf); `?ref=` addresses it by an output                    |
 | `GET /api/v1/plan`                 | The derived run plan: the target DAG the engine resolves, with each node's live state                                              |
 | `GET /api/v1/ledger`               | The delegation plan an agent [declared](../guides/integrations/agents/delegation.md); magus enforces none of it                    |
 | `GET /api/v1/attention`            | The attention queue: blocks waiting on a person, same shape as `magus session attention -o json`                                   |
@@ -66,7 +62,7 @@ Every route on the console's `/api/v1/` surface, enumerated:
 
 One more route sits under `/api/v1/` without belonging to this read surface:
 `POST /api/v1/share`, described below. The daemon's typed Connect
-services - status, activity, metrics, insight, memory, notes, tool, and
+services - status, activity, metrics, insight, viewer, memory, notes, tool, and
 [job control](#job-control) - are mounted at their own
 `magus.<service>.v1.<Service>/` prefixes rather than here, and the
 [daemon API reference](api/index.md) is their schema. The console mounts at

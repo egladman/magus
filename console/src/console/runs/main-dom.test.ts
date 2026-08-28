@@ -64,18 +64,23 @@ function serve(outputs: unknown[], runs: unknown[]): void {
   setDefaultHost(HOST);
   globalThis.fetch = ((input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.includes("/api/v1/outputs")) {
+    // Connect unary in the transport's JSON codec. Distinguished by PROCEDURE, not by path: both
+    // feeds are ViewerService now, so matching the service name alone would answer either with the
+    // other's body.
+    if (url.includes("ViewerService/ListOutputs")) {
       return Promise.resolve({
         ok: true,
         status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
         json: () => Promise.resolve({ outputs }),
       } as unknown as Response);
     }
-    if (url.includes("/api/v1/runs")) {
+    if (url.includes("ViewerService/ListInvocations")) {
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ runs }),
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () => Promise.resolve({ invocations: runs }),
       } as unknown as Response);
     }
     return Promise.reject(new Error("stub: no network"));
@@ -84,28 +89,30 @@ function serve(outputs: unknown[], runs: unknown[]): void {
 
 const NOW = Date.now();
 
+// The wire shape, in protobuf JSON: a Timestamp is RFC3339, a Duration is a seconds string, and an
+// enum is its declared name. Written as the daemon actually serializes it so a fixture cannot pass
+// while the real feed would not parse.
 function output(over: Record<string, unknown> = {}): unknown {
   return {
     ref: "out1111",
     project: "console",
     target: "build",
-    inv: "invA",
+    invocation: "invA",
     failed: false,
-    timestamp_ms: NOW - 60_000,
-    duration_ms: 2100,
+    createTime: new Date(NOW - 60_000).toISOString(),
+    duration: "2.100s",
     ...over,
   };
 }
 
 function runLog(over: Record<string, unknown> = {}): unknown {
   return {
-    inv: "invA",
-    arguments: ["run", "build", "console"],
-    trigger: "run",
-    started_ms: NOW - 62_000,
-    finished_ms: NOW - 60_000,
-    status: "pass",
-    magus_version: "v0.3.0-test",
+    id: "invA",
+    command: { arguments: ["run", "build", "console"], trigger: "TRIGGER_RUN" },
+    startTime: new Date(NOW - 62_000).toISOString(),
+    endTime: new Date(NOW - 60_000).toISOString(),
+    status: "STATUS_PASS",
+    magusVersion: "v0.3.0-test",
     ...over,
   };
 }
@@ -144,8 +151,14 @@ test("a run lists by the command that produced it, not by a ref", async () => {
 
 test("the facets list only values that occur, and a click writes its term into the query box", async () => {
   serve(
-    [output({ ref: "o1", inv: "invA" }), output({ ref: "o2", inv: "invB", project: "docs" })],
-    [runLog({ inv: "invA" }), runLog({ inv: "invB", trigger: "ci" })],
+    [
+      output({ ref: "o1", invocation: "invA" }),
+      output({ ref: "o2", invocation: "invB", project: "docs" }),
+    ],
+    [
+      runLog({ id: "invA" }),
+      runLog({ id: "invB", command: { arguments: ["ci"], trigger: "TRIGGER_CI" } }),
+    ],
   );
   const host = await mount();
 
@@ -184,11 +197,11 @@ test("clicking the same facet again removes its term", async () => {
 test("the header count and the status facet both count runs", async () => {
   serve(
     [
-      output({ ref: "o1", inv: "invA", target: "build" }),
-      output({ ref: "o2", inv: "invA", target: "test" }),
-      output({ ref: "o3", inv: "invB", failed: true }),
+      output({ ref: "o1", invocation: "invA", target: "build" }),
+      output({ ref: "o2", invocation: "invA", target: "test" }),
+      output({ ref: "o3", invocation: "invB", failed: true }),
     ],
-    [runLog({ inv: "invA" }), runLog({ inv: "invB", status: "fail" })],
+    [runLog({ id: "invA" }), runLog({ id: "invB", status: "STATUS_FAIL" })],
   );
   const host = await mount();
 
@@ -203,7 +216,7 @@ test("the header count and the status facet both count runs", async () => {
 });
 
 test("the detail pane names the run's facts and links its targets into the viewer", async () => {
-  serve([output({ error: "boom", failed: true })], [runLog({ status: "fail" })]);
+  serve([output({ error: "boom", failed: true })], [runLog({ status: "STATUS_FAIL" })]);
   const host = await mount();
 
   assert.equal(text(host.querySelector(".console-runs__detail-cmd")), "magus run build console");

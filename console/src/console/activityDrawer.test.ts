@@ -9,11 +9,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { Output } from "@wire/viewer/v1alpha1/viewer_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Status } from "../gen/magus/status/v1alpha1/status_pb";
+import type { Status } from "@wire/status/v1alpha1/status_pb";
 import {
   fmtMs,
-  parseDescriptors,
+  wireDescriptors,
   recentRows,
   relAge,
   runningRows,
@@ -261,73 +262,34 @@ test("summaryLine is what the live region announces", () => {
 
 // ---- reading the feed ------------------------------------------------------
 
-// The rows above are only as honest as what reaches them, and what reaches them is a JSON body from
-// the network. A cast promises the shape; this is what checks it.
-test("parseDescriptors drops a row whose timestamp is not a number", () => {
-  const runs = parseDescriptors({
-    outputs: [
-      {
-        ref: "good",
-        project: "svc",
-        target: "build",
-        failed: false,
-        timestamp_ms: NOW,
-        duration_ms: 12,
-      },
-      {
-        ref: "null-ts",
-        project: "svc",
-        target: "build",
-        failed: false,
-        timestamp_ms: null,
-        duration_ms: 12,
-      },
-      {
-        ref: "nan-dur",
-        project: "svc",
-        target: "build",
-        failed: false,
-        timestamp_ms: NOW,
-        duration_ms: Number.NaN,
-      },
-    ],
-  });
-  assert.deepEqual(
-    runs.map((r) => r.ref),
-    ["good"],
-    "a NaN timestamp reaching the comparator leaves the WHOLE section in an order nobody promised",
-  );
-  // And the rows that survive render as numbers rather than as "NaNs".
-  assert.deepEqual(ids(recentRows(runs, NOW)), ["good"]);
-  assert.equal(recentRows(runs, NOW)[0]?.detail, "12ms - 0s");
+// The four tests that stood here checked hand-rolled JSON coercion - a timestamp that is not a
+// number, a row with no ref, a body that is not the documented shape. Connect decodes this feed now,
+// so none of those states is representable and a test for them would assert nothing. What IS worth
+// pinning is the unit conversion: the wire carries a Timestamp and a Duration, the panel renders
+// millis, and an absent field must read as 0 rather than NaN.
+test("wireDescriptors converts the wire's timestamp and duration to millis", () => {
+  const rows = wireDescriptors([
+    {
+      ref: "out1",
+      project: "api",
+      target: "build",
+      invocation: "inv1",
+      failed: false,
+      error: "",
+      createTime: { seconds: 1n, nanos: 500_000_000 },
+      duration: { seconds: 2n, nanos: 250_000_000 },
+    },
+  ] as unknown as Output[]);
+
+  assert.equal(rows[0]?.timestamp_ms, 1500);
+  assert.equal(rows[0]?.duration_ms, 2250);
 });
 
-// A row with no ref has no id and nothing to open, exactly as a ledger unit with no id has nothing
-// to hang an edge on.
-test("parseDescriptors drops a row with no ref", () => {
-  const runs = parseDescriptors({
-    outputs: [
-      { project: "svc", target: "build", failed: false, timestamp_ms: NOW, duration_ms: 1 },
-    ],
-  });
-  assert.deepEqual(runs, []);
-});
+test("wireDescriptors reads an absent time as 0, never NaN", () => {
+  const rows = wireDescriptors([
+    { ref: "out1", project: "", target: "", invocation: "", failed: false, error: "" },
+  ] as unknown as Output[]);
 
-// The string fields are COERCED rather than dropped: the drawer already renders a run with no
-// project as a bare target, so a missing one is a thinner row, not a lost one.
-test("parseDescriptors keeps a row whose strings are missing or wrong", () => {
-  const runs = parseDescriptors({
-    outputs: [{ ref: "r1", project: 7, failed: "yes", timestamp_ms: NOW, duration_ms: 0 }],
-  });
-  assert.equal(runs.length, 1);
-  assert.equal(runs[0]?.project, "");
-  assert.equal(runs[0]?.target, "");
-  assert.equal(runs[0]?.failed, false, "only a real true is a failure; a truthy string is not");
-});
-
-test("parseDescriptors reads anything that is not the documented shape as no rows", () => {
-  assert.deepEqual(parseDescriptors(null), []);
-  assert.deepEqual(parseDescriptors({}), []);
-  assert.deepEqual(parseDescriptors({ outputs: "nope" }), []);
-  assert.deepEqual(parseDescriptors({ outputs: [null, 3, "x"] }), []);
+  assert.equal(rows[0]?.timestamp_ms, 0);
+  assert.equal(rows[0]?.duration_ms, 0);
 });

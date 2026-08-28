@@ -26,7 +26,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/viewer/v1alpha1/viewer.proto.
  */
 export const file_magus_viewer_v1alpha1_viewer: GenFile = /*@__PURE__*/
-  fileDesc("CiJtYWd1cy92aWV3ZXIvdjFhbHBoYTEvdmlld2VyLnByb3RvEhVtYWd1cy52aWV3ZXIudjFhbHBoYTEiYAoHQ29tbWFuZBIRCglhcmd1bWVudHMYASADKAkSCwoDY3dkGAMgASgJEi8KB3RyaWdnZXIYBCABKA4yHi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuVHJpZ2dlckoECAIQAyK+AQoKSW52b2NhdGlvbhIKCgJpZBgBIAEoCRIvCgdjb21tYW5kGAIgASgLMh4ubWFndXMudmlld2VyLnYxYWxwaGExLkNvbW1hbmQSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDW1hZ3VzX3ZlcnNpb24YBSABKAki+gIKBUV2ZW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB3Byb2plY3QYAiABKAkSDgoGdGFyZ2V0GAMgASgJEikKBGtpbmQYBCABKA4yGy5tYWd1cy52aWV3ZXIudjFhbHBoYTEuS2luZBItCgZzdHJlYW0YBSABKA4yHS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuU3RyZWFtEg0KBWxldmVsGAYgASgJEi0KBnN0YXR1cxgHIAEoDjIdLm1hZ3VzLnZpZXdlci52MWFscGhhMS5TdGF0dXMSCwoDcmVmGAggASgJEisKCGR1cmF0aW9uGAkgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEgwKBHRleHQYCiABKAkSLwoHY29tbWFuZBgLIAEoCzIeLm1hZ3VzLnZpZXdlci52MWFscGhhMS5Db21tYW5kEhUKDW1hZ3VzX3ZlcnNpb24YDCABKAkibgoHSm91cm5hbBI1CgppbnZvY2F0aW9uGAEgASgLMiEubWFndXMudmlld2VyLnYxYWxwaGExLkludm9jYXRpb24SLAoGZXZlbnRzGAIgAygLMhwubWFndXMudmlld2VyLnYxYWxwaGExLkV2ZW50IkoKFEdldEludm9jYXRpb25SZXF1ZXN0EjIKBG5hbWUYASABKAlCJLpIIXIfMh1eKG91dFswLTlhLWZdK3xpbnZbMC05YS16XSspJCLPAQoKRXZlbnRRdWVyeRIQCghwcm9qZWN0cxgBIAMoCRIPCgd0YXJnZXRzGAIgAygJEg0KBWtpbmRzGAMgAygJEg8KB3N0cmVhbXMYBCADKAkSDgoGbGV2ZWxzGAUgAygJEg4KBnN0YXR1cxgGIAEoCRIvCgR0ZXh0GAcgAygLMiEubWFndXMucXVlcnkudjFhbHBoYTEuU3RyaW5nTWF0Y2gSLQoEdGltZRgIIAEoCzIfLm1hZ3VzLnF1ZXJ5LnYxYWxwaGExLlRpbWVSYW5nZSKvAQoRTGlzdEV2ZW50c1JlcXVlc3QSNAoGcGFyZW50GAEgASgJQiS6SCFyHzIdXihvdXRbMC05YS1mXSt8aW52WzAtOWEtel0rKSQSHQoJcGFnZV9zaXplGAIgASgFQgq6SAcaBRiIJygAEhIKCnBhZ2VfdG9rZW4YAyABKAkSMQoGZmlsdGVyGAQgASgLMiEubWFndXMudmlld2VyLnYxYWxwaGExLkV2ZW50UXVlcnkiWwoSTGlzdEV2ZW50c1Jlc3BvbnNlEiwKBmV2ZW50cxgBIAMoCzIcLm1hZ3VzLnZpZXdlci52MWFscGhhMS5FdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkibwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIlCgZwYXJlbnQYASABKAlCFbpIEnIQMg5eaW52WzAtOWEtel0rJBIxCgZmaWx0ZXIYAiABKAsyIS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuRXZlbnRRdWVyeSJDChRTdHJlYW1FdmVudHNSZXNwb25zZRIrCgVldmVudBgBIAEoCzIcLm1hZ3VzLnZpZXdlci52MWFscGhhMS5FdmVudCquAQoES2luZBIUChBLSU5EX1VOU1BFQ0lGSUVEEAASEAoMS0lORF9TVEFSVEVEEAcSEQoNS0lORF9GSU5JU0hFRBAIEg0KCUtJTkRfRVhFQxAJEg8KC0tJTkRfT1VUUFVUEAESDwoLS0lORF9SRVNVTFQQAhIOCgpLSU5EX1NDT1BFEAQSDQoJS0lORF9XQVJOEAYSDwoLS0lORF9TRUNSRVQQCiIECAMQAyIECAUQBSpGCgZTdHJlYW0SFgoSU1RSRUFNX1VOU1BFQ0lGSUVEEAASEQoNU1RSRUFNX1NURE9VVBABEhEKDVNUUkVBTV9TVERFUlIQAipVCgZTdGF0dXMSFgoSU1RBVFVTX1VOU1BFQ0lGSUVEEAASDwoLU1RBVFVTX1BBU1MQARIPCgtTVEFUVVNfRkFJTBACEhEKDVNUQVRVU19DQUNIRUQQAyqPAQoHVHJpZ2dlchIXChNUUklHR0VSX1VOU1BFQ0lGSUVEEAASDwoLVFJJR0dFUl9SVU4QARIUChBUUklHR0VSX0FGRkVDVEVEEAISDgoKVFJJR0dFUl9DSRADEg0KCVRSSUdHRVJfWBAEEhEKDVRSSUdHRVJfV0FUQ0gQBRISCg5UUklHR0VSX0RJUkVDVBAGMr4CCg1WaWV3ZXJTZXJ2aWNlEl8KDUdldEludm9jYXRpb24SKy5tYWd1cy52aWV3ZXIudjFhbHBoYTEuR2V0SW52b2NhdGlvblJlcXVlc3QaIS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuSW52b2NhdGlvbhJhCgpMaXN0RXZlbnRzEigubWFndXMudmlld2VyLnYxYWxwaGExLkxpc3RFdmVudHNSZXF1ZXN0GikubWFndXMudmlld2VyLnYxYWxwaGExLkxpc3RFdmVudHNSZXNwb25zZRJpCgxTdHJlYW1FdmVudHMSKi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuU3RyZWFtRXZlbnRzUmVxdWVzdBorLm1hZ3VzLnZpZXdlci52MWFscGhhMS5TdHJlYW1FdmVudHNSZXNwb25zZTABQusBChljb20ubWFndXMudmlld2VyLnYxYWxwaGExQgtWaWV3ZXJQcm90b1ABWktnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy92aWV3ZXIvdjFhbHBoYTE7dmlld2VydjFhbHBoYTGiAgNNVliqAhVNYWd1cy5WaWV3ZXIuVjFhbHBoYTHKAhVNYWd1c1xWaWV3ZXJcVjFhbHBoYTHiAiFNYWd1c1xWaWV3ZXJcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhdNYWd1czo6Vmlld2VyOjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
+  fileDesc("CiJtYWd1cy92aWV3ZXIvdjFhbHBoYTEvdmlld2VyLnByb3RvEhVtYWd1cy52aWV3ZXIudjFhbHBoYTEiYAoHQ29tbWFuZBIRCglhcmd1bWVudHMYASADKAkSCwoDY3dkGAMgASgJEi8KB3RyaWdnZXIYBCABKA4yHi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuVHJpZ2dlckoECAIQAyKBAgoKSW52b2NhdGlvbhIKCgJpZBgBIAEoCRIvCgdjb21tYW5kGAIgASgLMh4ubWFndXMudmlld2VyLnYxYWxwaGExLkNvbW1hbmQSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDW1hZ3VzX3ZlcnNpb24YBSABKAkSLQoGc3RhdHVzGAYgASgOMh0ubWFndXMudmlld2VyLnYxYWxwaGExLlN0YXR1cxISCgpzaXplX2J5dGVzGAcgASgDIvoCCgVFdmVudBIoCgR0aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdwcm9qZWN0GAIgASgJEg4KBnRhcmdldBgDIAEoCRIpCgRraW5kGAQgASgOMhsubWFndXMudmlld2VyLnYxYWxwaGExLktpbmQSLQoGc3RyZWFtGAUgASgOMh0ubWFndXMudmlld2VyLnYxYWxwaGExLlN0cmVhbRINCgVsZXZlbBgGIAEoCRItCgZzdGF0dXMYByABKA4yHS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuU3RhdHVzEgsKA3JlZhgIIAEoCRIrCghkdXJhdGlvbhgJIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIMCgR0ZXh0GAogASgJEi8KB2NvbW1hbmQYCyABKAsyHi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuQ29tbWFuZBIVCg1tYWd1c192ZXJzaW9uGAwgASgJIm4KB0pvdXJuYWwSNQoKaW52b2NhdGlvbhgBIAEoCzIhLm1hZ3VzLnZpZXdlci52MWFscGhhMS5JbnZvY2F0aW9uEiwKBmV2ZW50cxgCIAMoCzIcLm1hZ3VzLnZpZXdlci52MWFscGhhMS5FdmVudCJKChRHZXRJbnZvY2F0aW9uUmVxdWVzdBIyCgRuYW1lGAEgASgJQiS6SCFyHzIdXihvdXRbMC05YS1mXSt8aW52WzAtOWEtel0rKSQizwEKCkV2ZW50UXVlcnkSEAoIcHJvamVjdHMYASADKAkSDwoHdGFyZ2V0cxgCIAMoCRINCgVraW5kcxgDIAMoCRIPCgdzdHJlYW1zGAQgAygJEg4KBmxldmVscxgFIAMoCRIOCgZzdGF0dXMYBiABKAkSLwoEdGV4dBgHIAMoCzIhLm1hZ3VzLnF1ZXJ5LnYxYWxwaGExLlN0cmluZ01hdGNoEi0KBHRpbWUYCCABKAsyHy5tYWd1cy5xdWVyeS52MWFscGhhMS5UaW1lUmFuZ2UirwEKEUxpc3RFdmVudHNSZXF1ZXN0EjQKBnBhcmVudBgBIAEoCUIkukghch8yHV4ob3V0WzAtOWEtZl0rfGludlswLTlhLXpdKykkEh0KCXBhZ2Vfc2l6ZRgCIAEoBUIKukgHGgUYiCcoABISCgpwYWdlX3Rva2VuGAMgASgJEjEKBmZpbHRlchgEIAEoCzIhLm1hZ3VzLnZpZXdlci52MWFscGhhMS5FdmVudFF1ZXJ5IlsKEkxpc3RFdmVudHNSZXNwb25zZRIsCgZldmVudHMYASADKAsyHC5tYWd1cy52aWV3ZXIudjFhbHBoYTEuRXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIm8KE1N0cmVhbUV2ZW50c1JlcXVlc3QSJQoGcGFyZW50GAEgASgJQhW6SBJyEDIOXmludlswLTlhLXpdKyQSMQoGZmlsdGVyGAIgASgLMiEubWFndXMudmlld2VyLnYxYWxwaGExLkV2ZW50UXVlcnkiQwoUU3RyZWFtRXZlbnRzUmVzcG9uc2USKwoFZXZlbnQYASABKAsyHC5tYWd1cy52aWV3ZXIudjFhbHBoYTEuRXZlbnQixwEKBk91dHB1dBILCgNyZWYYASABKAkSDwoHcHJvamVjdBgCIAEoCRIOCgZ0YXJnZXQYAyABKAkSEgoKaW52b2NhdGlvbhgEIAEoCRIOCgZmYWlsZWQYBSABKAgSDQoFZXJyb3IYBiABKAkSLwoLY3JlYXRlX3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKCGR1cmF0aW9uGAggASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIkcKEkxpc3RPdXRwdXRzUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGIgnKAASEgoKcGFnZV90b2tlbhgCIAEoCSJeChNMaXN0T3V0cHV0c1Jlc3BvbnNlEi4KB291dHB1dHMYASADKAsyHS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuT3V0cHV0EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSI3ChBHZXRPdXRwdXRSZXF1ZXN0EiMKBG5hbWUYASABKAlCFbpIEnIQMg5eb3V0WzAtOWEtZl0rJCIhChFHZXRPdXRwdXRSZXNwb25zZRIMCgRib2R5GAEgASgMIksKFkxpc3RJbnZvY2F0aW9uc1JlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRiIJygAEhIKCnBhZ2VfdG9rZW4YAiABKAkiagoXTGlzdEludm9jYXRpb25zUmVzcG9uc2USNgoLaW52b2NhdGlvbnMYASADKAsyIS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuSW52b2NhdGlvbhIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiRwoRR2V0Sm91cm5hbFJlcXVlc3QSMgoEbmFtZRgBIAEoCUIkukghch8yHV4ob3V0WzAtOWEtZl0rfGludlswLTlhLXpdKykkKq4BCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIQCgxLSU5EX1NUQVJURUQQBxIRCg1LSU5EX0ZJTklTSEVEEAgSDQoJS0lORF9FWEVDEAkSDwoLS0lORF9PVVRQVVQQARIPCgtLSU5EX1JFU1VMVBACEg4KCktJTkRfU0NPUEUQBBINCglLSU5EX1dBUk4QBhIPCgtLSU5EX1NFQ1JFVBAKIgQIAxADIgQIBRAFKkYKBlN0cmVhbRIWChJTVFJFQU1fVU5TUEVDSUZJRUQQABIRCg1TVFJFQU1fU1RET1VUEAESEQoNU1RSRUFNX1NUREVSUhACKlUKBlN0YXR1cxIWChJTVEFUVVNfVU5TUEVDSUZJRUQQABIPCgtTVEFUVVNfUEFTUxABEg8KC1NUQVRVU19GQUlMEAISEQoNU1RBVFVTX0NBQ0hFRBADKo8BCgdUcmlnZ2VyEhcKE1RSSUdHRVJfVU5TUEVDSUZJRUQQABIPCgtUUklHR0VSX1JVThABEhQKEFRSSUdHRVJfQUZGRUNURUQQAhIOCgpUUklHR0VSX0NJEAMSDQoJVFJJR0dFUl9YEAQSEQoNVFJJR0dFUl9XQVRDSBAFEhIKDlRSSUdHRVJfRElSRUNUEAYyzgUKDVZpZXdlclNlcnZpY2USXwoNR2V0SW52b2NhdGlvbhIrLm1hZ3VzLnZpZXdlci52MWFscGhhMS5HZXRJbnZvY2F0aW9uUmVxdWVzdBohLm1hZ3VzLnZpZXdlci52MWFscGhhMS5JbnZvY2F0aW9uEmEKCkxpc3RFdmVudHMSKC5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdEV2ZW50c1JlcXVlc3QaKS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdEV2ZW50c1Jlc3BvbnNlEmkKDFN0cmVhbUV2ZW50cxIqLm1hZ3VzLnZpZXdlci52MWFscGhhMS5TdHJlYW1FdmVudHNSZXF1ZXN0GisubWFndXMudmlld2VyLnYxYWxwaGExLlN0cmVhbUV2ZW50c1Jlc3BvbnNlMAESZAoLTGlzdE91dHB1dHMSKS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdE91dHB1dHNSZXF1ZXN0GioubWFndXMudmlld2VyLnYxYWxwaGExLkxpc3RPdXRwdXRzUmVzcG9uc2USXgoJR2V0T3V0cHV0EicubWFndXMudmlld2VyLnYxYWxwaGExLkdldE91dHB1dFJlcXVlc3QaKC5tYWd1cy52aWV3ZXIudjFhbHBoYTEuR2V0T3V0cHV0UmVzcG9uc2UScAoPTGlzdEludm9jYXRpb25zEi0ubWFndXMudmlld2VyLnYxYWxwaGExLkxpc3RJbnZvY2F0aW9uc1JlcXVlc3QaLi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdEludm9jYXRpb25zUmVzcG9uc2USVgoKR2V0Sm91cm5hbBIoLm1hZ3VzLnZpZXdlci52MWFscGhhMS5HZXRKb3VybmFsUmVxdWVzdBoeLm1hZ3VzLnZpZXdlci52MWFscGhhMS5Kb3VybmFsQusBChljb20ubWFndXMudmlld2VyLnYxYWxwaGExQgtWaWV3ZXJQcm90b1ABWktnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy92aWV3ZXIvdjFhbHBoYTE7dmlld2VydjFhbHBoYTGiAgNNVliqAhVNYWd1cy5WaWV3ZXIuVjFhbHBoYTHKAhVNYWd1c1xWaWV3ZXJcVjFhbHBoYTHiAiFNYWd1c1xWaWV3ZXJcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhdNYWd1czo6Vmlld2VyOjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
 
 /**
  * Command is the invoking command line and context - what was asked of magus.
@@ -96,6 +96,23 @@ export type Invocation = Message<"magus.viewer.v1alpha1.Invocation"> & {
    * @generated from field: string magus_version = 5;
    */
   magusVersion: string;
+
+  /**
+   * Outcome, when the run reached one. The events carry this too (KIND_FINISHED), but a listing
+   * reads run HEADERS without opening any journal, so a browser that had to decide pass from fail
+   * would otherwise open every file it lists.
+   *
+   * @generated from field: magus.viewer.v1alpha1.Status status = 6;
+   */
+  status: Status;
+
+  /**
+   * On-disk size of this run's journal. What a retention view needs to say which runs are worth
+   * keeping, and the same reason as above: available from the header alone.
+   *
+   * @generated from field: int64 size_bytes = 7;
+   */
+  sizeBytes: bigint;
 };
 
 /**
@@ -430,6 +447,217 @@ export const StreamEventsResponseSchema: GenMessage<StreamEventsResponse> = /*@_
   messageDesc(file_magus_viewer_v1alpha1_viewer, 9);
 
 /**
+ * Output is one stored run's descriptor: what it was, how it went, and the ref that fetches
+ * its captured bytes. The wire twin of cache.OutputDescriptor.
+ *
+ * @generated from message magus.viewer.v1alpha1.Output
+ */
+export type Output = Message<"magus.viewer.v1alpha1.Output"> & {
+  /**
+   * The key-derived portable id shared by every attempt of the step.
+   *
+   * @generated from field: string ref = 1;
+   */
+  ref: string;
+
+  /**
+   * @generated from field: string project = 2;
+   */
+  project: string;
+
+  /**
+   * @generated from field: string target = 3;
+   */
+  target: string;
+
+  /**
+   * The invocation that produced this output, empty when the run predates journalling.
+   *
+   * @generated from field: string invocation = 4;
+   */
+  invocation: string;
+
+  /**
+   * @generated from field: bool failed = 5;
+   */
+  failed: boolean;
+
+  /**
+   * Failure message; empty on success.
+   *
+   * @generated from field: string error = 6;
+   */
+  error: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp create_time = 7;
+   */
+  createTime?: Timestamp;
+
+  /**
+   * @generated from field: google.protobuf.Duration duration = 8;
+   */
+  duration?: Duration;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.Output.
+ * Use `create(OutputSchema)` to create a new message.
+ */
+export const OutputSchema: GenMessage<Output> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 10);
+
+/**
+ * @generated from message magus.viewer.v1alpha1.ListOutputsRequest
+ */
+export type ListOutputsRequest = Message<"magus.viewer.v1alpha1.ListOutputsRequest"> & {
+  /**
+   * @generated from field: int32 page_size = 1;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 2;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.ListOutputsRequest.
+ * Use `create(ListOutputsRequestSchema)` to create a new message.
+ */
+export const ListOutputsRequestSchema: GenMessage<ListOutputsRequest> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 11);
+
+/**
+ * @generated from message magus.viewer.v1alpha1.ListOutputsResponse
+ */
+export type ListOutputsResponse = Message<"magus.viewer.v1alpha1.ListOutputsResponse"> & {
+  /**
+   * @generated from field: repeated magus.viewer.v1alpha1.Output outputs = 1;
+   */
+  outputs: Output[];
+
+  /**
+   * set when more outputs remain
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.ListOutputsResponse.
+ * Use `create(ListOutputsResponseSchema)` to create a new message.
+ */
+export const ListOutputsResponseSchema: GenMessage<ListOutputsResponse> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 12);
+
+/**
+ * @generated from message magus.viewer.v1alpha1.GetOutputRequest
+ */
+export type GetOutputRequest = Message<"magus.viewer.v1alpha1.GetOutputRequest"> & {
+  /**
+   * The output to read, by its ref.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.GetOutputRequest.
+ * Use `create(GetOutputRequestSchema)` to create a new message.
+ */
+export const GetOutputRequestSchema: GenMessage<GetOutputRequest> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 13);
+
+/**
+ * @generated from message magus.viewer.v1alpha1.GetOutputResponse
+ */
+export type GetOutputResponse = Message<"magus.viewer.v1alpha1.GetOutputResponse"> & {
+  /**
+   * The captured bytes, exactly as the subprocess wrote them.
+   *
+   * @generated from field: bytes body = 1;
+   */
+  body: Uint8Array;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.GetOutputResponse.
+ * Use `create(GetOutputResponseSchema)` to create a new message.
+ */
+export const GetOutputResponseSchema: GenMessage<GetOutputResponse> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 14);
+
+/**
+ * @generated from message magus.viewer.v1alpha1.ListInvocationsRequest
+ */
+export type ListInvocationsRequest = Message<"magus.viewer.v1alpha1.ListInvocationsRequest"> & {
+  /**
+   * @generated from field: int32 page_size = 1;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 2;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.ListInvocationsRequest.
+ * Use `create(ListInvocationsRequestSchema)` to create a new message.
+ */
+export const ListInvocationsRequestSchema: GenMessage<ListInvocationsRequest> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 15);
+
+/**
+ * @generated from message magus.viewer.v1alpha1.ListInvocationsResponse
+ */
+export type ListInvocationsResponse = Message<"magus.viewer.v1alpha1.ListInvocationsResponse"> & {
+  /**
+   * @generated from field: repeated magus.viewer.v1alpha1.Invocation invocations = 1;
+   */
+  invocations: Invocation[];
+
+  /**
+   * set when more invocations remain
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.ListInvocationsResponse.
+ * Use `create(ListInvocationsResponseSchema)` to create a new message.
+ */
+export const ListInvocationsResponseSchema: GenMessage<ListInvocationsResponse> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 16);
+
+/**
+ * @generated from message magus.viewer.v1alpha1.GetJournalRequest
+ */
+export type GetJournalRequest = Message<"magus.viewer.v1alpha1.GetJournalRequest"> & {
+  /**
+   * The run to fetch whole: an output ref or an invocation id, the same identity
+   * GetInvocation takes.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.GetJournalRequest.
+ * Use `create(GetJournalRequestSchema)` to create a new message.
+ */
+export const GetJournalRequestSchema: GenMessage<GetJournalRequest> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 17);
+
+/**
  * Kind classifies an Event. Output events carry subprocess text; the rest carry magus's
  * own structural events.
  *
@@ -670,6 +898,52 @@ export const ViewerService: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamEventsRequestSchema;
     output: typeof StreamEventsResponseSchema;
+  },
+  /**
+   * ListOutputs returns the stored runs' descriptors, newest first, so a viewer can browse
+   * recent runs grouped project -> target -> run.
+   *
+   * @generated from rpc magus.viewer.v1alpha1.ViewerService.ListOutputs
+   */
+  listOutputs: {
+    methodKind: "unary";
+    input: typeof ListOutputsRequestSchema;
+    output: typeof ListOutputsResponseSchema;
+  },
+  /**
+   * GetOutput returns one stored run's captured output VERBATIM - the bytes the subprocess
+   * wrote, unparsed and unstyled. Bytes rather than string: a captured log is whatever the
+   * tool emitted, which is not guaranteed to be valid UTF-8.
+   *
+   * @generated from rpc magus.viewer.v1alpha1.ViewerService.GetOutput
+   */
+  getOutput: {
+    methodKind: "unary";
+    input: typeof GetOutputRequestSchema;
+    output: typeof GetOutputResponseSchema;
+  },
+  /**
+   * ListInvocations returns the retained run journals by the command that produced them.
+   * The run browser's other axis: ListOutputs is per target, this is per `magus` command.
+   *
+   * @generated from rpc magus.viewer.v1alpha1.ViewerService.ListInvocations
+   */
+  listInvocations: {
+    methodKind: "unary";
+    input: typeof ListInvocationsRequestSchema;
+    output: typeof ListInvocationsResponseSchema;
+  },
+  /**
+   * GetJournal returns one past invocation whole - header plus every event - which is the
+   * same message the offline `#data=` URL fragment carries, so a browsed run and a shared
+   * one render from identical bytes.
+   *
+   * @generated from rpc magus.viewer.v1alpha1.ViewerService.GetJournal
+   */
+  getJournal: {
+    methodKind: "unary";
+    input: typeof GetJournalRequestSchema;
+    output: typeof JournalSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_viewer_v1alpha1_viewer, 0);

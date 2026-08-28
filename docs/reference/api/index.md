@@ -29,7 +29,7 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 | [StatusService](status/v1alpha1/status.md) | 2 | `magus.status.v1alpha1` |
 | [TokenService](token/v1alpha1/token.md) | 3 | `magus.token.v1alpha1` |
 | [ToolService](tool/v1alpha1/tool.md) | 1 | `magus.tool.v1alpha1` |
-| [ViewerService](viewer/v1alpha1/viewer.md) | 3 | `magus.viewer.v1alpha1` |
+| [ViewerService](viewer/v1alpha1/viewer.md) | 7 | `magus.viewer.v1alpha1` |
 
 ## Shared types
 
