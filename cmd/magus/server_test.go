@@ -2,12 +2,22 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -112,6 +122,100 @@ func TestEnsureConsoleDaemonReturnsWithoutSpawning(t *testing.T) {
 	globalCfg.MCP.Address = addr
 
 	require.NoError(t, ensureConsoleDaemon(t.Context(), addr, t.TempDir()))
+}
+
+// checkReviewWorkspace opens a throwaway workspace and wires a review provider whose
+// review_threads answer the caller chooses, so the job can be driven without a forge.
+//
+// The provider is asked for a MERGED review, since the merged report is the job's whole output
+// and the branch under test decides whether it is written.
+func checkReviewWorkspace(t *testing.T, threads func() (any, error)) (context.Context, string, *magus.Magus) {
+	t.Helper()
+	// The job parses its own flags, and that binding writes defaults into the global config.
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+	// The trail is read back per workspace, so a developer pointing every cache at one directory
+	// would have these two tests reading each other's events.
+	t.Setenv("MAGUS_CACHE_DIR", "")
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
+		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+	m, err := magus.Open(context.Background(), root)
+	require.NoError(t, err, "fixture workspace must open")
+
+	name := "fake-job-review-" + t.Name()
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.FindReviewContract:
+				return map[string]any{"id": "482", "repo": "acme/acme", "state": "merged"}, nil
+			case spells.ReviewThreadsContract:
+				return threads()
+			default:
+				return map[string]any{}, nil
+			}
+		})))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+
+	return withMagus(context.Background(), m), root, m
+}
+
+// mergedReviewEvents returns the review.merged events the job left on the trail.
+func mergedReviewEvents(t *testing.T, cacheDir string) []trail.Event {
+	t.Helper()
+	events, err := trail.ReadRecent(cacheDir, 20)
+	require.NoError(t, err)
+	var out []trail.Event
+	for _, e := range events {
+		if e.Action == "review.merged" {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// One unreadable remark must not blank the merge report. The threads that decoded are in hand,
+// and the job's error is a MALFORMED record rather than an unreachable host - reading it as the
+// latter meant a single bad row suppressed the only notice this merge would ever get, and the
+// conversation was then gone with the branch.
+func TestCheckReviewReportsAMergeDespiteAMalformedRemark(t *testing.T) {
+	ctx, root, m := checkReviewWorkspace(t, func() (any, error) {
+		return []any{
+			map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
+			map[string]any{"id": "t2", "line": "not a number"},
+		}, nil
+	})
+	// The watermark is the opt-in: without it the job asks the forge nothing at all. Marking the
+	// readable thread seen also keeps review.said out of the way of the assertion below.
+	reader := changeset.NewStore(m.CacheDir())
+	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	reader.MarkThreadsSeen(root, []string{"t1"})
+
+	require.NoError(t, serverCheckReview(ctx, root, nil))
+
+	merged := mergedReviewEvents(t, m.CacheDir())
+	require.Len(t, merged, 1, "a malformed remark must not suppress the merge report")
+	assert.Contains(t, merged[0].Preview, "acme/acme")
+}
+
+// A forge that could not be reached says nothing rather than reporting a count it derived from
+// an empty list. The drafts here are real and local, so the pre-fix reading emitted "1 remark"
+// about a review whose whole conversation was unread.
+func TestCheckReviewSaysNothingWhenTheForgeCouldNotBeReached(t *testing.T) {
+	ctx, root, m := checkReviewWorkspace(t, func() (any, error) {
+		return nil, errors.New("dial: connection refused")
+	})
+	reader := changeset.NewStore(m.CacheDir())
+	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	reader.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorHuman)
+
+	require.NoError(t, serverCheckReview(ctx, root, nil))
+
+	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()),
+		"a count taken from an unreachable host is a number nobody can act on")
 }
 
 // TestDaemonChildEnvDropsTheInheritedSocket pins the scrub. A child that inherits

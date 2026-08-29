@@ -110,6 +110,31 @@ func TestReviewThreadsReturnsWhatItReadAlongsideTheReason(t *testing.T) {
 	assert.Equal(t, "readable", got[0].Body)
 }
 
+// The unreachable host is the fact ReviewThreads swallows on purpose, and a caller that reports a
+// COUNT rather than rendering the threads cannot afford to lose it: an empty review and a review
+// nobody could read produce the same number. Reported here so the count can refuse to be taken.
+func TestReviewThreadsReachedTellsAnUnreachableHostFromAnEmptyReview(t *testing.T) {
+	withReviewSpell(t, func(string) (any, error) { return nil, errors.New("dial: connection refused") })
+	threads, reached, err := ReviewThreadsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	require.NoError(t, err, "an unreachable host is still not this call's failure")
+	assert.Empty(t, threads)
+	assert.False(t, reached)
+
+	withReviewSpell(t, func(string) (any, error) { return []any{}, nil })
+	_, reached, err = ReviewThreadsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	require.NoError(t, err)
+	assert.True(t, reached, "a review with no threads is a host that answered")
+
+	// A malformed remark is a host that answered badly, not one that failed to answer. Reading it
+	// as unreachable is what made a merge with one bad thread report nothing at all.
+	withReviewSpell(t, func(string) (any, error) {
+		return []any{map[string]any{"id": "t2", "line": "not a number"}}, nil
+	})
+	_, reached, err = ReviewThreadsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	require.Error(t, err)
+	assert.True(t, reached)
+}
+
 // A closed target consults no provider at all: there is nothing to ask about.
 func TestReviewThreadsAsksNothingWithoutAnOpenReview(t *testing.T) {
 	asked := false

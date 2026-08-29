@@ -771,18 +771,22 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	if !at.Open() {
 		return nil
 	}
-	// The error is READ here, unlike on the surfaces that render what they could get. An
+	// Reachability is READ here, unlike on the surfaces that render what they could get. An
 	// unreachable forge answers with an EMPTY list, and every number below is derived from that
 	// list - so reporting anyway meant "3 remarks live only on the host" when the true figure was
 	// fifteen, or silence about a merge whose whole conversation was unreadable. "Nothing was
 	// said" and "I could not ask" are opposite facts, and this is the one place that can still
 	// tell them apart.
-	threads, err := bindings.ReviewThreads(ctx, at)
-	if err != nil {
+	//
+	// The error is a MALFORMED remark and never the unreachable host, so it is dropped rather
+	// than read: the threads that decoded are in hand, and one unreadable record must not blank
+	// the only report this merge will get.
+	threads, reached, _ := bindings.ReviewThreadsReached(ctx, at)
+	if !reached {
 		// Not the job's failure to report: a forge that could not be reached is a fact about the
 		// network, and raising it would mark this job failed on the trail every fifteen minutes
 		// for as long as the reader is offline. The next tick asks again.
-		return nil //nolint:nilerr // an unreachable forge is a retry, not a job failure
+		return nil
 	}
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,

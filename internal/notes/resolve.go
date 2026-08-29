@@ -150,6 +150,10 @@ const StatusUngraded IssueCode = "ungraded-anchor"
 // populates it; one that leaves it empty loses the weaker neighbor match in AnchorHits and
 // nothing else.
 //
+// NodeID is left empty here for the same reason and is NOT as forgiving: a caller that
+// skips it loses every symbol match AnchorHits could have made, because the diff names its
+// changed symbols in the graph's vocabulary and the anchor carries the bare SCIP key.
+//
 // Ordering follows the store walk and then anchor position. Every anchor appears exactly once,
 // including anchor kinds no join can match, because absent is indistinguishable from clean.
 func ResolveAnchors(ctx context.Context, dir string, res Resolver) ([]ResolvedAnchor, error) {

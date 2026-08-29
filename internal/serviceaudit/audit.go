@@ -15,6 +15,12 @@ import (
 // naming each "path:target" and rendering its charm-applied argv via the spell's
 // command renderer. A service target whose spell cannot render a command (no
 // renderer, or the render fails) is skipped: it carries no argv to compare.
+//
+// The distinct reason comes from the static ServiceView rather than the render, because
+// the opt-out is declared on the op and the rendered argv carries no trace of it. A member
+// built from the command alone silently drops it, and that is not a cosmetic loss: MGS5001
+// then warns about a divergence its own documented remedy cannot silence, while doctor's
+// stale-suppression check sees no distinct services at all and reports OK forever.
 func collectMembers(projects []*types.Project, charms []string) []identity.Member {
 	var members []identity.Member
 	for _, p := range projects {
@@ -27,9 +33,13 @@ func collectMembers(projects []*types.Project, charms []string) []identity.Membe
 				if err != nil || !ok {
 					continue
 				}
+				svc := spells.Service{Command: spells.Command{Bin: bin, Args: args}}
+				if view, vok := s.ServiceView(target); vok && view != nil {
+					svc.Distinct = view.Distinct
+				}
 				members = append(members, identity.Member{
 					Name:    p.Path + ":" + target,
-					Service: spells.Service{Command: spells.Command{Bin: bin, Args: args}},
+					Service: svc,
 				})
 			}
 		}

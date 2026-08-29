@@ -65,12 +65,16 @@ func lockToProto(l types.StatusLock) *statusv1.Lock {
 		})
 	}
 	return &statusv1.Lock{
-		Waiters:     waiters,
-		Project:     l.Project,
-		Pid:         int32(l.PID),
-		Command:     l.Command,
-		Dir:         l.Dir,
-		AcquireTime: tsFromTime(l.AcquireTime),
+		Waiters: waiters,
+		Project: l.Project,
+		Pid:     int32(l.PID),
+		Command: l.Command,
+		Dir:     l.Dir,
+		// The pair is what a renderer needs: the age alone says nothing without the
+		// threshold the daemon judges it by. Dropping the threshold left every console
+		// row comparing against zero, so no held lock ever read as possibly abandoned.
+		AcquireTime:       tsFromTime(l.AcquireTime),
+		StaleAfterSeconds: int32(l.StaleAfterSeconds),
 	}
 }
 

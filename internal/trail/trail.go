@@ -71,7 +71,7 @@ const (
 	KindJob            Kind = "job"             // a daemon background job (SCIP reindex, graph build, VCS refresh)
 	KindConfigChange   Kind = "config_change"   // magus.yaml changed on reload, or a config-set mutation
 	KindTokenLifecycle Kind = "token_lifecycle" // a connector token minted or revoked
-	KindSandboxDenial  Kind = "sandbox_denial"  // a target attempted a disallowed filesystem write
+	KindSandboxDenial  Kind = "sandbox_denial"  // magus's own read/write/exec policy check refused an access (see sandbox.Policy); a kernel-landlock denial reports nothing back and cannot appear here
 	// KindAgentCommand records an agent-host tool invocation observed by a configured hook. It is
 	// an observation, not a process result: a PreToolUse hook runs before the host executes the
 	// command, so its payload records the requested command or path and the guard's decision, never

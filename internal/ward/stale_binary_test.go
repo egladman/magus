@@ -6,13 +6,30 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// buzzErr builds the shape gopherbuzz returns when a name cannot be resolved, wrapped
-// the way workspace load wraps it, so the test exercises errors.As rather than a
-// top-level type assertion that would pass for the wrong reason.
+// realBuzzErr compiles src and returns the failure wrapped the way workspace load wraps it.
+//
+// It goes through the checker rather than hand-building a *diagnostics.Error, and that is the
+// whole point of the helper. The hand-built fixture is not the shape gopherbuzz returns - the
+// checker returns its own unexported error type - so a test built on it proved that errors.As
+// works and nothing else. It was green for the entire time the BZZ1002 half of this explainer
+// could not fire.
+//
+// The test-only import of gopherbuzz does not move this package's production dependency floor,
+// which is why version.go still spells the codes as literals.
+func realBuzzErr(t *testing.T, src string) error {
+	t.Helper()
+	err := buzz.NewSession(t.Context()).Exec(t.Context(), src)
+	require.Error(t, err, "the fixture must actually fail to compile, or it pins nothing")
+	return fmt.Errorf("magusfile: exec magusfile.buzz: %w", err)
+}
+
+// buzzErr builds a coded diagnostic directly, for codes no Buzz source can produce here (a
+// magus code, an unrelated BZZ one). The positive cases go through realBuzzErr instead.
 func buzzErr(code, msg string) error {
 	return fmt.Errorf("magusfile: exec magusfile.buzz: %w", &diagnostics.Error{
 		Code: diagnostics.Code(code),
@@ -25,14 +42,14 @@ func buzzErr(code, msg string) error {
 // a spell referenced a type the binary did not provide (BZZ1002), which made the
 // module unresolvable to the magusfile importing it (BZZ2001).
 func TestExplainStaleBinary_AnnotatesTheDeadlockShapes(t *testing.T) {
-	for _, tc := range []struct{ name, code, msg string }{
-		{"undefined type from a spell", "BZZ1002", `undefined type "Secret"`},
-		{"the import it cascades into", "BZZ2001", `import "spells/github/actions": module not found`},
+	for _, tc := range []struct{ name, src, want string }{
+		{"undefined type from a spell", `final s = Secret{value = "x"};`, `undefined type "Secret"`},
+		{"the import it cascades into", `import "spells/github/actions";`, "module not found"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ExplainStaleBinary(buzzErr(tc.code, tc.msg), "0.4.0", ">= 0.4.0")
+			got := ExplainStaleBinary(realBuzzErr(t, tc.src), "0.4.0", ">= 0.4.0")
 			require.Error(t, got)
-			assert.Contains(t, got.Error(), tc.msg, "the original diagnostic must survive")
+			assert.Contains(t, got.Error(), tc.want, "the original diagnostic must survive")
 			assert.Contains(t, got.Error(), "out-of-date magus")
 			assert.Contains(t, got.Error(), "0.4.0", "names the running build")
 			assert.Contains(t, got.Error(), "requires >= 0.4.0", "names the declared floor")
@@ -66,7 +83,7 @@ func TestExplainStaleBinary_LeavesEverythingElseAlone(t *testing.T) {
 // hint still has to say something useful, because a workspace with no floor is exactly
 // the one whose users get no warning from CheckRequiredVersion.
 func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
-	got := ExplainStaleBinary(buzzErr("BZZ1002", `undefined type "Secret"`), "", "")
+	got := ExplainStaleBinary(realBuzzErr(t, `final s = Secret{value = "x"};`), "", "")
 	require.Error(t, got)
 	assert.Contains(t, got.Error(), "an unstamped build")
 	assert.Contains(t, got.Error(), "declares no required_version floor")
@@ -78,7 +95,7 @@ func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
 // CheckRequiredVersion, which exempts them. A dev build predating a pull is the most
 // common way to reach this, so exempting it here would skip the majority case.
 func TestExplainStaleBinary_AppliesToDevBuilds(t *testing.T) {
-	got := ExplainStaleBinary(buzzErr("BZZ1002", `undefined type "Secret"`), DevVersion, ">= 0.4.0")
+	got := ExplainStaleBinary(realBuzzErr(t, `final s = Secret{value = "x"};`), DevVersion, ">= 0.4.0")
 	require.Error(t, got)
 	assert.Contains(t, got.Error(), "out-of-date magus")
 

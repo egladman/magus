@@ -162,3 +162,22 @@ func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
 	// Nothing resembling a credential or a reference list rides along.
 	assert.NotContains(t, p.String(), "secret_ref")
 }
+
+// TestStatusProtoCarriesTheStaleLockThreshold pins the half of a lock row that decides how it
+// is READ. The holder's age is meaningless on its own; the threshold is what separates a peer
+// mid-run from a process nobody remembers starting, and it is on the wire so every renderer
+// shares the daemon's judgment instead of picking its own constant.
+func TestStatusProtoCarriesTheStaleLockThreshold(t *testing.T) {
+	held := time.UnixMilli(1700)
+	r := types.StatusReport{Locks: []types.StatusLock{{
+		Project: ".", PID: 4242, Command: "magus run build .", Dir: "/ws",
+		AcquireTime: held, StaleAfterSeconds: 600,
+	}}}
+
+	locks := statusReportToProto(r, types.BuildInfo{Version: "v1"}).GetLocks()
+
+	require.Len(t, locks, 1)
+	assert.Equal(t, int32(600), locks[0].GetStaleAfterSeconds())
+	assert.Equal(t, int64(1700), locks[0].GetAcquireTime().AsTime().UnixMilli())
+	assert.Equal(t, int32(4242), locks[0].GetPid())
+}

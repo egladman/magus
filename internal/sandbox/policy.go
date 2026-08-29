@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/internal/trail"
 )
 
 // ErrUnsupported is returned by Apply when landlock is unavailable (non-Linux, kernel <5.13, LSM disabled).
@@ -60,6 +62,7 @@ func (p *Policy) CheckExec(path string) error {
 func (p *Policy) CheckReadCtx(ctx context.Context, path string) error {
 	err := p.CheckRead(path)
 	RecordCheck(ctx, "read", err)
+	recordDenial(ctx, "read", path, err)
 	return err
 }
 
@@ -67,6 +70,7 @@ func (p *Policy) CheckReadCtx(ctx context.Context, path string) error {
 func (p *Policy) CheckWriteCtx(ctx context.Context, path string) error {
 	err := p.CheckWrite(path)
 	RecordCheck(ctx, "write", err)
+	recordDenial(ctx, "write", path, err)
 	return err
 }
 
@@ -74,10 +78,51 @@ func (p *Policy) CheckWriteCtx(ctx context.Context, path string) error {
 func (p *Policy) CheckExecCtx(ctx context.Context, path string) error {
 	err := p.CheckExec(path)
 	RecordCheck(ctx, "exec", err)
+	recordDenial(ctx, "exec", path, err)
 	return err
 }
 
+// recordDenial records a refused access on the run's trail - the producer trail.KindSandboxDenial
+// was declared for, and which the console's bell-tier notification has had no source for since.
+//
+// It sits behind these three wrappers rather than at each deny site because this is where the
+// decision is MADE: fs, archive, crypto, the http bindings and the exec pre-check all reach the
+// policy through them, so one producer covers every Go-side denial and a new binding inherits it.
+// The metric beside it makes the same trade for the same reason.
+//
+// What it deliberately does not claim to be is a syscall audit. The kernel landlock layer denies
+// without reporting anything back to Go, so an event here means "magus's own check refused",
+// which is the only denial anything in this process can witness.
+//
+// Allows are dropped. A read check fires once per glob match, and a durable append-only file is
+// the wrong place for a hot loop's happy path - a denial ends the operation, so it is rare by
+// construction.
+func recordDenial(ctx context.Context, access, path string, err error) {
+	if err == nil {
+		return
+	}
+	base := trail.BaseFromContext(ctx)
+	if base == "" {
+		return
+	}
+	trail.Append(ctx, base, trail.Event{
+		Ts:   time.Now().UnixMilli(),
+		Kind: trail.KindSandboxDenial,
+		// The magusfile is what asked, and no identity below this layer knows who ran it.
+		// Naming a person or an agent magus cannot identify would be worse than naming the
+		// file that made the request.
+		Actor: "magusfile",
+		// Reads as a sentence where the console renders it: "Sandbox denied read of <path>."
+		Action:  access + " of " + path,
+		Outcome: trail.OutcomeError,
+		Error:   err.Error(),
+	})
+}
+
 // ScrubEnv returns environ filtered to the allowlist, plus dropped names. A nil Policy is a no-op.
+//
+// Production builds BaseEnv by calling p.Env.Scrub directly (see defaults.go) rather than
+// through this method; only tests call ScrubEnv itself.
 func (p *Policy) ScrubEnv(environ []string) (kept, dropped []string) {
 	if p == nil {
 		return environ, nil

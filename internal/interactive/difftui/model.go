@@ -113,7 +113,11 @@ type Row struct {
 	Kind RowKind
 	File int
 	Hunk int
-	Text string
+	// Thread is the host thread this row renders a line of, empty on every other row. It is
+	// what lets the viewer report a remark as SHOWN once it has actually been drawn on screen,
+	// rather than when the changeset was handed over.
+	Thread string
+	Text   string
 	// Emph is which PART of Text changed, in BYTES of Text, on a RowLine that could be paired
 	// with its counterpart. The zero span means there is nothing to draw harder than the rest -
 	// the line has no partner, or the whole of it changed and the row color already says so.
@@ -136,6 +140,9 @@ type Model struct {
 	// changeset does not contain.
 	threads  map[hunkRef][]types.ReviewThread
 	unplaced map[string][]types.ReviewThread
+	// shown is the threads already reported as read, so a remark leaves the viewer once rather
+	// than on every frame it stays on screen.
+	shown map[string]bool
 
 	// file and hunk are where the HUMAN is. hunk is -1 on a file heading.
 	file, hunk int
@@ -167,6 +174,7 @@ func New(in Input) *Model {
 		suggests: map[hunkRef][]types.DiffSuggestion{},
 		threads:  map[hunkRef][]types.ReviewThread{},
 		unplaced: map[string][]types.ReviewThread{},
+		shown:    map[string]bool{},
 		hunk:     -1,
 		height:   1,
 	}
@@ -231,16 +239,16 @@ func (m *Model) Unsettled() bool { return m.unsettled }
 // Overview reports whether the file-list overview is open.
 func (m *Model) Overview() bool { return m.overview }
 
-// OverviewCursor is the highlighted file in the overview.
-func (m *Model) OverviewCursor() int { return m.overCursor }
+// overviewCursor is the highlighted file in the overview.
+func (m *Model) overviewCursor() int { return m.overCursor }
 
-// Cursor is where the human is looking, in the shape the session takes.
+// cursor is where the human is looking, in the shape the session takes.
 //
 // Hunk is the hunk's index in the PATCH (Hunk.Index), which is the coordinate the session
 // addresses talk by - the same one talkRows joins comments on. It is NOT the row position the
 // cursor walks: those coincide only while the viewer holds every hunk of every file, so
 // publishing the position would key the shared cursor by something no other client can resolve.
-func (m *Model) Cursor() types.DiffCursor {
+func (m *Model) cursor() types.DiffCursor {
 	if len(m.files) == 0 {
 		return types.DiffCursor{Hunk: -1}
 	}
@@ -251,8 +259,8 @@ func (m *Model) Cursor() types.DiffCursor {
 	return types.DiffCursor{Path: f.Path, Hunk: f.Hunks[m.hunk].Index}
 }
 
-// Resize sets the viewport height and keeps the cursor in view.
-func (m *Model) Resize(h int) {
+// resize sets the viewport height and keeps the cursor in view.
+func (m *Model) resize(h int) {
 	if h < 1 {
 		h = 1
 	}
@@ -260,18 +268,18 @@ func (m *Model) Resize(h int) {
 	m.follow()
 }
 
-// Scroll moves the viewport by n rows, clamped at both ends. The cursor does not move: a
+// scroll moves the viewport by n rows, clamped at both ends. The cursor does not move: a
 // reader looking around should not lose their place.
-func (m *Model) Scroll(n int) {
+func (m *Model) scroll(n int) {
 	m.top = clamp(m.top+n, 0, m.maxTop())
 }
 
-// Page scrolls a whole viewport in either direction.
-func (m *Model) Page(dir int) { m.Scroll(dir * m.height) }
+// page scrolls a whole viewport in either direction.
+func (m *Model) page(dir int) { m.scroll(dir * m.height) }
 
-// NextHunk moves to the next hunk shown anywhere below the cursor, crossing file
+// nextHunk moves to the next hunk shown anywhere below the cursor, crossing file
 // boundaries and skipping folded files. Reports whether it moved.
-func (m *Model) NextHunk() bool {
+func (m *Model) nextHunk() bool {
 	f, h := m.file, m.hunk
 	for f < len(m.files) {
 		if m.expanded(f) && h+1 < len(m.files[f].Hunks) {
@@ -283,8 +291,8 @@ func (m *Model) NextHunk() bool {
 	return false
 }
 
-// PrevHunk is NextHunk's mirror.
-func (m *Model) PrevHunk() bool {
+// prevHunk is nextHunk's mirror.
+func (m *Model) prevHunk() bool {
 	if m.expanded(m.file) && m.hunk > 0 {
 		m.setCursor(m.file, m.hunk-1)
 		return true
@@ -298,8 +306,8 @@ func (m *Model) PrevHunk() bool {
 	return false
 }
 
-// NextFile moves to the next file's heading. Reports whether it moved.
-func (m *Model) NextFile() bool {
+// nextFile moves to the next file's heading. Reports whether it moved.
+func (m *Model) nextFile() bool {
 	if m.file+1 >= len(m.files) {
 		return false
 	}
@@ -307,8 +315,8 @@ func (m *Model) NextFile() bool {
 	return true
 }
 
-// PrevFile moves to the previous file's heading. Reports whether it moved.
-func (m *Model) PrevFile() bool {
+// prevFile moves to the previous file's heading. Reports whether it moved.
+func (m *Model) prevFile() bool {
 	if m.file <= 0 {
 		return false
 	}
@@ -322,10 +330,10 @@ type ViewedChange struct {
 	On     bool
 }
 
-// ToggleViewed flips the read mark on the hunk under the cursor and reports what changed,
+// toggleViewed flips the read mark on the hunk under the cursor and reports what changed,
 // so the caller can tell the session. ok is false on a file heading or a hunk with no
 // digest - there is nothing to key a mark by.
-func (m *Model) ToggleViewed() (change ViewedChange, ok bool) {
+func (m *Model) toggleViewed() (change ViewedChange, ok bool) {
 	if m.hunk < 0 || len(m.files) == 0 {
 		return ViewedChange{}, false
 	}
@@ -346,7 +354,34 @@ func (m *Model) ToggleViewed() (change ViewedChange, ok bool) {
 // Viewed reports whether a digest is marked read.
 func (m *Model) Viewed(digest string) bool { return m.viewed[digest] }
 
-// ToggleSettled folds or unfolds every already-reviewed file at once.
+// takeShownThreads is the host threads now inside the viewport that this session has not
+// reported yet, and it reports each one exactly once.
+//
+// Keyed on what the viewport DREW rather than on what the viewer was handed, because the
+// watermark it feeds is the reader's claim to have had a remark in front of them: marking a
+// thread three screens down at open would consume the mark - and the notification that exists
+// to send the reader back to it - for something nobody looked at. Serving is not showing; the
+// console's session route draws the same line.
+//
+// The overview draws no changeset rows at all, so it shows nothing.
+func (m *Model) takeShownThreads() []string {
+	if m.overview {
+		return nil
+	}
+	var out []string
+	end := min(m.top+m.height, len(m.rows))
+	for i := m.top; i < end; i++ {
+		id := m.rows[i].Thread
+		if id == "" || m.shown[id] {
+			continue
+		}
+		m.shown[id] = true
+		out = append(out, id)
+	}
+	return out
+}
+
+// toggleSettled folds or unfolds every already-reviewed file at once.
 //
 // This is what makes a second pass cost only the second pass. A reviewer who asked for changes
 // comes back to a changeset where most files are exactly what they already read, and nothing
@@ -355,7 +390,7 @@ func (m *Model) Viewed(digest string) bool { return m.viewed[digest] }
 //
 // Folded by DEFAULT, and the count is always stated, because a hidden file nobody was told about
 // is the one failure this surface cannot have.
-func (m *Model) ToggleSettled() {
+func (m *Model) toggleSettled() {
 	m.unsettled = !m.unsettled
 	if len(m.files) > 0 && !m.expanded(m.file) {
 		m.hunk = -1
@@ -363,10 +398,10 @@ func (m *Model) ToggleSettled() {
 	m.rebuild()
 }
 
-// ToggleGenerated folds or unfolds every generated file at once, and recomputes the rows.
+// toggleGenerated folds or unfolds every generated file at once, and recomputes the rows.
 // A cursor sitting inside a file that just folded retreats to its heading rather than
 // pointing at a row that no longer exists.
-func (m *Model) ToggleGenerated() {
+func (m *Model) toggleGenerated() {
 	m.unfolded = !m.unfolded
 	if len(m.files) > 0 && !m.expanded(m.file) {
 		m.hunk = -1
@@ -374,25 +409,25 @@ func (m *Model) ToggleGenerated() {
 	m.rebuild()
 }
 
-// ToggleOverview opens or closes the changeset overview. Opening it starts on the file the
+// toggleOverview opens or closes the changeset overview. Opening it starts on the file the
 // cursor is in; closing it leaves the cursor exactly where it was.
-func (m *Model) ToggleOverview() {
+func (m *Model) toggleOverview() {
 	m.overview = !m.overview
 	if m.overview {
 		m.overCursor = m.file
 	}
 }
 
-// OverviewMove walks the overview's file list, clamped at both ends.
-func (m *Model) OverviewMove(d int) {
+// overviewMove walks the overview's file list, clamped at both ends.
+func (m *Model) overviewMove(d int) {
 	if len(m.files) == 0 {
 		return
 	}
 	m.overCursor = clamp(m.overCursor+d, 0, len(m.files)-1)
 }
 
-// OverviewEnter jumps to the highlighted file and closes the overview.
-func (m *Model) OverviewEnter() {
+// overviewEnter jumps to the highlighted file and closes the overview.
+func (m *Model) overviewEnter() {
 	if len(m.files) == 0 {
 		m.overview = false
 		return
@@ -415,9 +450,9 @@ type OverviewRow struct {
 	Rendered  string
 }
 
-// OverviewRows is the file list: what each file costs to read and how much of it is already
+// overviewRows is the file list: what each file costs to read and how much of it is already
 // read.
-func (m *Model) OverviewRows() []OverviewRow {
+func (m *Model) overviewRows() []OverviewRow {
 	out := make([]OverviewRow, 0, len(m.files))
 	for i := range m.files {
 		f := &m.files[i]
@@ -633,14 +668,21 @@ func threadRows(t types.ReviewThread, file, hunk int) []Row {
 	if who == "" {
 		who = "review"
 	}
+	said := who + ", on the review"
+	// Said out loud, because drawing the remark is also what marks it seen. A reader who was
+	// never told which ones had arrived since last time loses that distinction to their own
+	// scrolling, and it is the whole point of the watermark.
+	if t.New {
+		said += ", new to you"
+	}
 	lines := strings.Split(t.Body, "\n")
 	out := make([]Row, 0, len(lines))
 	for j, line := range lines {
 		text := "  | " + line
 		if j == 0 {
-			text = fmt.Sprintf("  | %s, on the review: %s", who, line)
+			text = fmt.Sprintf("  | %s: %s", said, line)
 		}
-		out = append(out, Row{Kind: RowComment, File: file, Hunk: hunk, Text: text})
+		out = append(out, Row{Kind: RowComment, File: file, Hunk: hunk, Thread: t.ID, Text: text})
 	}
 	return out
 }

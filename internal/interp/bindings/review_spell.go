@@ -204,16 +204,32 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 //
 // Empty on an unreachable host, for the reason FindReview gives about itself: this is the one
 // call that makes a local surface depend on a host being reachable, and the surface has to keep
-// working when it is not. Nil error, empty list.
+// working when it is not. Nil error, empty list - ReviewThreadsReached is for the caller that
+// cannot afford to lose that distinction.
 //
 // A MALFORMED thread is different, and is reported. Dropping one leaves the surface saying a
 // colleague said nothing, which is the single worst thing a review reader can be told - and
 // the threads that did decode still come back, so the caller shows what it has and says what
 // it could not read.
 func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewThread, error) {
+	threads, _, err := ReviewThreadsReached(ctx, at)
+	return threads, err
+}
+
+// ReviewThreadsReached is ReviewThreads plus the one fact ReviewThreads deliberately swallows:
+// whether the host answered at all.
+//
+// For the caller that turns the threads into a NUMBER rather than rendering the ones it got. A
+// count taken from an empty list says "nothing was said" about a conversation nobody could read,
+// and those are opposite facts. A surface that RENDERS wants ReviewThreads: staying up against a
+// host it cannot reach is the whole point of that contract.
+//
+// reached is false only when the host was asked and did not answer. Nothing to ask - no provider
+// wired, no review open - reports true, because no host failed.
+func ReviewThreadsReached(ctx context.Context, at types.ReviewTarget) (threads []types.ReviewThread, reached bool, err error) {
 	drv, ok := reviewDriver()
 	if !ok || !at.Open() {
-		return nil, nil
+		return nil, true, nil
 	}
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
 		Target: spells.ReviewThreadsContract,
@@ -221,18 +237,18 @@ func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewTh
 	})
 	if err != nil {
 		//nolint:nilerr // an unreachable host is not a failure of this call; see the doc above.
-		return nil, nil
+		return nil, false, nil
 	}
 	where := "review provider: " + spells.ReviewThreadsContract
 	if resp.Data == nil {
 		// Absent reads as the zero value, not as an error - the posture spell_decode.go states
 		// for this whole layer. A spell whose review has no threads returns nothing, and
 		// calling that malformed would put a provider bug on the screen for an empty review.
-		return nil, nil
+		return nil, true, nil
 	}
 	rows, ok := resp.Data.([]any)
 	if !ok {
-		return nil, fmt.Errorf("%s returned %T, want a list", where, resp.Data)
+		return nil, true, fmt.Errorf("%s returned %T, want a list", where, resp.Data)
 	}
 	out := make([]types.ReviewThread, 0, len(rows))
 	// Every row is attempted. Returning at the first bad one would drop the threads AFTER it,
@@ -240,14 +256,14 @@ func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewTh
 	// nobody had - which is the failure this whole path is written to avoid.
 	var bad []error
 	for i, r := range rows {
-		t, err := decodeReviewThread(r, fmt.Sprintf("%s[%d]", where, i))
-		if err != nil {
-			bad = append(bad, err)
+		t, derr := decodeReviewThread(r, fmt.Sprintf("%s[%d]", where, i))
+		if derr != nil {
+			bad = append(bad, derr)
 			continue
 		}
 		out = append(out, t)
 	}
-	return out, errors.Join(bad...)
+	return out, true, errors.Join(bad...)
 }
 
 func decodeReviewThread(row any, where string) (types.ReviewThread, error) {

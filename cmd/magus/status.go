@@ -73,8 +73,12 @@ func status(ctx context.Context, args []string) error {
 	}
 	f.Watch = clampStatusWatch(f.Watch)
 
-	isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
-	useGrid := gridEnabled(opts, tty.CanRender(os.Stdout, tty.SystemProbe)) && !f.Compact
+	// One probe for both decisions. They are the same question - may this loop move the
+	// cursor - and asking it twice with different answers is how a repaint gets set up on a
+	// terminal that cannot repaint: InlineView measures with CanRender, so a weaker gate here
+	// only ever produced a view that fell back to appending, one full frame per tick.
+	canRender := tty.CanRender(os.Stdout, tty.SystemProbe)
+	useGrid := gridEnabled(opts, canRender) && !f.Compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
 	// while retaining the last snapshot until the next real poll. Every other
@@ -92,7 +96,7 @@ func status(ctx context.Context, args []string) error {
 	report := buildStatusReport(ctx, f.Socket, f.Symbols)
 	repaint := tty.NewInlineView(os.Stdout, tty.SystemProbe)
 	defer repaint.Finish()
-	inline := opts.Format == outputText && isTTY
+	inline := opts.Format == outputText && canRender
 	for {
 		if err := paintStatusFrame(repaint, inline, report, opts, animFrame, f.Compact); err != nil {
 			return err

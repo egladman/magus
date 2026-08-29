@@ -1,6 +1,11 @@
 package clihint
 
-import "testing"
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"testing"
+)
 
 func TestCommandRender(t *testing.T) {
 	cases := []struct {
@@ -26,16 +31,59 @@ func TestCommandRender(t *testing.T) {
 	}
 }
 
-// TestAllRegistered fails if a Command value is declared but left out of All, so
-// the drift test in cmd/magus keeps walking the full set.
-func TestAllRegistered(t *testing.T) {
-	declared := []Command{
-		Run, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
-		ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
-		DescribeTargets, DescribeProject, Ls, LsTargets, Where, Refs, MCPTokenGenerate,
-		SelfUpdate, SelfRefresh, SelfRegistry,
+// TestAllDeclaredAreRegistered fails if a Command is declared but left out of All, so the
+// drift test in cmd/magus keeps walking the full set.
+//
+// It reads the declarations out of the source rather than comparing All against a second
+// hand-written list. That is not pedantry: the hand-written version compared LENGTHS against a
+// copy of All itself, so forgetting a command in both places - which is exactly what forgetting
+// looks like - kept the counts equal and the test green. ServerReload was declared, routed on
+// by serverCmd, and absent from All for as long as it existed.
+//
+// Go cannot enumerate its own package-level vars at runtime, so the source is the only place
+// the full set exists.
+func TestAllDeclaredAreRegistered(t *testing.T) {
+	registered := map[string]bool{}
+	for _, c := range All {
+		registered[c.String()] = true
 	}
-	if len(All) != len(declared) {
-		t.Fatalf("All has %d commands, declared list has %d; keep them in sync", len(All), len(declared))
+	for _, name := range declaredCommands(t) {
+		if !registered[name] {
+			t.Errorf("%q is declared but missing from All, so no drift test walks it", name)
+		}
 	}
+}
+
+// declaredCommands returns every "magus ..." path declared with cmd() in clihint.go, read from
+// the file so a new declaration is picked up without anyone remembering to list it.
+func declaredCommands(t *testing.T) []string {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), "clihint.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parsing clihint.go: %v", err)
+	}
+	var out []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if id, isIdent := call.Fun.(*ast.Ident); !isIdent || id.Name != "cmd" {
+			return true
+		}
+		tokens := make([]string, 0, len(call.Args))
+		for _, a := range call.Args {
+			lit, isLit := a.(*ast.BasicLit)
+			if !isLit || lit.Kind != token.STRING {
+				t.Fatalf("cmd() called with a non-literal argument; this test reads literals only")
+			}
+			tokens = append(tokens, lit.Value[1:len(lit.Value)-1])
+		}
+		out = append(out, Command{tokens: tokens}.String())
+		return true
+	})
+	if len(out) == 0 {
+		t.Fatal("found no cmd() declarations; the test is reading the wrong file")
+	}
+	return out
 }

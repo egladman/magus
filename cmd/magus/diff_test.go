@@ -20,8 +20,10 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 )
@@ -849,11 +851,13 @@ func TestAColorizedPatchNamesColorAsTheCause(t *testing.T) {
 // a wrapper that swallowed marks would desynchronize them silently.
 type recordingSync struct {
 	marks  []string
+	seen   []string
 	closed bool
 }
 
 func (r *recordingSync) SetCursor(types.DiffCursor)       {}
 func (r *recordingSync) SetViewed(digest string, on bool) { r.marks = append(r.marks, digest) }
+func (r *recordingSync) SetThreadsSeen(ids []string)      { r.seen = append(r.seen, ids...) }
 func (r *recordingSync) close()                           { r.closed = true }
 
 func earnedFixture(t *testing.T, files map[string]string) (root, cache string, tui []difftui.File) {
@@ -967,6 +971,22 @@ func TestEarnedSyncMintsNothingForAFileItCannotRead(t *testing.T) {
 	store, err := review.Load(cache)
 	require.NoError(t, err)
 	assert.Empty(t, store)
+}
+
+// The terminal writes the watermark through the SAME store call the console's session route
+// makes. Until it did, a reader who works entirely in `magus diff` marked nothing seen - and
+// check-review reads an empty watermark as a workspace nobody has ever reviewed in and returns
+// without asking the forge anything, so the bell could never ring for them at all.
+func TestTerminalSeenMarkingReachesTheStoreTheConsoleWrites(t *testing.T) {
+	root, cache := t.TempDir(), t.TempDir()
+	sessions := changeset.NewStore(cache)
+	sessions.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+
+	diffStoreSync{store: sessions, root: root}.SetThreadsSeen([]string{"t1", "t2"})
+
+	// Read back through a SECOND store, because the watermark has to survive the process: one
+	// that lived in memory marks the whole conversation new again the next morning.
+	assert.Equal(t, []string{"t1", "t2"}, changeset.NewStore(cache).LoadSeenThreads())
 }
 
 func TestCompatUntil(t *testing.T) {
@@ -2323,4 +2343,29 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 	require.Len(t, files, 1)
 	require.Len(t, files[0].Hunks, 1)
 	assert.Equal(t, []string{"-old", "+new"}, files[0].Hunks[0].Lines)
+}
+
+// TestSymbolAnchorJoinsAgainstTheGraphsNodeID holds the two ends of the anchor join together.
+//
+// A note anchors a bare SCIP key, the diff reports its changed symbols as knowledge-graph node
+// ids, and this is the only layer where both spellings are in scope. It shipped comparing them
+// directly, so symbol anchors - the form the store's own template tells authors to prefer -
+// never matched, and the impact report said no note anchored what you had changed.
+func TestSymbolAnchorJoinsAgainstTheGraphsNodeID(t *testing.T) {
+	const key = "m internal/cache/Store#Put()."
+	changed := knowledge.AnchorNodeID("symbol", key, string(notes.ScopeShared))
+	require.NotEqual(t, key, changed,
+		"if the two spellings agreed, the join could not have been broken")
+
+	res := stampAnchorNodeIDs([]notes.ResolvedAnchor{{
+		Note: "put-is-not-idempotent", Pos: 0,
+		Anchor: notes.Anchor{Kind: notes.AnchorSymbol, Target: key},
+	}}, string(notes.ScopeShared))
+
+	hits := notes.AnchorHits(res, nil, []string{changed})
+
+	require.Len(t, hits, 1)
+	assert.Equal(t, notes.MatchSymbol, hits[0].Match)
+	assert.Equal(t, changed, hits[0].Matched)
+	assert.Equal(t, key, hits[0].Target, "the rendered anchor stays the one the author wrote")
 }

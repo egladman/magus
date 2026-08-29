@@ -893,6 +893,9 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
 		said, pluralSuffix(said, "", "s"),
 		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
+	if line := newRemarkLine(threads); line != "" {
+		fmt.Println(line)
+	}
 	// Said out loud, because a transcript is exactly the artifact nobody re-checks. A capture
 	// that quietly omitted part of the review would be discovered, if ever, by the person who
 	// went looking for what a colleague said and concluded they had said nothing.
@@ -1169,6 +1172,28 @@ func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir s
 		return threads, err.Error()
 	}
 	return threads, ""
+}
+
+// newRemarkLine says how much of the captured conversation this reader had never had in front
+// of them, or "" when none of it is new to them.
+//
+// Printed rather than written into the note, which is the whole reason it is a line and not a
+// field. New belongs to the READER's history with the review and not to the conversation - see
+// types.ReviewThread.New - so in a transcript a colleague reads next year it would describe
+// somebody else's morning. Said to the person taking the capture, it is the one moment it is
+// worth knowing.
+func newRemarkLine(threads []types.ReviewThread) string {
+	fresh := 0
+	for _, t := range threads {
+		if t.New {
+			fresh++
+		}
+	}
+	if fresh == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `magus diff` marks them new.",
+		fresh, pluralSuffix(fresh, "", "s"))
 }
 
 // tagList collects a repeatable --tag flag.

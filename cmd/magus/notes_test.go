@@ -229,6 +229,21 @@ func TestASeenThreadIsNotNewWithoutADaemon(t *testing.T) {
 	assert.False(t, threads[0].New)
 }
 
+// Both read paths compute the mark, so a capture can say which half of the conversation the
+// reader had not weighed yet. It is told to the person TAKING the capture and never written
+// into the note: New belongs to this reader's history with the review, and in a transcript a
+// colleague reads next year it would describe somebody else's morning.
+func TestCaptureSaysWhatWasNewToThisReader(t *testing.T) {
+	threads := []types.ReviewThread{
+		{ID: "t1", Author: "priya", Body: "you weighed this already"},
+		{ID: "t2", Author: "marcus", Body: "arrived since you looked", New: true},
+	}
+
+	assert.Contains(t, newRemarkLine(threads), "1 remark on the review had not been in front of you before")
+	assert.Empty(t, newRemarkLine(threads[:1]), "a conversation the reader has already had says nothing")
+	assert.Contains(t, newRemarkLine(append(threads, types.ReviewThread{ID: "t3", New: true})), "2 remarks")
+}
+
 // A malformed remark is reported rather than dropped: the threads that decoded still travel,
 // and the caller says what it could not read.
 func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
