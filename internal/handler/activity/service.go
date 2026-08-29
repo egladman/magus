@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
@@ -27,6 +28,13 @@ import (
 const (
 	defaultPageSize = 200
 	maxPageSize     = 1000
+	// maxWindow bounds how far back one request reads each trail. It mirrors internal/trail's own
+	// retention cap, so the ceiling means "everything the trail still holds" rather than an
+	// arbitrary depth - reading further could only turn up events rotation has already dropped.
+	//
+	// The whole retained window is read on EVERY page because the filter runs over it: how many
+	// recorded events hide one page of matching ones is not knowable before matching them.
+	maxWindow = 10000
 )
 
 // Workspace names one workspace whose trail the view merges: its root (the identity a reader
@@ -69,9 +77,16 @@ func (s *Service) loaded() []Workspace {
 
 var _ activityv1alpha1connect.ActivityServiceHandler = (*Service)(nil)
 
-// ListActivityEvents returns recent events, newest first, narrowed by the request filter. Paging is a
-// simple recent-window today (page_size, capped); page_token is unused, so next_page_token is
-// always empty - enough for the dashboard's "recent activity" view.
+// ListActivityEvents returns recent events, newest first, narrowed by the request filter.
+//
+// The filter runs BEFORE the page is cut, so page_size counts MATCHING events. Truncating first
+// was the bug this replaced: on a busy daemon the newest page_size events could all be filtered
+// out, and the caller read the empty response as "there are none" - a false absence the review
+// bells and the dashboard Agents tile all assert on.
+//
+// page_token is a decimal offset into the filtered, newest-first stream, and next_page_token is
+// set while events remain, so "load older activity" walks the whole retained trail instead of
+// stopping at the first page.
 func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[activityv1.ListActivityEventsRequest]) (*connect.Response[activityv1.ListActivityEventsResponse], error) {
 	limit := int(req.Msg.GetPageSize())
 	if limit <= 0 {
@@ -80,13 +95,22 @@ func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[act
 	if limit > maxPageSize {
 		limit = maxPageSize
 	}
-	events := readMerged(s.loaded(), limit)
+	offset, err := pageOffset(req.Msg.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+
 	filter := req.Msg.GetFilter()
-	out := make([]*activityv1.ActivityEvent, 0, len(events))
-	for _, e := range events {
-		if !matchFilter(e, filter) {
-			continue
+	matched := make([]trail.Event, 0, limit)
+	for _, e := range readMerged(s.loaded(), maxWindow) {
+		if matchFilter(e, filter) {
+			matched = append(matched, e)
 		}
+	}
+
+	from, to, next := pageBounds(len(matched), offset, limit)
+	out := make([]*activityv1.ActivityEvent, 0, to-from)
+	for _, e := range matched[from:to] {
 		pe := &activityv1.ActivityEvent{
 			Time:          timestamppb.New(time.UnixMilli(e.Ts)),
 			Kind:          encodeKind(e.Kind),
@@ -109,17 +133,45 @@ func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[act
 		}
 		out = append(out, pe)
 	}
-	return connect.NewResponse(&activityv1.ListActivityEventsResponse{Events: out}), nil
+	return connect.NewResponse(&activityv1.ListActivityEventsResponse{Events: out, NextPageToken: next}), nil
+}
+
+// pageOffset reads a page token as an offset into the filtered stream. An unparseable token errors
+// rather than restarting at zero: a caller paging a list must not be handed page one again and
+// take it for the end.
+func pageOffset(token string) (int, error) {
+	if token == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(token)
+	if err != nil || n < 0 {
+		return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("activity: bad page token "+strconv.Quote(token)))
+	}
+	return n, nil
+}
+
+// pageBounds clamps offset and limit to total and returns the slice bounds plus the next token,
+// empty once the page reaches the end.
+func pageBounds(total, offset, limit int) (from, to int, next string) {
+	from = min(offset, total)
+	to = min(from+limit, total)
+	if to == total {
+		return from, to, ""
+	}
+	return from, to, strconv.Itoa(to)
 }
 
 // readMerged returns the limit most recent events across every workspace's trail, newest first.
 //
 // The cap applies to the MERGED set, not per trail: reading limit from each and concatenating
 // would neither be the limit most recent daemon-wide nor in time order. Each trail is read for
-// up to limit events (any one of them could supply the whole page), then the union is sorted and
+// up to limit events (any one of them could supply the whole window), then the union is sorted and
 // truncated. A trail that cannot be read - a pruned workspace, a permissions error, a workspace
 // that has recorded nothing yet - is SKIPPED: one unreadable workspace must not blank the panel
 // for the rest.
+//
+// limit is the READ WINDOW, not the page: the caller filters and pages what comes back, so cutting
+// here to a page size would starve a filtered page of matches sitting just past the boundary.
 func readMerged(workspaces []Workspace, limit int) []trail.Event {
 	merged := make([]trail.Event, 0, limit)
 	for _, w := range workspaces {

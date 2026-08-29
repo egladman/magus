@@ -418,3 +418,100 @@ func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
 			"trail kind %q has no proto value, so the activity view cannot show or filter it", k)
 	}
 }
+
+// TestListActivityEvents_FiltersBeforeTruncating is the regression for a page that starved on a
+// busy daemon: the newest page_size events were cut FIRST and the filter applied to the survivors,
+// so a filter matching only older events answered "none". The console reads that as a false
+// absence - the review bells and the dashboard Agents tile all assert on it.
+func TestListActivityEvents_FiltersBeforeTruncating(t *testing.T) {
+	dir := t.TempDir()
+	// One matching event, then enough noise to bury it past any page.
+	trail.Append(t.Context(), dir, trail.Event{
+		Ts: 1, Kind: trail.KindSandboxDenial, Actor: "target", Action: "the-denial", Outcome: trail.OutcomeError,
+	})
+	for i := range 50 {
+		trail.Append(t.Context(), dir, trail.Event{
+			Ts: int64(i + 2), Kind: trail.KindJob, Actor: "daemon", Action: "noise", Outcome: trail.OutcomeOK,
+		})
+	}
+
+	resp, err := svc(dir).ListActivityEvents(context.Background(),
+		connect.NewRequest(&activityv1.ListActivityEventsRequest{
+			PageSize: 10,
+			Filter:   &activityv1.ActivityQuery{Kinds: []activityv1.Kind{activityv1.Kind_KIND_SANDBOX_DENIAL}},
+		}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"the-denial"}, actions(resp.Msg.GetEvents()))
+	assert.Empty(t, resp.Msg.GetNextPageToken(), "page_size counts matching events, so one match is the whole list")
+}
+
+// TestListActivityEvents_PageTokenWalksTheTrail is the regression for "Load older activity" being
+// dead: next_page_token was never set, so the console capped the trail at one page and the three
+// branches gated on the token could never run.
+func TestListActivityEvents_PageTokenWalksTheTrail(t *testing.T) {
+	dir := seedAt(t, 1, 2, 3, 4, 5)
+	s := svc(dir)
+
+	page := func(token string) *activityv1.ListActivityEventsResponse {
+		t.Helper()
+		resp, err := s.ListActivityEvents(context.Background(),
+			connect.NewRequest(&activityv1.ListActivityEventsRequest{PageSize: 2, PageToken: token}))
+		require.NoError(t, err)
+		return resp.Msg
+	}
+
+	first := page("")
+	assert.Equal(t, []string{"job-5", "job-4"}, actions(first.GetEvents()))
+	require.Equal(t, "2", first.GetNextPageToken())
+
+	second := page(first.GetNextPageToken())
+	assert.Equal(t, []string{"job-3", "job-2"}, actions(second.GetEvents()))
+	require.Equal(t, "4", second.GetNextPageToken())
+
+	last := page(second.GetNextPageToken())
+	assert.Equal(t, []string{"job-1"}, actions(last.GetEvents()))
+	assert.Empty(t, last.GetNextPageToken(), "the last page ends the walk")
+}
+
+// TestListActivityEvents_PageTokenOffsetsMatchesNotRows checks the offset counts MATCHING events,
+// so a filtered walk does not skip matches that raw offsets would have stepped over.
+func TestListActivityEvents_PageTokenOffsetsMatchesNotRows(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 6 {
+		kind, action := trail.KindJob, fmt.Sprintf("noise-%d", i)
+		if i%2 == 0 {
+			kind, action = trail.KindSandboxDenial, fmt.Sprintf("denial-%d", i)
+		}
+		trail.Append(t.Context(), dir, trail.Event{
+			Ts: int64(i + 1), Kind: kind, Actor: "daemon", Action: action, Outcome: trail.OutcomeOK,
+		})
+	}
+	s := svc(dir)
+	filter := &activityv1.ActivityQuery{Kinds: []activityv1.Kind{activityv1.Kind_KIND_SANDBOX_DENIAL}}
+
+	first, err := s.ListActivityEvents(context.Background(),
+		connect.NewRequest(&activityv1.ListActivityEventsRequest{PageSize: 2, Filter: filter}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"denial-4", "denial-2"}, actions(first.Msg.GetEvents()))
+	require.Equal(t, "2", first.Msg.GetNextPageToken())
+
+	second, err := s.ListActivityEvents(context.Background(),
+		connect.NewRequest(&activityv1.ListActivityEventsRequest{
+			PageSize: 2, PageToken: first.Msg.GetNextPageToken(), Filter: filter,
+		}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"denial-0"}, actions(second.Msg.GetEvents()))
+	assert.Empty(t, second.Msg.GetNextPageToken())
+}
+
+// TestListActivityEvents_RejectsBadPageToken: an unparseable token errors rather than restarting at
+// page one, which a caller paging a list would take for the end.
+func TestListActivityEvents_RejectsBadPageToken(t *testing.T) {
+	dir, _ := seedTrail(t)
+	for _, token := range []string{"not-a-number", "-1"} {
+		_, err := svc(dir).ListActivityEvents(context.Background(),
+			connect.NewRequest(&activityv1.ListActivityEventsRequest{PageToken: token}))
+		require.Error(t, err, "token %q", token)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	}
+}

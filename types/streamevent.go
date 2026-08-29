@@ -16,9 +16,9 @@ import (
 // by content. [Event] is what magus emits when it needs a PERSON: it carries an
 // urgency tier and a situation class because a human renderer has to decide
 // whether to interrupt someone. A StreamEvent carries neither, because a program
-// subscribing to a build stream decides relevance by [StreamEventType]. An
-// attention request rides this stream as a [StreamAttention] body, which is the
-// one place the two meet.
+// subscribing to a build stream decides relevance by [StreamEventType]. The two
+// do not meet on the wire today: every mapped type is a run or target fact, and
+// an attention request has no adapter onto this stream - see the const block.
 //
 // Nothing a subscriber does can change a magus verdict. The stream is outbound
 // only, by design and not by omission: docs/scope.md seals the engine, the cache,

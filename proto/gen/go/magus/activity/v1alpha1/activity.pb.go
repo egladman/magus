@@ -50,7 +50,7 @@ const (
 	Kind_KIND_JOB             Kind = 2 // a daemon background job: SCIP reindex, graph build, VCS refresh (emitted)
 	Kind_KIND_CONFIG_CHANGE   Kind = 3 // reserved: magus.yaml changed on reload, or a `magus config set` mutation
 	Kind_KIND_TOKEN_LIFECYCLE Kind = 4 // reserved: a connector token was minted or revoked
-	Kind_KIND_SANDBOX_DENIAL  Kind = 5 // reserved: a target attempted a disallowed filesystem write
+	Kind_KIND_SANDBOX_DENIAL  Kind = 5 // magus's own read/write/exec check refused an access; not a kernel-landlock denial, which reports nothing back (emitted)
 	Kind_KIND_MEMORY          Kind = 6 // a console MemoryService action on the durable magus_memory files (reads audited too)
 	// An agent host observed a shell or file-tool invocation. The request blob contains normalized
 	// host/tool/session data and the command or path; the response blob contains the guard decision.

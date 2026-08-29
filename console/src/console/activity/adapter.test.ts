@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { Kind, Outcome, type ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
 import { must } from "../../lib/guards";
 import {
+  PAYLOAD_MAX_BYTES,
   activityToModel,
   clockTime,
   durText,
@@ -13,6 +14,9 @@ import {
   groupEventsByKind,
   humanBytes,
   kindLabel,
+  payloadLabel,
+  payloadLines,
+  payloadRefs,
   tsMillis,
 } from "./adapter";
 
@@ -147,6 +151,50 @@ test("a job event with no payload is just its head", () => {
   const sec = eventSection(ev({ kind: Kind.JOB, action: "scip-reindex", actor: "daemon" }));
   assert.equal(sec.meta?.label, "job");
   assert.deepEqual(sec.lines, [sec.title]);
+});
+
+// The expand control is built from these refs: an event that names a body must offer one, and an
+// event that names none must not.
+test("payloadRefs lists request then response, and nothing for an event with no body", () => {
+  assert.deepEqual(payloadRefs(ev({ action: "scip-reindex" })), []);
+  assert.deepEqual(
+    payloadRefs(
+      ev({
+        requestRef: "mcpaaaa",
+        requestBytes: 40n,
+        responseRef: "mcpbbbb",
+        responseBytes: 2048n,
+      }),
+    ),
+    [
+      { label: "request", ref: "mcpaaaa", bytes: 40 },
+      { label: "response", ref: "mcpbbbb", bytes: 2048 },
+    ],
+  );
+  // A spawn records the handed context and no response at all.
+  const spawn = ev({ kind: Kind.AGENT_SPAWN, requestRef: "spwaaaa", requestBytes: 900n });
+  assert.deepEqual(payloadRefs(spawn), [{ label: "request", ref: "spwaaaa", bytes: 900 }]);
+});
+
+test("payloadLabel names the body, and its size only when one was recorded", () => {
+  const response = { label: "response", ref: "mcpbbbb", bytes: 2048 };
+  assert.equal(payloadLabel(response), "show response (2.0 KB)");
+  assert.equal(payloadLabel({ label: "request", ref: "mcpaaaa", bytes: 0 }), "show request");
+});
+
+test("payloadLines splits a body and treats a trailing newline as a terminator", () => {
+  const body = new TextEncoder().encode("first\nsecond\n");
+  assert.deepEqual(payloadLines(body), { lines: ["first", "second"], clipped: false });
+});
+
+// The bound exists because a blob is whatever its producer wrote: one megabytes-long line of JSON
+// is a normal MCP response, and the section renderer paints a line as a single row.
+test("payloadLines clips a body past the bound and says so", () => {
+  const body = new TextEncoder().encode("x".repeat(PAYLOAD_MAX_BYTES + 10));
+  const out = payloadLines(body);
+  assert.equal(out.clipped, true);
+  assert.equal(out.lines.length, 1);
+  assert.equal(out.lines[0].length, PAYLOAD_MAX_BYTES);
 });
 
 test("groupEventsByKind buckets in fixed order, drops empty kinds, keeps original indices", () => {

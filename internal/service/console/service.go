@@ -95,18 +95,6 @@ func WithInsightFn(fn func(ctx context.Context) (types.InsightView, error)) Opti
 	return func(s *Service) { s.insightFn = fn }
 }
 
-// WithWorkingDiffFn replaces the VCS call behind WorkingDiff. Tests pass a canned patch so
-// the review surface can be driven without a repository.
-func WithWorkingDiffFn(fn func(ctx context.Context, paths []string) (string, error)) Option {
-	return func(s *Service) { s.workingDiffFn = fn }
-}
-
-// WithDiffFn replaces the annotation join behind Review. Tests pass canned annotations so
-// the review surface can be driven without a symbol index or a coverage run.
-func WithDiffFn(fn func(ctx context.Context, paths []string) (types.Diff, error)) Option {
-	return func(s *Service) { s.diffFn = fn }
-}
-
 // WithInsightTTL overrides how long an assembled InsightView is reused before the git-log
 // scan runs again. Zero disables caching (every call recomputes); negative is treated as
 // zero. Production leaves it at defaultInsightTTL.

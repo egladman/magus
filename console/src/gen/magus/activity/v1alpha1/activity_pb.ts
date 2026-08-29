@@ -350,7 +350,7 @@ export enum Kind {
   TOKEN_LIFECYCLE = 4,
 
   /**
-   * reserved: a target attempted a disallowed filesystem write
+   * magus's own read/write/exec check refused an access; not a kernel-landlock denial, which reports nothing back (emitted)
    *
    * @generated from enum value: KIND_SANDBOX_DENIAL = 5;
    */

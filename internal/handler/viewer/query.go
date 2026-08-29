@@ -1,4 +1,12 @@
-package console
+// This file is the viewer's event filter: the DSL a filter bar types, the typed EventQuery it
+// parses into, and the matcher ListEvents and StreamEventsRequest.filter are defined in terms of.
+//
+// It lives HERE rather than in internal/service/console, where it started, because ListEvents has
+// to apply it and console already imports this package for EncodeJournalFragment - importing back
+// would be a cycle. The viewer's own grammar over the viewer's own fields belongs with the viewer
+// wire anyway.
+
+package viewer
 
 import (
 	"strings"

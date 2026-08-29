@@ -69,18 +69,23 @@ func (s *Service) GetJournal(_ context.Context, req *connect.Request[viewerv1.Ge
 	return connect.NewResponse(journalToProto(header, events)), nil
 }
 
-// ListEvents returns a page of one run's events. The store returns the journal whole, so the page
-// token is an offset into it rather than a cursor it could resume from.
+// ListEvents returns a page of one run's events, narrowed by the request filter. The store returns
+// the journal whole, so the page token is an offset into it rather than a cursor it could resume
+// from.
+//
+// The filter runs BEFORE the page is cut, so page_size counts MATCHING events. Cutting first would
+// make a narrow filter over a long journal return an empty page while matches sat just past the
+// boundary, and a caller cannot tell that from "no such events".
 func (s *Service) ListEvents(_ context.Context, req *connect.Request[viewerv1.ListEventsRequest]) (*connect.Response[viewerv1.ListEventsResponse], error) {
 	inv, err := s.resolveInvocation(req.Msg.GetParent())
 	if err != nil {
 		return nil, err
 	}
-	header, events, err := s.runs.InvocationEventsByID(inv)
+	_, events, err := s.runs.InvocationEventsByID(inv)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	_ = header
+	events = ApplyEventQuery(events, req.Msg.GetFilter())
 
 	from, to, next, err := page(len(events), req.Msg.GetPageToken(), int(req.Msg.GetPageSize()))
 	if err != nil {

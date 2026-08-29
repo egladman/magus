@@ -15,7 +15,7 @@ import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { TokenService, TokenScope } from "@wire/token/v1alpha1/token_pb";
-import { createDaemonTransport, getLiveToken, resolveDaemonHost } from "./daemon";
+import { createDaemonTransport, getLiveToken, logsLink, resolveDaemonHost } from "./daemon";
 import { showToast } from "./refresh-toast";
 import { mergedNotice, saidNotice } from "./review-notice";
 import {
@@ -27,6 +27,15 @@ import {
 } from "./notifications";
 
 const POLL_MS = 30_000;
+
+// surfaceLink deep-links a console surface by its canonical /console/<surface>/ clean path, the form
+// the shell's boot router opens. The re-attach fragment is taken from logsLink rather than rebuilt: a
+// console attached by #port= has no stored host, so a link that drops the fragment lands the reader on
+// a surface that cannot find the daemon.
+function surfaceLink(surface: string, host: string | null): string {
+  const hash = logsLink(host, {}).split("#")[1];
+  return "../" + surface + "/" + (hash ? "#" + hash : "");
+}
 
 // checkLocalStorageAlert warns once when the console's own localStorage footprint nears the browser quota.
 // Runs on mount regardless of daemon connectivity - it is the console's storage, not the daemon's.
@@ -41,6 +50,9 @@ export function checkLocalStorageAlert(
     return;
   }
   if (bytes < LOCALSTORAGE_WARN_BYTES) return;
+  // No link, for the reason notifyDenials gives for its own: there is nothing to address. This is the
+  // browser's site storage, no console control clears it, and a page cannot open the browser's own
+  // site-data settings.
   store.notify({
     source: "Console",
     kind: "warn",
@@ -127,6 +139,9 @@ async function pollDaemonStorage(host: string, store: NotificationStore): Promis
       humanBytes(size) +
       (capBytes > 0 ? " of a " + humanBytes(capBytes) + " cap" : "") +
       "). Run the clear-cache job from Activity or rotate logs to reclaim space.",
+    // The dashboard, not the Activity trail the message names: the trail RECORDS a job and cannot run
+    // one, while the dashboard renders the cache figure this is reporting and shows it come back down.
+    link: { label: "Open the dashboard", href: surfaceLink("dashboard", host) },
   });
 }
 
@@ -160,12 +175,15 @@ async function pollReviewMerged(host: string, store: NotificationStore): Promise
       // A preview this cannot read yields no message, and no key either - keying the malformed
       // case on a constant made two different broken events dedupe into one.
       if (!message || !ids) continue;
+      // warn, not error: nothing failed. `important` is what rings the bell, so the colour is free to
+      // say "somebody is waiting on you" rather than painting a colleague's remark as a red failure.
       store.notify({
         source: "Diff",
-        kind: "error",
+        kind: "warn",
         important: true,
         key: "review.said:" + ids,
         message,
+        link: { label: "Open the review", href: surfaceLink("diff", host) },
       });
       continue;
     }
@@ -182,6 +200,9 @@ async function pollReviewMerged(host: string, store: NotificationStore): Promise
       kind: "ok",
       key: "review.merged:" + (ev.time ? Number(ev.time.seconds) : 0) + ":" + (ev.preview || ""),
       message,
+      // The capture itself is a CLI act by construction (see review-notice.ts), so the link goes to the
+      // conversation the reader has to read before deciding it is worth keeping.
+      link: { label: "Open the review", href: surfaceLink("diff", host) },
     });
   }
 }
