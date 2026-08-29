@@ -1,8 +1,9 @@
 // Package jobs is the registry of the daemon's background maintenance jobs: the single source
 // of truth that maps a job's stable name to the worker argv the daemon runs for it. It is the
 // leaf shared by the producers that must agree on that mapping - the `server job <name>` CLI
-// submitter, the daemon's job dispatch (which admits exactly these worker argvs and rejects
-// anything else submitted as a job), and the maintenance scheduler.
+// submitter, the magus.job.v1alpha1 JobService RPC handlers, the daemon's job dispatch (which admits
+// exactly these worker argvs and rejects anything else submitted as a job), and the maintenance
+// scheduler.
 //
 // A job is submitted through the same fire-and-forget proc mechanism as any adopted work
 // (proc.SubmitJob), so it inherits that layer's coalescing (an identical in-flight job is
@@ -96,6 +97,6 @@ func IsWorkerArgv(argv []string) bool {
 
 // ActionString is the canonical trail "action" for a job argv: the space-joined command. It is
 // the ONE place that format is defined, so the producer that records a job run (the daemon's
-// OnJobDone callback) and the consumer that looks a run up by action (the scheduler's due-check)
-// cannot drift apart on how a run is keyed.
+// OnJobDone callback) and the consumers that look a run up by action (the scheduler's due-check
+// and the JobService metadata) cannot drift apart on how a run is keyed.
 func ActionString(argv []string) string { return strings.Join(argv, " ") }

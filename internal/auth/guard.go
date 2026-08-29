@@ -74,9 +74,9 @@ func VerifyConsoleBearer(presented string) bool {
 // full console token, or a viewer token (ScopeConsoleRead).
 //
 // A viewer token is accepted HERE and nowhere else, which is what makes it a viewer:
-// the mutating console mounts (MemoryService, the diff session's run ops, the share
-// trigger) use VerifyConsoleBearer, which does not consult ScopeConsoleRead, so a leaked
-// viewer credential can read the console and change nothing. A full console token is
+// the mutating console mounts (JobService, MemoryService, the share trigger) use
+// VerifyConsoleBearer, which does not consult ScopeConsoleRead, so a leaked viewer
+// credential can read the console and change nothing. A full console token is
 // accepted too - the write tier is a superset of the read tier, not a sibling.
 func VerifyConsoleReadBearer(presented string) bool {
 	if VerifyConsoleBearer(presented) {

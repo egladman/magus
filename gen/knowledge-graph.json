@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2403,
-  "edge_count": 6293,
+  "node_count": 2406,
+  "edge_count": 6300,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -936,7 +936,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "221",
+        "dir_files": "224",
         "dir_languages": "markdown"
       }
     },
@@ -946,7 +946,7 @@
       "label": "docs/reference/api",
       "source": "docs/reference/api",
       "attrs": {
-        "dir_files": "34",
+        "dir_files": "37",
         "dir_languages": "markdown"
       }
     },
@@ -1005,6 +1005,26 @@
       "kind": "dir",
       "label": "docs/reference/api/insight/v1alpha1",
       "source": "docs/reference/api/insight/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/job",
+      "kind": "dir",
+      "label": "docs/reference/api/job",
+      "source": "docs/reference/api/job",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/job/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/job/v1alpha1",
+      "source": "docs/reference/api/job/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -3232,6 +3252,18 @@
         "section": "reference",
         "tags": "api,proto,connect,grpc,insightservice",
         "title": "InsightService"
+      }
+    },
+    {
+      "id": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "kind": "doc",
+      "label": "docs/reference/api/job/v1alpha1/job.md",
+      "source": "docs/reference/api/job/v1alpha1/job.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "api,proto,connect,grpc,jobservice",
+        "title": "JobService"
       }
     },
     {
@@ -23295,6 +23327,14 @@
     },
     {
       "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/job",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job"
+    },
+    {
+      "source": "dir:docs/reference/api",
       "target": "dir:docs/reference/api/memory",
       "relation": "contains",
       "confidence": "extracted",
@@ -23412,6 +23452,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
+    },
+    {
+      "source": "dir:docs/reference/api/job",
+      "target": "dir:docs/reference/api/job/v1alpha1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/job/v1alpha1",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
       "source": "dir:docs/reference/api/memory",
@@ -33423,6 +33479,14 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/index.md"
+    },
+    {
+      "source": "doc:docs/reference/api/index.md",
       "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -33508,6 +33572,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
+    },
+    {
+      "source": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "target": "doc:docs/reference/api/index.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
+    },
+    {
+      "source": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
       "source": "doc:docs/reference/api/memory/v1alpha1/memory.md",
@@ -69308,6 +69388,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

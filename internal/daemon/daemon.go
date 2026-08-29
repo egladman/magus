@@ -29,6 +29,7 @@ import (
 	diffhandler "github.com/egladman/magus/internal/handler/diff"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
+	jobhandler "github.com/egladman/magus/internal/handler/job"
 	ledgerhandler "github.com/egladman/magus/internal/handler/ledger"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	memoryhandler "github.com/egladman/magus/internal/handler/memory"
@@ -48,6 +49,7 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1/memoryv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1/notesv1alpha1connect"
@@ -366,8 +368,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// shareGuarded is the exact read surface the LAN share listener exposes,
 			// each entry guarded per-session by the share token (share.Manager wraps
 			// them). It is deliberately a subset of the loopback bridge: NO /api/v1/graph,
-			// NO /mcp, NO mutating memory or token service - a leaked share link reaches
-			// only these read routes. The two Connect read services (activity, metrics) are added
+			// NO /mcp, NO mutating JobService - a leaked share link reaches only these
+			// read routes. The two Connect read services (activity, metrics) are added
 			// to this map below, where their handlers are built.
 			shareGuarded := map[string]http.Handler{
 				"/api/v1/events":  eventsH,
@@ -479,6 +481,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			} {
 				httpServer.Handle(path, httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyConsoleReadBearer, h)))
 			}
+
+			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
+			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
+			// cross-origin allowance as the read services - never unauthenticated - so a browser
+			// client can trigger maintenance without the daemon exposing an open action endpoint.
+			jobPath, jobHandler := jobv1alpha1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version))
+			httpServer.Handle(jobPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, jobHandler))))
+			log.InfoContext(ctx, "[BRIDGE] job service mounted", slog.String("path", jobPath))
 
 			// Share to phone: POST /api/v1/share opens an on-demand, time-boxed LAN
 			// listener serving shareGuarded (the read surface) under a fresh read-only

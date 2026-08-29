@@ -272,11 +272,3 @@ reference/manpage/magus-hook/
 tags/desktop/
 tags/magus-hook/
 tags/policy/
-
-# JobService was removed: it duplicated `magus server job <name>` with no console
-# caller ever wired, so its Connect API and generated reference pages retire with
-# it. No successor page: jobs are driven by the CLI verb, documented on the
-# console reference page.
-reference/api/job/
-reference/api/job/v1alpha1/
-reference/api/job/v1alpha1/job/

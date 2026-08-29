@@ -405,6 +405,36 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle);
 }
 
+/* The maintenance-jobs control (activity/jobs.ts): a PF Card above the trail carrying one row per
+   registered job. PF owns the frame and the Run button; these rules only lay the row out and subdue
+   the meta. Running state is a data-* attribute, not a --modifier (README.md's convention), because
+   it is transient - it flips between two loads of the same list. */
+.console-activity-jobs {
+  margin-block-end: 0.5rem;
+}
+.console-activity-jobs__head {
+  display: flex; align-items: baseline; gap: 0.5rem;
+}
+.console-activity-jobs__row {
+  display: flex; align-items: center; gap: 0.5rem; padding-block: 0.15rem;
+}
+.console-activity-jobs__name {
+  font-weight: 600; min-width: 11ch;
+}
+/* The description is the flexible column: it is the least load-bearing text on the row, so it is
+   what gives way when the pane is narrow. */
+.console-activity-jobs__desc {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.console-activity-jobs__meta,
+.console-activity-jobs__state,
+.console-activity-jobs__note {
+  font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle);
+}
+.console-activity-jobs__row[data-state="running"] .console-activity-jobs__state {
+  color: var(--console-status-running);
+}
+
 /* --- Run browser (the log viewer's left master-detail tree; runtree.ts) --------------------------
    A collapsible aside down the left of the viewer, below the shared toolbar: a PF TreeView of prior
    runs (project -> target -> run) read from the daemon's /api/v1/outputs. Selecting a run loads its

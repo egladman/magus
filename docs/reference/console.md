@@ -124,8 +124,17 @@ serialization). This is a known limitation; memoization per variant is deferred.
 
 ## Job control
 
-There is none here. Background maintenance is submitted from the CLI with
-`magus server job <name>`, and the daemon serves no RPC for it.
+Separate from the read routes above, the daemon hosts a **mutating** Connect
+service, `magus.job.v1alpha1.JobService`, so a browser client (or the CLI) can trigger
+background maintenance without an open action endpoint. It is the only surface
+that changes anything magus computed - the others record a person's own review
+state, open a share listener, or edit their handoff journal - and it is bounded:
+it submits a fixed set of named jobs, never an arbitrary command.
+
+The service exposes two RPCs, not one per job: `RunJob(name)` submits any
+registered job by its resource name (`jobs/{job}`), and `ListJobs` reports every
+job's running state, last run, and target size. A job name nobody registered is
+a NotFound error rather than a third RPC.
 
 | Job                 | Effect                                               |
 | ------------------- | ---------------------------------------------------- |
@@ -135,8 +144,21 @@ There is none here. Background maintenance is submitted from the CLI with
 | `clear-cache`       | Invalidate cached build entries                      |
 | `check-review`      | Note when a review this tree took part in has merged |
 
-Each submit is fire-and-forget and coalesced: an identical in-flight job is not
-started twice.
+Each submit is fire-and-forget and coalesced (an identical in-flight job is not
+started twice) and returns a metadata snapshot - the job's last run and the
+current size of what it maintains. The service is mounted behind the same loopback
+bind and bearer token as everything else here; it is never served unauthenticated.
+
+Two doors reach it. In the console, the **Activity** surface carries a
+maintenance control above the trail: it lists every registered job with its
+running state, last run and target size (`ListJobs`), and each row runs that job
+(`RunJob`). It sits on Activity because a job's result is a trail entry - what a
+job did is read on that surface, so what starts it belongs there. From a
+terminal, `magus server job <name>` submits the same jobs down the same path. The
+control exists because the console is where the prompt to run one already fires:
+the daemon-storage notification watches the cache figure from inside the console,
+and used to end by naming a shell command, so the surface that noticed the
+problem could not act on it.
 
 ## How it is secured
 

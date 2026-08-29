@@ -483,9 +483,9 @@ func daemonDefaultAddr() string {
 }
 
 // serverJob submits a named background maintenance job to a running daemon and returns
-// immediately. It is the ONLY way to run one: the daemon serves no job RPC, so maintenance is a
-// command a person or a hook issues. The job set is the shared jobs registry (sync-graph,
-// rotate-activities, rotate-logs, clear-cache); `server job` with no name lists them. A no-op when no persistent daemon is running, so the VCS refresh hook (which
+// immediately, the CLI counterpart to the magus.job.v1alpha1 JobService RPC. The job set is the
+// shared jobs registry (sync-graph, rotate-activities, rotate-logs, clear-cache); `server job`
+// with no name lists them. A no-op when no persistent daemon is running, so the VCS refresh hook (which
 // calls `server job sync-graph`) never blocks or fails a checkout. The daemon coalesces an
 // identical in-flight job, reported back as an empty invocation id ("already running").
 func serverJob(ctx context.Context, args []string) error {
