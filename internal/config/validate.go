@@ -106,9 +106,9 @@ func humanReason(f FieldFailure) string {
 	case "oneof":
 		return fmt.Sprintf("must be one of: %s (got %q)", strings.Join(strings.Fields(f.Param), ", "), f.Value)
 	case "gte":
-		return fmt.Sprintf("must be ≥ %s (got %s)", f.Param, f.Value)
+		return fmt.Sprintf("must be >= %s (got %s)", f.Param, f.Value)
 	case "lte":
-		return fmt.Sprintf("must be ≤ %s (got %s)", f.Param, f.Value)
+		return fmt.Sprintf("must be <= %s (got %s)", f.Param, f.Value)
 	case "shard_count":
 		return fmt.Sprintf("must be -1 or in [1, 256] (got %s)", f.Value)
 	case "magus_endpoint":

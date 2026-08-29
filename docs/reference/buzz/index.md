@@ -25,7 +25,7 @@ These are the runtime utility modules. Import each under its bare name (`import 
 |--------|-------------|
 | [`os`](os.md) | The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module. |
 | [`env`](env.md) | Process environment variable access. |
-| [`platform`](platform.md) | Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin). |
+| [`platform`](platform.md) | Normalize OS/architecture identifiers across naming conventions (aarch64<->arm64, Darwin<->darwin). |
 
 ## Text and formatting
 
@@ -103,6 +103,6 @@ Three provider namespaces are wired by the runtime rather than declared here, so
 ## See also
 
 - [Targets](../../concepts/targets.md): the runnable units whose magusfiles call these modules.
-- [Spells](../../concepts/spells.md): language and toolchain adapters that compose these modules into operations.
+- [Spells](../../concepts/spells.md): language and toolchain adapters that compose these modules into ops.
 - [Charms](../../concepts/charms.md): the execution modifiers the `charm` module constructs.
 - [Playground](../../playground.html): exercise these modules live in the browser.

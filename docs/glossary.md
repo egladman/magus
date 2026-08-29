@@ -34,10 +34,11 @@ A named operation (`build`, `test`, ...) you invoke with `magus run <target>`; i
 may compose a spell's tool-native operations and depend on other targets. See
 [targets.md](concepts/targets.md).
 
-### Operation
+### Op
 
-A single tool-native command a target composes; the middle of the work hierarchy
-(Spell to Operation to Target). See [operations.md](concepts/operations.md).
+A single tool-native command a target composes (long form: operation); the
+middle of the work hierarchy (Spell to Op to Target). See
+[operations.md](concepts/operations.md).
 
 ### Spell
 
@@ -256,6 +257,23 @@ positive delta is a rising hotspot; a negative one is cooling. See
 A stable `MGSxxxx` identifier attached to a magus warning or error, so it can be
 referenced and looked up; some are guardrails (see [wards](concepts/wards.md)), others hard
 errors.
+
+## Design and scope
+
+Two rules named often enough elsewhere to need a definition of their own.
+
+### Scope test
+
+The question every proposed capability has to answer: does it read the model
+magus already had to build, or does it make magus learn something new about the
+world? Reads stay small; acquisitions are where a tool loses its shape. See
+[scope.md](scope.md).
+
+### One-vocabulary rule
+
+Each concept gets one name, used everywhere: target, spell, charm, op. A second
+word for the same thing is a house dialect, and it costs every reader (and every
+agent) a lookup that never ends. See [doctrine.md](doctrine.md).
 
 ## Sessions and delegation
 

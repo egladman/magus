@@ -102,7 +102,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	}
 	errs, err := meter.Int64Counter(
 		"magus.cache.errors",
-		metric.WithDescription("Number of cached step failures."),
+		metric.WithDescription("Number of cached target failures."),
 		metric.WithUnit("{call}"),
 	)
 	if err != nil {

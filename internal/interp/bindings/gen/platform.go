@@ -11,7 +11,7 @@ import (
 )
 
 // RegisterPlatform builds the "platform" module map and returns it.
-// Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin).
+// Normalize OS/architecture identifiers across naming conventions (aarch64<->arm64, Darwin<->darwin).
 func RegisterPlatform(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess

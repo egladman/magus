@@ -59,7 +59,7 @@ func TestOutputToolRequiredParam(t *testing.T) {
 // magus_query shape-routing, a graph search term can never land here by accident).
 func TestOutputToolRejectsMalformedRef(t *testing.T) {
 	_, err := (&outputTool{}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "refactor"}})
-	assert.ErrorContains(t, err, "not a target-output reference")
+	assert.ErrorContains(t, err, "not an output ref")
 }
 
 // TestOutputToolInvokeHappy drives outputTool.Invoke through a fake reader: a valid

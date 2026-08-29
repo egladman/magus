@@ -1277,7 +1277,7 @@ func archiveOptString(m map[string]any, key string, def string) string {
 
 func archiveSubOpLabel(name, file string, threads int) string {
 	if threads > 1 {
-		return fmt.Sprintf("%s %s [%d×]", name, file, threads)
+		return fmt.Sprintf("%s %s [%dx]", name, file, threads)
 	}
 	return fmt.Sprintf("%s %s", name, file)
 }

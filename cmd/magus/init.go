@@ -228,7 +228,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 	// is per-user and per-machine (it writes the client's config, not the repo),
 	// so it does not belong in repo bootstrap - init just says where to look.
 	interactive.Emit(os.Stderr, "")
-	interactive.Emit(os.Stderr, "let an AI agent use this workspace over the daemon (graph-aware skills + MCP tools):")
+	interactive.Emit(os.Stderr, "let an agent use this workspace over the daemon (graph-aware skills + MCP tools):")
 	interactive.Emit(os.Stderr, "  magus agent install .agents/skills  # Agent Skills; it also prints the AGENTS.md block to paste")
 	interactive.Emit(os.Stderr, "  magus config mcp connector create --name <client>  # mint a token, then configure the client")
 }

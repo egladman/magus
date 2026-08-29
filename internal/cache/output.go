@@ -130,7 +130,7 @@ type AmbiguousRefError struct {
 }
 
 func (e *AmbiguousRefError) Error() string {
-	return fmt.Sprintf("output ref %q is ambiguous; matches %d executions: %s",
+	return fmt.Sprintf("output ref %q is ambiguous; matches %d attempts: %s",
 		e.Prefix, len(e.Candidates), strings.Join(e.Candidates, ", "))
 }
 

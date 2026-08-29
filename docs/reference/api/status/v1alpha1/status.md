@@ -146,7 +146,7 @@ Source: [status.proto:128](https://github.com/egladman/magus/blob/main/proto/mag
 | `mode` | string | 3 | "daemon" \| "proc" \| "" |
 | `capacity` | int32 | 4 | total concurrency slots (0 = unlimited) |
 | `running` | int32 | 5 | slots currently running |
-| `queued` | int32 | 6 | tasks queued for a slot |
+| `queued` | int32 | 6 | targets queued for a slot |
 | `running_targets` | [repeated RunningTarget](#runningtarget) | 7 | what is running right now |
 | `workspaces` | [repeated Workspace](#workspace) | 8 |  |
 | `affected` | repeated string | 9 |  |

@@ -1734,9 +1734,9 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
 
 // Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.
 export fun watch(ctx: magus\Context, args: [str]) > void !> any {
-    magus\log.info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
+    magus\log.info("watching cmd/ and internal/ - rebuilding on change (Ctrl-C to stop)");
     fs\watch(["cmd", "internal"], fun(changed: [str]) > bool {
-        magus\log.info("change detected — rebuilding");
+        magus\log.info("change detected - rebuilding");
         try {
             go_build(ctx, []);
         } catch (e) {
@@ -2199,7 +2199,7 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
         input = io.stdin.readAll();
     }
     if (input == "") {
-        throw "ci-shard: no shard plan on stdin — pipe one in: magus affected ci --plan | magus run ci-shard:gha";
+        throw "ci-shard: no shard plan on stdin - pipe one in: magus affected ci --plan | magus run ci-shard:gha";
     }
     final plan = serialize\jsonDecode(input);
     var include = mut [];
@@ -2211,14 +2211,14 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
         + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
 
     if (!ctx.hasCharm("gha")) {
-        magus\log.info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
+        magus\log.info("ci-shard preview (add the gha charm - `magus run ci-shard:gha` - to write $GITHUB_OUTPUT):\n" + block);
         return;
     }
     final path = os\env("GITHUB_OUTPUT");
     var p = "";
     if (path != null) { p = "{path}"; }
     if (p == "") {
-        throw "ci-shard: the gha charm is set but $GITHUB_OUTPUT is unset — run this inside a GitHub Actions step";
+        throw "ci-shard: the gha charm is set but $GITHUB_OUTPUT is unset - run this inside a GitHub Actions step";
     }
     var existing = "";
     if (fs\exists(p)) { existing = fs\readFile(p); }
@@ -2240,7 +2240,7 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
         }
         md = md + "\n**What this means:** each shard runs the listed projects concurrently within the declared limit. "
             + "To inspect why a project was selected, run `magus affected ci --explain` locally. "
-            + "[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) · "
+            + "[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) - "
             + "[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n";
         var existingSummary = "";
         if (fs\exists(sp)) { existingSummary = fs\readFile(sp); }

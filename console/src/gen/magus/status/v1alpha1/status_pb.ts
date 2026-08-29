@@ -507,7 +507,7 @@ export type Pool = Message<"magus.status.v1alpha1.Pool"> & {
   running: number;
 
   /**
-   * tasks queued for a slot
+   * targets queued for a slot
    *
    * @generated from field: int32 queued = 6;
    */

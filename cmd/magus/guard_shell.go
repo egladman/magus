@@ -516,10 +516,10 @@ const (
 		"If you were asked to mark the change reviewed, say that you cannot and hand back the unread list."
 
 	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
-		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled.\n" +
+		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is denied however the write is spelled.\n" +
 		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
 
-	denyScriptedRewrite = "A scripted substitute-and-write is the same edit `sed -i` is refused for, by another route. Use your editor tool for a few sites; for a whole-tree rename use the graph:\n" +
+	denyScriptedRewrite = "A scripted substitute-and-write is the same edit `sed -i` is denied for, by another route. Use your editor tool for a few sites; for a whole-tree rename use the graph:\n" +
 		"  1. `magus graph build` FIRST if `magus refs` says a project is not-indexed: a cold index answers \"unknown, not absent\", and taking that for \"no matches\" is how a rename misses half its sites.\n" +
 		"  2. `magus refs <symbol> --occurrences` gives column-precise, verified sites, per file.\n" +
 		"  3. Edit those sites. Let the compiler enumerate what moved; do not widen the pattern until it goes quiet.\n" +

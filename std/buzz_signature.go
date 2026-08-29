@@ -40,7 +40,7 @@ func argNames(m Method) []string {
 	return args
 }
 
-// returnSuffix renders " → t1, t2" for a method's returns, or "" when it returns
+// returnSuffix renders " -> t1, t2" for a method's returns, or "" when it returns
 // only the implicit error.
 func returnSuffix(m Method) string {
 	if len(m.Returns) == 0 {
@@ -64,7 +64,7 @@ func returnSuffix(m Method) string {
 			rets[i] = r.Type.GoType()
 		}
 	}
-	return " → " + strings.Join(rets, ", ")
+	return " -> " + strings.Join(rets, ", ")
 }
 
 // CamelCase converts a snake_case descriptor name to Buzz's camelCase (a

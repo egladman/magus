@@ -13,6 +13,9 @@ package magus
 import (
 	"bufio"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1245,4 +1248,120 @@ func TestLandingRotatorSlotsMatchHeadlineCount(t *testing.T) {
 	assert.Equalf(t, strconv.Itoa(headlines*slot), dur[1],
 		"landing-rotate runs %ss for %d headlines at %ds a slot; it must be %ds",
 		dur[1], headlines, slot, headlines*slot)
+}
+
+// nonASCIIGlyphs are the punctuation substitutes user-facing strings must not
+// carry (CLAUDE.md: "user-facing message strings are plain ASCII"). Named
+// rather than a blanket >127 check, because a blanket check would also flag
+// the deliberate drawing glyphs excluded below.
+var nonASCIIGlyphs = map[rune]string{
+	'—': "em dash",
+	'–': "en dash",
+	'‘': "left single quote",
+	'’': "right single quote",
+	'“': "left double quote",
+	'”': "right double quote",
+	'→': "right arrow",
+	'↔': "left-right arrow",
+	'…': "ellipsis",
+	'≥': "greater-or-equal sign",
+	'≤': "less-or-equal sign",
+	'×': "multiplication sign",
+	'·': "middle dot",
+}
+
+// asciiScanFiles is the exact set of non-test Go sources this pass swept for
+// the glyphs above (the P2-19/20 audit). It is a file list rather than a
+// package walk on purpose: cmd/magus, status.go's box-drawing pool display and
+// internal/cache/log.go's log-preview divider deliberately keep non-ASCII
+// glyphs (spinner frames, "|"-drawn borders), and files this pass did not
+// touch may carry pre-existing drift this pass was not scoped to fix. Scanning
+// exactly the fixed files still catches the regression this test exists for:
+// reverting any one fix here fails it.
+var asciiScanFiles = []string{
+	"types/describe.go",
+	"internal/render/targetgraph.go",
+	"cmd/magus-docs/main.go",
+	"internal/observability/otlp/provider.go",
+	"internal/handler/mcp/registry.go",
+	"internal/handler/mcp/output.go",
+	"internal/handler/mcp/where.go",
+	"cmd/magus/query.go",
+	"cmd/magus/guard_shell.go",
+	"cmd/magus/guard_write.go",
+	"cmd/magus/config_console.go",
+	"internal/doctor/checks.go",
+	"cmd/magus/init.go",
+	"internal/config/load.go",
+	"internal/config/validate.go",
+	"internal/interp/repl.go",
+	"internal/interp/bindings/pry.go",
+	"std/platform.go",
+	"std/env.go",
+	"std/markdown.go",
+	"std/buzz_stdlib.go",
+	"std/archive.go",
+	"std/buzz_signature.go",
+	"internal/cache/output.go",
+}
+
+// TestUserFacingStringsAreASCII scans string literals (not comments - CLAUDE.md
+// exempts those) in asciiScanFiles for the glyphs in nonASCIIGlyphs. It is scoped
+// to files this pass swept, not entire packages: see asciiScanFiles's comment.
+func TestUserFacingStringsAreASCII(t *testing.T) {
+	var violations []string
+
+	fset := token.NewFileSet()
+	for _, path := range asciiScanFiles {
+		f, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		require.NoErrorf(t, err, "parse %s", path)
+
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			for _, r := range lit.Value {
+				if name, bad := nonASCIIGlyphs[r]; bad {
+					pos := fset.Position(lit.Pos())
+					violations = append(violations, fmt.Sprintf("%s:%d: %s in %s", path, pos.Line, name, lit.Value))
+				}
+			}
+			return true
+		})
+	}
+
+	assert.Empty(t, violations,
+		"user-facing strings must be plain ASCII (CLAUDE.md): no em/en dash, curly quotes, arrows, "+
+			"ellipsis, >=/<= glyphs, or multiplication sign. Use the ASCII spelling instead (-, ->, "+
+			"<->, ..., >=, <=, x).\n\nviolations:\n%s",
+		strings.Join(violations, "\n"))
+}
+
+// TestTargetIsTheTaughtNoun pins the worst vocabulary-drift regression: the
+// printed target definition and the magus-run skill's opening both teaching
+// "target" as the unit of work, rather than sliding back to "operation" or
+// "task" (docs/concepts/targets.md bans both as a Target substitute). This is
+// deliberately narrow - a broad synonym grep false-positives too easily - so it
+// only pins these two known-worst sites.
+func TestTargetIsTheTaughtNoun(t *testing.T) {
+	lower := strings.ToLower(types.TargetDefinition)
+	assert.Contains(t, lower, "target", "TargetDefinition must teach target as the unit of work")
+	assert.NotContains(t, lower, "operation", "TargetDefinition must not substitute operation for target")
+	assert.NotContains(t, lower, "task", "TargetDefinition must not substitute task for target")
+
+	data, err := os.ReadFile(filepath.Join("internal", "agent", "skills", "magus-run", "SKILL.md"))
+	require.NoError(t, err, "read magus-run SKILL.md")
+	paragraphs := strings.SplitN(string(data), "\n\n", 3)
+	require.GreaterOrEqual(t, len(paragraphs), 2, "SKILL.md must have an opening paragraph after its heading")
+	opening := strings.ToLower(paragraphs[1])
+
+	assert.Contains(t, opening, "target", "the magus-run skill opening must teach target as the unit of work")
+	assert.NotContains(t, opening, "operation", "the magus-run skill opening must not substitute operation for target")
+	// "task orchestrator" is the blessed product-positioning phrase (README.md uses it);
+	// strip it before checking, so this pins task NOT being used as the taught noun
+	// without banning the positioning phrase itself.
+	withoutBlessedPhrase := strings.ReplaceAll(opening, "task orchestrator", "")
+	assert.NotContains(t, withoutBlessedPhrase, "task",
+		"the magus-run skill opening must not teach task as the unit of work (task orchestrator excepted)")
 }

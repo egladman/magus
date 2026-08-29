@@ -131,7 +131,7 @@ message Pool {
   string mode = 3;             // "daemon" | "proc" | ""
   int32 capacity = 4;          // total concurrency slots (0 = unlimited)
   int32 running = 5;           // slots currently running
-  int32 queued = 6;            // tasks queued for a slot
+  int32 queued = 6;            // targets queued for a slot
   repeated RunningTarget running_targets = 7; // what is running right now
   repeated Workspace workspaces = 8;
   repeated string affected = 9;

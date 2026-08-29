@@ -18,7 +18,7 @@ URL percent-encoding, parsing, and building.
 
 Percent-encode s for use in a URL query component.
 
-**Signature:** `url\encode(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L66)
+**Signature:** `url\encode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L66)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -30,7 +30,7 @@ Percent-encode s for use in a URL query component.
 
 Decode a percent-encoded URL query component; errors on malformed input.
 
-**Signature:** `url\decode(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L71)
+**Signature:** `url\decode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L71)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -42,7 +42,7 @@ Decode a percent-encoded URL query component; errors on malformed input.
 
 Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.
 
-**Signature:** `url\parse(raw_url) → URL` · [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L80)
+**Signature:** `url\parse(raw_url) -> URL` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L80)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -54,7 +54,7 @@ Parse a URL string into {scheme, host, port, path, query, fragment}; errors on m
 
 Build a URL string from a URL object - the same shape parse returns, so the two round-trip. Missing fields are treated as empty.
 
-**Signature:** `url\build(parts) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L97)
+**Signature:** `url\build(parts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L97)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

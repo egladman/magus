@@ -54,7 +54,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolInsight),
-		Description: "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn × complexity, with authors/recency/blast-radius), files (per-file churn × complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). One lens reads the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names). Read its answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
+		Description: "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn x complexity, with authors/recency/blast-radius), files (per-file churn x complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). One lens reads the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names). Read its answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
 		Params: []ParamDescriptor{
 			{Name: "lens", Type: "string", Description: "One of: hotspots (default), files, affinity, ownership, trend, unreferenced."},
 			{Name: "commits", Type: "number", Description: "Cap on how many recent commits to scan (default 500)."},
@@ -98,7 +98,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolConfigGet),
-		Description: "Return the resolved workspace configuration as JSON. Read-only — use the magus CLI to edit config.",
+		Description: "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
 	},
 	{
 		Name:        string(ToolTailLog),
@@ -133,9 +133,9 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolOutput),
-		Description: "Return one target execution's exact captured output by its reference id (out1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
+		Description: "Return one target run's exact captured output by its output ref (out1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
 		Params: []ParamDescriptor{
-			{Name: "ref", Type: "string", Required: true, Description: "A target-output reference id (out1a2b3c) or a unique prefix of one, as printed on each target's result line."},
+			{Name: "ref", Type: "string", Required: true, Description: "An output ref (out1a2b3c) or a unique prefix of one, as printed on each target's result line."},
 		},
 	},
 	{

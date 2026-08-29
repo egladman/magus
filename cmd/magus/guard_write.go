@@ -294,7 +294,7 @@ func gradeDelegatedWrite(ctx context.Context, actingDelegation, writePath string
 		_ = store.RecordUnattributedWrite(ctx, owner.ID, rel)
 		return writeGrade{Decision: "advise", Context: notice + fmt.Sprintf(
 			"magus workspace: if you are delegation %s, set %s=%s (or pass --delegation %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
-				"%s is inside the paths delegation %s (%s) declared it owns, and that delegation is %s. This is an advisory and not a block: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
+				"%s is inside the paths delegation %s (%s) declared it owns, and that delegation is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
 			owner.ID, envHookDelegation, owner.ID, owner.ID, rel, owner.ID, goalLine(owner), owner.State)}
 	}
 	if notice != "" {

@@ -90,11 +90,11 @@ func init() { Register(Platform) }
 var Platform = Module{
 	Name: "platform",
 	WASM: true,
-	Doc:  "Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin).",
+	Doc:  "Normalize OS/architecture identifiers across naming conventions (aarch64<->arm64, Darwin<->darwin).",
 	Methods: []Method{
 		{
 			Name: "arch",
-			Doc:  "Normalize an architecture identifier (x86_64, aarch64, armv7l, …) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
+			Doc:  "Normalize an architecture identifier (x86_64, aarch64, armv7l, ...) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
 			Args: []Arg{
 				{Name: "name", Type: TypeString},
 				{Name: "style", Type: TypeString, Optional: true, Enum: "PlatformStyle"},
@@ -105,7 +105,7 @@ var Platform = Module{
 		},
 		{
 			Name: "os",
-			Doc:  "Normalize an OS identifier (Darwin, macOS, win, …) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
+			Doc:  "Normalize an OS identifier (Darwin, macOS, win, ...) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
 			Args: []Arg{
 				{Name: "name", Type: TypeString},
 				{Name: "style", Type: TypeString, Optional: true, Enum: "PlatformStyle"},

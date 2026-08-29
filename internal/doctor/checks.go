@@ -383,7 +383,7 @@ func (r *runner) checkConfigFile() types.DoctorCheck {
 	return types.DoctorCheck{
 		Name:    "config-file",
 		Status:  types.DoctorFail,
-		Message: fmt.Sprintf("%d problem(s) in config file(s)", len(all)),
+		Message: fmt.Sprintf("%d finding(s) in config file(s)", len(all)),
 		Details: all,
 	}
 }

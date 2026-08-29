@@ -1,7 +1,8 @@
 # Running work through magus
 
-magus is the task orchestrator: targets declare their inputs, outputs, and
-sandbox, and magus caches results and computes what a change affects. Invoking a
+magus is the task orchestrator: its unit of work is the target, and targets
+declare their inputs, outputs, and sandbox; magus caches results and computes
+what a change affects. Invoking a
 raw language tool directly bypasses all of that{{if .Full}}, so the cache goes stale, declared
 outputs drift, and `magus affected` can no longer vouch for your change{{else}}, so the cache goes
 stale and `magus affected` can no longer vouch for your change{{end}}.
