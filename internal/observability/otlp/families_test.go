@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/egladman/magus/internal/observability"
@@ -43,6 +44,89 @@ func sumInt64(t *testing.T, rm metricdata.ResourceMetrics, name string) (int64, 
 		}
 	}
 	return 0, false
+}
+
+// histFloat64 returns the count and summed value of a float64 histogram named name, plus
+// the attribute sets its data points carry, and whether the instrument was present at all.
+func histFloat64(t *testing.T, rm metricdata.ResourceMetrics, name string) (count uint64, sum float64, attrs []attribute.Set, ok bool) {
+	t.Helper()
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			h, isHist := m.Data.(metricdata.Histogram[float64])
+			require.True(t, isHist, "%s is not a float64 histogram", name)
+			for _, dp := range h.DataPoints {
+				count += dp.Count
+				sum += dp.Sum
+				attrs = append(attrs, dp.Attributes)
+			}
+			return count, sum, attrs, true
+		}
+	}
+	return 0, 0, nil, false
+}
+
+// TestCacheSavedCollects covers magus.cache.saved.duration: the savings lens, which until it
+// existed lived only in the end-of-run footer and never reached an exporter.
+func TestCacheSavedCollects(t *testing.T) {
+	p, coll := collectLocal(t)
+	ctx := context.Background()
+
+	p.RecordCacheSaved(ctx, 1.5)
+	p.RecordCacheSaved(ctx, 0.5)
+
+	rm, err := coll.Collect(ctx)
+	require.NoError(t, err)
+
+	count, sum, attrs, ok := histFloat64(t, rm, "magus.cache.saved.duration")
+	require.True(t, ok, "magus.cache.saved.duration missing")
+	assert.Equal(t, uint64(2), count)
+	assert.InDelta(t, 2.0, sum, 1e-9, "the histogram sum IS the wall-clock the cache saved")
+	// The cache family is a low-cardinality aggregate view; saved time carries no attribute
+	// at all, so a workspace with thousands of targets adds no series here.
+	require.Len(t, attrs, 1)
+	assert.Equal(t, 0, attrs[0].Len(), "magus.cache.saved.duration must carry no attributes")
+}
+
+// TestAgentFamiliesCollect records one observation on each agent-surface instrument and reads
+// back both the value and the attribute set, since a stray unbounded attribute is the failure
+// mode these families are most exposed to.
+func TestAgentFamiliesCollect(t *testing.T) {
+	p, coll := collectLocal(t)
+	ctx := context.Background()
+
+	p.RecordDelegationRegistration(ctx, "diverged")
+	p.RecordAttentionDisposition(ctx, 42, "warning")
+	p.RecordReviewRemark(ctx, "agent")
+	p.RecordReviewRemark(ctx, "human")
+	p.RecordReviewPublish(ctx, "comment", true)
+
+	rm, err := coll.Collect(ctx)
+	require.NoError(t, err)
+
+	regs, ok := sumInt64(t, rm, "magus.delegation.registrations")
+	require.True(t, ok, "magus.delegation.registrations missing")
+	assert.Equal(t, int64(1), regs)
+
+	remarks, ok := sumInt64(t, rm, "magus.review.remarks")
+	require.True(t, ok, "magus.review.remarks missing")
+	assert.Equal(t, int64(2), remarks)
+
+	publishes, ok := sumInt64(t, rm, "magus.review.publishes")
+	require.True(t, ok, "magus.review.publishes missing")
+	assert.Equal(t, int64(1), publishes)
+
+	count, sum, attrs, ok := histFloat64(t, rm, "magus.attention.disposition.duration")
+	require.True(t, ok, "magus.attention.disposition.duration missing")
+	assert.Equal(t, uint64(1), count)
+	assert.InDelta(t, 42.0, sum, 1e-9)
+	require.Len(t, attrs, 1)
+	sev, found := attrs[0].Value(attribute.Key("severity"))
+	require.True(t, found, "the disposition histogram must be attributed by severity")
+	assert.Equal(t, "warning", sev.AsString())
+	assert.Equal(t, 1, attrs[0].Len(), "severity is the only attribute; a session id must never join it")
 }
 
 // TestPoolInstrumentsCollect exercises the magus.pool.slots.running gauge and the

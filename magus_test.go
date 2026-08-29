@@ -947,6 +947,7 @@ func (p *recordingProvider) RecordCacheHit(context.Context, ...observability.Att
 func (p *recordingProvider) RecordCacheMiss(context.Context, ...observability.Attr)              {}
 func (p *recordingProvider) RecordCacheError(context.Context, ...observability.Attr)             {}
 func (p *recordingProvider) RecordCacheDuration(context.Context, float64, ...observability.Attr) {}
+func (p *recordingProvider) RecordCacheSaved(context.Context, float64)                           {}
 func (p *recordingProvider) RecordGraphQuery(context.Context, float64, ...observability.Attr)    {}
 func (p *recordingProvider) RecordRemoteOp(context.Context, observability.RemoteOp)              {}
 func (p *recordingProvider) StartSpan(ctx context.Context, _ string, _ ...observability.Attr) (context.Context, func(error)) {
@@ -973,6 +974,10 @@ func (p *recordingProvider) RecordBuzzSpellResolve(context.Context, float64, str
 func (p *recordingProvider) RecordBuzzSpellBuiltinsWarm(context.Context, float64, string)    {}
 func (p *recordingProvider) RecordBuzzJITRun(context.Context)                                {}
 func (p *recordingProvider) RecordBuzzVMFault(context.Context, string)                       {}
+func (p *recordingProvider) RecordDelegationRegistration(context.Context, string)            {}
+func (p *recordingProvider) RecordAttentionDisposition(context.Context, float64, string)     {}
+func (p *recordingProvider) RecordReviewRemark(context.Context, string)                      {}
+func (p *recordingProvider) RecordReviewPublish(context.Context, string, bool)               {}
 func (p *recordingProvider) Snapshot(context.Context) ([]byte, error)                        { return nil, nil }
 func (p *recordingProvider) Shutdown(context.Context) error {
 	p.shutdownCalled = true

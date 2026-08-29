@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
@@ -343,6 +344,8 @@ type SessionOptions struct {
 	Root      string
 	// CacheDir is where read receipts live. Empty records none.
 	CacheDir string
+	// Telemetry records the review families; nil records none.
+	Telemetry observability.Provider
 }
 
 // reviewSource is what the review routes read. The daemon answers it, never the client: a
@@ -451,6 +454,13 @@ func (h *SessionHandler) publish(ctx context.Context, req reviewSessionRequest) 
 		h.Log.InfoContext(ctx, "review published as remarks: a review cannot approve a change its own credential opened",
 			"review", at.ID, "asked", string(want), "published", string(got))
 	}
+	// The verdict that LANDED, not the one asked for, plus whether those two differ - a
+	// downgrade is invisible in the forge's record and this is the only place it is known.
+	// got is PermittedVerdict's answer, so it is one of the three declared verdicts and
+	// never the caller's spelling.
+	if h.Telemetry != nil {
+		h.Telemetry.RecordReviewPublish(ctx, string(got), got != want)
+	}
 	// All or none: a review posts as one request, so reaching here means the host took it.
 	for _, d := range drafts {
 		sess = h.Sessions.MarkPublished(h.Root, d.ID)
@@ -545,6 +555,9 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body,
 			Anchor: h.Sessions.AnchorFor(h.Root, req.Path, req.Line),
 		}, types.DiffAuthorHuman)
+		if h.Telemetry != nil {
+			h.Telemetry.RecordReviewRemark(r.Context(), string(types.DiffAuthorHuman))
+		}
 	case "seen":
 		// The reader's claim that these threads were put in front of them, which is the ONLY
 		// thing that advances the watermark. It arrives on this route because it is the human's

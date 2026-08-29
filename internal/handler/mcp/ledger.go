@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -62,6 +63,13 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 			paramString(req.Params, "reported_base", ""))
 		if err != nil {
 			return spells.InvokeResponse{}, err
+		}
+		// The verdict is a fact this tool records and never acts on, and counting it is the
+		// same read one step further out: how often a fleet's workers land on the base they
+		// were handed. types.DelegationBaseVerdict is a closed set of four, so it is safe as
+		// an attribute; the delegation id beside it is not, and stays off.
+		if p := observability.FromContext(ctx); p != nil && stored.BaseVerdict != "" {
+			p.RecordDelegationRegistration(ctx, string(stored.BaseVerdict))
 		}
 		return spells.InvokeResponse{Text: ledger.RegistrationAdvice(stored), Data: stored}, nil
 

@@ -213,6 +213,11 @@ type Result struct {
 	Duration    time.Duration
 	Outputs     []string // absolute paths written or replayed
 	Ref         string   // per-execution output reference id (see recordOutput); "" when the output store is absent or persistence failed
+	// Saved is the per-hit half of [Stats.SavedMs]: the duration the entry recorded when it
+	// was written, which this hit replayed instead of running. Zero on a miss, and zero for
+	// an entry written before the manifest carried a duration - the same understatement
+	// SavedMs carries, for the same reason.
+	Saved time.Duration
 }
 
 type runCtx struct {
@@ -482,6 +487,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// The work this hit avoided, as measured when the entry was written. Entries from
 				// before the field existed carry zero and add nothing, so the total understates.
 				c.savedMs.Add(manifest.DurationMs)
+				result.Saved = time.Duration(manifest.DurationMs) * time.Millisecond
 				logData, _ := os.ReadFile(c.logPath(s.ProjectPath, hash))
 				// Quiet mode suppresses log replay; passing projects stay silent.
 				// Stderr, not stdout, matching captureRun's miss path: stdout is

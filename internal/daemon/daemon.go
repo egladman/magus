@@ -289,6 +289,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				Workspace: svc,
 				Root:      diffRoot,
 				CacheDir:  opts.Magus.CacheDir(),
+				Telemetry: opts.Magus.Telemetry(),
 			}
 			diffSessionH := diffhandler.NewSessionHandler(diffOpts, log)
 			diffReviewH := diffhandler.NewReviewHandler(svc, log)
@@ -307,7 +308,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
 			// checkout, so the console lists what `magus session attention` lists from any worktree.
-			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log)
+			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log, opts.Magus.Telemetry())
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route

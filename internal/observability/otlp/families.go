@@ -252,3 +252,51 @@ func (p *otelProvider) RecordBuzzJITRun(ctx context.Context) {
 func (p *otelProvider) RecordBuzzVMFault(ctx context.Context, kind string) {
 	p.buzz.vmFaults.Add(ctx, 1, metric.WithAttributes(attribute.String("kind", kind)))
 }
+
+// agentInstruments is the agent-surface family: magus.delegation.*, magus.attention.* and
+// magus.review.*, the three places a fleet of agents and the people working with them meet.
+// Every producer here runs in the daemon, which is what makes them collectable at all - the
+// CLI halves of the same surfaces (raising an attention request, the guard grading a write)
+// live in one-shot processes and are recorded to the activity trail instead.
+//
+// The attributes are deliberately thin. A delegation id, an attention message, a remark body
+// and an agent's self-declared host label are all unbounded, and none of them is here.
+type agentInstruments struct {
+	delegationRegistrations metric.Int64Counter
+	attentionDisposition    metric.Float64Histogram
+	reviewRemarks           metric.Int64Counter
+	reviewPublishes         metric.Int64Counter
+}
+
+func newAgentInstruments(m metric.Meter) (agentInstruments, error) {
+	r := reg{m: m}
+	ai := agentInstruments{
+		delegationRegistrations: r.i64c("magus.delegation.registrations", "Delegation base registrations, by how the base a worker reported compares to the checkpoint it was handed.", "{registration}"),
+		attentionDisposition:    r.f64h("magus.attention.disposition.duration", "Wall-clock time an attention request waited from raised to disposed, in seconds."),
+		reviewRemarks:           r.i64c("magus.review.remarks", "Review remarks drafted on a change.", "{remark}"),
+		reviewPublishes:         r.i64c("magus.review.publishes", "Review publishes, by the verdict that landed.", "{publish}"),
+	}
+	return ai, r.err
+}
+
+func (p *otelProvider) RecordDelegationRegistration(ctx context.Context, verdict string) {
+	p.agent.delegationRegistrations.Add(ctx, 1, metric.WithAttributes(attribute.String("verdict", verdict)))
+}
+
+func (p *otelProvider) RecordAttentionDisposition(ctx context.Context, secs float64, sev string) {
+	p.agent.attentionDisposition.Record(ctx, secs, metric.WithAttributes(attribute.String("severity", sev)))
+}
+
+func (p *otelProvider) RecordReviewRemark(ctx context.Context, author string) {
+	p.agent.reviewRemarks.Add(ctx, 1, metric.WithAttributes(attribute.String("author", author)))
+}
+
+// The published verdict carries no author attribute, on purpose. Which door a remark came
+// through is a fact about the surface; how a change was JUDGED, split by who wrote it, is the
+// first half of a threshold that blocks work by author kind. magus observes and does not gate.
+func (p *otelProvider) RecordReviewPublish(ctx context.Context, verdict string, downgraded bool) {
+	p.agent.reviewPublishes.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("verdict", verdict),
+		attribute.Bool("downgraded", downgraded),
+	))
+}

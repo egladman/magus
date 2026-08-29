@@ -20,10 +20,13 @@ magus can export **metrics** and **traces** to any OTLP collector you run.
 Telemetry is **OFF by default**: there is no magus-operated backend. The
 collector is yours, and magus connects only to the endpoint you configure.
 
-This page is the complete reference for everything magus emits. Instrument
-definitions live in
-[`internal/observability/provider.go`](../../internal/observability/provider.go);
-config in [`internal/config/config.go`](../../internal/config/config.go).
+Instrument definitions live in
+[`internal/observability/otlp/provider.go`](../../internal/observability/otlp/provider.go)
+and
+[`internal/observability/otlp/families.go`](../../internal/observability/otlp/families.go);
+the interface every producer records through is
+[`internal/observability/provider.go`](../../internal/observability/provider.go),
+and config is in [`internal/config/config.go`](../../internal/config/config.go).
 
 ## Enabling
 
@@ -75,12 +78,20 @@ Every metric and span carries these resource attributes:
 Low-cardinality aggregate view of the on-disk content-addressed cache; no
 per-project attribute.
 
-| Metric                 | Instrument | Unit     | Attributes              | Meaning                                        |
-| ---------------------- | ---------- | -------- | ----------------------- | ---------------------------------------------- |
-| `magus.cache.hits`     | counter    | `{call}` | `outcome=hit`           | Cache replays (a `Cache.Run` served from disk) |
-| `magus.cache.misses`   | counter    | `{call}` | `outcome=miss`          | Genuine builds (no entry found)                |
-| `magus.cache.errors`   | counter    | `{call}` | `outcome=error`         | Build steps that failed                        |
-| `magus.cache.duration` | histogram  | `s`      | `outcome ∈ {hit, miss}` | Wall-clock of a single `Cache.Run`             |
+| Metric                       | Instrument | Unit     | Attributes              | Meaning                                                                     |
+| ---------------------------- | ---------- | -------- | ----------------------- | --------------------------------------------------------------------------- |
+| `magus.cache.hits`           | counter    | `{call}` | `outcome=hit`           | Cache replays (a `Cache.Run` served from disk)                              |
+| `magus.cache.misses`         | counter    | `{call}` | `outcome=miss`          | Genuine builds (no entry found)                                             |
+| `magus.cache.errors`         | counter    | `{call}` | `outcome=error`         | Build steps that failed                                                     |
+| `magus.cache.duration`       | histogram  | `s`      | `outcome ∈ {hit, miss}` | Wall-clock of a single `Cache.Run`                                          |
+| `magus.cache.saved.duration` | histogram  | `s`      | -                       | What a hit **avoided**: the duration the entry recorded when it was written |
+
+`magus.cache.duration` says what a hit **cost**; `magus.cache.saved.duration` says
+what it **saved**, one observation per hit. Its sum is the wall-clock the cache
+has given back, and its distribution says which hits are worth having. An entry
+written before the manifest carried a duration reports nothing rather than zero,
+so the total understates and never overstates - the same measured-not-modeled
+rule the `cache_saved_ms` field in `magus status` follows.
 
 ### Remote cache
 
@@ -139,6 +150,45 @@ per resolved spell per project.
 `magus.pool.slots.running` is an up-down counter: it rises as targets acquire
 slots and falls as they release, so its value reads as the live running depth.
 
+### Agent surface
+
+Delegations, attention requests and paired review: the three places a fleet of
+agents and the people working with them meet. **Every producer here runs in the
+daemon**, which is what makes them collectable at all - a magus CLI invocation is
+a one-shot process, and the CLI halves of these same surfaces (raising an
+attention request, the agent guard grading a write) reach the
+[activity trail](../guides/integrations/daemon.md) instead. Read each row for
+what it counts, not for the whole surface.
+
+| Metric                                 | Instrument | Unit             | Attributes                              | Meaning                                            |
+| -------------------------------------- | ---------- | ---------------- | --------------------------------------- | -------------------------------------------------- |
+| `magus.delegation.registrations`       | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on |
+| `magus.attention.disposition.duration` | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed |
+| `magus.review.remarks`                 | counter    | `{remark}`       | `author ∈ {human, agent}`               | A remark drafted on a change                       |
+| `magus.review.publishes`               | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed     |
+
+`verdict` on registrations is `match`, `revision-match`, `diverged` or `unknown`;
+a rising `diverged` share says a fleet's workers are building on trees their
+orchestrator never handed them. `verdict` on publishes is `comment`, `approve` or
+`request_changes`, and it is the verdict that **landed**: `downgraded=true` means
+the asserting verdict the person asked for was refused (a review cannot approve a
+change its own credential opened), which is invisible in the forge's record and
+known only here.
+
+`magus.attention.disposition.duration` counts the disposals made through the
+console route. `magus session dispose` closes a request from a one-shot process
+with no collector, so those are absent - the instrument is a wait-time
+distribution rather than a queue depth, which would read as the whole queue and
+be neither. `severity` is re-read from the store and clamped to the declared
+tiers (`info`, `notice`, `warning`, `critical`, plus `unset`), so a record written
+by another build can never mint a series.
+
+**Metrics observe, they never gate.** `magus.review.remarks` is attributed by
+`author` because that says which **door** a remark came through, and both doors
+write to one store. `magus.review.publishes` is deliberately **not**: how a change
+was judged, split by who wrote it, is the first half of a threshold that blocks
+work by author kind, and magus does not build the instrument that invites one.
+
 ## Traces (spans)
 
 Spans are sampled head-based by `telemetry.sample_ratio`.
@@ -174,7 +224,11 @@ processors:
 ```
 
 Alternatively, use an SDK View at startup to drop the attribute before it leaves
-the process. Every other metric intentionally omits `magus.project`. The remote
+the process. Three other instruments carry a workspace-sized attribute and the
+same recipe applies: `magus.sandbox.checks` and `magus.sandbox.env.dropped`
+carry `magus.project`, and `magus.buzz.spell.resolve.duration` and the
+`magus.buzz.spell.builtins.*` family carry `spell`, a workspace-authored name.
+Every other metric omits them. The remote
 `get`/`put` **spans** carry `magus.project`, but spans are sampled and not
 aggregated into time series, so they don't create cardinality the way a metric
 attribute would.

@@ -257,6 +257,14 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 		// request/response pair is a whole tool payload, persisted verbatim to an
 		// append-only file, and nothing else on that path scrubs it.
 		ctx = withSecrets(ctx)
+		// The provider a tool needs to record its OWN domain metric. The wrapper can only
+		// see what every tool has in common (name, outcome, sizes, duration); a bounded
+		// vocabulary like the ledger's base verdict is known to the tool alone, and reading
+		// it out of the argument map here would be attributing a metric by caller-supplied
+		// text.
+		if tel != nil {
+			ctx = observability.WithProvider(ctx, tel)
+		}
 
 		reqLog := log.With(
 			slog.String("agent", agentID),

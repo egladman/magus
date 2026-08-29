@@ -59,6 +59,7 @@ type Provider interface {
 	RecordCacheMiss(ctx context.Context, attrs ...Attr)
 	RecordCacheError(ctx context.Context, attrs ...Attr)
 	RecordCacheDuration(ctx context.Context, secs float64, attrs ...Attr)                     // magus.cache.duration histogram
+	RecordCacheSaved(ctx context.Context, secs float64)                                       // magus.cache.saved.duration histogram
 	RecordGraphQuery(ctx context.Context, secs float64, attrs ...Attr)                        // magus.graph.query.duration histogram
 	RecordRemoteOp(ctx context.Context, op RemoteOp)                                          // magus.cache.remote.* metrics
 	StartSpan(ctx context.Context, name string, attrs ...Attr) (context.Context, func(error)) // end fn marks failure on non-nil error
@@ -89,6 +90,14 @@ type Provider interface {
 	RecordBuzzSpellBuiltinsWarm(ctx context.Context, secs float64, spell string)     // magus.buzz.spell.builtins.warm
 	RecordBuzzJITRun(ctx context.Context)                                            // magus.buzz.jit.runs
 	RecordBuzzVMFault(ctx context.Context, kind string)                              // magus.buzz.vm.faults
+
+	// Agent-surface families: magus.delegation.*, magus.attention.*, magus.review.*. Every
+	// attribute here is a bounded enum the caller has already validated; an id, a path, a
+	// delegation label or a remark body must never reach one.
+	RecordDelegationRegistration(ctx context.Context, verdict string)         // magus.delegation.registrations
+	RecordAttentionDisposition(ctx context.Context, secs float64, sev string) // magus.attention.disposition.duration
+	RecordReviewRemark(ctx context.Context, author string)                    // magus.review.remarks
+	RecordReviewPublish(ctx context.Context, verdict string, downgraded bool) // magus.review.publishes
 	// Snapshot returns the current metrics as standard OTLP protobuf, or (nil, nil) when this
 	// provider is not collecting locally. OTLP is the export format for real monitoring
 	// backends; it is never put on the dashboard's wire.
@@ -205,6 +214,12 @@ func CacheRunOptions(ctx context.Context, p Provider) []cache.RunOption {
 				ctx, r.Duration.Seconds(),
 				Attr{Key: "outcome", Value: "hit"},
 			)
+			// An entry written before the manifest carried a duration reports zero saved,
+			// which is an absence of measurement rather than a hit that saved nothing;
+			// recording it would drag the distribution down with points nobody measured.
+			if r.Saved > 0 {
+				p.RecordCacheSaved(ctx, r.Saved.Seconds())
+			}
 		}),
 		cache.OnMiss(func(r *cache.Result) {
 			p.RecordCacheMiss(ctx, Attr{Key: "outcome", Value: "miss"})

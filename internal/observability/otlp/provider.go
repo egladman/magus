@@ -102,7 +102,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	}
 	errs, err := meter.Int64Counter(
 		"magus.cache.errors",
-		metric.WithDescription("Number of cached target failures."),
+		metric.WithDescription("Number of target runs that failed."),
 		metric.WithUnit("{call}"),
 	)
 	if err != nil {
@@ -115,6 +115,18 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("observability: cache.duration histogram: %w", err)
+	}
+	// The savings lens: magus.cache.duration says what a hit COST, this says what it AVOIDED.
+	// One observation per hit, so the histogram's sum is the wall-clock the cache has saved and
+	// its distribution says which hits are worth having. It is the exported half of
+	// cache.Stats.SavedMs, which until now only ever reached an end-of-run footer.
+	saved, err := meter.Float64Histogram(
+		"magus.cache.saved.duration",
+		metric.WithDescription("Wall-clock duration a cache hit replayed instead of running, in seconds."),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("observability: cache.saved.duration histogram: %w", err)
 	}
 	graphQueryDur, err := meter.Float64Histogram(
 		"magus.graph.query.duration",
@@ -244,6 +256,10 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	if err != nil {
 		return nil, err
 	}
+	agent, err := newAgentInstruments(meter)
+	if err != nil {
+		return nil, err
+	}
 
 	return &otelProvider{
 		mp:              mp,
@@ -256,6 +272,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 		misses:          misses,
 		errs:            errs,
 		dur:             dur,
+		saved:           saved,
 		graphQueryDur:   graphQueryDur,
 		graphQueryCount: graphQueryCount,
 		targetRuns:      targetRuns,
@@ -272,6 +289,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 		mcp:             mcp,
 		sandbox:         sandbox,
 		buzz:            buzz,
+		agent:           agent,
 	}, nil
 }
 
@@ -288,6 +306,7 @@ type otelProvider struct {
 	misses          metric.Int64Counter
 	errs            metric.Int64Counter
 	dur             metric.Float64Histogram
+	saved           metric.Float64Histogram
 	graphQueryDur   metric.Float64Histogram
 	graphQueryCount metric.Int64Counter
 	targetRuns      metric.Int64Counter
@@ -305,6 +324,7 @@ type otelProvider struct {
 	mcp     mcpInstruments
 	sandbox sandboxInstruments
 	buzz    buzzInstruments
+	agent   agentInstruments
 }
 
 func (*otelProvider) Enabled() bool { return true }
@@ -323,6 +343,10 @@ func (p *otelProvider) RecordCacheError(ctx context.Context, attrs ...observabil
 
 func (p *otelProvider) RecordCacheDuration(ctx context.Context, secs float64, attrs ...observability.Attr) {
 	p.dur.Record(ctx, secs, metric.WithAttributes(toKV(attrs)...))
+}
+
+func (p *otelProvider) RecordCacheSaved(ctx context.Context, secs float64) {
+	p.saved.Record(ctx, secs)
 }
 
 func (p *otelProvider) RecordGraphQuery(ctx context.Context, secs float64, attrs ...observability.Attr) {
@@ -418,6 +442,7 @@ func (disabledProvider) RecordCacheMiss(_ context.Context, _ ...observability.At
 func (disabledProvider) RecordCacheError(_ context.Context, _ ...observability.Attr) {}
 func (disabledProvider) RecordCacheDuration(_ context.Context, _ float64, _ ...observability.Attr) {
 }
+func (disabledProvider) RecordCacheSaved(_ context.Context, _ float64)                          {}
 func (disabledProvider) RecordGraphQuery(_ context.Context, _ float64, _ ...observability.Attr) {}
 func (disabledProvider) RecordRemoteOp(_ context.Context, _ observability.RemoteOp)             {}
 func (disabledProvider) StartSpan(ctx context.Context, _ string, _ ...observability.Attr) (context.Context, func(error)) {
@@ -444,6 +469,10 @@ func (disabledProvider) RecordBuzzSpellResolve(_ context.Context, _ float64, _, 
 func (disabledProvider) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string)    {}
 func (disabledProvider) RecordBuzzJITRun(_ context.Context)                                    {}
 func (disabledProvider) RecordBuzzVMFault(_ context.Context, _ string)                         {}
+func (disabledProvider) RecordDelegationRegistration(_ context.Context, _ string)              {}
+func (disabledProvider) RecordAttentionDisposition(_ context.Context, _ float64, _ string)     {}
+func (disabledProvider) RecordReviewRemark(_ context.Context, _ string)                        {}
+func (disabledProvider) RecordReviewPublish(_ context.Context, _ string, _ bool)               {}
 func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)                            { return nil, nil }
 func (disabledProvider) Shutdown(_ context.Context) error                                      { return nil }
 
