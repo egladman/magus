@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2403,
-  "edge_count": 6224,
+  "node_count": 2406,
+  "edge_count": 6294,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -471,6 +471,14 @@
       }
     },
     {
+      "id": "diagnostic:MGS3008",
+      "kind": "diagnostic",
+      "label": "MGS3008",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3008/"
+      }
+    },
+    {
       "id": "diagnostic:MGS4001",
       "kind": "diagnostic",
       "label": "MGS4001",
@@ -928,7 +936,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "222",
+        "dir_files": "224",
         "dir_languages": "markdown"
       }
     },
@@ -1198,7 +1206,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "91",
+        "dir_files": "92",
         "dir_languages": "markdown"
       }
     },
@@ -1278,7 +1286,7 @@
       "label": "docs/reference/codes/sandbox",
       "source": "docs/reference/codes/sandbox",
       "attrs": {
-        "dir_files": "18",
+        "dir_files": "19",
         "dir_languages": "markdown"
       }
     },
@@ -1298,7 +1306,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "31",
+        "dir_files": "32",
         "dir_languages": "markdown"
       }
     },
@@ -2777,7 +2785,7 @@
       "source": "docs/doctrine.md",
       "attrs": {
         "role": "doc",
-        "tags": "doctrine,design,judgment,agents,philosophy",
+        "tags": "doctrine,design,judgment,agents,philosophy,unix",
         "title": "Doctrine"
       }
     },
@@ -4711,6 +4719,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/codes/sandbox/MGS3008.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS3008.md",
+      "source": "docs/reference/codes/sandbox/MGS3008.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS3008,workspace root,magus init,first run,magus.yaml",
+        "title": "MGS3008: no workspace root found"
+      }
+    },
+    {
       "id": "doc:docs/reference/codes/sandbox/README.md",
       "kind": "doc",
       "label": "docs/reference/codes/sandbox/README.md",
@@ -5032,6 +5052,18 @@
         "section": "reference",
         "tags": "cli,magus man,manpage,documentation,install",
         "title": "magus man"
+      }
+    },
+    {
+      "id": "doc:docs/reference/manpage/magus-mcp.md",
+      "kind": "doc",
+      "label": "docs/reference/manpage/magus-mcp.md",
+      "source": "docs/reference/manpage/magus-mcp.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "cli,magus mcp,mcp,agent,daemon",
+        "title": "magus mcp"
       }
     },
     {
@@ -16483,7 +16515,7 @@
       "label": "archive.compress",
       "doc": "Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts keys: format (string, override format detection), threads (int, parallel encode workers; 0 or omitted = auto), level (int, compression level; -1 = format default), follow_symlinks (bool, default false), max_size (int, output byte cap, de",
       "attrs": {
-        "buzz": "archive\\compress(src, dest, [opts]) → CompressResult"
+        "buzz": "archive\\compress(src, dest, [opts]) -> CompressResult"
       }
     },
     {
@@ -16492,7 +16524,7 @@
       "label": "archive.list",
       "doc": "List the archive at src without extracting it, as entries of {name, size, is_dir} sorted by name. Use it to check what an archive holds - that a release tarball carries the binary you expect, or how large an entry is - before paying to extract it. Symlinks and devices are skipped, matching uncompress. opts keys: threads (int, parallel decode workers; 0 or omitted = auto).",
       "attrs": {
-        "buzz": "archive\\list(src, [opts]) → [ArchiveEntry]"
+        "buzz": "archive\\list(src, [opts]) -> [ArchiveEntry]"
       }
     },
     {
@@ -16501,7 +16533,7 @@
       "label": "archive.read_file",
       "doc": "Return the contents of the single entry named name inside the archive at src, without extracting anything to disk. Reading one manifest out of a release tarball is the usual reason. Raises when name is not in the archive, or when the entry exceeds max_size. opts keys: max_size (int, byte cap on the entry, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
       "attrs": {
-        "buzz": "archive\\readFile(src, name, [opts]) → string"
+        "buzz": "archive\\readFile(src, name, [opts]) -> string"
       }
     },
     {
@@ -16510,7 +16542,7 @@
       "label": "archive.uncompress",
       "doc": "Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts keys: strip (int, strip N leading path components), max_size (int, uncompressed byte cap, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
       "attrs": {
-        "buzz": "archive\\uncompress(src, dest, [opts]) → UncompressResult"
+        "buzz": "archive\\uncompress(src, dest, [opts]) -> UncompressResult"
       }
     },
     {
@@ -16519,7 +16551,7 @@
       "label": "base64.decode",
       "doc": "Decode a standard (padded) base64 string; errors on malformed input.",
       "attrs": {
-        "buzz": "base64\\decode(s) → string"
+        "buzz": "base64\\decode(s) -> string"
       }
     },
     {
@@ -16528,7 +16560,7 @@
       "label": "base64.encode",
       "doc": "Encode data as standard (padded) base64.",
       "attrs": {
-        "buzz": "base64\\encode(data) → string"
+        "buzz": "base64\\encode(data) -> string"
       }
     },
     {
@@ -16537,7 +16569,7 @@
       "label": "base64.url_decode",
       "doc": "Decode a URL-safe (padded) base64 string; errors on malformed input.",
       "attrs": {
-        "buzz": "base64\\urlDecode(s) → string"
+        "buzz": "base64\\urlDecode(s) -> string"
       }
     },
     {
@@ -16546,7 +16578,7 @@
       "label": "base64.url_encode",
       "doc": "Encode data as URL-safe (padded) base64.",
       "attrs": {
-        "buzz": "base64\\urlEncode(data) → string"
+        "buzz": "base64\\urlEncode(data) -> string"
       }
     },
     {
@@ -16555,7 +16587,7 @@
       "label": "charm.after",
       "doc": "Insert vals immediately after the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm\\after(argv, anchor, vals) → Charm"
+        "buzz": "charm\\after(argv, anchor, vals) -> Charm"
       }
     },
     {
@@ -16564,7 +16596,7 @@
       "label": "charm.after_func",
       "doc": "Insert vals after the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm\\afterFunc(argv, fn, vals) → Charm"
+        "buzz": "charm\\afterFunc(argv, fn, vals) -> Charm"
       }
     },
     {
@@ -16573,7 +16605,7 @@
       "label": "charm.append",
       "doc": "Append vals to the end of the argv.",
       "attrs": {
-        "buzz": "charm\\append(vals) → Charm"
+        "buzz": "charm\\append(vals) -> Charm"
       }
     },
     {
@@ -16582,7 +16614,7 @@
       "label": "charm.before",
       "doc": "Insert vals immediately before the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm\\before(argv, anchor, vals) → Charm"
+        "buzz": "charm\\before(argv, anchor, vals) -> Charm"
       }
     },
     {
@@ -16591,7 +16623,7 @@
       "label": "charm.before_func",
       "doc": "Insert vals before the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm\\beforeFunc(argv, fn, vals) → Charm"
+        "buzz": "charm\\beforeFunc(argv, fn, vals) -> Charm"
       }
     },
     {
@@ -16600,7 +16632,7 @@
       "label": "charm.copy",
       "doc": "Copy the first argv element equal to anchor to the JSON Pointer to (\"/-\" end, \"/0\" front, or charm.path(...)).",
       "attrs": {
-        "buzz": "charm\\copy(argv, anchor, to) → Charm"
+        "buzz": "charm\\copy(argv, anchor, to) -> Charm"
       }
     },
     {
@@ -16609,7 +16641,7 @@
       "label": "charm.copy_func",
       "doc": "Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.",
       "attrs": {
-        "buzz": "charm\\copyFunc(argv, fn, to) → Charm"
+        "buzz": "charm\\copyFunc(argv, fn, to) -> Charm"
       }
     },
     {
@@ -16618,7 +16650,7 @@
       "label": "charm.drop",
       "doc": "Drop (remove) the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm\\drop(argv, anchor) → Charm"
+        "buzz": "charm\\drop(argv, anchor) -> Charm"
       }
     },
     {
@@ -16627,7 +16659,7 @@
       "label": "charm.drop_func",
       "doc": "Drop (remove) the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm\\dropFunc(argv, fn) → Charm"
+        "buzz": "charm\\dropFunc(argv, fn) -> Charm"
       }
     },
     {
@@ -16636,7 +16668,7 @@
       "label": "charm.move",
       "doc": "Move the first argv element equal to anchor to the JSON Pointer to (\"/-\" end, \"/0\" front, or charm.path(...)).",
       "attrs": {
-        "buzz": "charm\\move(argv, anchor, to) → Charm"
+        "buzz": "charm\\move(argv, anchor, to) -> Charm"
       }
     },
     {
@@ -16645,7 +16677,7 @@
       "label": "charm.move_func",
       "doc": "Move the first argv element for which fn(s) is truthy to the JSON Pointer to.",
       "attrs": {
-        "buzz": "charm\\moveFunc(argv, fn, to) → Charm"
+        "buzz": "charm\\moveFunc(argv, fn, to) -> Charm"
       }
     },
     {
@@ -16654,7 +16686,7 @@
       "label": "charm.path",
       "doc": "Return the JSON Pointer (\"/N\") of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.",
       "attrs": {
-        "buzz": "charm\\path(argv, anchor) → string"
+        "buzz": "charm\\path(argv, anchor) -> string"
       }
     },
     {
@@ -16663,7 +16695,7 @@
       "label": "charm.path_func",
       "doc": "Return the JSON Pointer (\"/N\") of the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm\\pathFunc(argv, fn) → string"
+        "buzz": "charm\\pathFunc(argv, fn) -> string"
       }
     },
     {
@@ -16672,7 +16704,7 @@
       "label": "charm.prepend",
       "doc": "Insert vals at the front of the argv, in order.",
       "attrs": {
-        "buzz": "charm\\prepend(vals) → Charm"
+        "buzz": "charm\\prepend(vals) -> Charm"
       }
     },
     {
@@ -16681,7 +16713,7 @@
       "label": "charm.set",
       "doc": "Replace the first argv element equal to anchor with val.",
       "attrs": {
-        "buzz": "charm\\set(argv, anchor, val) → Charm"
+        "buzz": "charm\\set(argv, anchor, val) -> Charm"
       }
     },
     {
@@ -16690,7 +16722,7 @@
       "label": "charm.set_func",
       "doc": "Replace the first argv element for which fn(s) is truthy with val.",
       "attrs": {
-        "buzz": "charm\\setFunc(argv, fn, val) → Charm"
+        "buzz": "charm\\setFunc(argv, fn, val) -> Charm"
       }
     },
     {
@@ -16699,7 +16731,7 @@
       "label": "charm.test",
       "doc": "Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).",
       "attrs": {
-        "buzz": "charm\\test(argv, anchor) → Charm"
+        "buzz": "charm\\test(argv, anchor) -> Charm"
       }
     },
     {
@@ -16708,7 +16740,7 @@
       "label": "charm.test_func",
       "doc": "Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.",
       "attrs": {
-        "buzz": "charm\\testFunc(argv, fn) → Charm"
+        "buzz": "charm\\testFunc(argv, fn) -> Charm"
       }
     },
     {
@@ -16717,7 +16749,7 @@
       "label": "crypto.base64_decode_bytes",
       "doc": "Decode standard (padded) base64 into a byte list; errors on invalid input. Returns bytes rather than a str so arbitrary binary survives - a decoded key or archive would not.",
       "attrs": {
-        "buzz": "crypto\\base64DecodeBytes(s) → []byte"
+        "buzz": "crypto\\base64DecodeBytes(s) -> []byte"
       }
     },
     {
@@ -16726,7 +16758,7 @@
       "label": "crypto.base64_encode_bytes",
       "doc": "Encode raw bytes as standard (padded) base64. The byte-list counterpart to encoding/base64's encode, for data that came from another byte-level call and must not round-trip through a rune-oriented str.",
       "attrs": {
-        "buzz": "crypto\\base64EncodeBytes(data) → string"
+        "buzz": "crypto\\base64EncodeBytes(data) -> string"
       }
     },
     {
@@ -16735,7 +16767,7 @@
       "label": "crypto.hmac_sha256",
       "doc": "Return the raw HMAC-SHA256 of data keyed by key, as a BYTE LIST. key and data may each be a str or a byte list, which is what lets one result key the next call - the shape an AWS SigV4 signing chain needs (kDate to kRegion to kService to kSigning). Use hmac_sha256_hex for the final signature you actually send.",
       "attrs": {
-        "buzz": "crypto\\hmacSha256(key, data) → []byte"
+        "buzz": "crypto\\hmacSha256(key, data) -> []byte"
       }
     },
     {
@@ -16744,7 +16776,7 @@
       "label": "crypto.hmac_sha256_hex",
       "doc": "Return the lowercase hex HMAC-SHA256 of data keyed by key - the form a signature header carries, once the signing key has been derived with hmac_sha256.",
       "attrs": {
-        "buzz": "crypto\\hmacSha256Hex(key, data) → string"
+        "buzz": "crypto\\hmacSha256Hex(key, data) -> string"
       }
     },
     {
@@ -16753,7 +16785,7 @@
       "label": "crypto.md5_file",
       "doc": "Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto\\md5File(path) → string"
+        "buzz": "crypto\\md5File(path) -> string"
       }
     },
     {
@@ -16762,7 +16794,7 @@
       "label": "crypto.md5_hex",
       "doc": "Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto\\md5Hex(data) → string"
+        "buzz": "crypto\\md5Hex(data) -> string"
       }
     },
     {
@@ -16771,7 +16803,7 @@
       "label": "crypto.public_key",
       "doc": "Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is \"ed25519\".",
       "attrs": {
-        "buzz": "crypto\\publicKey(alg, key_env) → string"
+        "buzz": "crypto\\publicKey(alg, key_env) -> string"
       }
     },
     {
@@ -16780,7 +16812,7 @@
       "label": "crypto.sha1_file",
       "doc": "Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto\\sha1File(path) → string"
+        "buzz": "crypto\\sha1File(path) -> string"
       }
     },
     {
@@ -16789,7 +16821,7 @@
       "label": "crypto.sha1_hex",
       "doc": "Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto\\sha1Hex(data) → string"
+        "buzz": "crypto\\sha1Hex(data) -> string"
       }
     },
     {
@@ -16798,7 +16830,7 @@
       "label": "crypto.sha256_file",
       "doc": "Return the lowercase hex SHA-256 digest of the file at path.",
       "attrs": {
-        "buzz": "crypto\\sha256File(path) → string"
+        "buzz": "crypto\\sha256File(path) -> string"
       }
     },
     {
@@ -16807,7 +16839,7 @@
       "label": "crypto.sha256_hex",
       "doc": "Return the lowercase hex SHA-256 digest of data.",
       "attrs": {
-        "buzz": "crypto\\sha256Hex(data) → string"
+        "buzz": "crypto\\sha256Hex(data) -> string"
       }
     },
     {
@@ -16816,7 +16848,7 @@
       "label": "crypto.sha512_file",
       "doc": "Return the lowercase hex SHA-512 digest of the file at path.",
       "attrs": {
-        "buzz": "crypto\\sha512File(path) → string"
+        "buzz": "crypto\\sha512File(path) -> string"
       }
     },
     {
@@ -16825,7 +16857,7 @@
       "label": "crypto.sha512_hex",
       "doc": "Return the lowercase hex SHA-512 digest of data.",
       "attrs": {
-        "buzz": "crypto\\sha512Hex(data) → string"
+        "buzz": "crypto\\sha512Hex(data) -> string"
       }
     },
     {
@@ -16834,7 +16866,7 @@
       "label": "crypto.sign",
       "doc": "Sign data with the private key in the named environment variable and return the lowercase hex signature. alg is \"ed25519\". The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.",
       "attrs": {
-        "buzz": "crypto\\sign(alg, data, key_env) → string"
+        "buzz": "crypto\\sign(alg, data, key_env) -> string"
       }
     },
     {
@@ -16843,7 +16875,7 @@
       "label": "crypto.sign_file",
       "doc": "Sign the file at path, write the detached signature to path + \".sig\", and return the lowercase hex signature. alg is \"ed25519\".",
       "attrs": {
-        "buzz": "crypto\\signFile(alg, path, key_env) → string"
+        "buzz": "crypto\\signFile(alg, path, key_env) -> string"
       }
     },
     {
@@ -16852,7 +16884,7 @@
       "label": "crypto.verify",
       "doc": "Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is \"ed25519\".",
       "attrs": {
-        "buzz": "crypto\\verify(alg, data, sig_hex, pub_hex) → bool"
+        "buzz": "crypto\\verify(alg, data, sig_hex, pub_hex) -> bool"
       }
     },
     {
@@ -16861,7 +16893,7 @@
       "label": "csv.parse",
       "doc": "Parse delimiter-separated text into a list of rows, each a list of fields. Quoted fields, embedded delimiters, and embedded newlines are handled per RFC 4180. delimiter defaults to \",\" - pass \"\\t\" for TSV. When comment is a single character, lines starting with it are skipped. Raises when a row has a different field count than the first, which is the corruption a hand-rolled split would silently pass through.",
       "attrs": {
-        "buzz": "csv\\parse(s, [delimiter], [comment]) → [][]string"
+        "buzz": "csv\\parse(s, [delimiter], [comment]) -> [][]string"
       }
     },
     {
@@ -16870,7 +16902,7 @@
       "label": "csv.stringify",
       "doc": "Render rows (a list of lists of fields) as delimiter-separated text, quoting any field that needs it. delimiter defaults to \",\". The output ends with a newline, so it is ready to write.",
       "attrs": {
-        "buzz": "csv\\stringify(rows, [delimiter]) → string"
+        "buzz": "csv\\stringify(rows, [delimiter]) -> string"
       }
     },
     {
@@ -16879,7 +16911,7 @@
       "label": "diff.equal",
       "doc": "Report whether a and b are identical after normalizing line endings and a single trailing newline. It is the comparison a drift gate wants: a file that differs only by CRLF or by whether the last line is newline-terminated has not drifted in any sense a reader cares about, and a bare == would say it had.",
       "attrs": {
-        "buzz": "diff\\equal(a, b) → bool"
+        "buzz": "diff\\equal(a, b) -> bool"
       }
     },
     {
@@ -16888,7 +16920,7 @@
       "label": "diff.stat",
       "doc": "Return a one-line summary of the change: \"3 added, 1 removed\", or \"\" when a and b are identical. For a report that wants the shape of a drift without the whole patch - a summary line per file, with unified reserved for the one the reader drills into.",
       "attrs": {
-        "buzz": "diff\\stat(a, b) → string"
+        "buzz": "diff\\stat(a, b) -> string"
       }
     },
     {
@@ -16897,7 +16929,7 @@
       "label": "diff.unified",
       "doc": "Return a unified diff of a and b, or \"\" when they are identical - so the result doubles as the check. from_label and to_label name the two sides in the +++/--- header (default \"a\" and \"b\"); pass the file path and something like \"regenerated\" to make a drift report read like a patch. context is the unchanged lines kept around each hunk, defaulting to 3 as git does.",
       "attrs": {
-        "buzz": "diff\\unified(a, b, [from_label], [to_label], [context]) → string"
+        "buzz": "diff\\unified(a, b, [from_label], [to_label], [context]) -> string"
       }
     },
     {
@@ -16906,7 +16938,7 @@
       "label": "env.expand",
       "doc": "Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to \"\").",
       "attrs": {
-        "buzz": "env\\expand(s) → string"
+        "buzz": "env\\expand(s) -> string"
       }
     },
     {
@@ -16915,7 +16947,7 @@
       "label": "env.get",
       "doc": "Return the value of name, or \"\" if unset. Use lookup to tell unset from set-but-empty.",
       "attrs": {
-        "buzz": "env\\get(name) → string"
+        "buzz": "env\\get(name) -> string"
       }
     },
     {
@@ -16924,7 +16956,7 @@
       "label": "env.get_or",
       "doc": "Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is - def only applies when the variable is absent.",
       "attrs": {
-        "buzz": "env\\getOr(name, def) → string"
+        "buzz": "env\\getOr(name, def) -> string"
       }
     },
     {
@@ -16933,16 +16965,16 @@
       "label": "env.home",
       "doc": "Return the current user's home directory.",
       "attrs": {
-        "buzz": "env\\home() → string"
+        "buzz": "env\\home() -> string"
       }
     },
     {
       "id": "method:env.list",
       "kind": "method",
       "label": "env.list",
-      "doc": "Return all environment variables as a name→value map.",
+      "doc": "Return all environment variables as a name->value map.",
       "attrs": {
-        "buzz": "env\\list() → map[string]string"
+        "buzz": "env\\list() -> map[string]string"
       }
     },
     {
@@ -16960,7 +16992,7 @@
       "label": "env.lookup",
       "doc": "Return (value, found); found is false when name is unset or stripped by the sandbox.",
       "attrs": {
-        "buzz": "env\\lookup(name) → string, bool"
+        "buzz": "env\\lookup(name) -> string, bool"
       }
     },
     {
@@ -16969,7 +17001,7 @@
       "label": "env.parse_dotenv",
       "doc": "Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
       "attrs": {
-        "buzz": "env\\parseDotenv(content) → map[string]string"
+        "buzz": "env\\parseDotenv(content) -> map[string]string"
       }
     },
     {
@@ -16978,7 +17010,7 @@
       "label": "env.read_dotenv",
       "doc": "Read a .env file and return its name->value map (parse_dotenv over the file contents). Errors if the file cannot be read.",
       "attrs": {
-        "buzz": "env\\readDotenv(path) → map[string]string"
+        "buzz": "env\\readDotenv(path) -> map[string]string"
       }
     },
     {
@@ -16987,7 +17019,7 @@
       "label": "env.require",
       "doc": "Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).",
       "attrs": {
-        "buzz": "env\\require(name) → string"
+        "buzz": "env\\require(name) -> string"
       }
     },
     {
@@ -17014,7 +17046,7 @@
       "label": "fmt.sprintf",
       "doc": "Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.",
       "attrs": {
-        "buzz": "fmt\\sprintf(format, args...) → string"
+        "buzz": "fmt\\sprintf(format, args...) -> string"
       }
     },
     {
@@ -17032,7 +17064,7 @@
       "label": "fs.basename",
       "doc": "Final element of path.",
       "attrs": {
-        "buzz": "fs\\basename(path) → string"
+        "buzz": "fs\\basename(path) -> string"
       }
     },
     {
@@ -17068,7 +17100,7 @@
       "label": "fs.dirname",
       "doc": "Directory portion of path.",
       "attrs": {
-        "buzz": "fs\\dirname(path) → string"
+        "buzz": "fs\\dirname(path) -> string"
       }
     },
     {
@@ -17077,7 +17109,7 @@
       "label": "fs.exists",
       "doc": "True iff path exists.",
       "attrs": {
-        "buzz": "fs\\exists(path) → bool"
+        "buzz": "fs\\exists(path) -> bool"
       }
     },
     {
@@ -17086,7 +17118,7 @@
       "label": "fs.ext",
       "doc": "File-name extension of path, including the leading dot (\"\" if none).",
       "attrs": {
-        "buzz": "fs\\ext(path) → string"
+        "buzz": "fs\\ext(path) -> string"
       }
     },
     {
@@ -17095,7 +17127,7 @@
       "label": "fs.glob",
       "doc": "Return paths matching pattern (doublestar-style).",
       "attrs": {
-        "buzz": "fs\\glob(pattern) → [Path]"
+        "buzz": "fs\\glob(pattern) -> [Path]"
       }
     },
     {
@@ -17104,7 +17136,7 @@
       "label": "fs.is_dir",
       "doc": "True iff path exists and is a directory. A sandbox-denied path raises rather than reading as false.",
       "attrs": {
-        "buzz": "fs\\isDir(path) → bool"
+        "buzz": "fs\\isDir(path) -> bool"
       }
     },
     {
@@ -17113,7 +17145,7 @@
       "label": "fs.is_file",
       "doc": "True iff path exists and is a regular file. A sandbox-denied path raises rather than reading as false.",
       "attrs": {
-        "buzz": "fs\\isFile(path) → bool"
+        "buzz": "fs\\isFile(path) -> bool"
       }
     },
     {
@@ -17122,7 +17154,7 @@
       "label": "fs.join",
       "doc": "Join path elements with the OS separator.",
       "attrs": {
-        "buzz": "fs\\join(parts...) → string"
+        "buzz": "fs\\join(parts...) -> string"
       }
     },
     {
@@ -17131,7 +17163,7 @@
       "label": "fs.list_dir",
       "doc": "Return directory entries; empty if path does not exist.",
       "attrs": {
-        "buzz": "fs\\listDir(path) → []string"
+        "buzz": "fs\\listDir(path) -> []string"
       }
     },
     {
@@ -17149,7 +17181,7 @@
       "label": "fs.read_file",
       "doc": "Return the contents of path as a string.",
       "attrs": {
-        "buzz": "fs\\readFile(path) → string"
+        "buzz": "fs\\readFile(path) -> string"
       }
     },
     {
@@ -17158,7 +17190,7 @@
       "label": "fs.read_lines",
       "doc": "Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.",
       "attrs": {
-        "buzz": "fs\\readLines(path) → []string"
+        "buzz": "fs\\readLines(path) -> []string"
       }
     },
     {
@@ -17167,7 +17199,7 @@
       "label": "fs.readlink",
       "doc": "Return the target of the symbolic link at path.",
       "attrs": {
-        "buzz": "fs\\readlink(path) → string"
+        "buzz": "fs\\readlink(path) -> string"
       }
     },
     {
@@ -17203,7 +17235,7 @@
       "label": "fs.size",
       "doc": "Return path's size in bytes. Raises when path does not exist; stat returns the whole FileInfo when more than the size is wanted.",
       "attrs": {
-        "buzz": "fs\\size(path) → int"
+        "buzz": "fs\\size(path) -> int"
       }
     },
     {
@@ -17212,7 +17244,7 @@
       "label": "fs.stat",
       "doc": "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
       "attrs": {
-        "buzz": "fs\\stat(path) → FileInfo"
+        "buzz": "fs\\stat(path) -> FileInfo"
       }
     },
     {
@@ -17230,7 +17262,7 @@
       "label": "fs.temp_dir",
       "doc": "Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.",
       "attrs": {
-        "buzz": "fs\\tempDir([prefix]) → string"
+        "buzz": "fs\\tempDir([prefix]) -> string"
       }
     },
     {
@@ -17239,7 +17271,7 @@
       "label": "fs.temp_file",
       "doc": "Create a new empty temporary file (in os.TempDir()) with an optional name prefix and return its path. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
       "attrs": {
-        "buzz": "fs\\tempFile([prefix]) → string"
+        "buzz": "fs\\tempFile([prefix]) -> string"
       }
     },
     {
@@ -17293,7 +17325,7 @@
       "label": "hex.decode",
       "doc": "Decode a hex string; errors on malformed input.",
       "attrs": {
-        "buzz": "hex\\decode(s) → string"
+        "buzz": "hex\\decode(s) -> string"
       }
     },
     {
@@ -17302,7 +17334,7 @@
       "label": "hex.encode",
       "doc": "Encode data as lowercase hex.",
       "attrs": {
-        "buzz": "hex\\encode(data) → string"
+        "buzz": "hex\\encode(data) -> string"
       }
     },
     {
@@ -17311,7 +17343,7 @@
       "label": "http.byteSize",
       "doc": "Byte length of the file at path. The companion to uploadChunked: the size a Content-Range needs, which len() on a Buzz string cannot give for binary data.",
       "attrs": {
-        "buzz": "http\\byteSize(path) → int"
+        "buzz": "http\\byteSize(path) -> int"
       }
     },
     {
@@ -17320,7 +17352,7 @@
       "label": "http.download",
       "doc": "GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry arg",
       "attrs": {
-        "buzz": "http\\download(url, dest, [headers], [opts], [retry]) → int"
+        "buzz": "http\\download(url, dest, [headers], [opts], [retry]) -> int"
       }
     },
     {
@@ -17329,7 +17361,7 @@
       "label": "http.get",
       "doc": "Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\get(url, [headers], [opts], [retry]) → HttpResponse"
+        "buzz": "http\\get(url, [headers], [opts], [retry]) -> HttpResponse"
       }
     },
     {
@@ -17338,7 +17370,7 @@
       "label": "http.post",
       "doc": "Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\post(url, body, [headers], [opts], [retry]) → HttpResponse"
+        "buzz": "http\\post(url, body, [headers], [opts], [retry]) -> HttpResponse"
       }
     },
     {
@@ -17347,7 +17379,7 @@
       "label": "http.request",
       "doc": "Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\request(method, url, [body], [headers], [opts], [retry]) → HttpResponse"
+        "buzz": "http\\request(method, url, [body], [headers], [opts], [retry]) -> HttpResponse"
       }
     },
     {
@@ -17356,7 +17388,7 @@
       "label": "http.server",
       "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
       "attrs": {
-        "buzz": "http\\server(opts) → int"
+        "buzz": "http\\server(opts) -> int"
       }
     },
     {
@@ -17365,7 +17397,7 @@
       "label": "http.upload_chunked",
       "doc": "Send the file at src as the request body. chunk_size > 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunk_size <= 0 sends it in one request. Returns the final [status, body].",
       "attrs": {
-        "buzz": "http\\upload_chunked(method, url, src, chunk_size, [headers]) → any"
+        "buzz": "http\\upload_chunked(method, url, src, chunk_size, [headers]) -> any"
       }
     },
     {
@@ -17374,7 +17406,7 @@
       "label": "ini.parse",
       "doc": "Parse INI text into {section: {key: value}}. Entries before the first [section] header are under the \"\" key, which is where a flat file like .npmrc puts everything. Values are always strings; a repeated key takes the last value.",
       "attrs": {
-        "buzz": "ini\\parse(source) → map[string]map[string]string"
+        "buzz": "ini\\parse(source) -> map[string]map[string]string"
       }
     },
     {
@@ -17383,7 +17415,7 @@
       "label": "ini.stringify",
       "doc": "Render {section: {key: value}} back to INI text. The \"\" section is written first with no header, then the rest sorted by name with their keys sorted, so the output is byte-stable and diffs cleanly.",
       "attrs": {
-        "buzz": "ini\\stringify(sections) → string"
+        "buzz": "ini\\stringify(sections) -> string"
       }
     },
     {
@@ -17392,7 +17424,7 @@
       "label": "json.parse",
       "doc": "Decode a JSON string into a value (map, list, string, number, or boolean).",
       "attrs": {
-        "buzz": "json\\parse(s) → any"
+        "buzz": "json\\parse(s) -> any"
       }
     },
     {
@@ -17401,7 +17433,7 @@
       "label": "json.stringify",
       "doc": "Encode a value as a JSON string. With no indent (or \"\") the output is compact; pass an indent string (e.g. \"  \" or \"\\t\") for pretty, multi-line output.",
       "attrs": {
-        "buzz": "json\\stringify(value, [indent]) → string"
+        "buzz": "json\\stringify(value, [indent]) -> string"
       }
     },
     {
@@ -17410,7 +17442,7 @@
       "label": "lcov.mergePercent",
       "doc": "mergePercent is percent over SEVERAL lcov reports of the same sources,",
       "attrs": {
-        "buzz": "lcov\\mergePercent(reports, keep) → str"
+        "buzz": "lcov\\mergePercent(reports, keep) -> str"
       }
     },
     {
@@ -17419,7 +17451,7 @@
       "label": "lcov.percent",
       "doc": "percent is the covered-line percentage across an lcov report, as a string",
       "attrs": {
-        "buzz": "lcov\\percent(lcov, keep) → str"
+        "buzz": "lcov\\percent(lcov, keep) -> str"
       }
     },
     {
@@ -17482,7 +17514,7 @@
       "label": "magus.affected",
       "doc": "Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.",
       "attrs": {
-        "buzz": "magus\\affected([base]) → Affected"
+        "buzz": "magus\\affected([base]) -> Affected"
       }
     },
     {
@@ -17491,7 +17523,7 @@
       "label": "magus.affected_impact",
       "doc": "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Computed in-process from the workspace on the con",
       "attrs": {
-        "buzz": "magus\\affectedImpact([base], [opts]) → Impact"
+        "buzz": "magus\\affectedImpact([base], [opts]) -> Impact"
       }
     },
     {
@@ -17500,7 +17532,7 @@
       "label": "magus.attention",
       "doc": "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, delegation, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a",
       "attrs": {
-        "buzz": "magus\\attention(args, [opts]) → map[string]any"
+        "buzz": "magus\\attention(args, [opts]) -> map[string]any"
       }
     },
     {
@@ -17518,7 +17550,7 @@
       "label": "magus.canonical_name",
       "doc": "The canonical form of a magus entity name - a target, charm, or spell op. `build2` gains a '-' you did not type; `HTTPServer` breaks before its last letter. Returns the NAME, never a spell handle: a handle can only come from a literal import, because the target graph is built by reading imports statically.",
       "attrs": {
-        "buzz": "magus\\canonicalName(name) → string"
+        "buzz": "magus\\canonicalName(name) -> string"
       }
     },
     {
@@ -17527,7 +17559,7 @@
       "label": "magus.cmd",
       "doc": "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv",
       "attrs": {
-        "buzz": "magus\\cmd(sub, args, [opts]) → ExecResult"
+        "buzz": "magus\\cmd(sub, args, [opts]) -> ExecResult"
       }
     },
     {
@@ -17536,7 +17568,7 @@
       "label": "magus.describe",
       "doc": "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
       "attrs": {
-        "buzz": "magus\\describe(args, [opts]) → ExecResult"
+        "buzz": "magus\\describe(args, [opts]) -> ExecResult"
       }
     },
     {
@@ -17545,7 +17577,7 @@
       "label": "magus.describe_file",
       "doc": "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), `maintained` (magus writes it outside any target - commit it, never ignore it), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role`",
       "attrs": {
-        "buzz": "magus\\describeFile(paths, [opts]) → FileReport"
+        "buzz": "magus\\describeFile(paths, [opts]) -> FileReport"
       }
     },
     {
@@ -17554,7 +17586,7 @@
       "label": "magus.describe_module",
       "doc": "The host modules magus exposes, with their fields, methods and rendered Buzz signatures - the records `magus describe module` prints. Omit `name` for every module; pass one to detail it.",
       "attrs": {
-        "buzz": "magus\\describeModule([name]) → [Module]"
+        "buzz": "magus\\describeModule([name]) -> [Module]"
       }
     },
     {
@@ -17563,7 +17595,7 @@
       "label": "magus.diagnose_drift",
       "doc": "Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility",
       "attrs": {
-        "buzz": "magus\\diagnoseDrift(outputs, [inputs]) → DriftResult"
+        "buzz": "magus\\diagnoseDrift(outputs, [inputs]) -> DriftResult"
       }
     },
     {
@@ -17572,7 +17604,7 @@
       "label": "magus.diff",
       "doc": "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then wide",
       "attrs": {
-        "buzz": "magus\\diff([opts]) → Diff"
+        "buzz": "magus\\diff([opts]) -> Diff"
       }
     },
     {
@@ -17581,7 +17613,7 @@
       "label": "magus.doctor",
       "doc": "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the rep",
       "attrs": {
-        "buzz": "magus\\doctor(args, [opts]) → DoctorReport"
+        "buzz": "magus\\doctor(args, [opts]) -> DoctorReport"
       }
     },
     {
@@ -17599,7 +17631,7 @@
       "label": "magus.has_charm",
       "doc": "True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm(\"rw\")).",
       "attrs": {
-        "buzz": "magus\\hasCharm(name) → bool"
+        "buzz": "magus\\hasCharm(name) -> bool"
       }
     },
     {
@@ -17608,7 +17640,7 @@
       "label": "magus.insight",
       "doc": "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context -",
       "attrs": {
-        "buzz": "magus\\insight([opts]) → InsightReport"
+        "buzz": "magus\\insight([opts]) -> InsightReport"
       }
     },
     {
@@ -17626,7 +17658,7 @@
       "label": "magus.project_graph",
       "doc": "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
       "attrs": {
-        "buzz": "magus\\projectGraph() → Graph"
+        "buzz": "magus\\projectGraph() -> Graph"
       }
     },
     {
@@ -17635,7 +17667,7 @@
       "label": "magus.projects",
       "doc": "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd(\"ls\") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSO",
       "attrs": {
-        "buzz": "magus\\projects() → Projects"
+        "buzz": "magus\\projects() -> Projects"
       }
     },
     {
@@ -17662,7 +17694,7 @@
       "label": "magus.run",
       "doc": "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
       "attrs": {
-        "buzz": "magus\\run(args, [opts]) → ExecResult"
+        "buzz": "magus\\run(args, [opts]) -> ExecResult"
       }
     },
     {
@@ -17671,7 +17703,7 @@
       "label": "magus.targets",
       "doc": "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.projectGraph() does not carry: that is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it ne",
       "attrs": {
-        "buzz": "magus\\targets([opts]) → TargetGraph"
+        "buzz": "magus\\targets([opts]) -> TargetGraph"
       }
     },
     {
@@ -17680,7 +17712,7 @@
       "label": "magus.where",
       "doc": "Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.",
       "attrs": {
-        "buzz": "magus\\where(dir) → string"
+        "buzz": "magus\\where(dir) -> string"
       }
     },
     {
@@ -17689,7 +17721,7 @@
       "label": "markdown.frontmatter",
       "doc": "Parse the leading YAML frontmatter block (a \"---\" fenced header at the top of the document) and return it as a JSON object string; decode with serialize.jsonDecode. Returns \"{}\" when no frontmatter is present.",
       "attrs": {
-        "buzz": "markdown\\frontmatter(source) → string"
+        "buzz": "markdown\\frontmatter(source) -> string"
       }
     },
     {
@@ -17698,16 +17730,16 @@
       "label": "markdown.strip_frontmatter",
       "doc": "Return the Markdown body with any leading YAML frontmatter block removed (the source unchanged when none is present).",
       "attrs": {
-        "buzz": "markdown\\stripFrontmatter(source) → string"
+        "buzz": "markdown\\stripFrontmatter(source) -> string"
       }
     },
     {
       "id": "method:markdown.to_html",
       "kind": "method",
       "label": "markdown.to_html",
-      "doc": "Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a \"---\" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md → index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).",
+      "doc": "Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a \"---\" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md -> index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).",
       "attrs": {
-        "buzz": "markdown\\toHtml(source) → string"
+        "buzz": "markdown\\toHtml(source) -> string"
       }
     },
     {
@@ -17716,7 +17748,7 @@
       "label": "math.clamp",
       "doc": "Constrain x to the range lo..hi, returning lo when x is below it and hi when above. Sizing parallelism is the usual reason - clamp(cpus / 2, 1, 8) never yields zero workers. Raises when lo is greater than hi, which is a caller bug rather than an empty range.",
       "attrs": {
-        "buzz": "math\\clamp(x, lo, hi) → float64"
+        "buzz": "math\\clamp(x, lo, hi) -> float64"
       }
     },
     {
@@ -17725,7 +17757,7 @@
       "label": "math.max",
       "doc": "The largest number in the list. Distinct from Buzz's own maxInt/maxDouble, which compare exactly two values. Raises on an empty list.",
       "attrs": {
-        "buzz": "math\\max(nums) → float64"
+        "buzz": "math\\max(nums) -> float64"
       }
     },
     {
@@ -17734,7 +17766,7 @@
       "label": "math.mean",
       "doc": "The arithmetic mean. Raises on an empty list rather than returning 0, because 0 is a real average and \"there was nothing to average\" is not - returning it would let an empty set silently pass a floor check.",
       "attrs": {
-        "buzz": "math\\mean(nums) → float64"
+        "buzz": "math\\mean(nums) -> float64"
       }
     },
     {
@@ -17743,7 +17775,7 @@
       "label": "math.median",
       "doc": "The middle value, averaging the two middle values for an even count. Prefer it to mean when reporting what a TYPICAL run costs: one pathological outlier moves a mean and barely moves a median. Raises on an empty list, like mean.",
       "attrs": {
-        "buzz": "math\\median(nums) → float64"
+        "buzz": "math\\median(nums) -> float64"
       }
     },
     {
@@ -17752,7 +17784,7 @@
       "label": "math.min",
       "doc": "The smallest number in the list. Distinct from Buzz's own minInt/minDouble, which compare exactly two values. Raises on an empty list.",
       "attrs": {
-        "buzz": "math\\min(nums) → float64"
+        "buzz": "math\\min(nums) -> float64"
       }
     },
     {
@@ -17761,7 +17793,7 @@
       "label": "math.round",
       "doc": "Round x to places decimal places, half away from zero. places defaults to 0 (the nearest whole number) and may be negative to round to tens, hundreds and so on. Rendering a coverage percentage or a duration is the usual reason; Buzz's floor and ceil cannot express it.",
       "attrs": {
-        "buzz": "math\\round(x, [places]) → float64"
+        "buzz": "math\\round(x, [places]) -> float64"
       }
     },
     {
@@ -17770,7 +17802,7 @@
       "label": "math.sum",
       "doc": "Add every number in the list; an empty list sums to 0. Non-numeric items are skipped rather than counted as zero.",
       "attrs": {
-        "buzz": "math\\sum(nums) → float64"
+        "buzz": "math\\sum(nums) -> float64"
       }
     },
     {
@@ -17779,7 +17811,7 @@
       "label": "math.trunc",
       "doc": "Discard x's fractional part, rounding TOWARD ZERO - so -1.7 is -1, where floor gives -2. The difference matters whenever a value can be negative and you meant \"drop the decimals\".",
       "attrs": {
-        "buzz": "math\\trunc(x) → float64"
+        "buzz": "math\\trunc(x) -> float64"
       }
     },
     {
@@ -17788,7 +17820,7 @@
       "label": "net.free_port",
       "doc": "Ask the operating system for an unused TCP port and return it. Bind it promptly: the port is released before this returns, so between the call and your server's own bind another process could take it. That race is unavoidable for any \"find a free port\" answer and is why this is for choosing a dev-server port, not for anything that must not collide.",
       "attrs": {
-        "buzz": "net\\freePort() → int"
+        "buzz": "net\\freePort() -> int"
       }
     },
     {
@@ -17797,7 +17829,7 @@
       "label": "net.is_port_open",
       "doc": "Report whether a TCP connection to host:port succeeds right now, with no waiting. The single-shot form of wait_for_port - for deciding whether a service is ALREADY running before starting another one.",
       "attrs": {
-        "buzz": "net\\isPortOpen(host, port) → bool"
+        "buzz": "net\\isPortOpen(host, port) -> bool"
       }
     },
     {
@@ -17806,7 +17838,7 @@
       "label": "net.wait_for_port",
       "doc": "Block until a TCP connection to host:port succeeds, then return true; return false when the timeout elapses first. Use it after starting a dev server or a container instead of sleeping a guessed number of seconds. timeout_ms defaults to 30000. Returns FALSE rather than raising on timeout, so a caller can fall back or report its own message; the run's cancellation is honored, so Ctrl-C does not wait out the timeout.",
       "attrs": {
-        "buzz": "net\\waitForPort(host, port, [timeout_ms]) → bool"
+        "buzz": "net\\waitForPort(host, port, [timeout_ms]) -> bool"
       }
     },
     {
@@ -17815,7 +17847,7 @@
       "label": "os.executable",
       "doc": "Return the absolute path of the running magus binary. Pair it with fs.stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
       "attrs": {
-        "buzz": "os\\executable() → string"
+        "buzz": "os\\executable() -> string"
       }
     },
     {
@@ -17833,7 +17865,7 @@
       "label": "os.hostname",
       "doc": "Return the host machine's name.",
       "attrs": {
-        "buzz": "os\\hostname() → string"
+        "buzz": "os\\hostname() -> string"
       }
     },
     {
@@ -17842,7 +17874,7 @@
       "label": "os.num_cpu",
       "doc": "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).",
       "attrs": {
-        "buzz": "os\\numCpu() → int"
+        "buzz": "os\\numCpu() -> int"
       }
     },
     {
@@ -17851,7 +17883,7 @@
       "label": "os.platform",
       "doc": "Return the Docker/OCI platform triple: (os, arch, variant).",
       "attrs": {
-        "buzz": "os\\platform() → string, string, string"
+        "buzz": "os\\platform() -> string, string, string"
       }
     },
     {
@@ -17860,7 +17892,7 @@
       "label": "os.retry",
       "doc": "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.",
       "attrs": {
-        "buzz": "os\\retry(max, fn, [opts]) → any"
+        "buzz": "os\\retry(max, fn, [opts]) -> any"
       }
     },
     {
@@ -17887,7 +17919,7 @@
       "label": "path.abs",
       "doc": "Return the absolute form of path, resolved against the current directory and lexically cleaned.",
       "attrs": {
-        "buzz": "path\\abs(path) → string"
+        "buzz": "path\\abs(path) -> string"
       }
     },
     {
@@ -17896,7 +17928,7 @@
       "label": "path.clean",
       "doc": "Return the shortest lexically-equivalent path (resolves . and .., collapses separators).",
       "attrs": {
-        "buzz": "path\\clean(path) → string"
+        "buzz": "path\\clean(path) -> string"
       }
     },
     {
@@ -17905,7 +17937,7 @@
       "label": "path.expand_user",
       "doc": "Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.",
       "attrs": {
-        "buzz": "path\\expandUser(path) → string"
+        "buzz": "path\\expandUser(path) -> string"
       }
     },
     {
@@ -17914,7 +17946,7 @@
       "label": "path.is_abs",
       "doc": "Report whether path is absolute.",
       "attrs": {
-        "buzz": "path\\isAbs(path) → bool"
+        "buzz": "path\\isAbs(path) -> bool"
       }
     },
     {
@@ -17923,7 +17955,7 @@
       "label": "path.matches",
       "doc": "Report whether path matches a doublestar glob (** crosses directory separators, * does not). Purely lexical: unlike fs.glob it touches no filesystem, so it is what filters a list already in hand - the changed files from vcs.changed_files, the entries from archive.list - against the same pattern syntax a target's sources use. Raises on a malformed pattern rather than reporting no match, so a typo is not read as \"nothing changed\".",
       "attrs": {
-        "buzz": "path\\matches(pattern, path) → bool"
+        "buzz": "path\\matches(pattern, path) -> bool"
       }
     },
     {
@@ -17932,7 +17964,7 @@
       "label": "path.matches_any",
       "doc": "Report whether path matches ANY of the patterns; an empty pattern list is false. The common shape of a declared source or ignore set, which is a list rather than one glob.",
       "attrs": {
-        "buzz": "path\\matchesAny(patterns, path) → bool"
+        "buzz": "path\\matchesAny(patterns, path) -> bool"
       }
     },
     {
@@ -17941,16 +17973,16 @@
       "label": "path.rel",
       "doc": "Return a relative path from base to target; errors if no relative path exists.",
       "attrs": {
-        "buzz": "path\\rel(base, target) → string"
+        "buzz": "path\\rel(base, target) -> string"
       }
     },
     {
       "id": "method:platform.arch",
       "kind": "method",
       "label": "platform.arch",
-      "doc": "Normalize an architecture identifier (x86_64, aarch64, armv7l, …) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
+      "doc": "Normalize an architecture identifier (x86_64, aarch64, armv7l, ...) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
       "attrs": {
-        "buzz": "platform\\arch(name, [style]) → string"
+        "buzz": "platform\\arch(name, [style]) -> string"
       }
     },
     {
@@ -17959,7 +17991,7 @@
       "label": "platform.cpus",
       "doc": "How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory_bytes() when sizing parallel work: the smaller of the two limits is the one that matters.",
       "attrs": {
-        "buzz": "platform\\cpus() → int"
+        "buzz": "platform\\cpus() -> int"
       }
     },
     {
@@ -17968,16 +18000,16 @@
       "label": "platform.memory_bytes",
       "doc": "How much memory this process may commit, in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Narrowed by a container's memory ceiling where there is one, the way cpus() honors a CPU quota. Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0",
       "attrs": {
-        "buzz": "platform\\memoryBytes() → int"
+        "buzz": "platform\\memoryBytes() -> int"
       }
     },
     {
       "id": "method:platform.os",
       "kind": "method",
       "label": "platform.os",
-      "doc": "Normalize an OS identifier (Darwin, macOS, win, …) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
+      "doc": "Normalize an OS identifier (Darwin, macOS, win, ...) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
       "attrs": {
-        "buzz": "platform\\os(name, [style]) → string"
+        "buzz": "platform\\os(name, [style]) -> string"
       }
     },
     {
@@ -17986,7 +18018,7 @@
       "label": "proc.exec",
       "doc": "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console. opts.tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check is",
       "attrs": {
-        "buzz": "proc\\exec(cmd, [args], [dir], [opts]) → ExecResult"
+        "buzz": "proc\\exec(cmd, [args], [dir], [opts]) -> ExecResult"
       }
     },
     {
@@ -17995,7 +18027,7 @@
       "label": "proc.shell",
       "doc": "Build the command line that runs `line` through the platform shell, WITHOUT running it: returns {bin, args} for proc.exec. Default shell is /bin/sh (cmd on Windows); pass shell (e.g. \"bash\") to override, resolved via PATH. This is a pure function, so the argv is inspectable before anything executes - print it, log it, or assert on it. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes; for cross-platform logic prefer proc.exec plus the fs/os helpers.",
       "attrs": {
-        "buzz": "proc\\shell(line, [shell]) → ShellCommand"
+        "buzz": "proc\\shell(line, [shell]) -> ShellCommand"
       }
     },
     {
@@ -18004,7 +18036,7 @@
       "label": "proc.stdin_is_terminal",
       "doc": "Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.",
       "attrs": {
-        "buzz": "proc\\stdinIsTerminal() → bool"
+        "buzz": "proc\\stdinIsTerminal() -> bool"
       }
     },
     {
@@ -18013,7 +18045,7 @@
       "label": "proc.which",
       "doc": "Resolve cmd against PATH and return its absolute path. RAISES when the command is not found - wrap it in try/catch to check a tool is installed and emit a clear hint instead of a cryptic exec failure.",
       "attrs": {
-        "buzz": "proc\\which(cmd) → string"
+        "buzz": "proc\\which(cmd) -> string"
       }
     },
     {
@@ -18031,7 +18063,7 @@
       "label": "semver.canonical",
       "doc": "Canonical \"vX.Y.Z\" form of v, filling in missing components and discarding build metadata; errors on invalid input.",
       "attrs": {
-        "buzz": "semver\\canonical(v) → string"
+        "buzz": "semver\\canonical(v) -> string"
       }
     },
     {
@@ -18040,7 +18072,7 @@
       "label": "semver.compare",
       "doc": "Order two semver strings: -1 when a sorts before b, 0 when they are equal, 1 when a sorts after. Use satisfies() to test a relation or a range.",
       "attrs": {
-        "buzz": "semver\\compare(a, b) → int"
+        "buzz": "semver\\compare(a, b) -> int"
       }
     },
     {
@@ -18049,7 +18081,7 @@
       "label": "semver.isValid",
       "doc": "Whether v parses as a semantic version. Use it instead of calling parse purely to see whether it raises.",
       "attrs": {
-        "buzz": "semver\\isValid(v) → bool"
+        "buzz": "semver\\isValid(v) -> bool"
       }
     },
     {
@@ -18058,7 +18090,7 @@
       "label": "semver.major",
       "doc": "The major prefix of v as a string: major(\"1.2.3\") is \"v1\". This is the cache token a spell's VersionKey{upTo = \"major\"} produces; parse().major is the same number as an int.",
       "attrs": {
-        "buzz": "semver\\major(v) → string"
+        "buzz": "semver\\major(v) -> string"
       }
     },
     {
@@ -18067,7 +18099,7 @@
       "label": "semver.majorMinor",
       "doc": "The major.minor prefix of v as a string: majorMinor(\"1.2.3\") is \"v1.2\". This is the cache token a spell's VersionKey{upTo = \"minor\"} produces.",
       "attrs": {
-        "buzz": "semver\\majorMinor(v) → string"
+        "buzz": "semver\\majorMinor(v) -> string"
       }
     },
     {
@@ -18076,7 +18108,7 @@
       "label": "semver.next",
       "doc": "Candidate next versions after v: {major, minor, patch}, each \"vX.Y.Z\" - the result of bumping the major, minor, or patch component. Errors on invalid input.",
       "attrs": {
-        "buzz": "semver\\next(v) → SemverNext"
+        "buzz": "semver\\next(v) -> SemverNext"
       }
     },
     {
@@ -18085,7 +18117,7 @@
       "label": "semver.parse",
       "doc": "Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.",
       "attrs": {
-        "buzz": "semver\\parse(v) → SemverVersion"
+        "buzz": "semver\\parse(v) -> SemverVersion"
       }
     },
     {
@@ -18094,7 +18126,7 @@
       "label": "semver.satisfies",
       "doc": "Whether v meets constraint, the full range syntax magus.yaml required_version uses: \">= 1.2, < 2.0\", \"^1.2.3\", \"~1.2\". compare() tests one relation; this tests a range.",
       "attrs": {
-        "buzz": "semver\\satisfies(v, constraint) → bool"
+        "buzz": "semver\\satisfies(v, constraint) -> bool"
       }
     },
     {
@@ -18103,7 +18135,7 @@
       "label": "sort.natural",
       "doc": "Return a new list ordered so embedded numbers compare as numbers: file2 before file10, where a lexicographic sort puts file10 first. Use it for anything a human will read - filenames, shard names, versioned directories - and note it is NOT a version sort; semver is.",
       "attrs": {
-        "buzz": "sort\\natural(items) → []string"
+        "buzz": "sort\\natural(items) -> []string"
       }
     },
     {
@@ -18112,7 +18144,7 @@
       "label": "sort.semver",
       "doc": "Return a new list ordered by semantic version, oldest first, so v1.9.0 precedes v1.10.0 and a prerelease precedes its release. Accepts tags with or without a leading v. Anything that is not a valid version sorts AFTER every valid one, in lexicographic order among themselves - so a stray tag is visible at the end rather than silently reordering the releases.",
       "attrs": {
-        "buzz": "sort\\semver(items) → []string"
+        "buzz": "sort\\semver(items) -> []string"
       }
     },
     {
@@ -18121,7 +18153,7 @@
       "label": "sort.strings",
       "doc": "Return a new list ordered lexicographically by byte. The plain alphabetical sort, and the one to reach for when the goal is a stable order rather than a meaningful one - a listing that must not change between runs.",
       "attrs": {
-        "buzz": "sort\\strings(items) → []string"
+        "buzz": "sort\\strings(items) -> []string"
       }
     },
     {
@@ -18130,7 +18162,7 @@
       "label": "strings.camel_case",
       "doc": "Convert s to camelCase.",
       "attrs": {
-        "buzz": "strings\\camelCase(s) → string"
+        "buzz": "strings\\camelCase(s) -> string"
       }
     },
     {
@@ -18139,7 +18171,7 @@
       "label": "strings.capitalize",
       "doc": "Uppercase the first rune of s and lowercase the rest.",
       "attrs": {
-        "buzz": "strings\\capitalize(s) → string"
+        "buzz": "strings\\capitalize(s) -> string"
       }
     },
     {
@@ -18148,7 +18180,7 @@
       "label": "strings.collapse_ws",
       "doc": "Fold every run of whitespace in s into a single space and trim the ends, so a multi-line value reads as one clean line.",
       "attrs": {
-        "buzz": "strings\\collapseWs(s) → string"
+        "buzz": "strings\\collapseWs(s) -> string"
       }
     },
     {
@@ -18157,7 +18189,7 @@
       "label": "strings.compare",
       "doc": "Compare a and b lexicographically by byte, returning -1, 0, or 1. Buzz has no < operator on str, so this is what a list.sort comparator over strings is built from.",
       "attrs": {
-        "buzz": "strings\\compare(a, b) → int"
+        "buzz": "strings\\compare(a, b) -> int"
       }
     },
     {
@@ -18166,7 +18198,7 @@
       "label": "strings.contains",
       "doc": "Report whether s contains substr.",
       "attrs": {
-        "buzz": "strings\\contains(s, substr) → bool"
+        "buzz": "strings\\contains(s, substr) -> bool"
       }
     },
     {
@@ -18175,7 +18207,7 @@
       "label": "strings.ellipsis",
       "doc": "Trim s to at most length runes, appending \"...\" when truncated.",
       "attrs": {
-        "buzz": "strings\\ellipsis(s, length) → string"
+        "buzz": "strings\\ellipsis(s, length) -> string"
       }
     },
     {
@@ -18184,7 +18216,7 @@
       "label": "strings.fields",
       "doc": "Split s around runs of whitespace, discarding empties. Picking a column out of a tool's version banner is what this is for; str.split(\" \") cannot, because it yields an empty element per extra space.",
       "attrs": {
-        "buzz": "strings\\fields(s) → []string"
+        "buzz": "strings\\fields(s) -> []string"
       }
     },
     {
@@ -18193,7 +18225,7 @@
       "label": "strings.kebab_case",
       "doc": "Convert s to kebab-case.",
       "attrs": {
-        "buzz": "strings\\kebabCase(s) → string"
+        "buzz": "strings\\kebabCase(s) -> string"
       }
     },
     {
@@ -18202,7 +18234,7 @@
       "label": "strings.lines",
       "doc": "Split s into lines on \\n, tolerating \\r\\n endings and dropping the trailing empty element a final newline would produce. Reading a command's stdout line by line is what this is for; fs.read_lines is the same shape over a file.",
       "attrs": {
-        "buzz": "strings\\lines(s) → []string"
+        "buzz": "strings\\lines(s) -> []string"
       }
     },
     {
@@ -18211,7 +18243,7 @@
       "label": "strings.pad_left",
       "doc": "Left-pad s with pad until it is length runes wide; s is returned unchanged when already that wide or wider. pad defaults to a space. Zero-padding a number so it sorts lexically is the usual reason.",
       "attrs": {
-        "buzz": "strings\\padLeft(s, length, [pad]) → string"
+        "buzz": "strings\\padLeft(s, length, [pad]) -> string"
       }
     },
     {
@@ -18220,7 +18252,7 @@
       "label": "strings.pad_right",
       "doc": "Right-pad s with pad until it is length runes wide; s is returned unchanged when already that wide or wider. pad defaults to a space. Aligning a column of output is the usual reason.",
       "attrs": {
-        "buzz": "strings\\padRight(s, length, [pad]) → string"
+        "buzz": "strings\\padRight(s, length, [pad]) -> string"
       }
     },
     {
@@ -18229,7 +18261,7 @@
       "label": "strings.pascal_case",
       "doc": "Convert s to PascalCase.",
       "attrs": {
-        "buzz": "strings\\pascalCase(s) → string"
+        "buzz": "strings\\pascalCase(s) -> string"
       }
     },
     {
@@ -18238,7 +18270,7 @@
       "label": "strings.snake_case",
       "doc": "Convert s to snake_case.",
       "attrs": {
-        "buzz": "strings\\snakeCase(s) → string"
+        "buzz": "strings\\snakeCase(s) -> string"
       }
     },
     {
@@ -18247,7 +18279,7 @@
       "label": "strings.split_n",
       "doc": "Split s on sep into at most n pieces, leaving any remaining separators in the final piece; n of -1 means no limit. Parsing a KEY=VALUE line whose value itself contains the separator needs this rather than str.split.",
       "attrs": {
-        "buzz": "strings\\splitN(s, sep, n) → []string"
+        "buzz": "strings\\splitN(s, sep, n) -> []string"
       }
     },
     {
@@ -18256,7 +18288,7 @@
       "label": "strings.trim_prefix",
       "doc": "Remove prefix from the start of s if present, otherwise return s unchanged. Buzz's str.trim only strips whitespace, so there is no built-in way to drop a known affix.",
       "attrs": {
-        "buzz": "strings\\trimPrefix(s, prefix) → string"
+        "buzz": "strings\\trimPrefix(s, prefix) -> string"
       }
     },
     {
@@ -18265,7 +18297,7 @@
       "label": "strings.trim_suffix",
       "doc": "Remove suffix from the end of s if present, otherwise return s unchanged.",
       "attrs": {
-        "buzz": "strings\\trimSuffix(s, suffix) → string"
+        "buzz": "strings\\trimSuffix(s, suffix) -> string"
       }
     },
     {
@@ -18274,7 +18306,7 @@
       "label": "strings.upper_first",
       "doc": "Uppercase the first rune of s, leaving the rest untouched. Unlike capitalize, which lowercases the remainder, this preserves interior casing - the form a label or breadcrumb built from an existing string needs.",
       "attrs": {
-        "buzz": "strings\\upperFirst(s) → string"
+        "buzz": "strings\\upperFirst(s) -> string"
       }
     },
     {
@@ -18283,7 +18315,7 @@
       "label": "strings.words",
       "doc": "Split s into its constituent words (splitting on case changes, digits, and separators).",
       "attrs": {
-        "buzz": "strings\\words(s) → []string"
+        "buzz": "strings\\words(s) -> []string"
       }
     },
     {
@@ -18292,7 +18324,7 @@
       "label": "template.render",
       "doc": "Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
       "attrs": {
-        "buzz": "template\\render(template, data) → string"
+        "buzz": "template\\render(template, data) -> string"
       }
     },
     {
@@ -18301,7 +18333,7 @@
       "label": "template.render_partials",
       "doc": "Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
       "attrs": {
-        "buzz": "template\\renderPartials(template, data, partials) → string"
+        "buzz": "template\\renderPartials(template, data, partials) -> string"
       }
     },
     {
@@ -18319,7 +18351,7 @@
       "label": "term.colorize",
       "doc": "Wrap s in the given style and close it again. Returns s UNCHANGED when the output is not a terminal or the environment asked for plain text, so a magusfile never has to guard the call and escape codes cannot leak into a CI log. A style of none is also pass-through, which lets a conditionally-computed style be passed without branching.",
       "attrs": {
-        "buzz": "term\\colorize(s, style) → string"
+        "buzz": "term\\colorize(s, style) -> string"
       }
     },
     {
@@ -18328,7 +18360,7 @@
       "label": "term.is_interactive",
       "doc": "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a daemon this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.",
       "attrs": {
-        "buzz": "term\\isInteractive() → bool"
+        "buzz": "term\\isInteractive() -> bool"
       }
     },
     {
@@ -18346,7 +18378,7 @@
       "label": "term.pick",
       "doc": "Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr.",
       "attrs": {
-        "buzz": "term\\pick(items, [prompt], [initial_filter], [initial], [max_rows]) → int"
+        "buzz": "term\\pick(items, [prompt], [initial_filter], [initial], [max_rows]) -> int"
       }
     },
     {
@@ -18355,7 +18387,7 @@
       "label": "term.size",
       "doc": "Return the terminal's {width, height} in character cells. Both are 0 when there is no terminal to measure - piped output, no controlling terminal - so check width rather than expecting a raise. Use it to wrap or truncate output to the reader's actual window instead of assuming 80 columns.",
       "attrs": {
-        "buzz": "term\\size() → TermSize"
+        "buzz": "term\\size() -> TermSize"
       }
     },
     {
@@ -18364,7 +18396,7 @@
       "label": "term.wants_color",
       "doc": "Report whether styled output should be emitted: standard error is a terminal and the environment does not ask for plain text (NO_COLOR, TERM=dumb). colorize already consults this, so a caller needs it only to make a wider rendering choice - a box-drawing table versus a plain one.",
       "attrs": {
-        "buzz": "term\\wantsColor() → bool"
+        "buzz": "term\\wantsColor() -> bool"
       }
     },
     {
@@ -18373,7 +18405,7 @@
       "label": "time.add",
       "doc": "Add a Go duration string (e.g. \"24h\", \"-1h30m\") to a Unix-millis timestamp; returns the new Unix-millis timestamp.",
       "attrs": {
-        "buzz": "time\\add(unix_millis, duration) → float64"
+        "buzz": "time\\add(unix_millis, duration) -> float64"
       }
     },
     {
@@ -18382,7 +18414,7 @@
       "label": "time.diff",
       "doc": "Return a minus b in milliseconds (positive when a is later than b).",
       "attrs": {
-        "buzz": "time\\diff(a, b) → float64"
+        "buzz": "time\\diff(a, b) -> float64"
       }
     },
     {
@@ -18391,7 +18423,7 @@
       "label": "time.format",
       "doc": "Render Unix-millis as a string using a Go reference layout (UTC).",
       "attrs": {
-        "buzz": "time\\format(layout, unix_millis) → string"
+        "buzz": "time\\format(layout, unix_millis) -> string"
       }
     },
     {
@@ -18400,7 +18432,7 @@
       "label": "time.now_iso",
       "doc": "Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().",
       "attrs": {
-        "buzz": "time\\nowIso() → string"
+        "buzz": "time\\nowIso() -> string"
       }
     },
     {
@@ -18409,7 +18441,7 @@
       "label": "time.parse",
       "doc": "Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.",
       "attrs": {
-        "buzz": "time\\parse(layout, value) → float64"
+        "buzz": "time\\parse(layout, value) -> float64"
       }
     },
     {
@@ -18418,7 +18450,7 @@
       "label": "time.parse_duration",
       "doc": "Parse a Go duration string (e.g. \"168h\", \"1h30m\") into milliseconds; errors on mismatch.",
       "attrs": {
-        "buzz": "time\\parseDuration(duration) → float64"
+        "buzz": "time\\parseDuration(duration) -> float64"
       }
     },
     {
@@ -18427,7 +18459,7 @@
       "label": "toml.parse",
       "doc": "Decode a TOML document into a value (tables become maps, arrays become lists, plus strings, numbers, bools, and datetimes); errors on invalid input.",
       "attrs": {
-        "buzz": "toml\\parse(source) → any"
+        "buzz": "toml\\parse(source) -> any"
       }
     },
     {
@@ -18436,7 +18468,7 @@
       "label": "toml.stringify",
       "doc": "Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.",
       "attrs": {
-        "buzz": "toml\\stringify(value) → string"
+        "buzz": "toml\\stringify(value) -> string"
       }
     },
     {
@@ -18445,7 +18477,7 @@
       "label": "url.build",
       "doc": "Build a URL string from a URL object - the same shape parse returns, so the two round-trip. Missing fields are treated as empty.",
       "attrs": {
-        "buzz": "url\\build(parts) → string"
+        "buzz": "url\\build(parts) -> string"
       }
     },
     {
@@ -18454,7 +18486,7 @@
       "label": "url.decode",
       "doc": "Decode a percent-encoded URL query component; errors on malformed input.",
       "attrs": {
-        "buzz": "url\\decode(s) → string"
+        "buzz": "url\\decode(s) -> string"
       }
     },
     {
@@ -18463,7 +18495,7 @@
       "label": "url.encode",
       "doc": "Percent-encode s for use in a URL query component.",
       "attrs": {
-        "buzz": "url\\encode(s) → string"
+        "buzz": "url\\encode(s) -> string"
       }
     },
     {
@@ -18472,7 +18504,7 @@
       "label": "url.parse",
       "doc": "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
       "attrs": {
-        "buzz": "url\\parse(raw_url) → URL"
+        "buzz": "url\\parse(raw_url) -> URL"
       }
     },
     {
@@ -18481,7 +18513,7 @@
       "label": "uuid.randomHex",
       "doc": "A cryptographically random lowercase hex string of n bytes (2*n characters); errors when n is not positive.",
       "attrs": {
-        "buzz": "uuid\\randomHex(n) → string"
+        "buzz": "uuid\\randomHex(n) -> string"
       }
     },
     {
@@ -18490,7 +18522,7 @@
       "label": "uuid.randomToken",
       "doc": "A cryptographically random URL-safe base64 token from n bytes of entropy (no padding); errors when n is not positive.",
       "attrs": {
-        "buzz": "uuid\\randomToken(n) → string"
+        "buzz": "uuid\\randomToken(n) -> string"
       }
     },
     {
@@ -18499,7 +18531,7 @@
       "label": "uuid.v4",
       "doc": "A random (version 4) UUID string, e.g. \"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d\".",
       "attrs": {
-        "buzz": "uuid\\v4() → string"
+        "buzz": "uuid\\v4() -> string"
       }
     },
     {
@@ -18508,7 +18540,7 @@
       "label": "uuid.v7",
       "doc": "A time-ordered (version 7) UUID string; lexically sorts by creation time, which makes it a good ordered run/build id.",
       "attrs": {
-        "buzz": "uuid\\v7() → string"
+        "buzz": "uuid\\v7() -> string"
       }
     },
     {
@@ -18517,7 +18549,7 @@
       "label": "vcs.base",
       "doc": "Resolved base ref for diffs.",
       "attrs": {
-        "buzz": "vcs\\base() → string"
+        "buzz": "vcs\\base() -> string"
       }
     },
     {
@@ -18526,7 +18558,7 @@
       "label": "vcs.changed_files",
       "doc": "The files changed against the given base (defaults to vcs.base), each a Path carrying the repository root as its base. Empty when no VCS is resolved. Named for what it returns: it answers WHICH files a branch touched, where vcs.dirtyDiff answers WHAT changed inside the working tree.",
       "attrs": {
-        "buzz": "vcs\\changedFiles([base]) → [Path]"
+        "buzz": "vcs\\changedFiles([base]) -> [Path]"
       }
     },
     {
@@ -18535,7 +18567,7 @@
       "label": "vcs.cmd",
       "doc": "Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch o",
       "attrs": {
-        "buzz": "vcs\\cmd(args, [opts]) → ExecResult"
+        "buzz": "vcs\\cmd(args, [opts]) -> ExecResult"
       }
     },
     {
@@ -18544,7 +18576,7 @@
       "label": "vcs.commit",
       "doc": "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Raises when no VCS is resolved or the revision cannot be looked up, so a caller never has to sniff a field to find out - use vcs.name() to test for a VCS, and try/catch for a revision that ma",
       "attrs": {
-        "buzz": "vcs\\commit([rev]) → Commit"
+        "buzz": "vcs\\commit([rev]) -> Commit"
       }
     },
     {
@@ -18553,7 +18585,7 @@
       "label": "vcs.describe",
       "doc": "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.commit().short as a fallback.",
       "attrs": {
-        "buzz": "vcs\\describe() → string"
+        "buzz": "vcs\\describe() -> string"
       }
     },
     {
@@ -18562,7 +18594,7 @@
       "label": "vcs.dirty_diff",
       "doc": "The uncommitted changes to paths, as the active VCS's own unified diff; \"\" when nothing changed or no VCS is resolved. is_dirty answers whether an output moved, this answers how - which is what a drift gate needs when it fires in CI and nobody can look at the tree. Every backend implements it, so a magusfile no longer branches on vcs.name() to print a diff; the bytes are the backend's native format, not a normalized one.",
       "attrs": {
-        "buzz": "vcs\\dirtyDiff([paths]) → string"
+        "buzz": "vcs\\dirtyDiff([paths]) -> string"
       }
     },
     {
@@ -18571,7 +18603,7 @@
       "label": "vcs.history",
       "doc": "Up to limit recent commits, newest first; each is the same object vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.",
       "attrs": {
-        "buzz": "vcs\\history([limit]) → [Commit]"
+        "buzz": "vcs\\history([limit]) -> [Commit]"
       }
     },
     {
@@ -18580,7 +18612,7 @@
       "label": "vcs.is_dirty",
       "doc": "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.",
       "attrs": {
-        "buzz": "vcs\\isDirty([paths]) → bool"
+        "buzz": "vcs\\isDirty([paths]) -> bool"
       }
     },
     {
@@ -18589,7 +18621,7 @@
       "label": "vcs.name",
       "doc": "VCS short name (e.g. \"git\"). Empty if unresolved, which is how a caller tests for a VCS without catching.",
       "attrs": {
-        "buzz": "vcs\\name() → string"
+        "buzz": "vcs\\name() -> string"
       }
     },
     {
@@ -18598,7 +18630,7 @@
       "label": "vcs.ref",
       "doc": "The movable name pointing at the current revision, or \"\" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so \"\" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
       "attrs": {
-        "buzz": "vcs\\ref() → string"
+        "buzz": "vcs\\ref() -> string"
       }
     },
     {
@@ -18607,7 +18639,7 @@
       "label": "vcs.root",
       "doc": "Absolute path of the repository root.",
       "attrs": {
-        "buzz": "vcs\\root() → string"
+        "buzz": "vcs\\root() -> string"
       }
     },
     {
@@ -18616,7 +18648,7 @@
       "label": "vcs.status",
       "doc": "The working tree's uncommitted state as {clean, files}: clean is true when nothing changed, files are the changed paths (empty when clean). Pass paths to scope it. Each file is a Path carrying the repository root as its base, because a VCS reports paths from the root while a target runs in its project directory. Paths only - a per-entry status code is not portable (jj reports none), so reach for vcs.cmd() when the codes matter.",
       "attrs": {
-        "buzz": "vcs\\status([paths]) → Status"
+        "buzz": "vcs\\status([paths]) -> Status"
       }
     },
     {
@@ -18625,7 +18657,7 @@
       "label": "vcs.tags",
       "doc": "Repository tags, newest first. Each is an object {name, date, id}: name as written (\"v0.3.0\", no refs/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name (\"v*\"); wildcards stop at \"/\", so \"v*\" selects releases and skips a namespaced tag like backup/x. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed query raises rather than reporting \"no tags\". Note a shallow or single-branch clone l",
       "attrs": {
-        "buzz": "vcs\\tags([pattern]) → [Tag]"
+        "buzz": "vcs\\tags([pattern]) -> [Tag]"
       }
     },
     {
@@ -18634,7 +18666,7 @@
       "label": "xml.element",
       "doc": "Build an element node from a tag, a flat [name, value, ...] attribute list, and a list of child nodes (elements or strings). Sugar for the {\"tag\", \"attrs\", \"children\"} map that render consumes.",
       "attrs": {
-        "buzz": "xml\\element(tag, attrs, children) → any"
+        "buzz": "xml\\element(tag, attrs, children) -> any"
       }
     },
     {
@@ -18643,7 +18675,7 @@
       "label": "xml.parse",
       "doc": "Parse an XML string into a node tree: each element becomes {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}, character data becomes a string. The inverse shape of render.",
       "attrs": {
-        "buzz": "xml\\parse(s) → any"
+        "buzz": "xml\\parse(s) -> any"
       }
     },
     {
@@ -18652,7 +18684,7 @@
       "label": "xml.render",
       "doc": "Serialize an XML node to a string. A node is a string (text) or an element map {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.",
       "attrs": {
-        "buzz": "xml\\render(node) → string"
+        "buzz": "xml\\render(node) -> string"
       }
     },
     {
@@ -18661,7 +18693,7 @@
       "label": "yaml.parse",
       "doc": "Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.",
       "attrs": {
-        "buzz": "yaml\\parse(source) → any"
+        "buzz": "yaml\\parse(source) -> any"
       }
     },
     {
@@ -18670,7 +18702,7 @@
       "label": "yaml.stringify",
       "doc": "Encode a value to a YAML string; errors on unencodable input.",
       "attrs": {
-        "buzz": "yaml\\stringify(value) → string"
+        "buzz": "yaml\\stringify(value) -> string"
       }
     },
     {
@@ -18803,7 +18835,7 @@
       "id": "module:platform",
       "kind": "module",
       "label": "platform",
-      "doc": "Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin)."
+      "doc": "Normalize OS/architecture identifiers across naming conventions (aarch64<->arm64, Darwin<->darwin)."
     },
     {
       "id": "module:proc",
@@ -24533,6 +24565,14 @@
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS3008.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3008.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
       "target": "doc:docs/reference/codes/sandbox/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -24698,6 +24738,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "dir:docs/reference/manpage",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
     },
     {
       "source": "dir:docs/reference/manpage",
@@ -31253,6 +31301,14 @@
     },
     {
       "source": "doc:docs/glossary.md",
+      "target": "doc:docs/scope.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
       "target": "spell:go",
       "relation": "documents",
       "confidence": "inferred",
@@ -36796,6 +36852,38 @@
       "provenance": "docs/reference/codes/sandbox/MGS3007.md"
     },
     {
+      "source": "doc:docs/reference/codes/sandbox/MGS3008.md",
+      "target": "diagnostic:MGS1021",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3008.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3008.md",
+      "target": "diagnostic:MGS3008",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3008.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3008.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1021.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3008.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3008.md",
+      "target": "doc:docs/reference/manpage/magus-init.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3008.md"
+    },
+    {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -37501,6 +37589,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-affected.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-affected.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -37734,6 +37830,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-agent.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-agent.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -37981,6 +38085,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-buzz.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-buzz.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-buzz.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -38214,6 +38326,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-clean.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-clean.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-clean.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -38461,6 +38581,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-completion.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-completion.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-completion.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -38694,6 +38822,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-config.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-config.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-config.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -38941,6 +39077,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-describe.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-describe.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-describe.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -39174,6 +39318,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-diff.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-diff.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-diff.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -39421,6 +39573,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-doctor.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-doctor.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-doctor.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -39654,6 +39814,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-events.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-events.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-events.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -39901,6 +40069,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-explain.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-explain.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-explain.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -40134,6 +40310,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-graph.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-graph.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-graph.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40381,6 +40565,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-init.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-init.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-init.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -40614,6 +40806,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-ls.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-ls.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-ls.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40861,6 +41061,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -40988,6 +41196,254 @@
       "provenance": "docs/reference/manpage/magus-man.md"
     },
     {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-agent.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-clean.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-completion.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-config.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-events.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-explain.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-graph.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-init.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-path.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-query.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-self.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-server.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-vcs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-version.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-watch.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-where.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus-x.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-mcp.md",
+      "target": "doc:docs/reference/manpage/magus.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-mcp.md"
+    },
+    {
       "source": "doc:docs/reference/manpage/magus-memory.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
@@ -41102,6 +41558,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-memory.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-memory.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-memory.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -41342,6 +41806,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-notes.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-notes.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-notes.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -41597,6 +42069,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-path.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-path.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-path.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -41837,6 +42317,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-query.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-query.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-query.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -42070,6 +42558,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-refs.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-refs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-refs.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -42333,6 +42829,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-run.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-run.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-run.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -42566,6 +43070,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-self.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-self.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-self.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -42813,6 +43325,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-server.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-server.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-server.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -43046,6 +43566,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-session.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-session.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-session.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -43293,6 +43821,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-status.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-status.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-status.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -43526,6 +44062,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-vcs.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-vcs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-vcs.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -43773,6 +44317,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-version.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-version.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-version.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -44006,6 +44558,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-watch.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-watch.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-watch.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -44253,6 +44813,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-where.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-where.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-where.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -44486,6 +45054,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-x.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-x.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-x.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -44734,6 +45310,14 @@
     {
       "source": "doc:docs/reference/manpage/magus.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus.md",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -69242,6 +69826,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

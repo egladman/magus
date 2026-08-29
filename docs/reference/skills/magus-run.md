@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 10877
-skill_simple_bytes: 7113
+skill_full_bytes: 10909
+skill_simple_bytes: 7145
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `43` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `a8b8e03490ee` |
+| `skill-content` | `4915a071a8a9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -42,8 +42,9 @@ Every mechanical step spelled out, plus the rationale for each. Installed as the
 ````markdown
 # Running work through magus
 
-magus is the task orchestrator: targets declare their inputs, outputs, and
-sandbox, and magus caches results and computes what a change affects. Invoking a
+magus is the task orchestrator: its unit of work is the target, and targets
+declare their inputs, outputs, and sandbox; magus caches results and computes
+what a change affects. Invoking a
 raw language tool directly bypasses all of that, so the cache goes stale, declared
 outputs drift, and `magus affected` can no longer vouch for your change.
 
@@ -260,8 +261,9 @@ The enumeration dropped, the judgment kept - for the most capable readers, not t
 ````markdown
 # Running work through magus
 
-magus is the task orchestrator: targets declare their inputs, outputs, and
-sandbox, and magus caches results and computes what a change affects. Invoking a
+magus is the task orchestrator: its unit of work is the target, and targets
+declare their inputs, outputs, and sandbox; magus caches results and computes
+what a change affects. Invoking a
 raw language tool directly bypasses all of that, so the cache goes
 stale and `magus affected` can no longer vouch for your change.
 
