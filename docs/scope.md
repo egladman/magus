@@ -247,8 +247,10 @@ Each of those removes states rather than adding them.
 
 The honest numbers, because this is the section where a claim like that gets
 tested. `magus.yaml` accepts about a hundred keys, container and leaf together,
-and magus binds 63 of them to command-line flags. That is not a small surface,
-and calling it zero configuration would be a lie.
+and magus binds 51 of them to command-line flags. Five more globals - `-o`,
+`--tee`, `-v`, `--quiet`, `--silent` - are display switches that answer to no
+config key at all, so 56 flags stand in front of any subcommand's own. That is
+not a small surface, and calling it zero configuration would be a lie.
 
 What the claim rests on is the second number. magus's own `magus.yaml`, for a
 ten-project polyglot repo that publishes containers, signs releases and runs a
@@ -273,16 +275,26 @@ is subtly different and nothing says so", that is a trap with a default.
 
 Where this is strained: an option nobody can find is worse than one that does not
 exist, because the escape hatch is real and the person who needs it is told it is
-not. `cache.include.os.enabled` and `cache.include.arch.enabled` decide whether
-host OS and architecture key every cache entry. Both are real, both have
-environment variables, and neither appears in [the cache-key reference](concepts/cache.md) - which instead enumerates the hashed fields and
-says nothing else reaches the hash. Anyone comparing a laptop's output reference
-against CI's is looking at this, and the page that would tell them says
-the inputs do not exist.
+not. This section used to name `cache.include.os.enabled` and
+`cache.include.arch.enabled` - the switches deciding whether host OS and
+architecture key every cache entry - as that option, absent from the one page a
+reader would consult. They are documented now.
+[The cache-key reference](concepts/cache.md) carries both, says they default to
+off, and says why: the manifest records the platform an entry was built on and
+refuses a replay onto a different one whatever these are set to, so leaving them
+out of the key is what buys an output reference naming the same run on a laptop
+and on CI. `TestCacheIncludeDefaultsOff` pins that default against the pull to
+flip it.
+
+The general case is not fixed. Every key reaches the generated configuration
+reference, which proves a key is documented, not that anyone can find it without
+already knowing its name. Nothing gates a new option on being reachable from the
+page describing the behavior it changes; that is still whoever wrote it thinking
+to write it down twice.
 
 ## Where the claim is strained
 
-The claim is that magus only reads a model it already had to build. Five places
+The claim is that magus only reads a model it already had to build. Six places
 strain it.
 
 **It writes versioned artifacts into your repository.** `magus agent install`
@@ -306,12 +318,23 @@ distinction is thinner than it sounds. This repo's `generate` target regenerates
 the skills and `ci` runs `generate` as a drift gate, so stale skills fail CI
 here. Leaning on build-versus-CI is the move this page exists to catch.
 
-**The daemon runs long, and one check requires it.** It ships inside the binary,
-so you install nothing extra, and no build needs it. But `magus doctor` probes
-bridge reachability and fails without a daemon running, which this repo's
-CLAUDE.md already records as a known local failure. The console and the MCP
-server need it too. "No second toolchain" holds for installation and holds less
-firmly at runtime.
+**`magus init spell` writes source into your repository.** The scaffold it drops
+at `spells/<name>/spell.buzz` is a real spell: the contract stubbed, each
+function documented inline, a runnable test block. It satisfies the letter of
+the rule above and is the closest thing in the tool to breaking it. Written
+once, hand-edited from there, never regenerated and never compared against
+anything, so nothing about a build depends on magus having produced it - which
+is the whole distinction, and it rests on the word generated.
+
+**The daemon runs long, and two surfaces do not work without it.** It ships
+inside the binary, so you install nothing extra, and no build needs it. The
+sharpest version of this entry has since been retired: `magus doctor` used to
+probe bridge reachability and FAIL when no daemon was running, which made doctor
+red on every machine in its ordinary state. It reports the bridge as skipped
+now, with the daemon check immediately above it already saying the daemon is
+down. What remains is real - the console and the MCP server both need one
+running. "No second toolchain" holds for installation and holds less firmly at
+runtime.
 
 **The upgrade path runs on a server we operate.** `magus self update` fetches
 `https://eli.gladman.cc/magus/public/release/index.json`. We sign the releases
@@ -324,20 +347,34 @@ carries a warning giving the structural reason. Documenting a route while tellin
 you to avoid it is a compromise, and a tension.
 
 That page spent a long time discouraging `go install` for a cosmetic reason: it
-cannot pass the `-ldflags` that stamp the version. Underneath, the command failed
-outright on most clean machines. `internal/compress` gated the native xz and zstd
+cannot pass the `-ldflags` that stamp the version, so an installed binary
+presents itself as an unstamped dev build. Two harder reasons sat underneath it.
+
+One was a bug and is gone. `internal/compress` gated the native xz and zstd
 implementations on the `cgo` build tag, `CGO_ENABLED` defaults to 1 wherever a C
 compiler exists, and an ordinary install then demanded `liblzma` and `libzstd`
 headers through pkg-config before dying without naming magus or the fix. No
 maintainer ever hit it, because maintainers have the headers. The native codec is
 opt-in now.
 
+The other is not a bug and is not fixed: `go install` does not work at all. The
+root `go.mod` requires the nested `libs/gopherbuzz` and `libs/diagnostics`
+modules - each with its own `go.mod` - at `v0.0.0`, and resolves them only
+through this repo's own local `replace` directives. Neither nested module has
+ever been tagged, and `go install pkg@version` refuses outright to build any
+module whose `go.mod` carries a replace directive unless it is the main module
+of the build, so the install dies on the replace lines before dependency
+resolution starts. Nothing on the consuming side gets around that; tagging the
+nested modules is what would. The route the rule above says not to recommend is
+therefore a route that currently does not run, which makes documenting it and
+warning you off it less of a compromise than it reads as.
+
 **magus's own console needs a Node toolchain to build.** The tool that ships as
 one statically linked binary contains a project requiring pnpm and esbuild. That
 concerns developing magus rather than using it, and it reads as hypocrisy when
 somebody else finds it first.
 
-A sixth sits close to the line without crossing it. A version range is policy
+A seventh sits close to the line without crossing it. A version range is policy
 living inside a build tool, and you can reasonably say pinning belongs to a
 version manager. A version manager pins what to install; magus checks what ran.
 Those diverge more often than you expect, and only the second can fail your build
