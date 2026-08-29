@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -167,15 +168,12 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// stdinIsTerminal reports whether stdin is an interactive terminal (a character
-// device) rather than a pipe, file, or heredoc. It gates the no-argument REPL so a
-// piped script still runs as a whole.
+// stdinIsTerminal reports whether stdin is an interactive terminal rather than
+// a pipe, file, or /dev/null. It gates the no-argument REPL so a piped script,
+// or one run with stdin redirected from /dev/null, still runs as a whole
+// instead of blocking on a REPL prompt no one can answer.
 func stdinIsTerminal() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return tty.StdinIsTerminal()
 }
 
 // runBuzzTests executes every `test "..." {}` block registered while executing the

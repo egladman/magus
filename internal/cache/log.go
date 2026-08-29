@@ -573,20 +573,9 @@ func (h *PrettyHandler) Close() error {
 }
 
 // wantsColor reports whether output to this writer should carry ANSI
-// color: the writer must be a terminal, and NO_COLOR must be unset.
-// It is consulted per record so a late redirect is noticed.
-//
-// The descriptor comes from tty.Fd, so any writer exposing Fd() is
-// treated uniformly and the region sees the same writer this does.
+// color. It is consulted per record so a late redirect is noticed.
 func (h *PrettyHandler) wantsColor() bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-	fd, ok := tty.Fd(h.w)
-	if !ok {
-		return false
-	}
-	return h.probe.IsTerminal(fd)
+	return tty.WantsColor(h.w, h.probe)
 }
 
 // fail latches the first write error of the current record. Reading and

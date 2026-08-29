@@ -8,14 +8,21 @@ aliases: [tui, interactive-terminal]
 # Terminal
 
 magus draws in your terminal without taking it over. There is no alternate
-screen, nothing is cleared, and your scrollback survives: ordinary output keeps
-scrolling exactly as it would, while a few rows at the bottom hold still and
-show what is happening right now.
+screen, and your scrollback survives: ordinary output keeps scrolling exactly
+as it would, while a few rows at the bottom hold still and show what is
+happening right now.
+
+The one exception is `magus status --watch`: each frame normally redraws in
+place, but a frame taller than your terminal has nowhere to redraw to, so that
+one case clears the visible screen and reprints. Scrollback still survives -
+clearing is not the alternate screen buffer, so what scrolled past before is
+still there when you scroll up.
 
 Every surface on this page degrades to plain output when there is no terminal to
-draw on, so a piped run, a CI log and a `magus` inside another tool all behave
-the way they always did. `magus doctor` reports which way your terminal
-degraded, if it does.
+draw on - a pipe, a CI log, a `magus` inside another tool, or a real terminal
+whose `TERM` declares it understands no escape sequence (`TERM=dumb`, which
+Emacs shell-mode sets) - so all of those behave the way they always did.
+`magus doctor` reports which way your terminal degraded, if it does.
 
 ## The pinned band
 

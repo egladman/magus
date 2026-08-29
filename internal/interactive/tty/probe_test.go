@@ -102,6 +102,38 @@ func TestWantsColorIsFalseOffATerminal(t *testing.T) {
 		"a pipe gets no escapes even when NO_COLOR is unset")
 }
 
+// TestCanRenderIsFalseUnderTermDumb pins the half of CanRender's contract that
+// a bare descriptor check misses: the pty behind Emacs shell-mode IS a
+// terminal, but TERM=dumb says it understands no escape sequence, so nothing
+// that moves the cursor or reserves rows may be written to it.
+func TestCanRenderIsFalseUnderTermDumb(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	assert.False(t, CanRender(&ttyBuf{}, fakeProbe{isTTY: true}))
+}
+
+// TestWantsColorIsFalseUnderTermDumb is [TestCanRenderIsFalseUnderTermDumb]'s
+// counterpart for color: WantsColor is documented as disabling color under
+// TERM=dumb via CanRender, which had no test pinning it.
+func TestWantsColorIsFalseUnderTermDumb(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "")
+	assert.False(t, WantsColor(&ttyBuf{}, fakeProbe{isTTY: true}))
+}
+
+// TestIsTerminalReaderIsFalseForDevNull pins the flaw that os.ModeCharDevice
+// checks (formerly in cmd/magus/buzz.go and internal/interp/pry_display.go)
+// got wrong: /dev/null IS a character device, so a mode check alone
+// classifies it as interactive. SystemProbe asks the OS via an ioctl instead,
+// which correctly says no.
+func TestIsTerminalReaderIsFalseForDevNull(t *testing.T) {
+	t.Parallel()
+	f, err := os.Open(os.DevNull)
+	require.NoError(t, err)
+	defer f.Close()
+	assert.False(t, IsTerminalReader(f, SystemProbe),
+		"/dev/null is a character device but never a terminal")
+}
+
 func TestFakeProbeSizeErrorPropagates(t *testing.T) {
 	t.Parallel()
 	want := errors.New("ioctl failed")

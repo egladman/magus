@@ -452,6 +452,22 @@ func newTerminalHandler(buf *ttyBuf) *PrettyHandler {
 	return newPrettyHandler(buf, slog.LevelInfo, terminalProbe{})
 }
 
+// TestPrettyHandlerWantsColorRespectsTermDumb pins wantsColor routing through
+// tty.WantsColor: a TERM=dumb pty is a real terminal by descriptor alone, but
+// understands no escape sequence, so the handler must not color its output.
+// Not parallel: it sets TERM.
+func TestPrettyHandlerWantsColorRespectsTermDumb(t *testing.T) {
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TERM", "xterm-256color")
+	assert.True(t, h.wantsColor(), "a capable terminal with NO_COLOR unset wants color")
+
+	t.Setenv("TERM", "dumb")
+	assert.False(t, h.wantsColor(), "TERM=dumb cannot render color, whatever NO_COLOR says")
+}
+
 // TestPrettyHandlerErrorWritesHeadingToStickyRegion verifies that on a TTY
 // writer, the [fail] heading reaches the sticky region (DECSTBM + bold-red
 // SGR + heading text) while the trailing cause/output/inspect lines stay

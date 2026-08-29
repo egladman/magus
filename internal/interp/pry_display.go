@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/fatih/color"
 )
 
@@ -18,19 +19,12 @@ func pryColorize(useColor bool, s string, attrs ...color.Attribute) string {
 }
 
 // ColorEnabledForFile reports whether ANSI color should be used when writing
-// to f. Returns false when f is not a terminal or NO_COLOR is set.
+// to f. Returns false when f is not a terminal, TERM=dumb, or NO_COLOR is set.
 func ColorEnabledForFile(f *os.File) bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
 	if f == nil {
 		return false
 	}
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return tty.WantsColor(f, tty.SystemProbe)
 }
 
 // PrintSourceContext prints radius lines on each side of line from path, with
