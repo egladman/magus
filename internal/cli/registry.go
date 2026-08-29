@@ -377,7 +377,7 @@ with an id:
 
   output <ref>       One target run's captured output, by the output ref
                      shown when the target ran (out1a2b3c). The default prints the
-                     exact bytes, so it pipes anywhere. --meta shows the run's
+                     exact bytes, so it pipes anywhere. --identity shows the run's
                      identity instead - descriptor, lineage, cache key, and the
                      digests of the key's component classes, which is the
                      machine-comparable half of a works-on-my-machine report.
@@ -386,7 +386,7 @@ with an id:
                      hands the bytes to the browser log viewer in a URL fragment
                      (delivered privately; never uploaded).
   invocation <id>    One run's journal, by the invocation id shown as inv: in
-                     query output <ref> --meta. --secrets narrows it to the
+                     query output <ref> --identity. --secrets narrows it to the
                      credential reads - which references the run reached for and
                      through which provider, never the value - which is how an audit
                      answers "what did this run touch". Run logs are trimmed to a cap
@@ -401,7 +401,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "kind", Kind: FlagString, Doc: "Restrict matches to these node kinds (comma-separated)"},
 		{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild before querying"},
 		{Name: "global", Kind: FlagBool, Doc: "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace"},
-		{Name: "meta", Kind: FlagBool, Doc: "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests"},
+		{Name: "identity", Kind: FlagBool, Doc: "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests"},
 		{Name: "attempts", Kind: FlagBool, Doc: "output <ref>: list the ref's stored attempts (newest first)"},
 		{Name: "publish", Kind: FlagBool, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
 		{Name: "open", Kind: FlagBool, Doc: "output <ref>: open the captured output in the browser log viewer (delivered privately)"},
@@ -418,7 +418,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{"What uses this target", "magus query relation:uses id:build"},
 		{"Everything but ops", "magus query docker -kind:op"},
 		{"Print a run's captured output", "magus query output out1a2b3c"},
-		{"Compare a run's cache key", "magus query output out1a2b3c --meta"},
+		{"Compare a run's cache key", "magus query output out1a2b3c --identity"},
 		{"Audit a run's credential reads", "magus query invocation invmsm3vcou1 --secrets"},
 	},
 }

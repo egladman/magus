@@ -267,7 +267,7 @@ func (c *Cache) OutputByRef(ctx context.Context, ref string) ([]byte, OutputDesc
 	}
 	data, bundle, err := c.fetchBundle(ctx, ref)
 	if err == nil {
-		// Keep what arrived: the ref now resolves locally, and `--meta` /
+		// Keep what arrived: the ref now resolves locally, and `--identity` /
 		// `describe target --cache --against` can explain a foreign run's key
 		// without a second network round trip.
 		c.storeFetchedBundle(ctx, data, bundle)

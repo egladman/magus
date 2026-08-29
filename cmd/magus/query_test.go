@@ -22,7 +22,7 @@ import (
 )
 
 // captureStdout redirects os.Stdout for the duration of fn and returns what it wrote.
-// showOutputMeta prints straight to os.Stdout (matching the rest of `magus query`'s
+// showOutputIdentity prints straight to os.Stdout (matching the rest of `magus query`'s
 // text-format rendering), so a real fd swap is the only way to observe it.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
@@ -156,12 +156,12 @@ func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
 	assert.NotContains(t, out, "magus run build .", "root project must not be spelled out as \".\"")
 }
 
-// TestShowOutputMeta_RevisionRendering drives showOutputMeta end to end in a real git
+// TestShowOutputIdentity_RevisionRendering drives showOutputIdentity end to end in a real git
 // workspace: a target's descriptor is stamped with the revision HEAD was at when it
-// ran (CurrentRevision, resolved once by executeStages), and --meta must render it -
+// ran (CurrentRevision, resolved once by executeStages), and --identity must render it -
 // silently when it still matches HEAD, and with a "recorded at X, you are on Y" line
 // once a later commit moves HEAD away from it.
-func TestShowOutputMeta_RevisionRendering(t *testing.T) {
+func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 	dir := initGitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(""), 0o644))
 	runGit(t, dir, "add", "magusfile.buzz")
@@ -188,7 +188,7 @@ func TestShowOutputMeta_RevisionRendering(t *testing.T) {
 	ref := cache.PortableRef(key)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, showOutputMeta(ctx, m, ref, OutputOptions{}))
+		require.NoError(t, showOutputIdentity(ctx, m, ref, OutputOptions{}))
 	})
 	assert.Contains(t, out, "rev:     "+firstRev[:12], "the descriptor records the revision HEAD was at when the target ran")
 	assert.NotContains(t, out, "recorded at", "HEAD has not moved yet, so nothing to call out")
@@ -202,7 +202,7 @@ func TestShowOutputMeta_RevisionRendering(t *testing.T) {
 	require.NotEqual(t, firstRev, secondRev)
 
 	out = captureStdout(t, func() {
-		require.NoError(t, showOutputMeta(ctx, m, ref, OutputOptions{}))
+		require.NoError(t, showOutputIdentity(ctx, m, ref, OutputOptions{}))
 	})
 	assert.Contains(t, out,
 		"recorded at "+firstRev[:12]+", you are on "+secondRev[:12]+".",

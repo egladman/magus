@@ -82,7 +82,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		qf = gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--meta] [--publish]")
+			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--identity] [--publish]")
 			fmt.Fprintln(os.Stderr, "       magus query invocation <id> [-o json] [--secrets]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
@@ -97,10 +97,10 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("out1a2b3c", "-o json"))
 			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("out1a2b3c", "--open"))
 			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored attempts\n", clihint.QueryOutput.With("out1a2b3c", "--attempts"))
-			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", clihint.QueryOutput.With("out1a2b3c", "--meta"))
+			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", clihint.QueryOutput.With("out1a2b3c", "--identity"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "`%s <id>` reads one run's journal back by the id shown as\n", clihint.QueryInvocation.Leaf())
-			fmt.Fprintf(os.Stderr, "`inv:` in %s:\n", clihint.QueryOutput.With("<ref>", "--meta"))
+			fmt.Fprintf(os.Stderr, "`inv:` in %s:\n", clihint.QueryOutput.With("<ref>", "--identity"))
 			fmt.Fprintf(os.Stderr, "  %-38s the run's events, newest last\n", clihint.QueryInvocation.With("invmsm3vcou1"))
 			fmt.Fprintf(os.Stderr, "  %-38s only the credential reads (audit)\n", clihint.QueryInvocation.With("invmsm3vcou1", "--secrets"))
 			fmt.Fprintln(os.Stderr, "")
@@ -136,16 +136,16 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			return oerr
 		}
 		exclusive := 0
-		for _, set := range []bool{qf.Attempts, qf.Meta, qf.Publish, qf.Open || qf.Print} {
+		for _, set := range []bool{qf.Attempts, qf.Identity, qf.Publish, qf.Open || qf.Print} {
 			if set {
 				exclusive++
 			}
 		}
 		if exclusive > 1 {
-			fmt.Fprintf(os.Stderr, "magus query output: --attempts, --meta, --publish, and --open/--print are distinct actions; pick one\n")
+			fmt.Fprintf(os.Stderr, "magus query output: --attempts, --identity, --publish, and --open/--print are distinct actions; pick one\n")
 			return errSilent{exitCode: 2}
 		}
-		return queryOutputRef(ctx, root, ref, outputRefOpts{open: qf.Open, printURL: qf.Print, viewerBase: qf.URL, attempts: qf.Attempts, meta: qf.Meta, publish: qf.Publish, out: outOpts})
+		return queryOutputRef(ctx, root, ref, outputRefOpts{open: qf.Open, printURL: qf.Print, viewerBase: qf.URL, attempts: qf.Attempts, identity: qf.Identity, publish: qf.Publish, out: outOpts})
 	}
 	// `magus query invocation <id>` - the sibling of `query output <ref>`, and explicit for
 	// the same reason: an id is shape-routed nowhere, so a search term cannot collide with one.
@@ -158,7 +158,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		inv := pos[1]
 		if !cache.LooksLikeInvocationID(inv) {
 			fmt.Fprintf(os.Stderr, "magus query invocation: %q is not an invocation id (expected inv<id>, e.g. invmsm3vcou1); a run prints one as `inv:` in %s\n",
-				inv, clihint.QueryOutput.With("<ref> --meta"))
+				inv, clihint.QueryOutput.With("<ref> --identity"))
 			return errSilent{exitCode: 2}
 		}
 		outOpts, oerr := outputOptionsOrDefault()
@@ -175,10 +175,10 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			pos[0], clihint.QueryInvocation.With(pos[0]))
 		return errSilent{exitCode: 2}
 	}
-	if qf.Open || qf.Print || qf.Attempts || qf.Meta || qf.Publish {
-		// --open/--print/--attempts/--meta only apply to `query output <ref>`. Set on a graph
+	if qf.Open || qf.Print || qf.Attempts || qf.Identity || qf.Publish {
+		// --open/--print/--attempts/--identity only apply to `query output <ref>`. Set on a graph
 		// search, they were a mistake; stop rather than silently ignore them.
-		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--meta/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphExport.With("--open"))
+		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--identity/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphExport.With("--open"))
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && qf.Kind == "" {
@@ -222,6 +222,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		// legitimate answer to a search, and every script that runs `magus query` would
 		// break if it became a failure. The verdict rides the output instead.
 		printVerdict(os.Stdout, out.Answer, clihint.Refs.With("<name>"))
+		printIndexStaleness(ctx, os.Stdout, root)
 		return nil
 	}
 	shown := out.Matches
@@ -236,6 +237,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	}
 	fmt.Printf("\nneighborhood: %d nodes, %d edges\n", len(out.Nodes), len(out.Links))
 	fmt.Println("Run with -o json for the full subgraph.")
+	printIndexStaleness(ctx, os.Stdout, root)
 	return nil
 }
 
@@ -245,7 +247,7 @@ type outputRefOpts struct {
 	printURL   bool          // with open, print the URL instead of launching a browser
 	viewerBase string        // log viewer base URL
 	attempts   bool          // list the ref's stored executions instead of printing output
-	meta       bool          // show the run's identity (descriptor, lineage, key digests)
+	identity   bool          // show the run's identity (descriptor, lineage, key digests)
 	publish    bool          // upload this run's output to the remote as a signed bundle
 	out        OutputOptions // -o: text prints raw bytes, json/yaml prints the descriptor record
 }
@@ -281,8 +283,8 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	if o.attempts {
 		return listOutputAttempts(ctx, m, ref, o.out)
 	}
-	if o.meta {
-		return showOutputMeta(ctx, m, ref, o.out)
+	if o.identity {
+		return showOutputIdentity(ctx, m, ref, o.out)
 	}
 	if o.publish {
 		published, perr := m.PublishOutput(ctx, ref)
@@ -388,7 +390,7 @@ func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out Out
 	return nil
 }
 
-// outputMetaRecord is the -o json/yaml projection of `query output <ref> --meta`: the
+// outputIdentityRecord is the -o json/yaml projection of `query output <ref> --identity`: the
 // stored descriptor, the producing invocation's lineage when its run log survives, and
 // the cache key's component-class digests when the run persisted its key inputs.
 // invocationRecord is the machine-readable projection of one run: its header plus the events
@@ -499,18 +501,18 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 	return nil
 }
 
-type outputMetaRecord struct {
+type outputIdentityRecord struct {
 	magus.OutputDescriptor
 	Invocation   *magus.Invocation   `json:"invocation,omitempty"`
 	ClassDigests []cache.ClassDigest `json:"class_digests,omitempty"`
 }
 
-// showOutputMeta renders a stored run's IDENTITY rather than its output: what ran,
+// showOutputIdentity renders a stored run's IDENTITY rather than its output: what ran,
 // how it ended, which invocation produced it, and the digests of its cache key's
 // component classes - the machine-comparable half of the works-on-my-machine story
 // (two machines compare digests to learn WHICH class disagrees; `describe target
 // --cache --against` then names the exact line).
-func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
+func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
 	desc, err := m.OutputDescriptorByRef(ref)
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)
@@ -533,7 +535,7 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 	}
 	switch out.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(out, outputMetaRecord{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
+		return emitFormatted(out, outputIdentityRecord{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
 	case outputName:
 		fmt.Println(desc.Ref)
 		return nil
@@ -766,6 +768,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		fmt.Printf("%s\n", authHint)
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
+	printIndexStaleness(ctx, os.Stdout, root)
 	return nil
 }
 

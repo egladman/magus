@@ -393,3 +393,7 @@ deliberately instead:
   and loop until the checks pass.
 - Lead with the command, path, or snippet; explanation after, no preamble or
   recap. Raise one issue at a time. Keep estimates concrete.
+- Be terse. Lead with the result; no status narration ("now I'll..."), no
+  recap of finished work, no restating a plan before doing it, no selling.
+  A mid-task update earns its place only when direction changes or something
+  load-bearing surfaced. When a reply runs long, cut detail, never clarity.

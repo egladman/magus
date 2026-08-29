@@ -413,7 +413,7 @@ the way out.
   not leak the value's length.
 - **Records the read in the run's journal, where you can read it back.** A `secret` event
   carries the reference and the provider that served it - never the value. Every run has
-  an invocation id, shown as `inv:` in `magus query output <ref> --meta`, and that id
+  an invocation id, shown as `inv:` in `magus query output <ref> --identity`, and that id
   answers the audit question directly:
 
   ```sh

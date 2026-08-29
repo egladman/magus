@@ -15,7 +15,7 @@ import (
 // This file is the key-explanation store: the pre-hash key LINES behind a step's
 // cache key, persisted once per key beside the step's attempts, plus the derived
 // per-class digests and the stored-vs-live diff. The ref alone cannot be inverted
-// into key components; these lines are what let `magus query output <ref> --meta`
+// into key components; these lines are what let `magus query output <ref> --identity`
 // name a key's component classes and `describe target --cache --against <ref>`
 // answer "WHY does my machine compute a different ref than CI" with the exact
 // disagreeing line.
@@ -62,7 +62,7 @@ func DigestEnvValues(inputs []string) []string {
 // values digested (DigestEnvValues) and the result secret-redacted line-by-line as a
 // second net for non-env classes. One file per cache key: the lines are a property
 // of the KEY, so later attempts of the same step overwrite with identical content.
-// Best-effort at the call site: an error just means a later --meta/--against has no
+// Best-effort at the call site: an error just means a later --identity/--against has no
 // lines to explain with.
 func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inputs []string) error {
 	if len(inputs) == 0 {

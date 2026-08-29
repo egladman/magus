@@ -742,7 +742,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 			ref = stored.Ref
 		}
 		// Persist the key's pre-hash lines beside the attempts - the explanation
-		// `--meta` and `describe target --cache --against` diff. Recomputed (cheap:
+		// `--identity` and `describe target --cache --against` diff. Recomputed (cheap:
 		// source hashing is mtime-cached) rather than threaded from Run, and only
 		// written when the recomputed key still equals the one being recorded, so a
 		// source edited mid-run can never store lines that misdescribe the key.

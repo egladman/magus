@@ -271,10 +271,10 @@ const (
 	FlagQueryBudget = "budget"
 	// query: --global
 	FlagQueryGlobal = "global"
+	// query: --identity
+	FlagQueryIdentity = "identity"
 	// query: --kind
 	FlagQueryKind = "kind"
-	// query: --meta
-	FlagQueryMeta = "meta"
 	// query: --open
 	FlagQueryOpen = "open"
 	// query: --print
@@ -733,7 +733,7 @@ type QueryFlags struct {
 	Kind     string // --kind
 	Refresh  bool   // --refresh
 	Global   bool   // --global
-	Meta     bool   // --meta
+	Identity bool   // --identity
 	Attempts bool   // --attempts
 	Publish  bool   // --publish
 	Open     bool   // --open
@@ -755,7 +755,7 @@ func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
 	fs.StringVar(&f.Kind, FlagQueryKind, "", "Restrict matches to these node kinds (comma-separated)")
 	fs.BoolVar(&f.Refresh, FlagQueryRefresh, false, "Force a full graph rebuild before querying")
 	fs.BoolVar(&f.Global, FlagQueryGlobal, false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
-	fs.BoolVar(&f.Meta, FlagQueryMeta, false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
+	fs.BoolVar(&f.Identity, FlagQueryIdentity, false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
 	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored attempts (newest first)")
 	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
 	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")

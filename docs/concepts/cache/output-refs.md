@@ -57,7 +57,7 @@ refactor` always searches the graph.
   status, duration) plus the output as one record; `-o yaml` too.
 - `magus query output out1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
 - `magus query output out1a2b3c --attempts` - list the ref's stored executions.
-- `magus query output out1a2b3c --meta` - the run's identity: descriptor, lineage,
+- `magus query output out1a2b3c --identity` - the run's identity: descriptor, lineage,
   cache key, per-class key digests, and the VCS revision its inputs were read at.
 
 Refs prefix-match like a git short hash: type as few characters as are unique, and
@@ -95,7 +95,7 @@ name the input. Each run stores the deterministic label:value lines its key was
 hashed from (secret-redacted), so:
 
 ```sh
-magus query output out4ef30de6abcd --meta
+magus query output out4ef30de6abcd --identity
 ```
 
 shows one digest per component class (`src`, `env`, `tool`, `charm`, `dep`, ...) -
@@ -211,7 +211,7 @@ them with no class prefix. Class digests cut at the first colon, so those three
 surface as classes named `Scanner`, `DB`, and `DB updated`:
 
 ```text
-$ magus query output out0931f826468f --meta
+$ magus query output out0931f826468f --identity
 ...
   tool             8944986013e2  3 lines
   Scanner          aed443a297a2  1 line

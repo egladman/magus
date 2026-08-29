@@ -866,7 +866,7 @@ func (s *OutputStore) newestDescriptor(cacheKey string) (OutputDescriptor, error
 }
 
 // DescriptorByRef resolves a ref (or unique prefix) to its stored descriptor alone,
-// without reading the output blob - the identity views (`--meta`, `--against`) want
+// without reading the output blob - the identity views (`--identity`, `--against`) want
 // the metadata, and a captured log can be large. A resolvable ref whose descriptor is
 // missing or unreadable yields the error, unlike ByRef, which still has bytes to
 // return and so degrades to a zero descriptor.
@@ -898,7 +898,7 @@ func (s *OutputStore) ByRef(ref string) ([]byte, OutputDescriptor, error) {
 // InvocationByID reads the union run log (<cacheDir>/runs/<inv>.jsonl) for one invocation
 // id and rebuilds its header: the command lineage (subcommand/args/trigger), timing, and outcome.
 // It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it -
-// `magus query output <ref> --meta` and the viewer surface this lineage. Reads off the cache
+// `magus query output <ref> --identity` and the viewer surface this lineage. Reads off the cache
 // ROOT (RunsDir), not outputsDir. Returns fs.ErrNotExist when the run log has aged out.
 func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 	_, events, err := s.InvocationEventsByID(inv)
@@ -910,7 +910,7 @@ func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 
 // InvocationEventsByID reads one invocation's run log and returns its header alongside the
 // EVENTS it was reconstructed from. [OutputStore.InvocationByID] keeps only the header, which
-// is all a `--meta` line needs; this is for a caller that wants the stream itself.
+// is all a `--identity` line needs; this is for a caller that wants the stream itself.
 //
 // It exists because the events were being read and discarded: journal.KindSecret records
 // every credential a run reached for, and the docs offer that as the answer to "what did this

@@ -20,7 +20,7 @@ with an id:
 .PP
 output <ref>       One target run's captured output, by the output ref
                      shown when the target ran (out1a2b3c). The default prints the
-                     exact bytes, so it pipes anywhere. \-\-meta shows the run's
+                     exact bytes, so it pipes anywhere. \-\-identity shows the run's
                      identity instead \- descriptor, lineage, cache key, and the
                      digests of the key's component classes, which is the
                      machine\-comparable half of a works\-on\-my\-machine report.
@@ -29,7 +29,7 @@ output <ref>       One target run's captured output, by the output ref
                      hands the bytes to the browser log viewer in a URL fragment
                      (delivered privately; never uploaded).
   invocation <id>    One run's journal, by the invocation id shown as inv: in
-                     query output <ref> \-\-meta. \-\-secrets narrows it to the
+                     query output <ref> \-\-identity. \-\-secrets narrows it to the
                      credential reads \- which references the run reached for and
                      through which provider, never the value \- which is how an audit
                      answers "what did this run touch". Run logs are trimmed to a cap
@@ -50,11 +50,11 @@ Max nodes in the returned neighborhood (default 50)
 \fB\-\-global\fR
 Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace
 .TP
+\fB\-\-identity\fR
+output <ref>: show the run's identity \- descriptor, lineage, cache key, component digests
+.TP
 \fB\-\-kind\fR \fIstring\fR
 Restrict matches to these node kinds (comma\-separated)
-.TP
-\fB\-\-meta\fR
-output <ref>: show the run's identity \- descriptor, lineage, cache key, component digests
 .TP
 \fB\-\-open\fR
 output <ref>: open the captured output in the browser log viewer (delivered privately)
@@ -111,7 +111,7 @@ magus query output out1a2b3c
 \fICompare a run's cache key\fR
 .PP
 .EX
-magus query output out1a2b3c --meta
+magus query output out1a2b3c --identity
 .EE
 .PP
 \fIAudit a run's credential reads\fR

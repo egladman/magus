@@ -133,8 +133,8 @@ flag path/refresh
 flag query/attempts
 flag query/budget
 flag query/global
+flag query/identity
 flag query/kind
-flag query/meta
 flag query/open
 flag query/print
 flag query/publish
