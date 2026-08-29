@@ -71,6 +71,14 @@ whose product is throughput - volume is the one metric that gets easier to
 move every year and proves less every year, and a build tool that helps ship
 more unverified work faster has joined the problem it was built against.
 
+The horizon for that test is years. A tool that generates on your behalf
+compounds dependence: what its operator can ship drifts past what they can
+judge, and the gap is the crutch. A tool that verifies compounds judgment,
+one answered question at a time.
+[Automation you can interrogate](#automation-you-can-interrogate) holds the
+enforcement half - helpful, never so helpful that the operator stops
+learning.
+
 ### Human-first is the AI integration
 
 magus was built for humans, and agents drive it well anyway, because an
@@ -97,6 +105,15 @@ carries no CLI verb because no person is its audience. This prevents the
 bolted-on AI integration, papering over a tool
 people already struggle with, and the quiet inversion where a person becomes
 the secondary user of their own build tool.
+
+The floor under the ordering rule is an absent seam: magus never calls a
+model ([Scope](scope.md#where-others-drew-it) records the missing adapter as
+deliberate). The closest feature, `magus diff --prompt`, prints the context
+magus holds for you to paste into your own model, and never a drafted
+review. Every capability on this surface is a person's to run with no agent
+anywhere in the loop; the agent surface is additive, never load-bearing. A
+workspace that goes a day, or a Friday, without an agent loses nothing but
+speed.
 
 ### Verdicts are provenance-blind; disposition is not
 
