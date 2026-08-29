@@ -165,6 +165,7 @@ export function resetBigPicture(): void {
 export function dashboardHeader(): Tile {
   const root = h("div", "console-dashboard-viewbar");
   root.setAttribute("aria-label", "Dashboard controls");
+  root.dataset.controlSize = "default";
 
   const viewWrap = h("div", "console-dashboard-viewbar__view");
   const viewLabel = h("span", "console-dashboard-viewbar__label", "View");

@@ -16,12 +16,15 @@
  * dark need no per-mode rules here. */
 
 .console-notes-app {
-  --notes-pad: 0.65rem;
+  /* The shell's surface gutter, not a value of this surface's own: Notes sat 5.6px tighter than
+     everything else, which reads as the panel being a slightly different size rather than as a
+     deliberate density. Kept as a local name because every rule below spends it. */
+  --notes-pad: var(--console-pad);
   /* The one header row, spanning the whole surface. There used to be one per pane, holding
      different things and sizing themselves independently - they came out 39.5px and 10.6px, so
      the columns started 29px apart. One bar across both is the version with no alignment to
      maintain. */
-  --notes-bar-h: 2.9rem;
+  --notes-bar-h: var(--console-surface-bar-h);
   display: flex; flex-direction: column; position: relative;
   margin-top: 1.25rem;
   height: calc(100svh - 12.5rem); min-height: 420px;
@@ -58,8 +61,16 @@
 
    Sizing and the corner radius come from PF's FormControl, so the field matches every other
    input in the console rather than carrying a second opinion about what a text box looks like. */
+/* The bar's leading label - see the note on .console-runs__label; the two bars carry the same slot. */
+.console-notes-app__label {
+  flex: 0 0 auto;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
 .console-notes-app__search { flex: 1 1 auto; min-width: 0; }
-.console-notes-app__search .pf-v6-c-form-control__text { font-size: 0.82rem; }
 
 /* --- The list ---------------------------------------------------------------------------- */
 .console-notes-app__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -80,7 +91,8 @@
   background: var(--pf-t--global--background--color--secondary--default);
   border: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--mono);
-  font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking); text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
   text-align: left; cursor: pointer;
 }
@@ -182,8 +194,9 @@
   margin-left: auto; flex: 0 0 auto;
   padding: 0.05rem 0.4rem;
   border: 1px solid currentcolor; border-radius: var(--pf-t--global--border--radius--small);
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.62rem;
-  letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+  font-family: var(--pf-t--global--font--family--mono); font-size: var(--console-chip-size);
+  font-weight: var(--console-chip-weight);
+  letter-spacing: var(--console-chip-tracking); text-transform: uppercase; white-space: nowrap;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-notes-app__detail-scope:empty { display: none; }
@@ -260,7 +273,8 @@
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.73rem;
 }
 .console-notes-app__facts-head {
-  font-size: 0.65rem; letter-spacing: 0.09em; text-transform: uppercase;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking); text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-notes-app__facts-head:not(:first-child) { margin-top: 0.35rem; }
@@ -369,8 +383,9 @@
   flex: 0 0 auto; align-self: center;
   padding: 0 0.3em;
   border: 1px solid var(--console-indigo); border-radius: var(--pf-t--global--border--radius--small);
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.6rem;
-  letter-spacing: 0.06em; text-transform: uppercase; color: var(--console-indigo);
+  font-family: var(--pf-t--global--font--family--mono); font-size: var(--console-chip-size);
+  font-weight: var(--console-chip-weight);
+  letter-spacing: var(--console-chip-tracking); text-transform: uppercase; color: var(--console-indigo);
 }
 
 .console-notes-app__thread { display: grid; gap: 0.35rem; margin-top: 0.9rem; }
@@ -402,8 +417,9 @@
   display: inline-block; margin-bottom: 0.15rem; padding: 0 0.3em;
   border-radius: var(--pf-t--global--border--radius--small);
   background: color-mix(in srgb, var(--console-status-ok) 22%, transparent);
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.62rem;
-  letter-spacing: 0.05em; text-transform: uppercase;
+  font-family: var(--pf-t--global--font--family--mono); font-size: var(--console-chip-size);
+  font-weight: var(--console-chip-weight);
+  letter-spacing: var(--console-chip-tracking); text-transform: uppercase;
   color: var(--pf-t--global--text--color--regular);
 }
 .console-notes-app__entry-body {

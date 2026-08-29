@@ -23,8 +23,8 @@
 /* Status badge: the "[pass]"/"[fail]" bracket token promoted to a colored chip. */
 .console-render-badge {
   display: inline-block; margin-right: 0.55em; padding: 0 0.4em;
-  font-size: 0.66rem; font-weight: 700; line-height: 1.5;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: var(--console-chip-size); font-weight: var(--console-chip-weight); line-height: 1.5;
+  text-transform: uppercase; letter-spacing: var(--console-chip-tracking);
   /* A literal 2px, NOT a radius token, and this is the rare case where that is right.
    *
    * Corner radius reads relative to the box it is on, and this box is ~15px tall - so a value that
@@ -75,7 +75,7 @@
 
 /* A single output line: a fixed line-number gutter plus the wrapping content. */
 .console-render-line {
-  display: flex; gap: 0.75rem; padding: 0 var(--log-pad, 0.6rem);
+  display: flex; gap: 0.75rem; padding: 0 var(--log-pad, var(--console-pad));
 }
 .console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
 /* Line-number gutter: ALWAYS shown and never selectable, so copying the body grabs the text

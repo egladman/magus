@@ -996,9 +996,17 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      RAIL, so both are gated on the rail existing: below this width it is hidden, the frame's left
      edge IS the window's, and an unconditional border ran down the outermost pixel of a phone with
      nothing on the far side of it while the corner bit a notch out of the content. */
-  #console-frame {
+  #console-frame,
+  body[data-console-fill] > footer {
     border-left: 1px solid var(--pf-t--global--border--color--default);
+  }
+  /* The curve goes on the FOOTER, which is the row that actually reaches the shell's bottom edge.
+     On the frame it landed at the frame/status-bar seam instead - the frame stops at grid-row 3,
+     the footer starts there - so the cutout exposed the page ground as a dark notch above a square
+     status bar, which is the "black corner" it reads as. overflow clips the bar inside it. */
+  body[data-console-fill] > footer {
     border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
+    overflow: hidden;
   }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
@@ -1418,7 +1426,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-scope-btn {
   display: flex; align-items: center; gap: 0.3rem;
   inline-size: auto; padding-inline: 0.5rem;
-  font-size: 0.78rem; color: var(--pf-t--global--text--color--regular);
+  /* The compact tier, which is what the Reference and Notifications buttons beside it already
+     measure. This one carried its own 26px and 12.5px, so the title bar had two control sizes on
+     one row. */
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
+  font-size: var(--console-control-font-size);
+  color: var(--pf-t--global--text--color--regular);
   border: 0; border-radius: 0;
   white-space: nowrap;
 }
@@ -1509,7 +1523,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-scope__tag {
   margin-inline-start: 0.5rem;
   padding: 0.05rem 0.35rem; border-radius: 999px;
-  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  font-size: var(--console-chip-size); font-weight: var(--console-chip-weight);
+  letter-spacing: var(--console-chip-tracking); text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
   background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
@@ -1596,7 +1611,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* App-drawer section label: the "Menu" group heading above the app entries - smaller, uppercase, muted,
    and non-interactive-looking, so it reads as a divider label rather than a menu row. */
 .console-appmenu__group-title {
-  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking); text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -2087,7 +2103,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 .console-cheatsheet-box__empty { margin: 0; color: var(--pf-t--global--text--color--subtle); }
 .console-cheatsheet-group__title {
-  margin: 0 0 0.4rem; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em;
+  margin: 0 0 0.4rem;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
   text-transform: uppercase; color: var(--pf-t--global--text--color--subtle);
 }
 .console-cheatsheet-group__list {
@@ -2114,7 +2132,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    and clips (#console-outlet-content > div), so this just owns its own padding and scroll. */
 #console-outlet [data-surface="actions"] {
   height: 100%; overflow-y: auto; display: flex; flex-direction: column;
-  gap: 1.25rem; padding: 1.5rem 1.5rem 2.5rem;
+  gap: 1.25rem; padding-block: 1.5rem 2.5rem; padding-inline: var(--console-pad);
 }
 /* The banner: a bordered callout leading the surface, replacing the old read-only lede now that a row
    both runs and (for a rebindable command) edits. The Edit-keybindings button sits at the trailing edge

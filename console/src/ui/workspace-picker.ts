@@ -65,6 +65,7 @@ export function initWorkspacePicker(
 
   const btn = document.createElement("button");
   btn.id = "console-scope-btn";
+  btn.dataset.controlSize = "compact";
   btn.type = "button";
   btn.className = "pf-v6-c-button pf-m-plain";
   btn.setAttribute("aria-haspopup", "true");

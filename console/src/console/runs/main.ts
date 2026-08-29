@@ -188,6 +188,7 @@ function build(host: HTMLElement, on: { onQuery: () => void; onRefresh: () => vo
   const page = h("section", "console-runs");
 
   const bar = h("header", "console-runs__bar");
+  bar.dataset.controlSize = "default";
   const search = h("div", "pf-v6-c-text-input-group console-runs__search");
   const main = h("div", "pf-v6-c-text-input-group__main pf-m-icon");
   const textWrap = h("span", "pf-v6-c-text-input-group__text");
@@ -228,7 +229,7 @@ function build(host: HTMLElement, on: { onQuery: () => void; onRefresh: () => vo
   refreshIcon.append(svgGlyph(REFRESH, 14));
   refresh.append(refreshIcon, h("span", "pf-v6-c-button__text", "Refresh"));
   refresh.addEventListener("click", on.onRefresh);
-  bar.append(search, help, count, refresh);
+  bar.append(h("span", "console-runs__label", "Runs"), search, help, count, refresh);
 
   // The facets are a full-width STRIP under the toolbar, not a third column. They are a control for
   // the query box directly above them, and a column gave that weight it does not carry - it cost a

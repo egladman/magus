@@ -143,6 +143,7 @@ export function verdictFor(read: AttentionRead, nowMs: number = Date.now()): Ver
       sub: "The attention queue could not be read, so this is not a report that nobody is waiting.",
     };
   }
+
   const n = read.requests.length;
   if (n === 0) {
     return {
@@ -671,7 +672,7 @@ export function attentionTile(): Tile {
     const v = verdictFor(read);
     root.dataset.state = v.state;
     verdict.textContent = v.line;
-    detail.textContent = v.sub;
+    setProse(detail, v.sub);
 
     if (read.kind !== "ok" || read.requests.length === 0) {
       queueList.hidden = true;
@@ -791,4 +792,27 @@ export function attentionTile(): Tile {
       offScope();
     },
   };
+}
+
+// setProse writes a sentence that may name a command in `backticks` as real nodes: the spans
+// between the ticks are text, the spans inside them are <code>. textContent printed the ticks
+// themselves, so a mark meant to say "this is a command you type" read as stray punctuation.
+//
+// Deliberately not markdown - this handles ONE inline construct, because that is the only one the
+// dashboard's own copy uses. A parser here would be a second markdown implementation living beside
+// the real one in notes/markdown.ts.
+function setProse(el: HTMLElement, text: string): void {
+  el.replaceChildren();
+  // Odd indices are the spans that sat between a pair of ticks.
+  text.split("`").forEach((part, i) => {
+    if (part === "") return;
+    if (i % 2 === 0) {
+      el.append(document.createTextNode(part));
+      return;
+    }
+    const code = document.createElement("code");
+    code.className = "console-dashboard-code";
+    code.textContent = part;
+    el.append(code);
+  });
 }

@@ -412,6 +412,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // focus mode arrives back in it, and the attribute is what the layout keys off.
   root.dataset.focus = state.focus ? "on" : "off";
   const sidebar = h("nav", "console-diff-sidebar");
+  sidebar.dataset.controlSize = "compact";
   sidebar.setAttribute("aria-label", "Changed files");
 
   // The file index collapses to a rail, the way the activity trail's event index does. The diff
@@ -476,6 +477,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   const main = h("div", "console-diff-main");
   const toolbar = h("div", "console-diff-toolbar");
+  toolbar.dataset.controlSize = "default";
   const statsEl = h("div", "console-diff-toolbar__stats");
   const collaborationNotice = h("span", "console-diff-collaboration");
   collaborationNotice.setAttribute("role", "status");
@@ -560,8 +562,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // The two controls and the legend share a row. The toolbar stacks, so an item appended straight
   // to it stretches to the full width and PF centres its label in all that space, which reads as a
   // caption rather than a control.
+  //
+  // Legend first, ACTIONS LAST: what you can do sits at the trailing edge of a bar, the same edge
+  // the dashboard's Big Picture button holds. The legend is a reading, so it takes the leading one.
   const controls = h("div", "console-diff-toolbar__controls");
-  controls.append(verdictButton, focusButton, keysEl);
+  controls.append(keysEl, verdictButton, focusButton);
 
   toolbar.append(statsEl, collaborationNotice, progressEl, controls);
   // Keep context outside the fixed-height virtual stream.

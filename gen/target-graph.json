@@ -1468,6 +1468,9 @@
             },
             {
               "glob": "stylelint-control-sizing.mjs"
+            },
+            {
+              "glob": "stylelint-label-token.mjs"
             }
           ]
         },
