@@ -9,10 +9,10 @@ Print a shell completion script to stdout. Every script registers both
 magus and the mgs shorthand.
 .PP
 Completes subcommands, the targets accepted by run and affected, the nouns
-accepted by describe, the lenses accepted by insight, and each subcommand's
-flags. Project paths are completed live by shelling out to magus ls \-o name,
-so they track the workspace instead of a baked\-in list; outside a workspace
-they are simply empty.
+accepted by describe, and each subcommand's flags. Project paths are
+completed live by shelling out to magus ls \-o name, so they track the
+workspace instead of a baked\-in list; outside a workspace they are simply
+empty.
 .PP
 Install differs per shell, and zsh is the one that bites:
 .PP
@@ -76,6 +76,7 @@ magus completion powershell >> $PROFILE
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-man\fR(1),
 \fBmagus\-init\fR(1),

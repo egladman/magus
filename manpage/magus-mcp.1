@@ -1,0 +1,58 @@
+.TH MAGUS-MCP 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-mcp \- Print how to reach the MCP server
+.SH SYNOPSIS
+.B magus
+.RI "mcp"
+.SH DESCRIPTION
+MCP is not a standalone process: it is served by the daemon, alongside
+everything else magus server start hosts. This command prints what a client
+needs to reach it \- the endpoint, the auth token command, and a liveness
+probe \- and exits non\-zero, since it starts nothing itself.
+.PP
+magus server start                    start the daemon (MCP comes up with it)
+  magus config token print              print the bearer token
+  magus status \-\-probe=liveness,mcp     confirm the endpoint is serving
+.PP
+Per\-client configuration lives in docs/guides/integrations/mcp.md, not in
+this binary: naming a client here would make a change to its config format a
+magus release.
+.SH EXIT STATUS
+.RS
+.TP
+\fB2\fR
+Always: mcp prints reach\-it instructions and starts nothing, so the invocation is treated like any other command that named a retired verb.
+.RE
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-events\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

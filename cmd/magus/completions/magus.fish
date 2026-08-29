@@ -6,7 +6,7 @@ function __magus_subcommands
     printf '%s\t%s\n' \
 # magus-utils:subcommands:begin
         ls         'list all discovered projects' \
-        describe   'define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)' \
+        describe   'define a magus concept and list all entities (spell|charm|target|graph|project|workspace|module|mcp-tool|file|tool)' \
         where      'print the absolute path of a project (fuzzy match)' \
         run        'run a target for selected projects' \
         affected   'run a target for VCS-diff affected projects' \
@@ -25,13 +25,14 @@ function __magus_subcommands
         watch      'emit changed file paths (pipe into affected --stdin)' \
         events     'stream workspace events as JSONL for an editor plugin or other integration' \
         server     'manage the persistent daemon (start / stop / status; MCP starts with it)' \
+        mcp        'print how to reach the MCP server (served by the daemon, not a standalone command)' \
         status     'inspect the concurrency pool of a running parent magus' \
         buzz       'run a Buzz script (Buzz stdlib + every magus host module)' \
         agent      'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
         init       'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
         doctor     'validate the workspace' \
         config     'view or update magus configuration' \
-        completion 'print a shell completion script (bash, zsh, fish)' \
+        completion 'print a shell completion script (bash, zsh, fish, powershell)' \
         man        'install the man pages embedded in this binary' \
         self       'manage the magus binary (self update / install)' \
         version    'print version, commit, and build date' \
@@ -69,10 +70,13 @@ function __magus_describe_nouns
         spell     'list every spell' \
         charm     'list every charm' \
         target    'list every target' \
+        graph     'emit the target catalog and dependency graph' \
         project   'list every project' \
         workspace 'describe the workspace' \
         module    'list every module' \
-        mcp-tool  'list every MCP tool'
+        mcp-tool  'list every MCP tool' \
+        file      'classify a path (generated, source, maintained)' \
+        tool      'list external tools spells require'
 end
 
 function __magus_insight_lenses
@@ -118,7 +122,7 @@ function __magus_projects
 end
 
 set -l verb_set ls build test lint format clean generate ci
-set -l describe_noun_set spell charm target project workspace module mcp-tool
+set -l describe_noun_set spell charm target graph project workspace module mcp-tool file tool
 set -l graph_sub_set deps export stats
 
 for _cmd in magus mgs

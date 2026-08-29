@@ -34,7 +34,7 @@ const (
 //go:generate go run ../magus-utils completions -surface surface.go -out completions
 var subcommands = []subcommand{
 	{Group: groupWork, Name: "ls", Short: "list all discovered projects"},
-	{Group: groupWork, Name: "describe", Short: "define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)"},
+	{Group: groupWork, Name: "describe", Short: "define a magus concept and list all entities (spell|charm|target|graph|project|workspace|module|mcp-tool|file|tool)"},
 	{Group: groupWork, Name: "where", Short: "print the absolute path of a project (fuzzy match)"},
 	{Group: groupWork, Name: "run", Short: "run a target for selected projects"},
 	{Group: groupWork, Name: "affected", Short: "run a target for VCS-diff affected projects"},
@@ -56,6 +56,7 @@ var subcommands = []subcommand{
 	{Group: groupIntegrate, Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
 	{Group: groupIntegrate, Name: "events", Short: "stream workspace events as JSONL for an editor plugin or other integration"},
 	{Group: groupIntegrate, Name: "server", Short: "manage the persistent daemon (start / stop / status; MCP starts with it)"},
+	{Group: groupIntegrate, Name: "mcp", Short: "print how to reach the MCP server (served by the daemon, not a standalone command)"},
 	{Group: groupIntegrate, Name: "status", Short: "inspect the concurrency pool of a running parent magus"},
 	{Group: groupIntegrate, Name: "buzz", Short: "run a Buzz script (Buzz stdlib + every magus host module)"},
 	{Group: groupIntegrate, Name: "agent", Short: "install the knowledge-graph agent skills into a repo (agent install <dir>)"},
@@ -63,7 +64,7 @@ var subcommands = []subcommand{
 	{Group: groupSetup, Name: "init", Short: "bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)"},
 	{Group: groupSetup, Name: "doctor", Short: "validate the workspace"},
 	{Group: groupSetup, Name: "config", Short: "view or update magus configuration"},
-	{Group: groupSetup, Name: "completion", Short: "print a shell completion script (bash, zsh, fish)"},
+	{Group: groupSetup, Name: "completion", Short: "print a shell completion script (bash, zsh, fish, powershell)"},
 	{Group: groupSetup, Name: "man", Short: "install the man pages embedded in this binary"},
 	{Group: groupSetup, Name: "self", Short: "manage the magus binary (self update / install)"},
 	{Group: groupSetup, Name: "version", Short: "print version, commit, and build date"},

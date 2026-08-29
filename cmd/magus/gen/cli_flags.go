@@ -377,6 +377,18 @@ const (
 	FlagWatchInitial = "initial"
 	// watch: --null
 	FlagWatchNull = "null"
+	// where: --A
+	FlagWhereA = "A"
+	// where: --all
+	FlagWhereAll = "all"
+	// where: --filter
+	FlagWhereFilter = "filter"
+	// where: --glob
+	FlagWhereGlob = "glob"
+	// where: --literal
+	FlagWhereLiteral = "literal"
+	// where: --regex
+	FlagWhereRegex = "regex"
 )
 
 // DescribeTargetFlags are the flags declared for `magus describe target`.
@@ -460,6 +472,27 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.StringVar(&f.Shard, FlagRunShard, "", "This run's shard index within a CI matrix; paired with --n-shards")
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Total shard count for this CI matrix run; paired with --shard")
 	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
+	return &f
+}
+
+// WhereFlags are the flags declared for `magus where`.
+type WhereFlags struct {
+	All     bool   // --all, -A
+	Filter  string // --filter
+	Glob    string // --glob
+	Regex   string // --regex
+	Literal string // --literal
+}
+
+// BindWhere registers `magus where`'s flags on fs and returns the destination.
+func BindWhere(fs *flag.FlagSet) *WhereFlags {
+	var f WhereFlags
+	fs.BoolVar(&f.All, FlagWhereAll, false, "Print all matching paths to stdout; do not error on ambiguity")
+	fs.BoolVar(&f.All, FlagWhereA, false, "Short for --all")
+	fs.StringVar(&f.Filter, FlagWhereFilter, "", "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>")
+	fs.StringVar(&f.Glob, FlagWhereGlob, "", "Restrict file search to paths matching a doublestar glob (shorthand for --filter type=glob,...)")
+	fs.StringVar(&f.Regex, FlagWhereRegex, "", "Restrict file search to paths matching a Go regexp (shorthand for --filter type=regex,...)")
+	fs.StringVar(&f.Literal, FlagWhereLiteral, "", "Restrict file search to paths containing this exact segment (shorthand for --filter type=literal,...)")
 	return &f
 }
 
@@ -669,7 +702,7 @@ func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
 	fs.BoolVar(&f.Refresh, FlagQueryRefresh, false, "Force a full graph rebuild before querying")
 	fs.BoolVar(&f.Global, FlagQueryGlobal, false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
 	fs.BoolVar(&f.Meta, FlagQueryMeta, false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
-	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored executions (newest first)")
+	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored attempts (newest first)")
 	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
 	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
 	fs.BoolVar(&f.Print, FlagQueryPrint, false, "With --open, print the viewer URL instead of launching a browser")

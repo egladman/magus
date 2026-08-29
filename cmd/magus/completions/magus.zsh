@@ -42,7 +42,7 @@ _magus() {
             # magus-utils:subcommands:begin
             subcommands=(
                 'ls:list all discovered projects'
-                'describe:define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)'
+                'describe:define a magus concept and list all entities (spell|charm|target|graph|project|workspace|module|mcp-tool|file|tool)'
                 'where:print the absolute path of a project (fuzzy match)'
                 'run:run a target for selected projects'
                 'affected:run a target for VCS-diff affected projects'
@@ -61,13 +61,14 @@ _magus() {
                 'watch:emit changed file paths (pipe into affected --stdin)'
                 'events:stream workspace events as JSONL for an editor plugin or other integration'
                 'server:manage the persistent daemon (start / stop / status; MCP starts with it)'
+                'mcp:print how to reach the MCP server (served by the daemon, not a standalone command)'
                 'status:inspect the concurrency pool of a running parent magus'
                 'buzz:run a Buzz script (Buzz stdlib + every magus host module)'
                 'agent:install the knowledge-graph agent skills into a repo (agent install <dir>)'
                 'init:bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)'
                 'doctor:validate the workspace'
                 'config:view or update magus configuration'
-                'completion:print a shell completion script (bash, zsh, fish)'
+                'completion:print a shell completion script (bash, zsh, fish, powershell)'
                 'man:install the man pages embedded in this binary'
                 'self:manage the magus binary (self update / install)'
                 'version:print version, commit, and build date'
@@ -138,10 +139,13 @@ _magus() {
                             'spell:list every spell'
                             'charm:list every charm'
                             'target:list every target'
+                            'graph:emit the target catalog and dependency graph'
                             'project:list every project'
                             'workspace:describe the workspace'
                             'module:list every module'
                             'mcp-tool:list every MCP tool'
+                            'file:classify a path (generated, source, maintained)'
+                            'tool:list external tools spells require'
                         )
                         _describe 'noun' nouns
                     else

@@ -62,8 +62,9 @@ targets (44):
 ```
 
 The bracket suffix tells you where each came from - a spell, a custom
-magusfile function, or the canonical set. `describe` accepts `tools`,
-`targets`, `projects`, `workspaces`, and `mcp-tools`.
+magusfile function, or the canonical set. `describe` accepts `spell`,
+`charm`, `target`, `graph`, `project`, `workspace`, `module`, `mcp-tool`,
+`file`, and `tool` (singular or plural).
 
 `magus where` fuzzy-matches a project and prints its absolute path, bare and
 alone, so it composes:
@@ -159,8 +160,11 @@ A high-degree node is a structural risk: everything depends on it, so changing
 it touches everything. Isolated nodes are the opposite problem - something the
 builder never linked up.
 
-The insight lenses answer the same questions from VCS history instead of
-structure: hotspots, change affinity, ownership, trend, volatility.
+The insight lenses (hotspots, change affinity, ownership, trend, volatility)
+answer the same questions from VCS history instead of structure. They are not
+a `magus` subcommand: the console's Insight page renders all five together,
+and an agent reaches individual lenses (plus unreferenced-symbol detection)
+through the `magus_insight` MCP tool.
 
 ## Is my setup sane?
 

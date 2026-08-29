@@ -28,7 +28,10 @@ deps     The project dependency DAG. A trailing list of project paths roots
            targets \- where structural risk concentrates), orphans (docs that
            document nothing, spells no target uses), and doc coverage (the
            share of diagnostics, spells, and modules with a doc). \-\-kind scopes
-           every section to one node kind. insight report embeds this section.
+           every section to one node kind. The VCS\-history lenses (hotspots,
+           affinity, ownership, trend, unreferenced) are a separate view, served
+           by the magus_insight MCP tool and the console's Insight page \- not by
+           this command.
   open     Open the workspace's knowledge graph (or target dependency graph with
            \-\-targets) in the hosted, interactive Graph Explorer. The graph is
            delivered privately: by default it rides in the URL fragment
@@ -206,6 +209,7 @@ magus graph export --open --targets --print
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
 \fBmagus\-man\fR(1),

@@ -57,7 +57,7 @@ func mcpCmd(_ context.Context, _ []string) error {
 	// What each client does with them - a TOML table, a JSON object, an env var
 	// read at launch - is that client's dialect, and it belongs in documentation
 	// the reader owns, not in this binary. Naming clients here would make a
-	// change to any one of them a magus release. See docs/guides/mcp.md.
+	// change to any one of them a magus release. See docs/guides/integrations/mcp.md.
 	fmt.Fprintf(os.Stderr, "Point your MCP client at that endpoint. Most take three settings:\n")
 	fmt.Fprintf(os.Stderr, "  transport  streamable-http\n")
 	fmt.Fprintf(os.Stderr, "  url        http://%s/mcp\n", addr)
@@ -67,8 +67,12 @@ func mcpCmd(_ context.Context, _ []string) error {
 	fmt.Fprintf(os.Stderr, "Then confirm the endpoint is actually serving:\n")
 	fmt.Fprintf(os.Stderr, "  magus status --probe=liveness,mcp\n\n")
 	fmt.Fprintf(os.Stderr, "Per-client configuration, and what to re-register when mcp.address\n")
-	fmt.Fprintf(os.Stderr, "changes, are documented in: docs/guides/mcp.md\n")
-	return nil
+	fmt.Fprintf(os.Stderr, "changes, are documented in: docs/guides/integrations/mcp.md\n")
+	// mcp is a retired verb: everything useful it could do is printed above, and
+	// nothing was run, so it exits like any other misuse (errUsage's 2) rather
+	// than 0 - a script that still invokes `magus mcp` expecting a server should
+	// see a failure, not a silent no-op success.
+	return errSilent{exitCode: exitUsage}
 }
 
 // startMCPWithDaemon starts the MCP HTTP server as a background goroutine

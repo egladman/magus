@@ -77,7 +77,7 @@ Stream workspace events as JSONL for an integration to consume. See \fBmagus\-ev
 Inspect concurrency pool and configuration. See \fBmagus\-status\fR(1).
 .TP
 \fBclean\fR
-Remove declared Outputs (regenerable build artifacts). See \fBmagus\-clean\fR(1).
+Remove declared outputs (regenerable, never sources). See \fBmagus\-clean\fR(1).
 .TP
 \fBvcs\fR
 Staging and conflict resolution that knows what is generated. See \fBmagus\-vcs\fR(1).
@@ -103,6 +103,9 @@ Read the working tree's changes in the order they deserve attention. See \fBmagu
 \fBserver\fR
 Manage the persistent magus daemon. See \fBmagus\-server\fR(1).
 .TP
+\fBmcp\fR
+Print how to reach the MCP server. See \fBmagus\-mcp\fR(1).
+.TP
 \fBbuzz\fR
 Run a Buzz script. See \fBmagus\-buzz\fR(1).
 .TP
@@ -116,7 +119,7 @@ Install the man pages embedded in this binary. See \fBmagus\-man\fR(1).
 Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See \fBmagus\-init\fR(1).
 .TP
 \fBagent\fR
-Install the knowledge\-graph agent skills into a repo. See \fBmagus\-agent\fR(1).
+Install the knowledge\-graph agent skills into a repository. See \fBmagus\-agent\fR(1).
 .TP
 \fBself\fR
 Manage the magus binary (update, install\-shorthand). See \fBmagus\-self\fR(1).
@@ -296,6 +299,7 @@ MAGUS_CACHE_DIR.
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
 \fBmagus\-man\fR(1),

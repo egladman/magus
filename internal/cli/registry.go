@@ -28,6 +28,7 @@ var All = []Command{
 	notesCommand,
 	diffCommand,
 	serverCommand,
+	mcpCommand,
 	buzzCommand,
 	completionCommand,
 	manCommand,
@@ -45,7 +46,7 @@ var CommonTargets = []Target{
 	{Name: "test", Short: "Test selected projects"},
 	{Name: "lint", Short: "Lint selected projects (read-only)"},
 	{Name: "format", Short: "Format source files in selected projects"},
-	{Name: "clean", Short: "Remove build artifacts from selected projects"},
+	{Name: "clean", Short: "Remove declared outputs from selected projects"},
 	{Name: "generate", Short: "Run code generation for selected projects"},
 	{Name: "ci", Short: "Run the magusfile's ci target read-only (affected-set anchor)"},
 }
@@ -226,7 +227,15 @@ Filters are AND-combined substrings. On a unique top score the path is
 printed and the command exits 0. On ambiguity, candidates are listed on
 stderr and the command exits 2. No interactive picker - use magus x for
 that.`,
-	Usage: "magus where [filter...]",
+	Usage: "magus where [flags] [filter...]",
+	Flags: []Flag{
+		{Name: "all", Kind: FlagBool, Doc: "Print all matching paths to stdout; do not error on ambiguity"},
+		{Name: "A", Kind: FlagBool, AliasOf: "all", Doc: "Short for --all"},
+		{Name: "filter", Kind: FlagString, Doc: "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>"},
+		{Name: "glob", Kind: FlagString, Doc: "Restrict file search to paths matching a doublestar glob (shorthand for --filter type=glob,...)"},
+		{Name: "regex", Kind: FlagString, Doc: "Restrict file search to paths matching a Go regexp (shorthand for --filter type=regex,...)"},
+		{Name: "literal", Kind: FlagString, Doc: "Restrict file search to paths containing this exact segment (shorthand for --filter type=literal,...)"},
+	},
 	Examples: []Example{
 		{"Navigate to a project", `cd "$(magus where api)"`},
 		{"Open in editor", `code "$(magus where dash)"`},
@@ -366,13 +375,13 @@ query is also the retrieval verb for the two ids magus prints, each an EXPLICIT
 subcommand rather than a shape-routed positional, so a search term can never collide
 with an id:
 
-  output <ref>       One target execution's captured output, by the reference id
+  output <ref>       One target run's captured output, by the output ref
                      shown when the target ran (out1a2b3c). The default prints the
                      exact bytes, so it pipes anywhere. --meta shows the run's
                      identity instead - descriptor, lineage, cache key, and the
                      digests of the key's component classes, which is the
                      machine-comparable half of a works-on-my-machine report.
-                     --attempts lists the ref's stored executions, --publish uploads
+                     --attempts lists the ref's stored attempts, --publish uploads
                      the output to the remote cache as a signed bundle, and --open
                      hands the bytes to the browser log viewer in a URL fragment
                      (delivered privately; never uploaded).
@@ -393,7 +402,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild before querying"},
 		{Name: "global", Kind: FlagBool, Doc: "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace"},
 		{Name: "meta", Kind: FlagBool, Doc: "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests"},
-		{Name: "attempts", Kind: FlagBool, Doc: "output <ref>: list the ref's stored executions (newest first)"},
+		{Name: "attempts", Kind: FlagBool, Doc: "output <ref>: list the ref's stored attempts (newest first)"},
 		{Name: "publish", Kind: FlagBool, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
 		{Name: "open", Kind: FlagBool, Doc: "output <ref>: open the captured output in the browser log viewer (delivered privately)"},
 		{Name: "print", Kind: FlagBool, Doc: "With --open, print the viewer URL instead of launching a browser"},
@@ -401,7 +410,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "secrets", Kind: FlagBool, Doc: "invocation <id>: list only the credential reads (reference and provider, never the value)"},
 	},
 	Children: []Command{
-		{Name: "output", Short: "Retrieve one target execution's captured output by reference id"},
+		{Name: "output", Short: "Retrieve one target run's captured output by output ref"},
 		{Name: "invocation", Short: "Read one run's journal by invocation id (--secrets for the credential reads)"},
 	},
 	Examples: []Example{
@@ -510,7 +519,10 @@ Subcommands (the first argument):
            targets - where structural risk concentrates), orphans (docs that
            document nothing, spells no target uses), and doc coverage (the
            share of diagnostics, spells, and modules with a doc). --kind scopes
-           every section to one node kind. insight report embeds this section.
+           every section to one node kind. The VCS-history lenses (hotspots,
+           affinity, ownership, trend, unreferenced) are a separate view, served
+           by the magus_insight MCP tool and the console's Insight page - not by
+           this command.
   open     Open the workspace's knowledge graph (or target dependency graph with
            --targets) in the hosted, interactive Graph Explorer. The graph is
            delivered privately: by default it rides in the URL fragment
@@ -897,6 +909,29 @@ check for the file with [ -S "$socket" ] before starting one.`,
 	},
 }
 
+var mcpCommand = Command{
+	Name:        "mcp",
+	Short:       "Print how to reach the MCP server",
+	Description: "Print the MCP endpoint, its auth token command, and how to point a client at it. MCP is served by the daemon (magus server start), not run as its own process.",
+	Tags:        []string{"cli", "magus mcp", "mcp", "agent", "daemon"},
+	Long: `MCP is not a standalone process: it is served by the daemon, alongside
+everything else magus server start hosts. This command prints what a client
+needs to reach it - the endpoint, the auth token command, and a liveness
+probe - and exits non-zero, since it starts nothing itself.
+
+  magus server start                    start the daemon (MCP comes up with it)
+  magus config token print              print the bearer token
+  magus status --probe=liveness,mcp     confirm the endpoint is serving
+
+Per-client configuration lives in docs/guides/integrations/mcp.md, not in
+this binary: naming a client here would make a change to its config format a
+magus release.`,
+	Usage: "magus mcp",
+	ExitStatus: []ExitCode{
+		{2, "Always: mcp prints reach-it instructions and starts nothing, so the invocation is treated like any other command that named a retired verb."},
+	},
+}
+
 var completionCommand = Command{
 	Name:        "completion",
 	Short:       "Print a shell completion script",
@@ -906,10 +941,10 @@ var completionCommand = Command{
 magus and the mgs shorthand.
 
 Completes subcommands, the targets accepted by run and affected, the nouns
-accepted by describe, the lenses accepted by insight, and each subcommand's
-flags. Project paths are completed live by shelling out to magus ls -o name,
-so they track the workspace instead of a baked-in list; outside a workspace
-they are simply empty.
+accepted by describe, and each subcommand's flags. Project paths are
+completed live by shelling out to magus ls -o name, so they track the
+workspace instead of a baked-in list; outside a workspace they are simply
+empty.
 
 Install differs per shell, and zsh is the one that bites:
 
@@ -1050,7 +1085,7 @@ one for the other is how a wrong answer looks right.`,
 
 var cleanCommand = Command{
 	Name:        "clean",
-	Short:       "Remove declared Outputs (regenerable build artifacts)",
+	Short:       "Remove declared outputs (regenerable, never sources)",
 	Description: "Delete the files each selected project declares as Outputs, optionally dropping the matching cache entries so the next run rebuilds from scratch.",
 	Tags:        []string{"cli", "magus clean", "outputs", "cache", "artifacts", "rebuild"},
 	Long: `Remove the declared Outputs of the selected projects. With no project
@@ -1576,7 +1611,7 @@ Server Protocol over stdio for an editor integration.`,
 
 var agentCommand = Command{
 	Name:        "agent",
-	Short:       "Install the knowledge-graph agent skills into a repo",
+	Short:       "Install the knowledge-graph agent skills into a repository",
 	Description: "Render the embedded agent skills into a repository's skill directories, or print a starter AGENTS.md; it never writes the AGENTS.md you own.",
 	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install"},
 	Long: `Render the agent skills embedded in this binary and write or stream them

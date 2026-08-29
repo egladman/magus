@@ -211,7 +211,7 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 //
 // 2 matches Go's own flag package (flag.ExitOnError) and the long-standing Unix
 // convention, and it is already what magus returns when a request cannot be carried
-// out as stated (an unresolvable `path` node, an ambiguous `where`, a `tail` with no
+// out as stated (an unresolvable `path` node, an ambiguous `where`, an `x` with no
 // terminal). Before this was unified, the same "you forgot the subcommand" situation
 // exited 0 from `config`, `self` and `merge-driver`, 1 from `man` and `completion`,
 // and 2 from `self <unknown>` - so nothing scripting magus could branch on it.

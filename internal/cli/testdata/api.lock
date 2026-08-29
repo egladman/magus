@@ -180,6 +180,12 @@ flag watch/debounce
 flag watch/ignore
 flag watch/initial
 flag watch/null
+flag where/A
+flag where/all
+flag where/filter
+flag where/glob
+flag where/literal
+flag where/regex
 subcommand affected
 subcommand agent
 subcommand buzz
@@ -195,6 +201,7 @@ subcommand graph
 subcommand init
 subcommand ls
 subcommand man
+subcommand mcp
 subcommand memory
 subcommand notes
 subcommand path

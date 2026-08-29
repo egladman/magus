@@ -29,9 +29,9 @@ _magus_complete() {
     cur="${COMP_WORDS[COMP_CWORD]}"
 
 # magus-utils:subcommands:begin
-    local subcommands="ls describe where run affected x clean query refs explain path graph diff vcs session memory notes watch events server status buzz agent init doctor config completion man self version help"
+    local subcommands="ls describe where run affected x clean query refs explain path graph diff vcs session memory notes watch events server mcp status buzz agent init doctor config completion man self version help"
 # magus-utils:subcommands:end
-    local nouns="spell charm target project workspace module mcp-tool"
+    local nouns="spell charm target graph project workspace module mcp-tool file tool"
     local lenses="hotspots affinity ownership trend unreferenced report"
     local graph_subs="deps export stats"
     local config_subs="view set history cache mcp"

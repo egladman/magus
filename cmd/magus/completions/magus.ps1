@@ -12,11 +12,11 @@ $__magus_scriptblock = {
     $subcommands = 'ls', 'describe', 'where', 'run', 'affected', 'x',
                    'clean', 'query', 'refs', 'explain', 'path', 'graph',
                    'diff', 'vcs', 'session', 'memory', 'notes', 'watch',
-                   'events', 'server', 'status', 'buzz', 'agent', 'init',
-                   'doctor', 'config', 'completion', 'man', 'self', 'version',
-                   'help'
+                   'events', 'server', 'mcp', 'status', 'buzz', 'agent',
+                   'init', 'doctor', 'config', 'completion', 'man', 'self',
+                   'version', 'help'
     # magus-utils:subcommands:end
-    $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
+    $describeNouns = 'spell', 'charm', 'target', 'graph', 'project', 'workspace', 'module', 'mcp-tool', 'file', 'tool'
     $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'unreferenced', 'report'
     $graphSubs     = 'deps', 'export', 'stats'
     $configSubs    = 'view', 'set', 'history', 'cache', 'mcp'

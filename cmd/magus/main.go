@@ -7,30 +7,19 @@
 // optional configuration from magus.yaml (XDG or CWD) and MAGUS_* environment
 // variables.
 //
-// Usage:
+// A few commands to start with:
 //
 //	magus ls                            list all discovered projects
-//	magus describe <noun>               define a concept and list all entities (tools|targets|projects|workspaces|mcp-tools)
-//	magus run <target> [project...]     run a target for selected projects (use --graph for dependency view)
-//	magus x [filter...]                 interactive shorthand: pick project + target
-//	magus where [filter...]             print the absolute path of a project
-//	magus tail [-f] [-n <count>] [target]     stream the most recent cached log (interactive only)
+//	magus run <target> [project...]     run a target for selected projects
 //	magus affected <target>             run a target for VCS-diff affected projects
-//	magus affected --plan               emit shard plan JSON for CI fan-out
-//	magus graph <deps|export|stats>     the graphs as objects: project DAG, knowledge-graph export, shape stats
-//	magus watch [flags]                 emit changed paths (pipe into affected --stdin)
-//	magus status [flags]                inspect the concurrency pool of a running parent magus
+//	magus x [filter...]                 interactive shorthand: pick project + target
 //	magus doctor                        validate the workspace
-//	magus config <subcommand>           view or update magus configuration
-//	magus memory <subcommand>           manage the durable handoff journal
-//	magus notes <subcommand>            read the workspace's human-authored notes
-//	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
-//	magus completion <shell>            print a shell completion script
-//	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
-//	magus session <subcommand>          what sessions did and are blocked on; hosts write via hook and notify
-//	magus self update [flags]           update magus to the latest release
-//	magus version                       print version info
-//	magus help                          show this message
+//
+// magus help prints the full top-level surface, in the order and with the
+// descriptions subcommands in surface.go declares as the single source of
+// truth - kept short here rather than a second enumeration that can drift
+// from it, as this comment once did (it advertised a `magus tail` that was
+// never a real subcommand).
 //
 // Run any subcommand with -h/--help for its own flag list.
 //
@@ -121,7 +110,7 @@ func runCLI() int {
 	switch res.sub {
 	case "help", "-h", "--help":
 		usage()
-	case "version", "-v", "--version":
+	case "version", "--version":
 		dispatchErr = runVersion(res.rootCtx, res.subArgs)
 	default:
 		dispatchErr = dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs)
@@ -470,6 +459,15 @@ func peekSub(args []string) (sub string, subArgs []string) {
 		if a[0] == '-' && strings.ContainsRune(a, '=') {
 			i++
 			continue
+		}
+		// -version/--version is a subcommand in a flag's clothing: the stdlib flag
+		// package special-cases -h/-help this way already (fs.Parse itself returns
+		// ErrHelp for those), but has nothing built in for version, so without this
+		// `magus --version` fell through to the generic dash-skip below, peekSub
+		// returned no subcommand at all, and the later fs.Parse died on an
+		// unregistered flag ("flag parse failed") instead of printing the version.
+		if a == "-version" || a == "--version" {
+			return "version", args[i+1:]
 		}
 		// --flag value form: consume both tokens.
 		if globalValueFlags()[a] && i+1 < len(args) {
@@ -882,7 +880,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
 	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
 	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        detail (-v), plus live target output (-vv), plus tracing (-vvv)")
-	fmt.Fprintln(os.Stderr, "  --concurrency N      max parallel build steps (0 = config / MAGUS_CONCURRENCY / min(NumCPU,8))")
+	fmt.Fprintln(os.Stderr, "  --concurrency N      max parallel target runs (0 = config / MAGUS_CONCURRENCY / min(NumCPU,8))")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Pre-subcommand flags (must precede the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --root <path>        workspace root (default: walk up to go.mod)")
