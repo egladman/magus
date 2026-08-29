@@ -1365,3 +1365,146 @@ func TestTargetIsTheTaughtNoun(t *testing.T) {
 	assert.NotContains(t, withoutBlessedPhrase, "task",
 		"the magus-run skill opening must not teach task as the unit of work (task orchestrator excepted)")
 }
+
+// mgsDeclarationFile declares and enumerates every diagnostic code. References there are
+// the code EXISTING, not the code firing, so the raise-site scan looks past this one file.
+const mgsDeclarationFile = "types/diagnostic.go"
+
+// mgsCodeRe matches a diagnostic code written out as text, which is how a Buzz spell
+// raises one - it throws the string, having no Go constant to reach for.
+var mgsCodeRe = regexp.MustCompile(`MGS[0-9]{4}`)
+
+// raiseSiteSkipDirs are trees a raise site cannot live in: version control and cache
+// state, generated output, fixtures, and vendored code.
+var raiseSiteSkipDirs = map[string]bool{
+	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
+	"node_modules": true, "gen": true, "testdata": true,
+}
+
+// mgsCodesWithoutRaiseSite are the codes that fail TestEveryDiagnosticCodeHasARaiseSite
+// today, listed rather than tolerated so the gate is green and the debt is named.
+//
+// TODO: both are undecided. Either the sandbox learns to report what it did - stripping an
+// env var, refusing a binary that a PATH entry substituted - or the codes come out of the
+// enumeration and out of the docs that promise them. Whoever settles that deletes the entry
+// here; nothing else has to change.
+var mgsCodesWithoutRaiseSite = map[types.DiagnosticCode]string{
+	types.EnvStripped:       "the sandbox strips variables but names no code when it does",
+	types.PathShimSuspected: "nothing detects a substituted binary on PATH yet",
+}
+
+// TestEveryDiagnosticCodeHasARaiseSite pins the property the code registry silently lost:
+// a code magus can never emit.
+//
+// An enumerated code is a promise - it becomes a knowledge-graph node, a docs page, and a
+// string a reader is told to search for. A code with no production raise site keeps every
+// one of those and honours none: the page exists, the node exists, and the condition it
+// describes reports as something else or as nothing. Nothing at runtime can observe the
+// absence, which is why it is asserted over the source shape instead.
+//
+// Declaring the code in a doctor check registry counts, since that routes a real finding.
+// Naming it only in a test does not: a code no shipped path reaches is the defect.
+func TestEveryDiagnosticCodeHasARaiseSite(t *testing.T) {
+	fset := token.NewFileSet()
+	decl, err := parser.ParseFile(fset, mgsDeclarationFile, nil, 0)
+	require.NoError(t, err, "parse %s", mgsDeclarationFile)
+
+	// identifier per code, so the scan can look for the Go name a raise site would use
+	// rather than the string literal, which almost nothing writes out.
+	name := map[types.DiagnosticCode]string{}
+	for _, d := range decl.Decls {
+		gd, ok := d.(*ast.GenDecl)
+		if !ok || gd.Tok != token.CONST {
+			continue
+		}
+		for _, s := range gd.Specs {
+			vs, ok := s.(*ast.ValueSpec)
+			if !ok || len(vs.Names) != 1 || len(vs.Values) != 1 {
+				continue
+			}
+			lit, ok := vs.Values[0].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				continue
+			}
+			code, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				continue
+			}
+			name[types.DiagnosticCode(code)] = vs.Names[0].Name
+		}
+	}
+
+	raised := map[string]bool{}
+	err = filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if raiseSiteSkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		slash := filepath.ToSlash(path)
+		// The built-in spells are shipped code too, and one of them is the only thing that
+		// raises MGS1016 - a spell throws the code as a STRING, so there is no identifier
+		// to find. Only spells/: every other .buzz naming a code is a tour page or a
+		// glossary entry describing one, which is the opposite of raising it.
+		if strings.HasSuffix(slash, ".buzz") {
+			if strings.HasPrefix(slash, "spells/") {
+				body, rerr := os.ReadFile(path)
+				if rerr != nil {
+					return rerr
+				}
+				for _, code := range mgsCodeRe.FindAllString(string(body), -1) {
+					if id, ok := name[types.DiagnosticCode(code)]; ok {
+						raised[id] = true
+					}
+				}
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		if slash == mgsDeclarationFile {
+			return nil
+		}
+		f, perr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if perr != nil {
+			return nil //nolint:nilerr // a file that does not parse is the build's finding, not this gate's
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok {
+				raised[id.Name] = true
+			}
+			return true
+		})
+		return nil
+	})
+	require.NoError(t, err, "walk")
+
+	var unraised []string
+	for _, code := range types.AllDiagnosticCodes() {
+		id, ok := name[code]
+		require.True(t, ok, "code %s is enumerated but declared by no constant", code)
+		if raised[id] {
+			assert.NotContains(t, mgsCodesWithoutRaiseSite, code,
+				"%s (%s) now has a raise site; drop it from mgsCodesWithoutRaiseSite", code, id)
+			continue
+		}
+		if why, excepted := mgsCodesWithoutRaiseSite[code]; excepted {
+			t.Logf("known exception %s (%s): %s", code, id, why)
+			continue
+		}
+		unraised = append(unraised, fmt.Sprintf("%s (%s)", code, id))
+	}
+	sort.Strings(unraised)
+
+	assert.Empty(t, unraised,
+		"every enumerated diagnostic code must have at least one production raise site.\n"+
+			"A code nothing emits still ships a docs page, a graph node, and a promise that the\n"+
+			"condition will be reported under it. Raise it where the condition is detected, or\n"+
+			"remove it from types.allDiagnosticCodes.\n\nunraised:\n%s",
+		strings.Join(unraised, "\n"))
+}

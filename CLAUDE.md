@@ -185,15 +185,19 @@ Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
-Six workflows, one trigger each, and the name says which:
+Seven workflows. The name says which, but the trigger does not follow from it -
+read the table, and `regenerate.yaml` in particular is the one that fires three
+ways:
 
-| File                 | Runs on                        | Ships                                                     |
-| -------------------- | ------------------------------ | --------------------------------------------------------- |
-| `ci.yaml`            | pull request, and main push    | nothing                                                   |
-| `cd.yaml`            | main push                      | docs site (Pages), per-commit container image (GHCR)      |
-| `release.yaml`       | `v*` tag                       | binaries and release images                               |
-| `release-index.yaml` | manual                         | a PR carrying the signed `public/release/index.json` pair |
-| `audit.yaml`         | cron 05:17 UTC Mondays, manual | nothing                                                   |
+| File                 | Runs on                                             | Ships                                                     |
+| -------------------- | --------------------------------------------------- | --------------------------------------------------------- |
+| `ci.yaml`            | pull request, and main push                         | nothing                                                   |
+| `cd.yaml`            | main push, manual                                   | docs site (Pages), per-commit container image (GHCR)      |
+| `release.yaml`       | `v*` tag, manual (pick a TAG, not a branch)         | binaries and release images                               |
+| `release-index.yaml` | manual                                              | a PR carrying the signed `public/release/index.json` pair |
+| `regenerate.yaml`    | pull request labeled or synchronized, and main push | a push of regenerated output onto the PR branch           |
+| `registry.yaml`      | cron 05:40 UTC daily, manual                        | a PR carrying the signed endoflife.date registry          |
+| `audit.yaml`         | cron 05:17 UTC Mondays, manual                      | nothing                                                   |
 
 ci also runs on a main push, and that is not a publish step: the push run is what
 populates the shared cache and the run history a pull request may only read.
@@ -299,9 +303,12 @@ deliberately instead:
   MGS1002 when running magus at the repo root; remove dead worktrees first.
 - `magus affected ci` has NO known local-environment failure any more. The
   doctor console check used to need a running daemon and made this red on every
-  machine with the daemon stopped; `probeBridgeReachability` now skips instead,
-  under the standing rule that the daemon is an accelerant and never a
-  capability gate (see `docs/guides/integrations/editor/design.md`).
+  machine with the daemon stopped. `probeBridgeReachability` now skips unless a
+  PERSISTENT daemon is up - proc mode `daemon`, which only `magus server start`
+  produces - because the earlier skip keyed on the proc daemon being reachable
+  and magus adopts a per-process one for ordinary commands, so it could never
+  fire. The rule it serves: the daemon is an accelerant and never a capability
+  gate (see `docs/guides/integrations/editor/design.md`).
   `magus run lint .` is GREEN as of 2026-08-02 - the "pre-existing lint
   findings" this file used to warn about are gone - so treat any failure in the
   gate as yours rather than assuming it is background noise.

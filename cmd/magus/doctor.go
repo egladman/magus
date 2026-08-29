@@ -234,6 +234,7 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	// explicitly set to false (mirrors how MCP.Enabled works).
 	di.MCPAddr = mcpAddrString()
 	di.BridgeEnabled = globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled
+	di.MCPEnabled = globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled
 
 	// daemon.enabled=false means this invocation is self-contained, so there is nothing
 	// to ask. Without this check the probe still discovers and dials whatever daemon the
@@ -255,6 +256,10 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 		return di
 	}
 	di.Reachable = true
+	// Mode separates the `magus server start` daemon from the per-process proc server
+	// this very invocation may have spun up. Only the former starts the MCP HTTP server,
+	// so only it makes a bridge something to expect.
+	di.Persistent = reply.Mode == "daemon"
 	di.ParentPID = reply.ParentPID
 	di.DaemonVersion = reply.DaemonVersion
 	di.Capacity = reply.Capacity

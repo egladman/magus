@@ -71,9 +71,12 @@ func (*runner) checkMCPTokens() types.DoctorCheck {
 // route exists (auth runs before handler). Connection refused means the MCP
 // HTTP server is not up. Any other status is treated as unexpected.
 //
-// The check gates on d.MCPAddr being non-empty and d.BridgeEnabled being true,
-// independent of whether the proc daemon is reachable (the bridge lives on the
-// MCP HTTP server, which has a distinct lifecycle from the proc socket).
+// The check gates on the bridge's OWN lifecycle - config saying it is served, and a
+// persistent `magus server start` daemon being the process on the socket - rather than
+// on the proc daemon being reachable. Reachable was the wrong signal and silently so:
+// magus spins up a per-process proc server for ordinary commands, so a plain `magus
+// doctor` adopts one, sets Reachable, and the skip below could never fire. Every fresh
+// machine failed here on a bridge nothing had started.
 func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorCheck {
 	const name = "bridge-reachability"
 	if d == nil {
@@ -82,18 +85,21 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 	if !d.BridgeEnabled {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "bridge disabled via console.enabled: false"}
 	}
-	// No daemon means no bridge, necessarily. Reporting that as a FAILURE made
-	// `magus doctor` red on every machine with the daemon stopped - which is the
+	if !d.MCPEnabled {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "bridge not served: mcp.enabled is false, and the bridge is mounted on the MCP server"}
+	}
+	// No persistent daemon means no bridge, necessarily. Reporting that as a FAILURE
+	// made `magus doctor` red on every machine with the daemon stopped - which is the
 	// normal state for a CLI-first tool - and a check that is red by default is a
 	// check people learn to ignore, taking the real failures with it. The daemon
 	// check immediately above already says the daemon is down; saying it twice,
 	// once as a failure, is noise rather than information.
-	if !d.Reachable {
+	if !d.Persistent {
 		return types.DoctorCheck{
 			Name:     name,
 			Status:   types.DoctorOK,
 			Evidence: types.EvidenceUnknown,
-			Message:  "daemon not running, so the bridge is not expected; skipped",
+			Message:  "no persistent daemon, so the bridge is not expected; skipped",
 			Details:  []string{"start it to serve the console: magus server start"},
 		}
 	}

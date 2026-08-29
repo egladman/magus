@@ -35,6 +35,15 @@ type DaemonInfo struct {
 	MCPAddr string
 	// BridgeEnabled is true when the bridge is not explicitly disabled in config.
 	BridgeEnabled bool
+	// MCPEnabled is true when the MCP server is not explicitly disabled in config. The
+	// bridge is mounted on that server, so a false here means no bridge is served no
+	// matter what the daemon is doing.
+	MCPEnabled bool
+	// Persistent is true when the process answering on the socket is a `magus server
+	// start` daemon rather than the per-process proc server any command may spin up.
+	// Only the persistent one starts the MCP HTTP server, so this - and not Reachable -
+	// is what says a bridge is expected.
+	Persistent bool
 }
 
 // LoadedWorkspace describes one workspace slot in the daemon.
