@@ -126,14 +126,15 @@ func main() {
 	}))
 	doc.Call("getElementById", "term").Call("addEventListener", "click",
 		js.FuncOf(func(js.Value, []js.Value) any { u.in.Call("focus"); return nil }))
+	u.wireShare()
 
 	// Seed the editor with the minimal example (loadExample parses + highlights),
 	// then show the sandbox banner.
 	u.loadExample(examples[0].id)
-	// A #source=<base64url> deep link replaces the editor contents with the
-	// decoded source. The hash keeps source client-side (never sent to the server
-	// / CDN / referrer / logs), which is why it's a hash and not a ?code= query.
-	// Any load failure silently falls back to the seeded example.
+	// A #source= deep link replaces the editor contents with the decoded source.
+	// The hash keeps source client-side (never sent to the server / CDN / referrer
+	// / logs), which is why it's a hash and not a ?code= query. Any load failure
+	// silently falls back to the seeded example.
 	u.applyHashSource()
 	u.render(u.shell.Banner())
 
@@ -167,50 +168,100 @@ func (u *ui) loadExample(id string) {
 	}
 }
 
-// applyHashSource decodes a `#source=<base64url>` URL fragment into the editor,
-// replacing whatever example was seeded. This is how "Open in Playground"
-// deep-links from the docs and the future Share button pass source into the page:
-// through the URL hash, so the content stays client-side and never rides an HTTP
-// request. Any malformed hash silently no-ops (the seeded example stays put).
+// applyHashSource seeds the editor from a `#source=` URL fragment, replacing
+// whatever example was seeded. This is how the docs' "Open in Playground"
+// deep-links and the Share button below pass source into the page: through the
+// URL hash, so the content stays client-side and never rides an HTTP request.
+// Any malformed hash silently no-ops (the seeded example stays put).
 func (u *ui) applyHashSource() {
-	hash := js.Global().Get("location").Get("hash").String()
-	if hash == "" {
+	src, ok := playground.SourceFromFragment(js.Global().Get("location").Get("hash").String())
+	if !ok {
 		return
 	}
-	// Strip leading "#" and split into k=v pairs; consume only "source".
-	q := strings.TrimPrefix(hash, "#")
-	for _, part := range strings.Split(q, "&") {
-		k, v, ok := strings.Cut(part, "=")
-		if !ok || k != "source" {
-			continue
-		}
-		// Base64URL-decode via the browser's atob rather than encoding/base64
-		// (TinyGo builds this file, and extra encoding packages balloon the wasm):
-		// convert URL-safe -> standard alphabet, re-pad, then atob.
-		s := strings.ReplaceAll(v, "-", "+")
-		s = strings.ReplaceAll(s, "_", "/")
-		switch len(s) % 4 {
-		case 2:
-			s += "=="
-		case 3:
-			s += "="
-		}
-		// atob returns a "binary string" (each JS char = one decoded byte); invalid
-		// input throws, so recover to keep the boot path silent.
-		defer func() { _ = recover() }()
-		atob := js.Global().Get("atob")
-		if !atob.Truthy() {
-			return
-		}
-		decoded := atob.Invoke(s).String()
-		// decoded is bytes-as-latin1; UTF-8-decode via decodeURIComponent(escape).
-		esc := js.Global().Get("escape").Invoke(decoded).String()
-		src := js.Global().Get("decodeURIComponent").Invoke(esc).String()
-		u.src.Set("value", src)
-		u.src.Set("scrollTop", 0)
-		u.onSourceChanged()
+	u.src.Set("value", src)
+	u.src.Set("scrollTop", 0)
+	u.onSourceChanged()
+}
+
+// wireShare turns the file bar's Share button into a link back to whatever is in
+// the editor: it writes the encoded source into the address bar and copies the
+// result. The snippet IS the link, so there is no upload, no paste service, and
+// nothing to expire.
+//
+// Hidden rather than left inert where the Clipboard API is missing, matching the
+// docs site's other copy controls: a button that cannot do its job should not be
+// drawn.
+func (u *ui) wireShare() {
+	btn := u.doc.Call("getElementById", "share-btn")
+	if !btn.Truthy() {
 		return
 	}
+	if !js.Global().Get("navigator").Get("clipboard").Truthy() {
+		btn.Set("hidden", true)
+		return
+	}
+	label := btn.Call("querySelector", ".btn-label")
+	btn.Call("addEventListener", "click", js.FuncOf(func(js.Value, []js.Value) any {
+		frag, err := playground.ShareFragment(u.src.Get("value").String())
+		if err != nil {
+			u.flashShare(label, "Share failed")
+			return nil
+		}
+		// replaceState rather than assigning location.hash: sharing repeatedly
+		// while editing would otherwise stack a history entry per click, and the
+		// visitor would have to press Back once for each to leave the page.
+		js.Global().Get("history").Call("replaceState", js.Null(), "", frag)
+		copied, failed := settle(
+			func() { u.flashShare(label, "Copied") },
+			func() { u.flashShare(label, "Copy failed") })
+		js.Global().Get("navigator").Get("clipboard").
+			Call("writeText", js.Global().Get("location").Get("href")).
+			Call("then", copied, failed)
+		return nil
+	}))
+}
+
+// flashShare reports the outcome on the button itself for 2s (the interval the
+// docs site's copy controls use), then restores the resting label. Only the label
+// span is touched: setting the button's own text would drop its leading icon.
+func (u *ui) flashShare(label js.Value, text string) {
+	if !label.Truthy() {
+		return
+	}
+	label.Set("textContent", text)
+	js.Global().Call("setTimeout", oneShot(func() { label.Set("textContent", "Share") }), 2000)
+}
+
+// oneShot wraps fn as a JS callback that releases itself once it fires. Every
+// js.FuncOf pins a Go closure for the life of the page, so a callback allocated
+// per click has to hand its slot back or the playground leaks one per Share.
+func oneShot(fn func()) js.Func {
+	var f js.Func
+	f = js.FuncOf(func(js.Value, []js.Value) any {
+		defer f.Release()
+		fn()
+		return nil
+	})
+	return f
+}
+
+// settle pairs a promise's two outcomes. Both slots are released as soon as
+// either fires, because exactly one of them ever will: a handler that released
+// only itself would strand the other for the life of the page.
+func settle(onOK, onErr func()) (js.Func, js.Func) {
+	var ok, err js.Func
+	release := func() { ok.Release(); err.Release() }
+	ok = js.FuncOf(func(js.Value, []js.Value) any {
+		defer release()
+		onOK()
+		return nil
+	})
+	err = js.FuncOf(func(js.Value, []js.Value) any {
+		defer release()
+		onErr()
+		return nil
+	})
+	return ok, err
 }
 
 // showIntroOnce reveals the first-visit callout unless the visitor has dismissed

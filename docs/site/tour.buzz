@@ -94,13 +94,16 @@ fun tourSrc(file: str) > str {
 }
 
 
-// playgroundLink deep-links src into the playground editor via a #source= fragment of
-// url-safe unpadded base64 (matching src/site/run-example.ts and the wasm's
-// applyHashSource decoder), so the code stays client-side, never hitting server/CDN.
+// playgroundLink deep-links src into the playground editor via a #source= fragment,
+// so the code stays client-side, never hitting server/CDN. The payload is a version
+// byte plus url-safe unpadded base64; "0" is the uncompressed variant, which is what
+// a producer with no DEFLATE implementation emits - this renderer and the page bundle
+// (src/site/run-example.ts) both encode here, while the playground's own Share button
+// emits the compressed "1". internal/playground/share.go decodes all of them.
 fun playgroundLink(root: str, src: str) > str {
     var enc = base64\urlEncode(src);
     while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
-    return root + "playground/#source=" + enc;
+    return root + "playground/#source=0" + enc;
 }
 
 
