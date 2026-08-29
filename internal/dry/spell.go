@@ -152,7 +152,11 @@ func dryRunSpell(ops []spellOp, opName, output string, charms []string) Result {
 		}
 	}
 	if op == nil {
-		return Result{Output: output, Diag: &Diag{Msg: "unknown op: " + opName}}
+		names := make([]string, len(ops))
+		for i := range ops {
+			names[i] = ops[i].name
+		}
+		return Result{Output: output, Diag: &Diag{Msg: "unknown op " + opName + " (one of: " + strings.Join(names, ", ") + ")"}}
 	}
 	if op.decodeErr != nil {
 		return Result{Output: output, Diag: &Diag{Msg: op.name + ": " + op.decodeErr.Error()}}

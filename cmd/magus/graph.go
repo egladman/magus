@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -875,8 +874,9 @@ func safeBrowserURL(raw string) (string, error) {
 func openViaBrowserEnv(url string) error {
 	env := strings.TrimSpace(os.Getenv("BROWSER"))
 	if env == "" {
-		return errors.New("BROWSER not set")
+		return fmt.Errorf("BROWSER not set; falling back to the OS default browser to open %s", url)
 	}
+	var tried []string
 	for _, entry := range strings.Split(env, ":") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
@@ -891,12 +891,13 @@ func openViaBrowserEnv(url string) error {
 		if len(fields) == 0 {
 			continue
 		}
+		tried = append(tried, fields[0])
 		cmd := exec.Command(fields[0], fields[1:]...) //nolint:gosec // G702: user's own configured browser-open command, not remote input
 		if err := cmd.Start(); err == nil {
 			return nil
 		}
 	}
-	return errors.New("no BROWSER entry launched")
+	return fmt.Errorf("no BROWSER entry launched (tried: %s); falling back to the OS default browser to open %s", strings.Join(tried, ", "), url)
 }
 
 // probeLiveBridgeTimeout bounds the real HTTP probe of the console below.

@@ -585,7 +585,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "answer":
 		sess = h.Sessions.AnswerSuggestion(h.Root, req.ID, req.On)
 	default:
-		http.Error(w, "unknown op "+req.Op, http.StatusBadRequest)
+		http.Error(w, "unknown op "+req.Op+" (one of: cursor, viewed, comment, seen, publish, reply, discard, resolve, answer)", http.StatusBadRequest)
 		return
 	}
 	if sess == nil {

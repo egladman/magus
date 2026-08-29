@@ -77,7 +77,7 @@ type Options struct {
 // a signature must check this first.
 func checkKeys(ring Keyring) error {
 	if len(ring) == 0 {
-		return errors.New("no release key: set Options.Keys")
+		return errors.New("no release key configured: pass selfupdate.ReleaseKeys via Options.Keys (or, if every key was revoked, download the release manually from the release site)")
 	}
 	for _, key := range ring {
 		if len(key.Pub) != ed25519.PublicKeySize {

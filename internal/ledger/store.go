@@ -206,7 +206,7 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 	}
 	_, err := s.mutate(ctx, id, func(cur *types.Delegation, exists bool, now int64) error {
 		if !exists {
-			return errNoSuchRow
+			return fmt.Errorf("ledger: no such delegation %q: %w", id, errNoSuchRow)
 		}
 		next := make([]types.DelegationUnattributedWrite, 0, len(cur.Unattributed)+1)
 		for _, w := range cur.Unattributed {

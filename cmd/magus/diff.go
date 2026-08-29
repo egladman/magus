@@ -2477,7 +2477,7 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 
 	mainFn := sess.GetGlobal("main")
 	if !mainFn.IsFun() {
-		return out.String(), warnings, fmt.Errorf("no main() to run")
+		return out.String(), warnings, fmt.Errorf("no main() to run (an advisor must define `fun main() > void` or `fun main() > int`)")
 	}
 	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(nil)})
 	if err != nil {
@@ -2487,7 +2487,7 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 	// so an advisor may report failure by returning rather than by throwing. Discarding the
 	// value read that advisor as having succeeded.
 	if ret.IsInt() && ret.AsInt() != 0 {
-		return out.String(), warnings, fmt.Errorf("main() returned %d", ret.AsInt())
+		return out.String(), warnings, fmt.Errorf("main() returned %d (non-zero means the advisor failed)", ret.AsInt())
 	}
 	return out.String(), warnings, nil
 }

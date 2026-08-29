@@ -206,7 +206,9 @@ func FindRoot(dir string) (string, error) {
 	if contiguous != "" {
 		return contiguous, nil
 	}
-	return "", errors.New("magus: could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found)")
+	return "", types.DiagnosticErrorf(types.NoWorkspaceRoot,
+		"magus: could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found); "+
+			"run `magus init` to bootstrap one")
 }
 
 // Inspect discovers the workspace without opening the cache (for introspection commands).

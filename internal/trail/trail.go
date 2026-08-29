@@ -24,6 +24,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -568,7 +569,7 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 // creates nothing.
 func ReadBlob(base, ref string) ([]byte, error) {
 	if !validRef(ref) {
-		return nil, errors.New("trail: invalid ref")
+		return nil, fmt.Errorf("trail: invalid ref %q: expected a 2-8 letter provenance prefix (e.g. %q) followed by %d hex chars", ref, "mcp", refHexLen)
 	}
 	return os.ReadFile(filepath.Join(blobsPath(base), ref))
 }

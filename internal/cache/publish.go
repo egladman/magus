@@ -80,7 +80,7 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 		return "", errors.New("cache: publishing needs a signing key (MAGUS_CACHE_SIGNING_KEY); an unsigned bundle would be refused on import")
 	}
 	if c.outputs == nil {
-		return "", errors.New("cache: no output store")
+		return "", errors.New("cache: no output store; Cache must be built via cache.Open (this is a magus bug, not a workspace problem - file an issue)")
 	}
 	data, desc, err := c.outputs.ByRef(ref)
 	if err != nil {
@@ -214,7 +214,7 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
 		return nil, OutputBundle{}, errors.New("output bundle: no trust set configured; refusing to read an unauthenticated bundle")
 	}
 	if sigBytes == nil {
-		return nil, OutputBundle{}, errors.New("output bundle: unsigned; refusing")
+		return nil, OutputBundle{}, errors.New("output bundle: unsigned; refusing to import an unauthenticated bundle - ask the publisher to set MAGUS_CACHE_SIGNING_KEY and republish")
 	}
 	sum := sha256.Sum256(output)
 	legacy, err := c.verifier.verify(domainBundle, sigBytes, meta, map[string]string{bundleOutputName: hex.EncodeToString(sum[:])})
@@ -226,7 +226,7 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
 		// unauthenticated - and the bytes are the entire point of a bundle. There are
 		// no such bundles in the wild (the format is new), so refuse rather than
 		// invent a degraded mode.
-		return nil, OutputBundle{}, errors.New("output bundle: signature predates domain separation; refusing")
+		return nil, OutputBundle{}, errors.New("output bundle: signature predates domain separation; refusing - ask the publisher to republish with a current magus (no legacy output bundles are supported)")
 	}
 	var b OutputBundle
 	if err := json.Unmarshal(meta, &b); err != nil {

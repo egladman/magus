@@ -211,6 +211,11 @@ const (
 	// makes it impossible. Named for the condition it detects, not for a "re-entrant lock"
 	// magus does not offer.
 	ProjectLockHeldByAncestor DiagnosticCode = "MGS3007"
+	// NoWorkspaceRoot is the most common first-run failure: no ancestor directory
+	// declares a workspace (magus.yaml) or a contiguous run of projects (magusfile.buzz,
+	// magusfiles/, go.mod) reaching one. `magus init` is the fix in both cases, so the
+	// message names it directly rather than leaving the reader to find the command.
+	NoWorkspaceRoot           DiagnosticCode = "MGS3008"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -288,7 +293,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
-	ProjectLockHeldByAncestor,
+	ProjectLockHeldByAncestor, NoWorkspaceRoot,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,

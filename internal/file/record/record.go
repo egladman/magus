@@ -160,7 +160,7 @@ func Read(path string, v any) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return ErrNotFound
+			return fmt.Errorf("record: not found at %s: %w", path, ErrNotFound)
 		}
 		return err
 	}
@@ -187,7 +187,7 @@ func Read(path string, v any) error {
 			if omitempty {
 				continue
 			}
-			return ErrNotFound
+			return fmt.Errorf("record: field %s missing from %s: %w", name, path, ErrNotFound)
 		}
 		if err := setField(rv.Field(i), strings.TrimSpace(val)); err != nil {
 			return fmt.Errorf("record: field %s: %w", name, err)

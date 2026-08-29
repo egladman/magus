@@ -72,7 +72,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	}
 	all := m.All()
 	if len(all) == 0 {
-		return errors.New("no projects in workspace")
+		return errors.New("magus x: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project); run `magus init` to bootstrap one")
 	}
 
 	chosen, err := pickProject(ctx, root, all, filters)
@@ -102,7 +102,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	m.LogScope(ctx, chosen.Path, "")
 
 	if *step && !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
+		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal; rerun without --step, or from a terminal")
 		return errSilent{exitCode: 2}
 	}
 	if *step {
@@ -456,7 +456,7 @@ func reportForeignMachine(ctx context.Context, m *magus.Magus, ref string, d mag
 
 	add("platform", d.Platform, runtime.GOOS+"/"+runtime.GOARCH)
 	if d.KeyVersion != 0 && d.KeyVersion != magus.CacheKeyVersion {
-		rows = append(rows, row{"key recipe", strconv.Itoa(d.KeyVersion), strconv.Itoa(magus.CacheKeyVersion)})
+		rows = append(rows, row{"key version", strconv.Itoa(d.KeyVersion), strconv.Itoa(magus.CacheKeyVersion)})
 	}
 	add("magus", d.MagusVersion, version)
 	vcsName, head, _ := m.CurrentRevision(ctx)
@@ -478,7 +478,7 @@ func reportForeignMachine(ctx context.Context, m *magus.Magus, ref string, d mag
 		b.WriteString("  sources hash identically across platforms, so the artifact would be refused on import\n")
 	}
 	if d.KeyVersion != 0 && d.KeyVersion != magus.CacheKeyVersion {
-		b.WriteString("  the two keys were computed by different recipes and can never match\n")
+		b.WriteString("  the two keys were computed by different key versions and can never match\n")
 	}
 
 	fmt.Fprintln(os.Stderr, types.DiagnosticErrorf(types.OutputRefForeignMachine, "%s", strings.TrimRight(b.String(), "\n")).Error())

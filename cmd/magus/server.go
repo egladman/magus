@@ -346,7 +346,7 @@ func waitDaemonReady(ctx context.Context, addr string, timeout time.Duration) er
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out after %s", timeout)
+			return fmt.Errorf("daemon did not become ready within %s", timeout)
 		}
 		select {
 		case <-ctx.Done():
@@ -454,7 +454,7 @@ func waitDaemonStopped(ctx context.Context, addr string, timeout time.Duration) 
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out after %s", timeout)
+			return fmt.Errorf("daemon did not stop within %s", timeout)
 		}
 		select {
 		case <-ctx.Done():

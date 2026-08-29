@@ -473,7 +473,7 @@ func rerunStepped(ctx context.Context, root string, f cache.Failure) error {
 // still on screen underneath it.
 func showOutput(ctx context.Context, root string, f cache.Failure) error {
 	if f.OutputRef == "" {
-		return fmt.Errorf("no captured output for %s", f.Target)
+		return fmt.Errorf("no captured output for %s (the run predates output capture, or none was recorded); rerun it to capture one", f.Target)
 	}
 	return queryOutputRef(ctx, root, f.OutputRef, outputRefOpts{})
 }
