@@ -25,11 +25,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
@@ -145,8 +143,8 @@ type Event struct {
 	Workspace string `json:"workspace,omitempty"`  // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
 	Action    string `json:"action"`               // the specific action: a tool name, a job command, "connector.create"
 	// Delegation is the delegation this action belongs to, when the producer could
-	// correlate one (a marker line, or the MAGUS_DELEGATION channel); "" when
-	// uncorrelated.
+	// correlate one (a marker line, or the BAGGAGE channel); ""
+	// when uncorrelated.
 	//
 	// The wire key was renamed along with the field rather than pinned, unlike the
 	// ledger's: a row written before the rename carries "unit" and decodes with an
@@ -258,7 +256,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
 	// A supplied delegation is what the producer could correlate at the observation itself and wins;
-	// MAGUS_DELEGATION is this process's own claim about itself and fills the gap. A supplied one that
+	// the BAGGAGE channel is this process's own claim about itself and fills the gap. A supplied one that
 	// fails types.ValidDelegationID falls through to the environment rather than being stamped, on the same
 	// reasoning as everywhere else: no join beats a wrong one.
 	//
@@ -390,45 +388,16 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	})
 }
 
-// EnvDelegation names the environment variable a worker process carries its delegation in. It is
-// exported so a spawner and a worker cannot disagree about the spelling of the channel.
-const EnvDelegation = "MAGUS_DELEGATION"
-
-// delegationEnvNoteOnce holds the malformed-delegation note to one per process. The environment does not
-// change under a running worker, so the same bad value would otherwise be reported once per
-// event and drown the run in one repeated fact.
-var delegationEnvNoteOnce sync.Once
-
-// DelegationFromEnv returns the delegation this process was launched under, or "" when it was
-// launched under none.
+// DelegationFromEnv returns the delegation this process is ACTING as, or "" when it claims
+// none: the magus.delegation member of the W3C BAGGAGE channel. See [SpawnFromEnv], which
+// reads the rest of what that environment claimed.
 //
-// This is the second of the two delegation channels, and the two say different things. The delegation
-// marker (see delegationFromContext) is the ORCHESTRATOR's assertion about a handoff it is making;
-// MAGUS_DELEGATION is the WORKER's own claim about itself. Where both are available the marker wins:
-// the party doing the partitioning is the one that knows the partition.
-//
-// A value failing [types.ValidDelegationID] yields "" plus a one-time note. Dropping it rather than stamping
-// it is what keeps the redaction exemption honest; the note is what keeps a typo'd delegation from
-// looking like a fleet that simply never attributed anything.
-func DelegationFromEnv() string {
-	id := strings.TrimSpace(os.Getenv(EnvDelegation))
-	if id == "" {
-		return ""
-	}
-	if !types.ValidDelegationID(id) {
-		delegationEnvNoteOnce.Do(func() {
-			// The value itself is deliberately not logged: it failed the charset check that
-			// makes a delegation safe to carry unredacted, so it is the one string here that could
-			// be anything at all.
-			slog.WarnContext(context.Background(),
-				"magus: ignoring MAGUS_DELEGATION and recording no delegation for this process: a delegation id is letters, digits and -_./: only, and never empty",
-				slog.Int("length", len(id)),
-				slog.Int("max_length", types.MaxDelegationIDLen))
-		})
-		return ""
-	}
-	return id
-}
+// This is the second of the two delegation channels, and the two say different things. The
+// delegation marker (see delegationFromContext) is the ORCHESTRATOR's assertion about a handoff
+// it is making; the environment is the WORKER's own claim about itself. Where both are
+// available the marker wins: the party doing the partitioning is the one that knows the
+// partition.
+func DelegationFromEnv() string { return SpawnFromEnv().Delegation }
 
 // delegationScanBytes bounds the head of the handed context the marker may appear in. The marker
 // leads the prompt, so this is a cap on one pathological first line rather than a window to
@@ -916,7 +885,7 @@ func validRef(ref string) bool {
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing - the same reasoning that leaves slog
 // attribute KEYS alone in internal/secret. Delegation is the one of those derived from free text - a
-// delegation prompt, or the MAGUS_DELEGATION environment channel - rather than supplied by a caller,
+// delegation prompt, or the BAGGAGE environment channel - rather than supplied by a caller,
 // which is why every channel that can stamp one runs it through [types.ValidDelegationID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {

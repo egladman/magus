@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -187,7 +188,7 @@ func TestGradeDelegatedWriteUnenrolled(t *testing.T) {
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "delegation-a", "the advisory must name the delegation already working there")
 	assert.Contains(t, got.Context, "own the ledger store")
-	assert.Contains(t, got.Context, "MAGUS_DELEGATION", "the advisory must say how to enroll")
+	assert.Contains(t, got.Context, "magus.delegation", "the advisory must say how to enroll")
 	assert.Contains(t, got.Context, "seatbelt", "the advisory must say why it is not a block")
 }
 
@@ -201,7 +202,7 @@ func TestGradeDelegatedWriteInvalidDelegationID(t *testing.T) {
 		got := gradeDelegatedWrite(ctx, "delegation b!", filepath.Join(root, "README.md"))
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "not a valid delegation id")
-		assert.Contains(t, got.Context, "MAGUS_DELEGATION")
+		assert.Contains(t, got.Context, "magus.delegation")
 	})
 
 	t.Run("over-long ids are invalid too", func(t *testing.T) {
@@ -307,18 +308,27 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		assert.Equal(t, "deny\n", got)
 	})
 
-	t.Run("MAGUS_DELEGATION supplies the default", func(t *testing.T) {
-		t.Setenv(envHookDelegation, "delegation-b")
+	t.Run("the baggage member supplies the default", func(t *testing.T) {
+		t.Setenv(trail.EnvBaggage, "userId=alice,"+trail.BaggageDelegation+"=delegation-b")
 		_, err := run(owned, "--path", "-o", "name")
 		var silent errSilent
 		require.ErrorAs(t, err, &silent)
 		require.Equal(t, guardDenyExitCode, silent.exitCode)
 	})
 
+	// Baggage a magus member does not appear in is a fleet nobody enrolled: another tenant's
+	// members must never be read as a delegation.
+	t.Run("baggage carrying no magus member enrolls nobody", func(t *testing.T) {
+		t.Setenv(trail.EnvBaggage, "userId=alice,serverNode=DF28")
+		_, err := run(owned, "--path", "-o", "name")
+		require.NoError(t, err, "an un-enrolled writer is advised, never blocked")
+	})
+
 	t.Run("the flag wins over the environment", func(t *testing.T) {
-		// The path belongs to delegation-a. Acting AS delegation-a it is the writer's own ground, so a
-		// pass here proves the flag replaced the environment's delegation-b rather than joining it.
-		t.Setenv(envHookDelegation, "delegation-b")
+		// The path belongs to delegation-a. Acting AS delegation-a it is the writer's own ground,
+		// so a pass here proves the flag replaced the environment's delegation-b rather than
+		// joining it.
+		t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=delegation-b")
 		_, err := run(owned, "--path", "--delegation", "delegation-a", "-o", "name")
 		require.NoError(t, err, "acting as the owner must not be denied")
 	})

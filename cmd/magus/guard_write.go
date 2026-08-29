@@ -200,11 +200,15 @@ func resolveSymlinks(path string) string {
 }
 
 // Where the acting delegation's identity comes from. Both spellings name the same thing so a
-// harness can pick whichever it can set: a wrapper that builds an argv passes the flag,
-// and a worker that only inherits an environment exports the variable.
+// harness can pick whichever it can set: a wrapper that builds an argv passes the flag, and a
+// worker that only inherits an environment exports the W3C baggage member.
+//
+// envHookDelegation is the ASSIGNMENT a person would type, not a variable name, because that
+// is what the advisories below hand them: BAGGAGE carries a list, so naming the variable alone
+// would tell a reader to set it to a bare id and produce a value no baggage parser accepts.
 const (
 	flagHookDelegation = "delegation"
-	envHookDelegation  = trail.EnvDelegation
+	envHookDelegation  = trail.EnvBaggage + "=" + trail.BaggageDelegation
 )
 
 // writeGrade is what the delegation ledger has to say about one write. Separate from
@@ -225,8 +229,11 @@ type writeGrade struct {
 // route around, while a guard denial is loud, names the owning delegation, and teaches. This is
 // the reader that turns those declared facts into a verdict, and the only one.
 //
+// The delegation id is the ONLY thing here that reads any of the propagation channels. The
+// trace context a spawning tool claims alongside it is attribution and never a verdict's input.
+//
 // It is a SEATBELT FOR COOPERATING HARNESSES, NOT A SANDBOX. An un-enrolled writer - a
-// person editing their own repo with no MAGUS_DELEGATION set - is advised and never blocked.
+// person editing their own repo with no baggage set - is advised and never blocked.
 // magus cannot tell "not part of the fleet" from "part of it and not saying so", and of
 // the two ways to be wrong, blocking a human in their own checkout is the one that must
 // not happen.
@@ -317,8 +324,8 @@ func gradeAgainstOwnDelegation(me types.Delegation, live []types.Delegation, rel
 	// This is the one rule here that enforces a PROCEDURE rather than a boundary, and it is a deny
 	// rather than an advisory for the reason the skill was not enough: an instruction an agent can
 	// skip is an instruction that gets skipped, and the record it was meant to leave is missing
-	// exactly when somebody needs to recover from it. A human is unaffected - they never set
-	// MAGUS_DELEGATION, so they never reach this function at all.
+	// exactly when somebody needs to recover from it. A human is unaffected - they never name a
+	// delegation, so they never reach this function at all.
 	if me.Registered == 0 {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: run `magus vcs checkpoint -o name` in this tree and register what it prints with the magus_ledger tool (op register, delegation %s), then retry this write.\n"+

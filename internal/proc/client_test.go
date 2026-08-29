@@ -49,7 +49,7 @@ func TestForwardRoundTrip(t *testing.T) {
 }
 
 // TestForwardCarriesTheDelegation exercises the whole seam rather than the request struct: the
-// client reads MAGUS_DELEGATION, the server validates it, and the adopted handler sees it. A run
+// client reads the BAGGAGE delegation, the server validates it, and the adopted handler sees it. A run
 // launched under a delegation used to lose it the moment the daemon adopted the run, because proc
 // forwarded argv, cwd and root and no environment at all.
 func TestForwardCarriesTheDelegation(t *testing.T) {
@@ -65,7 +65,7 @@ func TestForwardCarriesTheDelegation(t *testing.T) {
 	require.NoError(t, srv.Start())
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
-	t.Setenv(trail.EnvDelegation, "fleet/f3")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/f3")
 
 	code, err := Forward(context.Background(), []string{"run", "build"}, "test", "")
 	require.NoError(t, err)

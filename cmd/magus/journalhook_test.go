@@ -131,7 +131,7 @@ func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 // read as a fleet that stopped working the moment it ran `affected`.
 func TestWithSessionJournalStampsTheDelegationOnEveryVerb(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvDelegation, "fleet/f3")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/f3")
 
 	for verb, args := range map[string][]string{
 		"run":      {"ci", "api"},
@@ -163,7 +163,7 @@ func TestWithSessionJournalStampsTheDelegationOnEveryVerb(t *testing.T) {
 // to one stranger, or to nobody - the defect this wiring exists to close.
 func TestWithSessionJournalPrefersTheForwardedDelegation(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvDelegation, "fleet/daemon-env")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/daemon-env")
 	root := t.TempDir()
 
 	ctx := proc.WithDelegation(context.Background(), "fleet/client")
@@ -188,7 +188,7 @@ func TestWithSessionJournalPrefersTheForwardedDelegation(t *testing.T) {
 // unadopted run unattributed, which is the same bug with the cases swapped.
 func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedDelegation(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvDelegation, "fleet/local")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/local")
 	root := t.TempDir()
 
 	// An invalid forwarded id stores nothing, so this is also the "the wire lied" case: the
@@ -214,7 +214,7 @@ func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedDelegation(
 // gate can be reset. Here the observable fact is that nothing was attributed.
 func TestWithSessionJournalDropsAnInvalidDelegation(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvDelegation, "not a delegation id")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=not a delegation id")
 	root := t.TempDir()
 
 	handlers := withSessionJournal(context.Background(), nil, root, "run", []string{"build"})

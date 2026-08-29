@@ -20,9 +20,9 @@ import (
 func attentionTestRoot(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	// A developer running with MAGUS_DELEGATION set would otherwise have it stamped on every request
+	// A developer running with a delegation in BAGGAGE would otherwise have it stamped on every request
 	// these tests raise. A test that wants one sets it after this call.
-	t.Setenv(trail.EnvDelegation, "")
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	return t.TempDir()
 }
@@ -87,7 +87,7 @@ func TestAttentionListShowsAnOpenRequest(t *testing.T) {
 
 func TestAttentionListShowsTheRaisingDelegation(t *testing.T) {
 	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvDelegation, "fleet/f3")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/f3")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision on the schema")))
 
 	out := captureStdout(t, func() {
@@ -122,12 +122,12 @@ func TestAttentionListRendersAnUnattributedRequestWithADash(t *testing.T) {
 // Re-raising the same block under a new delegation re-uses the id, and the queue still holds one row.
 func TestRecordAttentionOpenKeepsTheIDWhenTheDelegationChanges(t *testing.T) {
 	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvDelegation, "fleet/f3")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/f3")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 	first := openRequestIDs(t, root)
 	require.Len(t, first, 1)
 
-	t.Setenv(trail.EnvDelegation, "fleet/f9")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/f9")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
 	assert.Equal(t, first, openRequestIDs(t, root), "a re-partitioned fleet must not re-key an open request")
@@ -136,7 +136,7 @@ func TestRecordAttentionOpenKeepsTheIDWhenTheDelegationChanges(t *testing.T) {
 // The store carries the delegation, not just the rendering: the console reads these records too.
 func TestRecordAttentionOpenStoresTheDelegation(t *testing.T) {
 	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvDelegation, "fleet/f3")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/f3")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
 	dir, err := sessions.Dir(root)
@@ -152,7 +152,7 @@ func TestRecordAttentionOpenStoresTheDelegation(t *testing.T) {
 // trail carries unredacted. internal/trail asserts the note that explains the drop.
 func TestRecordAttentionOpenDropsAnInvalidDelegation(t *testing.T) {
 	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvDelegation, "not a delegation id")
+	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=not a delegation id")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
 	dir, err := sessions.Dir(root)

@@ -1286,8 +1286,8 @@ cannot extract a session id must still be able to get a verdict.
 acting as, and a write is then graded against that delegation's declared write boundary
 in this workspace's delegation ledger. Inside its owned paths passes; inside its
 forbidden paths, or inside another live delegation's owned paths, is denied and the
-reason names the owning delegation. It defaults to $MAGUS_DELEGATION, and the flag wins when
-both are set.
+reason names the owning delegation. It defaults to the magus.delegation member of $BAGGAGE -
+the W3C baggage list a spawning tool exports - and the flag wins when both are set.
 
 A call that names no valid delegation while a fleet is running is ADVISED and never
 blocked: a person editing their own repository has no delegation id, and the guard is a
@@ -1297,7 +1297,7 @@ no delegation in it declared or running, nothing is graded and nothing is read.`
 			Flags: []Flag{
 				{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
 				{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-				{Name: "delegation", Kind: FlagString, Doc: "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)"},
+				{Name: "delegation", Kind: FlagString, Doc: "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to magus.delegation in $BAGGAGE)"},
 				{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
 				{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
 				{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},

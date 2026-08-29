@@ -81,7 +81,9 @@ type RunRequest struct {
 	// daemon executes the run in its own process and so reads its own environment, not
 	// the client's - without this an adopted run records no delegation at all.
 	//
-	// It is the client's own claim about itself, exactly what MAGUS_DELEGATION is, and it
+	// It is the client's own claim about itself, exactly what the BAGGAGE channel's
+	// magus.delegation member is - the client's trace context does not cross this socket, so
+	// an adopted run records the delegation and no ancestry - and it
 	// arrives over a socket any local process may dial. The server therefore re-validates
 	// it with types.ValidDelegationID and drops a value that fails, matching what
 	// trail.DelegationFromEnv does with a malformed environment value: a delegation id is

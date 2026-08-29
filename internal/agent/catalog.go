@@ -42,14 +42,17 @@ import (
 // 41: the vocabulary drops "unit" - a row of the delegation ledger is a
 // DELEGATION, in the skill, the ledger table, and the tools it names.
 // 42: the delegation runtime reaches the skills - magus-delegate-multi-agent
-// teaches ledger register, MAGUS_DELEGATION enrollment and the guard's
+// teaches ledger register, environment enrollment and the guard's
 // deny/advise split, attention events for a blocked worker, and the session
 // audit of what a delegation ran; both it and magus-vcs-hygiene read
 // `magus diff --impact` before landing.
 // 43: the session CLI family (`magus session`, `session attention`, `session
 // dispose`, `session hook`, `session notify`) replaces the sessions/attention/
 // notify/hook top-level verbs in the skill text; there are no compat aliases.
-const SkillVersion = 43
+// 44: enrollment moves to the W3C channels - a worker exports
+// BAGGAGE=magus.delegation=<id>, plus TRACEPARENT and magus.spawner when its host
+// has them. The magus-specific environment variable it replaces is gone.
+const SkillVersion = 44
 
 const skillLicense = "GPL-3.0-or-later"
 

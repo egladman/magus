@@ -293,26 +293,26 @@ func TestDelegationFromContext(t *testing.T) {
 }
 
 func TestDelegationFromEnv_ReadsAValidID(t *testing.T) {
-	t.Setenv(EnvDelegation, "  feat/spawn-capture  ")
+	t.Setenv(EnvBaggage, BaggageDelegation+"=  feat/spawn-capture  ")
 	require.Equal(t, "feat/spawn-capture", DelegationFromEnv(), "surrounding whitespace is formatting, not part of the id")
 
-	t.Setenv(EnvDelegation, "")
+	t.Setenv(EnvBaggage, "")
 	require.Empty(t, DelegationFromEnv(), "an unset channel is a session that claims no delegation, not an error")
 }
 
-// The note is what keeps a typo'd MAGUS_DELEGATION from looking like a fleet that simply never
+// The note is what keeps a typo'd delegation from looking like a fleet that simply never
 // attributed anything: the value is dropped either way, and only the note says why.
 func TestDelegationFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
-	t.Setenv(EnvDelegation, "not a delegation id")
-	delegationEnvNoteOnce = sync.Once{} // another test in this binary may already have spent it
-	t.Cleanup(func() { delegationEnvNoteOnce = sync.Once{} })
+	t.Setenv(EnvBaggage, BaggageDelegation+"=not a delegation id")
+	baggageNoteOnce = sync.Once{} // another test in this binary may already have spent it
+	t.Cleanup(func() { baggageNoteOnce = sync.Once{} })
 
 	logged := captureWarnings(t, func() {
 		require.Empty(t, DelegationFromEnv())
 		require.Empty(t, DelegationFromEnv())
 	})
 
-	assert.Equal(t, 1, strings.Count(logged, "MAGUS_DELEGATION"), "the environment cannot change under a running worker, so the note cannot repeat")
+	assert.Equal(t, 1, strings.Count(logged, EnvBaggage), "the environment cannot change under a running worker, so the note cannot repeat")
 	assert.Contains(t, logged, "letters, digits", "the note names the rule the value failed")
 	assert.NotContains(t, logged, "not a delegation id", "the value failed the charset that makes a delegation safe to log unredacted")
 }
@@ -320,7 +320,7 @@ func TestDelegationFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
 // A hook observes a command, not a delegation, so the environment is the only channel that can
 // attribute one - and it is what lights up the console drawer's delegation column for runs.
 func TestAppendAgentCommand_DelegationFallsBackToTheEnvironment(t *testing.T) {
-	t.Setenv(EnvDelegation, "fleet/f3")
+	t.Setenv(EnvBaggage, BaggageDelegation+"=fleet/f3")
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: "pass"})
 
@@ -331,7 +331,7 @@ func TestAppendAgentCommand_DelegationFallsBackToTheEnvironment(t *testing.T) {
 }
 
 func TestAppendAgentCommand_SuppliedDelegationBeatsTheEnvironment(t *testing.T) {
-	t.Setenv(EnvDelegation, "fleet/from-env")
+	t.Setenv(EnvBaggage, BaggageDelegation+"=fleet/from-env")
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Delegation: "fleet/supplied"})
 	// A supplied delegation that could not be stamped is not an error and not a stamp: the process's
@@ -346,7 +346,7 @@ func TestAppendAgentCommand_SuppliedDelegationBeatsTheEnvironment(t *testing.T) 
 }
 
 func TestAppendAgentCommand_NoDelegationAnywhereStaysUncorrelated(t *testing.T) {
-	t.Setenv(EnvDelegation, "")
+	t.Setenv(EnvBaggage, "")
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls"})
 

@@ -222,10 +222,14 @@ magus-change-summary skill) - review time and handoff time read the same object.
 
 Every worker prompt must include its row, its DELEGATION ID, relevant graph
 evidence, and the global spawn rule. Require the worker to export
-`MAGUS_DELEGATION=<its id>` before it works{{if .Full}} - that environment channel is
-what tells the agent guard whose declared boundary to grade a write against, and a
-worker that never exports it is graded as an editor magus cannot attribute{{else}} -
-the guard grades its writes only when that is set{{end}}. Require it to preserve
+`BAGGAGE=magus.delegation=<its id>` before it works{{if .Full}} - that is the W3C
+Baggage channel, and the member is what tells the agent guard whose declared boundary
+to grade a write against, so a worker that never exports it is graded as an editor
+magus cannot attribute. Export `TRACEPARENT` too when your host has one, and add
+`magus.spawner=<your label>` to the baggage: magus records the trace, the parent span
+and the label as CLAIMS, so `magus session ls` can show who spawned whom, and no
+verdict is ever keyed on them{{else}} - the guard grades its writes only when that is
+set{{end}}. Require it to preserve
 unrelated changes, stay inside owned paths, avoid generated outputs, run only its
 assigned Magus target, and return changed paths, validation evidence, descendants
 it created, and unresolved risks.
@@ -275,7 +279,7 @@ decide is possibly dead, and a reported overlap is a pair you either intended or
 must repartition.
 
 The ledger RECORDS and the agent guard GRADES. A worker that exported
-`MAGUS_DELEGATION` has each file write judged against these declarations as it
+`magus.delegation` has each file write judged against these declarations as it
 happens: inside its own owned paths passes; inside its forbidden paths, or inside
 another live delegation's owned paths, is DENIED, and the denial names the owning
 delegation. A writer magus cannot attribute - a person in their own checkout, or a
@@ -338,11 +342,12 @@ that raised one waits for the disposition instead of choosing for itself.
 
 `magus session` is how the root audits what a delegation actually RAN, as opposed
 to what it reported. Each session carries the delegation it was launched under -
-the same `MAGUS_DELEGATION` channel - along with the targets it finished and how
-they ended, and the store is keyed by repository identity, so a worker in its own
-worktree is still listed here{{if .Full}}. Attribution is cooperative: an empty
-delegation means the session claimed none, which is the ordinary answer for anything
-a person ran by hand, never an error{{end}}. `magus session --since 2h -o json` is the
+the same `magus.delegation` channel - along with the spawner label and parent span it
+claimed, the targets it finished and how they ended, and the store is keyed by
+repository identity, so a worker in its own worktree is still listed here{{if .Full}}.
+Attribution is cooperative and every one of those values is a CLAIM magus records
+rather than corroborates: an empty delegation means the session claimed none, which is
+the ordinary answer for anything a person ran by hand, never an error{{end}}. `magus session --since 2h -o json` is the
 form that answers what the fleet has been doing.
 
 {{if .Full}}Course-correct at explicit checkpoints: after a child proposes new

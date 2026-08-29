@@ -63,7 +63,7 @@ still working stays listed however long ago it began.
 : Name of the agent host this invocation came from (attribution only)
 
 **--delegation** *string*
-: The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)
+: The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to magus.delegation in $BAGGAGE)
 
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)

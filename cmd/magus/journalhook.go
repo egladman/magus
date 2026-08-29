@@ -26,25 +26,30 @@ import (
 // forwarded run reaches this function in the daemon process. ctx is what tells the two
 // cases apart - see below.
 func withSessionJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
-	// The delegation is read ONCE, here, and every fact this invocation writes carries that copy.
-	// Reading it per fact would let a mid-run environment change split one session's facts
-	// across two delegations, which is a history no producer could have meant.
+	// The environment is read ONCE, here, and every fact this invocation writes carries that
+	// copy. Reading it per fact would let a mid-run environment change split one session's
+	// facts across two delegations, which is a history no producer could have meant.
 	//
 	// On an ADOPTED run the environment belongs to the DAEMON, not to whoever asked for the
 	// run, so the environment channel alone leaves every forwarded run unattributed. proc
 	// carries the client's delegation on the request and lands it on ctx, and that wins here:
 	// it is the claim of the process that asked, which is the same precedence trail documents
-	// between a delegation marker and MAGUS_DELEGATION. A plain CLI run carries none on ctx and
-	// falls through to its own environment.
-	delegation := proc.DelegationFromContext(ctx)
-	if delegation == "" {
-		delegation = trail.DelegationFromEnv()
+	// between a delegation marker and the environment. The trace context does not cross that
+	// socket, so a forwarded run records the client's delegation and no ancestry rather than
+	// borrowing the daemon's. A plain CLI run carries none on ctx and reads its own environment.
+	spawn := trail.SpawnFromEnv()
+	if forwarded := proc.DelegationFromContext(ctx); forwarded != "" {
+		spawn = trail.Spawn{Delegation: forwarded}
 	}
 	h := sessions.NewFactHandler(root, sessions.SessionStart{
-		Workspace:  root,
-		Command:    strings.Join(append([]string{verb}, args...), " "),
-		Version:    version,
-		Delegation: delegation,
+		Workspace:    root,
+		Command:      strings.Join(append([]string{verb}, args...), " "),
+		Version:      version,
+		Delegation:   spawn.Delegation,
+		TraceID:      spawn.TraceID,
+		ParentSpanID: spawn.ParentSpanID,
+		SpanID:       trail.NewSpanID(),
+		Spawner:      spawn.Spawner,
 	})
 	if h == nil {
 		return handlers

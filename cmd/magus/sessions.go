@@ -146,13 +146,21 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tDELEGATION\tFACTS\tTARGETS")
+	bySpan := make(map[string]string, len(summaries))
 	for _, s := range summaries {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
+		if s.SpanID != "" {
+			bySpan[s.SpanID] = s.Session
+		}
+	}
+	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tDELEGATION\tSPAWNER\tPARENT\tFACTS\tTARGETS")
+	for _, s := range summaries {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
 			s.Session,
 			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"),
 			orDash(s.Host),
 			orDash(s.Delegation),
+			orDash(s.Spawner),
+			orDash(sessionParent(bySpan, s.ParentSpanID)),
 			s.Facts,
 			orDash(summarizeTargets(s.Targets)))
 	}
@@ -173,6 +181,20 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 		fmt.Fprintf(os.Stdout, "\n%d unreadable line(s) skipped (a session killed mid-write leaves a partial line; the rest of its records still read)\n", fold.Skipped)
 	}
 	return nil
+}
+
+// sessionParent names the session a span id belongs to, falling back to the raw id when this
+// store holds no record of it. The id is the honest answer rather than a blank: the parent may
+// have run in a repository this store does not cover, or before the retention window, and
+// "unknown to magus" is a different fact from "spawned by nobody".
+//
+// Resolved for the TEXT view only. -o json carries the ids, because a consumer joining sessions
+// wants the identity rather than this reader's guess at a name for it.
+func sessionParent(bySpan map[string]string, parentSpanID string) string {
+	if session, ok := bySpan[parentSpanID]; ok {
+		return session
+	}
+	return parentSpanID
 }
 
 // summarizeTargets renders a session's targets as "<target> <project> (<outcome>)",

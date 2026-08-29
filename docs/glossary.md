@@ -309,9 +309,19 @@ back when grading a write. See [doctrine.md](doctrine.md).
 
 ### Delegation id
 
-The short identifier a worker carries (the `--delegation` flag or `MAGUS_DELEGATION`) so
-its runs, journal facts, and guard verdicts attribute to its delegation.
-Letters, digits and `-_./:` only.
+The short identifier a worker carries (the `--delegation` flag, or the
+`magus.delegation` member of the W3C `BAGGAGE` environment channel) so its runs,
+journal facts, and guard verdicts attribute to its delegation. Letters, digits
+and `-_./:` only.
+
+### Spawn claim
+
+What a spawning tool said about itself in the environment: `TRACEPARENT` (the
+W3C trace and the parent span this process runs under) and the
+`magus.spawner` baggage member (a label for whoever spawned it). magus records
+each verbatim beside the session's own minted span id, and no verdict reads
+any of them - the ancestry is a relation between recorded sessions, the way a
+process tree is a relation between pids.
 
 ### Advisor
 

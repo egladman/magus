@@ -99,21 +99,29 @@ type Record struct {
 // reaches magus only through the hook payloads internal/trail records, and joining
 // the two stores is later work. An empty Host means "not known", never "a human".
 //
-// Delegation is the delegation the session was launched under, from the MAGUS_DELEGATION
-// environment channel (trail.DelegationFromEnv). Attribution is cooperative: an empty
-// Delegation means the session claimed none, which is the designed outcome for anything a
-// person started by hand, never an error and never a session that belongs to no work.
+// Delegation, TraceID, ParentSpanID and Spawner are what the spawning tool CLAIMED, recorded
+// verbatim off the environment (trail.SpawnFromEnv); nothing here corroborates one and no
+// verdict reads one. Attribution is cooperative, so empty means the session claimed nothing,
+// which is the designed outcome for anything a person started by hand.
 //
-// Its wire key was renamed with the field rather than pinned. A record written before the
-// rename carries "unit" and decodes with an empty Delegation, so it reads as unattributed
-// instead of wrong, and this store is machine-local and pruned, so those records age out
-// rather than needing a reader that understands both spellings.
+// SpanID is the exception and the one identity magus asserts: this session mints it
+// (trail.NewSpanID). A child that reports this value as its ParentSpanID is what makes
+// ancestry readable across sessions, so no chain of ancestors is stored anywhere - the
+// relation is derived from records, the way a process tree is derived from PPIDs.
+//
+// Delegation's wire key was renamed with the field rather than pinned. A record written
+// before the rename carries "unit" and decodes with an empty Delegation, so it reads as
+// unattributed instead of wrong.
 type SessionStart struct {
-	Host       string `json:"host,omitempty"`
-	Workspace  string `json:"workspace,omitempty"`
-	Command    string `json:"command,omitempty"`
-	Version    string `json:"version,omitempty"`
-	Delegation string `json:"delegation,omitempty"`
+	Host         string `json:"host,omitempty"`
+	Workspace    string `json:"workspace,omitempty"`
+	Command      string `json:"command,omitempty"`
+	Version      string `json:"version,omitempty"`
+	Delegation   string `json:"delegation,omitempty"`
+	TraceID      string `json:"trace_id,omitempty"`
+	SpanID       string `json:"span_id,omitempty"`
+	ParentSpanID string `json:"parent_span_id,omitempty"`
+	Spawner      string `json:"spawner,omitempty"`
 }
 
 // TargetResult is the payload of one target finishing. Replayed distinguishes a
@@ -452,15 +460,19 @@ func readLine(br *bufio.Reader, limit int) ([]byte, bool, error) {
 
 // Summary is one session as a reader meets it: who, when, and what it ran.
 type Summary struct {
-	Session    string         `json:"session"`
-	Host       string         `json:"host,omitempty"`
-	Delegation string         `json:"delegation,omitempty"`
-	Workspace  string         `json:"workspace,omitempty"`
-	Command    string         `json:"command,omitempty"`
-	StartedMs  int64          `json:"started_ms"`
-	LastMs     int64          `json:"last_ms"`
-	Facts      int            `json:"facts"`
-	Targets    []TargetResult `json:"targets,omitempty"`
+	Session      string         `json:"session"`
+	Host         string         `json:"host,omitempty"`
+	Delegation   string         `json:"delegation,omitempty"`
+	TraceID      string         `json:"trace_id,omitempty"`
+	SpanID       string         `json:"span_id,omitempty"`
+	ParentSpanID string         `json:"parent_span_id,omitempty"`
+	Spawner      string         `json:"spawner,omitempty"`
+	Workspace    string         `json:"workspace,omitempty"`
+	Command      string         `json:"command,omitempty"`
+	StartedMs    int64          `json:"started_ms"`
+	LastMs       int64          `json:"last_ms"`
+	Facts        int            `json:"facts"`
+	Targets      []TargetResult `json:"targets,omitempty"`
 }
 
 // Summarize groups a fold into one entry per session, most recent activity first.
@@ -489,6 +501,7 @@ func Summarize(fold Fold) []Summary {
 			var start SessionStart
 			if json.Unmarshal(rec.Payload, &start) == nil {
 				s.Host, s.Workspace, s.Command, s.Delegation = start.Host, start.Workspace, start.Command, start.Delegation
+				s.TraceID, s.SpanID, s.ParentSpanID, s.Spawner = start.TraceID, start.SpanID, start.ParentSpanID, start.Spawner
 			}
 		case KindTargetResult:
 			var result TargetResult
