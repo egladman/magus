@@ -34,7 +34,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | Config key | Environment variable | Flag | Type |
 |------------|----------------------|------|------|
 | `console.enabled` | `MAGUS_CONSOLE_ENABLED` | _(env only)_ | bool _(env only)_ |
-| `console.url` | `MAGUS_CONSOLE_URL` | `--console-url` | string |
 
 ## daemon
 
@@ -47,7 +46,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `daemon.maintenance.rotate_activities` | `MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES` | `--daemon-maintenance-rotate-activities` | duration |
 | `daemon.maintenance.rotate_logs` | `MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS` | `--daemon-maintenance-rotate-logs` | duration |
 | `daemon.maintenance.sync_graph` | `MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH` | `--daemon-maintenance-sync-graph` | duration |
-| `daemon.socket` | `MAGUS_DAEMON_SOCKET` | `--daemon-socket` | string |
 | `daemon.workspaces` | `MAGUS_DAEMON_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |
 
 ## diff
@@ -66,15 +64,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `history_path` | `MAGUS_HISTORY_PATH` | `--history-path` | string |
 | `max_failures` | `MAGUS_MAX_FAILURES` | `--max-failures` | int |
 | `target_timeout` | `MAGUS_TARGET_TIMEOUT` | `--target-timeout` | duration |
-
-## graph
-
-| Config key | Environment variable | Flag | Type |
-|------------|----------------------|------|------|
-| `graph.depth` | `MAGUS_GRAPH_DEPTH` | `--graph-depth` | int |
-| `graph.direction` | `MAGUS_GRAPH_DIRECTION` | `--graph-direction` | string |
-| `graph.roots` | `MAGUS_GRAPH_ROOTS` | `--graph-roots` | string |
-| `graph.spell` | `MAGUS_GRAPH_SPELL` | `--graph-spell` | string |
 
 ## hints
 

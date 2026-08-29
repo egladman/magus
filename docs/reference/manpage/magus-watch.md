@@ -29,7 +29,7 @@ trigger a full initial build in the downstream magus affected --stdin.
 ## Options
 
 **--backend** *string* (default: fsnotify)
-: Notification backend: fsnotify or poll
+: Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)
 
 **--debounce** *duration* (default: 200ms)
 : Quiet window before emitting a batch

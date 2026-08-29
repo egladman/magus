@@ -23,7 +23,7 @@ type vcsCheckpointTool struct {
 	ws types.WorkspaceReader
 }
 
-func (t *vcsCheckpointTool) Name() string { return ToolVCSCheckpoint.String() }
+func (t *vcsCheckpointTool) Name() string { return toolVCSCheckpoint.String() }
 
 func (t *vcsCheckpointTool) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
 	root := t.ws.Root()

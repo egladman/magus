@@ -454,26 +454,24 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			shareGuarded[insightPath] = insightConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] insight service mounted", slog.String("path", insightPath))
 
-			// Viewer Connect service: the typed twin of the four JSON run-browser routes
-			// (/api/v1/outputs, /output, /runs, /run), reading the SAME two stores. The contract
-			// has existed in magus/viewer/v1alpha1 since the log viewer shipped and nothing served
-			// it; the JSON routes stay mounted until the console reads this instead, and retiring
-			// them is its own breaking change (docs/concepts/compatibility.md).
+			// Viewer Connect service: the typed twin of the JSON run-browser routes this
+			// replaced (/api/v1/outputs, /output, /runs, /run - retired in 7ce1896d4, see
+			// docs/concepts/compatibility.md), reading the SAME two stores.
 			//
-			// Read-only, so it takes the read bearer and joins the share surface exactly as its
-			// JSON twins do - a shared phone renders the run browser, and it must keep reaching
-			// the same runs whichever route the page settles on.
+			// Read-only, so it takes the read bearer and joins the share surface the way its
+			// retired JSON twins did - a shared phone renders the run browser, and it must keep
+			// reaching the same runs whichever route the page settles on.
 			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore))
 			httpServer.Handle(viewerPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, viewerConnectHandler))))
 			shareGuarded[viewerPath] = viewerConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] viewer service mounted", slog.String("path", viewerPath))
 
-			// The four plain-JSON read routes are ALSO mounted here individually, on the
-			// viewer-accepting guard. They are already reachable through the /api/ mux above,
-			// but that mux is mixed (it carries the diff session's mutating ops), so it must
-			// stay on the write tier. Registering these paths explicitly gives a viewer token
-			// the log and output surface - the whole point of a viewer - without widening the
-			// mux: net/http prefers the longer pattern, so /api/v1/events wins over /api/.
+			// events and insight are ALSO mounted here individually, on the viewer-accepting
+			// guard. They are already reachable through the /api/ mux above, but that mux is
+			// mixed (it carries the diff session's mutating ops), so it must stay on the write
+			// tier. Registering these two paths explicitly gives a viewer token the same surface
+			// without widening the mux: net/http prefers the longer pattern, so /api/v1/events
+			// wins over /api/.
 			//
 			// They are the SAME handlers shareGuarded hands the LAN listener, so "what a viewer
 			// may see" has one definition and cannot drift between a phone and a loopback tab.
@@ -530,21 +528,24 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				log.InfoContext(ctx, "[BRIDGE] static console mounted", slog.String("path", "/console/"), slog.String("dir", consoleDir))
 			}
 
-			// Token management service: the typed surface the console Settings UI uses to LIST and
-			// REVOKE connector tokens and to see/revoke the active share token. It is VIEW-AND-REVOKE
-			// only - it can NEVER mint. Minting stays a CLI-only operation, so a compromised browser
-			// session cannot forge a durable credential (the XSS-to-durable-credential escalation is
-			// closed by construction). It is a second door onto the same connector store the CLI
-			// writes and the same shareMgr the share endpoint drives - never a second store.
+			// Token management service: the typed surface the console Settings UI uses to LIST,
+			// CREATE, and REVOKE console and viewer tokens, and to see/revoke the active share
+			// token. CreateToken can mint - it is not view-and-revoke only - but only the two
+			// scopes a browser has any business minting (console, console-read); the operator and
+			// connector classes are refused there by the handler itself (internal/handler/token),
+			// regardless of who is asking. What guards against a compromised browser forging a
+			// durable /mcp credential is the GUARD tier below, not an absence of a mint path. It
+			// is a second door onto the same connector store the CLI writes and the same shareMgr
+			// the share endpoint drives - never a second store.
 			//
 			// The mount enforces the three-tier credential hierarchy at the GUARD, so the handler
 			// stays dumb:
 			//   - operator token (built-in cli credential): the ONLY accepted bearer here
 			//     (VerifyCLIBearer, not the generic VerifyBearer). Whoever holds it owns the daemon,
-			//     so token ops are operator-tier.
+			//     so every token op, mint included, is operator-tier.
 			//   - connector token (MCP client): valid on /mcp and the console data services, but
-			//     rejected on this mount - a client credential must never revoke credentials
-			//     (privilege self-replication).
+			//     rejected on this mount - a client credential must never mint or revoke another
+			//     credential (privilege self-replication).
 			//   - share token (read-only viewer): only ever valid on the LAN share listener; this
 			//     service is deliberately NOT in shareGuarded, so a shared phone can never reach
 			//     the token-management surface.
@@ -552,13 +553,15 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// `activityAllowed`): token management is sensitive and local-only. The operator/built-in
 			// token is additionally unreachable through the handler itself: it is bootstrap-only,
 			// managed SOLELY by the CLI, and structurally invisible+immutable to this service (it
-			// lives in a store the handler never opens, so it is neither listed nor revocable here),
-			// preventing lockout.
-			// The audit interceptor records every MUTATING token RPC (RevokeToken today) to the trail by
-			// construction, so a browser-reachable credential revoke is always audited. The actor is
-			// stamped "operator" from the mount tier (this surface is cli-guarded), never read from a
-			// caller-supplied field. Reads (ListTokens) are not recorded. See internal/handler/trailrpc for
-			// the pattern and the arch-test ratchet that keeps it honest.
+			// lives in a store the handler never opens, so it is neither listed, mintable, nor
+			// revocable here), preventing lockout.
+			// The audit interceptor classifies every RPC on this service by its leading verb
+			// (internal/handler/trailrpc) and records the mutating ones - CreateToken and
+			// RevokeToken today - to the trail, so a browser-reachable mint or revoke is always
+			// audited. The actor is stamped "operator" from the mount tier (this surface is
+			// cli-guarded), never read from a caller-supplied field. Reads (ListTokens) are not
+			// recorded. See internal/handler/trailrpc for the pattern and the arch-test ratchet
+			// that keeps it honest.
 			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindTokenLifecycle))
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit)
 			httpServer.Handle(tokenPath, httpx.GuardRebind(allowed, cors(httpx.BearerGuard(auth.VerifyCLIBearer, tokenHandler))))

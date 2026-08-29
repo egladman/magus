@@ -8,18 +8,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// emit runs fn against a fresh Writer over a buffer and returns the emitted text.
-// Every Writer method is exercised through this helper so the golden strings
+// emit runs fn against a fresh writer over a buffer and returns the emitted text.
+// Every writer method is exercised through this helper so the golden strings
 // below assert the exact bytes a man page would receive.
-func emit(fn func(*Writer)) string {
+func emit(fn func(*writer)) string {
 	var buf bytes.Buffer
-	fn(NewWriter(&buf))
+	fn(newWriter(&buf))
 	return buf.String()
 }
 
 func TestWriterTH(t *testing.T) {
 	// TH uppercases the name and %q-quotes the last three fields (date/source/manual).
-	got := emit(func(w *Writer) {
+	got := emit(func(w *writer) {
 		w.TH("magus", "1", "2026-07-08", "magus 0.1", "Magus Manual")
 	})
 	require.Equal(t, ".TH MAGUS 1 \"2026-07-08\" \"magus 0.1\" \"Magus Manual\"\n", got)
@@ -27,18 +27,18 @@ func TestWriterTH(t *testing.T) {
 
 func TestWriterSH(t *testing.T) {
 	// SH uppercases the section title per groff convention.
-	got := emit(func(w *Writer) { w.SH("description") })
+	got := emit(func(w *writer) { w.SH("description") })
 	require.Equal(t, ".SH DESCRIPTION\n", got)
 }
 
 func TestWriterSS(t *testing.T) {
 	// SS preserves case for sub-section headings.
-	got := emit(func(w *Writer) { w.SS("Sub Heading") })
+	got := emit(func(w *writer) { w.SS("Sub Heading") })
 	require.Equal(t, ".SS Sub Heading\n", got)
 }
 
 func TestWriterP(t *testing.T) {
-	got := emit(func(w *Writer) { w.P() })
+	got := emit(func(w *writer) { w.P() })
 	require.Equal(t, ".PP\n", got)
 }
 
@@ -75,7 +75,7 @@ func TestWriterPara(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := emit(func(w *Writer) { w.Para(tt.in) })
+			got := emit(func(w *writer) { w.Para(tt.in) })
 			require.Equal(t, tt.want, got)
 		})
 	}
@@ -83,12 +83,12 @@ func TestWriterPara(t *testing.T) {
 
 func TestWriterTP(t *testing.T) {
 	// TP emits the .TP macro, then the raw label and body on their own lines.
-	got := emit(func(w *Writer) { w.TP("\\fB\\-\\-flag\\fR", "flag help") })
+	got := emit(func(w *writer) { w.TP("\\fB\\-\\-flag\\fR", "flag help") })
 	require.Equal(t, ".TP\n\\fB\\-\\-flag\\fR\nflag help\n", got)
 }
 
 func TestWriterIndentDedent(t *testing.T) {
-	got := emit(func(w *Writer) {
+	got := emit(func(w *writer) {
 		w.Indent()
 		w.Dedent()
 	})
@@ -108,7 +108,7 @@ func TestWriterExample(t *testing.T) {
 			want:  ".EX\n.EE\n",
 		},
 		{
-			// Example uses EscapeExample: hyphens stay literal for copy-paste.
+			// Example uses escapeExample: hyphens stay literal for copy-paste.
 			name:  "keeps hyphens literal",
 			lines: []string{"magus run build --dry-run"},
 			want:  ".EX\nmagus run build --dry-run\n.EE\n",
@@ -122,7 +122,7 @@ func TestWriterExample(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := emit(func(w *Writer) { w.Example(tt.lines...) })
+			got := emit(func(w *writer) { w.Example(tt.lines...) })
 			require.Equal(t, tt.want, got)
 		})
 	}
@@ -131,7 +131,7 @@ func TestWriterExample(t *testing.T) {
 func TestWriterB(t *testing.T) {
 	// B escapes the text and wraps it in \fB...\fR. Note the returned string is
 	// not written to the buffer; B is a pure helper.
-	w := NewWriter(&bytes.Buffer{})
+	w := newWriter(&bytes.Buffer{})
 	require.Equal(t, "\\fBbuild\\fR", w.B("build"))
 	// The hyphen inside is escaped to a roff minus.
 	require.Equal(t, "\\fB\\-\\-flag\\fR", w.B("--flag"))
@@ -180,7 +180,7 @@ func TestEscape(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, Escape(tt.in))
+			assert.Equal(t, tt.want, escape(tt.in))
 		})
 	}
 }
@@ -192,7 +192,7 @@ func TestEscapeExample(t *testing.T) {
 		want string
 	}{
 		{name: "plain", in: "hello", want: "hello"},
-		// Unlike Escape, hyphens are preserved literally for copy-paste.
+		// Unlike escape, hyphens are preserved literally for copy-paste.
 		{name: "keeps hyphen", in: "a-b", want: "a-b"},
 		{name: "backslash", in: "a\\b", want: "a\\(rsb"},
 		{name: "leading dot", in: ".x", want: "\\&.x"},
@@ -201,16 +201,16 @@ func TestEscapeExample(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, EscapeExample(tt.in))
+			assert.Equal(t, tt.want, escapeExample(tt.in))
 		})
 	}
 }
 
 func TestEscapeHyphen(t *testing.T) {
-	assert.Equal(t, "\\-", EscapeHyphen("-"))
-	assert.Equal(t, "a\\-b\\-c", EscapeHyphen("a-b-c"))
-	assert.Equal(t, "none", EscapeHyphen("none"))
-	assert.Equal(t, "", EscapeHyphen(""))
+	assert.Equal(t, "\\-", escapeHyphen("-"))
+	assert.Equal(t, "a\\-b\\-c", escapeHyphen("a-b-c"))
+	assert.Equal(t, "none", escapeHyphen("none"))
+	assert.Equal(t, "", escapeHyphen(""))
 }
 
 func TestSplitParas(t *testing.T) {

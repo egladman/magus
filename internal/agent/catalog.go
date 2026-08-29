@@ -468,20 +468,6 @@ func (c *Catalog) SkillBytes(name string, v Variant) ([]byte, error) {
 	return nil, fmt.Errorf("unknown skill %q", name)
 }
 
-// SkillNames returns the embedded skill names in deterministic order.
-func (c *Catalog) SkillNames() ([]string, error) {
-	skills, err := c.EmbeddedSkills()
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(skills))
-	for _, skill := range skills {
-		names = append(names, skill.Name)
-	}
-	sort.Strings(names)
-	return names, nil
-}
-
 // SkillTar returns a tar archive of every embedded skill at the path
 // `<dest>/<skill-name>/SKILL.md`. The archive is reproducible: tar headers
 // carry a fixed mtime and deterministic mode bits so byte-equal output is

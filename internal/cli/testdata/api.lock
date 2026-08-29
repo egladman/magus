@@ -10,7 +10,6 @@ config ci.record_runs
 config ci.runner_pool_budget
 config concurrency
 config console.enabled
-config console.url
 config daemon.address
 config daemon.enabled
 config daemon.idle_ttl
@@ -18,15 +17,10 @@ config daemon.maintenance.check_review
 config daemon.maintenance.rotate_activities
 config daemon.maintenance.rotate_logs
 config daemon.maintenance.sync_graph
-config daemon.socket
 config daemon.workspaces
 config default_charms
 config diff.tui
 config dry_run
-config graph.depth
-config graph.direction
-config graph.roots
-config graph.spell
 config hints.enabled
 config history_path
 config knowledge.max_size_mb

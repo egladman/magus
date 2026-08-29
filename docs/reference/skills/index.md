@@ -20,7 +20,7 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
 | [magus-buzz-write](magus-buzz-write.md) | 8174 | 6776 | 17% | Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. |
 | [magus-change-summary](magus-change-summary.md) | 7051 | 5385 | 23% | Summarize what changed in a magus workspace, write it up, or answer a granular diff question. |
 | [magus-commit-composition](magus-commit-composition.md) | 4448 | 3840 | 13% | Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths. |
-| [magus-context-audit](magus-context-audit.md) | 5573 | 4065 | 27% | Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. |
+| [magus-context-audit](magus-context-audit.md) | 5579 | 4071 | 27% | Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. |
 | [magus-docs-lookup](magus-docs-lookup.md) | 3670 | 2956 | 19% | Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. |
 | [magus-handoff-journal](magus-handoff-journal.md) | 4178 | 3506 | 16% | Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. |
 | [magus-multi-agent](magus-multi-agent.md) | 21560 | 15822 | 26% | Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, bound fan-out depth, and match each lease's model to the work it needs. |
@@ -29,4 +29,4 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
 | [magus-sdk](magus-sdk.md) | 13317 | 12880 | 3% | Help a Go developer consume magus as a library (import "github.com/egladman/magus") instead of shelling out to the CLI, and audit whether the SDK actually serves them. |
 | [magus-vcs-hygiene](magus-vcs-hygiene.md) | 8106 | 5977 | 26% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
 | [magus-workspace-rules](magus-workspace-rules.md) | 5435 | 4391 | 19% | Adapt magus's installed agent surface to THIS workspace without breaking it. |
-| **all 14** | **130575** | **102364** | **21%** | |
+| **all 14** | **130581** | **102370** | **21%** | |

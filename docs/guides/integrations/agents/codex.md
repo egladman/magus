@@ -48,7 +48,7 @@ enabled = true
 
 ```sh
 magus server start
-export MAGUS_MCP_TOKEN="$(magus config mcp token print)"
+export MAGUS_MCP_TOKEN="$(magus config token print)"
 codex mcp list
 magus status --probe=liveness,mcp
 ```

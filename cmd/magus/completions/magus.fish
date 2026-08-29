@@ -21,7 +21,7 @@ function __magus_subcommands
         vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)' \
         session    'what sessions did and what they are blocked on: humans read (ls, attention) and dispose; hosts write (hook, notify)' \
         memory     'durable cross-session project memory (ls, get, put, delete, verify)' \
-        notes      'human-authored notes committed to the repo (ls, get, edit, verify)' \
+        notes      'human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)' \
         watch      'emit changed file paths (pipe into affected --stdin)' \
         events     'stream workspace events as JSONL for an editor plugin or other integration' \
         server     'manage the persistent daemon (start / stop / status; MCP starts with it)' \
@@ -79,14 +79,13 @@ function __magus_describe_nouns
         tool      'list external tools spells require'
 end
 
-function __magus_insight_lenses
+function __magus_session_subs
     printf '%s\t%s\n' \
-        hotspots  'edit frequency x complexity, prime refactoring targets' \
-        affinity  'projects that change together (temporal coupling)' \
-        ownership 'author concentration and bus factor' \
-        trend     'rising vs cooling activity' \
-        unreferenced 'code symbols nothing in the workspace names' \
-        report    'every lens plus graph stats as one document'
+        ls        'list past sessions' \
+        attention 'list the open requests' \
+        dispose   'close one request with a reason' \
+        hook      'evaluate one shell command or file path' \
+        notify    'normalize an attention event'
 end
 
 function __magus_graph_subs
@@ -162,11 +161,7 @@ for _cmd in magus mgs
     complete -c $_cmd -n '__fish_seen_subcommand_from x' -a '(__magus_projects)'
     complete -c $_cmd -n '__fish_seen_subcommand_from x' -l step -d 'pause before each subprocess'
 
-    complete -c $_cmd -n "__fish_seen_subcommand_from insight; and not __fish_seen_subcommand_from hotspots affinity ownership trend unreferenced report" -a '(__magus_insight_lenses)'
-    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l commits -d 'cap on how many recent commits to scan'
-    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l since -d 'only commits within this window'
-    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l workspace -d 'analyze the whole workspace'
-    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l files -d 'hotspots: rank individual files instead of projects'
+    complete -c $_cmd -n "__fish_seen_subcommand_from session; and not __fish_seen_subcommand_from ls attention dispose hook notify" -a '(__magus_session_subs)'
 
     complete -c $_cmd -n "__fish_seen_subcommand_from graph; and not __fish_seen_subcommand_from $graph_sub_set" -a '(__magus_graph_subs)'
     complete -c $_cmd -n '__fish_seen_subcommand_from graph deps' -l upstream -d 'show dependents instead of dependencies'

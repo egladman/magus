@@ -25,7 +25,7 @@ import (
 // refusing is a ledger agents route around. See types.Lease.
 type ledgerTool struct{ store *ledger.Store }
 
-func (t *ledgerTool) Name() string { return ToolLedger.String() }
+func (t *ledgerTool) Name() string { return toolLedger.String() }
 
 func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	switch op := paramString(req.Params, "op", "list"); op {

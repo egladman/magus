@@ -177,6 +177,8 @@ const (
 	FlagExplainGlobal = "global"
 	// explain: --refresh
 	FlagExplainRefresh = "refresh"
+	// graph build: --no-symbols
+	FlagGraphBuildNoSymbols = "no-symbols"
 	// graph deps: --depth
 	FlagGraphDepsDepth = "depth"
 	// graph deps: --spell
@@ -185,6 +187,12 @@ const (
 	FlagGraphDepsTarget = "target"
 	// graph deps: --upstream
 	FlagGraphDepsUpstream = "upstream"
+	// graph diff: --global
+	FlagGraphDiffGlobal = "global"
+	// graph diff: --refresh
+	FlagGraphDiffRefresh = "refresh"
+	// graph diff: --rev
+	FlagGraphDiffRev = "rev"
 	// graph export: --budget
 	FlagGraphExportBudget = "budget"
 	// graph export: --follow
@@ -227,6 +235,10 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
+	// man install: --dir
+	FlagManInstallDir = "dir"
+	// man install: --dry-run
+	FlagManInstallDryRun = "dry-run"
 	// memory put: --body
 	FlagMemoryPutBody = "body"
 	// memory put: --ref
@@ -237,6 +249,18 @@ const (
 	FlagMemoryPutStatus = "status"
 	// memory put: --type
 	FlagMemoryPutType = "type"
+	// notes capture: --name
+	FlagNotesCaptureName = "name"
+	// notes capture: --private
+	FlagNotesCapturePrivate = "private"
+	// notes capture: --shared
+	FlagNotesCaptureShared = "shared"
+	// notes capture: --tag
+	FlagNotesCaptureTag = "tag"
+	// notes capture: --title
+	FlagNotesCaptureTitle = "title"
+	// notes promote: --name
+	FlagNotesPromoteName = "name"
 	// path: --global
 	FlagPathGlobal = "global"
 	// path: --refresh
@@ -315,6 +339,8 @@ const (
 	FlagSelfUpdateY = "y"
 	// self update: --yes
 	FlagSelfUpdateYes = "yes"
+	// server reload: --socket
+	FlagServerReloadSocket = "socket"
 	// server start: --foreground
 	FlagServerStartForeground = "foreground"
 	// server stop: --services
@@ -596,6 +622,18 @@ func BindAffectedBisect(fs *flag.FlagSet) *AffectedBisectFlags {
 	return &f
 }
 
+// GraphBuildFlags are the flags declared for `magus graph build`.
+type GraphBuildFlags struct {
+	NoSymbols bool // --no-symbols
+}
+
+// BindGraphBuild registers `magus graph build`'s flags on fs and returns the destination.
+func BindGraphBuild(fs *flag.FlagSet) *GraphBuildFlags {
+	var f GraphBuildFlags
+	fs.BoolVar(&f.NoSymbols, FlagGraphBuildNoSymbols, false, "Rebuild the domain graph only; do not reindex code symbols")
+	return &f
+}
+
 // GraphDepsFlags are the flags declared for `magus graph deps`.
 type GraphDepsFlags struct {
 	Upstream bool   // --upstream
@@ -670,6 +708,22 @@ func BindGraphStats(fs *flag.FlagSet) *GraphStatsFlags {
 	fs.BoolVar(&f.Refresh, FlagGraphStatsRefresh, false, "Force a full graph rebuild first")
 	fs.BoolVar(&f.Global, FlagGraphStatsGlobal, false, "Union the workspaces registered in config (knowledge.workspaces) before computing stats")
 	fs.BoolVar(&f.Symbols, FlagGraphStatsSymbols, false, "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph")
+	return &f
+}
+
+// GraphDiffFlags are the flags declared for `magus graph diff`.
+type GraphDiffFlags struct {
+	Refresh bool   // --refresh
+	Global  bool   // --global
+	Rev     string // --rev
+}
+
+// BindGraphDiff registers `magus graph diff`'s flags on fs and returns the destination.
+func BindGraphDiff(fs *flag.FlagSet) *GraphDiffFlags {
+	var f GraphDiffFlags
+	fs.BoolVar(&f.Refresh, FlagGraphDiffRefresh, false, "Force a full graph rebuild of the current graph before diffing")
+	fs.BoolVar(&f.Global, FlagGraphDiffGlobal, false, "Diff the global (all-workspaces) graph; match this to how the baseline was exported")
+	fs.StringVar(&f.Rev, FlagGraphDiffRev, "", "Diff against a git revision (e.g. HEAD~1, main) instead of an export file")
 	return &f
 }
 
@@ -767,7 +821,7 @@ func BindWatch(fs *flag.FlagSet) *WatchFlags {
 	fs.DurationVar(&f.Debounce, FlagWatchDebounce, time.Duration(200000000), "Quiet window before emitting a batch")
 	fs.BoolVar(&f.Initial, FlagWatchInitial, true, "Emit an --all batch on startup before watching")
 	fs.BoolVar(&f.Null, FlagWatchNull, false, "NUL-separate paths; double-NUL between batches")
-	fs.StringVar(&f.Backend, FlagWatchBackend, "fsnotify", "Notification backend: fsnotify or poll")
+	fs.StringVar(&f.Backend, FlagWatchBackend, "fsnotify", "Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)")
 	return &f
 }
 
@@ -1075,6 +1129,36 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	return &f
 }
 
+// NotesCaptureFlags are the flags declared for `magus notes capture`.
+type NotesCaptureFlags struct {
+	Title   string // --title
+	Name    string // --name
+	Shared  bool   // --shared
+	Private bool   // --private
+}
+
+// BindNotesCapture registers `magus notes capture`'s flags on fs and returns the destination.
+func BindNotesCapture(fs *flag.FlagSet) *NotesCaptureFlags {
+	var f NotesCaptureFlags
+	fs.StringVar(&f.Title, FlagNotesCaptureTitle, "", "Title for the note (defaults to naming the reviewed base)")
+	fs.StringVar(&f.Name, FlagNotesCaptureName, "", "Note name (defaults to review-<patch digest>)")
+	fs.BoolVar(&f.Shared, FlagNotesCaptureShared, false, "Only notes committed to this repository (your team has these)")
+	fs.BoolVar(&f.Private, FlagNotesCapturePrivate, false, "Only your own notes (default for capture)")
+	return &f
+}
+
+// NotesPromoteFlags are the flags declared for `magus notes promote`.
+type NotesPromoteFlags struct {
+	Name string // --name
+}
+
+// BindNotesPromote registers `magus notes promote`'s flags on fs and returns the destination.
+func BindNotesPromote(fs *flag.FlagSet) *NotesPromoteFlags {
+	var f NotesPromoteFlags
+	fs.StringVar(&f.Name, FlagNotesPromoteName, "", "Note name (defaults to the record's name)")
+	return &f
+}
+
 // DiffFlags are the flags declared for `magus diff`.
 type DiffFlags struct {
 	Generated bool   // --generated
@@ -1129,6 +1213,18 @@ func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	return &f
 }
 
+// ServerReloadFlags are the flags declared for `magus server reload`.
+type ServerReloadFlags struct {
+	Socket string // --socket
+}
+
+// BindServerReload registers `magus server reload`'s flags on fs and returns the destination.
+func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
+	var f ServerReloadFlags
+	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
+	return &f
+}
+
 // BuzzFlags are the flags declared for `magus buzz`.
 type BuzzFlags struct {
 	E          string // -e
@@ -1147,6 +1243,20 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
 	fs.StringVar(&f.C, FlagBuzzC, "", "Working directory for the REPL's import resolution (default: cwd)")
+	return &f
+}
+
+// ManInstallFlags are the flags declared for `magus man install`.
+type ManInstallFlags struct {
+	Dir    string // --dir
+	DryRun bool   // --dry-run
+}
+
+// BindManInstall registers `magus man install`'s flags on fs and returns the destination.
+func BindManInstall(fs *flag.FlagSet) *ManInstallFlags {
+	var f ManInstallFlags
+	fs.StringVar(&f.Dir, FlagManInstallDir, "", "Directory for section 1 man pages (default: the user manpath)")
+	fs.BoolVar(&f.DryRun, FlagManInstallDryRun, false, "Print what would be written without touching the filesystem")
 	return &f
 }
 

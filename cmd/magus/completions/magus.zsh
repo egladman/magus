@@ -57,7 +57,7 @@ _magus() {
                 'vcs:staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)'
                 'session:what sessions did and what they are blocked on\: humans read (ls, attention) and dispose; hosts write (hook, notify)'
                 'memory:durable cross-session project memory (ls, get, put, delete, verify)'
-                'notes:human-authored notes committed to the repo (ls, get, edit, verify)'
+                'notes:human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)'
                 'watch:emit changed file paths (pipe into affected --stdin)'
                 'events:stream workspace events as JSONL for an editor plugin or other integration'
                 'server:manage the persistent daemon (start / stop / status; MCP starts with it)'
@@ -79,15 +79,21 @@ _magus() {
             ;;
         args)
             case $words[1] in
-                attention)
+                session)
                     # dispose completes from the live queue, the way run completes
                     # targets from the workspace.
                     if (( CURRENT == 2 )); then
-                        local -a verbs=('ls:list the open requests' 'dispose:close one request with a reason')
+                        local -a verbs=(
+                            'ls:list past sessions'
+                            'attention:list the open requests'
+                            'dispose:close one request with a reason'
+                            'hook:evaluate one shell command or file path'
+                            'notify:normalize an attention event'
+                        )
                         _describe 'verb' verbs
                     elif [[ $words[2] == dispose ]] && (( CURRENT == 3 )); then
                         local -a ids
-                        ids=("${(@f)$(magus attention -o name 2>/dev/null)}")
+                        ids=("${(@f)$(magus session attention -o name 2>/dev/null)}")
                         _describe 'request id' ids
                     fi
                     ;;
@@ -162,22 +168,6 @@ _magus() {
                         local -a projects
                         projects=("${(@f)$(magus ls -o name 2>/dev/null)}")
                         _describe 'project' projects
-                    fi
-                    ;;
-                insight)
-                    if (( CURRENT == 2 )); then
-                        local -a lenses=(
-                            'hotspots:edit frequency x complexity, prime refactoring targets'
-                            'affinity:projects that change together (temporal coupling)'
-                            'ownership:author concentration and bus factor'
-                            'trend:rising vs cooling activity'
-                            'unreferenced:code symbols nothing in the workspace names'
-                            'report:every lens plus graph stats as one document'
-                        )
-                        _describe 'lens' lenses
-                    else
-                        local -a flags=(--commits --since --workspace --files)
-                        _describe 'flag' flags
                     fi
                     ;;
                 graph)

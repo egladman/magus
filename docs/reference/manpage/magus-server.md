@@ -11,7 +11,7 @@ Manage the persistent magus daemon
 
 ## Synopsis
 
-**magus** server \<start|stop\> [flags]
+**magus** server \<start|stop|reload|job\> [flags]
 
 ## Description
 
@@ -44,6 +44,11 @@ check for the file with [ -S "$socket" ] before starting one.
 **--socket** *string*
 : Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)
 
+### server reload options
+
+**--socket** *string*
+: Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)
+
 ## Subcommands
 
 **start**
@@ -51,6 +56,12 @@ check for the file with [ -S "$socket" ] before starting one.
 
 **stop**
 : Send a graceful shutdown request to a running daemon
+
+**reload**
+: Re-read configuration without restarting: drop the daemon's open workspaces
+
+**job**
+: Submit a background maintenance job to a running daemon (no-op with no daemon)
 
 ## Examples
 
@@ -70,6 +81,18 @@ magus server start --foreground
 
 ```sh
 magus server stop
+```
+
+*Reload configuration without restarting*
+
+```sh
+magus server reload
+```
+
+*Submit a background job*
+
+```sh
+magus server job rotate-logs
 ```
 
 *Inspect daemon pool state*

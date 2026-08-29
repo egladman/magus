@@ -6,6 +6,15 @@ magus\-man \- Install the man pages embedded in this binary
 .RI "man install [\-\-dir <path>]"
 .SH DESCRIPTION
 Write the complete magus manpage set carried by this binary. The installer uses this command to place the pages under the selected installation prefix.
+.SS man install options
+.RS
+.TP
+\fB\-\-dir\fR \fIstring\fR
+Directory for section 1 man pages (default: the user manpath)
+.TP
+\fB\-\-dry\-run\fR
+Print what would be written without touching the filesystem
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP

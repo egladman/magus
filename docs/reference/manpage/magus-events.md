@@ -1,7 +1,7 @@
 ---
 title: magus events
 generated_from: internal/cli/registry.go
-description: Stream magus events as JSONL - one event per line - so an editor plugin, a status bar, or any other integration can react to runs, results, and diagnostics.
+description: Stream magus events as JSONL - one event per line - so an editor plugin, a status bar, or any other integration can react to runs and results.
 tags: [cli, magus events, events, integration, editor, plugin, jsonl, subscribe]
 ---
 
@@ -59,10 +59,10 @@ schema.
 magus events --follow
 ```
 
-*Only what an editor needs for diagnostics*
+*Only what an editor needs for progress*
 
 ```sh
-magus events --follow --type target.result,diagnostic.emitted
+magus events --follow --type run.started,target.result
 ```
 
 *What did the last run do*

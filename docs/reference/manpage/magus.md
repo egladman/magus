@@ -134,7 +134,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Install the knowledge-graph agent skills into a repository. See [**magus-agent**(1)](magus-agent.md).
 
 **self**
-: Manage the magus binary (update, install-shorthand). See [**magus-self**(1)](magus-self.md).
+: Manage the magus binary (update, refresh, registry, install-shorthand). See [**magus-self**(1)](magus-self.md).
 
 **version**
 : Print the client and daemon versions. See [**magus-version**(1)](magus-version.md).
@@ -190,7 +190,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 
 **MAGUS_DAEMON_SOCKET**
-: Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: **daemon.socket**.
+: Env-only, no magus.yaml equivalent: runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path, read directly by the process that adopts it
 
 **MAGUS_CI_MAX_SHARDS**
 : Maximum number of parallel CI shards; -1 means unlimited (default: 8). Equivalent magus.yaml key: **ci.max_shards**.
@@ -203,18 +203,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_N_SHARDS**
 : Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus
-
-**MAGUS_GRAPH_DIRECTION**
-: Default graph direction: downstream or upstream (default: downstream). Equivalent magus.yaml key: **graph.direction**.
-
-**MAGUS_GRAPH_SPELL**
-: Filter graph output to a single spell. Equivalent magus.yaml key: **graph.spell**.
-
-**MAGUS_GRAPH_DEPTH**
-: Cap displayed graph depth (0 = unlimited) (default: 0). Equivalent magus.yaml key: **graph.depth**.
-
-**MAGUS_GRAPH_ROOTS**
-: Comma-separated starting nodes for graph traversal. Equivalent magus.yaml key: **graph.roots**.
 
 **MAGUS_TELEMETRY_ENABLED**
 : Turn OTLP export on; magus connects to telemetry.endpoint when true (default: false). Equivalent magus.yaml key: **telemetry.enabled**.

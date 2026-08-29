@@ -19,7 +19,7 @@ trigger a full initial build in the downstream magus affected \-\-stdin.
 .RS
 .TP
 \fB\-\-backend\fR \fIstring\fR (default: fsnotify)
-Notification backend: fsnotify or poll
+Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)
 .TP
 \fB\-\-debounce\fR \fIduration\fR (default: 200ms)
 Quiet window before emitting a batch

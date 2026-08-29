@@ -17,7 +17,7 @@ $__magus_scriptblock = {
                    'version', 'help'
     # magus-utils:subcommands:end
     $describeNouns = 'spell', 'charm', 'target', 'graph', 'project', 'workspace', 'module', 'mcp-tool', 'file', 'tool'
-    $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'unreferenced', 'report'
+    $sessionSubs   = 'ls', 'attention', 'dispose', 'hook', 'notify'
     $graphSubs     = 'deps', 'export', 'stats'
     $configSubs    = 'view', 'set', 'history', 'cache', 'mcp'
     $serverSubs    = 'start', 'stop'
@@ -33,7 +33,6 @@ $__magus_scriptblock = {
     $graphDepsFlags   = '--upstream', '--depth', '--spell', '--target'
     $graphExportFlags = '--refresh'
     $graphStatsFlags  = '--kind', '--refresh'
-    $insightFlags     = '--commits', '--since', '--workspace', '--files'
     $watchFlags       = '--debounce', '--initial', '--null', '--backend', '--ignore'
     $statusFlags      = '--watch', '--compact', '--socket', '--probe', '--workspace'
     $initFlags        = '--global', '--local', '--force', '--vcs'
@@ -101,11 +100,10 @@ $__magus_scriptblock = {
             }
             return Complete-From (Get-MagusProjects)
         }
-        'insight' {
+        'session' {
             if ($atArg2) {
-                return Complete-From $lenses
+                return Complete-From $sessionSubs
             }
-            return Complete-From $insightFlags 'ParameterName'
         }
         'graph' {
             if ($atArg2) {

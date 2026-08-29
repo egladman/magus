@@ -198,7 +198,7 @@ func totalHunks(files []changeset.FileHunks) int {
 	return n
 }
 
-func (t *diffTool) Name() string { return ToolDiff.String() }
+func (t *diffTool) Name() string { return toolDiff.String() }
 
 func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	if t.sessions == nil || t.root == "" {

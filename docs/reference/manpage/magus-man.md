@@ -17,6 +17,14 @@ Install the man pages embedded in this binary
 
 Write the complete magus manpage set carried by this binary. The installer uses this command to place the pages under the selected installation prefix.
 
+### man install options
+
+**--dir** *string*
+: Directory for section 1 man pages (default: the user manpath)
+
+**--dry-run**
+: Print what would be written without touching the filesystem
+
 ## Subcommands
 
 **install**

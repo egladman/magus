@@ -11,7 +11,7 @@ Human-authored notes committed to the repository
 
 ## Synopsis
 
-**magus** notes \<ls|get|edit|verify\> [flags]
+**magus** notes \<ls|get|edit|verify|capture|promote\> [flags]
 
 ## Description
 
@@ -36,6 +36,28 @@ committed under their own name, which is what makes git attribution meaningful
 and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
 to declare where they live; with nothing declared the feature is inert.
 
+### notes capture options
+
+**--name** *string*
+: Note name (defaults to review-\<patch digest\>)
+
+**--private**
+: Only your own notes (default for capture)
+
+**--shared**
+: Only notes committed to this repository (your team has these)
+
+**--tag** *string*
+: Tag to set on the note; repeatable
+
+**--title** *string*
+: Title for the note (defaults to naming the reviewed base)
+
+### notes promote options
+
+**--name** *string*
+: Note name (defaults to the record's name)
+
 ## Subcommands
 
 **ls**
@@ -49,6 +71,12 @@ to declare where they live; with nothing declared the feature is inert.
 
 **verify**
 : Check malformed notes and anchors that no longer resolve
+
+**capture**
+: Capture the review under way as a note: your own remarks plus any colleagues' comments
+
+**promote**
+: Open an agent-drafted memory record for editing and write it to the shared notes store under your own name
 
 ## Examples
 
@@ -74,6 +102,18 @@ magus notes edit cache-invalidation-pairing
 
 ```sh
 magus notes verify
+```
+
+*Capture the review under way*
+
+```sh
+magus notes capture
+```
+
+*Promote a memory record into a shared note*
+
+```sh
+magus notes promote release-checklist
 ```
 
 ## See Also

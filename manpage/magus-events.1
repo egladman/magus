@@ -48,10 +48,10 @@ Restrict to these event types (comma\-separated); default is every type except t
 magus events --follow
 .EE
 .PP
-\fIOnly what an editor needs for diagnostics\fR
+\fIOnly what an editor needs for progress\fR
 .PP
 .EX
-magus events --follow --type target.result,diagnostic.emitted
+magus events --follow --type run.started,target.result
 .EE
 .PP
 \fIWhat did the last run do\fR

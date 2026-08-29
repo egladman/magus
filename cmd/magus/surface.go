@@ -51,7 +51,7 @@ var subcommands = []subcommand{
 	{Group: groupChanges, Name: "vcs", Short: "staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)"},
 	{Group: groupChanges, Name: "session", Short: "what sessions did and what they are blocked on: humans read (ls, attention) and dispose; hosts write (hook, notify)"},
 	{Group: groupChanges, Name: "memory", Short: "durable cross-session project memory (ls, get, put, delete, verify)"},
-	{Group: groupChanges, Name: "notes", Short: "human-authored notes committed to the repo (ls, get, edit, verify)"},
+	{Group: groupChanges, Name: "notes", Short: "human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)"},
 
 	{Group: groupIntegrate, Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
 	{Group: groupIntegrate, Name: "events", Short: "stream workspace events as JSONL for an editor plugin or other integration"},

@@ -122,7 +122,7 @@ Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See \fBmagus
 Install the knowledge\-graph agent skills into a repository. See \fBmagus\-agent\fR(1).
 .TP
 \fBself\fR
-Manage the magus binary (update, install\-shorthand). See \fBmagus\-self\fR(1).
+Manage the magus binary (update, refresh, registry, install\-shorthand). See \fBmagus\-self\fR(1).
 .TP
 \fBversion\fR
 Print the client and daemon versions. See \fBmagus\-version\fR(1).
@@ -179,7 +179,7 @@ Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalen
 Per\-VCS base\-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 .TP
 \fBMAGUS_DAEMON_SOCKET\fR
-Runtime proc\-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: \fBdaemon.socket\fR.
+Env\-only, no magus.yaml equivalent: runtime proc\-server socket set by the daemon for forwarded child processes; unix:// URL or bare path, read directly by the process that adopts it
 .TP
 \fBMAGUS_CI_MAX_SHARDS\fR
 Maximum number of parallel CI shards; \-1 means unlimited (default: 8). Equivalent magus.yaml key: \fBci.max_shards\fR.
@@ -192,18 +192,6 @@ CI matrix shard ID (e.g. "0"); equivalent to magus run \-\-shard; set by .github
 .TP
 \fBMAGUS_N_SHARDS\fR
 Total shard count for this matrix run; equivalent to magus run \-\-n\-shards; set by .github/actions/magus
-.TP
-\fBMAGUS_GRAPH_DIRECTION\fR
-Default graph direction: downstream or upstream (default: downstream). Equivalent magus.yaml key: \fBgraph.direction\fR.
-.TP
-\fBMAGUS_GRAPH_SPELL\fR
-Filter graph output to a single spell. Equivalent magus.yaml key: \fBgraph.spell\fR.
-.TP
-\fBMAGUS_GRAPH_DEPTH\fR
-Cap displayed graph depth (0 = unlimited) (default: 0). Equivalent magus.yaml key: \fBgraph.depth\fR.
-.TP
-\fBMAGUS_GRAPH_ROOTS\fR
-Comma\-separated starting nodes for graph traversal. Equivalent magus.yaml key: \fBgraph.roots\fR.
 .TP
 \fBMAGUS_TELEMETRY_ENABLED\fR
 Turn OTLP export on; magus connects to telemetry.endpoint when true (default: false). Equivalent magus.yaml key: \fBtelemetry.enabled\fR.
