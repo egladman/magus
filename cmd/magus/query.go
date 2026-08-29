@@ -40,7 +40,43 @@ import (
 // mirror.
 const defaultLogViewerURL = "https://eli.gladman.cc/magus/console/logs/"
 
+// splitQueryNegations pulls the query grammar's negation terms (-kind:op, -docker) out
+// of args before flag parsing. A negation shares the flag prefix, so stdlib flag.Parse
+// rejects it as an unknown flag - the documented syntax was unreachable from the CLI. A
+// dash token is a term rather than a flag exactly when the full query flag set does not
+// know its name; registered flags, their values, "-name=value" spellings (left for
+// flag.Parse to report, since the grammar spells fields with a colon), and everything
+// after "--" pass through untouched.
+func splitQueryNegations(args []string) (kept, negations []string) {
+	fs := flag.NewFlagSet("query-prescan", flag.ContinueOnError)
+	gen.BindFlags(fs, &globalCfg)
+	bindDisplayFlags(fs)
+	gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
+	flags, positionals := partitionFlags(fs, args)
+	kept = make([]string, 0, len(args))
+	for i := 0; i < len(flags); i++ {
+		a := flags[i]
+		if len(a) >= 2 && a[0] == '-' && !strings.ContainsRune(a, '=') {
+			name := strings.TrimLeft(a, "-")
+			if f := fs.Lookup(name); f == nil {
+				negations = append(negations, a)
+				continue
+			} else if !flagIsBool(f) && i+1 < len(flags) {
+				// A value flag's value may itself start with a dash; consume it
+				// paired, the same way partitionFlags did, so it is never read
+				// as a negation.
+				kept = append(kept, a, flags[i+1])
+				i++
+				continue
+			}
+		}
+		kept = append(kept, a)
+	}
+	return append(kept, positionals...), negations
+}
+
 func queryCmd(ctx context.Context, root string, args []string) error {
+	args, negations := splitQueryNegations(args)
 	var qf *gen.QueryFlags
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		qf = gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
@@ -78,6 +114,9 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// Appended rather than interleaved: the grammar joins terms into one string, so
+	// relative order between a positive term and a negation carries no meaning.
+	pos = append(pos, negations...)
 
 	// Output-reference retrieval is an EXPLICIT subcommand - `magus query output <ref>` - not a
 	// shape-routed positional, so a search term can never collide with a ref id.

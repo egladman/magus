@@ -127,17 +127,9 @@ func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
 //
 // knownBrokenExamples lists example commands that fail this dry-parse for a
 // reason already tracked as a bug in the CLI ITSELF, not in the registry
-// data: `magus query docker -kind:op`, the registry's own documented
-// negation syntax, is rejected by the real binary today with "flag provided
-// but not defined: -kind:op" - stdlib flag.Parse treats any bare "-token" as
-// an attempted flag, and queryCmd never shields a leading-dash SEARCH TERM
-// from that before parsing. Fixing query's term/flag disambiguation is a
-// cmd/magus/query.go change outside this audit's file ownership; it is
-// tracked separately rather than silently dropped or worked around by
-// changing the example to demonstrate something else.
-var knownBrokenExamples = map[string]bool{
-	"magus query docker -kind:op": true,
-}
+// data. Empty is the healthy state; an entry is a bug with a tracker, never
+// a way to keep an example that demonstrates something broken.
+var knownBrokenExamples = map[string]bool{}
 
 func TestRegistryExamplesParse(t *testing.T) {
 	// bindDisplayFlags binds onto the process-global display vars, so parsing an
@@ -174,7 +166,13 @@ func TestRegistryExamplesParse(t *testing.T) {
 					for _, node := range cmdPath {
 						bindUnlessRegistered(fs, node)
 					}
-					if err := fs.Parse(reorderFlagsFirst(fs, gc.Args)); err != nil {
+					parseArgs := gc.Args
+					if cmdPath[0].Name == "query" {
+						// Model query's real entrance: queryCmd shields the grammar's
+						// negation terms (-kind:op) from flag parsing before cmdParse.
+						parseArgs, _ = splitQueryNegations(parseArgs)
+					}
+					if err := fs.Parse(reorderFlagsFirst(fs, parseArgs)); err != nil {
 						t.Errorf("example %q: %q fails to parse under %q's own flag set: %v",
 							ex.Command, strings.Join(gc.Args, " "), strings.Join(path, " "), err)
 					}

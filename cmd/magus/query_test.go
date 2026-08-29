@@ -58,6 +58,34 @@ func captureStderr(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+// TestSplitQueryNegations pins the shield that makes the grammar's documented
+// negation reachable from the CLI: a dash token the query flag set does not know
+// is a search term, never a flag error, while real flags, their values, "="
+// spellings, and the "--" tail keep today's parse.
+func TestSplitQueryNegations(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	cases := []struct {
+		name      string
+		args      []string
+		kept      []string
+		negations []string
+	}{
+		{"field negation", []string{"docker", "-kind:op"}, []string{"docker"}, []string{"-kind:op"}},
+		{"bare negation", []string{"cache", "-remote"}, []string{"cache"}, []string{"-remote"}},
+		{"registered flag survives", []string{"docker", "-o", "json"}, []string{"-o", "json", "docker"}, nil},
+		{"value flag keeps its value", []string{"--url", "-kind:op", "docker"}, []string{"--url", "-kind:op", "docker"}, nil},
+		{"equals spelling stays a flag error", []string{"-kind=op"}, []string{"-kind=op"}, nil},
+		{"double dash tail untouched", []string{"a", "--", "-kind:op"}, []string{"a", "--", "-kind:op"}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			kept, negations := splitQueryNegations(tc.args)
+			assert.Equal(t, tc.kept, kept)
+			assert.Equal(t, tc.negations, negations)
+		})
+	}
+}
+
 // TestReportRefLookupError_NoDoubledConsulted guards the RefNotFoundError rendering
 // bug: Error() already reads `...; consulted: local cache`, so the wrapper must not
 // append a second "(consulted: ...)". m is nil here on purpose - this branch exercises
