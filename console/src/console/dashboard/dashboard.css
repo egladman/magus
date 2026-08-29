@@ -1715,7 +1715,10 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 
 .console-dashboard-hero__metrics {
   display: grid;
-  grid-template-columns: repeat(3, 5.2rem);
+  /* minmax, not a fixed track: the linked label carries an arrow via ::after, and a track
+     sized to the bare word wraps the arrow onto its own line the moment the label tokens
+     grow. The floor keeps the three cards even; a wider label stretches its card instead. */
+  grid-template-columns: repeat(3, minmax(5.2rem, auto));
   gap: 0.6rem;
   flex: 0 0 auto;
   justify-content: end;
@@ -1739,7 +1742,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   font-family: var(--pf-t--global--font--family--mono);
   font-variant-numeric: tabular-nums;
 }
-.console-dashboard-hero__l { font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); margin-top: 0.2rem; }
+.console-dashboard-hero__l { font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); margin-top: 0.2rem; white-space: nowrap; }
 /* Counts stay quiet at zero and only light up when there is something to report. */
 .console-dashboard-hero__metric .console-dashboard-hero__n { color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-hero__fail[data-n="some"] .console-dashboard-hero__n  { color: var(--console-status-danger-text); }
