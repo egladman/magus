@@ -157,13 +157,15 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 	case 1:
 		return note, found[0], nil
 	default:
-		return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q exists in both stores; say which with --shared or --private: %w", name, errAmbiguousNote)
+		return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q %w", name, errAmbiguousNote)
 	}
 }
 
 // errAmbiguousNote marks a name present in both stores, so a caller can tell it apart from
-// "not found" instead of treating both as "nothing here".
-var errAmbiguousNote = errors.New("the name exists in more than one store")
+// "not found" instead of treating both as "nothing here". It carries the fix as well as
+// the diagnosis, because it is the text every wrapping caller prints and a reader told
+// the name is ambiguous still needs the flag that resolves it.
+var errAmbiguousNote = errors.New("exists in both stores; say which with --shared or --private")
 
 // notesScopeFlags binds the pair of filters every subcommand accepts.
 func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
@@ -249,7 +251,7 @@ type notesStoreOutput struct {
 
 type notesListOutput struct {
 	Stores []notesStoreOutput `json:"stores"`
-	Notes  []scopedNote       `json:"notes"`
+	Notes  []scopedNote       `json:"notes" jsonl:"primary"`
 	Issues []store.Issue      `json:"issues"`
 }
 
@@ -313,6 +315,16 @@ func notesList(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if opts.Format == outputName {
+		names := make([]string, len(found))
+		for i, n := range found {
+			names[i] = n.Name
+		}
+		if err := emitNames(names); err != nil {
+			return err
+		}
+		return notesIssuesError(issues, false)
+	}
 	if opts.Format != outputText {
 		if err := emitFormatted(opts, notesListOutput{Stores: listed, Notes: found, Issues: issues}); err != nil {
 			return err
@@ -363,6 +375,9 @@ func notesGet(root string, args []string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
+	}
+	if opts.Format == outputName {
+		return emitNames([]string{n.Name})
 	}
 	if opts.Format != outputText {
 		return emitFormatted(opts, scopedNote{
@@ -571,6 +586,15 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A verification has no name of its own, so the one-token-per-line identity is what
+	// the reader would act on next: the note each issue is about (its file, for an issue
+	// about the store rather than a note). A clean store prints nothing.
+	if opts.Format == outputName {
+		if err := emitNames(notesIssueSubjects(report.Issues)); err != nil {
+			return err
+		}
+		return notesIssuesError(report.Issues, strict)
+	}
 	if opts.Format != outputText {
 		if err := emitFormatted(opts, report); err != nil {
 			return err
@@ -644,7 +668,7 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 		// accumulate duplicates on every run, and each duplicate re-reports every dangling
 		// or drifted finding for the rest of the note's life.
 		if len(anchors) != 0 {
-			return fmt.Errorf("magus notes edit: %q already exists, so --anchor is refused; its anchors are what the note is about, and piping new prose does not change that. Edit the note to change them", name)
+			return fmt.Errorf("magus notes edit: %q already exists, so --anchor is refused; its anchors are what the note is about, and piping new prose does not change that. Edit the note with `magus notes edit %s` (no pipe) to change them", name, name)
 		}
 	case errors.Is(err, os.ErrNotExist):
 		n = store.Note{Name: name, Title: strings.ReplaceAll(name, "-", " ")}
@@ -737,6 +761,19 @@ func printNotesIssues(issues []store.Issue, strict bool) error {
 // blocks a merge pending a judgment call is one people route around permanently. The only
 // actively-maintained tool in this space is a CI check that fails a pull request when covered
 // files move - the gate is the mechanism that works, and keeping it narrow is what keeps it.
+// notesIssueSubjects names what each issue is about, for `-o name`.
+func notesIssueSubjects(issues []store.Issue) []string {
+	out := make([]string, 0, len(issues))
+	for _, i := range issues {
+		if i.Note != "" {
+			out = append(out, i.Note)
+			continue
+		}
+		out = append(out, i.Path)
+	}
+	return out
+}
+
 func notesIssuesError(issues []store.Issue, strict bool) error {
 	var failures, dangling int
 	for _, issue := range issues {

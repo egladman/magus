@@ -815,8 +815,9 @@ type StagingPlan struct {
 	// writes outside any target's globs (.gitattributes).
 	Undeclared []string `json:"undeclared,omitempty" yaml:"undeclared,omitempty"`
 	Maintained []string `json:"maintained,omitempty" yaml:"maintained,omitempty"`
-	// Staged is what actually reached the index, empty on a dry run.
-	Staged []string `json:"staged" yaml:"staged"`
+	// Staged is what actually reached the index, empty on a dry run. It is the plan's
+	// product, so it is what -o jsonl streams.
+	Staged []string `json:"staged" yaml:"staged" jsonl:"primary"`
 	// Code, Message and URL classify Unexplained via ClassifyDrift, and are empty when
 	// nothing is unexplained.
 	Code    string `json:"code,omitempty" yaml:"code,omitempty"`

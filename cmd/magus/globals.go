@@ -75,7 +75,57 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 		return nil, err
 	}
 	applyDisplay()
+	if err := checkOutputSupported(name, fs); err != nil {
+		return nil, err
+	}
 	return fs.Args(), nil
+}
+
+// commandsWithoutOutput names the verbs that render nothing structured, keyed by the
+// name they hand cmdParse.
+//
+// -o is bound into EVERY FlagSet (bindDisplayFlags), because it is a global flag that
+// may precede or follow the subcommand. A verb that never consults it therefore accepted
+// `-o json`, printed prose, and exited 0 - the accepted-and-ignored failure that costs
+// most in a pipe, since the caller's parse fails somewhere else entirely.
+//
+// Declared rather than derived: deriving it needs a check AFTER the verb has had its
+// chance to consult -o, which is a post-dispatch hook this file cannot reach. A wrong
+// entry here is loud rather than silent - the verb's own `-o json` tests fail - which is
+// what makes the list safe to keep by hand.
+var commandsWithoutOutput = map[string]bool{
+	"affected --bisect":        true,
+	"buzz":                     true,
+	"clean":                    true,
+	"graph build":              true,
+	"notes capture":            true,
+	"notes edit":               true,
+	"notes promote":            true,
+	"server reload":            true,
+	"server rotate-activities": true,
+	"server rotate-logs":       true,
+	"server start":             true,
+	"server stop":              true,
+	"vcs resolve":              true,
+}
+
+// checkOutputSupported rejects -o on a verb that renders nothing structured. Usage-class
+// (exit 2): the flag was never going to do anything, so failing before the work happens
+// is the whole point.
+//
+// It asks the FlagSet whether -o was typed on THIS invocation rather than reading
+// global.output, which is ambient: bindDisplayFlags seeds each flag's default from the
+// live global, so a value left there by an earlier dispatch on the same process - one
+// adopted run in the daemon, one testscript command - would otherwise fail the next
+// command for a flag nobody passed it.
+func checkOutputSupported(name string, fs *flag.FlagSet) error {
+	if !commandsWithoutOutput[name] {
+		return nil
+	}
+	if !flagWasSet(fs, "output") && !flagWasSet(fs, "o") {
+		return nil
+	}
+	return usagef("magus %s: -o is not supported by this command", name)
 }
 
 // reorderFlagsFirst moves recognized flags (and their values) ahead of positional

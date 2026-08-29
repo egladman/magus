@@ -46,11 +46,11 @@ grep 'built' out/app.txt
 exec magus run bundle:rw --then outputs export --path ./dist-copy
 exists dist-copy/dist/app.txt
 
-# A path that is not an artifact names what the target DID produce: that turns a typo
-# into a one-line fix, where "no such file" is equally true of a path that was never
-# an artifact at all.
+# A path that is not a declared output names what the target DID produce: that turns a
+# typo into a one-line fix, where "no such file" is equally true of a path that was never
+# an output at all.
 ! exec magus run bundle:rw --then file nope.txt
-stderr 'is not an artifact of this target \(produced: dist/app\.txt\)'
+stderr 'is not a declared output of this target \(produced: dist/app\.txt\)'
 
 # An unknown verb is a usage error (exit 2, per the CLI-wide convention) and prints
 # the whole grammar rather than only naming what failed.

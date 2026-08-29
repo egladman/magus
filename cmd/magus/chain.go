@@ -39,9 +39,9 @@ func chainUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus run <target> [project...] --then <verb> [args]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Verbs, applied to the files the target declared as outputs:")
-	fmt.Fprintln(os.Stderr, "  outputs                          list every artifact produced")
+	fmt.Fprintln(os.Stderr, "  outputs                          list every output produced")
 	fmt.Fprintln(os.Stderr, "  outputs export --path <dir>      copy them all into <dir>")
-	fmt.Fprintln(os.Stderr, "  file <path>                      print one artifact's absolute path")
+	fmt.Fprintln(os.Stderr, "  file <path>                      print one output's absolute path")
 	fmt.Fprintln(os.Stderr, "  file <path> contents             write its bytes to stdout")
 	fmt.Fprintln(os.Stderr, "  file <path> export --path <dst>  copy it to <dst>")
 	fmt.Fprintln(os.Stderr, "  file <path> hash                 print its content hash (the store's blob key)")
@@ -179,6 +179,14 @@ func chainOutputs(ctx context.Context, m *magus.Magus, opts OutputOptions, artif
 			out = append(out, runArtifact{Path: a.Path, Glob: a.Glob, Role: roles[a.Path]})
 		}
 		return emitFormatted(opts, out)
+	case outputName:
+		// Same paths the text form prints, but through the -o name destination so --tee
+		// mirrors them; an output's identity is its workspace-relative path.
+		names := make([]string, len(artifacts))
+		for i, a := range artifacts {
+			names[i] = a.Path
+		}
+		return emitNames(names)
 	}
 	for _, a := range artifacts {
 		fmt.Println(a.Path)
@@ -207,9 +215,9 @@ func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifact
 			have = append(have, a.Path)
 		}
 		if len(have) == 0 {
-			return usagef("magus run: the target produced no artifacts, so %q is not one of them", want)
+			return usagef("magus run: the target produced no declared outputs, so %q is not one of them", want)
 		}
-		return usagef("magus run: %q is not an artifact of this target (produced: %s)", want, strings.Join(have, ", "))
+		return usagef("magus run: %q is not a declared output of this target (produced: %s)", want, strings.Join(have, ", "))
 	}
 	abs := filepath.Join(m.Root(), filepath.FromSlash(match.Path))
 
@@ -243,7 +251,8 @@ func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifact
 		fmt.Println(plan.dst)
 		return nil
 	}
-	if opts.Format == outputJSON || opts.Format == outputYAML || opts.Format == outputTemplate {
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		roles, err := artifactRoles(ctx, m, []magus.TargetArtifact{*match})
 		if err != nil {
 			return err
@@ -251,6 +260,10 @@ func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifact
 		return emitFormatted(opts, runArtifact{
 			Path: match.Path, Glob: match.Glob, Role: roles[match.Path],
 		})
+	case outputName:
+		// The workspace-relative path, as `outputs` prints it, not the absolute one the
+		// text form gives: -o name is the identity a later command takes as an argument.
+		return emitNames([]string{match.Path})
 	}
 	fmt.Println(abs)
 	return nil
@@ -385,6 +398,17 @@ func chainValue(m *magus.Magus, opts OutputOptions, selection []types.Target, re
 			out = append(out, runProject{Path: p.Path, Value: returns[p.Path]})
 		}
 		return emitFormatted(opts, out)
+	case outputName:
+		// The projects that returned something, not the values: -o name is the identity
+		// column everywhere else, and a returned value is arbitrary text that may carry
+		// spaces or newlines, which is the one thing this format promises it will not.
+		names := make([]string, 0, len(projects))
+		for _, p := range projects {
+			if _, ok := returns[p.Path]; ok {
+				names = append(names, p.Path)
+			}
+		}
+		return emitNames(names)
 	}
 
 	// The text form exists to be substituted - VER=$(... --then value) - so it must
@@ -452,6 +476,14 @@ func chainFileHistory(ctx context.Context, m *magus.Magus, opts OutputOptions, p
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
+	case outputName:
+		// The full blob key, not the short form: it is the version's identity in the
+		// store and the same hash `--then file <p> hash` prints, so the two compare.
+		names := make([]string, len(out))
+		for i, v := range out {
+			names[i] = v.Blob
+		}
+		return emitNames(names)
 	}
 	if len(out) == 0 {
 		// Not an error: an artifact built once and never rebuilt has no history to

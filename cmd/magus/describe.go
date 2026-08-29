@@ -1526,10 +1526,14 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, report)
 	case outputName:
-		for _, f := range files {
-			fmt.Printf("%s\t%s\n", f.Path, f.Role)
+		// One bare path per line. This used to print "<path>\t<role>", which is two
+		// columns in the one format that promises a single token - so `xargs` and
+		// `while read` both got the role as a second argument.
+		names := make([]string, len(files))
+		for i, f := range files {
+			names[i] = f.Path
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide

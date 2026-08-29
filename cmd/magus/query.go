@@ -55,12 +55,12 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "relation:uses, id:build, and negation (-kind:op). Example:")
 			fmt.Fprintln(os.Stderr, "  magus query kind:spell go")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target execution's captured output by its\n", clihint.QueryOutput.Leaf())
-			fmt.Fprintln(os.Stderr, "reference id (out1a2b3c), shown when the target ran:")
+			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target run's captured output by its\n", clihint.QueryOutput.Leaf())
+			fmt.Fprintln(os.Stderr, "output ref (out1a2b3c), shown when the target ran:")
 			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", clihint.QueryOutput.With("out1a2b3c"))
 			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("out1a2b3c", "-o json"))
 			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("out1a2b3c", "--open"))
-			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored executions\n", clihint.QueryOutput.With("out1a2b3c", "--attempts"))
+			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored attempts\n", clihint.QueryOutput.With("out1a2b3c", "--attempts"))
 			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", clihint.QueryOutput.With("out1a2b3c", "--meta"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "`%s <id>` reads one run's journal back by the id shown as\n", clihint.QueryInvocation.Leaf())
@@ -88,7 +88,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		}
 		ref := pos[1]
 		if !cache.LooksLikeRef(ref) {
-			msg := fmt.Sprintf("%q is not a target-output reference (expected out<hex>, e.g. out1a2b3c)", ref)
+			msg := fmt.Sprintf("%q is not an output ref (expected out<hex>, e.g. out1a2b3c)", ref)
 			fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg).Error())
 			return errSilent{exitCode: 2}
 		}
@@ -225,6 +225,16 @@ type outputRefRecord struct {
 // record; --open hands it to the browser log viewer. The bytes never leave the machine: --open
 // rides them in a URL fragment, exactly like `magus graph export --open`.
 func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) error {
+	// What this verb emits by default is the raw bytes a run captured, and bytes have no
+	// fields to template and no identity to name. Only the record WRAPPING them has a
+	// shape, which is why json and yaml work and the rest are refused rather than
+	// silently answered with the bytes - the accepted-and-ignored failure -o exists to
+	// avoid, and worse here than elsewhere because the fallback looks like real output.
+	switch o.out.Format {
+	case FormatText, FormatJSON, FormatYAML:
+	default:
+		return usagef("magus query output: -o %s is not supported; a captured log has no fields to render, so json and yaml (the record around the bytes) are the only structured forms", o.out.Format)
+	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err

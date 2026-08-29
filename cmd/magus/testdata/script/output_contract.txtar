@@ -1,0 +1,56 @@
+# The -o contract: a format a command does not implement must FAIL, and -o name must be
+# one bare token per line.
+#
+# -o is bound into every subcommand's FlagSet because it is a global flag that may
+# precede or follow the verb. That made it accepted everywhere and honored by opt-in, so
+# a verb that renders nothing structured took `-o json`, printed prose, and exited 0 -
+# the failure that costs most in a pipe, because the caller's parse breaks somewhere else
+# entirely.
+
+# -- a verb that renders nothing structured refuses -o (exit 2, usage class) -----------
+! exec magus clean -o json
+stderr 'magus clean: -o is not supported by this command'
+
+! exec magus notes edit some-note -o json
+stderr 'magus notes edit: -o is not supported by this command'
+
+# Without -o the same verbs are untouched.
+exec magus clean --dry-run
+
+# -- events is a JSONL stream, so every other format is refused ------------------------
+! exec magus events -o json --limit 0
+stderr 'the event stream is JSONL only'
+exec magus events -o jsonl --limit 0
+
+# -- -o name is ONE token per line ----------------------------------------------------
+# describe file used to print "<path>\t<role>", which is two columns in the one format
+# that promises a single token: `xargs` got the role as a second argument.
+exec magus describe file magusfile.buzz -o name
+stdout '^magusfile\.buzz$'
+
+# -- the memory verbs answer -o name with the entry name ------------------------------
+# The journal lives under the state dir, which is /no-home by default in a script.
+env XDG_STATE_HOME=$WORK/state
+exec magus memory put pairing --type decision --ref 'command: magus run lint' --body 'keep one gate' -o name
+stdout '^pairing$'
+exec magus memory get pairing -o name
+stdout '^pairing$'
+exec magus memory ls -o name
+stdout '^pairing$'
+exec magus memory delete pairing -o name
+stdout '^pairing$'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
+-- spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

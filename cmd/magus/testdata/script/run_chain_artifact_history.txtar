@@ -57,7 +57,7 @@ stdout '^[0-9a-f]{64}$'
 
 # history on a path the target does not produce is a usage error naming what it does.
 ! exec magus run bundle:rw -s --then file nope.txt history
-stderr 'is not an artifact of this target'
+stderr 'is not a declared output of this target'
 
 -- magus.yaml --
 concurrency: 2

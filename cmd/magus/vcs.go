@@ -950,6 +950,10 @@ func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, v)
+	case outputName:
+		// The paths that were staged, which is what the plan is a plan OF. Dropped paths
+		// are deliberately absent: this is the list a caller feeds forward.
+		return emitNames(v.Staged)
 	}
 	reportStaging(v, dropped, untracked, dryRun)
 	return nil
