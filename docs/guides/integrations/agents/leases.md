@@ -38,9 +38,13 @@ that skill writes to and reads from.
 | Watch it                 | the console Plan surface, `GET /api/v1/ledger` |
 | Verify                   | the actual diff since each lease's checkpoint  |
 
-No surface in that table enforces anything. The ledger is a declaration, the
-checkpoint is a reading, and the Plan surface renders both; a worker that writes
-outside its owned paths is caught by the last step, not by the third.
+Only one thing in that table enforces, and it is not the ledger. The ledger is a
+declaration, the checkpoint is a reading, and the Plan surface renders both. The
+[guard](guard.md) is what reads the declaration back: on a file write it denies a
+lease that never registered its base, a path the lease itself declared forbidden,
+and a path another live lease owns. It grades only a worker that named its lease,
+so the last step below - the actual diff against the checkpoint - is still what
+catches a write nobody could attribute.
 
 <!--diagram:lease-loop-->
 
@@ -90,26 +94,38 @@ returns the same record. Full flags: [`magus vcs`](../../../reference/manpage/ma
 `magus_ledger` records the lease plan an orchestrating agent declared, so a
 person can see it. One row per lease, in the skill's vocabulary.
 
-| op      | does                                                                       |
-| ------- | -------------------------------------------------------------------------- |
-| `list`  | every row in the order they were recorded, plus the overlaps (the default) |
-| `put`   | create or replace one row by `id`, merging the fields you send             |
-| `clear` | drop every row and start a fresh plan                                      |
+| op         | does                                                                           |
+| ---------- | ------------------------------------------------------------------------------ |
+| `list`     | every row in the order they were recorded, plus the overlaps (the default)     |
+| `put`      | create or replace one row by `id`, merging the fields you send                 |
+| `register` | record the base a worker actually landed on, and read the verdict comparing it |
+| `clear`    | drop every row and start a fresh plan                                          |
 
 A row carries `id` and optionally `parent` (the lease that handed out this one),
 `goal` with its observable acceptance criteria, `checkpoint` (as
 `magus vcs checkpoint -o name` prints it), `owned_paths` and `forbidden_paths`,
 `depends_on`, `tier`, `validation`, `state`, and `read_only`. The store adds
-`created`, `updated`, and `releases`, which are output-only: a timestamp a client
-sent would be a fact about that client's clock.
+`created`, `updated`, `releases`, and `unattributed` (paths this lease owns that
+somebody outside it wrote, noticed by the guard), all output-only: a timestamp a
+client sent would be a fact about that client's clock. `register` adds three more
+the same way - `reported_base`, the checkpoint token the worker found in its OWN
+tree; `base_verdict`, the store's comparison of that against the row's
+`checkpoint`; and `registered`, when that comparison was recorded.
 
 Three properties are worth stating plainly.
 
-**Owned and forbidden paths are a declaration, not a boundary.** Nothing here
-blocks a write, gates a run, or derives a verdict. They are the text an
-orchestrator put in a worker's prompt, written down where a human can read it.
-Ownership is checked by comparing this ledger against the actual diff since each
-lease's checkpoint, which is the last step below.
+**Owned and forbidden paths are declared here and enforced elsewhere.** This
+store gates nothing: it records the text an orchestrator put in a worker's
+prompt, where a human can read it. The [agent guard](guard.md) is the one reader
+that turns it into a verdict, and on a file write it DENIES three things - a
+lease that has not registered the base it landed on, a path covered by that
+lease's own `forbidden_paths`, and a path covered by another live lease's
+`owned_paths`. It advises on a fourth: your own path, written from a base that
+`base_verdict` says is not the checkpoint you were handed. Everything else
+passes, and every uncertainty fails open with at most an advisory - no ledger, an
+unreadable one, a writer that named no lease - because this is a seatbelt for a
+harness that opted in and not a sandbox. Which is why the diff since each lease's
+checkpoint, the last step below, is still where ownership is finally checked.
 
 **Every row ends in `pass`, `fail`, or `no_return`.** `no_return` is not a
 failure. A lease that failed came back and said so; a lease that died, stalled, or
@@ -164,6 +180,33 @@ daemon's read-only `GET /api/v1/ledger` route is its read door; there is no CLI
 verb, because the ledger has a single author by definition of what it records -
 the one agent doing the orchestrating. The store takes no cross-process lock, so
 do not point two orchestrators at one workspace.
+
+## Wiring the lease into a worker
+
+A declared boundary grades nothing until the writing process says which lease it
+is, and it says that through its ENVIRONMENT. So the orchestrator that spawns a
+worker exports the id into that worker's environment, and the hook process the
+worker's host launches inherits it from there:
+
+```sh
+export BAGGAGE=magus.lease=<its id>
+```
+
+That is the W3C Baggage channel, carried in the environment under the
+OpenTelemetry convention, and `magus.lease` is the one member a verdict reads.
+Export `TRACEPARENT` too when your host has one, and add
+`magus.spawner=<your label>` to the baggage: magus records the trace, the parent
+span and the label as CLAIMS for `magus session ls` to show, and keys no verdict
+on them. The [`magus-multi-agent` skill](../../../reference/skills/magus-multi-agent.md)
+requires this of every worker prompt it writes, in the same spelling.
+
+Exporting it is the ORCHESTRATOR's job today. The shipped
+[guard templates](guard-templates.md) pass `--agent-name` and `--session`, which
+are attribution, and nothing that names a lease - so a worker whose orchestrator
+never exported the variable is graded as an editor magus cannot attribute, which
+is an advisory rather than a deny and leaves every rule above it inert. A wrapper
+that builds its own argv can pass `magus session hook --lease <id>` instead; an
+explicit flag wins over the environment.
 
 ## Watch it: Dashboard's Lease plan
 
@@ -253,10 +296,11 @@ review back up read the same identity.
 
 ## What magus never does here
 
-- Block a write outside a lease's owned paths, or any write at all on account of
-  a ledger row.
-- Derive a verdict, a state, or a completion from anything in the ledger. Every
-  state in it was written by the agent that declared the plan.
+- Block a writer it cannot attribute. Only a process that named a live lease is
+  graded against a declared boundary; anyone else editing this workspace is
+  advised at most, because a human in their own checkout names no lease either.
+- Transition a row, or derive a state or a completion from one. Every state in
+  the ledger was written by the agent that declared the plan.
 - Judge a lease prompt, or let one change a guard verdict.
 - Mint anything for a checkpoint - no tag, no stash, no ref, no file.
 - Inject any of this into an agent's context. Every surface here is pull-based,

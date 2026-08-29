@@ -64,7 +64,10 @@ If your host writes its payload as JSON with `tool_input.command` or
 itself, infers a write from a file path, and picks up `session_id` and
 `hook_event_name` for attribution. Otherwise select the field yourself - `jq -r
 '.<path>'` is what the shipped templates use - and pass `--path` when the input
-is a file.
+is a file. A lease id is not a field you select out of the event: the guard
+inherits it from the worker's environment, which the orchestrator that spawned
+the worker has to export - see
+[wiring a lease into a worker](leases.md#wiring-the-lease-into-a-worker).
 
 The fastest start is to copy [`magus-guard-command.sh`](guard-templates.md) and
 set its override variables: `HOST_EVENT_PATH`, `HOST_RESPONSE`,

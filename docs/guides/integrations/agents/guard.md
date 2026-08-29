@@ -59,7 +59,9 @@ This one judges what the write does to the corpus: the artifact's value depends
 on a guarantee about who authored it, and undoing the write does not restore the
 guarantee.
 
-Its only instance is a write into a declared notes store. A note is the one
+Its instances are a write into a declared notes store and a read receipt an
+agent mints for itself. Both refuse an agent authoring a human's statement, and
+the notes store is the one worth reading out in full. A note is the one
 thing in the knowledge graph that is not derived from the workspace: a doc comes
 from markdown, a rationale from a comment, a symbol from an index, an author
 from git, and rebuilding the graph recovers every one of them. A note's content
@@ -80,7 +82,10 @@ the command being RUN: an environment prefix, `env -u GOROOT ...`, a launcher,
 or `bash -c '...'` all reach the same verdict as the bare command.
 
 - **Destructive whole-tree VCS operations**: `git stash`, `git reset --hard`,
-  `git checkout .`, `git restore .`, `git clean -f`. Reading a stash is exempt
+  `git checkout .`, `git restore .`, `git clean -f`, and `git worktree remove`,
+  which destroys another tree's uncommitted and untracked work rather than this
+  one's - in a repository running several checkouts that is routinely another
+  session's, and it is in no commit to recover from. Reading a stash is exempt
   (`git stash list`, `git stash show`), as is `git stash create`, which returns a
   commit object without touching the working tree or the stash stack.
   These rules are git-shaped.
@@ -88,8 +93,14 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   snapshots the working copy and keeps an operation log, so its nearest
   equivalents are undoable and would not meet this bar. Their commands are not
   matched today.
-- **Raw language tools**: `go test`, `go build`, `go mod tidy`, `pytest`,
-  `cargo build`, `eslint`, `ruff`, `gofmt -w`, `prettier --write`, and the rest.
+- **Raw language tools**: `go test`, `go build`, `go mod tidy`, `cargo build`,
+  `gofmt -w`, `prettier --write`, and the rest. The match is the base PROGRAM a
+  registered spell op renders plus the leading argv it renders with it, so the
+  denied spelling is the one a spell would actually launch. A tool a spell
+  reaches through a runner is therefore matched under the runner:
+  `uv run pytest` and `pnpm exec eslint .` deny, while bare `pytest`, `eslint`
+  and `ruff` pass, because no spell renders those as the program. That is
+  silence rather than endorsement - a target still covers the work.
   The reason names the escalation ladder: a top-level target first, then a
   single spell op (`magus run go::go-test <project>`), which still runs through
   magus, and `--dry-run` to see the exact command either would run. Read-only
@@ -117,6 +128,12 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   switch on afterwards. A declaration made anywhere else (an explicit
   `--config`, user-global config) is in effect in every workspace on the
   machine, so it arms this rule only where the store already exists.
+- **Minting a read receipt** (`magus diff --ack`). A receipt records that a
+  PERSON read a change, so there is no spelling of it an agent may use. The
+  guard is wired into agent hosts, so every command reaching it came from an
+  agent by construction and a person at a terminal never meets this rule. The
+  reason routes to `magus diff --impact`, which names every changed file
+  carrying no receipt, and says to hand that list back rather than stamp it.
 - **In-place stream edits**: `sed -i`, `sed --in-place`. The flag is not
   portable and the two spellings destroy each other's work: GNU reads
   `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the
@@ -125,11 +142,23 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   next machine, by writing, so the damage lands before anyone reads a diff.
   Every host driving this guard has a structured editor tool that applies an
   exact replacement and reports what changed. Reading with sed is untouched.
+  A **scripted substitute-and-write** is the same edit by another route and
+  denies with it: `perl -i` and `ruby -i` outright, and a `python` or `node`
+  one-liner whose substitution (`re.sub`, `.replace(`) is followed on the line
+  by a `.write(`. Deliberately narrow - an interpreter that only WRITES a file
+  is ordinary authoring and passes - so a one-liner that writes before it
+  substitutes slips through, and the rule is a habit rail rather than a fence.
 - **Running magus from a copy of the workspace** in a temp or scratchpad
   directory (`cd /tmp/... && magus ...`, including via a variable assigned
   earlier on the same line). The verdict would describe a tree nobody ships:
   generated files land in the copy, the cache splits, and duplicated spell
   sources trip MGS1002. To work on a different workspace, pass `--root <path>`.
+  A `cd` into a SIBLING CHECKOUT of this repository - a linked worktree, or the
+  main checkout reached from inside one - denies on the same ground, recognized
+  by reading the shared git directory rather than by the path's name: that
+  tree's `./magus` was linked from ITS sources and its cache is keyed to ITS
+  tree, so the verdict describes neither checkout. A cd into a genuinely
+  different repository is not denied; that one only draws the `--root` advisory.
 
 ## What magus explains
 
@@ -170,6 +199,11 @@ disarmed the guard for that call, and magus now sends it nothing.
 - `time magus ...`, `timeout 5m magus ...`, and `magus ... && echo done`: magus
   already reports each target's duration and verdict, already takes `--timeout`,
   and already reports success through its exit status.
+- A chained `magus run` - a second `run` or `affected` after any of `;`, `&&` or
+  `||`: targets compose through `ctx.needs`, so running the LAST one usually
+  pulls the rest in, and each extra invocation reloads the workspace. Only the
+  dependency graph knows whether the two are genuinely independent, which is why
+  this advises rather than denies.
 
 Everything else about the command itself passes. Two rules then read state
 outside the command line, and speak only into the silence the rules above leave:
@@ -192,7 +226,8 @@ outside the command line, and speak only into the silence the rules above leave:
 The advisories that carry a standing fact rather than a correction to the
 command in front of you are held to one firing per session: the stale-binary
 notice, the graph-beats-grep hint, the classify-before-staging reminder, the
-index-staleness advisory, and the repository-scoped path rules above. The second
+index-staleness advisory, the enroll-a-lease notice an unleased write draws, and
+the repository-scoped path rules above. The second
 identical paragraph teaches nothing, and this page's standard says why that
 matters - a check that is red by default is a check people learn to ignore,
 taking the real failures with it.
@@ -211,14 +246,40 @@ after a week.
 
 ## The file surface
 
-`magus session hook --path <file>` judges a file path rather than a command. Three of its
-rules are definitive rather than heuristic, because each reads DECLARATIONS: the
+`printf '%s' '<file>' | magus session hook --path` judges a file path rather
+than a command. `--path` is a switch and takes no value: the path arrives on
+stdin exactly as a command does. Three of its rules are definitive rather
+than heuristic, because each reads DECLARATIONS: the
 generated-output rule classifies the path against every target's declared
 outputs, the notes rule against the declared notes store, and the lease rule
 against what concurrent leases declared they own (see
 [leases](leases.md)). The first advises, because a hand-edited generated
 file is wasteful rather than destructive; the other two deny, on the provenance
 trigger and on a collision no later rule can outrank.
+
+The lease rule denies only where two DECLARED boundaries collide - an enrolled
+lease writing onto another live lease's owned paths, onto its own forbidden
+paths, or writing at all before it has registered the base it landed on. Four
+cases it cannot decide that way advise instead:
+
+- The ledger exists but will not parse. It says no boundary was checked rather
+  than blocking on a file it cannot read, because a lease whose boundary
+  silently stopped being checked looks exactly like one nobody declared.
+- A write onto another live lease's owned paths by a writer magus cannot
+  attribute to a live lease - naming none, naming an id it cannot parse, or
+  naming a valid id with no live row. That is the same collision the enrolled
+  case denies, and it advises because magus cannot tell "not in the fleet" from
+  "in it and not saying so", and blocking a person in their own checkout is the
+  worse of the two ways to be wrong. It also records the write against the
+  owner, so the lease whose file just moved can find out by asking the ledger.
+- An id that is not a valid lease id (at most 128 characters of `A-Za-z0-9-_./:`).
+  The call is graded as if it named no lease and told so, rather than rejected:
+  an id magus cannot parse is one it cannot look up either, and erroring would
+  block a tool call over metadata.
+- A lease whose registered base is not the checkpoint it was handed. An
+  orchestrator may have rebased the plan deliberately, which magus cannot tell
+  from a worker that wandered; what it can do is keep the divergence from
+  staying silent until the merge finds it.
 
 The rest are heuristics on the path, and each only fills a silence the
 definitive rules leave: a cross-host instruction file (`AGENTS.md`, `CLAUDE.md`)

@@ -24,7 +24,9 @@ understand several languages, every project in the tree, caching, scheduling,
 and what a change reaches. That is already many things. What survives the
 translation is the discipline, relocated to the verb. Each verb answers one
 question, deterministically, from declared sources, and stops. Output reads at
-a terminal and parses in a pipe (`-o name`, `-o json`, `-o template=`). A
+a terminal and parses in a pipe (`-o name`, `-o json`, `-o template=`; the
+pipe is for people, and the agent guard routes an agent to `-o` instead,
+because a pipe replaces the exit status and a failing gate then reads as 0). A
 non-zero exit means what it has meant for fifty years. Every surface degrades
 to plain text when there is no terminal to draw on, and the pinned band never
 takes the screen, the alternate buffer, or your scrollback. Composition
@@ -111,7 +113,9 @@ model ([Scope](scope.md#where-others-drew-it) records the missing adapter as
 deliberate). The closest feature, `magus diff --prompt`, prints the context
 magus holds for you to paste into your own model, and never a drafted
 review. Every capability on this surface is a person's to run with no agent
-anywhere in the loop; the agent surface is additive, never load-bearing. A
+anywhere in the loop; the agent surface is additive, never load-bearing -
+except in this repo, where `ci` drift-gates the installed skills
+([Scope](scope.md#where-the-claim-is-strained)). A
 workspace that goes a day, or a Friday, without an agent loses nothing but
 speed.
 

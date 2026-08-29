@@ -163,8 +163,8 @@ things; see below.
 magus will not require an account or a subscription, and no capability sits
 behind a paid tier. Nothing exists to upsell.
 
-magus will not decide for you. It answers questions. You decide, or your agent
-does.
+magus will not decide for you. It answers questions. You decide; an agent may
+propose.
 
 ## The container question
 
@@ -247,27 +247,28 @@ Each of those removes states rather than adding them.
 
 The honest numbers, because this is the section where a claim like that gets
 tested. `magus.yaml` accepts about a hundred keys, container and leaf together,
-and magus binds 51 of them to command-line flags. Five more globals - `-o`,
+and magus binds 45 of them to command-line flags. Five more globals - `-o`,
 `--tee`, `-v`, `--quiet`, `--silent` - are display switches that answer to no
-config key at all, so 56 flags stand in front of any subcommand's own. That is
+config key at all, so 50 flags stand in front of any subcommand's own. That is
 not a small surface, and calling it zero configuration would be a lie.
 
 What the claim rests on is the second number. magus's own `magus.yaml`, for a
 ten-project polyglot repo that publishes containers, signs releases and runs a
-sharded CI pipeline, sets four things:
+sharded CI pipeline, sets five things:
 
 ```yaml
 default_charms: [rw]
 sandbox: { env: { passthrough: ["GO*"] } }
 cache: { remote: { trusted_keys: ["..."] } }
 required_version: ">= 0.4.0"
+knowledge: { notes: { shared: notes }, vcs: { enabled: true } }
 ```
 
-Three of those four are facts about this repository that no default could
-supply - a trust key, an environment passthrough, a version floor. Only
-`default_charms` is a preference. Every other key exists for a workspace whose
-situation we did not anticipate, and the measure of whether that is discipline or
-sprawl is whether we reach for them ourselves.
+Four of those five are facts about this repository that no default could
+supply - a trust key, an environment passthrough, a version floor, a notes
+directory. Only `default_charms` is a preference. Every other key exists for a
+workspace whose situation we did not anticipate, and the measure of whether that
+is discipline or sprawl is whether we reach for them ourselves.
 
 The rule that follows: **a new option must remove a failure, not enable a
 preference.** If the answer to "what happens if I set this wrong" is "your build
@@ -301,12 +302,15 @@ strain it.
 writes agent skills into the directories you name (`.claude/skills/`,
 `.agents/skills/`, `.opencode/skills/`), each stamped with a magus-internal
 version. It does NOT write `AGENTS.md`: that file is yours, so install prints
-the managed block for you to paste. `magus doctor` reports on both
-surfaces, the pasted block included:
+the managed block for you to paste. `magus doctor` reports on every one of
+those surfaces, the pasted block included:
 
 ```text
-agent skills (.claude/skills): up to date (skill v33, schema v8, content 26f270bc4a34)
-agent skills (AGENTS.md): up to date (skill v33, schema v8, content 26f270bc4a34)
+[pass] agent-skills: 4 install location(s) current with this binary
+    .agents/skills: up to date (skill v47, schema v9)
+    .claude/skills: up to date (skill v47, schema v9)
+    .opencode/skills: up to date (skill v47, schema v9)
+    AGENTS.md: up to date (skill v47, schema v9, content 00482e4b1658)
 ```
 
 `MAGUS.md` lands at your repo root. The git merge driver writes your tracked

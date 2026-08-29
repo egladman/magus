@@ -6,8 +6,8 @@ tags: [agents, skills, magus-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
   - reference/skills/magus-delegate-multi-agent
-skill_full_bytes: 21729
-skill_simple_bytes: 15991
+skill_full_bytes: 21840
+skill_simple_bytes: 16102
 ---
 
 # magus-multi-agent
@@ -31,9 +31,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `46` |
+| `agent-skill-version` | `47` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `2123a12dfa36` |
+| `skill-content` | `9e89dfcffbde` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -62,6 +62,7 @@ proves nothing. Finding the candidate paths IS the partitioning work, and it is
 done with the graph, not by intuition:
 
 ```sh
+magus graph build                           # first in a fresh worktree, or refs answers "unknown, not absent"
 magus refs <symbol> --occurrences -o json   # every edit site, column-precise
 magus explain <node>                        # one node's edges and blast radius
 magus affected ci --plan --stdin            # plan PROPOSED paths, before editing
@@ -452,6 +453,7 @@ proves nothing. Finding the candidate paths IS the partitioning work, and it is
 done with the graph:
 
 ```sh
+magus graph build                           # first in a fresh worktree, or refs answers "unknown, not absent"
 magus refs <symbol> --occurrences -o json   # every edit site, column-precise
 magus explain <node>                        # one node's edges and blast radius
 magus affected ci --plan --stdin            # plan PROPOSED paths, before editing

@@ -17,6 +17,7 @@ proves nothing. Finding the candidate paths IS the partitioning work, and it is
 done with the graph{{if .Full}}, not by intuition{{end}}:
 
 ```sh
+magus graph build                           # first in a fresh worktree, or refs answers "unknown, not absent"
 magus refs <symbol> --occurrences -o json   # every edit site, column-precise
 magus explain <node>                        # one node's edges and blast radius
 magus affected ci --plan --stdin            # plan PROPOSED paths, before editing

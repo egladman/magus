@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2406,
-  "edge_count": 6297,
+  "node_count": 2403,
+  "edge_count": 6293,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -936,7 +936,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "224",
+        "dir_files": "221",
         "dir_languages": "markdown"
       }
     },
@@ -946,7 +946,7 @@
       "label": "docs/reference/api",
       "source": "docs/reference/api",
       "attrs": {
-        "dir_files": "37",
+        "dir_files": "34",
         "dir_languages": "markdown"
       }
     },
@@ -1005,26 +1005,6 @@
       "kind": "dir",
       "label": "docs/reference/api/insight/v1alpha1",
       "source": "docs/reference/api/insight/v1alpha1",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:docs/reference/api/job",
-      "kind": "dir",
-      "label": "docs/reference/api/job",
-      "source": "docs/reference/api/job",
-      "attrs": {
-        "dir_files": "2",
-        "dir_languages": "markdown"
-      }
-    },
-    {
-      "id": "dir:docs/reference/api/job/v1alpha1",
-      "kind": "dir",
-      "label": "docs/reference/api/job/v1alpha1",
-      "source": "docs/reference/api/job/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -3252,18 +3232,6 @@
         "section": "reference",
         "tags": "api,proto,connect,grpc,insightservice",
         "title": "InsightService"
-      }
-    },
-    {
-      "id": "doc:docs/reference/api/job/v1alpha1/job.md",
-      "kind": "doc",
-      "label": "docs/reference/api/job/v1alpha1/job.md",
-      "source": "docs/reference/api/job/v1alpha1/job.md",
-      "attrs": {
-        "role": "doc",
-        "section": "reference",
-        "tags": "api,proto,connect,grpc,jobservice",
-        "title": "JobService"
       }
     },
     {
@@ -10698,7 +10666,7 @@
       "kind": "function",
       "label": "collectDemos",
       "doc": "collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its title + card anchor), pre-walk, so renderFile can inject a \"see the demo\" callout on the matching concept page.",
-      "source": "docs/site/tour.buzz:173",
+      "source": "docs/site/tour.buzz:176",
       "attrs": {
         "exported": "true"
       }
@@ -10707,8 +10675,8 @@
       "id": "function:docs/site/tour.buzz:playgroundLink",
       "kind": "function",
       "label": "playgroundLink",
-      "doc": "playgroundLink deep-links src into the playground editor via a #source= fragment of url-safe unpadded base64 (matching src/site/run-example.ts and the wasm's applyHashSource decoder), so the code stays client-side, never hitting server/CDN.",
-      "source": "docs/site/tour.buzz:100"
+      "doc": "playgroundLink deep-links src into the playground editor via a #source= fragment, so the code stays client-side, never hitting server/CDN. The payload is a version byte plus url-safe unpadded base64; \"0\" is the uncompressed variant, which is what a producer with no DEFLATE implementation emits - this renderer and the page bundle (src/site/run-example.ts) both encode here, while the playground's own Share button emits the compressed \"1\". internal/playground/share.go decodes all of them.",
+      "source": "docs/site/tour.buzz:103"
     },
     {
       "id": "function:docs/site/tour.buzz:renderPlayground",
@@ -10724,7 +10692,7 @@
       "id": "function:docs/site/tour.buzz:renderTourPage",
       "kind": "function",
       "label": "renderTourPage",
-      "source": "docs/site/tour.buzz:183",
+      "source": "docs/site/tour.buzz:186",
       "attrs": {
         "exported": "true"
       }
@@ -10733,21 +10701,21 @@
       "id": "function:docs/site/tour.buzz:tourDocLabel",
       "kind": "function",
       "label": "tourDocLabel",
-      "source": "docs/site/tour.buzz:163"
+      "source": "docs/site/tour.buzz:166"
     },
     {
       "id": "function:docs/site/tour.buzz:tourDocSlug",
       "kind": "function",
       "label": "tourDocSlug",
       "doc": "The doc cross-link is one line, `// doc: <slug>|<label>`, because a slug with no label renders a link with nothing to click.",
-      "source": "docs/site/tour.buzz:156"
+      "source": "docs/site/tour.buzz:159"
     },
     {
       "id": "function:docs/site/tour.buzz:tourMeta",
       "kind": "function",
       "label": "tourMeta",
       "doc": "tourMeta reads one `// key: value` line from a step's header. The metadata lives in the step file so adding a step is one file, not two places that can disagree.",
-      "source": "docs/site/tour.buzz:145"
+      "source": "docs/site/tour.buzz:148"
     },
     {
       "id": "function:docs/site/tour.buzz:tourSrc",
@@ -10761,7 +10729,7 @@
       "kind": "function",
       "label": "tourSteps",
       "doc": "renderTourPage writes gen/tour/index.html: a numbered card grid walking a newcomer through magusfiles and Buzz. Synthesized (no .md source), so renderPage()'s srcRel guards drop the provenance/edit chrome. tourSteps is the ordered curriculum, shared by the tour page and collectDemos (which inverts each step's docSlug into a \"see the demo\" callout on the matching concept page).",
-      "source": "docs/site/tour.buzz:112",
+      "source": "docs/site/tour.buzz:115",
       "attrs": {
         "exported": "true"
       }
@@ -23327,14 +23295,6 @@
     },
     {
       "source": "dir:docs/reference/api",
-      "target": "dir:docs/reference/api/job",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/api/job"
-    },
-    {
-      "source": "dir:docs/reference/api",
       "target": "dir:docs/reference/api/memory",
       "relation": "contains",
       "confidence": "extracted",
@@ -23452,22 +23412,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
-    },
-    {
-      "source": "dir:docs/reference/api/job",
-      "target": "dir:docs/reference/api/job/v1alpha1",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/api/job/v1alpha1"
-    },
-    {
-      "source": "dir:docs/reference/api/job/v1alpha1",
-      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
       "source": "dir:docs/reference/api/memory",
@@ -27392,14 +27336,6 @@
     {
       "source": "doc:CLAUDE.md",
       "target": "diagnostic:MGS1021",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CLAUDE.md"
-    },
-    {
-      "source": "doc:CLAUDE.md",
-      "target": "diagnostic:MGS3001",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -31823,6 +31759,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/any-host.md",
+      "target": "doc:docs/guides/integrations/agents/leases.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/any-host.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/any-host.md",
       "target": "doc:docs/guides/integrations/agents/notifications.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32094,6 +32038,22 @@
       "provenance": "docs/guides/integrations/agents/guard.md"
     },
     {
+      "source": "doc:docs/guides/integrations/agents/guard.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/guard.md",
+      "target": "spell:python",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
       "source": "doc:docs/guides/integrations/agents/leases.md",
       "target": "doc:docs/concepts/cache/output-refs.md",
       "relation": "references",
@@ -32112,6 +32072,14 @@
     {
       "source": "doc:docs/guides/integrations/agents/leases.md",
       "target": "doc:docs/guides/integrations/agents.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/guides/integrations/agents/guard-templates.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -33455,14 +33423,6 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/api/index.md"
-    },
-    {
-      "source": "doc:docs/reference/api/index.md",
       "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -33548,22 +33508,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
-    },
-    {
-      "source": "doc:docs/reference/api/job/v1alpha1/job.md",
-      "target": "doc:docs/reference/api/index.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/api/job/v1alpha1/job.md"
-    },
-    {
-      "source": "doc:docs/reference/api/job/v1alpha1/job.md",
-      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
       "source": "doc:docs/reference/api/memory/v1alpha1/memory.md",
@@ -69364,14 +69308,6 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
-      "relation": "produces",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

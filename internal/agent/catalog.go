@@ -62,7 +62,11 @@ import (
 // the write sets disjoint and the root reopens a lease's evidence itself
 // (magus-multi-agent), and every audit finding carries the command that
 // reproduces it (magus-context-audit).
-const SkillVersion = 46
+// 47: magus-multi-agent names `magus graph build` as the prerequisite for its
+// central evidence command - in a fresh worktree `magus refs --occurrences`
+// answers "unknown, not absent" rather than reporting the edit sites, and the
+// partition is then built on a silence.
+const SkillVersion = 47
 
 const skillLicense = "GPL-3.0-or-later"
 
