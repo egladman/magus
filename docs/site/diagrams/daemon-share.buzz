@@ -19,7 +19,7 @@ export fun daemonShareDiagram() > Diagram {
         desc = "Sharing from the dashboard posts to a loopback-only endpoint, which mints a "
             + "time-boxed read-only token and opens an ephemeral LAN listener. The listener "
             + "serves four JSON read routes and the read Connect services, and nothing "
-            + "else: the graph, the diff routes, the derived plan, the delegation ledger, "
+            + "else: the graph, the diff routes, the derived plan, the lease ledger, "
             + "/mcp and job control stay loopback only.",
         width = 960,
         height = 600,

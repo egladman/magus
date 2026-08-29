@@ -34,8 +34,8 @@ const (
 // The baggage members magus reads. Namespaced because BAGGAGE is a shared channel: every other
 // member belongs to somebody else and is left alone.
 const (
-	// BaggageDelegation names the ledger delegation the process is ACTING as.
-	BaggageDelegation = "magus.delegation"
+	// BaggageLease names the ledger lease the process is ACTING as.
+	BaggageLease = "magus.lease"
 	// BaggageSpawner names the tool or session that spawned it, as a label for a person to
 	// read. It is free text and a claim; nothing resolves it and no verdict reads it.
 	BaggageSpawner = "magus.spawner"
@@ -51,7 +51,7 @@ const MaxSpawnerLen = 128
 // Trust tier, stated once because every field shares it: the worker's own claim about itself,
 // arriving over a channel any local process may set. NO verdict may key on any of it. The one
 // grading that reads a field here
-// takes Delegation to the ledger boundary check, and that check fails open (see
+// takes Lease to the ledger boundary check, and that check fails open (see
 // cmd/magus/guard_write.go). The human is never a claim: a run carrying no trace context IS a
 // person, and that root is inferred from the transport rather than asserted by anyone.
 type Spawn struct {
@@ -63,11 +63,11 @@ type Spawn struct {
 	TraceID      string
 	ParentSpanID string
 	Flags        string
-	// Delegation is the ledger delegation the process acts as, from the magus.delegation
-	// baggage member, percent-decoded and validated by [types.ValidDelegationID] - the same
-	// rule every delegation channel shares, and what keeps the trail's redaction exemption
+	// Lease is the ledger lease the process acts as, from the magus.lease
+	// baggage member, percent-decoded and validated by [types.ValidLeaseID] - the same
+	// rule every lease channel shares, and what keeps the trail's redaction exemption
 	// honest.
-	Delegation string
+	Lease string
 	// Spawner is the magus.spawner baggage member: a label for whoever spawned this, for a
 	// person reading `magus session ls`. Percent-decoded, clamped to [MaxSpawnerLen].
 	Spawner string
@@ -86,11 +86,11 @@ var (
 // designed outcome and never an error.
 //
 // A malformed value is DROPPED with a one-time note rather than recorded. Dropping is what keeps
-// the redaction exemption honest for the delegation id; the note is what keeps a typo'd
+// the redaction exemption honest for the lease id; the note is what keeps a typo'd
 // environment from looking like a fleet that simply never attributed anything.
 func SpawnFromEnv() Spawn {
 	spawn := parseTraceparent(strings.TrimSpace(os.Getenv(EnvTraceparent)))
-	spawn.Delegation, spawn.Spawner = parseBaggage(strings.TrimSpace(os.Getenv(EnvBaggage)))
+	spawn.Lease, spawn.Spawner = parseBaggage(strings.TrimSpace(os.Getenv(EnvBaggage)))
 	return spawn
 }
 
@@ -170,14 +170,14 @@ const maxBaggageLen = 8192
 //
 // A member magus cannot read is skipped rather than failing the list: a value this process did
 // not write must not be able to cost it its own attribution.
-func parseBaggage(v string) (delegation, spawner string) {
+func parseBaggage(v string) (lease, spawner string) {
 	if v == "" {
 		return "", ""
 	}
 	if len(v) > maxBaggageLen {
 		baggageNoteOnce.Do(func() {
 			slog.WarnContext(context.Background(),
-				"magus: ignoring "+EnvBaggage+" and recording no delegation for this process: a W3C baggage list is a bounded set of comma-separated key=value members",
+				"magus: ignoring "+EnvBaggage+" and recording no lease for this process: a W3C baggage list is a bounded set of comma-separated key=value members",
 				slog.Int("length", len(v)),
 				slog.Int("max_length", maxBaggageLen))
 		})
@@ -198,26 +198,26 @@ func parseBaggage(v string) (delegation, spawner string) {
 			continue
 		}
 		switch strings.TrimSpace(key) {
-		case BaggageDelegation:
-			delegation = validDelegation(strings.TrimSpace(decoded))
+		case BaggageLease:
+			lease = validLease(strings.TrimSpace(decoded))
 		case BaggageSpawner:
 			spawner = clampSpawner(strings.TrimSpace(decoded))
 		}
 	}
-	return delegation, spawner
+	return lease, spawner
 }
 
-// validDelegation returns id when it may be stamped, and "" plus a one-time note when it cannot.
-func validDelegation(id string) string {
+// validLease returns id when it may be stamped, and "" plus a one-time note when it cannot.
+func validLease(id string) string {
 	if id == "" {
 		return ""
 	}
-	if !types.ValidDelegationID(id) {
+	if !types.ValidLeaseID(id) {
 		baggageNoteOnce.Do(func() {
 			slog.WarnContext(context.Background(),
-				"magus: ignoring the delegation in "+EnvBaggage+" and recording no delegation for this process: a delegation id is letters, digits and -_./: only, and never empty",
+				"magus: ignoring the lease in "+EnvBaggage+" and recording no lease for this process: a lease id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
-				slog.Int("max_length", types.MaxDelegationIDLen))
+				slog.Int("max_length", types.MaxLeaseIDLen))
 		})
 		return ""
 	}

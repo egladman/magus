@@ -1,4 +1,4 @@
-// ledger.test.ts - the delegation ledger's model. Every function under test is pure and DOM-free
+// ledger.test.ts - the lease ledger's model. Every function under test is pure and DOM-free
 // (main.ts keeps the SVG, the poll and the keyboard on the other side of the file boundary), so it
 // runs directly under node with no happy-dom.
 //
@@ -7,7 +7,7 @@
 // table, a cycle), whether no_return survives as its own state all the way to the overview line,
 // and whether a missing endpoint stays distinguishable from an empty plan. Each of those fails
 // SILENTLY - a plausible-looking plan that says the wrong thing is worse than an empty panel, and
-// the worst of them reads "nothing was delegated" when the truth is "nobody asked".
+// the worst of them reads "nothing was handed out" when the truth is "nobody asked".
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,13 +22,13 @@ import {
   normalizeState,
   overviewLine,
   parseOverlaps,
-  parseUnits,
+  parseLeases,
   treeOrder,
   STALE_AFTER_MS,
-  type DelegationUnit,
+  type Lease,
 } from "./ledger";
 
-function unit(partial: Partial<DelegationUnit> & { id: string }): DelegationUnit {
+function lease(partial: Partial<Lease> & { id: string }): Lease {
   return { state: "declared", ...partial };
 }
 
@@ -38,16 +38,16 @@ function row(partial: Partial<ActivityRow> & { id: string }): ActivityRow {
 
 // The plan every assembly test reads: a root with two children, one of which has a child of its
 // own, plus one ordering constraint that is NOT a parent link (b2 must wait for b1).
-const TREE: DelegationUnit[] = [
-  unit({ id: "root", goal: "ship the surface" }),
-  unit({ id: "b1", parent: "root", state: "pass" }),
-  unit({ id: "b2", parent: "root", state: "running", depends_on: ["b1"] }),
-  unit({ id: "b2a", parent: "b2", state: "no_return", read_only: true }),
+const TREE: Lease[] = [
+  lease({ id: "root", goal: "ship the surface" }),
+  lease({ id: "b1", parent: "root", state: "pass" }),
+  lease({ id: "b2", parent: "root", state: "running", depends_on: ["b1"] }),
+  lease({ id: "b2a", parent: "b2", state: "no_return", read_only: true }),
 ];
 
 // ---- assembly --------------------------------------------------------------
 
-test("parents, children and depth come out of a flat unit list", () => {
+test("parents, children and depth come out of a flat lease list", () => {
   const plan = buildPlan(TREE);
   assert.deepEqual(plan.roots, ["root"]);
   assert.deepEqual(plan.byId.get("root")?.children, ["b1", "b2"]);
@@ -85,8 +85,8 @@ test("parent edges and depends_on edges are both present and stay labeled", () =
 
 // A ledger is a table a person or an agent keeps by hand, so it arrives with the mistakes those
 // produce. None of them may cost the reader the whole picture.
-test("a unit naming a parent the ledger does not carry is drawn as a root, and reported", () => {
-  const plan = buildPlan([unit({ id: "orphan", parent: "somewhere-else" })]);
+test("a lease naming a parent the ledger does not carry is drawn as a root, and reported", () => {
+  const plan = buildPlan([lease({ id: "orphan", parent: "somewhere-else" })]);
   assert.deepEqual(plan.roots, ["orphan"]);
   assert.deepEqual(plan.dangling, ["orphan"]);
   assert.equal(plan.byId.get("orphan")?.parent, null);
@@ -99,7 +99,7 @@ test("a unit naming a parent the ledger does not carry is drawn as a root, and r
 });
 
 test("a self-parent is a root, not a loop", () => {
-  const plan = buildPlan([unit({ id: "a", parent: "a" })]);
+  const plan = buildPlan([lease({ id: "a", parent: "a" })]);
   assert.deepEqual(plan.roots, ["a"]);
   assert.equal(
     plan.byId.get("a")?.danglingParent,
@@ -109,8 +109,8 @@ test("a self-parent is a root, not a loop", () => {
   assert.equal(plan.edges.length, 0);
 });
 
-test("a parent cycle flattens instead of hanging, and every unit still appears", () => {
-  const plan = buildPlan([unit({ id: "a", parent: "b" }), unit({ id: "b", parent: "a" })]);
+test("a parent cycle flattens instead of hanging, and every lease still appears", () => {
+  const plan = buildPlan([lease({ id: "a", parent: "b" }), lease({ id: "b", parent: "a" })]);
   assert.deepEqual(
     plan.nodes.map((n) => n.depth),
     [0, 0],
@@ -118,21 +118,21 @@ test("a parent cycle flattens instead of hanging, and every unit still appears",
   assert.deepEqual(
     treeOrder(plan).sort(),
     ["a", "b"],
-    "a cycle must not drop a unit from the list",
+    "a cycle must not drop a lease from the list",
   );
 });
 
 test("a duplicate id keeps the first row", () => {
-  const plan = buildPlan([unit({ id: "a", goal: "first" }), unit({ id: "a", goal: "second" })]);
+  const plan = buildPlan([lease({ id: "a", goal: "first" }), lease({ id: "a", goal: "second" })]);
   assert.equal(plan.nodes.length, 1);
-  assert.equal(plan.byId.get("a")?.unit.goal, "first");
+  assert.equal(plan.byId.get("a")?.lease.goal, "first");
 });
 
-test("a depends_on naming a unit outside the ledger draws no edge and is not invented", () => {
-  const plan = buildPlan([unit({ id: "a", depends_on: ["ghost", "a"] })]);
+test("a depends_on naming a lease outside the ledger draws no edge and is not invented", () => {
+  const plan = buildPlan([lease({ id: "a", depends_on: ["ghost", "a"] })]);
   assert.equal(plan.edges.length, 0);
   assert.deepEqual(
-    plan.byId.get("a")?.unit.depends_on,
+    plan.byId.get("a")?.lease.depends_on,
     ["ghost", "a"],
     "the raw list survives so the detail can show what was actually written",
   );
@@ -141,7 +141,7 @@ test("a depends_on naming a unit outside the ledger draws no edge and is not inv
 // ---- states ----------------------------------------------------------------
 
 test("an unrecognized state reads as declared and keeps what the ledger said", () => {
-  const plan = buildPlan([unit({ id: "a", state: "cancelled" })]);
+  const plan = buildPlan([lease({ id: "a", state: "cancelled" })]);
   const node = plan.byId.get("a");
   assert.equal(node?.state, "declared", "nothing unknown may ever read as a pass or a fail");
   assert.equal(node?.rawState, "cancelled");
@@ -149,34 +149,37 @@ test("an unrecognized state reads as declared and keeps what the ledger said", (
 
 test("no_return is its own state and is never folded into fail", () => {
   assert.equal(normalizeState("no_return"), "no_return");
-  const plan = buildPlan([unit({ id: "a", state: "no_return" }), unit({ id: "b", state: "fail" })]);
+  const plan = buildPlan([
+    lease({ id: "a", state: "no_return" }),
+    lease({ id: "b", state: "fail" }),
+  ]);
   assert.equal(plan.counts.no_return, 1);
   assert.equal(plan.counts.fail, 1);
 });
 
 // ---- the overview line -----------------------------------------------------
 
-test("the overview counts the units, breaks down the states, and calls out no-return", () => {
+test("the overview counts the leases, breaks down the states, and calls out no-return", () => {
   assert.equal(
     overviewLine(buildPlan(TREE)),
-    "4 units. 1 declared, 1 running, 1 pass. 1 no-return.",
+    "4 leases. 1 declared, 1 running, 1 pass. 1 no-return.",
   );
 });
 
 // A call-out that disappears at zero is a call-out a reader stops watching for.
 test("the no-return call-out is present even when it is zero", () => {
   assert.equal(
-    overviewLine(buildPlan([unit({ id: "a", state: "pass" })])),
-    "1 unit. 1 pass. 0 no-return.",
+    overviewLine(buildPlan([lease({ id: "a", state: "pass" })])),
+    "1 lease. 1 pass. 0 no-return.",
   );
-  assert.equal(overviewLine(buildPlan([])), "0 units. 0 no-return.");
+  assert.equal(overviewLine(buildPlan([])), "0 leases. 0 no-return.");
 });
 
 // ---- the heartbeat ---------------------------------------------------------
 
 // A row is re-put on every state change, so the gap since the last one is the only evidence this
 // surface has that a worker is still there. What the gap MEANS stays the reader's call - nothing
-// here transitions a unit, and no-return is never inferred.
+// here transitions a lease, and no-return is never inferred.
 test("a row nobody has touched past the threshold is stale; a fresh one is not", () => {
   const now = 1_755_300_000_000;
   const sec = (msAgo: number): number => (now - msAgo) / 1000;
@@ -187,7 +190,7 @@ test("a row nobody has touched past the threshold is stale; a fresh one is not",
 test("a finished row is never stale, and neither is one carrying no timestamp", () => {
   const now = 1_755_300_000_000;
   const long = (now - STALE_AFTER_MS * 10) / 1000;
-  assert.equal(isStale(true, long, now), false, "a unit that finished is not going to be touched");
+  assert.equal(isStale(true, long, now), false, "a lease that finished is not going to be touched");
   assert.equal(
     isStale(false, 0, now),
     false,
@@ -207,7 +210,7 @@ test("age reads at the coarsest granularity that still answers the question", ()
 
 // ---- the live join ---------------------------------------------------------
 
-test("runs join onto the unit they name, in the order they were fed", () => {
+test("runs join onto the lease they name, in the order they were fed", () => {
   const plan = buildPlan(TREE);
   const join = joinRuns(plan, [
     row({ id: "inv1", unit: "b2", title: "magus run test" }),
@@ -215,29 +218,29 @@ test("runs join onto the unit they name, in the order they were fed", () => {
     row({ id: "inv2", unit: "b1" }),
   ]);
   assert.deepEqual(
-    join.byUnit.get("b2")?.map((r) => r.id),
+    join.byLease.get("b2")?.map((r) => r.id),
     ["inv1", "out9"],
   );
   assert.deepEqual(
-    join.byUnit.get("b1")?.map((r) => r.id),
+    join.byLease.get("b1")?.map((r) => r.id),
     ["inv2"],
   );
   assert.equal(
-    join.byUnit.has("root"),
+    join.byLease.has("root"),
     false,
-    "a unit with no runs gets no bucket, not an empty one",
+    "a lease with no runs gets no bucket, not an empty one",
   );
 });
 
-// This is the whole state of the world today: nothing stamps a unit onto the activity feeds yet.
+// This is the whole state of the world today: nothing stamps a lease onto the activity feeds yet.
 // Treating that as evidence of a stale ledger would make the warning permanent and worthless.
-test("a run naming no unit is unattributed, not unmatched", () => {
+test("a run naming no lease is unattributed, not unmatched", () => {
   const join = joinRuns(buildPlan(TREE), [row({ id: "inv1" }), row({ id: "inv2", unit: "" })]);
-  assert.equal(join.byUnit.size, 0);
+  assert.equal(join.byLease.size, 0);
   assert.deepEqual(join.unmatched, []);
 });
 
-test("a run naming a unit this ledger does not carry is unmatched, which means the plan is stale", () => {
+test("a run naming a lease this ledger does not carry is unmatched, which means the plan is stale", () => {
   const join = joinRuns(buildPlan(TREE), [row({ id: "inv1", unit: "b3" })]);
   assert.deepEqual(
     join.unmatched.map((r) => r.id),
@@ -251,7 +254,7 @@ test("a child is placed to the right of its parent, and a dependent right of its
   const plan = buildPlan(TREE);
   const at = layoutPlan(plan).at;
   const x = (id: string): number => at.get(id)?.x ?? Number.NaN;
-  assert.ok(x("root") < x("b1"), "a child cannot start before the parent that delegated it");
+  assert.ok(x("root") < x("b1"), "a child cannot start before the parent that handed it out");
   assert.ok(x("b1") < x("b2"), "b2 waits on b1, so it sits downstream of it");
   assert.ok(x("b2") < x("b2a"));
 });
@@ -273,8 +276,8 @@ test("an empty plan lays out without a NaN viewBox", () => {
 // edge, and reports which, so the renderer can mark the reversal as its own fiction.
 test("a depends_on cycle is broken and the reversed edge is reported", () => {
   const plan = buildPlan([
-    unit({ id: "a", depends_on: ["b"] }),
-    unit({ id: "b", depends_on: ["a"] }),
+    lease({ id: "a", depends_on: ["b"] }),
+    lease({ id: "b", depends_on: ["a"] }),
   ]);
   const layout = layoutPlan(plan);
   assert.equal(layout.back.size, 1, "exactly one of the two edges is layout fiction");
@@ -283,9 +286,9 @@ test("a depends_on cycle is broken and the reversed edge is reported", () => {
 
 // ---- parsing ---------------------------------------------------------------
 
-test("parseUnits keeps the documented fields and drops a row with no id", () => {
-  const units = parseUnits({
-    units: [
+test("parseLeases keeps the documented fields and drops a row with no id", () => {
+  const leases = parseLeases({
+    leases: [
       {
         id: "u1",
         parent: "root",
@@ -309,20 +312,20 @@ test("parseUnits keeps the documented fields and drops a row with no id", () => 
       null,
     ],
   });
-  assert.equal(units.length, 1);
+  assert.equal(leases.length, 1);
   assert.deepEqual(
-    units[0]?.owned_paths,
+    leases[0]?.owned_paths,
     ["a.ts"],
     "a non-string path is dropped, not stringified",
   );
-  assert.equal(units[0]?.read_only, true);
-  assert.equal(units[0]?.tier, "sonnet");
+  assert.equal(leases[0]?.read_only, true);
+  assert.equal(leases[0]?.tier, "sonnet");
   // Unix seconds, as the route serves them. Read as strings they were silently discarded, and a
   // surface that cannot read this field cannot tell a fresh row from an abandoned one.
-  assert.equal(units[0]?.updated, 1755300000);
-  assert.equal(units[0]?.created, 1755299000);
+  assert.equal(leases[0]?.updated, 1755300000);
+  assert.equal(leases[0]?.created, 1755299000);
   assert.deepEqual(
-    units[0]?.releases,
+    leases[0]?.releases,
     [{ path: "b.ts", digest: "sha256:abc", released_at: 1755300000 }],
     "a release naming no path points at nothing a reader can open",
   );
@@ -333,39 +336,39 @@ test("parseOverlaps keeps the pairs it can draw and drops the ones it cannot", (
     parseOverlaps({
       overlaps: [
         {
-          unit_a: "u1",
-          unit_b: "u2",
+          lease_a: "u1",
+          lease_b: "u2",
           paths_a: ["internal/ledger", 7],
           paths_b: ["internal/ledger/store.go"],
         },
-        { unit_a: "u1", unit_b: "u1", paths_a: [], paths_b: [] },
-        { unit_a: "u1" },
+        { lease_a: "u1", lease_b: "u1", paths_a: [], paths_b: [] },
+        { lease_a: "u1" },
         null,
       ],
     }),
     [
       {
-        unit_a: "u1",
-        unit_b: "u2",
+        lease_a: "u1",
+        lease_b: "u2",
         paths_a: ["internal/ledger"],
         paths_b: ["internal/ledger/store.go"],
       },
     ],
   );
   // A daemon predating the field sends none, which is an absence and not a failure.
-  assert.deepEqual(parseOverlaps({ units: [] }), []);
+  assert.deepEqual(parseOverlaps({ leases: [] }), []);
   assert.deepEqual(parseOverlaps(null), []);
 });
 
 // The warning belongs on BOTH rows: either one is where a reader might be standing when they need
 // to know the other exists.
-test("an overlap lands on both units, carrying the other id and each side's paths", () => {
+test("an overlap lands on both leases, carrying the other id and each side's paths", () => {
   const plan = buildPlan(
-    [unit({ id: "a", state: "running" }), unit({ id: "b", state: "running" })],
+    [lease({ id: "a", state: "running" }), lease({ id: "b", state: "running" })],
     [
       {
-        unit_a: "a",
-        unit_b: "b",
+        lease_a: "a",
+        lease_b: "b",
         paths_a: ["internal/ledger"],
         paths_b: ["internal/ledger/store.go"],
       },
@@ -377,19 +380,19 @@ test("an overlap lands on both units, carrying the other id and each side's path
   assert.equal(plan.overlaps.length, 1);
 });
 
-test("an overlap naming a unit this ledger does not carry is dropped, not half-drawn", () => {
+test("an overlap naming a lease this ledger does not carry is dropped, not half-drawn", () => {
   const plan = buildPlan(
-    [unit({ id: "a" })],
-    [{ unit_a: "a", unit_b: "ghost", paths_a: ["x"], paths_b: ["x"] }],
+    [lease({ id: "a" })],
+    [{ lease_a: "a", lease_b: "ghost", paths_a: ["x"], paths_b: ["x"] }],
   );
   assert.deepEqual(plan.byId.get("a")?.overlaps, []);
   assert.deepEqual(plan.overlaps, []);
 });
 
-test("a body that is not the documented shape yields no units rather than throwing", () => {
-  assert.deepEqual(parseUnits(null), []);
-  assert.deepEqual(parseUnits({}), []);
-  assert.deepEqual(parseUnits({ units: "nope" }), []);
+test("a body that is not the documented shape yields no leases rather than throwing", () => {
+  assert.deepEqual(parseLeases(null), []);
+  assert.deepEqual(parseLeases({}), []);
+  assert.deepEqual(parseLeases({ leases: "nope" }), []);
 });
 
 // ---- the read --------------------------------------------------------------
@@ -408,7 +411,7 @@ async function stubFetch<T>(impl: () => unknown, body: () => Promise<T>): Promis
 }
 
 // The reason this distinction exists: on every daemon that predates the ledger, GET /api/v1/ledger
-// 404s. Reporting that as an empty plan would tell a reader nothing was delegated.
+// 404s. Reporting that as an empty plan would tell a reader nothing was leased.
 test("a 404 is absent - the route is missing, not the plan", async () => {
   const read = await stubFetch(
     () => ({ ok: false, status: 404 }),
@@ -451,11 +454,11 @@ test("a served ledger comes back parsed, overlaps included", async () => {
       status: 200,
       json: () =>
         Promise.resolve({
-          units: [{ id: "root" }, { id: "b1" }],
+          leases: [{ id: "root" }, { id: "b1" }],
           overlaps: [
             {
-              unit_a: "root",
-              unit_b: "b1",
+              lease_a: "root",
+              lease_b: "b1",
               paths_a: ["internal/ledger"],
               paths_b: ["internal/ledger"],
             },
@@ -465,6 +468,6 @@ test("a served ledger comes back parsed, overlaps included", async () => {
     () => loadLedger("127.0.0.1:7391"),
   );
   assert.equal(read.kind, "ok");
-  assert.deepEqual(read.kind === "ok" ? read.units.map((u) => u.id) : [], ["root", "b1"]);
-  assert.deepEqual(read.kind === "ok" ? read.overlaps.map((o) => o.unit_b) : [], ["b1"]);
+  assert.deepEqual(read.kind === "ok" ? read.leases.map((u) => u.id) : [], ["root", "b1"]);
+  assert.deepEqual(read.kind === "ok" ? read.overlaps.map((o) => o.lease_b) : [], ["b1"]);
 });

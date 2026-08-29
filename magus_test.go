@@ -974,7 +974,7 @@ func (p *recordingProvider) RecordBuzzSpellResolve(context.Context, float64, str
 func (p *recordingProvider) RecordBuzzSpellBuiltinsWarm(context.Context, float64, string)    {}
 func (p *recordingProvider) RecordBuzzJITRun(context.Context)                                {}
 func (p *recordingProvider) RecordBuzzVMFault(context.Context, string)                       {}
-func (p *recordingProvider) RecordDelegationRegistration(context.Context, string)            {}
+func (p *recordingProvider) RecordLeaseRegistration(context.Context, string)                 {}
 func (p *recordingProvider) RecordAttentionDisposition(context.Context, float64, string)     {}
 func (p *recordingProvider) RecordReviewRemark(context.Context, string)                      {}
 func (p *recordingProvider) RecordReviewPublish(context.Context, string, bool)               {}

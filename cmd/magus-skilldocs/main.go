@@ -140,8 +140,13 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 	// A renamed skill keeps its old page URL working. The rename is recorded on the
 	// catalog row rather than in a redirect list beside the site, so the page that
 	// carries the redirect is generated from the same fact that caused it.
-	for _, old := range agent.FormerNames(full.Name) {
-		aliases += fmt.Sprintf("aliases:\n  - reference/skills/%s\n", old)
+	// One block, however many names: a second `aliases:` key is a duplicate mapping key
+	// and the frontmatter parser refuses the whole page.
+	if former := agent.FormerNames(full.Name); len(former) > 0 {
+		aliases = "aliases:\n"
+		for _, old := range former {
+			aliases += fmt.Sprintf("  - reference/skills/%s\n", old)
+		}
 	}
 	fmt.Fprintf(&b, "---\ntitle: %s\ngenerated_from: internal/agent/skills/%s/SKILL.md\ndescription: %q\ntags: [agents, skills, %s]\n%s"+
 		"skill_full_bytes: %d\nskill_simple_bytes: %d\n---\n\n",

@@ -152,7 +152,7 @@ slots and falls as they release, so its value reads as the live running depth.
 
 ### Agent surface
 
-Delegations, attention requests and paired review: the three places a fleet of
+Leases, attention requests and paired review: the three places a fleet of
 agents and the people working with them meet. **Every producer here runs in the
 daemon**, which is what makes them collectable at all - a magus CLI invocation is
 a one-shot process, and the CLI halves of these same surfaces (raising an
@@ -162,7 +162,7 @@ what it counts, not for the whole surface.
 
 | Metric                                 | Instrument | Unit             | Attributes                              | Meaning                                            |
 | -------------------------------------- | ---------- | ---------------- | --------------------------------------- | -------------------------------------------------- |
-| `magus.delegation.registrations`       | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on |
+| `magus.lease.registrations`            | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on |
 | `magus.attention.disposition.duration` | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed |
 | `magus.review.remarks`                 | counter    | `{remark}`       | `author ∈ {human, agent}`               | A remark drafted on a change                       |
 | `magus.review.publishes`               | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed     |

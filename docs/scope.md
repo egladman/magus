@@ -423,7 +423,7 @@ had to build, and the test above is how to check any one of them against its dif
 
 The agent-harness world drew the line at the opposite extreme, and the contrast
 is worth stating because magus keeps being read as a member of that category.
-deepseek-harness's published decision notes sharpened the delegation surface's
+deepseek-harness's published decision notes sharpened the lease surface's
 checkpoint and release semantics, which is why the architectural disagreement
 deserves stating precisely. It makes every module a plugin - the model adapter,
 the tool registry, the session log, the agent loop itself - so there is no

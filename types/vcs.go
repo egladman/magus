@@ -832,7 +832,7 @@ type StagingPlan struct {
 // It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file - a
 // checkpoint is a pure read, so nothing about it can be lost by not keeping it and
 // nothing about the tree changes by taking it. That is what makes it safe to take
-// one per delegation, and it is why this is a plain value with no id of its own:
+// one per lease, and it is why this is a plain value with no id of its own:
 // an identity magus invented would be a fact only magus could confirm.
 //
 // Two things a reader can do with it. Revision feeds anything that takes a rev

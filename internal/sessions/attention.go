@@ -32,17 +32,17 @@ const (
 // file is read by binaries older than the one that wrote it, and nesting an envelope
 // that carries its own schema version would leave such a reader two versions to
 // reconcile for one fact.
-// Delegation is the delegation the RAISING session was launched under, which is what lets a
+// Lease is the lease the RAISING session was launched under, which is what lets a
 // person reading the queue see which slice of a fleet's work is blocked. It is attribution and
 // not identity: see [RequestID] for why it stays out of the id.
 type AttentionOpen struct {
-	Request    string `json:"request"`
-	Outcome    string `json:"outcome"`
-	Severity   string `json:"severity,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Where      string `json:"where,omitempty"`
-	Delegation string `json:"delegation,omitempty"`
-	Message    string `json:"message"` // clamped to MaxMessageBytes when written
+	Request  string `json:"request"`
+	Outcome  string `json:"outcome"`
+	Severity string `json:"severity,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Where    string `json:"where,omitempty"`
+	Lease    string `json:"lease,omitempty"`
+	Message  string `json:"message"` // clamped to MaxMessageBytes when written
 }
 
 // MaxMessageBytes bounds the Message one [AttentionOpen] may carry into the store.
@@ -101,9 +101,9 @@ type AttentionDispose struct {
 // first as "waiting" and then as "permission" is describing the same wait, and two
 // rows for it would be two interruptions for one event.
 //
-// The DELEGATION is not an input either, for a different reason. A delegation says which slice of work the
+// The LEASE is not an input either, for a different reason. A lease says which slice of work the
 // raising session belongs to - it is attribution, and identity here is "which block is this".
-// Feeding it in would re-key every open request the moment a fleet re-partitioned its delegations: the
+// Feeding it in would re-key every open request the moment a fleet re-partitioned its leases: the
 // row a person was about to dispose of would vanish and an identical one would appear under a new
 // id, from a change that did not touch the block at all.
 //
@@ -117,15 +117,15 @@ func RequestID(session string, o AttentionOpen) string {
 // AttentionRequest is one request as a reader meets it: what was raised, and whether
 // anybody has disposed of it.
 type AttentionRequest struct {
-	ID         string `json:"id"`
-	Session    string `json:"session"` // the session that raised it
-	OpenedMs   int64  `json:"opened_ms"`
-	Outcome    string `json:"outcome"`
-	Severity   string `json:"severity,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Where      string `json:"where,omitempty"`
-	Delegation string `json:"delegation,omitempty"`
-	Message    string `json:"message"`
+	ID       string `json:"id"`
+	Session  string `json:"session"` // the session that raised it
+	OpenedMs int64  `json:"opened_ms"`
+	Outcome  string `json:"outcome"`
+	Severity string `json:"severity,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Where    string `json:"where,omitempty"`
+	Lease    string `json:"lease,omitempty"`
+	Message  string `json:"message"`
 
 	Disposed   bool   `json:"disposed"`
 	DisposedMs int64  `json:"disposed_ms,omitempty"`
@@ -179,15 +179,15 @@ func Attention(fold Fold) []AttentionRequest {
 				order = append(order, open.Request)
 			}
 			*req = AttentionRequest{
-				ID:         open.Request,
-				Session:    rec.Session,
-				OpenedMs:   rec.Ts,
-				Outcome:    open.Outcome,
-				Severity:   open.Severity,
-				Source:     open.Source,
-				Where:      open.Where,
-				Delegation: open.Delegation,
-				Message:    open.Message,
+				ID:       open.Request,
+				Session:  rec.Session,
+				OpenedMs: rec.Ts,
+				Outcome:  open.Outcome,
+				Severity: open.Severity,
+				Source:   open.Source,
+				Where:    open.Where,
+				Lease:    open.Lease,
+				Message:  open.Message,
 			}
 		case KindAttentionDispose:
 			var dispose AttentionDispose

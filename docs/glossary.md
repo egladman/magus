@@ -275,7 +275,7 @@ Each concept gets one name, used everywhere: target, spell, charm, op. A second
 word for the same thing is a house dialect, and it costs every reader (and every
 agent) a lookup that never ends. See [doctrine.md](doctrine.md).
 
-## Sessions and delegation
+## Sessions and leases
 
 The vocabulary of magus watching work happen: who ran what, what an agent is
 blocked on, and which agent owns which paths. The policy behind these terms
@@ -284,7 +284,7 @@ lives in [doctrine.md](doctrine.md).
 ### Session
 
 One magus process's recorded facts - the targets it finished, their outcomes,
-and the delegation it acted as - kept in a repo-scoped store every worktree shares.
+and the lease it acted as - kept in a repo-scoped store every worktree shares.
 `magus session` lists them; the store prunes itself by last-fact age.
 
 ### Attention request
@@ -300,18 +300,18 @@ The human act of closing an attention request: a judgment rendered, recorded
 with who and why. Distinct from resolving a review thread or a merge conflict -
 a disposition answers a request; it does not merge anything.
 
-### Delegation
+### Lease
 
-One row of the delegation ledger: a piece of work an orchestrating agent handed
+One row of the lease ledger: a piece of work an orchestrating agent handed
 out, with its goal, the checkpoint it was cut against, and the paths it owns or
 must not touch. The ledger records; the agent guard is what reads those facts
 back when grading a write. See [doctrine.md](doctrine.md).
 
-### Delegation id
+### Lease id
 
-The short identifier a worker carries (the `--delegation` flag, or the
-`magus.delegation` member of the W3C `BAGGAGE` environment channel) so its runs,
-journal facts, and guard verdicts attribute to its delegation. Letters, digits
+The short identifier a worker carries (the `--lease` flag, or the
+`magus.lease` member of the W3C `BAGGAGE` environment channel) so its runs,
+journal facts, and guard verdicts attribute to its lease. Letters, digits
 and `-_./:` only.
 
 ### Spawn claim

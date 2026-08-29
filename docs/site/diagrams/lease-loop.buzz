@@ -1,6 +1,6 @@
-// site/diagrams/delegation-loop.buzz - how work is split across several agents and put back
+// site/diagrams/lease-loop.buzz - how work is split across several agents and put back
 // together. Drawn as a ring because the mechanism is a loop that closes: the checkpoint the
-// orchestrator takes at the start is the same one it diffs against at the end, so a unit is
+// orchestrator takes at the start is the same one it diffs against at the end, so a lease is
 // verified against what it CLAIMED rather than against whatever the tree looks like later.
 //
 // The center box is not a step. It is the doctrine the rest of the figure only makes sense
@@ -8,23 +8,23 @@
 // thing it prevents. No connector reaches it because it constrains all of them.
 //
 // The release connector is the one accent. Releasing a path early - so owned_paths shrinks
-// while the unit is still running - is the move that makes the plan usable by a reader, and
+// while the lease is still running - is the move that makes the plan usable by a reader, and
 // it is the half people skip.
-namespace delegationLoop;
+namespace leaseLoop;
 
 import "../libs/diagram/diagram" as _;
 
-export fun delegationLoopDiagram() > Diagram {
+export fun leaseLoopDiagram() > Diagram {
     return Diagram{
-        id = "delegation-loop",
-        eyebrow = "delegation",
+        id = "lease-loop",
+        eyebrow = "lease",
         title = "A declared plan, released early, verified by diff",
         desc = "An orchestrator checkpoints the working state, partitions the work by write "
-            + "set using graph evidence, and declares one ledger row per delegation: goal, "
+            + "set using graph evidence, and declares one ledger row per lease: goal, "
             + "checkpoint, owned paths. Workers release paths as soon as they are done with "
             + "them, so the plan shrinks while it runs, and the Plan surface renders the "
             + "rows, their overlaps and their staleness for whoever is watching. The "
-            + "orchestrator verifies each unit by diffing since that unit's checkpoint "
+            + "orchestrator verifies each lease by diffing since that lease's checkpoint "
             + "against what it claimed, then integrates and runs magus affected ci. magus "
             + "records and answers; it enforces none of it.",
         width = 960,
@@ -41,7 +41,7 @@ export fun delegationLoopDiagram() > Diagram {
                   x = 528, y = 88, w = 200, h = 64 },
             Node{ id = "work", label = "Workers edit", sub = "one write set each",
                   role = "external", x = 744, y = 192, w = 200, h = 64 },
-            Node{ id = "verify", anchor = "internal/changeset", label = "Verify each unit",
+            Node{ id = "verify", anchor = "internal/changeset", label = "Verify each lease",
                   sub = "diff since its checkpoint",
                   x = 744, y = 440, w = 200, h = 64 },
             Node{ id = "integrate", anchor = "cmd/magus", label = "Integrate",
@@ -71,7 +71,7 @@ export fun delegationLoopDiagram() > Diagram {
             Edge{ src = "integrate", dst = "cp", srcSide = "left", dstSide = "left", bend = 16 },
 
             // The feedback leg: a released path is a ledger update, not a new step, so it
-            // returns to the same row the unit was declared in.
+            // returns to the same row the lease was declared in.
             // bend sits at 740 rather than the middle of the 16px corridor: a bend exactly
             // between the two boxes leaves a zero-length final leg, and an arrowhead on one
             // of those takes its angle from whatever the renderer infers.

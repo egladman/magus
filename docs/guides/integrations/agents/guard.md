@@ -188,9 +188,9 @@ outside the command line, and speak only into the silence the rules above leave:
 `magus session hook --path <file>` judges a file path rather than a command. Three of its
 rules are definitive rather than heuristic, because each reads DECLARATIONS: the
 generated-output rule classifies the path against every target's declared
-outputs, the notes rule against the declared notes store, and the delegation rule
-against what concurrent delegations declared they own (see
-[delegation](delegation.md)). The first advises, because a hand-edited generated
+outputs, the notes rule against the declared notes store, and the lease rule
+against what concurrent leases declared they own (see
+[leases](leases.md)). The first advises, because a hand-edited generated
 file is wasteful rather than destructive; the other two deny, on the provenance
 trigger and on a collision no later rule can outrank.
 
@@ -305,8 +305,8 @@ another process did not report. The coverage boundary is explicit rather than
 guessed.
 
 One payload shape is recorded and never judged. A hook event carrying a `prompt`
-rather than a command or a file path is a delegation handoff: it appends an
+rather than a command or a file path is a lease handoff: it appends an
 `agent_spawn` event and returns `pass` without evaluating a rule, because there
 is no command and no path to judge, and a prompt that merely mentions a denied
-command would otherwise block the delegation that describes it. See
-[Delegation](delegation.md).
+command would otherwise block the lease that describes it. See
+[Leases](leases.md).

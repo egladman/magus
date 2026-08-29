@@ -1451,16 +1451,6 @@
       }
     },
     {
-      "id": "dir:internal/agent/skills/magus-delegate-multi-agent",
-      "kind": "dir",
-      "label": "internal/agent/skills/magus-delegate-multi-agent",
-      "source": "internal/agent/skills/magus-delegate-multi-agent",
-      "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
-      }
-    },
-    {
       "id": "dir:internal/agent/skills/magus-docs-lookup",
       "kind": "dir",
       "label": "internal/agent/skills/magus-docs-lookup",
@@ -1475,6 +1465,16 @@
       "kind": "dir",
       "label": "internal/agent/skills/magus-handoff-journal",
       "source": "internal/agent/skills/magus-handoff-journal",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent/skills/magus-multi-agent",
+      "kind": "dir",
+      "label": "internal/agent/skills/magus-multi-agent",
+      "source": "internal/agent/skills/magus-multi-agent",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -2908,18 +2908,6 @@
       }
     },
     {
-      "id": "doc:docs/guides/integrations/agents/delegation.md",
-      "kind": "doc",
-      "label": "docs/guides/integrations/agents/delegation.md",
-      "source": "docs/guides/integrations/agents/delegation.md",
-      "attrs": {
-        "role": "doc",
-        "section": "guides",
-        "tags": "agents,delegation,checkpoint,ledger,plan,magus vcs checkpoint,magus_ledger,console,activity",
-        "title": "Delegation"
-      }
-    },
-    {
       "id": "doc:docs/guides/integrations/agents/guard-templates.md",
       "kind": "doc",
       "label": "docs/guides/integrations/agents/guard-templates.md",
@@ -2941,6 +2929,18 @@
         "section": "guides",
         "tags": "agents,guard,hooks,magus session hook,telemetry,activity",
         "title": "The guard"
+      }
+    },
+    {
+      "id": "doc:docs/guides/integrations/agents/leases.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/agents/leases.md",
+      "source": "docs/guides/integrations/agents/leases.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "agents,leases,checkpoint,ledger,plan,magus vcs checkpoint,magus_ledger,console,activity",
+        "title": "Leases"
       }
     },
     {
@@ -5343,18 +5343,6 @@
       }
     },
     {
-      "id": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "kind": "doc",
-      "label": "docs/reference/skills/magus-delegate-multi-agent.md",
-      "source": "docs/reference/skills/magus-delegate-multi-agent.md",
-      "attrs": {
-        "role": "doc",
-        "section": "reference",
-        "tags": "agents,skills,magus-delegate-multi-agent",
-        "title": "magus-delegate-multi-agent"
-      }
-    },
-    {
       "id": "doc:docs/reference/skills/magus-docs-lookup.md",
       "kind": "doc",
       "label": "docs/reference/skills/magus-docs-lookup.md",
@@ -5376,6 +5364,18 @@
         "section": "reference",
         "tags": "agents,skills,magus-handoff-journal",
         "title": "magus-handoff-journal"
+      }
+    },
+    {
+      "id": "doc:docs/reference/skills/magus-multi-agent.md",
+      "kind": "doc",
+      "label": "docs/reference/skills/magus-multi-agent.md",
+      "source": "docs/reference/skills/magus-multi-agent.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "agents,skills,magus-multi-agent",
+        "title": "magus-multi-agent"
       }
     },
     {
@@ -5632,15 +5632,6 @@
       }
     },
     {
-      "id": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
-      "kind": "doc",
-      "label": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
-      "source": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
-      "attrs": {
-        "role": "skill"
-      }
-    },
-    {
       "id": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
       "kind": "doc",
       "label": "internal/agent/skills/magus-docs-lookup/SKILL.md",
@@ -5654,6 +5645,15 @@
       "kind": "doc",
       "label": "internal/agent/skills/magus-handoff-journal/SKILL.md",
       "source": "internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
+      "kind": "doc",
+      "label": "internal/agent/skills/magus-multi-agent/SKILL.md",
+      "source": "internal/agent/skills/magus-multi-agent/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -6311,15 +6311,6 @@
       }
     },
     {
-      "id": "file:docs/site/diagrams/delegation-loop.buzz",
-      "kind": "file",
-      "label": "docs/site/diagrams/delegation-loop.buzz",
-      "source": "docs/site/diagrams/delegation-loop.buzz",
-      "attrs": {
-        "language": "buzz"
-      }
-    },
-    {
       "id": "file:docs/site/diagrams/dogfood.buzz",
       "kind": "file",
       "label": "docs/site/diagrams/dogfood.buzz",
@@ -6333,6 +6324,15 @@
       "kind": "file",
       "label": "docs/site/diagrams/image-build.buzz",
       "source": "docs/site/diagrams/image-build.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/site/diagrams/lease-loop.buzz",
+      "kind": "file",
+      "label": "docs/site/diagrams/lease-loop.buzz",
+      "source": "docs/site/diagrams/lease-loop.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -10489,15 +10489,6 @@
       }
     },
     {
-      "id": "function:docs/site/diagrams/delegation-loop.buzz:delegationLoopDiagram",
-      "kind": "function",
-      "label": "delegationLoopDiagram",
-      "source": "docs/site/diagrams/delegation-loop.buzz:17",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
       "id": "function:docs/site/diagrams/dogfood.buzz:dogfoodDiagram",
       "kind": "function",
       "label": "dogfoodDiagram",
@@ -10511,6 +10502,15 @@
       "kind": "function",
       "label": "imageBuildDiagram",
       "source": "docs/site/diagrams/image-build.buzz:8",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/site/diagrams/lease-loop.buzz:leaseLoopDiagram",
+      "kind": "function",
+      "label": "leaseLoopDiagram",
+      "source": "docs/site/diagrams/lease-loop.buzz:17",
       "attrs": {
         "exported": "true"
       }
@@ -16369,14 +16369,6 @@
       }
     },
     {
-      "id": "import:site/diagrams/delegation-loop",
-      "kind": "import",
-      "label": "site/diagrams/delegation-loop",
-      "attrs": {
-        "diagnostic": "MGS7001"
-      }
-    },
-    {
       "id": "import:site/diagrams/dogfood",
       "kind": "import",
       "label": "site/diagrams/dogfood",
@@ -16388,6 +16380,14 @@
       "id": "import:site/diagrams/image-build",
       "kind": "import",
       "label": "site/diagrams/image-build",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:site/diagrams/lease-loop",
+      "kind": "import",
+      "label": "site/diagrams/lease-loop",
       "attrs": {
         "diagnostic": "MGS7001"
       }
@@ -17530,7 +17530,7 @@
       "id": "method:magus.attention",
       "kind": "method",
       "label": "magus.attention",
-      "doc": "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, delegation, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a",
+      "doc": "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, lease, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `mag",
       "attrs": {
         "buzz": "magus\\attention(args, [opts]) -> map[string]any"
       }
@@ -24933,14 +24933,6 @@
     },
     {
       "source": "dir:docs/reference/skills",
-      "target": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
-    },
-    {
-      "source": "dir:docs/reference/skills",
       "target": "doc:docs/reference/skills/magus-docs-lookup.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -24954,6 +24946,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/skills/magus-handoff-journal.md"
+    },
+    {
+      "source": "dir:docs/reference/skills",
+      "target": "doc:docs/reference/skills/magus-multi-agent.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/magus-multi-agent.md"
     },
     {
       "source": "dir:docs/reference/skills",
@@ -25213,14 +25213,6 @@
     },
     {
       "source": "dir:docs/site/diagrams",
-      "target": "file:docs/site/diagrams/delegation-loop.buzz",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/site/diagrams/delegation-loop.buzz"
-    },
-    {
-      "source": "dir:docs/site/diagrams",
       "target": "file:docs/site/diagrams/dogfood.buzz",
       "relation": "contains",
       "confidence": "extracted",
@@ -25234,6 +25226,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/site/diagrams/image-build.buzz"
+    },
+    {
+      "source": "dir:docs/site/diagrams",
+      "target": "file:docs/site/diagrams/lease-loop.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/diagrams/lease-loop.buzz"
     },
     {
       "source": "dir:docs/site/diagrams",
@@ -25533,14 +25533,6 @@
     },
     {
       "source": "dir:internal/agent/skills",
-      "target": "dir:internal/agent/skills/magus-delegate-multi-agent",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "internal/agent/skills/magus-delegate-multi-agent"
-    },
-    {
-      "source": "dir:internal/agent/skills",
       "target": "dir:internal/agent/skills/magus-docs-lookup",
       "relation": "contains",
       "confidence": "extracted",
@@ -25554,6 +25546,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal/agent/skills/magus-handoff-journal"
+    },
+    {
+      "source": "dir:internal/agent/skills",
+      "target": "dir:internal/agent/skills/magus-multi-agent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-multi-agent"
     },
     {
       "source": "dir:internal/agent/skills",
@@ -25644,14 +25644,6 @@
       "provenance": "internal/agent/skills/magus-context-audit/SKILL.md"
     },
     {
-      "source": "dir:internal/agent/skills/magus-delegate-multi-agent",
-      "target": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md"
-    },
-    {
       "source": "dir:internal/agent/skills/magus-docs-lookup",
       "target": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
       "relation": "contains",
@@ -25666,6 +25658,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+    },
+    {
+      "source": "dir:internal/agent/skills/magus-multi-agent",
+      "target": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
     },
     {
       "source": "dir:internal/agent/skills/magus-query",
@@ -31717,14 +31717,6 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents.md",
-      "target": "doc:docs/guides/integrations/agents/delegation.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents.md",
       "target": "doc:docs/guides/integrations/agents/guard-templates.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31734,6 +31726,14 @@
     {
       "source": "doc:docs/guides/integrations/agents.md",
       "target": "doc:docs/guides/integrations/agents/guard.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/guides/integrations/agents/leases.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31964,86 +31964,6 @@
       "provenance": "docs/guides/integrations/agents/cursor.md"
     },
     {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/concepts/cache/output-refs.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/concepts/knowledge.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/guides/integrations/agents.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/guides/integrations/agents/guard.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/guides/integrations/daemon.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/guides/integrations/mcp.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/reference/console.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/reference/manpage/magus-diff.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/reference/manpage/magus-vcs.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/delegation.md",
-      "target": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
       "source": "doc:docs/guides/integrations/agents/guard-templates.md",
       "target": "doc:docs/guides/integrations/agents/claude-code.md",
       "relation": "references",
@@ -32141,7 +32061,7 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/guard.md",
-      "target": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/guides/integrations/agents/leases.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32170,6 +32090,86 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/guides/integrations/agents.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/guides/integrations/agents/guard.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/guides/integrations/mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/reference/console.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/reference/manpage/magus-vcs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/reference/skills/magus-multi-agent.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
       "source": "doc:docs/guides/integrations/agents/notifications.md",
@@ -37213,7 +37213,7 @@
     },
     {
       "source": "doc:docs/reference/console.md",
-      "target": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/guides/integrations/agents/leases.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -45533,14 +45533,6 @@
     },
     {
       "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
       "target": "doc:docs/reference/skills/magus-docs-lookup.md",
       "relation": "references",
       "confidence": "extracted",
@@ -45550,6 +45542,14 @@
     {
       "source": "doc:docs/reference/skills/index.md",
       "target": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-multi-agent.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -45748,38 +45748,6 @@
       "provenance": "docs/reference/skills/magus-context-audit.md"
     },
     {
-      "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "target": "doc:docs/guides/integrations/agents/skills.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "target": "doc:docs/reference/manpage/magus-session.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
-    },
-    {
       "source": "doc:docs/reference/skills/magus-docs-lookup.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -45858,6 +45826,38 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/reference/skills/magus-handoff-journal.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-multi-agent.md",
+      "target": "doc:docs/guides/integrations/agents/skills.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/magus-multi-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-multi-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-multi-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-multi-agent.md"
     },
     {
       "source": "doc:docs/reference/skills/magus-query.md",
@@ -46492,22 +46492,6 @@
       "provenance": "internal/agent/skills/magus-change-summary/SKILL.md"
     },
     {
-      "source": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-session.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md"
-    },
-    {
-      "source": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "internal/agent/skills/magus-delegate-multi-agent/SKILL.md"
-    },
-    {
       "source": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -46554,6 +46538,22 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
     },
     {
       "source": "doc:internal/agent/skills/magus-query/SKILL.md",
@@ -50829,14 +50829,6 @@
     },
     {
       "source": "file:docs/site/diagrams/all.buzz",
-      "target": "import:site/diagrams/delegation-loop",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "docs/site/diagrams/all.buzz"
-    },
-    {
-      "source": "file:docs/site/diagrams/all.buzz",
       "target": "import:site/diagrams/dogfood",
       "relation": "imports",
       "confidence": "inferred",
@@ -50846,6 +50838,14 @@
     {
       "source": "file:docs/site/diagrams/all.buzz",
       "target": "import:site/diagrams/image-build",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/diagrams/all.buzz"
+    },
+    {
+      "source": "file:docs/site/diagrams/all.buzz",
+      "target": "import:site/diagrams/lease-loop",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -50980,22 +50980,6 @@
       "provenance": "docs/site/diagrams/daemon-socket.buzz"
     },
     {
-      "source": "file:docs/site/diagrams/delegation-loop.buzz",
-      "target": "function:docs/site/diagrams/delegation-loop.buzz:delegationLoopDiagram",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/site/diagrams/delegation-loop.buzz"
-    },
-    {
-      "source": "file:docs/site/diagrams/delegation-loop.buzz",
-      "target": "import:../libs/diagram/diagram",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "docs/site/diagrams/delegation-loop.buzz"
-    },
-    {
       "source": "file:docs/site/diagrams/dogfood.buzz",
       "target": "function:docs/site/diagrams/dogfood.buzz:dogfoodDiagram",
       "relation": "contains",
@@ -51026,6 +51010,22 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/site/diagrams/image-build.buzz"
+    },
+    {
+      "source": "file:docs/site/diagrams/lease-loop.buzz",
+      "target": "function:docs/site/diagrams/lease-loop.buzz:leaseLoopDiagram",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/diagrams/lease-loop.buzz"
+    },
+    {
+      "source": "file:docs/site/diagrams/lease-loop.buzz",
+      "target": "import:../libs/diagram/diagram",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/diagrams/lease-loop.buzz"
     },
     {
       "source": "file:docs/site/diagrams/project-reference.buzz",
@@ -66941,14 +66941,6 @@
     },
     {
       "source": "project:docs/guides/integrations/agents",
-      "target": "doc:docs/guides/integrations/agents/delegation.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/delegation.md"
-    },
-    {
-      "source": "project:docs/guides/integrations/agents",
       "target": "doc:docs/guides/integrations/agents/guard-templates.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -66962,6 +66954,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
+      "target": "doc:docs/guides/integrations/agents/leases.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
       "source": "project:docs/guides/integrations/agents",
@@ -70041,14 +70041,6 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
-      "relation": "produces",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
       "target": "doc:docs/reference/skills/magus-docs-lookup.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -70058,6 +70050,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/skills/magus-multi-agent.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -70153,14 +70153,6 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:internal/agent/skills/magus-delegate-multi-agent/SKILL.md",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
       "target": "doc:internal/agent/skills/magus-docs-lookup/SKILL.md",
       "relation": "consumes",
       "confidence": "extracted",
@@ -70170,6 +70162,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -70329,14 +70329,6 @@
     },
     {
       "source": "target:docs:diagrams-generate",
-      "target": "file:docs/site/diagrams/delegation-loop.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:diagrams-generate",
       "target": "file:docs/site/diagrams/dogfood.buzz",
       "relation": "consumes",
       "confidence": "extracted",
@@ -70346,6 +70338,14 @@
     {
       "source": "target:docs:diagrams-generate",
       "target": "file:docs/site/diagrams/image-build.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:diagrams-generate",
+      "target": "file:docs/site/diagrams/lease-loop.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -70905,14 +70905,6 @@
     },
     {
       "source": "target:docs:site-generate",
-      "target": "file:docs/site/diagrams/delegation-loop.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:site-generate",
       "target": "file:docs/site/diagrams/dogfood.buzz",
       "relation": "consumes",
       "confidence": "extracted",
@@ -70922,6 +70914,14 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/site/diagrams/image-build.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/site/diagrams/lease-loop.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

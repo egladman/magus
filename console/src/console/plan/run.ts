@@ -2,7 +2,7 @@
 // shape, the read, and the model the Plan surface draws. Everything here is pure and DOM-free, so
 // what a reader ends up seeing is decided by code a test can run without a browser (run.test.ts).
 //
-// This is the Plan surface's SECOND tenant, beside the declared delegation ledger next door. Same
+// This is the Plan surface's SECOND tenant, beside the declared lease ledger next door. Same
 // visual grammar, two sources; this is the human-first half. A ledger is a table an orchestrating
 // agent keeps while it fans work out. A run plan is what the engine itself resolves when a person
 // types `magus run ci` - nobody declared it, so nothing about it can be stale in the way a
@@ -24,7 +24,7 @@ import { str } from "./ledger";
 // ---- states ----------------------------------------------------------------
 
 // The four states a target in a resolved plan can be in. There is no no_return here and the surface
-// must not invent one: that state belongs to a delegated worker that never came back, and an engine
+// must not invent one: that state belongs to a leased worker that never came back, and an engine
 // that resolved a DAG always knows what happened to every node in it.
 export const RUN_STATES = ["idle", "running", "pass", "fail"] as const;
 export type RunState = (typeof RUN_STATES)[number];

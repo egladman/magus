@@ -608,7 +608,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .console-shell-activity__rowmeta { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
-/* The delegation unit a row belongs to. Nothing sets it yet (phase 2 does); the rule exists so the
+/* The lease a row belongs to. Nothing sets it yet (phase 2 does); the rule exists so the
    field's arrival is a data change rather than a styling one. */
 .console-shell-activity__rowunit {
   align-self: flex-start; font-size: 0.66rem; letter-spacing: 0.03em;

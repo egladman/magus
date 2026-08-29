@@ -39,7 +39,7 @@ import { sandboxTile } from "./tiles/sandbox";
 import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
 import { agentsTile } from "./tiles/agents";
-import { delegationTile } from "./tiles/delegation";
+import { leaseTile } from "./tiles/lease";
 import { openSurface } from "../surface-navigation";
 import { workspacesTile } from "./tiles/workspaces";
 import { locksTile } from "./tiles/locks";
@@ -349,7 +349,7 @@ function mountTiles(): void {
   cacheStats.el.dataset.half = "";
 
   const attention = attentionTile();
-  const delegation = delegationTile();
+  const lease = leaseTile();
   const activity = activityTile();
   const agents = agentsTile();
   const gantt = ganttTile(); // the live execution timeline (fed by Status.runs)
@@ -381,7 +381,7 @@ function mountTiles(): void {
   // or board-only in the presentation layout.
   const boardTiles: BoardTile[] = [
     { tile: attention, section: "live", bigPicture: "always" },
-    { tile: delegation, section: "live", bigPicture: "always" },
+    { tile: lease, section: "live", bigPicture: "always" },
     { tile: agents, section: "live", bigPicture: "always" },
     { tile: activity, section: "live", bigPicture: "always" },
     { tile: gantt, section: "live", bigPicture: "always" },

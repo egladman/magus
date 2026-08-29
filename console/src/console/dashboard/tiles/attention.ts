@@ -32,7 +32,7 @@ import {
   type AttentionRequest,
 } from "./attentionQueue";
 
-// The poll cadence and request budget the delegation tile reads its ledger on. Same numbers on
+// The poll cadence and request budget the lease tile reads its ledger on. Same numbers on
 // purpose: both tiles poll a small JSON route on the same daemon, and two boards refreshing at
 // two rhythms would make one of them look stuck.
 const REFRESH_MS = 4_000;
@@ -571,8 +571,8 @@ export function attentionTile(): Tile {
     }
     // Which slice of a fleet's work is blocked. Absent for anything a person started by hand,
     // which is the ordinary case and not worth a placeholder.
-    if (req.delegation) {
-      head.append(h("span", "console-dashboard-attention__delegation", req.delegation));
+    if (req.lease) {
+      head.append(h("span", "console-dashboard-attention__lease", req.lease));
     }
     head.append(disposeControl(req));
 

@@ -126,13 +126,13 @@ var boundaryTypes = []boundaryType{
 	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
-	// magus\ledger's bundle (put/list), leaf-first: Delegation.releases and
-	// DelegationReport.overlaps are each a list of the other two.
-	{Name: "DelegationRelease", Type: reflect.TypeFor[types.DelegationRelease](), RuntimeObject: true},
-	{Name: "DelegationUnattributedWrite", Type: reflect.TypeFor[types.DelegationUnattributedWrite](), RuntimeObject: true},
-	{Name: "Delegation", Type: reflect.TypeFor[types.Delegation](), RuntimeObject: true},
-	{Name: "DelegationOverlap", Type: reflect.TypeFor[types.DelegationOverlap](), RuntimeObject: true},
-	{Name: "DelegationReport", Type: reflect.TypeFor[types.DelegationReport](), RuntimeObject: true},
+	// magus\ledger's bundle (put/list), leaf-first: Lease.releases and
+	// LeaseReport.overlaps are each a list of the other two.
+	{Name: "LeaseRelease", Type: reflect.TypeFor[types.LeaseRelease](), RuntimeObject: true},
+	{Name: "LeaseUnattributedWrite", Type: reflect.TypeFor[types.LeaseUnattributedWrite](), RuntimeObject: true},
+	{Name: "Lease", Type: reflect.TypeFor[types.Lease](), RuntimeObject: true},
+	{Name: "LeaseOverlap", Type: reflect.TypeFor[types.LeaseOverlap](), RuntimeObject: true},
+	{Name: "LeaseReport", Type: reflect.TypeFor[types.LeaseReport](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

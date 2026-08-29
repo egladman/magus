@@ -30,7 +30,7 @@ function request(openedMs: number): AttentionRequest {
     severity: "",
     source: "claude/Notification",
     where: "/repo",
-    delegation: "",
+    lease: "",
     message: "needs the deploy key",
   };
 }

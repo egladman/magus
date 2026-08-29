@@ -97,8 +97,8 @@ function serveLedger(reply: () => unknown): void {
   serve({ ledger: reply });
 }
 
-function ok(units: unknown[], overlaps: unknown[] = []): () => unknown {
-  return () => ({ ok: true, status: 200, json: () => Promise.resolve({ units, overlaps }) });
+function ok(leases: unknown[], overlaps: unknown[] = []): () => unknown {
+  return () => ({ ok: true, status: 200, json: () => Promise.resolve({ leases, overlaps }) });
 }
 
 // secondsAgo builds the unix-second stamp a row carries, so a test can put a row far enough in the
@@ -177,8 +177,8 @@ test("with no daemon configured it says that, rather than showing an empty plan"
   }
 });
 
-// What a reader meets against any daemon predating the delegation ledger. A blank plan here would
-// read as "nothing was delegated", which is the one wrong answer that costs something: they stop
+// What a reader meets against any daemon predating the lease ledger. A blank plan here would
+// read as "nothing was leased", which is the one wrong answer that costs something: they stop
 // looking. Reached by asking for Declared, because a ledger with no rows is exactly the case that
 // hands the surface to Run.
 test("a daemon with no ledger route names the missing endpoint", async () => {
@@ -189,7 +189,7 @@ test("a daemon with no ledger route names the missing endpoint", async () => {
     pickSource(host, "declared");
     await settle();
     assert.equal(phase(host), "empty");
-    assert.match(text(host), /No delegation ledger endpoint/);
+    assert.match(text(host), /No lease ledger endpoint/);
     assert.match(text(host), /lights up when the daemon serves \/api\/v1\/ledger/);
   } finally {
     teardown();
@@ -204,8 +204,8 @@ test("a served but empty ledger is a different sentence from a missing one", asy
     pickSource(host, "declared");
     await settle();
     assert.equal(phase(host), "empty");
-    assert.match(text(host), /Nothing delegated/);
-    assert.doesNotMatch(text(host), /No delegation ledger endpoint/);
+    assert.match(text(host), /No leases declared/);
+    assert.doesNotMatch(text(host), /No lease ledger endpoint/);
   } finally {
     teardown();
   }
@@ -218,14 +218,14 @@ test("a read that fails for any other reason blames neither the plan nor the dae
     await settle();
     pickSource(host, "declared");
     await settle();
-    assert.match(text(host), /Could not read the delegation ledger/);
+    assert.match(text(host), /Could not read the lease ledger/);
     assert.match(text(host), /HTTP 500/);
   } finally {
     teardown();
   }
 });
 
-test("a plan draws one node per unit and one list row per unit", async () => {
+test("a plan draws one node per lease and one list row per lease", async () => {
   serveLedger(
     ok([
       { id: "root", state: "running", goal: "ship it" },
@@ -257,14 +257,14 @@ test("a plan draws one node per unit and one list row per unit", async () => {
   }
 });
 
-test("the overview line is the polite live region; the unit list is not", async () => {
+test("the overview line is the polite live region; the lease list is not", async () => {
   serveLedger(ok([{ id: "root", state: "no_return" }]));
   const { host, teardown } = mount();
   try {
     await settle();
     const summary = host.querySelector(".console-plan-summary");
     assert.equal(summary?.getAttribute("aria-live"), "polite");
-    assert.match(summary?.textContent ?? "", /1 unit\. 1 no-return\./);
+    assert.match(summary?.textContent ?? "", /1 lease\. 1 no-return\./);
     assert.equal(
       host.querySelector(".console-plan-list")?.getAttribute("aria-live"),
       null,
@@ -277,7 +277,7 @@ test("the overview line is the polite live region; the unit list is not", async 
 
 // The same split the graph explorer makes between its canvas and its node cloud: a laid-out drawing
 // has no reading order, so the list is what assistive tech is given.
-test("the drawing is hidden from assistive tech and the unit list is its twin", async () => {
+test("the drawing is hidden from assistive tech and the lease list is its twin", async () => {
   serveLedger(ok([{ id: "root" }]));
   const { host, teardown } = mount();
   try {
@@ -287,7 +287,7 @@ test("the drawing is hidden from assistive tech and the unit list is its twin", 
       "true",
     );
     const nav = host.querySelector(".console-plan-tree");
-    assert.equal(nav?.getAttribute("aria-label"), "Delegation units");
+    assert.equal(nav?.getAttribute("aria-label"), "Leases");
     assert.match(host.querySelector(".console-plan-list__item")?.textContent ?? "", /root/);
   } finally {
     teardown();
@@ -313,7 +313,7 @@ test("mounting does not move focus", async () => {
 });
 
 // Navigation is the ONE thing allowed to move focus, because that is what the reader asked for.
-test("the next-unit key selects a unit and focuses its row", async () => {
+test("the next-lease key selects a lease and focuses its row", async () => {
   serveLedger(ok([{ id: "root" }, { id: "b1", parent: "root" }]));
   const { host, teardown } = mount();
   try {
@@ -329,7 +329,7 @@ test("the next-unit key selects a unit and focuses its row", async () => {
   }
 });
 
-test("selecting a unit shows its goal, checkpoint, tier, validation and owned paths", async () => {
+test("selecting a lease shows its goal, checkpoint, tier, validation and owned paths", async () => {
   serve({
     ledger: ok([
       {
@@ -356,8 +356,8 @@ test("selecting a unit shows its goal, checkpoint, tier, validation and owned pa
     assert.match(detail, /console\/src\/console\/plan\//);
     assert.match(detail, /internal\//);
     // Both feeds answered and carried nothing for this unit: nothing stamps a unit onto them yet,
-    // and the surface says so rather than leaving a blank that reads as "this unit ran nothing".
-    assert.match(detail, /No runs are attributed to this unit/);
+    // and the surface says so rather than leaving a blank that reads as "this lease ran nothing".
+    assert.match(detail, /No runs are attributed to this lease/);
   } finally {
     teardown();
   }
@@ -366,7 +366,7 @@ test("selecting a unit shows its goal, checkpoint, tier, validation and owned pa
 // The other half of that sentence, and the reason it is two sentences. Feeds that did not answer
 // cannot attribute a run to ANY unit, which is a fact about the daemon; reporting it as the one
 // above would blame the ledger for a daemon that is not talking.
-test("a unit whose activity feeds could not be read says that instead", async () => {
+test("a lease whose activity feeds could not be read says that instead", async () => {
   serveLedger(ok([{ id: "root" }]));
   const { host, teardown } = mount();
   try {
@@ -375,7 +375,7 @@ test("a unit whose activity feeds could not be read says that instead", async ()
     const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
     assert.match(detail, /The activity feeds could not be read/);
     assert.match(detail, /stub: no network/, "and it carries what actually went wrong");
-    assert.doesNotMatch(detail, /No runs are attributed to this unit/);
+    assert.doesNotMatch(detail, /No runs are attributed to this lease/);
   } finally {
     teardown();
   }
@@ -383,10 +383,10 @@ test("a unit whose activity feeds could not be read says that instead", async ()
 
 // ---- what the ledger reports about itself ----------------------------------
 
-// Two units claiming one path is a FACT the route derived from two rows an agent wrote, and the
+// Two leases claiming one path is a FACT the route derived from two rows an agent wrote, and the
 // surface's job is to put it in front of a reader. Nothing is blocked, reordered, or failed by it -
 // and it is drawn on BOTH rows, because either one is where the reader might be standing.
-test("an overlap warns on both rows and names the other unit in the detail", async () => {
+test("an overlap warns on both rows and names the other lease in the detail", async () => {
   serve({
     ledger: ok(
       [
@@ -396,8 +396,8 @@ test("an overlap warns on both rows and names the other unit in the detail", asy
       ],
       [
         {
-          unit_a: "a",
-          unit_b: "b",
+          lease_a: "a",
+          lease_b: "b",
           paths_a: ["internal/ledger"],
           paths_b: ["internal/ledger/store.go"],
         },
@@ -414,7 +414,7 @@ test("an overlap warns on both rows and names the other unit in the detail", asy
     assert.deepEqual(
       warned.map((el) => el.dataset.id),
       ["a", "b"],
-      "the unit with no reported overlap carries no warning",
+      "the lease with no reported overlap carries no warning",
     );
     // In words, not in color alone.
     assert.match(warned[0]?.textContent ?? "", /overlap/);
@@ -565,7 +565,7 @@ test("an explicit pick survives the poll", async () => {
     pickSource(host, "declared");
     await settle();
     assert.equal(pressed(host, "declared"), "true");
-    assert.match(text(host), /Nothing delegated/);
+    assert.match(text(host), /No leases declared/);
   } finally {
     teardown();
   }
@@ -592,7 +592,7 @@ test("the run plan draws one node per target and one list row per target", async
   }
 });
 
-// no_return belongs to the delegation ledger alone. An engine that resolved a DAG knows what
+// no_return belongs to the lease ledger alone. An engine that resolved a DAG knows what
 // happened to every node in it, so there is nothing here for that state to describe.
 test("the run view invents no no-return, in the overview or on a node", async () => {
   serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
@@ -873,7 +873,7 @@ test("a ledger that answers after the switch to Run cannot paint the run view", 
     ledgerGate.release({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ units: [{ id: "root", state: "no_return" }] }),
+      json: () => Promise.resolve({ leases: [{ id: "root", state: "no_return" }] }),
     });
     await settle();
 
@@ -933,10 +933,10 @@ test("closing one Plan pane leaves the commands with the pane still open", async
     a.teardown();
 
     assert.ok(
-      listCommands().some((c) => c.id === "plan.unit.next"),
+      listCommands().some((c) => c.id === "plan.lease.next"),
       "a Plan pane is still open, so its commands are still registered",
     );
-    assert.equal(dispatchCommand("plan.unit.next"), true);
+    assert.equal(dispatchCommand("plan.lease.next"), true);
     const rows = [...b.host.querySelectorAll<HTMLElement>(".console-plan-list__item")];
     assert.equal(
       rows[0]?.getAttribute("aria-current"),

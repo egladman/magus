@@ -20,7 +20,7 @@ event.
 | file surface     | deny and advise both reach the model   |
 | MCP              | [MCP](../mcp.md)                       |
 | attention events | `Notification`, `Stop`, `SubagentStop` |
-| delegation       | `PreToolUse` on the sub-agent tool     |
+| lease            | `PreToolUse` on the sub-agent tool     |
 
 ## Skills
 
@@ -85,12 +85,12 @@ old to judge: both of those render nothing, and Claude Code reads nothing as
 allow, so the session goes unguarded with no sign of it. Use the short form
 while you are experimenting; use the templates once you rely on the guard.
 
-## Delegation capture
+## Lease capture
 
 When Claude Code hands work to a sub-agent it does so through a tool call, and
 that call fires `PreToolUse` like any other - carrying the whole prompt the
 orchestrator is handing over in `tool_input.prompt`. Neither guard matcher above
-selects it, so by default magus never sees a delegation. Add a third entry to
+selects it, so by default magus never sees a lease. Add a third entry to
 record one:
 
 ```json
@@ -115,7 +115,7 @@ record one:
 No `jq` and no template: the whole event goes in unchanged, and magus reads
 `tool_input.prompt` for the context, `tool_input.subagent_type` (then
 `description`, then `tool_name`) for the callee's label, and `session_id` for the
-parent's session. The result is one `agent_spawn` event per delegation, with the
+parent's session. The result is one `agent_spawn` event per lease, with the
 handed context stored as a payload blob you fetch by ref.
 
 The `while` loop at the front is how it finds magus, and it is doing the same job
@@ -127,14 +127,14 @@ there. It falls through to `PATH` silently, and where the `PATH` copy cannot loa
 the workspace, the event is simply never recorded. Nothing surfaces that: an
 audit trail with holes reads exactly like one nobody wrote to.
 
-It records; it does not judge. A delegation prompt is prose, so the command rules
+It records; it does not judge. A lease prompt is prose, so the command rules
 never run against it and the verdict is always a pass - a prompt that mentions a
 denied command describes it rather than runs it. Output is discarded and the exit
 status is forced to 0 for the same reason the notification hook does it: an audit
 step must not be able to break the session it observes.
 
-To join those events to a work ledger, write the marker line documented in
-[Any other host](any-host.md#delegation-capture) at the top of the prompt you
+To join those events to a ledger, write the marker line documented in
+[Any other host](any-host.md#lease-capture) at the top of the prompt you
 hand the sub-agent.
 
 ## Notifications
@@ -163,7 +163,7 @@ permission prompt and when the agent goes idle waiting for input), and `Stop` or
 
 It exits 0 and swallows its own output on purpose: a notifier that can fail is a
 hook that can break the session it was meant to watch. It opens with the same
-magusfile walk as the delegation hook above, for the same reason.
+magusfile walk as the lease hook above, for the same reason.
 [Attention hooks](notifications.md) covers the envelope and the outcome vocabulary.
 
 ## Coverage and limits

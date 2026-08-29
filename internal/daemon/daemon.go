@@ -163,7 +163,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			slog.String("addr", addr.String()))
 	}
 
-	// ONE delegation-ledger store for the whole daemon, built before the MCP handler so
+	// ONE lease-ledger store for the whole daemon, built before the MCP handler so
 	// the magus_ledger tool and the console's /api/v1/ledger route below hold the same
 	// object. Two stores over one file each take their own mutex, and the merge Update
 	// performs under a single acquisition then serializes against nothing.
@@ -352,7 +352,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// this one names every target in the workspace, which a share link handed to a phone
 			// has no business enumerating.
 			bridgeMux.Handle("/api/v1/plan", cors(planH))
-			// Delegation ledger: the plan an orchestrating agent DECLARED, read straight off
+			// Lease ledger: the plan an orchestrating agent DECLARED, read straight off
 			// the store the magus_ledger MCP tool writes. Read-only here - the write door is
 			// the tool - and magus enforces none of it.
 			bridgeMux.Handle("/api/v1/ledger", cors(ledgerH))

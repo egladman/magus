@@ -6,7 +6,7 @@
 // accessible twin list, the detail sheet, the state colors and the state marks:
 //
 //  - DECLARED (ledger.ts) - the table an orchestrating agent keeps while it fans work out: one row
-//    per unit, with its parent, its owned and forbidden paths, what it depends on, and the state it
+//    per lease, with its parent, its owned and forbidden paths, what it depends on, and the state it
 //    reached. A GRAPH pretending to be a list, joined here to the live activity feeds.
 //  - RUN (run.ts) - the target DAG the engine resolves for plain human work. Nobody declared it, so
 //    nothing about it can be stale the way a hand-kept table can, and it FOLLOWS the live run: the
@@ -18,8 +18,8 @@
 //
 // Three decisions worth stating:
 //
-//  1. no_return IS ITS OWN COLOR, and it belongs to the ledger ALONE. A unit that failed came back
-//     and said so; a unit that never returned said nothing, and is the only state on this surface
+//  1. no_return IS ITS OWN COLOR, and it belongs to the ledger ALONE. A lease that failed came back
+//     and said so; a lease that never returned said nothing, and is the only state on this surface
 //     that no one else will report. It is never drawn, counted, or worded as a failure - and the
 //     run plan never invents one, because an engine that resolved a DAG knows what happened to
 //     every node in it.
@@ -46,7 +46,7 @@ import {
   resolveDaemonHost,
   wantsDemo,
 } from "../../lib/daemon";
-import { demoUnits, demoOverlaps } from "./demo";
+import { demoLeases, demoOverlaps } from "./demo";
 import { persisted } from "../../lib/persist";
 import { mountZoomControl, type ZoomControl } from "../zoomControl";
 import { registerCommand, unregisterCommand } from "../commands";
@@ -78,7 +78,7 @@ import {
   STATE_MARK,
   type PlanModel,
   type RunJoin,
-  type UnitRelease,
+  type LeaseRelease,
 } from "./ledger";
 import {
   emptyRunPlan,
@@ -92,10 +92,10 @@ import {
 
 // The refresh cadence and the deadline one read gets, both matching the activity drawer's. A plan
 // is watched while work moves under it, so the operator's configured dashboard refresh (20s by
-// default) is far too slow to answer "did that unit come back".
+// default) is far too slow to answer "did that lease come back".
 const POLL_MS = 4000;
 
-// The unit index collapses to a rail, as the diff's file index and the activity trail's event index
+// The lease index collapses to a rail, as the diff's file index and the activity trail's event index
 // do. Persisted, because a reader working in a narrow tile should not re-close it every visit.
 const treeCell = persisted<boolean>("plan-tree-collapsed", false);
 const FETCH_TIMEOUT_MS = 4000;
@@ -134,14 +134,14 @@ const COMMANDS: readonly {
   readonly run: (c: PlanCommands) => void;
 }[] = [
   {
-    id: "plan.unit.next",
-    label: "Plan: next unit",
+    id: "plan.lease.next",
+    label: "Plan: next lease",
     keys: ["j", "ArrowDown"],
     run: (c) => c.next(),
   },
   {
-    id: "plan.unit.prev",
-    label: "Plan: previous unit",
+    id: "plan.lease.prev",
+    label: "Plan: previous lease",
     keys: ["k", "ArrowUp"],
     run: (c) => c.prev(),
   },
@@ -153,7 +153,7 @@ const COMMANDS: readonly {
   },
   {
     id: "plan.select.clear",
-    label: "Plan: clear the selected unit",
+    label: "Plan: clear the selected lease",
     keys: ["Escape"],
     run: (c) => c.clearSelection(),
   },
@@ -275,7 +275,7 @@ interface Drawn {
 
 const NOTHING_DRAWN: Drawn = { nodes: [], edges: [] };
 
-// declaredDrawn projects the delegation ledger. Reading order is the tree walk, so the list reads
+// declaredDrawn projects the lease ledger. Reading order is the tree walk, so the list reads
 // parents before children; the stage places by the layout and does not care about the order.
 function declaredDrawn(model: PlanModel): Drawn {
   const nodes: DrawnNode[] = [];
@@ -284,7 +284,7 @@ function declaredDrawn(model: PlanModel): Drawn {
     if (!n) continue;
     const meta = [STATE_LABEL[n.state]];
     if (n.readOnly) meta.push("read only");
-    if (n.unit.tier) meta.push(n.unit.tier);
+    if (n.lease.tier) meta.push(n.lease.tier);
     nodes.push({
       id: n.id,
       state: n.state,
@@ -292,13 +292,13 @@ function declaredDrawn(model: PlanModel): Drawn {
       label: STATE_LABEL[n.state],
       text: n.id,
       meta,
-      // Both units of a reported pair carry the warning, because either row is where a reader
+      // Both leases of a reported pair carry the warning, because either row is where a reader
       // might be standing when they need to know the other one exists.
       warn: n.overlaps.length ? ["overlap"] : [],
       readOnly: n.readOnly,
       // Capped so a deeply nested plan does not indent itself off the panel.
       depth: Math.min(n.depth, 6),
-      updated: n.unit.updated ?? 0,
+      updated: n.lease.updated ?? 0,
       terminal: isTerminal(n.state),
     });
   }
@@ -307,7 +307,7 @@ function declaredDrawn(model: PlanModel): Drawn {
 
 // runDrawn projects the resolved run plan. Served order is reading order - the daemon resolved the
 // DAG and the console has no better claim about which target to read first - and there is no depth
-// to indent by, because a run plan is a dependency graph rather than a tree of delegations.
+// to indent by, because a run plan is a dependency graph rather than a tree of leases.
 function runDrawn(model: RunPlanModel): Drawn {
   return {
     nodes: model.nodes.map((n) => ({
@@ -349,7 +349,7 @@ function why(e: unknown): string {
 
 // Feeds is one tick of both activity feeds: the rows, and why they are short when a read failed.
 // The reason is carried rather than folded into an empty list because the detail sheet has to tell
-// "nothing is attributed to this unit" apart from "the feeds it would be attributed FROM did not
+// "nothing is attributed to this lease" apart from "the feeds it would be attributed FROM did not
 // answer" - the first is a fact about the plan, the second is a fact about the daemon.
 interface Feeds {
   readonly rows: ActivityRow[];
@@ -452,7 +452,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     btn.dataset.source = s;
     btn.title =
       s === "declared"
-        ? "The delegation ledger: the units an orchestrating agent declared"
+        ? "The lease ledger: the leases an orchestrating agent declared"
         : "The run plan: the target DAG magus resolves, following the live run";
     btn.append(h("span", "pf-v6-c-toggle-group__text", SOURCE_LABEL[s]));
     item.append(btn);
@@ -496,17 +496,17 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
 
   const tree = h("nav", "console-plan-tree");
   const treeHead = h("div", "console-plan-tree__head");
-  const treeTitle = h("span", "console-plan-tree__heading", "Units");
+  const treeTitle = h("span", "console-plan-tree__heading", "Leases");
   const treeHide = h("button", "console-plan-tree__toggle") as HTMLButtonElement;
   treeHide.type = "button";
-  treeHide.title = "Hide the unit index";
-  treeHide.setAttribute("aria-label", "Hide the unit index");
+  treeHide.title = "Hide the lease index";
+  treeHide.setAttribute("aria-label", "Hide the lease index");
   treeHide.textContent = "\u2039";
   treeHead.append(treeTitle, treeHide);
   const treeReopen = h("button", "console-plan-reopen") as HTMLButtonElement;
   treeReopen.type = "button";
-  treeReopen.title = "Show the unit index";
-  treeReopen.setAttribute("aria-label", "Show the unit index");
+  treeReopen.title = "Show the lease index";
+  treeReopen.setAttribute("aria-label", "Show the lease index");
   treeReopen.textContent = "\u203a";
   const list = h("ul", "console-plan-list");
   list.setAttribute("role", "list");
@@ -514,7 +514,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
 
   const stageBox = h("div", "console-plan-stage");
   const stage = svgEl("svg", "console-plan-stage__svg");
-  // The drawing is decoration over the list next door, which carries the same units in reading
+  // The drawing is decoration over the list next door, which carries the same leases in reading
   // order with the same states in words. Announcing a laid-out graph twice, once with no reading
   // order, is worse than announcing it once.
   stage.setAttribute("aria-hidden", "true");
@@ -551,7 +551,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   emptyBodyWrap.append(emptyBody);
   // The showcase offer, as the diff surface makes it: someone with no daemon running meets this
   // first, and a dead end is a worse first impression than a fabricated plan clearly labeled as
-  // one. Hidden unless the caller offers it - "nothing delegated" is a real answer about a real
+  // one. Hidden unless the caller offers it - "no leases declared" is a real answer about a real
   // workspace, and burying it under a demo button would be answering a different question.
   // No demo button, on any page - see the diff surface for the reasoning. showEmpty names where a
   // populated version lives instead.
@@ -613,13 +613,13 @@ function pathField(dl: HTMLElement, label: string, paths: readonly string[]): vo
   dl.append(dd);
 }
 
-// releaseField renders what the unit gave up: the path, and the version of it the next unit
+// releaseField renders what the lease gave up: the path, and the version of it the next lease
 // inherits. Compact by design - a short digest is enough to COMPARE, which is the only thing a
 // reader does with it, and the full one would push the path off the sheet.
 //
 // A digest that is not a hash arrives as a word ("absent" for a path with nothing on disk, "dir"
 // for a directory) and is shown as it came: shortening it would produce a hash-shaped lie.
-function releaseField(dl: HTMLElement, releases: readonly UnitRelease[]): void {
+function releaseField(dl: HTMLElement, releases: readonly LeaseRelease[]): void {
   if (!releases.length) return;
   dl.append(h("dt", "console-plan-detail__label", "Released"));
   const dd = h("dd", "console-plan-detail__value");
@@ -690,7 +690,7 @@ export function activate(host: HTMLElement): PlanInstance {
   // re-resolving it mid-render.
   let lastHost: string | null = null;
   // Why the last activity read came up short, "" when both feeds answered. The detail sheet reads it
-  // so an unread feed cannot masquerade as a unit nothing has been attributed to.
+  // so an unread feed cannot masquerade as a lease nothing has been attributed to.
   let feedsUnread = "";
   let selected: string | null = null;
   let painted = ""; // the signature of the plan currently on screen
@@ -710,7 +710,7 @@ export function activate(host: HTMLElement): PlanInstance {
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     }
     const declared = source === "declared";
-    refs.tree.setAttribute("aria-label", declared ? "Delegation units" : "Plan targets");
+    refs.tree.setAttribute("aria-label", declared ? "Leases" : "Plan targets");
     refs.targetWrap.hidden = declared;
   };
 
@@ -756,7 +756,7 @@ export function activate(host: HTMLElement): PlanInstance {
   // reader has focused - the surface repaints around them, not under them.
   //
   // It covers everything the list ROW draws, meta included. Leaving meta out made the signature a
-  // near-match rather than a match: a unit whose tier changed under an unchanged state drew the same
+  // near-match rather than a match: a lease whose tier changed under an unchanged state drew the same
   // signature, and the row went on reading the old tier until something else moved.
   const signature = (d: Drawn): string =>
     d.nodes
@@ -782,7 +782,7 @@ export function activate(host: HTMLElement): PlanInstance {
     }
     const n = model.byId.get(selected);
     if (!n) return "declared:gone";
-    const runs = (join.byUnit.get(n.id) ?? []).map((r) => [r.id, r.title, r.detail, r.outcome]);
+    const runs = (join.byLease.get(n.id) ?? []).map((r) => [r.id, r.title, r.detail, r.outcome]);
     return (
       "declared:" +
       JSON.stringify([
@@ -791,7 +791,7 @@ export function activate(host: HTMLElement): PlanInstance {
         n.rawState,
         n.parent,
         n.danglingParent,
-        n.unit,
+        n.lease,
         n.overlaps,
         runs,
         feedsUnread,
@@ -799,13 +799,13 @@ export function activate(host: HTMLElement): PlanInstance {
     );
   };
 
-  // syncAges writes the heartbeat onto rows that already exist: how long since the unit's row was
+  // syncAges writes the heartbeat onto rows that already exist: how long since the lease's row was
   // last touched, and the stale mark once that gap passes the surface's threshold. It runs on every
   // paint and touches only text and one attribute, so a plan that has not changed is never rebuilt
   // just because time passed - which is what keeps a clock from taking the focus off the row a
   // reader is standing on.
   //
-  // Terminal rows carry no age. A unit that finished is not going to be touched again, and an
+  // Terminal rows carry no age. A lease that finished is not going to be touched again, and an
   // ever-growing "2h" beside a pass reads as a problem where there is none.
   const syncAges = (): void => {
     const now = Date.now();
@@ -981,7 +981,7 @@ export function activate(host: HTMLElement): PlanInstance {
       const hint = h(
         "p",
         "console-plan-detail__hint",
-        "Select a unit to read its goal, its checkpoint, and the runs attributed to it.",
+        "Select a lease to read its goal, its checkpoint, and the runs attributed to it.",
       );
       refs.detail.replaceChildren(hint);
       return;
@@ -994,13 +994,13 @@ export function activate(host: HTMLElement): PlanInstance {
     if (n.readOnly) head.append(h("span", "console-plan-detail__ro", "read only"));
 
     const dl = h("dl", "console-plan-detail__fields");
-    field(dl, "Goal", n.unit.goal ?? "");
-    field(dl, "Checkpoint", n.unit.checkpoint ?? "");
-    field(dl, "Tier", n.unit.tier ?? "");
-    field(dl, "Validation", n.unit.validation ?? "");
-    pathField(dl, "Owned paths", n.unit.owned_paths ?? []);
-    pathField(dl, "Forbidden paths", n.unit.forbidden_paths ?? []);
-    pathField(dl, "Depends on", n.unit.depends_on ?? []);
+    field(dl, "Goal", n.lease.goal ?? "");
+    field(dl, "Checkpoint", n.lease.checkpoint ?? "");
+    field(dl, "Tier", n.lease.tier ?? "");
+    field(dl, "Validation", n.lease.validation ?? "");
+    pathField(dl, "Owned paths", n.lease.owned_paths ?? []);
+    pathField(dl, "Forbidden paths", n.lease.forbidden_paths ?? []);
+    pathField(dl, "Depends on", n.lease.depends_on ?? []);
     field(dl, "Parent", n.parent ?? "");
     if (n.danglingParent) {
       field(dl, "Parent", n.danglingParent + " (not in this ledger)");
@@ -1010,27 +1010,27 @@ export function activate(host: HTMLElement): PlanInstance {
     if (n.rawState && n.rawState !== n.state) {
       field(dl, "Ledger state", n.rawState + " (unrecognized, shown as declared)");
     }
-    // Every pair this unit is in, naming the OTHER unit and the paths THAT unit declared. Its
+    // Every pair this lease is in, naming the OTHER lease and the paths THAT lease declared. Its
     // declarations rather than this one's: the reader is already looking at their own owned
     // paths a few rows up, and what they cannot see is what the other agent claimed. A fact,
     // and worded as one - magus derived it from two rows an agent wrote, and it blocks nothing.
     for (const o of n.overlaps) {
-      const mine = o.unit_a === n.id;
-      const other = mine ? o.unit_b : o.unit_a;
+      const mine = o.lease_a === n.id;
+      const other = mine ? o.lease_b : o.lease_a;
       field(dl, "Overlaps", other + ": " + (mine ? o.paths_b : o.paths_a).join(", "));
     }
-    releaseField(dl, n.unit.releases ?? []);
+    releaseField(dl, n.lease.releases ?? []);
     // An absolute time rather than an age: the row list carries the age, which moves, and a sheet
     // that changed every second would rebuild itself out from under the link it holds.
-    field(dl, "Created", stamp(n.unit.created ?? 0));
-    field(dl, "Updated", stamp(n.unit.updated ?? 0));
+    field(dl, "Created", stamp(n.lease.created ?? 0));
+    field(dl, "Updated", stamp(n.lease.updated ?? 0));
 
-    const runs = join.byUnit.get(n.id) ?? [];
+    const runs = join.byLease.get(n.id) ?? [];
     const runsBox = h("div", "console-plan-detail__runs");
     runsBox.append(h("h3", "console-plan-detail__runshead", "Runs"));
     if (!runs.length) {
       // Two different facts, and only one of them is about the plan. The feeds not answering means
-      // nothing can be attributed to ANY unit right now; the feeds answering with nothing means the
+      // nothing can be attributed to ANY lease right now; the feeds answering with nothing means the
       // attribution itself does not exist yet. Reporting the first as the second would blame the
       // ledger for a daemon that is not talking.
       runsBox.append(
@@ -1040,8 +1040,8 @@ export function activate(host: HTMLElement): PlanInstance {
           feedsUnread
             ? "The activity feeds could not be read (" +
                 feedsUnread +
-                "), so nothing can be attributed to this unit right now."
-            : "No runs are attributed to this unit. Nothing stamps a unit onto the activity feeds yet, so this stays empty until something does.",
+                "), so nothing can be attributed to this lease right now."
+            : "No runs are attributed to this lease. Nothing stamps a lease onto the activity feeds yet, so this stays empty until something does.",
         ),
       );
     } else {
@@ -1123,7 +1123,7 @@ export function activate(host: HTMLElement): PlanInstance {
   };
 
   // syncSelection repaints only what the selection changed - the aria-current on one list row and
-  // the data-selected on one node - so choosing a unit never rebuilds the list under the caret. The
+  // the data-selected on one node - so choosing a lease never rebuilds the list under the caret. The
   // detail sheet goes through its signature for the same reason.
   const syncSelection = (): void => {
     for (const b of refs.list.querySelectorAll<HTMLElement>(".console-plan-list__item")) {
@@ -1156,7 +1156,7 @@ export function activate(host: HTMLElement): PlanInstance {
   const selectRow = (id: string | null): void => {
     select(id);
     if (!selected) return;
-    // Matched by walking the rows rather than by an attribute selector: a unit id is an agent's
+    // Matched by walking the rows rather than by an attribute selector: a lease id is an agent's
     // free text, so building a selector out of it is a quoting bug waiting for the first id with a
     // quote in it.
     const btn = [...refs.list.querySelectorAll<HTMLElement>(".console-plan-list__item")].find(
@@ -1194,13 +1194,13 @@ export function activate(host: HTMLElement): PlanInstance {
     syncSelection();
   };
 
-  // The ledger's stale-plan note. A run naming a unit the ledger does not carry means the plan on
+  // The ledger's stale-plan note. A run naming a lease the ledger does not carry means the plan on
   // screen is older than the work, which is exactly when a reader should stop trusting the picture.
   const staleNote = (): string => {
     const stale = join.unmatched.length;
     return stale
       ? stale +
-          (stale === 1 ? " run names a unit" : " runs name units") +
+          (stale === 1 ? " run names a lease" : " runs name leases") +
           " this ledger does not carry, so the plan on screen is older than the work."
       : "";
   };
@@ -1288,34 +1288,34 @@ export function activate(host: HTMLElement): PlanInstance {
       if (settleSource(false)) return refreshRun(daemonHost);
       blank();
       showEmpty(
-        "No delegation ledger endpoint",
-        "No delegation ledger endpoint; the plan view lights up when the daemon serves /api/v1/ledger.",
+        "No lease ledger endpoint",
+        "No lease ledger endpoint; the plan view lights up when the daemon serves /api/v1/ledger.",
       );
-      setSummary("No delegation ledger endpoint.");
+      setSummary("No lease ledger endpoint.");
       return;
     }
     if (read.kind === "unreadable") {
       if (settleSource(false)) return refreshRun(daemonHost);
       blank();
       showEmpty(
-        "Could not read the delegation ledger",
+        "Could not read the lease ledger",
         "GET http://" +
           daemonHost +
           "/api/v1/ledger did not answer (" +
           read.detail +
-          "). If this daemon predates the delegation ledger the route is not there yet; the plan view lights up when the daemon serves /api/v1/ledger.",
+          "). If this daemon predates the lease ledger the route is not there yet; the plan view lights up when the daemon serves /api/v1/ledger.",
       );
-      setSummary("Could not read the delegation ledger.");
+      setSummary("Could not read the lease ledger.");
       return;
     }
-    if (settleSource(read.units.length > 0)) return refreshRun(daemonHost);
-    model = buildPlan(read.units, read.overlaps);
+    if (settleSource(read.leases.length > 0)) return refreshRun(daemonHost);
+    model = buildPlan(read.leases, read.overlaps);
     join = joinRuns(model, feeds.rows);
     if (!model.nodes.length) {
       blank();
       showEmpty(
-        "Nothing delegated",
-        "The daemon serves the delegation ledger and it is empty: no unit has been declared in this workspace yet.",
+        "No leases declared",
+        "The daemon serves the lease ledger and it is empty: no lease has been declared in this workspace yet.",
       );
       setSummary(overviewLine(model));
       return;
@@ -1394,7 +1394,7 @@ export function activate(host: HTMLElement): PlanInstance {
     source = "declared";
     sourceDecided = true;
     paintSource();
-    model = buildPlan(demoUnits(Date.now()), demoOverlaps());
+    model = buildPlan(demoLeases(Date.now()), demoOverlaps());
     join = joinRuns(model, []);
     drawn = declaredDrawn(model);
     if (selected && !model.byId.has(selected)) selected = null;
@@ -1416,7 +1416,7 @@ export function activate(host: HTMLElement): PlanInstance {
       showEmpty(
         "No daemon connected",
         source === "declared"
-          ? "The plan view reads the delegation ledger from a local daemon. Start one with:"
+          ? "The plan view reads the lease ledger from a local daemon. Start one with:"
           : "The run plan comes from a local daemon. Start one with:",
         "magus server start",
         true,

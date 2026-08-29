@@ -254,9 +254,9 @@ func TestCatalogSkillBytesByName(t *testing.T) {
 	assert.Contains(t, string(body), "name: magus-architecture-review")
 	assert.Contains(t, string(body), "skill-content: "+catalog.SkillDigest("magus-architecture-review"))
 
-	ultra, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantFull)
+	ultra, err := catalog.SkillBytes("magus-multi-agent", VariantFull)
 	require.NoError(t, err)
-	assert.Contains(t, string(ultra), "name: magus-delegate-multi-agent")
+	assert.Contains(t, string(ultra), "name: magus-multi-agent")
 
 	_, err = catalog.SkillBytes("does-not-exist", VariantFull)
 	assert.ErrorContains(t, err, "unknown skill")
@@ -274,11 +274,11 @@ func TestMustSkillRefusesWhatMagusDoesNotShip(t *testing.T) {
 	assert.Panics(t, func() { MustSkill("magus-architecture") })
 }
 
-func TestDelegateUltraVariantsKeepTheSameSafetyContract(t *testing.T) {
+func TestMultiAgentVariantsKeepTheSameSafetyContract(t *testing.T) {
 	catalog := Default(7)
-	full, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantFull)
+	full, err := catalog.SkillBytes("magus-multi-agent", VariantFull)
 	require.NoError(t, err)
-	simple, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantSimple)
+	simple, err := catalog.SkillBytes("magus-multi-agent", VariantSimple)
 	require.NoError(t, err)
 
 	for _, body := range [][]byte{full, simple} {
@@ -286,7 +286,7 @@ func TestDelegateUltraVariantsKeepTheSameSafetyContract(t *testing.T) {
 		assert.Contains(t, text, "acceptance criteria")
 		assert.Contains(t, text, "magus affected <target> --plan")
 		assert.Contains(t, text, "magus status --watch=15s")
-		assert.Contains(t, text, "Nested delegation is allowed")
+		assert.Contains(t, text, "Nesting is allowed when the host supports it")
 		assert.NotContains(t, text, "{{")
 	}
 	assert.Contains(t, string(full), "natural evolution of loop engineering")

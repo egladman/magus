@@ -939,7 +939,7 @@ func (v StatusRun) BuzzObject() BuzzObject {
 	}
 }
 
-func (v DelegationRelease) BuzzObject() BuzzObject {
+func (v LeaseRelease) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path":       v.Path,
 		"digest":     v.Digest,
@@ -947,7 +947,7 @@ func (v DelegationRelease) BuzzObject() BuzzObject {
 	}
 }
 
-func (v DelegationUnattributedWrite) BuzzObject() BuzzObject {
+func (v LeaseUnattributedWrite) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path":   v.Path,
 		"digest": v.Digest,
@@ -955,7 +955,7 @@ func (v DelegationUnattributedWrite) BuzzObject() BuzzObject {
 	}
 }
 
-func (v Delegation) BuzzObject() BuzzObject {
+func (v Lease) BuzzObject() BuzzObject {
 	itemsReleases := make([]any, len(v.Releases))
 	for indexReleases := range v.Releases {
 		itemsReleases[indexReleases] = v.Releases[indexReleases].BuzzObject()
@@ -986,26 +986,26 @@ func (v Delegation) BuzzObject() BuzzObject {
 	}
 }
 
-func (v DelegationOverlap) BuzzObject() BuzzObject {
+func (v LeaseOverlap) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"delegationA": v.DelegationA,
-		"delegationB": v.DelegationB,
-		"pathsA":      v.PathsA,
-		"pathsB":      v.PathsB,
+		"leaseA": v.LeaseA,
+		"leaseB": v.LeaseB,
+		"pathsA": v.PathsA,
+		"pathsB": v.PathsB,
 	}
 }
 
-func (v DelegationReport) BuzzObject() BuzzObject {
-	itemsDelegations := make([]any, len(v.Delegations))
-	for indexDelegations := range v.Delegations {
-		itemsDelegations[indexDelegations] = v.Delegations[indexDelegations].BuzzObject()
+func (v LeaseReport) BuzzObject() BuzzObject {
+	itemsLeases := make([]any, len(v.Leases))
+	for indexLeases := range v.Leases {
+		itemsLeases[indexLeases] = v.Leases[indexLeases].BuzzObject()
 	}
 	itemsOverlaps := make([]any, len(v.Overlaps))
 	for indexOverlaps := range v.Overlaps {
 		itemsOverlaps[indexOverlaps] = v.Overlaps[indexOverlaps].BuzzObject()
 	}
 	return BuzzObject{
-		"delegations": itemsDelegations,
-		"overlaps":    itemsOverlaps,
+		"leases":   itemsLeases,
+		"overlaps": itemsOverlaps,
 	}
 }

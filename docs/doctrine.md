@@ -99,7 +99,7 @@ designed for an agent first. The `agents` key in `affected ci --plan` is the
 one agent-specific field in an otherwise human-first surface - the
 skill-routing hint sits quarantined inside it, so everything around it reads
 as what it is, ordinary build metadata a person wanted first. The one
-deliberate exception is the delegation ledger, an agent-to-agent declaration
+deliberate exception is the lease ledger, an agent-to-agent declaration
 under [Agents propose, humans dispose](#agents-propose-humans-dispose): it
 carries no CLI verb because no person is its audience. This prevents the
 bolted-on AI integration, papering over a tool
@@ -136,12 +136,12 @@ break it, a gate keyed on how code was written, has to argue with this page
 first.
 
 Exactly one code path grades a write by who is acting, and naming it is what
-keeps the rule checkable. `gradeDelegatedWrite` reads the delegation ledger to
-decide whether a worker is editing outside the paths its delegation declared.
+keeps the rule checkable. `gradeLeasedWrite` reads the lease ledger to
+decide whether a worker is editing outside the paths its lease declared.
 That is a concurrency-ownership question on the guard surface - who owns this
 file right now - rather than a judgment about the work, and it reaches no cache
 key, no drift comparison, and no diagnostic. Its uncertainties - no ledger, no
-live delegation, a file that will not parse - fail open with at most an
+live lease, a file that will not parse - fail open with at most an
 advisory.
 
 ## The standard
@@ -206,7 +206,7 @@ authorship from the surface that performed the write, so a change made through
 the agent surface carries an agent's name no matter what the writer reports
 about itself. Interrupting a person costs attention, and the suggestion
 operation reflects that: it requires a stated reason before the proposal
-reaches anyone. The delegation ledger has no CLI verb, unlike the attention
+reaches anyone. The lease ledger has no CLI verb, unlike the attention
 events `notify` raises, because an attention event is addressed to a person
 while the ledger is an agent-to-agent declaration read back by the guard and
 the console.

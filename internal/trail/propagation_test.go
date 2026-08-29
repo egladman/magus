@@ -65,31 +65,31 @@ func TestParseTraceparent_NotesOnceAndNeverEchoesTheValue(t *testing.T) {
 
 func TestParseBaggage(t *testing.T) {
 	for name, tc := range map[string]struct {
-		value          string
-		wantDelegation string
-		wantSpawner    string
+		value       string
+		wantLease   string
+		wantSpawner string
 	}{
-		"both members":              {"magus.delegation=fleet/f3,magus.spawner=claude", "fleet/f3", "claude"},
-		"other tenants are skipped": {"userId=alice,magus.delegation=fleet/f3,serverNode=DF28", "fleet/f3", ""},
-		"properties are ignored":    {"magus.delegation=fleet/f3;prop=1,magus.spawner=claude;x", "fleet/f3", "claude"},
-		"whitespace is formatting":  {" magus.delegation = fleet/f3 , magus.spawner = claude ", "fleet/f3", "claude"},
+		"both members":              {"magus.lease=fleet/f3,magus.spawner=claude", "fleet/f3", "claude"},
+		"other tenants are skipped": {"userId=alice,magus.lease=fleet/f3,serverNode=DF28", "fleet/f3", ""},
+		"properties are ignored":    {"magus.lease=fleet/f3;prop=1,magus.spawner=claude;x", "fleet/f3", "claude"},
+		"whitespace is formatting":  {" magus.lease = fleet/f3 , magus.spawner = claude ", "fleet/f3", "claude"},
 		"the value is percent-decoded": {
 			"magus.spawner=claude%20code%2Fsession%201", "", "claude code/session 1",
 		},
 		"a plus is a plus, not a space": {"magus.spawner=wave+2", "", "wave+2"},
-		"a member with no = is skipped": {"broken,magus.delegation=fleet/f3", "fleet/f3", ""},
+		"a member with no = is skipped": {"broken,magus.lease=fleet/f3", "fleet/f3", ""},
 		"unset":                         {"", "", ""},
-		// The id rule every delegation channel shares: an id magus cannot vouch for is dropped,
-		// because the trail exempts a delegation from redaction.
-		"a delegation that is not an id": {"magus.delegation=two%20words", "", ""},
-		"an empty delegation":            {"magus.delegation=", "", ""},
+		// The id rule every lease channel shares: an id magus cannot vouch for is dropped,
+		// because the trail exempts a lease from redaction.
+		"a lease that is not an id": {"magus.lease=two%20words", "", ""},
+		"an empty lease":            {"magus.lease=", "", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			baggageNoteOnce = sync.Once{}
 			t.Cleanup(func() { baggageNoteOnce = sync.Once{} })
 
-			delegation, spawner := parseBaggage(tc.value)
-			assert.Equal(t, tc.wantDelegation, delegation)
+			lease, spawner := parseBaggage(tc.value)
+			assert.Equal(t, tc.wantLease, lease)
 			assert.Equal(t, tc.wantSpawner, spawner)
 		})
 	}
@@ -108,19 +108,19 @@ func TestSpawnFromEnv_ReadsTheTwoChannelsIndependently(t *testing.T) {
 	const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
 	t.Setenv(EnvTraceparent, "  "+traceparent+"  ")
-	t.Setenv(EnvBaggage, BaggageDelegation+"=fleet/f3,"+BaggageSpawner+"=claude")
+	t.Setenv(EnvBaggage, BaggageLease+"=fleet/f3,"+BaggageSpawner+"=claude")
 
 	spawn := SpawnFromEnv()
 	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", spawn.TraceID, "surrounding whitespace is formatting, not part of the value")
 	assert.Equal(t, "00f067aa0ba902b7", spawn.ParentSpanID)
 	assert.Equal(t, "01", spawn.Flags)
-	assert.Equal(t, "fleet/f3", spawn.Delegation)
+	assert.Equal(t, "fleet/f3", spawn.Lease)
 	assert.Equal(t, "claude", spawn.Spawner)
-	assert.Equal(t, "fleet/f3", DelegationFromEnv())
+	assert.Equal(t, "fleet/f3", LeaseFromEnv())
 
 	t.Setenv(EnvBaggage, "")
-	assert.Empty(t, DelegationFromEnv(), "no baggage is a session that claims no delegation, not an error")
-	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", SpawnFromEnv().TraceID, "the trace is independent of the delegation")
+	assert.Empty(t, LeaseFromEnv(), "no baggage is a session that claims no lease, not an error")
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", SpawnFromEnv().TraceID, "the trace is independent of the lease")
 
 	t.Setenv(EnvTraceparent, "")
 	assert.Equal(t, Spawn{}, SpawnFromEnv(), "a process a person started claims nothing at all")

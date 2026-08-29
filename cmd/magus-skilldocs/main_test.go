@@ -134,6 +134,12 @@ func TestRenamedSkillPageCarriesItsOldURL(t *testing.T) {
 	require.NotEmpty(t, agent.FormerNames("magus-docs-lookup"), "this test is pinned to a skill that has been renamed")
 	assert.Contains(t, page(t, out, "magus-docs-lookup.md"), "aliases:\n  - reference/skills/magus-docs\n")
 	assert.NotContains(t, page(t, out, "magus-query.md"), "aliases:", "a skill that was never renamed carries no redirect")
+
+	// Renamed twice, so both old URLs sit under ONE aliases key: a repeated mapping key
+	// is a frontmatter parse error, which fails the whole site build.
+	require.Len(t, agent.FormerNames("magus-multi-agent"), 2, "this test is pinned to a skill renamed twice")
+	assert.Contains(t, page(t, out, "magus-multi-agent.md"),
+		"aliases:\n  - reference/skills/magus-delegate-ultra\n  - reference/skills/magus-delegate-multi-agent\n")
 }
 
 // TestIndexTotalsEverySkill checks the numbers the index exists for: the choice

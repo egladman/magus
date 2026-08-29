@@ -134,7 +134,7 @@ test("an unrecognized state reads as idle and keeps what the daemon said", () =>
   assert.equal(node?.rawState, "skipped");
 });
 
-// no_return belongs to the delegation ledger alone: it is what a worker that never came back
+// no_return belongs to the lease ledger alone: it is what a worker that never came back
 // leaves behind, and an engine that resolved a DAG always knows what happened to every node.
 test("no_return is not a state this plan has - it reads as idle like any other unknown", () => {
   assert.equal(normalizeRunState("no_return"), "idle");

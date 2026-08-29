@@ -97,7 +97,7 @@ func TestAgentFamiliesCollect(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
 
-	p.RecordDelegationRegistration(ctx, "diverged")
+	p.RecordLeaseRegistration(ctx, "diverged")
 	p.RecordAttentionDisposition(ctx, 42, "warning")
 	p.RecordReviewRemark(ctx, "agent")
 	p.RecordReviewRemark(ctx, "human")
@@ -106,8 +106,8 @@ func TestAgentFamiliesCollect(t *testing.T) {
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)
 
-	regs, ok := sumInt64(t, rm, "magus.delegation.registrations")
-	require.True(t, ok, "magus.delegation.registrations missing")
+	regs, ok := sumInt64(t, rm, "magus.lease.registrations")
+	require.True(t, ok, "magus.lease.registrations missing")
 	assert.Equal(t, int64(1), regs)
 
 	remarks, ok := sumInt64(t, rm, "magus.review.remarks")

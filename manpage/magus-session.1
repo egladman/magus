@@ -54,11 +54,11 @@ Record why the request is being closed, alongside the disposition
 \fB\-\-agent\-name\fR \fIstring\fR
 Name of the agent host this invocation came from (attribution only)
 .TP
-\fB\-\-delegation\fR \fIstring\fR
-The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to magus.delegation in $BAGGAGE)
-.TP
 \fB\-\-event\fR \fIstring\fR
 The host's hook event name (e.g. PreToolUse)
+.TP
+\fB\-\-lease\fR \fIstring\fR
+The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)
 .TP
 \fB\-\-observe\fR
 Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
@@ -160,10 +160,10 @@ printf '%s' 'go build ./...' | magus session hook
 printf '%s' 'internal/cache/output.go' | magus session hook --observe
 .EE
 .PP
-\fIGrade a write as a delegation\fR
+\fIGrade a write as a lease\fR
 .PP
 .EX
-printf '%s' 'internal/ledger/store.go' | magus session hook --path --delegation f2-guard
+printf '%s' 'internal/ledger/store.go' | magus session hook --path --lease f2-guard
 .EE
 .PP
 \fIRaise a permission prompt on the desktop (host\-wired)\fR

@@ -48,15 +48,15 @@ func TestForwardRoundTrip(t *testing.T) {
 	assert.Len(t, args, 3)
 }
 
-// TestForwardCarriesTheDelegation exercises the whole seam rather than the request struct: the
-// client reads the BAGGAGE delegation, the server validates it, and the adopted handler sees it. A run
-// launched under a delegation used to lose it the moment the daemon adopted the run, because proc
+// TestForwardCarriesTheLease exercises the whole seam rather than the request struct: the
+// client reads the BAGGAGE lease, the server validates it, and the adopted handler sees it. A run
+// launched under a lease used to lose it the moment the daemon adopted the run, because proc
 // forwarded argv, cwd and root and no environment at all.
-func TestForwardCarriesTheDelegation(t *testing.T) {
+func TestForwardCarriesTheLease(t *testing.T) {
 	got := make(chan string, 1)
 	srv, err := New(Options{
 		Handler: func(ctx context.Context, _ []string) error {
-			got <- DelegationFromContext(ctx)
+			got <- LeaseFromContext(ctx)
 			return nil
 		},
 	})
@@ -65,7 +65,7 @@ func TestForwardCarriesTheDelegation(t *testing.T) {
 	require.NoError(t, srv.Start())
 
 	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
-	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/f3")
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
 
 	code, err := Forward(context.Background(), []string{"run", "build"}, "test", "")
 	require.NoError(t, err)

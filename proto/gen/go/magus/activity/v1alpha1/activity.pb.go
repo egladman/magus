@@ -64,7 +64,7 @@ const (
 	// agent's tool call to the credential it made spendable.
 	Kind_KIND_CREDENTIAL_GRANT Kind = 8
 	// An orchestrating agent handed work to a sub-agent. The request blob carries the CONTEXT
-	// that was handed over - the delegation's whole point, and routinely kilobytes, so only its
+	// that was handed over - the lease's whole point, and routinely kilobytes, so only its
 	// ref rides the event. There is no response blob and no guard decision: a spawn is an
 	// observation, not a judged surface. OUTCOME_OK means the handoff was observed, NOT that the
 	// sub-agent later succeeded.
@@ -222,10 +222,11 @@ type ActivityEvent struct {
 	// grouped by host must not cost 200 GetPayload calls.
 	Host    string `protobuf:"bytes,14,opt,name=host,proto3" json:"host,omitempty"`
 	Session string `protobuf:"bytes,15,opt,name=session,proto3" json:"session,omitempty"`
-	// The work-ledger unit this action belongs to, empty when the producer could not correlate
-	// one. Set today only by KIND_AGENT_SPAWN, and only when the handed context declared it: no
-	// host event names a magus unit, so the producer scans the delegation prompt for a documented
-	// marker line ("unit: <id>") instead. Correlation is COOPERATIVE - an orchestrator that wants
+	// The work-ledger lease this action belongs to, empty when the producer could not correlate
+	// one. The field keeps the "unit" spelling; magus calls the concept a lease. Set today only by
+	// KIND_AGENT_SPAWN, and only when the handed context declared it: no host event names a magus
+	// lease, so the producer scans the lease prompt for a documented marker line
+	// ("lease: <id>") instead. Correlation is COOPERATIVE - an orchestrator that wants
 	// the join writes the marker, and one that does not leaves this empty, which is a missing join
 	// rather than a wrong one. It rides the event rather than the blob for the same reason host and
 	// session do: joining a page of rows to a ledger must not cost a GetPayload per row.

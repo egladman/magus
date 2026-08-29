@@ -18,7 +18,7 @@ import { authHeaders } from "../../../lib/daemon";
 
 // AttentionRequest mirrors one row of GET /api/v1/attention's JSON, which is the same shape
 // `magus session attention -o json` prints. Hand-written rather than generated because it rides the
-// plain /api routes, the same as the delegation ledger beside it.
+// plain /api routes, the same as the lease ledger beside it.
 //
 // Every field but the id is optional here even where the route always sends it: this is parsed
 // from the network, and a missing outcome must render as a blank cell rather than the string
@@ -35,11 +35,11 @@ export interface AttentionRequest {
   readonly severity: string;
   readonly source: string;
   readonly where: string;
-  // The delegation the RAISING session was launched under: which slice of a fleet's work is
+  // The lease the RAISING session was launched under: which slice of a fleet's work is
   // blocked. Attribution, never identity - the request id does not key on it, so a fleet
   // re-partitioning does not re-key the row a person was about to close. Empty for anything a
   // person started by hand, which is not an error.
-  readonly delegation: string;
+  readonly lease: string;
   readonly message: string;
 }
 
@@ -73,7 +73,7 @@ export function parseRequests(body: unknown): AttentionRequest[] {
       severity: str(r.severity),
       source: str(r.source),
       where: str(r.where),
-      delegation: str(r.delegation),
+      lease: str(r.lease),
       message: str(r.message),
     });
   }
@@ -89,7 +89,7 @@ export function parseStore(body: unknown): string {
 // ---- pure text -------------------------------------------------------------
 
 // ageLabel is how long a request has been waiting, at the coarsest granularity that still
-// answers the question - the same ladder the delegation surface reads ages on, over
+// answers the question - the same ladder the lease surface reads ages on, over
 // MILLISECONDS rather than seconds because that is the unit this route serves.
 //
 // "" when the row carries no timestamp, so the caller renders nothing rather than a confident
@@ -138,7 +138,7 @@ export type AttentionRead =
   | { readonly kind: "unreadable"; readonly detail: string };
 
 // loadAttention reads GET /api/v1/attention under the same bearer + no-store rules as the
-// delegation ledger beside it. 404 and 501 are "absent", not failures: on any daemon predating
+// lease ledger beside it. 404 and 501 are "absent", not failures: on any daemon predating
 // the route that is the honest answer, and the tile says so by name.
 //
 // A cross-origin console (a hosted page reaching a loopback daemon over #port=) cannot always

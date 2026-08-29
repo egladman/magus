@@ -144,14 +144,14 @@ func TestListActivityEvents_FilterAgentCommand(t *testing.T) {
 	assert.Equal(t, "session:abc", events[0].GetActor())
 }
 
-// TestListActivityEvents_CarriesAgentSpawn proves the delegation record reaches the console over the
+// TestListActivityEvents_CarriesAgentSpawn proves the lease record reaches the console over the
 // EXISTING listing: a distinct kind, the unit on the row so a reader can join a page to a work
 // ledger without a GetPayload per row, and the handed context reachable only by its ref.
 func TestListActivityEvents_CarriesAgentSpawn(t *testing.T) {
 	dir := t.TempDir()
 	trail.AppendAgentSpawn(t.Context(), dir, trail.AgentSpawn{
 		Workspace: "/ws/a", Host: "claude-code", Session: "abc", Tool: "Task", Child: "Explore",
-		Context: "unit: notes-store-6b\naudit the store",
+		Context: "lease: notes-store-6b\naudit the store",
 	})
 
 	events := list(t, dir, nil)
@@ -164,7 +164,7 @@ func TestListActivityEvents_CarriesAgentSpawn(t *testing.T) {
 	assert.NotEmpty(t, events[0].GetRequestRef())
 	assert.Empty(t, events[0].GetResponseRef(), "a spawn has no response: nothing judged it")
 
-	// The kind filter selects it, so the console needs no new endpoint to build a delegation view.
+	// The kind filter selects it, so the console needs no new endpoint to build a lease view.
 	assert.Len(t, list(t, dir, &activityv1.ActivityQuery{
 		Kinds: []activityv1.Kind{activityv1.Kind_KIND_AGENT_SPAWN},
 	}), 1)

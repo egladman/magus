@@ -152,13 +152,13 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 			bySpan[s.SpanID] = s.Session
 		}
 	}
-	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tDELEGATION\tSPAWNER\tPARENT\tFACTS\tTARGETS")
+	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tLEASE\tSPAWNER\tPARENT\tFACTS\tTARGETS")
 	for _, s := range summaries {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
 			s.Session,
 			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"),
 			orDash(s.Host),
-			orDash(s.Delegation),
+			orDash(s.Lease),
 			orDash(s.Spawner),
 			orDash(sessionParent(bySpan, s.ParentSpanID)),
 			s.Facts,

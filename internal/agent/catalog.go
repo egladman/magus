@@ -35,24 +35,27 @@ import (
 // 39: `magus graph verify` is gone; the installed copies are graded by `magus
 // doctor`'s agent skills check, which every skill that named the old verb now
 // points at.
-// 40: magus-delegate-multi-agent learns two delegation failure modes observed
+// 40: magus-multi-agent learns two lease failure modes observed
 // in the field: a worker's actual base can differ from the handed checkpoint
-// (verify it, or materialize and re-record), and a delegation whose environment
+// (verify it, or materialize and re-record), and a lease whose environment
 // cannot execute magus gets ROOT-DEFERRED validation up front.
-// 41: the vocabulary drops "unit" - a row of the delegation ledger is a
-// DELEGATION, in the skill, the ledger table, and the tools it names.
-// 42: the delegation runtime reaches the skills - magus-delegate-multi-agent
+// 41: the vocabulary drops "unit" for a row of the ledger, in the skill, the
+// ledger table, and the tools it names.
+// 42: the lease runtime reaches the skills - magus-multi-agent
 // teaches ledger register, environment enrollment and the guard's
 // deny/advise split, attention events for a blocked worker, and the session
-// audit of what a delegation ran; both it and magus-vcs-hygiene read
+// audit of what a lease ran; both it and magus-vcs-hygiene read
 // `magus diff --impact` before landing.
 // 43: the session CLI family (`magus session`, `session attention`, `session
 // dispose`, `session hook`, `session notify`) replaces the sessions/attention/
 // notify/hook top-level verbs in the skill text; there are no compat aliases.
 // 44: enrollment moves to the W3C channels - a worker exports
-// BAGGAGE=magus.delegation=<id>, plus TRACEPARENT and magus.spawner when its host
+// BAGGAGE=magus.lease=<id>, plus TRACEPARENT and magus.spawner when its host
 // has them. The magus-specific environment variable it replaces is gone.
-const SkillVersion = 44
+// 45: the concept is a LEASE - the ledger row, the `--lease` flag, the BAGGAGE
+// member magus.lease - and magus-delegate-multi-agent is renamed
+// magus-multi-agent. Nothing answers to the old names.
+const SkillVersion = 45
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -303,7 +306,7 @@ var skillSources = []skillSource{
 	{name: "magus-change-summary", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-change-summary/SKILL.md", formerNames: []string{"magus-changes"}},
 	{name: "magus-commit-composition", description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths. Use when a branch has accumulated commits in the order the work occurred, before opening a PR, when asked to reconsolidate/squash/reword/clean up commits, or when a reviewer would meet a rename split across commits and a fix buried in a regeneration. Do NOT use on pushed commits, and do NOT use it to write a single message - that is idiomatic-commit-messages; this decides what goes IN each commit.", bodyPath: "skills/magus-commit-composition/SKILL.md"},
 	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
-	{name: "magus-delegate-multi-agent", description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the delegations cannot collide, bound fan-out depth, and match each delegation's model to the work it needs. Use when a change needs several disjoint groups of files edited, when an audit or review covers a tree, or when the user says \"fan this out\" or \"spin up an agent per package\" - you do not need to be asked. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing, so it can veto a fan-out but never license one.", bodyPath: "skills/magus-delegate-multi-agent/SKILL.md", formerNames: []string{"magus-delegate-ultra"}},
+	{name: "magus-multi-agent", description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, bound fan-out depth, and match each lease's model to the work it needs. Use when a change needs several disjoint groups of files edited, when an audit or review covers a tree, or when the user says \"fan this out\" or \"spin up an agent per package\" - you do not need to be asked. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing, so it can veto a fan-out but never license one.", bodyPath: "skills/magus-multi-agent/SKILL.md", formerNames: []string{"magus-delegate-ultra", "magus-delegate-multi-agent"}},
 	{name: "magus-docs-lookup", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs-lookup/SKILL.md", formerNames: []string{"magus-docs"}},
 	{name: "magus-handoff-journal", description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.", bodyPath: "skills/magus-handoff-journal/SKILL.md", formerNames: []string{"magus-memory"}},
 	{name: "magus-query", description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.", bodyPath: "skills/magus-query/SKILL.md"},

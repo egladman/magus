@@ -46,15 +46,15 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	// The ancestry travels with the request because the daemon, not this process, is what
 	// takes the project locks for an adopted run: without it the daemon cannot tell a
 	// lock held for THIS client's parent from one held for an unrelated client.
-	// The delegation travels for the same reason in the other direction: the daemon runs the
+	// The lease travels for the same reason in the other direction: the daemon runs the
 	// work, so it would otherwise attribute it to the daemon's environment - which is
-	// nobody's delegation - and the session journal would show adopted runs unattributed.
-	// Read through trail.DelegationFromEnv rather than the raw variable so a malformed
+	// nobody's lease - and the session journal would show adopted runs unattributed.
+	// Read through trail.LeaseFromEnv rather than the raw variable so a malformed
 	// value is dropped here, once, by the same rule every other channel applies.
 	req := RunRequest{
 		Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root, Protocol: ProtocolV2,
-		Ancestors:  types.InvocationAncestorsFromContext(ctx),
-		Delegation: trail.DelegationFromEnv(),
+		Ancestors: types.InvocationAncestorsFromContext(ctx),
+		Lease:     trail.LeaseFromEnv(),
 	}
 	if err := writeFrame(conn, typeRun, req); err != nil {
 		return 0, fmt.Errorf("proc: forward: write: %w", err)

@@ -70,7 +70,7 @@ So nothing here is dangling. What happened is narrower and, for me, more pointed
 the three ways into magus, the command line is the one that lost this.
 
 **`magus_ledger` has no counterpart anywhere else.** There is no `magus ledger`
-subcommand and no ledger client in the Buzz module either. The delegation ledger is
+subcommand and no ledger client in the Buzz module either. The lease ledger is
 reachable over MCP and nowhere else. That is the one place in this surface where the
 server is not redundant, and the reason is not that a protocol layer earned it. I let
 a capability land in the newest door and never gave it one anywhere else.

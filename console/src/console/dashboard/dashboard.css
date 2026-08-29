@@ -3,7 +3,7 @@
    they do, so it gets the identical ANSI colors, status badges and line markup instead of a plain
    monospace dump. Bundled at build time, so this is an inline, not a runtime request. */
 @import "../render/render.css";
-/* Delegation is a Dashboard mode. */
+/* The lease plan is a Dashboard mode. */
 @import "../plan/plan.css";
 
 /* dashboard.css - page-scoped styles for the /dashboard/ control surface: the edge-to-edge
@@ -93,12 +93,12 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-orchestration__line { min-width: 0; }
 .console-dashboard-orchestration__detail { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
 
-.console-dashboard-delegation__summary {
+.console-dashboard-lease__summary {
   margin: 0 0 0.75rem;
   font-size: var(--pf-t--global--font--size--md);
   font-weight: 600;
 }
-.console-dashboard-delegation__list {
+.console-dashboard-lease__list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: 0.45rem;
@@ -106,7 +106,7 @@ body[data-dash-native] { margin: 0; }
   padding: 0;
   list-style: none;
 }
-.console-dashboard-delegation__item {
+.console-dashboard-lease__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 0.45rem;
@@ -116,18 +116,18 @@ body[data-dash-native] { margin: 0; }
   border-inline-start: 3px solid var(--console-status-running);
   background: var(--pf-t--global--background--color--secondary--default);
 }
-.console-dashboard-delegation__item[data-state="declared"] { border-inline-start-color: var(--console-status-queued); }
-.console-dashboard-delegation__item[data-state="pass"] { border-inline-start-color: var(--console-status-ok); }
-.console-dashboard-delegation__item[data-state="fail"],
-.console-dashboard-delegation__item[data-state="no_return"] { border-inline-start-color: var(--console-status-danger); }
-.console-dashboard-delegation__mark { font-size: 0.68rem; font-weight: 700; color: var(--console-status-running); }
-.console-dashboard-delegation__item[data-state="declared"] .console-dashboard-delegation__mark { color: var(--console-status-queued); }
-.console-dashboard-delegation__item[data-state="pass"] .console-dashboard-delegation__mark { color: var(--console-status-ok); }
-.console-dashboard-delegation__item[data-state="fail"] .console-dashboard-delegation__mark,
-.console-dashboard-delegation__item[data-state="no_return"] .console-dashboard-delegation__mark { color: var(--console-status-danger); }
-.console-dashboard-delegation__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.console-dashboard-delegation__state { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-delegation__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn-text); font-size: var(--pf-t--global--font--size--sm); }
+.console-dashboard-lease__item[data-state="declared"] { border-inline-start-color: var(--console-status-queued); }
+.console-dashboard-lease__item[data-state="pass"] { border-inline-start-color: var(--console-status-ok); }
+.console-dashboard-lease__item[data-state="fail"],
+.console-dashboard-lease__item[data-state="no_return"] { border-inline-start-color: var(--console-status-danger); }
+.console-dashboard-lease__mark { font-size: 0.68rem; font-weight: 700; color: var(--console-status-running); }
+.console-dashboard-lease__item[data-state="declared"] .console-dashboard-lease__mark { color: var(--console-status-queued); }
+.console-dashboard-lease__item[data-state="pass"] .console-dashboard-lease__mark { color: var(--console-status-ok); }
+.console-dashboard-lease__item[data-state="fail"] .console-dashboard-lease__mark,
+.console-dashboard-lease__item[data-state="no_return"] .console-dashboard-lease__mark { color: var(--console-status-danger); }
+.console-dashboard-lease__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.console-dashboard-lease__state { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-lease__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn-text); font-size: var(--pf-t--global--font--size--sm); }
 
 /* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact tile opts
    into a single column with [data-half] so it pairs with a neighbor instead of eating a whole
@@ -185,7 +185,7 @@ body[data-dash-native] { margin: 0; }
   #dash-panels { grid-template-columns: repeat(12, minmax(0, 1fr)); }
   #dash-panels > [data-card] { grid-column: span 4; }
 
-  #dash-panels > [data-card="delegation"],
+  #dash-panels > [data-card="lease"],
   #dash-panels > [data-card="agents"],
   #dash-panels > [data-card="activity"],
   #dash-panels > [data-card="gantt"],
@@ -202,7 +202,7 @@ body[data-dash-native] { margin: 0; }
   #dash-panels > [data-card="util"] { grid-column: span 4; }
 
   #dash-panels > [data-card] { min-block-size: 0; }
-  #dash-panels > [data-card="delegation"],
+  #dash-panels > [data-card="lease"],
   #dash-panels > [data-card="activity"],
   #dash-panels > [data-card="gantt"] { min-block-size: 13rem; }
 
@@ -523,14 +523,14 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
    are the tallest FIXED element in a panel whose other content already knows how to shrink. */
 [data-bigpicture] [data-card="agents"] .console-dashboard-activity__caption,
 [data-bigpicture] [data-card="activity"] .console-dashboard-activity__caption { display: none; }
-[data-bigpicture] [data-card="delegation"] .pf-v6-c-button { display: none; }
-[data-bigpicture] .console-dashboard-delegation__summary { font-size: calc(var(--bp-u) * 1.25); }
-[data-bigpicture] .console-dashboard-delegation__list { gap: calc(var(--bp-u) * 0.35); }
-[data-bigpicture] .console-dashboard-delegation__item { padding: calc(var(--bp-u) * 0.45) calc(var(--bp-u) * 0.6); }
-[data-bigpicture] .console-dashboard-delegation__mark,
-[data-bigpicture] .console-dashboard-delegation__state { font-size: calc(var(--bp-u) * 0.95); }
-[data-bigpicture] .console-dashboard-delegation__id { font-size: calc(var(--bp-u) * 1.05); }
-[data-bigpicture] .console-dashboard-delegation__note { display: none; }
+[data-bigpicture] [data-card="lease"] .pf-v6-c-button { display: none; }
+[data-bigpicture] .console-dashboard-lease__summary { font-size: calc(var(--bp-u) * 1.25); }
+[data-bigpicture] .console-dashboard-lease__list { gap: calc(var(--bp-u) * 0.35); }
+[data-bigpicture] .console-dashboard-lease__item { padding: calc(var(--bp-u) * 0.45) calc(var(--bp-u) * 0.6); }
+[data-bigpicture] .console-dashboard-lease__mark,
+[data-bigpicture] .console-dashboard-lease__state { font-size: calc(var(--bp-u) * 0.95); }
+[data-bigpicture] .console-dashboard-lease__id { font-size: calc(var(--bp-u) * 1.05); }
+[data-bigpicture] .console-dashboard-lease__note { display: none; }
 
 /* Legend swatches, shared by the charts and the utilization grid.
    The label takes the TEXT tier and the swatch keeps the ICON tier: the square is a shape and wants
@@ -978,8 +978,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   [data-bigpicture] #dash-panels > .console-dashboard-hero {
     grid-row: 1 / 3; grid-column: 1 / var(--bp-split-next, 9);
   }
-  /* Delegation belongs directly under the verdict. */
-  [data-bigpicture] #dash-panels > [data-card="delegation"] {
+  /* The lease plan belongs directly under the verdict. */
+  [data-bigpicture] #dash-panels > [data-card="lease"] {
     grid-row: 3 / 5; grid-column: 1 / var(--bp-split-next, 9);
   }
   [data-bigpicture] #dash-panels > [data-card="agents"] {
@@ -1100,7 +1100,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-area: cache; }
   [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-area: ws; }
   [data-bigpicture] #dash-panels > [data-card="locks"] { grid-area: locks; }
-  [data-bigpicture] #dash-panels > [data-card="delegation"] { grid-area: plan; }
+  [data-bigpicture] #dash-panels > [data-card="lease"] { grid-area: plan; }
   [data-bigpicture] #dash-panels > [data-card="agents"] { grid-area: agents; }
   [data-bigpicture] #dash-panels > [data-rotate] { grid-area: rotate; }
 }
@@ -1545,11 +1545,11 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   font-size: 0.72rem;
 }
 .console-dashboard-attention__age,
-.console-dashboard-attention__delegation {
+.console-dashboard-attention__lease {
   font-size: 0.7rem;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-dashboard-attention__delegation { font-family: var(--pf-t--global--font--family--mono); }
+.console-dashboard-attention__lease { font-family: var(--pf-t--global--font--family--mono); }
 /* The dispose control sits at the far end of the row, away from the id it closes: it is the one
    write on this board, and it should not be a mis-click away from reading. */
 .console-dashboard-attention__dispose { margin-left: auto; display: inline-flex; align-items: center; }

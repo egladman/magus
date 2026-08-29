@@ -321,7 +321,7 @@ uses; see [Attention hooks](notifications.md).
 - Tool identifiers were confirmed against an installed OpenCode 1.18.5: `bash`,
   `edit`, `write`, `read`, `patch` and `glob` all appear in its binary, and
   `filePath` is the field its edit tools carry.
-- Delegation capture is FEASIBLE but not wired. `tool.execute.before` fires for
+- Lease capture is FEASIBLE but not wired. `tool.execute.before` fires for
   every tool and hands the plugin `input.tool` plus the call's arguments, so a
   branch alongside the `bash` and `edit`/`write` ones could pipe a sub-agent
   tool's prompt to `magus session hook` and get the same `agent_spawn` event. Which tool

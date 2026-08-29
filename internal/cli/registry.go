@@ -1170,7 +1170,7 @@ base in yourself on the others, then run resolve.`,
 		},
 		{
 			Name:  "checkpoint",
-			Short: "Print the working state's identity, for recording what a delegation was handed; writes nothing",
+			Short: "Print the working state's identity, for recording what a lease was handed; writes nothing",
 		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
@@ -1179,7 +1179,7 @@ base in yourself on the others, then run resolve.`,
 		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
 		{"Settle a conflicted merge", "magus vcs resolve"},
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
-		{"Record what a delegation was handed", "magus vcs checkpoint"},
+		{"Record what a lease was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
 	},
 }
@@ -1282,22 +1282,22 @@ which is an opaque label the caller chooses rather than a set magus knows: a
 magus that enumerated hosts would need a release per host, and a wrapper that
 cannot extract a session id must still be able to get a verdict.
 
---delegation is the exception: it IS policy. It names the delegation the caller is
-acting as, and a write is then graded against that delegation's declared write boundary
-in this workspace's delegation ledger. Inside its owned paths passes; inside its
-forbidden paths, or inside another live delegation's owned paths, is denied and the
-reason names the owning delegation. It defaults to the magus.delegation member of $BAGGAGE -
+--lease is the exception: it IS policy. It names the lease the caller is
+acting as, and a write is then graded against that lease's declared write boundary
+in this workspace's lease ledger. Inside its owned paths passes; inside its
+forbidden paths, or inside another live lease's owned paths, is denied and the
+reason names the owning lease. It defaults to the magus.lease member of $BAGGAGE -
 the W3C baggage list a spawning tool exports - and the flag wins when both are set.
 
-A call that names no valid delegation while a fleet is running is ADVISED and never
-blocked: a person editing their own repository has no delegation id, and the guard is a
+A call that names no valid lease while a fleet is running is ADVISED and never
+blocked: a person editing their own repository has no lease id, and the guard is a
 seatbelt for harnesses that opt in rather than a sandbox. With no ledger, or with
-no delegation in it declared or running, nothing is graded and nothing is read.`,
+no lease in it declared or running, nothing is graded and nothing is read.`,
 			Usage: "magus session hook [--path] [flags]",
 			Flags: []Flag{
 				{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
 				{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-				{Name: "delegation", Kind: FlagString, Doc: "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to magus.delegation in $BAGGAGE)"},
+				{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)"},
 				{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
 				{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
 				{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
@@ -1338,7 +1338,7 @@ none. This is the only command that opens one.`,
 		{"Close one request, saying why", `magus session dispose att-3f9c -reason "approved and pushed by hand"`},
 		{"Judge a shell command (host-wired)", "printf '%s' 'go build ./...' | magus session hook"},
 		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus session hook --observe"},
-		{"Grade a write as a delegation", "printf '%s' 'internal/ledger/store.go' | magus session hook --path --delegation f2-guard"},
+		{"Grade a write as a lease", "printf '%s' 'internal/ledger/store.go' | magus session hook --path --lease f2-guard"},
 		{"Raise a permission prompt on the desktop (host-wired)", "printf '%s\\n' 'needs approval' | magus session notify --outcome permission --desktop"},
 	},
 	// The status IS the enforcement for hook: a host that reads only the exit code

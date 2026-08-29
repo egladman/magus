@@ -39,7 +39,7 @@ const (
 	rootCtxKey contextKey = iota
 	cwdCtxKey
 	jobCtxKey
-	delegationCtxKey
+	leaseCtxKey
 )
 
 // WithRoot returns ctx carrying the client-sent workspace root, readable via RootFromContext.
@@ -68,29 +68,29 @@ func CwdFromContext(ctx context.Context) string {
 	return ""
 }
 
-// WithDelegation returns ctx carrying the client's delegation, readable via
-// DelegationFromContext. An id failing [types.ValidDelegationID] - including the empty
+// WithLease returns ctx carrying the client's lease, readable via
+// LeaseFromContext. An id failing [types.ValidLeaseID] - including the empty
 // string a client that predates the field sends - stores nothing, so a reader sees "".
 //
 // The validation is here rather than at the call site because the value crosses a socket
-// any local process may dial: a delegation id is exempt from the trail's redaction, so
+// any local process may dial: a lease id is exempt from the trail's redaction, so
 // storing an unvalidated one would let the wire carry a credential onto an event line.
-// Dropping it matches what trail.DelegationFromEnv does with a malformed environment value.
-func WithDelegation(ctx context.Context, delegation string) context.Context {
-	if !types.ValidDelegationID(delegation) {
+// Dropping it matches what trail.LeaseFromEnv does with a malformed environment value.
+func WithLease(ctx context.Context, lease string) context.Context {
+	if !types.ValidLeaseID(lease) {
 		return ctx
 	}
-	return context.WithValue(ctx, delegationCtxKey, delegation)
+	return context.WithValue(ctx, leaseCtxKey, lease)
 }
 
-// DelegationFromContext returns the delegation the adopted client was launched under, or
+// LeaseFromContext returns the lease the adopted client was launched under, or
 // "" when it claimed none or claimed one that failed validation.
 //
-// A caller that also reads the environment channel must prefer this: it is the delegation
+// A caller that also reads the environment channel must prefer this: it is the lease
 // of the process that ASKED for the run, while the daemon's own environment describes
 // whoever happened to start the daemon.
-func DelegationFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(delegationCtxKey).(string); ok {
+func LeaseFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(leaseCtxKey).(string); ok {
 		return v
 	}
 	return ""
@@ -552,7 +552,7 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 
 	ctx = WithRoot(ctx, req.Root)
 	ctx = WithCwd(ctx, req.Cwd)
-	ctx = WithDelegation(ctx, req.Delegation)
+	ctx = WithLease(ctx, req.Lease)
 	// Adopt the client's ancestry (BeginInvocation appends the id minted below), so a run
 	// this daemon executes for a nested client recognizes the lock it holds for that
 	// client's parent as its own ancestor's rather than waiting on itself forever.

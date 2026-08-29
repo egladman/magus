@@ -77,19 +77,19 @@ type RunRequest struct {
 	// process holds. Empty from a client that predates the field: re-entry detection is
 	// then unavailable and the acquire falls back to waiting.
 	Ancestors []string `json:"ancestors,omitempty"`
-	// Delegation is the delegation the CLIENT was launched under, carried because the
+	// Lease is the lease the CLIENT was launched under, carried because the
 	// daemon executes the run in its own process and so reads its own environment, not
-	// the client's - without this an adopted run records no delegation at all.
+	// the client's - without this an adopted run records no lease at all.
 	//
 	// It is the client's own claim about itself, exactly what the BAGGAGE channel's
-	// magus.delegation member is - the client's trace context does not cross this socket, so
-	// an adopted run records the delegation and no ancestry - and it
+	// magus.lease member is - the client's trace context does not cross this socket, so
+	// an adopted run records the lease and no ancestry - and it
 	// arrives over a socket any local process may dial. The server therefore re-validates
-	// it with types.ValidDelegationID and drops a value that fails, matching what
-	// trail.DelegationFromEnv does with a malformed environment value: a delegation id is
+	// it with types.ValidLeaseID and drops a value that fails, matching what
+	// trail.LeaseFromEnv does with a malformed environment value: a lease id is
 	// exempt from the trail's redaction, so an unchecked one is a way to carry a
 	// credential onto an event line. Empty from a client that predates the field.
-	Delegation string `json:"delegation,omitempty"`
+	Lease string `json:"lease,omitempty"`
 }
 
 // RunReply is the response from the parent to the child.

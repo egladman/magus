@@ -101,7 +101,7 @@ maintainable. There are NO bare, ad-hoc, or unprefixed class names. This mirrors
     columns, the file sidebar). Authored rather than PF because PF has no diff component, and
     because the row geometry is load-bearing: the stream is virtualized against a fixed row
     height, so these rules are part of the scroll math rather than decoration.
-  - `console-plan-*` the delegation-plan surface (the unit-tree stage and its edges, the unit
+  - `console-plan-*` the lease-plan surface (the lease-tree stage and its edges, the lease
     list that is the stage's accessible twin, the detail sheet). Authored for the same reason as
     the graph stage: PF has no component for a laid-out node/edge drawing, and the node geometry
     is shared with the layout that places it.

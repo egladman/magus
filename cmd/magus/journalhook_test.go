@@ -126,12 +126,12 @@ func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 	}
 }
 
-// The delegation is stamped in the shared wiring, not per command, for the same reason the fact shape
-// is: `magus session` is a view of the repository, and a delegation that only `run` recorded would
+// The lease is stamped in the shared wiring, not per command, for the same reason the fact shape
+// is: `magus session` is a view of the repository, and a lease that only `run` recorded would
 // read as a fleet that stopped working the moment it ran `affected`.
-func TestWithSessionJournalStampsTheDelegationOnEveryVerb(t *testing.T) {
+func TestWithSessionJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/f3")
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
 
 	for verb, args := range map[string][]string{
 		"run":      {"ci", "api"},
@@ -150,23 +150,23 @@ func TestWithSessionJournalStampsTheDelegationOnEveryVerb(t *testing.T) {
 
 			summaries := sessions.Summarize(fold)
 			require.Len(t, summaries, 1)
-			assert.Equal(t, "fleet/f3", summaries[0].Delegation)
+			assert.Equal(t, "fleet/f3", summaries[0].Lease)
 			require.Len(t, summaries[0].Targets, 1)
-			assert.Equal(t, "fleet/f3", summaries[0].Targets[0].Delegation)
+			assert.Equal(t, "fleet/f3", summaries[0].Targets[0].Lease)
 		})
 	}
 }
 
-// The delegation a forwarded run carries beats the environment, because on an adopted run this
+// The lease a forwarded run carries beats the environment, because on an adopted run this
 // code executes in the DAEMON and the environment it would otherwise read belongs to whoever
 // started the daemon. Without the preference every daemon-adopted run in a fleet is attributed
 // to one stranger, or to nobody - the defect this wiring exists to close.
-func TestWithSessionJournalPrefersTheForwardedDelegation(t *testing.T) {
+func TestWithSessionJournalPrefersTheForwardedLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/daemon-env")
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/daemon-env")
 	root := t.TempDir()
 
-	ctx := proc.WithDelegation(context.Background(), "fleet/client")
+	ctx := proc.WithLease(context.Background(), "fleet/client")
 	handlers := withSessionJournal(ctx, nil, root, "run", []string{"ci", "api"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
@@ -178,22 +178,22 @@ func TestWithSessionJournalPrefersTheForwardedDelegation(t *testing.T) {
 
 	summaries := sessions.Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, "fleet/client", summaries[0].Delegation)
+	assert.Equal(t, "fleet/client", summaries[0].Lease)
 	require.Len(t, summaries[0].Targets, 1)
-	assert.Equal(t, "fleet/client", summaries[0].Targets[0].Delegation)
+	assert.Equal(t, "fleet/client", summaries[0].Targets[0].Lease)
 }
 
-// The other half of the precedence: a plain CLI run carries no forwarded delegation, and the
+// The other half of the precedence: a plain CLI run carries no forwarded lease, and the
 // environment channel must still be read. A context-only implementation would leave every
 // unadopted run unattributed, which is the same bug with the cases swapped.
-func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedDelegation(t *testing.T) {
+func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=fleet/local")
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/local")
 	root := t.TempDir()
 
 	// An invalid forwarded id stores nothing, so this is also the "the wire lied" case: the
 	// context carries none and the local environment is what remains.
-	ctx := proc.WithDelegation(context.Background(), "not a delegation id")
+	ctx := proc.WithLease(context.Background(), "not a lease id")
 	handlers := withSessionJournal(ctx, nil, root, "run", []string{"build"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
@@ -205,16 +205,16 @@ func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedDelegation(
 
 	summaries := sessions.Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, "fleet/local", summaries[0].Delegation)
+	assert.Equal(t, "fleet/local", summaries[0].Lease)
 }
 
-// A delegation that fails the id rule is dropped rather than stamped, which is what keeps the trail's
+// A lease that fails the id rule is dropped rather than stamped, which is what keeps the trail's
 // redaction exemption honest. The drop happens in the wiring, because that is where the
 // environment is read; the note explaining it is asserted in internal/trail, where the one-time
 // gate can be reset. Here the observable fact is that nothing was attributed.
-func TestWithSessionJournalDropsAnInvalidDelegation(t *testing.T) {
+func TestWithSessionJournalDropsAnInvalidLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, trail.BaggageDelegation+"=not a delegation id")
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=not a lease id")
 	root := t.TempDir()
 
 	handlers := withSessionJournal(context.Background(), nil, root, "run", []string{"build"})
@@ -228,9 +228,9 @@ func TestWithSessionJournalDropsAnInvalidDelegation(t *testing.T) {
 
 	summaries := sessions.Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Empty(t, summaries[0].Delegation)
+	assert.Empty(t, summaries[0].Lease)
 	require.Len(t, summaries[0].Targets, 1)
-	assert.Empty(t, summaries[0].Targets[0].Delegation)
+	assert.Empty(t, summaries[0].Targets[0].Lease)
 }
 
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler

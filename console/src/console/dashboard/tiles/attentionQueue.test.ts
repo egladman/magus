@@ -23,7 +23,7 @@ test("parseRequests reads the documented shape", () => {
         severity: "high",
         source: "claude/Notification",
         where: "/repo [apps/web]",
-        delegation: "unit-a",
+        lease: "lease-a",
         message: "may I push?",
       },
     ],
@@ -38,7 +38,7 @@ test("parseRequests reads the documented shape", () => {
     severity: "high",
     source: "claude/Notification",
     where: "/repo [apps/web]",
-    delegation: "unit-a",
+    lease: "lease-a",
     message: "may I push?",
   });
   assert.equal(parseStore({ store: "/s" }), "/s");

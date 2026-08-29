@@ -91,10 +91,10 @@ type Provider interface {
 	RecordBuzzJITRun(ctx context.Context)                                            // magus.buzz.jit.runs
 	RecordBuzzVMFault(ctx context.Context, kind string)                              // magus.buzz.vm.faults
 
-	// Agent-surface families: magus.delegation.*, magus.attention.*, magus.review.*. Every
+	// Agent-surface families: magus.lease.*, magus.attention.*, magus.review.*. Every
 	// attribute here is a bounded enum the caller has already validated; an id, a path, a
-	// delegation label or a remark body must never reach one.
-	RecordDelegationRegistration(ctx context.Context, verdict string)         // magus.delegation.registrations
+	// lease label or a remark body must never reach one.
+	RecordLeaseRegistration(ctx context.Context, verdict string)              // magus.lease.registrations
 	RecordAttentionDisposition(ctx context.Context, secs float64, sev string) // magus.attention.disposition.duration
 	RecordReviewRemark(ctx context.Context, author string)                    // magus.review.remarks
 	RecordReviewPublish(ctx context.Context, verdict string, downgraded bool) // magus.review.publishes

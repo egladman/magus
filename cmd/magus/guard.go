@@ -88,13 +88,13 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// host. A wrapper that cannot extract a session id must still get a verdict;
 	// erroring here would block a tool call over metadata.
 	hf := gen.BindSessionHook(fset)
-	// The environment supplies the DEFAULT, so an explicit --delegation still wins: a shell
+	// The environment supplies the DEFAULT, so an explicit --lease still wins: a shell
 	// that exported the variable for a whole session must not outrank a per-call
 	// override. Same shape `magus run` uses for MAGUS_SHARD.
-	// trail.DelegationFromEnv, never a raw Getenv: the journal producers read the variable
+	// trail.LeaseFromEnv, never a raw Getenv: the journal producers read the variable
 	// through the same helper, and two readers with different trimming rules split one
-	// exported delegation into a journal identity and an unguarded write.
-	envDefault(fset, flagHookDelegation, trail.DelegationFromEnv())
+	// exported lease into a journal identity and an unguarded write.
+	envDefault(fset, flagHookLease, trail.LeaseFromEnv())
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -113,7 +113,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 	// Read through Lookup rather than off a bound variable so the value is the same
 	// whichever registration above owns the flag. Goes with the TODO there.
-	actingDelegation := hf.Delegation
+	actingLease := hf.Lease
 
 	input, hasInput, readErr := readGuardInput(in)
 	// A failed read is not an empty stdin, and collapsing the two cleared every
@@ -155,11 +155,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			who.Event = req.Who.Event
 		}
 		if req.IsSpawn {
-			// A delegation carries no verdict, so it returns the pass every other
+			// A spawn carries no verdict, so it returns the pass every other
 			// non-finding does and never reaches the guard. Handled here rather than
 			// beside the two guard arms because the whole point is that nothing judges
 			// it: the handed context is prose, and a prompt that merely MENTIONS a
-			// denied command would otherwise block the delegation that describes it.
+			// denied command would otherwise block the spawn that describes it.
 			appendHookSpawn(ctx, req, who)
 			return writeGuardVerdict(out, opts,
 				guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"})
@@ -181,12 +181,12 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// contribution. Running the write rules here would only ever manufacture a false
 		// advisory about editing a file the agent opened read-only.
 	case hf.Path:
-		// The delegation ledger speaks first. It is the only path rule whose verdict is
+		// The lease ledger speaks first. It is the only path rule whose verdict is
 		// about a CONCURRENT AGENT rather than about the file itself, so nothing else can
 		// outrank it: the regeneration advice below is still true after a collision, and
-		// saying that instead would let two delegations edit one path in silence.
+		// saying that instead would let two leases edit one path in silence.
 		context := ""
-		switch g := gradeDelegatedWrite(ctx, actingDelegation, input.Value); g.Decision {
+		switch g := gradeLeasedWrite(ctx, actingLease, input.Value); g.Decision {
 		case "deny":
 			verdict.Decision = "deny"
 			verdict.Reason = g.Reason
@@ -364,7 +364,7 @@ type hookEnvelope struct {
 	ToolInput      struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
-		// A delegation: the context an orchestrator is about to hand a sub-agent, plus
+		// A spawn: the context an orchestrator is about to hand a sub-agent, plus
 		// whatever the host calls the callee. Field PATHS, not a host name - the same line
 		// the two fields above already draw. magus does not know which tool produces them
 		// and never switches on ToolName; a payload carrying a prompt IS a spawn.
@@ -407,7 +407,7 @@ const (
 // file_path - so it does not try. --observe is what separates them, and only the wrapper
 // can set it, because only the wrapper knows which of its host's tools merely look.
 //
-// A payload carrying a PROMPT rather than either is a delegation handoff: it is RECORDED and
+// A payload carrying a PROMPT rather than either is a spawn handoff: it is RECORDED and
 // EXEMPT from judgment. No rule is evaluated against a prompt, so the guard never denies one -
 // there is no command and no path to judge, only a context transfer to note. It is tested last on
 // purpose, so that adding this branch cannot change the verdict on any payload the guard already
@@ -437,7 +437,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value, req.IsSpawn = env.ToolInput.Prompt, true
 		req.Tool = env.ToolName
 		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
-		// across spawns, so it groups a delegation feed; a description is per-spawn prose; the
+		// across spawns, so it groups a spawn feed; a description is per-spawn prose; the
 		// tool name is the last resort that at least says a spawn happened.
 		for _, label := range []string{env.ToolInput.SubagentType, env.ToolInput.Description, env.ToolName} {
 			if label != "" {
@@ -513,7 +513,7 @@ func appendHookActivity(ctx context.Context, input guardInput, who hookAttributi
 	trail.AppendAgentCommand(ctx, location.base, command)
 }
 
-// appendHookSpawn records a delegation handoff into the same trail, so a person auditing the
+// appendHookSpawn records a spawn handoff into the same trail, so a person auditing the
 // activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
 // spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
 // there is no verdict to record, because a spawn is not a guard surface.

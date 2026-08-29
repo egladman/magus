@@ -325,10 +325,10 @@ const (
 	FlagSessionDisposeReason = "reason"
 	// session hook: --agent-name
 	FlagSessionHookAgentName = "agent-name"
-	// session hook: --delegation
-	FlagSessionHookDelegation = "delegation"
 	// session hook: --event
 	FlagSessionHookEvent = "event"
+	// session hook: --lease
+	FlagSessionHookLease = "lease"
 	// session hook: --observe
 	FlagSessionHookObserve = "observe"
 	// session hook: --path
@@ -1025,7 +1025,7 @@ func BindSessionDispose(fs *flag.FlagSet) *SessionDisposeFlags {
 type SessionHookFlags struct {
 	Path       bool   // --path
 	Observe    bool   // --observe
-	Delegation string // --delegation
+	Lease      string // --lease
 	AgentName  string // --agent-name
 	Session    string // --session
 	Transcript string // --transcript
@@ -1037,7 +1037,7 @@ func BindSessionHook(fs *flag.FlagSet) *SessionHookFlags {
 	var f SessionHookFlags
 	fs.BoolVar(&f.Path, FlagSessionHookPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
 	fs.BoolVar(&f.Observe, FlagSessionHookObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
-	fs.StringVar(&f.Delegation, FlagSessionHookDelegation, "", "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to magus.delegation in $BAGGAGE)")
+	fs.StringVar(&f.Lease, FlagSessionHookLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)")
 	fs.StringVar(&f.AgentName, FlagSessionHookAgentName, "", "Name of the agent host this invocation came from (attribution only)")
 	fs.StringVar(&f.Session, FlagSessionHookSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Transcript, FlagSessionHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")

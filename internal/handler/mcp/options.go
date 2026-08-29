@@ -65,7 +65,7 @@ type Options struct {
 	// Nil disables magus_diff, which is the honest state for a daemon with no workspace.
 	DiffSessions *changeset.Store
 
-	// Ledger is the daemon's shared delegation-ledger store, the SAME one the console's
+	// Ledger is the daemon's shared lease-ledger store, the SAME one the console's
 	// /api/v1/ledger route reads. Sharing it is what makes the Store's mutex mean
 	// anything: two Stores over one file each hold their own lock, so the in-process
 	// serialization the store documents would hold only while nothing wrote concurrently.

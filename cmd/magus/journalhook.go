@@ -28,24 +28,24 @@ import (
 func withSessionJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
 	// The environment is read ONCE, here, and every fact this invocation writes carries that
 	// copy. Reading it per fact would let a mid-run environment change split one session's
-	// facts across two delegations, which is a history no producer could have meant.
+	// facts across two leases, which is a history no producer could have meant.
 	//
 	// On an ADOPTED run the environment belongs to the DAEMON, not to whoever asked for the
 	// run, so the environment channel alone leaves every forwarded run unattributed. proc
-	// carries the client's delegation on the request and lands it on ctx, and that wins here:
+	// carries the client's lease on the request and lands it on ctx, and that wins here:
 	// it is the claim of the process that asked, which is the same precedence trail documents
-	// between a delegation marker and the environment. The trace context does not cross that
-	// socket, so a forwarded run records the client's delegation and no ancestry rather than
+	// between a lease marker and the environment. The trace context does not cross that
+	// socket, so a forwarded run records the client's lease and no ancestry rather than
 	// borrowing the daemon's. A plain CLI run carries none on ctx and reads its own environment.
 	spawn := trail.SpawnFromEnv()
-	if forwarded := proc.DelegationFromContext(ctx); forwarded != "" {
-		spawn = trail.Spawn{Delegation: forwarded}
+	if forwarded := proc.LeaseFromContext(ctx); forwarded != "" {
+		spawn = trail.Spawn{Lease: forwarded}
 	}
 	h := sessions.NewFactHandler(root, sessions.SessionStart{
 		Workspace:    root,
 		Command:      strings.Join(append([]string{verb}, args...), " "),
 		Version:      version,
-		Delegation:   spawn.Delegation,
+		Lease:        spawn.Lease,
 		TraceID:      spawn.TraceID,
 		ParentSpanID: spawn.ParentSpanID,
 		SpanID:       trail.NewSpanID(),

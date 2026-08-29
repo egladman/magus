@@ -1,17 +1,17 @@
-// ledger.ts - the delegation ledger: its wire shape, the read, the unit tree the Plan surface
+// ledger.ts - the lease ledger: its wire shape, the read, the lease tree the Plan surface
 // draws, and the placement it draws that tree at. Everything here is pure and DOM-free, so what a
 // reader ends up seeing is decided by code a test can run without a browser (ledger.test.ts). The
 // surface file next door owns the SVG, the poll, and the keyboard.
 //
 // The ledger is the table an orchestrating agent keeps while it fans work out (the
-// magus-delegate-multi-agent skill: one row per unit, descendants in the same table). It is the
+// magus-multi-agent skill: one row per lease, descendants in the same table). It is the
 // PLAN. The activity feeds next to it are what actually ran. Joining the two is the whole point of
-// the surface: a plan with no runs under it is a plan nobody started, and a run under no unit is
+// the surface: a plan with no runs under it is a plan nobody started, and a run under no lease is
 // work nobody planned.
 //
 // A daemon predating the endpoint 404s GET /api/v1/ledger, and that is a FIRST-CLASS outcome here
 // rather than an error: loadLedger reports "absent" so the surface can say what is missing instead
-// of showing an empty plan, which would read as "nothing was delegated".
+// of showing an empty plan, which would read as "nothing was handed out".
 
 import { authHeaders } from "../../lib/daemon";
 import { layoutLayered, LAYERED_COL_W, LAYERED_ROW_H } from "../graph/layout";
@@ -23,16 +23,16 @@ import type { ActivityRow } from "../activityDrawer";
 
 // ---- states ----------------------------------------------------------------
 
-// The five states a unit can be in. no_return is its OWN state and is never folded into fail: a
+// The five states a lease can be in. no_return is its OWN state and is never folded into fail: a
 // worker that failed reported a failure, and one that never returned reported nothing at all. The
 // second is the one that needs a human, because nobody is coming to tell you about it.
-export const UNIT_STATES = ["declared", "running", "pass", "fail", "no_return"] as const;
-export type UnitState = (typeof UNIT_STATES)[number];
+export const LEASE_STATES = ["declared", "running", "pass", "fail", "no_return"] as const;
+export type LeaseState = (typeof LEASE_STATES)[number];
 
 // STATE_LABEL is the word a reader sees. "no-return" is hyphenated everywhere - in the node mark's
 // tooltip, the list row, the detail, and the overview call-out - so the one state that most needs
 // to be recognized always reads the same.
-export const STATE_LABEL: Record<UnitState, string> = {
+export const STATE_LABEL: Record<LeaseState, string> = {
   declared: "declared",
   running: "running",
   pass: "pass",
@@ -43,7 +43,7 @@ export const STATE_LABEL: Record<UnitState, string> = {
 // STATE_MARK is the NON-COLOR channel on a node. Color alone fails WCAG 1.4.1, and this is a
 // surface whose entire content is five states told apart - the diff surface made the same call for
 // its add/delete markers. Short enough to sit inside a 152-unit-wide node beside the id.
-export const STATE_MARK: Record<UnitState, string> = {
+export const STATE_MARK: Record<LeaseState, string> = {
   declared: "D",
   running: "R",
   pass: "OK",
@@ -51,19 +51,19 @@ export const STATE_MARK: Record<UnitState, string> = {
   no_return: "NR",
 };
 
-const TERMINAL: readonly UnitState[] = ["pass", "fail", "no_return"];
+const TERMINAL: readonly LeaseState[] = ["pass", "fail", "no_return"];
 
-// isTerminal is "this unit is done, however it ended". A terminal row is not competing for its
+// isTerminal is "this lease is done, however it ended". A terminal row is not competing for its
 // paths and nobody is going to touch it again, which is why neither the overlap warning nor the
 // staleness one is ever drawn on one.
-export function isTerminal(s: UnitState): boolean {
+export function isTerminal(s: LeaseState): boolean {
   return TERMINAL.includes(s);
 }
 
 // STALE_AFTER_MS is a RENDERING decision and lives here rather than in any config: it says when
 // this surface starts drawing attention to a row, and nothing downstream reads it. Ten minutes,
-// because a unit re-puts its row on every state change and a working one moves far more often than
-// that - long enough that a normal running unit is never called stale, short enough that a worker
+// because a lease re-puts its row on every state change and a working one moves far more often than
+// that - long enough that a normal running lease is never called stale, short enough that a worker
 // that died is noticed while the reader still remembers spawning it. The store transitions nothing
 // on its own; what a stale row MEANS stays the reader's call.
 export const STALE_AFTER_MS = 10 * 60 * 1000;
@@ -90,22 +90,22 @@ export function ageLabel(updatedSec: number, nowMs: number): string {
 
 // normalizeState maps whatever the ledger said onto the five known states. An unrecognized value
 // (a newer daemon, a typo in a hand-kept table) becomes "declared" - the least-claiming of the
-// five, because it asserts only that a unit exists. Nothing unknown may ever read as a pass or a
+// five, because it asserts only that a lease exists. Nothing unknown may ever read as a pass or a
 // fail. The raw string is kept on the node so the detail panel can show what was actually written.
-export function normalizeState(v: unknown): UnitState {
-  return typeof v === "string" && (UNIT_STATES as readonly string[]).includes(v)
-    ? (v as UnitState)
+export function normalizeState(v: unknown): LeaseState {
+  return typeof v === "string" && (LEASE_STATES as readonly string[]).includes(v)
+    ? (v as LeaseState)
     : "declared";
 }
 
 // ---- the wire shape --------------------------------------------------------
 
-// DelegationUnit mirrors one row of GET /api/v1/ledger's JSON. Hand-written rather than generated
+// Lease mirrors one row of GET /api/v1/ledger's JSON. Hand-written rather than generated
 // because it rides the plain /api routes, the same as the diff session and the outputs feed beside
 // it. Every field but the id is optional here even where the route declares it required: this is
 // parsed from the network, and a missing goal must render as a blank line rather than the string
 // "undefined".
-export interface DelegationUnit {
+export interface Lease {
   readonly id: string;
   readonly parent?: string;
   readonly goal?: string;
@@ -117,7 +117,7 @@ export interface DelegationUnit {
   readonly validation?: string;
   readonly state?: string;
   readonly read_only?: boolean;
-  readonly releases?: readonly UnitRelease[];
+  readonly releases?: readonly LeaseRelease[];
   // Unix SECONDS, as the route serves them - numbers, never strings. Coerced as a string the field
   // reads as "", and the surface then cannot tell a row nobody has touched in an hour from one
   // written a moment ago.
@@ -125,31 +125,31 @@ export interface DelegationUnit {
   readonly updated?: number;
 }
 
-// UnitRelease is a path a unit gave up, and the version of it the next unit inherits. The digest is
+// LeaseRelease is a path a lease gave up, and the version of it the next one inherits. The digest is
 // the file's sha256 when there was a file; the route's two other answers ("absent", "dir") are
 // rendered as they arrive rather than being turned into a hash-shaped lie.
-export interface UnitRelease {
+export interface LeaseRelease {
   readonly path: string;
   readonly digest: string;
   readonly released_at: number;
 }
 
-// UnitOverlap is one pair of units whose declared owned paths intersect, as the route reports it.
+// LeaseOverlap is one pair of leases whose declared owned paths intersect, as the route reports it.
 // Derived there on every read, never stored, and never a verdict: the surface draws it and the
 // reader decides whether their plan meant it.
 //
 // Each side's intersecting declarations come separately, because the two are rarely the same
 // string - "internal/ledger" and "internal/ledger/store.go" intersect - and a reader who cannot
-// tell which unit claimed which has nothing to act on.
-export interface UnitOverlap {
-  readonly unit_a: string;
-  readonly unit_b: string;
+// tell which lease claimed which has nothing to act on.
+export interface LeaseOverlap {
+  readonly lease_a: string;
+  readonly lease_b: string;
   readonly paths_a: readonly string[];
   readonly paths_b: readonly string[];
 }
 
 // str is the one string coercion both of the surface's parsers read the wire through - the ledger's
-// units here, the run plan's nodes in run.ts - so a field that is not a string becomes "" in exactly
+// leases here, the run plan's nodes in run.ts - so a field that is not a string becomes "" in exactly
 // one way rather than two that could drift.
 export function str(v: unknown): string {
   return typeof v === "string" ? v : "";
@@ -165,9 +165,9 @@ function num(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
-function releaseList(v: unknown): UnitRelease[] {
+function releaseList(v: unknown): LeaseRelease[] {
   if (!Array.isArray(v)) return [];
-  const out: UnitRelease[] = [];
+  const out: LeaseRelease[] = [];
   for (const raw of v) {
     if (typeof raw !== "object" || raw === null) continue;
     const r = raw as Record<string, unknown>;
@@ -180,14 +180,14 @@ function releaseList(v: unknown): UnitRelease[] {
   return out;
 }
 
-// parseUnits normalizes the response body into units this module's model can be TOTAL over: every
+// parseLeases normalizes the response body into leases this module's model can be TOTAL over: every
 // field is the type it claims, and a row with no usable id is dropped rather than becoming a node
 // that no edge can reach and no run can join to. Anything that is not the documented shape yields
 // an empty list, not a throw - a surface that cannot read the ledger says so, it does not break.
-export function parseUnits(body: unknown): DelegationUnit[] {
-  const list = (body as { units?: unknown } | null)?.units;
+export function parseLeases(body: unknown): Lease[] {
+  const list = (body as { leases?: unknown } | null)?.leases;
   if (!Array.isArray(list)) return [];
-  const out: DelegationUnit[] = [];
+  const out: Lease[] = [];
   for (const raw of list) {
     if (typeof raw !== "object" || raw === null) continue;
     const r = raw as Record<string, unknown>;
@@ -213,20 +213,20 @@ export function parseUnits(body: unknown): DelegationUnit[] {
   return out;
 }
 
-// parseOverlaps reads the pairs the route derived. A pair naming a unit twice, or naming nothing,
-// is dropped: it would draw a warning a reader cannot act on. Total over any body, like parseUnits -
+// parseOverlaps reads the pairs the route derived. A pair naming a lease twice, or naming nothing,
+// is dropped: it would draw a warning a reader cannot act on. Total over any body, like parseLeases -
 // a daemon that predates the field sends none, and that is an absence, not a failure.
-export function parseOverlaps(body: unknown): UnitOverlap[] {
+export function parseOverlaps(body: unknown): LeaseOverlap[] {
   const list = (body as { overlaps?: unknown } | null)?.overlaps;
   if (!Array.isArray(list)) return [];
-  const out: UnitOverlap[] = [];
+  const out: LeaseOverlap[] = [];
   for (const raw of list) {
     if (typeof raw !== "object" || raw === null) continue;
     const r = raw as Record<string, unknown>;
-    const a = str(r.unit_a);
-    const b = str(r.unit_b);
+    const a = str(r.lease_a);
+    const b = str(r.lease_b);
     if (!a || !b || a === b) continue;
-    out.push({ unit_a: a, unit_b: b, paths_a: strList(r.paths_a), paths_b: strList(r.paths_b) });
+    out.push({ lease_a: a, lease_b: b, paths_a: strList(r.paths_a), paths_b: strList(r.paths_b) });
   }
   return out;
 }
@@ -235,12 +235,12 @@ export function parseOverlaps(body: unknown): UnitOverlap[] {
 
 export interface PlanNode {
   readonly id: string;
-  readonly unit: DelegationUnit;
-  readonly state: UnitState;
+  readonly lease: Lease;
+  readonly state: LeaseState;
   // Exactly what the ledger said, "" when it said nothing. Shown in the detail whenever it is not
   // one of the five, so an unrecognized state is visible rather than quietly rendered as declared.
   readonly rawState: string;
-  // The parent this ledger can actually resolve, or null. A unit naming a parent the ledger does
+  // The parent this ledger can actually resolve, or null. A lease naming a parent the ledger does
   // not carry is a root HERE (there is nothing to hang it under) but is not really one, so the
   // name it gave is kept in danglingParent rather than discarded.
   readonly parent: string | null;
@@ -248,10 +248,10 @@ export interface PlanNode {
   readonly children: readonly string[];
   readonly depth: number;
   readonly readOnly: boolean;
-  // The reported pairs this unit is IN, both sides of each kept so the row can name the other unit
-  // and the paths without going back to the model. Empty on every unit when the daemon reports no
-  // overlaps, which is the ordinary case.
-  readonly overlaps: readonly UnitOverlap[];
+  // The reported pairs this lease is IN, both sides of each kept so the row can name the other
+  // lease and the paths without going back to the model. Empty on every lease when the daemon
+  // reports no overlaps, which is the ordinary case.
+  readonly overlaps: readonly LeaseOverlap[];
 }
 
 // A PlanEdge always runs left to right in the drawn plan: `from` is the parent or the dependency,
@@ -269,25 +269,25 @@ export interface PlanModel {
   readonly edges: readonly PlanEdge[];
   readonly roots: readonly string[];
   readonly byId: ReadonlyMap<string, PlanNode>;
-  readonly counts: Readonly<Record<UnitState, number>>;
-  // The units that named a parent this ledger does not carry. A stale or partial ledger is a fact
+  readonly counts: Readonly<Record<LeaseState, number>>;
+  // The leases that named a parent this ledger does not carry. A stale or partial ledger is a fact
   // worth reporting, not a shape to silently flatten.
   readonly dangling: readonly string[];
   // The overlapping pairs, exactly as the route reported them and in its order.
-  readonly overlaps: readonly UnitOverlap[];
+  readonly overlaps: readonly LeaseOverlap[];
 }
 
-// buildPlan assembles the tree. It is total over any unit list, including the ones a hand-kept
-// table produces: a duplicate id (the first wins), a unit that is its own parent, a parent cycle,
+// buildPlan assembles the tree. It is total over any lease list, including the ones a hand-kept
+// table produces: a duplicate id (the first wins), a lease that is its own parent, a parent cycle,
 // a depends_on naming something that is not here. None of those may hang or throw - the reader
 // gets the plan that CAN be drawn plus, where it matters, a note about what could not.
 export function buildPlan(
-  units: readonly DelegationUnit[],
-  overlaps: readonly UnitOverlap[] = [],
+  leases: readonly Lease[],
+  overlaps: readonly LeaseOverlap[] = [],
 ): PlanModel {
   const byId = new Map<string, PlanNode>();
-  const kept: DelegationUnit[] = [];
-  for (const u of units) {
+  const kept: Lease[] = [];
+  for (const u of leases) {
     // First row wins on a duplicate id. Something has to, and the alternative - a later row
     // silently replacing an earlier one - would move edges under a reader mid-poll.
     if (byId.has(u.id)) continue;
@@ -298,13 +298,13 @@ export function buildPlan(
   const childrenOf = new Map<string, string[]>();
   for (const u of kept) childrenOf.set(u.id, []);
 
-  // Resolve each unit's parent first, so depth and children both read one answer.
+  // Resolve each lease's parent first, so depth and children both read one answer.
   const parentOf = new Map<string, string | null>();
   const dangling: string[] = [];
   for (const u of kept) {
     const named = u.parent ?? "";
     if (!named || named === u.id) {
-      // A unit that is its own parent is a typo in a table someone typed. Treating it as a root
+      // A lease that is its own parent is a typo in a table someone typed. Treating it as a root
       // is the only reading that draws something; a self-edge would be a loop in the layout.
       parentOf.set(u.id, null);
       continue;
@@ -334,20 +334,20 @@ export function buildPlan(
     depthOf.set(u.id, at ? 0 : d);
   }
 
-  const counts: Record<UnitState, number> = {
+  const counts: Record<LeaseState, number> = {
     declared: 0,
     running: 0,
     pass: 0,
     fail: 0,
     no_return: 0,
   };
-  // A pair naming a unit this ledger does not carry is dropped rather than drawn on the one side it
+  // A pair naming a lease this ledger does not carry is dropped rather than drawn on the one side it
   // can reach: a warning that cannot say who the other party is asks a reader to go find a row that
   // is not on their screen.
-  const kernel = overlaps.filter((o) => byId.has(o.unit_a) && byId.has(o.unit_b));
-  const overlapsOf = new Map<string, UnitOverlap[]>();
+  const kernel = overlaps.filter((o) => byId.has(o.lease_a) && byId.has(o.lease_b));
+  const overlapsOf = new Map<string, LeaseOverlap[]>();
   for (const o of kernel) {
-    for (const id of [o.unit_a, o.unit_b]) {
+    for (const id of [o.lease_a, o.lease_b]) {
       const at = overlapsOf.get(id);
       if (at) at.push(o);
       else overlapsOf.set(id, [o]);
@@ -362,7 +362,7 @@ export function buildPlan(
     const named = u.parent ?? "";
     const node: PlanNode = {
       id: u.id,
-      unit: u,
+      lease: u,
       state,
       rawState: u.state ?? "",
       parent,
@@ -376,12 +376,12 @@ export function buildPlan(
     byId.set(u.id, node);
   }
 
-  // Edges in ledger order, parent before dependencies per unit, so the list is deterministic and
+  // Edges in ledger order, parent before dependencies per lease, so the list is deterministic and
   // the layout's parallel link array lines up index for index.
   const edges: PlanEdge[] = [];
   for (const n of nodes) {
     if (n.parent) edges.push({ from: n.parent, to: n.id, kind: "parent" });
-    for (const dep of n.unit.depends_on ?? []) {
+    for (const dep of n.lease.depends_on ?? []) {
       // A depends_on naming something outside this ledger has no second endpoint, so there is no
       // edge to draw. It is not hidden: the detail panel lists the raw depends_on as written.
       if (dep !== n.id && byId.has(dep)) edges.push({ from: dep, to: n.id, kind: "depends_on" });
@@ -402,10 +402,10 @@ export function buildPlan(
 // placeholder is the node buildPlan seeds byId with while it is still resolving parents (the
 // resolution needs to know which ids exist before it can know which parents are real). Every entry
 // is overwritten with the finished node in the same call.
-function placeholder(u: DelegationUnit): PlanNode {
+function placeholder(u: Lease): PlanNode {
   return {
     id: u.id,
-    unit: u,
+    lease: u,
     state: normalizeState(u.state),
     rawState: u.state ?? "",
     parent: null,
@@ -418,8 +418,8 @@ function placeholder(u: DelegationUnit): PlanNode {
 }
 
 // treeOrder lists the ids depth-first from the roots, parents before their children, which is the
-// order the accessible twin list reads in. Units left unreachable by that walk (only possible
-// inside a parent cycle) are appended in ledger order so the list never silently omits a unit.
+// order the accessible twin list reads in. Leases left unreachable by that walk (only possible
+// inside a parent cycle) are appended in ledger order so the list never silently omits a lease.
 export function treeOrder(model: PlanModel): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -438,13 +438,13 @@ export function treeOrder(model: PlanModel): string[] {
   return out;
 }
 
-// overviewLine is the one sentence the polite live region announces: how many units, the breakdown
+// overviewLine is the one sentence the polite live region announces: how many leases, the breakdown
 // over the states that actually occur, and the no-return count ALWAYS, even at zero. The zero is
 // the point - a call-out that vanishes when it reads zero is a call-out a reader stops trusting,
 // and "0 no-return" is a fact worth stating on a plan that is still running.
 export function overviewLine(model: PlanModel): string {
   const n = model.nodes.length;
-  const head = n + (n === 1 ? " unit" : " units");
+  const head = n + (n === 1 ? " lease" : " leases");
   const parts: string[] = [];
   for (const s of ["declared", "running", "pass", "fail"] as const) {
     if (model.counts[s] > 0) parts.push(model.counts[s] + " " + STATE_LABEL[s]);
@@ -455,33 +455,33 @@ export function overviewLine(model: PlanModel): string {
 
 // ---- the live join ---------------------------------------------------------
 
-// RunJoin is the activity feed indexed by the unit each row claims. unmatched is not noise: a row
-// naming a unit this ledger does not carry means the plan on screen is older than the work, which
+// RunJoin is the activity feed indexed by the lease each row claims. unmatched is not noise: a row
+// naming a lease this ledger does not carry means the plan on screen is older than the work, which
 // is exactly when a reader should stop trusting the picture.
 export interface RunJoin {
-  readonly byUnit: ReadonlyMap<string, ActivityRow[]>;
+  readonly byLease: ReadonlyMap<string, ActivityRow[]>;
   readonly unmatched: readonly ActivityRow[];
 }
 
-// joinRuns indexes activity rows by unit id. Input order is preserved within a unit, so a caller
-// that passes running rows before finished ones gets them back that way. A row with no unit is not
-// unmatched - it is unattributed, which is every row today (nothing stamps the field yet), and
+// joinRuns indexes activity rows by lease id. Input order is preserved within a lease, so a caller
+// that passes running rows before finished ones gets them back that way. A row claiming no lease is
+// not unmatched - it is unattributed, which is every row today (nothing stamps the field yet), and
 // counting the whole feed as evidence of a stale ledger would be a permanent false alarm.
 export function joinRuns(model: PlanModel, rows: readonly ActivityRow[]): RunJoin {
-  const byUnit = new Map<string, ActivityRow[]>();
+  const byLease = new Map<string, ActivityRow[]>();
   const unmatched: ActivityRow[] = [];
   for (const row of rows) {
-    const unit = row.unit ?? "";
-    if (!unit) continue;
-    if (!model.byId.has(unit)) {
+    const lease = row.unit ?? "";
+    if (!lease) continue;
+    if (!model.byId.has(lease)) {
       unmatched.push(row);
       continue;
     }
-    const bucket = byUnit.get(unit);
+    const bucket = byLease.get(lease);
     if (bucket) bucket.push(row);
-    else byUnit.set(unit, [row]);
+    else byLease.set(lease, [row]);
   }
-  return { byUnit, unmatched };
+  return { byLease, unmatched };
 }
 
 // ---- placement -------------------------------------------------------------
@@ -511,13 +511,13 @@ export interface Placeable {
 
 // layoutPlan places the nodes with the graph explorer's layered (Sugiyama-style) layout - the same
 // pure, deterministic, dependency-free pass the DAG modes there use. Reused rather than rewritten:
-// a delegation plan IS a layered DAG (a unit sits to the right of its parent and of everything it
+// a lease plan IS a layered DAG (a lease sits to the right of its parent and of everything it
 // depends on), and so is a resolved run plan (a target sits to the right of what it needs), and
 // that module already solves cycle-breaking, longest-path layering, barycentric crossing reduction,
 // and long-edge routing.
 //
 // Both of the ledger's edge kinds feed the layering, which is the honest reading: a child cannot
-// start before its parent delegated it, and a dependent cannot start before its dependency
+// start before its parent handed it out, and a dependent cannot start before its dependency
 // finished. The KINDS stay distinct in the drawing, not in the placement.
 export function layoutPlan(model: Placeable): PlanLayout {
   const nodes: GNode[] = model.nodes.map((n) => ({
@@ -571,8 +571,8 @@ export function layoutPlan(model: Placeable): PlanLayout {
 export type LedgerRead =
   | {
       readonly kind: "ok";
-      readonly units: DelegationUnit[];
-      readonly overlaps: UnitOverlap[];
+      readonly leases: Lease[];
+      readonly overlaps: LeaseOverlap[];
     }
   | { readonly kind: "absent" }
   | { readonly kind: "unreadable"; readonly detail: string };
@@ -600,7 +600,7 @@ export async function loadLedger(host: string, signal?: AbortSignal): Promise<Le
   if (!res.ok) return { kind: "unreadable", detail: "HTTP " + res.status };
   try {
     const body = await res.json();
-    return { kind: "ok", units: parseUnits(body), overlaps: parseOverlaps(body) };
+    return { kind: "ok", leases: parseLeases(body), overlaps: parseOverlaps(body) };
   } catch (e) {
     return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
   }

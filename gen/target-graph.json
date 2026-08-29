@@ -357,13 +357,13 @@
               "glob": ".claude/skills/magus-context-audit*/**"
             },
             {
-              "glob": ".claude/skills/magus-delegate-multi-agent*/**"
-            },
-            {
               "glob": ".claude/skills/magus-docs-lookup*/**"
             },
             {
               "glob": ".claude/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-multi-agent*/**"
             },
             {
               "glob": ".claude/skills/magus-query*/**"
@@ -399,13 +399,13 @@
               "glob": ".agents/skills/magus-context-audit*/**"
             },
             {
-              "glob": ".agents/skills/magus-delegate-multi-agent*/**"
-            },
-            {
               "glob": ".agents/skills/magus-docs-lookup*/**"
             },
             {
               "glob": ".agents/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-multi-agent*/**"
             },
             {
               "glob": ".agents/skills/magus-query*/**"
@@ -441,13 +441,13 @@
               "glob": ".opencode/skills/magus-context-audit*/**"
             },
             {
-              "glob": ".opencode/skills/magus-delegate-multi-agent*/**"
-            },
-            {
               "glob": ".opencode/skills/magus-docs-lookup*/**"
             },
             {
               "glob": ".opencode/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-multi-agent*/**"
             },
             {
               "glob": ".opencode/skills/magus-query*/**"

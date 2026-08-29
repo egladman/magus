@@ -253,34 +253,34 @@ func (p *otelProvider) RecordBuzzVMFault(ctx context.Context, kind string) {
 	p.buzz.vmFaults.Add(ctx, 1, metric.WithAttributes(attribute.String("kind", kind)))
 }
 
-// agentInstruments is the agent-surface family: magus.delegation.*, magus.attention.* and
+// agentInstruments is the agent-surface family: magus.lease.*, magus.attention.* and
 // magus.review.*, the three places a fleet of agents and the people working with them meet.
 // Every producer here runs in the daemon, which is what makes them collectable at all - the
 // CLI halves of the same surfaces (raising an attention request, the guard grading a write)
 // live in one-shot processes and are recorded to the activity trail instead.
 //
-// The attributes are deliberately thin. A delegation id, an attention message, a remark body
+// The attributes are deliberately thin. A lease id, an attention message, a remark body
 // and an agent's self-declared host label are all unbounded, and none of them is here.
 type agentInstruments struct {
-	delegationRegistrations metric.Int64Counter
-	attentionDisposition    metric.Float64Histogram
-	reviewRemarks           metric.Int64Counter
-	reviewPublishes         metric.Int64Counter
+	leaseRegistrations   metric.Int64Counter
+	attentionDisposition metric.Float64Histogram
+	reviewRemarks        metric.Int64Counter
+	reviewPublishes      metric.Int64Counter
 }
 
 func newAgentInstruments(m metric.Meter) (agentInstruments, error) {
 	r := reg{m: m}
 	ai := agentInstruments{
-		delegationRegistrations: r.i64c("magus.delegation.registrations", "Delegation base registrations, by how the base a worker reported compares to the checkpoint it was handed.", "{registration}"),
-		attentionDisposition:    r.f64h("magus.attention.disposition.duration", "Wall-clock time an attention request waited from raised to disposed, in seconds."),
-		reviewRemarks:           r.i64c("magus.review.remarks", "Review remarks drafted on a change.", "{remark}"),
-		reviewPublishes:         r.i64c("magus.review.publishes", "Review publishes, by the verdict that landed.", "{publish}"),
+		leaseRegistrations:   r.i64c("magus.lease.registrations", "Lease base registrations, by how the base a worker reported compares to the checkpoint it was handed.", "{registration}"),
+		attentionDisposition: r.f64h("magus.attention.disposition.duration", "Wall-clock time an attention request waited from raised to disposed, in seconds."),
+		reviewRemarks:        r.i64c("magus.review.remarks", "Review remarks drafted on a change.", "{remark}"),
+		reviewPublishes:      r.i64c("magus.review.publishes", "Review publishes, by the verdict that landed.", "{publish}"),
 	}
 	return ai, r.err
 }
 
-func (p *otelProvider) RecordDelegationRegistration(ctx context.Context, verdict string) {
-	p.agent.delegationRegistrations.Add(ctx, 1, metric.WithAttributes(attribute.String("verdict", verdict)))
+func (p *otelProvider) RecordLeaseRegistration(ctx context.Context, verdict string) {
+	p.agent.leaseRegistrations.Add(ctx, 1, metric.WithAttributes(attribute.String("verdict", verdict)))
 }
 
 func (p *otelProvider) RecordAttentionDisposition(ctx context.Context, secs float64, sev string) {

@@ -1,13 +1,13 @@
-// Package ledger persists the delegation ledger: the rows an orchestrating agent
+// Package ledger persists the lease ledger: the rows an orchestrating agent
 // declares about the plan it is running, kept where a human can read them.
 //
 // It RECORDS AND REFUSES NOTHING. Nothing here gates a run or blocks a write; the AGENT
 // GUARD is what consults these rows to grade one, and it is a separate thing that READS
 // this store. Register does compute a verdict - whether a worker's reported base is the
-// checkpoint its delegation was handed - and that is a fact recorded on the row and handed back
+// checkpoint its lease was handed - and that is a fact recorded on the row and handed back
 // to the caller, not a gate: the registration succeeds either way and what to do about a
 // divergence is the caller's and the orchestrator's call. Enforcement stays outside for
-// the reason types.Delegation gives: a store that refused would make the ledger
+// the reason types.Lease gives: a store that refused would make the ledger
 // something agents route around, and a ledger nobody keeps honestly grades nothing. The
 // store's whole job is that a plan an agent stated in a prompt stops being trapped in one
 // session's transcript.
@@ -22,13 +22,13 @@
 // historical; this is neither - Put upserts a row in place, Clear wipes the book, and
 // nothing is archived. What it does share is the part that earns the name: it is written
 // to be checked AGAINST reality later, which is exactly the skill's "compare the ledger
-// against the actual diff since each delegation's checkpoint" step. Read it as a book of
+// against the actual diff since each lease's checkpoint" step. Read it as a book of
 // declared intent kept for reconciliation, not as a durable record of what happened. The
-// vocabulary came from the delegation skill, which is also where the row shape is defined
-// (see types.Delegation).
+// vocabulary came from the magus-multi-agent skill, which is also where the row shape is
+// defined (see types.Lease).
 //
 // It is the INTENT layer of three, and naming the other two is what keeps them apart -
-// they are flat stores joined by delegation id at render time, never a storage hierarchy:
+// they are flat stores joined by lease id at render time, never a storage hierarchy:
 //
 //   - intent - this package. What an orchestrating agent SAID it would hand out.
 //     Declared up front, mutable, one plan at a time.
@@ -39,7 +39,7 @@
 //
 // The two stores that sound related and are NOT: internal/journal is the event stream of
 // one magus invocation (what a build executed), and internal/memory and internal/notes
-// are prose a human or an agent writes to be read later - neither models delegated work.
+// are prose a human or an agent writes to be read later - neither models leased work.
 package ledger
 
 import (
@@ -63,12 +63,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrNoID reports a delegation with no id. The id is what Put upserts on, so a row without
+// ErrNoID reports a lease with no id. The id is what Put upserts on, so a row without
 // one could never be updated or referred to again - it is unaddressable, not merely
 // incomplete.
-var ErrNoID = errors.New("ledger: a delegation needs an id")
+var ErrNoID = errors.New("ledger: a lease needs an id")
 
-// Store is the workspace's delegation ledger, a single JSON file under the cache
+// Store is the workspace's lease ledger, a single JSON file under the cache
 // directory. Every operation reads the file, acts, and writes it back, so a Store is
 // cheap to construct and holds no state between calls beyond the path and its lock.
 //
@@ -78,7 +78,7 @@ var ErrNoID = errors.New("ledger: a delegation needs an id")
 //   - The mutex serializes writers within one process while they share a Store, which is
 //     why the daemon builds exactly one and hands it to both of its doors (the
 //     magus_ledger MCP tool and the console's read route).
-//   - An OS file lock beside units.json serializes writers across PROCESSES. The CLI, the
+//   - An OS file lock beside leases.json serializes writers across PROCESSES. The CLI, the
 //     daemon, and an MCP client each hold their own Store on the same file, and workers
 //     now register and heartbeat against it, so "one orchestrating agent writes this" -
 //     the assumption that made a cross-process race acceptable - stopped being true. Two
@@ -106,10 +106,10 @@ type Store struct {
 // empty ledger.
 type Location struct {
 	// CacheDir is the workspace's cache directory (magus.CacheDir); the ledger is
-	// written to <CacheDir>/ledger/units.json.
+	// written to <CacheDir>/ledger/leases.json.
 	CacheDir string
 	// Root is the workspace a row's paths are relative to, read for one purpose:
-	// digesting a path at the moment a delegation releases it (see Update). A Store built
+	// digesting a path at the moment a lease releases it (see Update). A Store built
 	// with an empty root still records releases - it just cannot say what was in them.
 	Root string
 }
@@ -117,31 +117,25 @@ type Location struct {
 // NewStore returns the ledger at loc. It touches no disk: the file is created by the
 // first Put.
 func NewStore(loc Location) *Store {
-	return &Store{path: filepath.Join(loc.CacheDir, "ledger", "units.json"), root: loc.Root}
+	return &Store{path: filepath.Join(loc.CacheDir, "ledger", "leases.json"), root: loc.Root}
 }
 
 // ledgerFile is the on-disk envelope. An object rather than a bare array so a later
 // field (a plan identity, a schema version) can be added without every existing reader
 // failing to parse the file.
 type ledgerFile struct {
-	// compat(until: no cache directory still holds a ledger written before the
-	// delegation rename): the on-disk key stays "units", as does the file name. A
-	// running plan lives in this file, and a renamed key would read every declared row
-	// back as an empty ledger - which the guard cannot tell from "nobody delegated",
-	// so it would silently stop grading writes. Observe it is safe to drop when no
-	// units.json predating the rename is left to load.
-	Delegations []types.Delegation `json:"units"`
+	Leases []types.Lease `json:"leases"`
 }
 
-// Put records one delegation, replacing any row with the same id IN PLACE. Position is
+// Put records one lease, replacing any row with the same id IN PLACE. Position is
 // preserved on update because the ledger is a table a person reads top to bottom, and
 // a row that jumped to the bottom every time its state changed would reorder itself
 // exactly when it is being watched.
 //
 // It stamps Created on the first write and Updated on every write, ignoring whatever
 // the caller passed for either. The stored row is returned.
-func (s *Store) Put(ctx context.Context, u types.Delegation) (types.Delegation, error) {
-	return s.Update(ctx, u.ID, func(cur *types.Delegation) { *cur = u })
+func (s *Store) Put(ctx context.Context, u types.Lease) (types.Lease, error) {
+	return s.Update(ctx, u.ID, func(cur *types.Lease) { *cur = u })
 }
 
 // Update applies apply to the row with this id and writes the result back, all while
@@ -150,8 +144,8 @@ func (s *Store) Put(ctx context.Context, u types.Delegation) (types.Delegation, 
 // fields of one row each read it before the other wrote, and the second write reverts the
 // first - whether the two are goroutines or separate magus processes.
 //
-// The row is CREATED when absent, matching Put: apply then sees a zero delegation carrying
-// only the id, so declaring a delegation and advancing one are the same call. Created is
+// The row is CREATED when absent, matching Put: apply then sees a zero lease carrying
+// only the id, so declaring a lease and advancing one are the same call. Created is
 // preserved from the stored row and Updated is stamped on every write, exactly as Put
 // does, and the id is the key - whatever apply writes into ID is overwritten with it.
 //
@@ -170,8 +164,8 @@ func (s *Store) Put(ctx context.Context, u types.Delegation) (types.Delegation, 
 // row - the merge is already done and abandoning it would lose the state change - but it
 // stops hashing files, so a caller that walked away does not keep the store's lock while
 // the disk is read.
-func (s *Store) Update(ctx context.Context, id string, apply func(*types.Delegation)) (types.Delegation, error) {
-	return s.mutate(ctx, id, func(cur *types.Delegation, _ bool, _ int64) error {
+func (s *Store) Update(ctx context.Context, id string, apply func(*types.Lease)) (types.Lease, error) {
+	return s.mutate(ctx, id, func(cur *types.Lease, _ bool, _ int64) error {
 		apply(cur)
 		return nil
 	})
@@ -182,10 +176,10 @@ func (s *Store) Update(ctx context.Context, id string, apply func(*types.Delegat
 // A cap rather than a growing list because this is written from the guard, which runs on every
 // file write a host makes: without one, a plan left declared over a long editing session would
 // accumulate a row entry per save until the ledger was mostly this. The newest are kept, since a
-// delegation asking what moved is asking about the tree it faces now.
+// lease asking what moved is asking about the tree it faces now.
 const MaxUnattributedWrites = 32
 
-// RecordUnattributedWrite notes that somebody outside delegation id wrote one of its owned paths,
+// RecordUnattributedWrite notes that somebody outside lease id wrote one of its owned paths,
 // with the content they left behind.
 //
 // ONE ROW PER PATH, newest wins. A person saves a file a dozen times while an agent works; the
@@ -197,24 +191,24 @@ const MaxUnattributedWrites = 32
 // never a verdict. The guard already read these boundaries to grade the write; it simply discarded
 // what it saw afterwards, leaving the one party who needed it uninformed.
 //
-// A missing row is not an error: the delegation may have ended between the grading and this call,
+// A missing row is not an error: the lease may have ended between the grading and this call,
 // and a write graded against a plan that has since finished is nothing to report to anybody.
 func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil
 	}
-	_, err := s.mutate(ctx, id, func(cur *types.Delegation, exists bool, now int64) error {
+	_, err := s.mutate(ctx, id, func(cur *types.Lease, exists bool, now int64) error {
 		if !exists {
-			return fmt.Errorf("ledger: no such delegation %q: %w", id, errNoSuchRow)
+			return fmt.Errorf("ledger: no such lease %q: %w", id, errNoSuchRow)
 		}
-		next := make([]types.DelegationUnattributedWrite, 0, len(cur.Unattributed)+1)
+		next := make([]types.LeaseUnattributedWrite, 0, len(cur.Unattributed)+1)
 		for _, w := range cur.Unattributed {
 			if w.Path != path {
 				next = append(next, w)
 			}
 		}
-		next = append(next, types.DelegationUnattributedWrite{
+		next = append(next, types.LeaseUnattributedWrite{
 			Path: path, Digest: s.digest(ctx, path), At: now,
 		})
 		if len(next) > MaxUnattributedWrites {
@@ -230,11 +224,11 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 }
 
 // errNoSuchRow is internal to RecordUnattributedWrite: mutate creates a row that is not there, and
-// this is how the apply func declines that without inventing a delegation nobody declared.
-var errNoSuchRow = errors.New("ledger: no such delegation")
+// this is how the apply func declines that without inventing a lease nobody declared.
+var errNoSuchRow = errors.New("ledger: no such lease")
 
 // mutate is the locked read-modify-write [Store.Update] and [Store.Register] share, and
-// the only place units.json is rewritten row-wise.
+// the only place leases.json is rewritten row-wise.
 //
 // apply gets two things Update's caller does not need and Register's cannot do without.
 // exists says whether a row was already there, which is the difference between the two
@@ -245,23 +239,23 @@ var errNoSuchRow = errors.New("ledger: no such delegation")
 //
 // apply may fail, which is what lets that refusal be decided where it has to be: under
 // the lock, after the row is known present or absent. Nothing is written when it does.
-func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Delegation, exists bool, now int64) error) (types.Delegation, error) {
+func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Lease, exists bool, now int64) error) (types.Lease, error) {
 	if strings.TrimSpace(id) == "" {
-		return types.Delegation{}, ErrNoID
+		return types.Lease{}, ErrNoID
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var stored types.Delegation
+	var stored types.Lease
 	err := s.withFileLock(ctx, func() error {
 		f, err := s.read()
 		if err != nil {
 			return err
 		}
-		i := slices.IndexFunc(f.Delegations, func(e types.Delegation) bool { return e.ID == id })
-		var prev types.Delegation
+		i := slices.IndexFunc(f.Leases, func(e types.Lease) bool { return e.ID == id })
+		var prev types.Lease
 		if i >= 0 {
-			prev = f.Delegations[i]
+			prev = f.Leases[i]
 		}
 		u := prev.Clone()
 		u.ID = id
@@ -276,9 +270,9 @@ func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Del
 		u.Releases = s.releases(ctx, prev, u, now)
 		if i >= 0 {
 			u.Created = prev.Created
-			f.Delegations[i] = u
+			f.Leases[i] = u
 		} else {
-			f.Delegations = append(f.Delegations, u)
+			f.Leases = append(f.Leases, u)
 		}
 		if werr := s.write(f); werr != nil {
 			return werr
@@ -287,14 +281,14 @@ func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Del
 		return nil
 	})
 	if err != nil {
-		return types.Delegation{}, err
+		return types.Lease{}, err
 	}
 	return stored, nil
 }
 
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
-func (s *Store) List() ([]types.Delegation, error) {
+func (s *Store) List() ([]types.Lease, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -302,8 +296,8 @@ func (s *Store) List() ([]types.Delegation, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]types.Delegation, len(f.Delegations))
-	for i, u := range f.Delegations {
+	out := make([]types.Lease, len(f.Leases))
+	for i, u := range f.Leases {
 		out[i] = u.Clone()
 	}
 	return out, nil
@@ -313,7 +307,7 @@ func (s *Store) List() ([]types.Delegation, error) {
 // ledger is not an error - the caller asked for an empty ledger and got one.
 //
 // It reads nothing, so no row can be lost to an interleaving; it takes the file lock
-// anyway, so that every rewrite of units.json is under it and a reader of this package
+// anyway, so that every rewrite of leases.json is under it and a reader of this package
 // never has to work out which writes are the exempt ones. ctx bounds the wait for the
 // lock and nothing else.
 func (s *Store) Clear(ctx context.Context) error {
@@ -330,16 +324,16 @@ func (s *Store) Clear(ctx context.Context) error {
 // released the same path tells a reader nothing they can act on. A path released twice
 // keeps its position and takes the NEWER digest, because the version the next agent
 // inherits is the one left behind last.
-func (s *Store) releases(ctx context.Context, prev, next types.Delegation, now int64) []types.DelegationRelease {
-	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.DelegationRelease) bool {
+func (s *Store) releases(ctx context.Context, prev, next types.Lease, now int64) []types.LeaseRelease {
+	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.LeaseRelease) bool {
 		return slices.Contains(next.OwnedPaths, r.Path)
 	})
 	for _, p := range prev.OwnedPaths {
 		if slices.Contains(next.OwnedPaths, p) {
 			continue
 		}
-		rel := types.DelegationRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now}
-		if at := slices.IndexFunc(out, func(r types.DelegationRelease) bool { return r.Path == p }); at >= 0 {
+		rel := types.LeaseRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now}
+		if at := slices.IndexFunc(out, func(r types.LeaseRelease) bool { return r.Path == p }); at >= 0 {
 			out[at] = rel
 			continue
 		}
@@ -414,7 +408,7 @@ func (s *Store) digest(ctx context.Context, declared string) string {
 }
 
 // maxDigestBytes bounds one release digest, because the hash is computed while the store
-// holds its mutex. 32 MiB is far above the source files a delegation actually releases and far
+// holds its mutex. 32 MiB is far above the source files a lease actually releases and far
 // below the build artifact that would otherwise stall every other ledger caller for as
 // long as it takes to read it; a path over the cap records unreadable, which is what it
 // is from the reader's side.
@@ -444,7 +438,7 @@ func (s *Store) read() (ledgerFile, error) {
 // first and TryLockContext to poll while contended. An OS lock rather than a lockfile
 // because the kernel drops it when the holder exits, so a killed worker never leaves the
 // ledger wedged. Advisory, like that one - it serializes the code that takes it and
-// nothing else, so a hand-edit of units.json ignores it entirely.
+// nothing else, so a hand-edit of leases.json ignores it entirely.
 //
 // The wait is BOUNDED, which is where this parts company with the project locks. Those
 // wait forever with a heartbeat because the holder is a build that may legitimately run
@@ -468,10 +462,10 @@ func (s *Store) withFileLock(ctx context.Context, fn func() error) error {
 			// caller has, and blaming a stuck holder for their own cancellation would send
 			// them looking for a process that is working fine.
 			if ctx.Err() != nil {
-				return fmt.Errorf("ledger: the caller was cancelled while waiting for the delegation ledger lock at %s,"+
+				return fmt.Errorf("ledger: the caller was cancelled while waiting for the lease ledger lock at %s,"+
 					" so this write was not applied: %w", fl.Path(), ctx.Err())
 			}
-			return fmt.Errorf("ledger: another process has held the delegation ledger lock at %s for more than %s,"+
+			return fmt.Errorf("ledger: another process has held the lease ledger lock at %s for more than %s,"+
 				" so this write was not applied. Look for a stuck magus process with `magus status`, then retry;"+
 				" the lock is an OS file lock and is released the moment its holder exits", fl.Path(), lockWait)
 		}

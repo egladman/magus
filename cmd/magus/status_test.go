@@ -760,7 +760,7 @@ func TestResolveStatusSocketsNarrowing(t *testing.T) {
 	})
 }
 
-// TestBuildConfigStatusConcurrency covers the fact a delegation orchestrator budgets
+// TestBuildConfigStatusConcurrency covers the fact a lease orchestrator budgets
 // against: concurrency 0 means "unset", and only the effective value answers how wide a
 // run gets. The wants are stated independently of internal/cache.ResolveConcurrency, which
 // is the function under test here.

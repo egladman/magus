@@ -469,7 +469,7 @@ func (disabledProvider) RecordBuzzSpellResolve(_ context.Context, _ float64, _, 
 func (disabledProvider) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string)    {}
 func (disabledProvider) RecordBuzzJITRun(_ context.Context)                                    {}
 func (disabledProvider) RecordBuzzVMFault(_ context.Context, _ string)                         {}
-func (disabledProvider) RecordDelegationRegistration(_ context.Context, _ string)              {}
+func (disabledProvider) RecordLeaseRegistration(_ context.Context, _ string)                   {}
 func (disabledProvider) RecordAttentionDisposition(_ context.Context, _ float64, _ string)     {}
 func (disabledProvider) RecordReviewRemark(_ context.Context, _ string)                        {}
 func (disabledProvider) RecordReviewPublish(_ context.Context, _ string, _ bool)               {}

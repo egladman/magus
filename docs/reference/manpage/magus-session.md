@@ -62,11 +62,11 @@ still working stays listed however long ago it began.
 **--agent-name** *string*
 : Name of the agent host this invocation came from (attribution only)
 
-**--delegation** *string*
-: The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to magus.delegation in $BAGGAGE)
-
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)
+
+**--lease** *string*
+: The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)
 
 **--observe**
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
@@ -166,10 +166,10 @@ printf '%s' 'go build ./...' | magus session hook
 printf '%s' 'internal/cache/output.go' | magus session hook --observe
 ```
 
-*Grade a write as a delegation*
+*Grade a write as a lease*
 
 ```sh
-printf '%s' 'internal/ledger/store.go' | magus session hook --path --delegation f2-guard
+printf '%s' 'internal/ledger/store.go' | magus session hook --path --lease f2-guard
 ```
 
 *Raise a permission prompt on the desktop (host-wired)*

@@ -122,9 +122,9 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do - 
 - The command rules are executed against this binary with a real event. The
   file surface is wired per OpenAI's documentation and has not been executed
   here.
-- Delegation capture is UNVERIFIED here. Codex's `PreToolUse` envelope is the
-  same shape magus already reads, so a delegation would be captured by the
-  wiring on [Claude Code](claude-code.md#delegation-capture) with the matcher
+- Lease capture is UNVERIFIED here. Codex's `PreToolUse` envelope is the
+  same shape magus already reads, so a lease would be captured by the
+  wiring on [Claude Code](claude-code.md#lease-capture) with the matcher
   changed - but nothing in Codex's documented tool surface is known to hand a
   sub-agent a prompt, so there is no matcher to name and none has been executed.
 

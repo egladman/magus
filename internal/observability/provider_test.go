@@ -132,7 +132,7 @@ func (r *recorder) RecordBuzzJITRun(_ context.Context) {}
 
 func (r *recorder) RecordBuzzVMFault(_ context.Context, _ string) {}
 
-func (r *recorder) RecordDelegationRegistration(_ context.Context, _ string) {}
+func (r *recorder) RecordLeaseRegistration(_ context.Context, _ string) {}
 
 func (r *recorder) RecordAttentionDisposition(_ context.Context, _ float64, _ string) {}
 
