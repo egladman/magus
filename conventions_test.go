@@ -1178,6 +1178,105 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 		strings.Join(violations, "\n"))
 }
 
+// The test above is one layer shallower than the rule it enforces. A branch keyed
+// on a host's TOOL VOCABULARY rather than its name - `switch tool { case "Read":
+// ... case "Bash": }` - is a per-host branch in everything but spelling, and no
+// host name appears in it, so the name scan waves it through. The test below is
+// that second layer.
+
+// hostToolVocabularyScope is where this rule bites: the guard's own source, the
+// only code that ever sees a host's hook payload. Scoped rather than tree-wide
+// because "Read", "Write" and "Task" are ordinary words elsewhere in this module -
+// method names, struct fields, JSON tags, graph kinds, spell ops - and a tree-wide
+// scan would report hundreds of them and be turned off within the week. A per-host
+// branch that is not deciding a verdict is not the failure this exists to prevent.
+var hostToolVocabularyScope = []string{
+	filepath.Join("cmd", "magus", "guard*.go"),
+	filepath.Join("internal", "agent", "*.go"),
+}
+
+// hostToolVocabulary is what agent hosts call their tools. magus's own labels -
+// hookToolCommand, hookToolWrite, hookToolRead in cmd/magus/guard.go - are
+// deliberately none of these, and are the positive example: a wrapper maps its
+// host's name to magus's label by which flag it passes, so a host renaming a tool
+// costs its reader one config line instead of costing magus a release.
+var hostToolVocabulary = map[string]bool{
+	"Read": true, "Write": true, "Edit": true, "MultiEdit": true, "NotebookEdit": true,
+	"Glob": true, "Grep": true, "Bash": true, "Task": true, "TodoWrite": true,
+	"WebFetch": true, "WebSearch": true, "ExitPlanMode": true,
+	"read_file": true, "write_file": true, "edit_file": true, "list_dir": true,
+	"apply_patch": true, "run_terminal_cmd": true, "str_replace_editor": true,
+	"codebase_search": true, "shell": true,
+}
+
+// hostToolVocabularyByDesign is the escape hatch, in the shape
+// failOpenSilentByDesign uses: "<path>:<literal>" mapped to WHERE the decision to
+// write a host's word into guard code is recorded. There is no per-line exemption
+// comment in this repo, so an entry here - reviewable, and readable as a list - is
+// the only way past this gate.
+//
+// Empty, and expected to stay that way: the wire contract in
+// internal/agent/guard.go is magus's vocabulary end to end. It exists so the next
+// author has somewhere to put the argument rather than somewhere to hide it.
+var hostToolVocabularyByDesign = map[string]string{}
+
+// TestGuardDoesNotBranchOnHostToolVocabulary rejects a host's tool NAME appearing
+// as a string literal anywhere in guard code, not merely in a comparison.
+//
+// The literal is the whole signal. There is no innocent reason for the guard to
+// spell a host's word for "read a file", and reading only == and case clauses
+// would pass a `map[string]surface{"Read": ...}`, which is the same branch with
+// the dispatch moved into a table. AST rather than a text scan so the prose that
+// explains the rule - including guard.go's own comment, which quotes "Read" and
+// "Bash" - is not itself a violation.
+func TestGuardDoesNotBranchOnHostToolVocabulary(t *testing.T) {
+	var violations []string
+
+	fset := token.NewFileSet()
+	for _, glob := range hostToolVocabularyScope {
+		paths, err := filepath.Glob(glob)
+		require.NoErrorf(t, err, "glob %s", glob)
+		require.NotEmptyf(t, paths, "%s matched no files; the guard moved and this gate stopped looking", glob)
+
+		for _, path := range paths {
+			if strings.HasSuffix(path, "_test.go") {
+				continue // a test may name a host's tool: it describes a real payload rather than judging one
+			}
+			f, err := parser.ParseFile(fset, path, nil, 0)
+			require.NoErrorf(t, err, "parse %s", path)
+
+			ast.Inspect(f, func(n ast.Node) bool {
+				lit, ok := n.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				value, err := strconv.Unquote(lit.Value)
+				if err != nil || !hostToolVocabulary[value] {
+					return true
+				}
+				if why, exempt := hostToolVocabularyByDesign[path+":"+value]; exempt {
+					t.Logf("%s: %q is host vocabulary by design (%s)", path, value, why)
+					return true
+				}
+				pos := fset.Position(lit.Pos())
+				violations = append(violations, fmt.Sprintf("%s:%d: %q", path, pos.Line, value))
+				return true
+			})
+		}
+	}
+
+	assert.Empty(t, violations,
+		"guard code must not know what a host calls its tools.\n"+
+			"A switch or a lookup table over \"Read\"/\"Bash\" is a per-host branch with the host's name\n"+
+			"filed off: it passes TestNoHostSpecificBehaviorInCode, and the next time any host renames a\n"+
+			"tool it costs a magus release. Record magus's own label instead (hookToolCommand,\n"+
+			"hookToolWrite, hookToolRead in cmd/magus/guard.go) and let the wrapper in the reader's own\n"+
+			"config do the mapping - which flag it passes IS the mapping. If a literal genuinely has to\n"+
+			"be here, add it to hostToolVocabularyByDesign with where that decision is written down.\n\n"+
+			"violations:\n%s",
+		strings.Join(violations, "\n"))
+}
+
 // The landing headline rotates through N stacked spans on one shared keyframe
 // animation, each offset by a negative delay of one slot. The count lives in
 // landing.buzz and the slot arithmetic lives in site.css, so nothing but agreement

@@ -55,7 +55,14 @@ import (
 // 45: the concept is a LEASE - the ledger row, the `--lease` flag, the BAGGAGE
 // member magus.lease - and magus-delegate-multi-agent is renamed
 // magus-multi-agent. Nothing answers to the old names.
-const SkillVersion = 45
+// 46: verification instructions become proof obligations wherever the evidence
+// is cheap - a gate you added is shown FAILING before its green counts
+// (magus-run), drift is proven by a second regenerate rather than by reading
+// the diff (magus-vcs-hygiene), fan-out waits on the collision check REPORTING
+// the write sets disjoint and the root reopens a lease's evidence itself
+// (magus-multi-agent), and every audit finding carries the command that
+// reproduces it (magus-context-audit).
+const SkillVersion = 46
 
 const skillLicense = "GPL-3.0-or-later"
 

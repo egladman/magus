@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 10909
-skill_simple_bytes: 7145
+skill_full_bytes: 11157
+skill_simple_bytes: 7393
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `45` |
+| `agent-skill-version` | `46` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `4915a071a8a9` |
+| `skill-content` | `4e30fbc894ca` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -80,7 +80,11 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
    full pipeline over every project your change reaches, which is how you learn
    about ramifications in projects you never touched. Hand-running lint,
    format, and test one at a time re-derives an order the magusfile already
-   owns, and the step you forget fails silently by omission. Verify in place;
+   owns, and the step you forget fails silently by omission. A gate you ADDED
+   this session is not proven by its green: make it FAIL once - break the input
+   it checks, watch it go red, restore - before you count its pass as
+   verification. A check wired to the wrong path passes exactly the same way.
+   Verify in place;
    never `git stash`/`reset` first (data-loss-prone and pointless - the tree is
    already what you want to verify).
 3. Reach for an individual target only to iterate on a failure `ci` named:
@@ -291,7 +295,11 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
    Run `magus run ci <project>` for the project you are working in, and
    `magus affected ci` as the final gate once the change is done. Hand-running lint,
    format, and test one at a time re-derives an order the magusfile already
-   owns, and the step you forget fails silently by omission. Verify in place;
+   owns, and the step you forget fails silently by omission. A gate you ADDED
+   this session is not proven by its green: make it FAIL once - break the input
+   it checks, watch it go red, restore - before you count its pass as
+   verification. A check wired to the wrong path passes exactly the same way.
+   Verify in place;
    never `git stash`/`reset` first (it destroys a concurrent agent's untracked
    work, and the tree is already what you want to verify).
 3. Reach for an individual target only to iterate on a failure `ci` named:

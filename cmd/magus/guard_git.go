@@ -146,9 +146,9 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			}) {
 				return bashGuardVerdict{Deny: denyStageAll}, true
 			}
-			return bashGuardVerdict{Context: vcsGuardContext}, true
+			return bashGuardVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 		case "commit":
-			return bashGuardVerdict{Context: vcsGuardContext}, true
+			return bashGuardVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 		case "checkout":
 			// A revert needs the `--` separator; without it the operand is a
 			// branch, which is not this rule's business.
@@ -230,7 +230,7 @@ func gitGuardFallback(command string) (bashGuardVerdict, bool) {
 	case guardStageAllRe.MatchString(command):
 		return bashGuardVerdict{Deny: denyStageAll}, true
 	case guardStageRe.MatchString(command):
-		return bashGuardVerdict{Context: vcsGuardContext}, true
+		return bashGuardVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 	case guardScopedRevertRe.MatchString(command):
 		return bashGuardVerdict{Context: revertGuardContext}, true
 	}

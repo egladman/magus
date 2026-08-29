@@ -6,8 +6,8 @@ tags: [agents, skills, magus-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
   - reference/skills/magus-delegate-multi-agent
-skill_full_bytes: 21560
-skill_simple_bytes: 15822
+skill_full_bytes: 21729
+skill_simple_bytes: 15991
 ---
 
 # magus-multi-agent
@@ -31,9 +31,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `45` |
+| `agent-skill-version` | `46` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `223eb31064c3` |
+| `skill-content` | `2123a12dfa36` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -77,7 +77,8 @@ Each of those is a choice made below, not a property of fanning out. Say what a
 round will cost when the user is deciding, and prefer the smallest fan-out that
 covers the work.
 
-Fan out when the leases are genuinely independent. If the graph supports only one
+Fan out only after the collision check below REPORTS the leases disjoint; write
+sets that look separate is not that check. If the graph supports only one
 coherent write set, keep the work local - fanning out one lease adds coordination
 and buys nothing. The root agent owns the goal, the budget, the topology,
 integration, and final verification, and never hands those out.
@@ -404,7 +405,9 @@ As leases finish:
 1. Compare the ledger against the ACTUAL diff since each lease's checkpoint, not
    the paths it reported (`magus graph diff --rev <revision>` for the domain; a
    differing dirty digest means it saw a tree you are not diffing).
-2. Verify each lease's acceptance criteria and evidence before accepting it.
+2. Reopen each lease's acceptance evidence yourself (`magus query output <ref>`)
+   before accepting it; a worker reporting that its criteria passed is not that
+   evidence.
 3. Resolve cross-lease API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
@@ -460,7 +463,8 @@ Fan-out is not inherently expensive. Say what a
 round will cost when the user is deciding, and prefer the smallest fan-out that
 covers the work.
 
-Fan out when the leases are genuinely independent. If the graph supports only one
+Fan out only after the collision check below REPORTS the leases disjoint; write
+sets that look separate is not that check. If the graph supports only one
 coherent write set, keep the work local - fanning out one lease adds coordination
 and buys nothing. The root agent owns the goal, the budget, the topology,
 integration, and final verification, and never hands those out.
@@ -714,7 +718,9 @@ As leases finish:
 1. Compare the ledger against the ACTUAL diff since each lease's checkpoint, not
    the paths it reported (`magus graph diff --rev <revision>` for the domain; a
    differing dirty digest means it saw a tree you are not diffing).
-2. Verify each lease's acceptance criteria and evidence before accepting it.
+2. Reopen each lease's acceptance evidence yourself (`magus query output <ref>`)
+   before accepting it; a worker reporting that its criteria passed is not that
+   evidence.
 3. Resolve cross-lease API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape

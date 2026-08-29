@@ -613,3 +613,132 @@ func TestGradeLeasedWriteFlagsADivergedBase(t *testing.T) {
 	assert.Contains(t, got.Context, "rev-somewhere-else")
 	assert.Contains(t, got.Context, "rev-a", "the advisory names both bases so the reader can tell which moved")
 }
+
+// TestAdviseUnleasedWorker is the teaching case for a fleet running unrecorded: a process
+// that claims a spawner, names no lease, and writes into a workspace whose ledger holds no
+// live row to grade it against. Nothing records who owns which paths, so a collision is
+// invisible until somebody reads the diff.
+func TestAdviseUnleasedWorker(t *testing.T) {
+	// A well-formed W3C traceparent: version, trace id, parent span id, flags.
+	const spawned = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+	t.Run("spawn ancestry and no lease advises", func(t *testing.T) {
+		t.Setenv(trail.EnvTraceparent, spawned)
+		ctx, root := fleetFixture(t)
+		got := gradeLeasedWrite(ctx, "", filepath.Join(root, "internal/thing/x.go"))
+
+		require.Equal(t, "advise", got.Decision)
+		assert.NotEqual(t, "deny", got.Decision, "the spawn chain is a claim, so it may teach and may never block")
+		assert.Equal(t, advisoryUnleasedWrite, got.Kind, "a standing fact, so it is held to one firing per session")
+		assert.Contains(t, got.Context, "magus_ledger", "the advisory must name the tool that declares the plan")
+		assert.Contains(t, got.Context, envHookLease, "and the channel a worker enrolls over")
+	})
+
+	t.Run("no ancestry stays silent", func(t *testing.T) {
+		t.Setenv(trail.EnvTraceparent, "")
+		ctx, root := fleetFixture(t)
+		assert.Empty(t, gradeLeasedWrite(ctx, "", filepath.Join(root, "internal/thing/x.go")).Decision,
+			"a run carrying no trace context IS a person, and a person editing their own checkout is owed silence")
+	})
+
+	t.Run("a malformed claim stays silent", func(t *testing.T) {
+		// Dropped rather than salvaged, which is trail.SpawnFromEnv's contract. A value that
+		// does not parse claims nothing, so there is no worker here to teach.
+		t.Setenv(trail.EnvTraceparent, "not-a-traceparent")
+		ctx, root := fleetFixture(t)
+		assert.Empty(t, gradeLeasedWrite(ctx, "", filepath.Join(root, "internal/thing/x.go")).Decision)
+	})
+
+	t.Run("an enrolled worker stays silent", func(t *testing.T) {
+		t.Setenv(trail.EnvTraceparent, spawned)
+		ctx, root := fleetFixture(t)
+		assert.Empty(t, gradeLeasedWrite(ctx, "lease-a", filepath.Join(root, "internal/thing/x.go")).Decision,
+			"naming a lease is the whole thing being asked for")
+	})
+
+	t.Run("a live ledger grades instead", func(t *testing.T) {
+		// The rule fills a silence and never competes: with live rows on record the existing
+		// grading answers, and this advisory is not reached at all.
+		t.Setenv(trail.EnvTraceparent, spawned)
+		ctx, root := fleetFixture(t, fleetLeases()...)
+		got := gradeLeasedWrite(ctx, "", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "advise", got.Decision)
+		assert.Contains(t, got.Context, "lease-a", "the collision report is the more specific answer")
+	})
+}
+
+// magusTreeFixture makes the working directory look like a checkout of magus's own
+// sources, which is the gate the two rules below are scoped by.
+func magusTreeFixture(t *testing.T) string {
+	t.Helper()
+	root := inWorkspace(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "agent"), 0o755))
+	return root
+}
+
+// TestAdviseAgentSurfaceWrite: an edit to what agents are TAUGHT routes through the method
+// that maintains it, because both ways to get it wrong here are silent.
+func TestAdviseAgentSurfaceWrite(t *testing.T) {
+	magusTreeFixture(t)
+
+	for _, rel := range []string{
+		"internal/agent/skills/magus-run/SKILL.md",
+		"internal/handler/mcp/registry.go",
+		"internal/handler/mcp/toolref.go",
+	} {
+		got := adviseAgentSurfaceWrite(rel)
+		assert.Contains(t, got, "magus-skill-authoring", rel)
+		assert.Contains(t, got, "SkillVersion", rel)
+	}
+
+	assert.Empty(t, adviseAgentSurfaceWrite("internal/handler/mcp/diff.go"), "one handler is not the registry")
+	assert.Empty(t, adviseAgentSurfaceWrite("internal/agent/catalog.go"))
+	assert.Empty(t, adviseAgentSurfaceWrite("cmd/magus/agent.go"))
+}
+
+// TestAdviseDescriptorWrite: the generator INPUT, not the generated output. The first is
+// the omitted edit, the second is the wasted one, and adviseGeneratedWrite already has the
+// second.
+func TestAdviseDescriptorWrite(t *testing.T) {
+	magusTreeFixture(t)
+
+	for _, rel := range []string{"proto/magus/v1/run.proto", "std/fs.go"} {
+		got := adviseDescriptorWrite(rel)
+		assert.Contains(t, got, "SAME commit", rel)
+		assert.Contains(t, got, "magus run generate .", rel)
+	}
+
+	assert.Empty(t, adviseDescriptorWrite("std/fs_test.go"), "a test beside a descriptor feeds no generator")
+	assert.Empty(t, adviseDescriptorWrite("std/http/client.go"), "a subdirectory is a module's implementation, not its surface")
+	assert.Empty(t, adviseDescriptorWrite("proto/README.md"))
+	assert.Empty(t, adviseDescriptorWrite("internal/cache/cache.go"))
+}
+
+// Both rules name paths and a target belonging to magus's OWN checkout, which a shipped
+// verdict may not normally do. The gate is what makes that legitimate, so it is the part
+// worth pinning: in anybody else's workspace neither rule can fire at all.
+func TestMagusOwnSourceTreeGatesTheRepoScopedRules(t *testing.T) {
+	inWorkspace(t) // an ordinary workspace: no magusfile, no cmd/magus
+	assert.Empty(t, adviseAgentSurfaceWrite("internal/agent/skills/magus-run/SKILL.md"))
+	assert.Empty(t, adviseDescriptorWrite("std/fs.go"))
+	assert.Empty(t, adviseDescriptorWrite("proto/magus/v1/run.proto"))
+}
+
+// The host sends an ABSOLUTE path, and this repository is routinely checked out under
+// .claude/worktrees/<name>. Matching the absolute form is how adviseNewSourceDir once
+// shipped inert with a green suite; both rules here resolve relative first for that reason.
+func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
+	root := t.TempDir()
+	ws := filepath.Join(root, ".claude", "worktrees", "feature-x")
+	require.NoError(t, os.MkdirAll(ws, 0o755))
+	t.Chdir(ws)
+	require.NoError(t, os.WriteFile(filepath.Join(ws, "magusfile.buzz"), nil, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, "cmd", "magus"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, "internal", "agent"), 0o755))
+
+	assert.Contains(t, adviseAgentSurfaceWrite(filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")), "magus-skill-authoring")
+	assert.Contains(t, adviseDescriptorWrite(filepath.Join(ws, "std", "fs.go")), "SAME commit")
+	assert.Empty(t, adviseDescriptorWrite(filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
+}

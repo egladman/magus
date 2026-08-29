@@ -5,8 +5,8 @@ description: "Safe git operations in a magus workspace (any repo with magusfile.
 tags: [agents, skills, magus-vcs-hygiene]
 aliases:
   - reference/skills/magus-vcs
-skill_full_bytes: 8106
-skill_simple_bytes: 5977
+skill_full_bytes: 8132
+skill_simple_bytes: 5992
 ---
 
 # magus-vcs-hygiene
@@ -30,9 +30,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `45` |
+| `agent-skill-version` | `46` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `96db0c2c44d2` |
+| `skill-content` | `4525466a7e42` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -87,10 +87,11 @@ CORRECT: note that `docs/gen/**` is a declared output of
 - Do not investigate their diffs; regenerate and compare instead. If a generated
   file changed with no source change, that is the finding (stale or hand-edited
   output) - `magus run generate` should settle it.
-- Distinguish real drift from environmental noise before you act. If regenerating
-  reproduces the same diff while the target's declared inputs are unchanged, the
-  drift is environmental (a tool-version bump, an embedded timestamp), not your
-  change. Report the tool or version; never revert the working tree to chase it.
+- Prove drift by regenerating a SECOND time, never by reading the diff and
+  judging it. If that second run reproduces the same diff while the target's
+  declared inputs are unchanged, the drift is environmental (a tool-version bump,
+  an embedded timestamp), not your change. Report the tool or version; never
+  revert the working tree to chase it.
   Real drift traces to a source edit; environmental drift traces to the toolchain.
 - Commit regenerated outputs together with the source change that produced
   them. CI typically runs the generate target as a drift gate: a source change
@@ -232,8 +233,9 @@ project and a role:
   target (usually `magus run generate`).
 - Do not investigate their diffs; regenerate and compare instead. If a generated
   file changed with no source change, that is the finding.
-- Distinguish real drift from environmental noise before you act.
-  Same diff on regenerate with inputs unchanged means environmental (tool
+- Prove drift by regenerating a SECOND time, never by reading the diff and
+  judging it.
+  Same diff again with inputs unchanged means environmental (tool
   version, timestamp). Report the tool; never revert the tree to chase it.
 - Commit regenerated outputs together with the source change that produced
   them.

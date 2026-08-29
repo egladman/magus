@@ -45,12 +45,13 @@ CORRECT: note that `docs/gen/**` is a declared output of
 - Do not investigate their diffs; regenerate and compare instead. If a generated
   file changed with no source change, that is the finding{{if .Full}} (stale or hand-edited
   output) - `magus run generate` should settle it{{end}}.
-- Distinguish real drift from environmental noise before you act.{{if .Full}} If regenerating
-  reproduces the same diff while the target's declared inputs are unchanged, the
-  drift is environmental (a tool-version bump, an embedded timestamp), not your
-  change. Report the tool or version; never revert the working tree to chase it.
+- Prove drift by regenerating a SECOND time, never by reading the diff and
+  judging it.{{if .Full}} If that second run reproduces the same diff while the target's
+  declared inputs are unchanged, the drift is environmental (a tool-version bump,
+  an embedded timestamp), not your change. Report the tool or version; never
+  revert the working tree to chase it.
   Real drift traces to a source edit; environmental drift traces to the toolchain.{{else}}
-  Same diff on regenerate with inputs unchanged means environmental (tool
+  Same diff again with inputs unchanged means environmental (tool
   version, timestamp). Report the tool; never revert the tree to chase it.{{end}}
 - Commit regenerated outputs together with the source change that produced
   them.{{if .Full}} CI typically runs the generate target as a drift gate: a source change

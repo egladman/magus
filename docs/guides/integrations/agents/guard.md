@@ -182,6 +182,32 @@ outside the command line, and speak only into the silence the rules above leave:
 - A binary older than the guard rules in the tree: appended to every verdict,
   including a deny, because a stale binary's verdicts are all suspect rather
   than only the ones that matched.
+- A graph read (`magus refs`, `query`, `explain`, `path`) against a symbol index
+  older than the sources it describes. The command's own output says the same
+  thing under the answer, which is the half that works on every host with
+  nothing wired; this one arrives a call earlier.
+
+## Advisories are said once
+
+The advisories that carry a standing fact rather than a correction to the
+command in front of you are held to one firing per session: the stale-binary
+notice, the graph-beats-grep hint, the classify-before-staging reminder, the
+index-staleness advisory, and the repository-scoped path rules above. The second
+identical paragraph teaches nothing, and this page's standard says why that
+matters - a check that is red by default is a check people learn to ignore,
+taking the real failures with it.
+
+Denials are exempt, and so is every reason a denial carries. A refusal explains
+itself every time it refuses; it is the one verdict the caller cannot see past.
+The advisories that correct the command itself - a `cd` before magus, a `time`
+wrapper, a chained run - are exempt too, because a second firing reports a
+second mistake.
+
+A session is identified by the `session_id` your host reports, on the flag or in
+the envelope. A host that reports none is not silenced forever: those notices
+expire on a two-hour clock instead, so the next session is told again. The state
+is one empty marker file per session and kind under the cache directory, swept
+after a week.
 
 ## The file surface
 
@@ -200,6 +226,21 @@ is where a workspace decision goes to be invisible to the next checkout, an
 installed skill is generated and the next `--force` install erases the edit, and
 a new source directory is a structural choice worth making deliberately rather
 than by where a file happened to land.
+
+Two more fire only inside magus's own checkout, identified the way the
+stale-binary notice identifies it, and are inert in every other workspace: a
+write to a shipped skill body or the MCP tool registry routes through the
+authoring method those files are maintained by, and a write to a generator input
+(a `.proto`, a Buzz host module descriptor) says to regenerate in the same
+commit. Both name paths and a target that belong to this repository, which a
+shipped verdict may not otherwise do; the gate is what makes them legitimate,
+because outside this repository neither can fire at all.
+
+One rule reads the environment rather than the path. A process carrying spawn
+ancestry that writes while naming no lease, in a workspace whose ledger holds no
+live row, is told how to enroll. The ancestry is a claim any local process can
+set, so it may teach and may not judge: it can only ever turn silence into an
+advisory, never deny, and never change what another rule decided.
 
 All of them say nothing on any uncertainty. A rule fired on a guess trains the
 reader to ignore it, and a deny fired on a guess blocks real work.

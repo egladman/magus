@@ -183,6 +183,33 @@ over prose. Defer to `-h` and live tools for anything versionable. Plain
 ASCII, no emojis (tests enforce it). Spell every rule out; a rule the reader
 has to infer will be inferred differently by every model that reads it.
 
+## 5b. Phrase verification as proof, not as care
+
+An instruction phrased as care is satisfiable by prose: an agent asserts it was
+careful and the sentence is met. The same instruction phrased as a proof
+obligation can only be met by evidence, because it names the artifact that
+settles it. Whenever the evidence is cheap to produce, write the obligation.
+
+Worked example, from magus-vcs-hygiene:
+
+```markdown
+WRONG: Distinguish real drift from environmental noise before you act.
+CORRECT: Prove drift by regenerating a SECOND time, never by reading the diff
+and judging it.
+```
+
+Both point at the same procedure, but only the second one fails visibly when
+nobody runs it: there is either a second regeneration in the transcript or there
+is not. Apply it to gates ("show a gate you added FAILING before you trust its
+green"), to collision claims ("the check REPORTS the write sets disjoint" rather
+than "the leases are genuinely independent"), and to reported findings ("carries
+the command that reproduces it").
+
+The limit is cost, and it is a real limit: a judgment rule with no cheap proof
+keeps its judgment framing. `never a whole-tree git op to verify a build` has
+nothing to run, and rewriting it into a fake obligation would trade a rule the
+reader can generalize for a ritual.
+
 ## 6. Record the why, then verify the whole
 
 - Decisions with a why go to magus_memory (file=decisions) so the next

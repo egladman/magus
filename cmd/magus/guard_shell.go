@@ -21,9 +21,15 @@ import (
 
 // bashGuardVerdict classifies one Bash command line. Deny blocks the call with a
 // reason the model sees; Context lets it proceed and injects a reminder.
+//
+// Kind names an advisory that is held to one firing per session (guard_advisory.go).
+// It is empty for the advisories that correct the command in front of the reader, where
+// a second firing reports a second mistake rather than repeating a standing fact, and it
+// is always empty on a deny: a refusal explains itself every time it refuses.
 type bashGuardVerdict struct {
 	Deny    string
 	Context string
+	Kind    advisoryKind
 }
 
 // cmdPos anchors a pattern to a COMMAND position - line start or just after a
@@ -704,7 +710,7 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case guardCodeSearchRe.MatchString(command):
-		return bashGuardVerdict{Context: searchGuardReason}
+		return bashGuardVerdict{Context: searchGuardReason, Kind: advisoryCodeSearch}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):

@@ -3,8 +3,8 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5579
-skill_simple_bytes: 4071
+skill_full_bytes: 5846
+skill_simple_bytes: 4187
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `45` |
+| `agent-skill-version` | `46` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `e592b6607c60` |
+| `skill-content` | `883a29c81e8d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -99,6 +99,11 @@ grep -rn "<the command or rule>" <every surface you enumerated>
 ```
 
 ## Rank what you find
+
+Every finding carries the command that REPRODUCES it - the exact line a reader
+runs to see the contradiction for themselves, not a description of where you saw
+it. A finding nobody can re-run is an opinion about a document, and it gets
+argued with instead of fixed.
 
 Report findings in this order. Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".
@@ -209,6 +214,9 @@ grep -rn "<the command or rule>" <every surface you enumerated>
 ```
 
 ## Rank what you find
+
+Every finding carries the command that REPRODUCES it - a finding nobody can re-run is an opinion about a
+document.
 
 Report findings in this order.
 

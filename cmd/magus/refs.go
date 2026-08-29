@@ -111,6 +111,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
 		printVerdict(os.Stdout, out.Answer, "")
+		printIndexStaleness(ctx, os.Stdout, root)
 		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
 		// an unresolved name does: exit 1 when magus could not verify it. Absent stays 0
 		// here, unlike the unresolved branch above - the symbol resolved and its empty
@@ -124,6 +125,9 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	for _, r := range out.Refs {
 		fmt.Printf("  %s  (%d)%s\n", r.File, r.Count, linesSuffix(r.Lines))
 	}
+	// Under the rows, never instead of them. A found answer from a stale index is the
+	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
+	printIndexStaleness(ctx, os.Stdout, root)
 	return nil
 }
 

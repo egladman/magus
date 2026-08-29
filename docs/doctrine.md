@@ -234,10 +234,12 @@ appears in code anywhere but a path on disk, and the `magus-guard-coverage:`
 line each template carries feeds a parity gate that fails when a host was never
 asked about a decision the contract grew.
 
-The name test is one layer shallower than the rule it enforces: a branch keyed
-on a host's tool vocabulary rather than its name - a switch over `Read` and
-`Bash` - is a per-host branch in everything but spelling, and passes the gate
-untouched. The activity-event tool labels are magus's own vocabulary for that
+A branch keyed on a host's tool vocabulary rather than its name - a switch over
+`Read` and `Bash` - is a per-host branch in everything but spelling, and the
+name test cannot see it. `TestGuardDoesNotBranchOnHostToolVocabulary` is the
+second layer: it fails the build when a host's word for a tool appears as a
+string literal in guard code at all, so a lookup table is no cheaper than a
+switch. The activity-event tool labels are magus's own vocabulary for that
 reason, chosen by which flag the wrapper passed.
 
 A layer that made every host work with no friction is what is being traded away

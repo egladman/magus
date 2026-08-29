@@ -165,6 +165,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"})
 		}
 	}
+	// One gate for the whole invocation, holding each enrolled advisory to one firing per
+	// session. Built AFTER the envelope is decoded: a host that reports its session id only
+	// inside the payload would otherwise be graded as having reported none, and every
+	// session on that host would share the anonymous bucket.
+	gate := newAdvisoryGate(hookActivityTrail(ctx).base, who.Session)
 	tool := hookToolCommand
 	switch {
 	case hf.Observe:
@@ -186,36 +191,63 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// outrank it: the regeneration advice below is still true after a collision, and
 		// saying that instead would let two leases edit one path in silence.
 		context := ""
+		// spoken reports that a rule MATCHED, which is not the same as a rule that
+		// produced text. A once-per-session advisory that already fired this session
+		// matched and stayed quiet, and the rules below it must not step into the silence
+		// it left: without this the second write to a skill source would draw the
+		// new-directory advisory instead of nothing.
+		spoken := false
 		switch g := gradeLeasedWrite(ctx, actingLease, input.Value); g.Decision {
 		case "deny":
 			verdict.Decision = "deny"
 			verdict.Reason = g.Reason
 		case "advise":
-			context = g.Context
+			context, spoken = gate.once(g.Kind, g.Context), true
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
 		// outranks the heuristics below; the memory nudge is a heuristic on the
 		// filename and only fills the silence it leaves.
-		if verdict.Decision == "pass" && context == "" {
-			context = adviseGeneratedWrite(ctx, input.Value)
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseGeneratedWrite(ctx, input.Value); text != "" {
+				context, spoken = text, true
+			}
 		}
 		// The notes rule DENIES, so it is checked before the advisories: a verdict
 		// that blocks is not something to fall through to. It sits after the
 		// generated-output rule only because a path cannot honestly be both, and if
 		// it somehow were, the regeneration answer is the more actionable one.
-		if verdict.Decision == "pass" && context == "" {
+		if verdict.Decision == "pass" && !spoken {
 			if reason := denyNotesWrite(input.Value); reason != "" {
 				verdict.Decision = "deny"
 				verdict.Reason = reason
 			}
 		}
-		if verdict.Decision == "pass" && context == "" {
-			context = adviseInstalledSkillWrite(input.Value)
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseInstalledSkillWrite(input.Value); text != "" {
+				context, spoken = text, true
+			}
 		}
-		if verdict.Decision == "pass" && context == "" {
-			context = adviseMemoryWrite(input.Value)
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseMemoryWrite(input.Value); text != "" {
+				context, spoken = text, true
+			}
 		}
-		if verdict.Decision == "pass" && context == "" {
+		// Both of these name paths and a target belonging to magus's own checkout, and
+		// both are inert anywhere else - see magusOwnSourceTree. They sit above the
+		// new-directory rule because a new skill directory is both, and which method to
+		// load is the more useful of the two answers.
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseAgentSurfaceWrite(input.Value); text != "" {
+				context, spoken = gate.once(advisorySkillSource, text), true
+			}
+		}
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseDescriptorWrite(input.Value); text != "" {
+				context, spoken = gate.once(advisoryRegenSource, text), true
+			}
+		}
+		// Last rung, so it sets no flag: there is nothing below it to hold back.
+		if verdict.Decision == "pass" && !spoken {
 			context = adviseNewSourceDir(input.Value)
 		}
 		if verdict.Decision == "pass" && context != "" {
@@ -231,8 +263,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
 		case v.Context != "":
-			verdict.Decision = "advise"
-			verdict.Context = v.Context
+			if held := gate.once(v.Kind, v.Context); held != "" {
+				verdict.Decision = "advise"
+				verdict.Context = held
+			}
 		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
 		// advisory's own answer is to run a narrower target, and firing on that
@@ -246,6 +280,16 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				verdict.Context = notice
 			}
 		}
+		// The guard's half of the index-staleness fact; the load-bearing half rides the
+		// command's own output (staleindex.go). gate.seen is asked BEFORE the rule, not
+		// after: producing this text costs a directory walk, and once the session has been
+		// told, paying for it again only to discard the answer is the cost nobody sees.
+		if verdict.Decision == "pass" && !gate.seen(advisoryGraphStale) && commandReadsGraph(input.Value) {
+			if notice := gate.once(advisoryGraphStale, staleGraphAdvice(ctx)); notice != "" {
+				verdict.Decision = "advise"
+				verdict.Context = notice
+			}
+		}
 	}
 	// Said last and on EVERY surface: a stale binary's verdicts are all suspect, not
 	// just the ones that matched a rule.
@@ -254,14 +298,20 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// from rules they have already changed is the case this rule exists for - and the
 	// first version of it skipped exactly that arm. The reason comes first, because
 	// the block has to be explained before it can be doubted.
+	//
+	// It is the loudest of the repeated advisories and so the one held to once per
+	// session - EXCEPT on a deny, where it is appended every time and spends no firing.
+	// A denial explains itself in full whenever it refuses, and this is the sentence that
+	// says the refusal may be coming from rules the caller has already changed.
 	if notice := staleGuardNotice(); notice != "" && !hf.Observe {
-		switch verdict.Decision {
-		case "deny":
+		if verdict.Decision == "deny" {
 			verdict.Reason += "\n\n" + notice
-		case "advise":
-			verdict.Context += "\n\n" + notice
-		default:
-			verdict.Decision, verdict.Context = "advise", notice
+		} else if held := gate.once(advisoryStaleBinary, notice); held != "" {
+			if verdict.Decision == "advise" {
+				verdict.Context += "\n\n" + held
+			} else {
+				verdict.Decision, verdict.Context = "advise", held
+			}
 		}
 	}
 	// An observation is not a judgment, and the trail already knows the difference: an
@@ -382,9 +432,11 @@ type hookEnvelope struct {
 // next change to any host would mean a magus release. The matcher in a host's own config is
 // where the host's vocabulary lives.
 //
-// Nothing MECHANICALLY enforces this particular case, which is why it is written down here.
 // TestNoHostSpecificBehaviorInCode matches host NAMES, so a switch over "Read"/"Bash" - a
 // per-host branch in everything but spelling - passes it untouched.
+// TestGuardDoesNotBranchOnHostToolVocabulary is the layer that catches that one: a host's
+// word for a tool may not appear as a string literal in guard code at all, so a lookup
+// table is no cheaper than a switch. These three constants are what it leaves room for.
 const (
 	hookToolCommand = "shell.command"
 	hookToolWrite   = "file.write"

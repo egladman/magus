@@ -52,7 +52,10 @@ const MaxSpawnerLen = 128
 // arriving over a channel any local process may set. NO verdict may key on any of it. The one
 // grading that reads a field here
 // takes Lease to the ledger boundary check, and that check fails open (see
-// cmd/magus/guard_write.go). The human is never a claim: a run carrying no trace context IS a
+// cmd/magus/guard_write.go). ParentSpanID is read in one more place and for teaching only:
+// adviseUnleasedWorker turns silence into an advisory when a process claiming a spawner writes
+// while no lease exists to grade it, which can never deny and never changes a verdict another
+// rule reached. The human is never a claim: a run carrying no trace context IS a
 // person, and that root is inferred from the transport rather than asserted by anyone.
 type Spawn struct {
 	// TraceID and ParentSpanID are the trace this process was spawned into and the span that
