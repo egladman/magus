@@ -70,6 +70,11 @@
   font-size: 0.8rem;
 }
 #log-bar .pf-v6-c-toolbar__content { padding-inline: var(--log-pad); }
+/* PF's Toolbar pads its own block-END by a spacer-md and its start by nothing, so the tinted strip
+   ran 16px lower than the row inside it: the filter field was centred in its content section and
+   visibly high in the box a reader actually sees. The rows below carry the console's bar height,
+   which is the whole height this strip should have. */
+#log-bar { padding-block: 0; }
 #log-bar-id .pf-v6-c-toolbar__content-section { padding-block: 0.45rem 0; align-items: center; min-height: 1.7rem; }
 /* The ref strip stays out of the layout until a log loads (setRefIdentity fills #log-ref); an empty
    bordered pill would otherwise render as a stray hairline "-" in the cold empty state. */

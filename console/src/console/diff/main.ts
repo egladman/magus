@@ -260,6 +260,18 @@ function label(text: string, modifier?: string, title?: string): HTMLElement {
   return el;
 }
 
+// scopeLabel names the two sides of the comparison, from the only thing the session carries
+// about them.
+//
+// "working" is a STATE rather than a ref (types.Diff.Base), and the working diff is the tree
+// against HEAD - so it is the one value expanded into both sides. Every other base is a ref the
+// daemon took the diff against and nothing here knows the other side of, which is why an
+// arbitrary base gets the phrasing types.Diff.Base's own readers use rather than an invented
+// second side.
+function scopeLabel(base: string): string {
+  return base === "" || base === "working" ? "working tree vs HEAD" : `compared against ${base}`;
+}
+
 // The marker is the NON-COLOR channel for add and delete. Color alone fails WCAG 1.4.1 and
 // fails anyone with a color vision deficiency, and a diff is exactly the case where the two
 // states must be told apart to be read at all.
@@ -477,7 +489,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   const main = h("div", "console-diff-main");
   const toolbar = h("div", "console-diff-toolbar");
-  toolbar.dataset.controlSize = "default";
+  // TWO strips, not one crowded one. The head names the surface and what it is comparing and
+  // carries the actions; the readout below carries the counts. They were one row of eleven chips
+  // over a row of hints and buttons, and nothing said which of the three kinds of thing a reader
+  // was looking at.
+  //
+  // The head is sized and tiered like the file index's head beside it, which is what makes the
+  // two hairlines meet as a straight line across the seam rather than as a T - the job
+  // --console-diff-head-block-size was introduced for and could not do while the toolbar's own
+  // content set its height.
+  const head = h("div", "console-diff-toolbar__head");
+  head.dataset.controlSize = "compact";
+  const eyebrow = h("span", "console-diff-toolbar__eyebrow", "Review");
+  // What is being compared, in the head where a reader looks for orientation rather than as a
+  // twelfth chip. A chip is a count; this is the sentence the counts are about.
+  const scopeEl = h("span", "console-diff-toolbar__scope");
+  const readout = h("div", "console-diff-toolbar__readout");
   const statsEl = h("div", "console-diff-toolbar__stats");
   const collaborationNotice = h("span", "console-diff-collaboration");
   collaborationNotice.setAttribute("role", "status");
@@ -519,6 +546,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     group.append(combo, h("span", "console-diff-toolbar__keyname", what));
     keysEl.append(group);
   }
+  // Behind a disclosure, not always on: the legend is teach-once reference, and leaving it
+  // inline was what wrapped the readout to a second line and grew the toolbar. A native
+  // details element keeps it keyboard-reachable with no JS.
+  const keysWrap = h("details", "console-diff-toolbar__keyswrap");
+  keysWrap.append(h("summary", "console-diff-toolbar__keystoggle", "keys"), keysEl);
   // The progress of the pass, shown only while reading one hunk at a time. A bar for the glance
   // and the numbers beside it, because a bar over hunks of unequal size advances unevenly and
   // would be read as lying about how much is left; the counts are the honest version it is
@@ -559,16 +591,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
   verdictButton.append(buttonIcon(PLAY), verdictText);
   verdictButton.addEventListener("click", () => void startRun());
 
-  // The two controls and the legend share a row. The toolbar stacks, so an item appended straight
-  // to it stretches to the full width and PF centres its label in all that space, which reads as a
-  // caption rather than a control.
+  // The toolbar STACKS, so an item appended straight to it stretches to the full width and PF
+  // centres its label in all that space, which reads as a caption rather than a control. Every
+  // control belongs to one of the two rows below.
   //
-  // Legend first, ACTIONS LAST: what you can do sits at the trailing edge of a bar, the same edge
-  // the dashboard's Big Picture button holds. The legend is a reading, so it takes the leading one.
-  const controls = h("div", "console-diff-toolbar__controls");
-  controls.append(keysEl, verdictButton, focusButton);
+  // ACTIONS at the trailing edge of the head, the same edge the dashboard's Big Picture button
+  // holds. The legend is a reading rather than an action, so it goes to the readout row it
+  // annotates - beside the counts, and the first thing to go when that row runs out of room.
+  const actions = h("div", "console-diff-toolbar__actions");
+  actions.append(verdictButton, focusButton);
+  head.append(eyebrow, scopeEl, actions);
+  readout.append(statsEl, keysWrap);
 
-  toolbar.append(statsEl, collaborationNotice, progressEl, controls);
+  toolbar.append(head, readout, collaborationNotice, progressEl);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
   context.hidden = true;
@@ -1488,7 +1523,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   const renderToolbar = (): void => {
     const s = stats(state.changeset);
-    const chips: HTMLElement[] = [];
+    // FOUR readings, not one run of eleven chips: how big the change is, what wants attention,
+    // where this pass has got to, and where it is going. Written flat at one gap they read as a
+    // single undifferentiated row, and a reader looking for the one red number has to check all
+    // of them. Same trick the key legend uses below - groups separate wider than a group holds
+    // together.
+    const size: HTMLElement[] = [];
+    const attention: HTMLElement[] = [];
+    const pass: HTMLElement[] = [];
     const collaboration = {
       live: { text: "agent session live", tone: "pf-m-blue", notice: "" },
       unavailable: {
@@ -1518,7 +1560,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // tree) is real and is the reason this existed. It is answered by the pill rather than by
     // a per-surface badge: fixing it here only would leave every other tileable surface with
     // the same gap and a different answer.
-    chips.push(
+    size.push(
       label(
         `${s.files} ${s.files === 1 ? "file" : "files"}`,
         undefined,
@@ -1531,7 +1573,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // hiding among them read as a different kind of thing because it was one. The fold lives on
     // the sidebar's "N generated" group, where the files it folds are, and on the . key.
     if (s.generated > 0) {
-      chips.push(
+      size.push(
         label(
           state.showGenerated ? `${s.generated} generated` : `${s.generated} generated folded`,
           undefined,
@@ -1543,7 +1585,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // told about is the one failure this surface cannot have. It is the second pass's whole
     // value, so it reads as progress rather than as a warning.
     if (s.settled > 0) {
-      chips.push(
+      pass.push(
         label(
           state.showSettled ? `${s.settled} already read` : `${s.settled} already read, folded`,
           undefined,
@@ -1552,10 +1594,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
       );
     }
     if (!ranked()) {
-      chips.push(label("unranked", "pf-m-orange", UNRANKED_TITLE));
+      attention.push(label("unranked", "pf-m-orange", UNRANKED_TITLE));
     }
     if (s.publicSurface > 0) {
-      chips.push(
+      attention.push(
         label(
           `${s.publicSurface} public surface`,
           "pf-m-orange",
@@ -1564,7 +1606,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       );
     }
     if (s.untested > 0) {
-      chips.push(
+      attention.push(
         label(
           `${s.untested} untested`,
           "pf-m-red",
@@ -1588,7 +1630,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       (o) => o.annotation?.read_state === "stale",
     ).length;
     if (stale > 0) {
-      chips.push(
+      attention.push(
         label(
           `${stale} changed since read`,
           "pf-m-red",
@@ -1597,26 +1639,36 @@ export function activate(host: HTMLElement): SurfaceInstance {
       );
     }
     const read = hunksRead(state.hunks, state.digestByRow, state.viewed);
-    chips.push(
+    pass.push(
       label(
         `${read}/${state.hunks.length} hunks read`,
         read === state.hunks.length && read > 0 ? "pf-m-green" : undefined,
         "Marks are keyed to hunk CONTENT, so they survive a rebase that did not touch the hunk",
       ),
     );
-    chips.push(
+    pass.push(
       label(
         state.mode === "split" ? "split" : "unified",
         "pf-m-blue",
         "1 unified, 2 split, 0 toggle",
       ),
     );
-    if (state.collaboration !== "live") chips.push(label(collaboration.text, collaboration.tone));
-    // The review chips come last: they describe what happens to this pass when it is over,
-    // which is the least urgent thing on a row about what is in front of the reader now.
-    chips.push(...reviewChips());
+    if (state.collaboration !== "live") pass.push(label(collaboration.text, collaboration.tone));
     collaborationNotice.textContent = transientNotice || collaboration.notice;
-    statsEl.replaceChildren(...chips);
+    // The review cluster comes last: it describes what happens to this pass when it is over,
+    // which is the least urgent thing on a row about what is in front of the reader now. An
+    // empty cluster is dropped rather than rendered, or the wide inter-cluster gap opens a hole
+    // where nothing is.
+    statsEl.replaceChildren(
+      ...[size, attention, pass, reviewChips()]
+        .filter((c) => c.length > 0)
+        .map((c) => {
+          const el = h("div", "console-diff-toolbar__cluster");
+          el.append(...c);
+          return el;
+        }),
+    );
+    scopeEl.textContent = scopeLabel(state.session?.base ?? "");
     renderProgress();
     renderMerged();
   };
@@ -2168,6 +2220,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     onCancel: () => void;
   }): { wrap: HTMLElement; field: HTMLTextAreaElement; commit: HTMLButtonElement } => {
     const wrap = h("span", "console-diff-composer__input");
+    // The commit button took PF's own geometry - baseline-aligned, its own vertical padding -
+    // while every other control in the console takes the shared tier. The tier reaches the button
+    // and skips the textarea by construction (a multi-line box is sized by its rows, which is why
+    // tokens.css excludes a form-control that holds one).
+    wrap.dataset.controlSize = "default";
     const control = h("span", "pf-v6-c-form-control");
     const field = h("textarea", "pf-v6-c-form-control__text");
     field.rows = 3;
@@ -2222,9 +2279,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
     });
     commit.addEventListener("click", () => opts.onCommit(field.value.trim()));
     control.append(field);
+    // The commit control shares the tab row, not the field row. On the field row it had nothing to
+    // line up with: a 37px button beside a box three lines tall, bottom-aligned into the corner of
+    // the panel, with the whole width above it empty. Here it sits on a real row - the same one
+    // Write and Preview sit on - and the field runs the full width beneath it.
+    //
+    // It still holds where the eye last left it as the remark grows, which is what put it beside
+    // the field in the first place: a textarea grows DOWNWARD, so a control anchored above it does
+    // not move at all.
+    const head = h("span", "console-diff-composer__head");
+    head.append(tabs, commit);
     const row = h("span", "console-diff-composer__row");
-    row.append(control, rendered, commit);
-    wrap.append(tabs, row);
+    row.append(control, rendered);
+    wrap.append(head, row);
     show(false);
     return { wrap, field, commit };
   };

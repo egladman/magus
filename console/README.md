@@ -61,7 +61,7 @@ Three tokens decide it now, and a surface sheet reads them rather than picking a
 | Token                       | What it sizes                                                     |
 | --------------------------- | ----------------------------------------------------------------- |
 | `--console-surface-bar-h`   | a BAR: the strip carrying a surface's controls (Runs filter, log viewer toolbar, Notes filter, graph stage header, plan toolbar). Derived from `--console-control-block-size`, so it is exactly a default control plus a symmetric spacer pair |
-| `--console-surface-head-h`  | a HEAD: the strip carrying a label over a column (Activity's Events/Details, the diff's file index, the log viewer's Recent runs/Output) |
+| `--console-surface-head-h`  | a HEAD: the strip carrying a label over a column (Activity's Events/Details, the diff's file index and its REVIEW head, the log viewer's Recent runs/Output) |
 | `--console-pad`             | the inline gutter for every surface-level strip AND the content under it, so a header label starts on the same x as what it heads |
 
 Use a bar's height as a FLOOR (`min-block-size`), never a fixed size: these rows wrap in a narrow
@@ -90,8 +90,8 @@ to. A container declares its tier once with `data-control-size`; `tokens.css` th
 
 | Tier      | Height | Type | Where                                                                 |
 | --------- | ------ | ---- | --------------------------------------------------------------------- |
-| `default` | 37px   | 14px | a surface BAR: the Runs filter row, the log viewer toolbar, the graph stage header, the Notes filter, the diff toolbar, the dashboard's own control row |
-| `compact` | 29px   | 12px | an in-panel RAIL or card: the graph sidebar, the log viewer's run index, the diff file index, a dashboard card's own controls, the title bar's tray |
+| `default` | 37px   | 14px | a surface BAR: the Runs filter row, the log viewer toolbar, the graph stage header, the Notes filter, the diff's remark composer, the dashboard's own control row |
+| `compact` | 29px   | 12px | an in-panel RAIL, HEAD or card: the graph sidebar, the log viewer's run index, the diff file index and the diff head's own actions, a dashboard card's own controls, the title bar's tray |
 
 Neither number is picked - both restate PatternFly's own button formula (one line box plus its
 vertical control spacer) at the default and compact steps.
