@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -926,6 +927,57 @@ func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []jo
 		return journal.Invocation{}, nil, err
 	}
 	return journal.InvocationFromEvents(inv, events), events, nil
+}
+
+// InvocationEventsFrom reads one invocation's journal starting at byte offset from and returns the
+// events on COMPLETE lines plus the offset just past the last one. It is the tailing counterpart to
+// [OutputStore.InvocationEventsByID], which reads the file whole.
+//
+// A journal is appended while its run is still going (journal.FileHandler flushes every kind but
+// output), so a follower resumes from where it stopped instead of re-reading megabytes it has
+// already delivered - which is what keeps watching a long build proportional to what arrived.
+// Stopping at the last newline is what makes a concurrent writer safe to read: a half-written line
+// is left for the next call rather than parsed as corruption.
+//
+// A file shorter than from means the id was reused after a cache clean, so the read restarts at
+// zero rather than seeking past the end and reporting nothing forever. Returns fs.ErrNotExist when
+// the log never existed or has aged out.
+func (s *OutputStore) InvocationEventsFrom(inv string, from int64) ([]journal.Event, int64, error) {
+	f, err := os.Open(filepath.Join(s.cacheDir, RunsDir, inv+runExt))
+	if err != nil {
+		return nil, from, err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, from, err
+	}
+	if info.Size() < from {
+		from = 0
+	}
+	if info.Size() == from {
+		return nil, from, nil
+	}
+	chunk := make([]byte, info.Size()-from)
+	n, err := f.ReadAt(chunk, from)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, from, err
+	}
+	end := bytes.LastIndexByte(chunk[:n], '\n')
+	if end < 0 {
+		return nil, from, nil
+	}
+	var events []journal.Event
+	for _, line := range bytes.Split(chunk[:end], []byte{'\n'}) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var e journal.Event
+		if json.Unmarshal(line, &e) == nil {
+			events = append(events, e)
+		}
+	}
+	return events, from + int64(end) + 1, nil
 }
 
 // RunLog summarizes one retained invocation journal - the row the console's run browser lists

@@ -3,24 +3,33 @@ package viewer
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/journal"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 )
+
+// streamPollInterval is how often StreamEvents re-reads a journal for what was appended since its
+// last read. It matches eventstream.Follower's default so this RPC and `magus events --follow`
+// observe a running build at the same granularity.
+const streamPollInterval = 250 * time.Millisecond
 
 // Service implements viewerv1alpha1connect.ViewerServiceHandler over the same two stores the
 // plain-JSON run-browser routes read.
 type Service struct {
 	outputs outputSource
 	runs    runSource
+	poll    time.Duration
 }
 
 // NewService builds the ViewerService Connect handler reading from the run and output stores.
 func NewService(outputs outputSource, runs runSource) *Service {
-	return &Service{outputs: outputs, runs: runs}
+	return &Service{outputs: outputs, runs: runs, poll: streamPollInterval}
 }
 
 var _ viewerv1alpha1connect.ViewerServiceHandler = (*Service)(nil)
@@ -99,10 +108,58 @@ func (s *Service) ListEvents(_ context.Context, req *connect.Request[viewerv1.Li
 	return connect.NewResponse(out), nil
 }
 
-// StreamEvents is not served here: live events ride the SSE route in live.go, which multiplexes
-// them onto the connection the console already holds open.
-func (s *Service) StreamEvents(_ context.Context, _ *connect.Request[viewerv1.StreamEventsRequest], _ *connect.ServerStream[viewerv1.StreamEventsResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("viewer: live events stream over the SSE route, not this RPC"))
+// StreamEvents replays one run's stored events, then tails the journal for what the run appends
+// next, until the run finishes or the caller goes away.
+//
+// It reads the journal rather than subscribing to a broadcaster because the daemon does not run
+// the build: every `magus` invocation is its own process appending to <cacheDir>/runs/<inv>.jsonl,
+// and that directory is the only place the daemon can observe a run from. journal.Broadcaster (the
+// SSE route in live.go) is the in-process path for the run that owns it, and is unreachable here.
+//
+// The filter runs BEFORE each send, as ListEvents applies it before paging, so a narrow filter
+// makes a quiet stream rather than a stream of dropped frames. filter.time.since doubles as the
+// resume cursor: the replay skips events older than it. That boundary is inclusive, so a caller
+// resuming from the last event it saw receives that event again - at-least-once, which is the
+// honest guarantee when the cursor is a millisecond timestamp several events can share.
+//
+// A slow client cannot slow anything but itself: each stream owns its file offset and reads on the
+// RPC's own goroutine, so it holds no lock and no buffer the run writes into. That is why there is
+// nothing to drop here, unlike the SSE side, which shares a Broadcaster with the running process
+// and skips a subscriber whose buffer is full.
+func (s *Service) StreamEvents(ctx context.Context, req *connect.Request[viewerv1.StreamEventsRequest], stream *connect.ServerStream[viewerv1.StreamEventsResponse]) error {
+	inv, err := s.resolveInvocation(req.Msg.GetParent())
+	if err != nil {
+		return err
+	}
+	filter := req.Msg.GetFilter()
+
+	ticker := time.NewTicker(s.poll)
+	defer ticker.Stop()
+	var offset int64
+	for {
+		events, next, err := s.runs.InvocationEventsFrom(inv, offset)
+		if err != nil {
+			// On the first read the run is unknown; later it means the journal aged out from under
+			// the stream. Both leave the caller with no run to follow.
+			return connect.NewError(connect.CodeNotFound, err)
+		}
+		offset = next
+		for _, e := range ApplyEventQuery(events, filter) {
+			if err := stream.Send(&viewerv1.StreamEventsResponse{Event: eventToProto(e)}); err != nil {
+				return err
+			}
+		}
+		// Read the UNFILTERED batch for the terminal event: a filter that excludes it must not turn
+		// a finished run into a stream that never ends.
+		if slices.ContainsFunc(events, func(e journal.Event) bool { return e.Kind == journal.KindFinished }) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
 }
 
 // ListOutputs returns the stored runs' descriptors, newest first.

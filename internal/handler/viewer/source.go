@@ -14,10 +14,11 @@ type outputSource interface {
 }
 
 // runSource is the narrow repository contract the invocation RPCs need: list the retained run
-// journals, read one back as events, and resolve an output ref to the run that produced it.
-// Satisfied by *cache.OutputStore, like [outputSource] beside it.
+// journals, read one back as events, tail one that is still being written, and resolve an output
+// ref to the run that produced it. Satisfied by *cache.OutputStore, like [outputSource] beside it.
 type runSource interface {
 	ListRunLogs(limit int) []cache.RunLog
 	InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error)
+	InvocationEventsFrom(inv string, from int64) ([]journal.Event, int64, error)
 	DescriptorByRef(ref string) (cache.OutputDescriptor, error)
 }

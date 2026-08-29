@@ -138,9 +138,9 @@ async function pollDaemonStorage(host: string, store: NotificationStore): Promis
       "The daemon cache is large (" +
       humanBytes(size) +
       (capBytes > 0 ? " of a " + humanBytes(capBytes) + " cap" : "") +
-      "). Run the clear-cache job from Activity or rotate logs to reclaim space.",
-    // The dashboard, not the Activity trail the message names: the trail RECORDS a job and cannot run
-    // one, while the dashboard renders the cache figure this is reporting and shows it come back down.
+      "). Run `magus server job clear-cache` (or `rotate-logs`) to reclaim space.",
+    // The console cannot run a job - maintenance is a CLI command - so the link goes to the
+    // dashboard, which renders the cache figure this is reporting and shows it come back down.
     link: { label: "Open the dashboard", href: surfaceLink("dashboard", host) },
   });
 }

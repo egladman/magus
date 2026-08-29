@@ -889,8 +889,10 @@ export const ViewerService: GenService<{
     output: typeof ListEventsResponseSchema;
   },
   /**
-   * StreamEvents streams a running invocation's events as they are produced. Reconnect
-   * with start_time set to the last seen time to resume.
+   * StreamEvents replays an invocation's stored events, then streams what the run appends
+   * as it is produced, ending when the run finishes. Reconnect with filter.time.since set
+   * to the last event seen to resume; that boundary is inclusive, so the event resumed from
+   * arrives again rather than being lost.
    *
    * @generated from rpc magus.viewer.v1alpha1.ViewerService.StreamEvents
    */

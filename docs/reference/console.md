@@ -124,17 +124,8 @@ serialization). This is a known limitation; memoization per variant is deferred.
 
 ## Job control
 
-Separate from the read routes above, the daemon hosts a **mutating** Connect
-service, `magus.job.v1alpha1.JobService`, so a browser client (or the CLI) can trigger
-background maintenance without an open action endpoint. It is the only surface
-that changes anything magus computed - the others record a person's own review
-state, open a share listener, or edit their handoff journal - and it is bounded:
-it submits a fixed set of named jobs, never an arbitrary command.
-
-The service exposes two RPCs, not one per job: `RunJob(name)` submits any
-registered job by its resource name (`jobs/{job}`), and `ListJobs` reports every
-job's running state, last run, and target size. A job name nobody registered is
-a NotFound error rather than a third RPC.
+There is none here. Background maintenance is submitted from the CLI with
+`magus server job <name>`, and the daemon serves no RPC for it.
 
 | Job                 | Effect                                               |
 | ------------------- | ---------------------------------------------------- |
@@ -144,11 +135,8 @@ a NotFound error rather than a third RPC.
 | `clear-cache`       | Invalidate cached build entries                      |
 | `check-review`      | Note when a review this tree took part in has merged |
 
-Each submit is fire-and-forget and coalesced (an identical in-flight job is not
-started twice) and returns a metadata snapshot - the job's last run and the
-current size of what it maintains. The same jobs are reachable from the CLI with
-`magus server job <name>`. The service is mounted behind the same loopback bind
-and bearer token as everything else here; it is never served unauthenticated.
+Each submit is fire-and-forget and coalesced: an identical in-flight job is not
+started twice.
 
 ## How it is secured
 

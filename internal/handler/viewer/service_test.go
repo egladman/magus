@@ -3,21 +3,33 @@ package viewer
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"sync"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/journal"
+	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 )
 
 // fakeRuns is the runSource half of the handler's contract, filled in per test. It is a struct of
 // stored answers rather than a mock: every RPC here reads, so what a test needs to say is what the
 // store would have returned.
 type fakeRuns struct {
+	// mu guards events so a streaming test can append mid-stream - a live journal grows under
+	// its reader - without racing the handler goroutine.
+	mu     sync.Mutex
 	events []journal.Event
 	header journal.Invocation
 	err    error
@@ -32,6 +44,28 @@ func (f *fakeRuns) InvocationEventsByID(string) (journal.Invocation, []journal.E
 		return journal.Invocation{}, nil, f.err
 	}
 	return f.header, f.events, nil
+}
+
+// InvocationEventsFrom serves the tail the same way the store does, with an event INDEX standing in
+// for the store's byte offset: both say "resume where the last read stopped", which is all the
+// handler does with the cursor.
+func (f *fakeRuns) InvocationEventsFrom(_ string, from int64) ([]journal.Event, int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return nil, from, f.err
+	}
+	if from >= int64(len(f.events)) {
+		return nil, from, nil
+	}
+	return slices.Clone(f.events[from:]), int64(len(f.events)), nil
+}
+
+// append adds events to the journal as a running build would.
+func (f *fakeRuns) append(events ...journal.Event) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, events...)
 }
 
 func (f *fakeRuns) DescriptorByRef(ref string) (cache.OutputDescriptor, error) {
@@ -182,15 +216,128 @@ func TestGetInvocationRejectsPreJournalRef(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
-// TestStreamEventsIsUnimplemented pins the CURRENT answer, not a desired one. The RPC is declared
-// and deliberately not served - live events ride the SSE route in live.go - and whether it gets an
-// implementation or gets removed is undecided. Either way the code must be a deliberate
-// Unimplemented rather than a handler that hangs or panics.
-func TestStreamEventsIsUnimplemented(t *testing.T) {
-	s := NewService(&fakeOutputs{}, &fakeRuns{})
-	err := s.StreamEvents(context.Background(), connect.NewRequest(&viewerv1.StreamEventsRequest{Parent: "inv1a2b3c"}), nil)
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+// streamClient mounts the real ViewerService Connect handler over an httptest server and returns a
+// client for it. connect.ServerStream has no injectable test sink, so a streaming RPC is exercised
+// end to end - the same shape the status service's stream test uses. poll is tightened so a test
+// does not wait on the production cadence.
+func streamClient(t *testing.T, runs runSource) viewerv1alpha1connect.ViewerServiceClient {
+	t.Helper()
+	s := NewService(&fakeOutputs{}, runs)
+	s.poll = 5 * time.Millisecond
+	path, handler := viewerv1alpha1connect.NewViewerServiceHandler(s)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return viewerv1alpha1connect.NewViewerServiceClient(srv.Client(), srv.URL)
+}
+
+// TestStreamEventsReplaysThenTails is the RPC's whole contract in one run: what the journal already
+// held arrives first, what the run appends next arrives as it lands, and the terminal event ends the
+// stream instead of leaving the caller polling an idle journal forever.
+func TestStreamEventsReplaysThenTails(t *testing.T) {
+	runs := &fakeRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}}}
+	client := streamClient(t, runs)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stream, err := client.StreamEvents(ctx, connect.NewRequest(&viewerv1.StreamEventsRequest{Parent: "inv1a2b3c"}))
+	require.NoError(t, err)
+
+	require.True(t, stream.Receive())
+	assert.Equal(t, "compiling", stream.Msg().GetEvent().GetText())
+
+	runs.append(
+		journal.Event{Ts: 2, Kind: journal.KindOutput, Text: "linking"},
+		journal.Event{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass},
+	)
+	require.True(t, stream.Receive())
+	assert.Equal(t, "linking", stream.Msg().GetEvent().GetText())
+	require.True(t, stream.Receive(), "the finished event is delivered, not swallowed")
+
+	assert.False(t, stream.Receive(), "a finished run ends the stream")
+	require.NoError(t, stream.Err())
+	require.NoError(t, stream.Close())
+}
+
+// TestStreamEventsFilterNarrows checks the filter is applied before each send, and - the part worth
+// pinning - that the terminal event is read from the UNFILTERED batch: a filter excluding it must
+// still end the stream.
+func TestStreamEventsFilterNarrows(t *testing.T) {
+	runs := &fakeRuns{events: []journal.Event{
+		{Ts: 1, Kind: journal.KindExec, Text: "go build"},
+		{Ts: 2, Kind: journal.KindOutput, Text: "compiling"},
+		{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass},
+	}}
+	client := streamClient(t, runs)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stream, err := client.StreamEvents(ctx, connect.NewRequest(&viewerv1.StreamEventsRequest{
+		Parent: "inv1a2b3c",
+		Filter: &viewerv1.EventQuery{Kinds: []string{journal.KindOutput}},
+	}))
+	require.NoError(t, err)
+
+	require.True(t, stream.Receive())
+	assert.Equal(t, "compiling", stream.Msg().GetEvent().GetText())
+	assert.False(t, stream.Receive(), "only the matching event streams, and the run still ends it")
+	require.NoError(t, stream.Err())
+}
+
+// TestStreamEventsResumesFromSince covers reconnecting: filter.time.since trims the replay to what
+// the caller has not seen. The boundary is inclusive, so the event resumed FROM arrives again -
+// at-least-once is the honest guarantee for a millisecond cursor several events can share.
+func TestStreamEventsResumesFromSince(t *testing.T) {
+	runs := &fakeRuns{events: []journal.Event{
+		{Ts: 1, Kind: journal.KindOutput, Text: "compiling"},
+		{Ts: 2, Kind: journal.KindOutput, Text: "linking"},
+		{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass},
+	}}
+	client := streamClient(t, runs)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stream, err := client.StreamEvents(ctx, connect.NewRequest(&viewerv1.StreamEventsRequest{
+		Parent: "inv1a2b3c",
+		Filter: &viewerv1.EventQuery{Time: &queryv1.TimeRange{Since: timestamppb.New(time.UnixMilli(2))}},
+	}))
+	require.NoError(t, err)
+
+	require.True(t, stream.Receive())
+	assert.Equal(t, "linking", stream.Msg().GetEvent().GetText(), "the pre-cursor event is not replayed")
+	require.True(t, stream.Receive())
+	assert.False(t, stream.Receive())
+	require.NoError(t, stream.Err())
+}
+
+// TestStreamEventsEndsOnClientCancel checks a caller walking away from an unfinished run ends the
+// RPC rather than leaving the daemon polling a journal nobody reads.
+func TestStreamEventsEndsOnClientCancel(t *testing.T) {
+	runs := &fakeRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}}}
+	client := streamClient(t, runs)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := client.StreamEvents(ctx, connect.NewRequest(&viewerv1.StreamEventsRequest{Parent: "inv1a2b3c"}))
+	require.NoError(t, err)
+	require.True(t, stream.Receive())
+
+	cancel()
+	assert.False(t, stream.Receive())
+	assert.Equal(t, connect.CodeCanceled, connect.CodeOf(stream.Err()))
+}
+
+// TestStreamEventsUnknownInvocation checks an invocation with no journal is NotFound at the first
+// read rather than an empty stream, which a caller cannot tell from a run that has yet to emit.
+func TestStreamEventsUnknownInvocation(t *testing.T) {
+	client := streamClient(t, &fakeRuns{err: fs.ErrNotExist})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stream, err := client.StreamEvents(ctx, connect.NewRequest(&viewerv1.StreamEventsRequest{Parent: "invmissing"}))
+	require.NoError(t, err)
+	require.False(t, stream.Receive())
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()))
 }
 
 // TestListEventsRejectsBadPageToken checks an unparseable token errors rather than restarting at

@@ -73,8 +73,10 @@ type ViewerServiceClient interface {
 	// ListEvents returns a page of an invocation's events; page through with page_token
 	// until next_page_token is empty. filter narrows them server-side (large logs).
 	ListEvents(context.Context, *connect.Request[v1alpha1.ListEventsRequest]) (*connect.Response[v1alpha1.ListEventsResponse], error)
-	// StreamEvents streams a running invocation's events as they are produced. Reconnect
-	// with start_time set to the last seen time to resume.
+	// StreamEvents replays an invocation's stored events, then streams what the run appends
+	// as it is produced, ending when the run finishes. Reconnect with filter.time.since set
+	// to the last event seen to resume; that boundary is inclusive, so the event resumed from
+	// arrives again rather than being lost.
 	StreamEvents(context.Context, *connect.Request[v1alpha1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1alpha1.StreamEventsResponse], error)
 	// ListOutputs returns the stored runs' descriptors, newest first, so a viewer can browse
 	// recent runs grouped project -> target -> run.
@@ -202,8 +204,10 @@ type ViewerServiceHandler interface {
 	// ListEvents returns a page of an invocation's events; page through with page_token
 	// until next_page_token is empty. filter narrows them server-side (large logs).
 	ListEvents(context.Context, *connect.Request[v1alpha1.ListEventsRequest]) (*connect.Response[v1alpha1.ListEventsResponse], error)
-	// StreamEvents streams a running invocation's events as they are produced. Reconnect
-	// with start_time set to the last seen time to resume.
+	// StreamEvents replays an invocation's stored events, then streams what the run appends
+	// as it is produced, ending when the run finishes. Reconnect with filter.time.since set
+	// to the last event seen to resume; that boundary is inclusive, so the event resumed from
+	// arrives again rather than being lost.
 	StreamEvents(context.Context, *connect.Request[v1alpha1.StreamEventsRequest], *connect.ServerStream[v1alpha1.StreamEventsResponse]) error
 	// ListOutputs returns the stored runs' descriptors, newest first, so a viewer can browse
 	// recent runs grouped project -> target -> run.

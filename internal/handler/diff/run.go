@@ -175,8 +175,8 @@ func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diff
 	handler.WriteJSON(w, out)
 }
 
-// submit hands argv to the daemon's own proc socket, the same self-dial the JobService uses, so
-// an inline run rides the identical coalescing and journal path a terminal's run does.
+// submit hands argv to the daemon's own proc socket - a self-dial - so an inline run rides the
+// identical coalescing and journal path a terminal's run does.
 func (h *RunHandler) submit(ctx context.Context, argv []string) error {
 	addr := h.socket()
 	if addr == "" {
