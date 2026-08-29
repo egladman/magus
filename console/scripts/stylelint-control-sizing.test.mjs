@@ -63,3 +63,52 @@ test("shared control sizing reaches any PF component's padding custom property",
 
   assert.equal(result.errored, true);
 });
+
+// The tier owns TYPE as well as height. A row whose controls agree on height and disagree on font
+// size is still two controls, which is how the console ended up with five of them.
+test("shared control sizing accepts the shared type token", async () => {
+  const result = await lint(`
+    [data-control-size] .pf-v6-c-button {
+      block-size: var(--console-control-block-size);
+      padding-block: 0;
+      font-size: var(--console-control-font-size);
+    }
+  `);
+
+  assert.equal(result.errored, false);
+});
+
+test("shared control sizing rejects a hand-picked control font size", async () => {
+  const result = await lint(`
+    [data-control-size] .pf-v6-c-button {
+      font-size: 0.72rem;
+    }
+  `);
+
+  assert.equal(result.errored, true);
+  assert.ok(result.results[0].warnings.some((warning) => warning.rule === "magus/control-size-token"));
+});
+
+// PF's FormControl is a wrapper around a real input, so the inner control inherits the tier by
+// filling the box the tier sized rather than restating its height.
+test("shared control sizing accepts a composite control filling its wrapper", async () => {
+  const result = await lint(`
+    [data-control-size] .pf-v6-c-form-control > input {
+      block-size: 100%;
+      padding-block: 0;
+      font-size: var(--console-control-font-size);
+    }
+  `);
+
+  assert.equal(result.errored, false);
+});
+
+test("shared control sizing still rejects another percentage height", async () => {
+  const result = await lint(`
+    [data-control-size] .pf-v6-c-form-control > input {
+      block-size: 90%;
+    }
+  `);
+
+  assert.equal(result.errored, true);
+});

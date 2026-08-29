@@ -323,12 +323,16 @@ function mountTiles(): void {
   const host = el("dash-panels");
   host.replaceChildren();
 
-  // The dashboard header row (the active-workspace picker, shown past a single workspace, +
-  // the Big Picture fullscreen-presentation button) is chrome, not a tile in the ordered board
-  // below - it stays visible in both modes, so it is mounted first and excluded from the
+  // The dashboard header (the active-workspace picker, shown past a single workspace, + the Big
+  // Picture button) is chrome, not a tile in the ordered board below, so it is excluded from the
   // board/Big Picture hide toggle.
+  //
+  // It mounts into the surface BAR rather than into the board, at the bar's trailing edge. As its
+  // own row inside #dash-panels it was a second full-width strip carrying one right-aligned
+  // button, stacked under the related-work links that are now its other half.
   const header = dashboardHeader();
-  host.append(header.el);
+  const bar = document.querySelector(".console-dashboard-related");
+  (bar ?? host).append(header.el);
 
   // Board order is triage-first, so a fresh landing reads top-down as "anything wrong? ->
   // what's running? -> instantaneous state -> live timeline -> trends -> heavy metrics

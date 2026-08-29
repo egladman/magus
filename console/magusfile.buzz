@@ -59,7 +59,7 @@ magus\project({
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
-                "stylelint.config.mjs", "stylelint-control-sizing.mjs",
+                "stylelint.config.mjs", "stylelint-control-sizing.mjs", "stylelint-label-token.mjs",
                 "../gen/knowledge-graph.json", "../gen/target-graph.json"],
     // gen/** alone: the esbuild bundle, which this project actually produces. src/gen/** lands
     // here too, but proto writes it (see proto/buf.gen.yaml) and declares it there against this
@@ -213,7 +213,7 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
         "src/**/*.ts", "src/**/*.css", "src/**/*.html", "scripts/**/*.mjs",
         "index.html", "manifest.webmanifest", "sw.js", "package.json",
         "tsconfig.json", "tsconfig.test.json", "stylelint.config.mjs",
-        "stylelint-control-sizing.mjs");
+        "stylelint-control-sizing.mjs", "stylelint-label-token.mjs");
     typescript["biome-format"](ctx);
 }
 

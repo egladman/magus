@@ -61,7 +61,9 @@
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
-  padding: 0.4rem 0.6rem;
+  min-block-size: var(--console-surface-bar-h);
+  padding-block: 0;
+  padding-inline: var(--console-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-plan-summary {
@@ -86,9 +88,10 @@
 }
 .console-plan-target[hidden] { display: none; }
 .console-plan-target__label {
-  font-size: 0.7rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 /* Deliberately narrow: the override is not the entry point. The run plan follows the live run, and
@@ -354,18 +357,20 @@
 .console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: 0.1rem; margin: 0; }
 .console-plan-detail__label {
   margin-top: 0.9rem;
-  font-size: 0.68rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-plan-detail__label:first-child { margin-top: 0; }
 .console-plan-detail__value { margin: 0; overflow-wrap: anywhere; }
 .console-plan-detail__runshead {
   margin: 0.9rem 0 0.2rem;
-  font-size: 0.72rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 /* The released paths: what the lease gave up, and which version of it the next one inherits. Two
@@ -421,11 +426,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.35rem;
-  padding: 0.3rem 0.5rem;
+  min-block-size: var(--console-surface-head-h);
+  padding-block: 0;
+  padding-inline: var(--console-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-plan-tree__heading {
-  font-size: 0.7rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-plan-tree__toggle,

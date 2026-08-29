@@ -620,6 +620,7 @@ export function mountCollapsiblePanel(opts: {
 
   const aside = document.createElement("aside");
   aside.className = "console-log-runs";
+  aside.dataset.controlSize = "compact";
   aside.hidden = true;
   aside.setAttribute("aria-label", opts.label);
 

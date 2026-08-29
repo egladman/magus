@@ -82,6 +82,7 @@ export function activityTile(): Tile {
     "pf-v6-c-button pf-m-secondary console-dashboard-activity__open",
   ) as HTMLButtonElement;
   open.type = "button";
+  open.dataset.controlSize = "compact";
   const openIcon = h("span", "pf-v6-c-button__icon pf-m-start");
   openIcon.append(externalIcon());
   open.append(openIcon, h("span", "pf-v6-c-button__text", "Open in log viewer"));

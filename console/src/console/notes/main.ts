@@ -237,6 +237,7 @@ function buildScaffold(host: HTMLElement): Refs {
   const pane = h("div", "console-notes-app__pane");
 
   const bar = h("div", "console-notes-app__bar");
+  bar.dataset.controlSize = "default";
   // PF FormControl is a WRAPPER plus an input, and `__text` alone styles nothing: the field
   // was rendering as a bare native input, which is why it had square corners and a 2px inset
   // border while every other control on the surface was rounded.
@@ -259,7 +260,7 @@ function buildScaffold(host: HTMLElement): Refs {
   // alignment that is easier to delete than to maintain.
   searchWrap.append(search);
   const detailScope = h("span", "console-notes-app__detail-scope");
-  bar.append(searchWrap, detailScope);
+  bar.append(h("span", "console-notes-app__label", "Notes"), searchWrap, detailScope);
 
   const list = h("div", "console-notes-app__list");
   list.setAttribute("role", "list");

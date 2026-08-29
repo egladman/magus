@@ -73,7 +73,7 @@
      Independently, the two are sized by unrelated content - a title versus a row of PF chips -
      and drift out of alignment the moment either one's content changes. One number, read by
      both, is what keeps that from happening again. */
-  --console-diff-head-block-size: 2.5rem;
+  --console-diff-head-block-size: var(--console-surface-head-h);
 }
 
 /* Collapsed, the index gives its column back to the diff and leaves only the reopen rail. The
@@ -93,13 +93,18 @@
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--xs);
   min-block-size: var(--console-diff-head-block-size);
+  padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 
-/* No uppercase, no letter-spacing. Both are shouting devices, and this is the quietest thing on
-   the surface - it labels a column whose contents already say what they are. */
+/* The console's one label voice (tokens.css), not a quieter one of this surface's own. It labels a
+   column, the same job Activity's Events/Details and the log viewer's Recent runs do, and a reader
+   switching tabs should meet one treatment rather than three. */
 .console-diff-sidebar__heading {
-  font-size: var(--pf-t--global--font--size--xs);
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -137,12 +142,16 @@
   background: var(--console-diff-panel);
   overflow: hidden;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
-  padding: var(--pf-t--global--spacer--sm);
-  /* The toolbar it has to line up with carries no padding above itself at all - its header row
-     is centered by height, not pushed down by padding. Matching that here is what the shared
-     header height above needs to land the two hairlines on the same row, not merely give the
-     two headers the same height starting from different tops. */
-  padding-block-start: 0;
+  /* No INLINE padding, and that is what makes the head's hairline reach both edges of the column.
+     An 8px inset here held the head's border-block-end 8px short at each end, so the line across
+     the surface broke twice - once at the rail and once at the sidebar/stream seam - which is the
+     opposite of what the shared head height above is for. Each child spends the gutter itself.
+
+     The toolbar it has to line up with carries no padding above itself at all - its header row is
+     centered by height, not pushed down by padding. Matching that here is what lands the two
+     hairlines on the same row, not merely gives the two headers the same height from different tops. */
+  padding-inline: 0;
+  padding-block: 0 var(--pf-t--global--spacer--sm);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -152,10 +161,14 @@
 .console-diff-sidebar__filter {
   flex: none;
   min-width: 0;
-  width: 100%;
-}
-.console-diff-sidebar__filter .pf-v6-c-form-control__text {
-  font: var(--pf-t--global--font--body--sm);
+  /* The gutter as a MARGIN: the sidebar gave up its inline padding so the head's hairline could
+     reach the column edges, and a bordered control still has to stand off them.
+     The width has to be stated against those margins. PatternFly's FormControl sets width: 100%
+     on itself, which a margin does not reduce - the field came out as wide as the whole column and
+     then sat 16px further right, hanging 15px past the sidebar's own edge. */
+  box-sizing: border-box;
+  margin-inline: var(--console-pad);
+  inline-size: calc(100% - 2 * var(--console-pad));
 }
 
 /* Virtualized file index. */
@@ -199,7 +212,8 @@
   gap: var(--pf-t--global--spacer--xs);
   box-sizing: border-box;
   height: 40px; /* MUST equal SIDEBAR_FILE_HEIGHT in main.ts. */
-  padding: 2px var(--pf-t--global--spacer--xs);
+  padding-block: 2px;
+  padding-inline: var(--console-pad);
   background: none;
   border: 0;
   cursor: pointer;
@@ -221,6 +235,7 @@
   box-sizing: border-box;
   height: 28px; /* MUST equal SIDEBAR_PROJECT_HEIGHT in main.ts. */
   padding-block: 2px;
+  padding-inline: var(--console-pad);
   background: var(--console-diff-panel);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
@@ -315,7 +330,7 @@
   gap: 2px;
   min-block-size: var(--console-diff-head-block-size);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  padding-inline: var(--pf-t--global--spacer--sm);
+  padding-inline: var(--console-pad);
 }
 
 .console-diff-scroll {
@@ -425,6 +440,9 @@
   gap: var(--pf-t--global--spacer--sm);
 }
 
+/* The actions at the trailing edge, the same edge the dashboard's Big Picture button holds. The
+   auto margin goes on the FIRST of the two so they stay a pair rather than spreading apart. */
+.console-diff-toolbar__verdict { margin-inline-start: auto; }
 .console-diff-toolbar__focus,
 .console-diff-toolbar__verdict {
   flex: 0 0 auto;
@@ -462,7 +480,11 @@
   /* Groups separate wider than a group holds together; at equal gaps the row reads as one run
      of punctuation. */
   gap: var(--pf-t--global--spacer--lg);
-  margin-inline-start: auto;
+  /* Shrinks and clips before the buttons beside it move: it teaches a reader who does not know the
+     bindings, and a reader who does has stopped looking at it. It no longer carries the auto margin
+     - the actions do, below - because the actions hold the trailing edge now. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   color: var(--pf-t--global--text--color--subtle);
   font-size: var(--pf-t--global--font--size--body--sm);
   font-family: var(--pf-t--global--font--family--mono);
@@ -993,10 +1015,10 @@
 
 .console-diff-row__who {
   flex: 0 0 auto;
-  font-weight: var(--pf-t--global--font--weight--body--bold);
-  font-size: var(--pf-t--global--font--size--xs);
+  font-weight: var(--console-chip-weight);
+  font-size: var(--console-chip-size);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--console-chip-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -1184,6 +1206,7 @@
   align-items: center;
   gap: 0.4rem;
   margin-block-start: var(--pf-t--global--spacer--sm);
+  margin-inline: var(--console-pad);
   padding: 2px var(--pf-t--global--spacer--xs);
   border: 1px dashed var(--pf-t--global--border--color--default);
   background: none;

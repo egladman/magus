@@ -13,7 +13,8 @@
 .console-settings-page {
   height: 100%;
   overflow-y: auto;
-  padding: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--2xl);
+  padding-block: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--2xl);
+  padding-inline: var(--console-pad);
   display: flex;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--lg);
