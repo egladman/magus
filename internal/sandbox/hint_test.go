@@ -55,6 +55,110 @@ func TestEmitDenyHint(t *testing.T) {
 	assert.Empty(t, capture(), "EmitDenyHint should be silent when hints are disabled")
 }
 
+// TestDetectShimSuspect_MiseShimOnPathVarDropped covers the case MGS2006 names:
+// mise's shim directory is still on PATH (so the shim binary still runs) but
+// MISE_DATA_DIR, the var it reads to pick a tool version, was scrubbed.
+func TestDetectShimSuspect_MiseShimOnPathVarDropped(t *testing.T) {
+	p := &Policy{
+		BaseEnv:    []string{"PATH=/home/u/.local/share/mise/shims:/usr/bin"},
+		EnvDropped: []string{"MISE_DATA_DIR", "GITHUB_TOKEN"},
+	}
+	manager, envVar, ok := detectShimSuspect(p)
+	require.True(t, ok)
+	assert.Equal(t, "mise", manager)
+	assert.Equal(t, "MISE_DATA_DIR", envVar)
+}
+
+// TestDetectShimSuspect_AsdfShimOnPathVarDropped is the asdf twin.
+func TestDetectShimSuspect_AsdfShimOnPathVarDropped(t *testing.T) {
+	p := &Policy{
+		BaseEnv:    []string{"PATH=/home/u/.asdf/shims:/usr/bin"},
+		EnvDropped: []string{"ASDF_DIR"},
+	}
+	manager, envVar, ok := detectShimSuspect(p)
+	require.True(t, ok)
+	assert.Equal(t, "asdf", manager)
+	assert.Equal(t, "ASDF_DIR", envVar)
+}
+
+// TestDetectShimSuspect_NoShimOnPath is a negative control: MISE_DATA_DIR was
+// dropped, but PATH carries no mise shim segment, so the shim mechanism was
+// never in play and the heuristic must not fire.
+func TestDetectShimSuspect_NoShimOnPath(t *testing.T) {
+	p := &Policy{
+		BaseEnv:    []string{"PATH=/usr/bin:/usr/local/bin"},
+		EnvDropped: []string{"MISE_DATA_DIR"},
+	}
+	_, _, ok := detectShimSuspect(p)
+	assert.False(t, ok, "no shim segment on PATH must not suspect a shim")
+}
+
+// TestDetectShimSuspect_ShimOnPathButVarNotDropped is a negative control: the
+// shim directory is on PATH but MISE_DATA_DIR passed through (e.g. via
+// sandbox.env.passthrough), so nothing was actually stripped.
+func TestDetectShimSuspect_ShimOnPathButVarNotDropped(t *testing.T) {
+	p := &Policy{
+		BaseEnv:    []string{"PATH=/home/u/.local/share/mise/shims:/usr/bin"},
+		EnvDropped: []string{"GITHUB_TOKEN"},
+	}
+	_, _, ok := detectShimSuspect(p)
+	assert.False(t, ok, "MISE_DATA_DIR not dropped must not suspect a shim")
+}
+
+// TestDetectShimSuspect_NilPolicy is the sandbox-off negative control.
+func TestDetectShimSuspect_NilPolicy(t *testing.T) {
+	_, _, ok := detectShimSuspect(nil)
+	assert.False(t, ok, "nil policy (sandbox off) must not suspect a shim")
+}
+
+// TestShimHint pins the MGS2006 message shape against
+// docs/reference/codes/sandbox/MGS2006.md's printed example.
+func TestShimHint(t *testing.T) {
+	got := shimHint("go", "mise", "MISE_DATA_DIR")
+	assert.Contains(t, got, "MGS2006")
+	assert.Contains(t, got, "mise shims appear stripped from PATH; the build is using system tools instead")
+	assert.Contains(t, got, "cmd=go missing_var=MISE_DATA_DIR")
+}
+
+// TestEmitShimHint verifies the hint reaches stderr when policy suspects a
+// stripped shim var, and stays silent for the negative controls (no policy,
+// or nothing suspect). Not parallel: it redirects os.Stderr and flips the
+// process-wide hints switch.
+func TestEmitShimHint(t *testing.T) {
+	capture := func(cmd string, p *Policy) string {
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		orig := os.Stderr
+		os.Stderr = w
+		EmitShimHint(cmd, p)
+		os.Stderr = orig
+		_ = w.Close()
+		out, _ := io.ReadAll(r)
+		return string(out)
+	}
+
+	interactive.SetHintsEnabled(true)
+	defer interactive.SetHintsEnabled(true)
+
+	suspect := &Policy{
+		BaseEnv:    []string{"PATH=/home/u/.local/share/mise/shims:/usr/bin"},
+		EnvDropped: []string{"MISE_DATA_DIR"},
+	}
+	got := capture("go", suspect)
+	assert.Contains(t, got, "hint:")
+	assert.Contains(t, got, "MGS2006")
+	assert.Contains(t, got, "cmd=go missing_var=MISE_DATA_DIR")
+
+	// Negative control: sandbox off.
+	assert.Empty(t, capture("go", nil), "EmitShimHint should be silent with sandbox off")
+
+	// Negative control: sandbox on, nothing suspect.
+	assert.Empty(t, capture("go", &Policy{}), "EmitShimHint should be silent when nothing is suspect")
+
+	interactive.SetHintsEnabled(false)
+	assert.Empty(t, capture("go", suspect), "EmitShimHint should be silent when hints are disabled")
+}
+
 // TestApplyNonLinuxReportsUnsupported verifies the !linux build tag's stub
 // returns ErrUnsupported so the caller can fall back. Compiled on every
 // platform; the assertion is only meaningful off-Linux but the call must

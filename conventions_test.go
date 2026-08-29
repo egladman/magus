@@ -1482,15 +1482,7 @@ var raiseSiteSkipDirs = map[string]bool{
 
 // mgsCodesWithoutRaiseSite are the codes that fail TestEveryDiagnosticCodeHasARaiseSite
 // today, listed rather than tolerated so the gate is green and the debt is named.
-//
-// TODO: both are undecided. Either the sandbox learns to report what it did - stripping an
-// env var, refusing a binary that a PATH entry substituted - or the codes come out of the
-// enumeration and out of the docs that promise them. Whoever settles that deletes the entry
-// here; nothing else has to change.
-var mgsCodesWithoutRaiseSite = map[types.DiagnosticCode]string{
-	types.EnvStripped:       "the sandbox strips variables but names no code when it does",
-	types.PathShimSuspected: "nothing detects a substituted binary on PATH yet",
-}
+var mgsCodesWithoutRaiseSite = map[types.DiagnosticCode]string{}
 
 // TestEveryDiagnosticCodeHasARaiseSite pins the property the code registry silently lost:
 // a code magus can never emit.

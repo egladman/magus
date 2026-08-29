@@ -99,7 +99,7 @@ sandbox:
       - "MISE_*"
 ```
 
-Passthrough matching is **exact name or suffix glob**: a pattern must end in a single `*` with a non-empty prefix, so `MISE_*` matches every name starting with `MISE_`. A bare `*` is never honored - it would leak the whole environment, defeating the point. A malformed pattern is skipped with [MGS2004](../reference/codes/sandbox/MGS2004.md). PATH-shim runtime managers (mise, asdf, direnv) are the common legitimate reason a build needs passthrough; when a subprocess looks like it failed because those vars were stripped, [MGS2006](../reference/codes/sandbox/MGS2006.md) fires as a targeted hint.
+Passthrough matching is **exact name or suffix glob**: a pattern must end in a single `*` with a non-empty prefix, so `MISE_*` matches every name starting with `MISE_`. A bare `*` is never honored - it would leak the whole environment, defeating the point. A malformed pattern is skipped with [MGS2004](../reference/codes/sandbox/MGS2004.md). PATH-shim runtime managers (mise, asdf) are the common legitimate reason a build needs passthrough; direnv is not part of this heuristic, since it hooks the shell prompt rather than adding a shim directory to PATH. When a manager's shim directory is still on PATH but the var it reads to pick a tool version (`MISE_DATA_DIR`, `ASDF_DIR`) was scrubbed, [MGS2006](../reference/codes/sandbox/MGS2006.md) fires as a targeted hint - the shim binary stays reachable and falls back to a system tool silently instead of erroring loudly.
 
 Env scrubbing runs in **pure Go**, independent of any kernel support, so it is enforced on every platform.
 
@@ -172,7 +172,7 @@ Every sandbox violation maps to a boundary described above.
 | [MGS2003](../reference/codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped                                        | pure Go; informational                          |
 | [MGS2004](../reference/codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                                          | policy build; entry skipped, non-fatal          |
 | [MGS2005](../reference/codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable; interpreter layer only                                              | once per process; non-fatal fallback            |
-| [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a subprocess likely failed because mise/asdf/direnv vars were stripped                           | heuristic hint                                  |
+| [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a mise/asdf shim directory is on PATH but its data var was scrubbed                              | heuristic hint                                  |
 | [MGS2007](../reference/codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                             | binding + kernel; denied                        |
 | [MGS2008](../reference/codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket withheld from an op subprocess, or re-injected into a recursive `magus` invocation | debug-level note                                |
 | [MGS2010](../reference/codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union                                 | fail closed                                     |
