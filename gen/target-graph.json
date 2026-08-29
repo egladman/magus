@@ -1020,7 +1020,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck.",
+          "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint.",
           "dependencies": [
             "format",
             "lint-build"
@@ -1121,6 +1121,10 @@
             {
               "project": ".",
               "glob": ".shellcheckrc"
+            },
+            {
+              "project": ".",
+              "glob": ".github/workflows/*.yaml"
             },
             {
               "project": ".",
@@ -2490,6 +2494,7 @@
         },
         {
           "name": "test",
+          "doc": "README.md's \"Contributing gotchas\" claims value changes are checked against all three build tags (default + buzz_safe in CI, buzz_unsafe by hand) - the second exec is what makes that true; before it, nothing here ever built or ran a single test under -tags buzz_safe.",
           "dependencies": [
             "format"
           ],
