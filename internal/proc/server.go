@@ -24,7 +24,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// maxArgs caps RunRequest.Args to prevent OOM from untrusted callers.
+// maxArgs caps runRequest.Args to prevent OOM from untrusted callers.
 const maxArgs = 256
 
 // handshakeTimeout bounds how long an accepted connection may take to deliver its
@@ -359,7 +359,7 @@ func serve(srv *Server, svc *service) {
 
 // writeErr sends an error reply; ignores send errors (best-effort on a broken connection).
 func writeErr(conn net.Conn, msg string) {
-	_ = writeFrame(conn, typeError, ErrorReply{Message: msg})
+	_ = writeFrame(conn, typeError, errorReply{Message: msg})
 }
 
 // handleConn reads one JSONL request frame, dispatches to the service, and writes the reply.
@@ -379,12 +379,12 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	switch typ {
 	case typeRun:
-		var req RunRequest
+		var req runRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode run request: "+err.Error())
 			return
 		}
-		var reply RunReply
+		var reply runReply
 		if err := svc.run(req, &reply); err != nil {
 			writeErr(conn, err.Error())
 			return
@@ -392,12 +392,12 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		_ = writeFrame(conn, typeRunReply, reply)
 
 	case typeJob:
-		var req JobRequest
+		var req jobRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode job request: "+err.Error())
 			return
 		}
-		var reply JobReply
+		var reply jobReply
 		if err := svc.submitJob(req, &reply); err != nil {
 			writeErr(conn, err.Error())
 			return
@@ -405,7 +405,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		_ = writeFrame(conn, typeJobReply, reply)
 
 	case typeStatus:
-		var req StatusRequest
+		var req statusRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode status request: "+err.Error())
 			return
@@ -418,12 +418,12 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		_ = writeFrame(conn, typeStatusReply, reply)
 
 	case typeShutdown:
-		var req ShutdownRequest
+		var req shutdownRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode shutdown request: "+err.Error())
 			return
 		}
-		var reply ShutdownReply
+		var reply shutdownReply
 		if err := svc.shutdown(req, &reply); err != nil {
 			writeErr(conn, err.Error())
 			return
@@ -431,49 +431,55 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		_ = writeFrame(conn, typeShutdownReply, reply)
 
 	case typeServiceAcquire:
-		var req ServiceAcquireRequest
+		var req serviceAcquireRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode service.acquire request: "+err.Error())
 			return
 		}
-		var reply ServiceAcquireReply
+		var reply serviceAcquireReply
 		svc.serviceAcquire(req, &reply)
 		_ = writeFrame(conn, typeServiceAcquireReply, reply)
 
 	case typeServiceRelease:
-		var req ServiceReleaseRequest
+		var req serviceReleaseRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode service.release request: "+err.Error())
 			return
 		}
 		svc.serviceRelease(req)
-		_ = writeFrame(conn, typeServiceReleaseReply, ServiceReleaseReply{})
+		_ = writeFrame(conn, typeServiceReleaseReply, serviceReleaseReply{})
 
 	case typeServiceStopAll:
-		var req ServiceStopAllRequest
+		var req serviceStopAllRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode service.stopall request: "+err.Error())
 			return
 		}
-		_ = req
+		if req.Protocol != "" && req.Protocol != protocolV2 {
+			writeErr(conn, ErrProtocolMismatch.Error())
+			return
+		}
 		count := 0
 		if svc.serviceHost != nil {
 			count = svc.serviceHost.StopAll()
 		}
-		_ = writeFrame(conn, typeServiceStopAllReply, ServiceStopAllReply{Count: count})
+		_ = writeFrame(conn, typeServiceStopAllReply, serviceStopAllReply{Count: count})
 
 	case typeConfigReload:
-		var req ConfigReloadRequest
+		var req configReloadRequest
 		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode config.reload request: "+err.Error())
 			return
 		}
-		_ = req
+		if req.Protocol != "" && req.Protocol != protocolV2 {
+			writeErr(conn, ErrProtocolMismatch.Error())
+			return
+		}
 		var dropped, busy int
 		if svc.configReloader != nil {
 			dropped, busy = svc.configReloader()
 		}
-		_ = writeFrame(conn, typeConfigReloadReply, ConfigReloadReply{Dropped: dropped, Busy: busy})
+		_ = writeFrame(conn, typeConfigReloadReply, configReloadReply{Dropped: dropped, Busy: busy})
 
 	default:
 		writeErr(conn, fmt.Sprintf("proc: unknown frame type %q", typ))
@@ -484,7 +490,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 // it stays warm across invocations. A daemon with no host (a per-process proc server)
 // reports that hosting is unavailable, so the client falls back to running the
 // service in-process for the current run.
-func (s *service) serviceAcquire(req ServiceAcquireRequest, reply *ServiceAcquireReply) {
+func (s *service) serviceAcquire(req serviceAcquireRequest, reply *serviceAcquireReply) {
 	if s.serviceHost == nil {
 		reply.Err = "proc: service.acquire: this server does not host shared services"
 		return
@@ -498,7 +504,7 @@ func (s *service) serviceAcquire(req ServiceAcquireRequest, reply *ServiceAcquir
 
 // serviceRelease drops one dependent's hold on a shared service. Releasing an unknown
 // key, or on a server without a host, is a no-op.
-func (s *service) serviceRelease(req ServiceReleaseRequest) {
+func (s *service) serviceRelease(req serviceReleaseRequest) {
 	if s.serviceHost != nil {
 		s.serviceHost.Release(req.Key)
 	}
@@ -536,11 +542,11 @@ func (s *service) versionAdmits(reqVersion string) bool {
 	return s.gateVersion == "" || reqVersion == "" || reqVersion == s.gateVersion
 }
 
-func (s *service) run(req RunRequest, reply *RunReply) error {
+func (s *service) run(req runRequest, reply *runReply) error {
 	if len(req.Args) > maxArgs {
-		return fmt.Errorf("proc: RunRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
+		return fmt.Errorf("proc: runRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
 	}
-	if req.Protocol != "" && req.Protocol != ProtocolV2 {
+	if req.Protocol != "" && req.Protocol != protocolV2 {
 		return ErrProtocolMismatch
 	}
 	if !s.versionAdmits(req.Version) {
@@ -634,14 +640,14 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 // duplicate job already in flight (same workspace + args) is coalesced: no second run
 // starts, so a rapid series of checkouts collapses to one refresh. The job's own
 // success/failure is observed via the Dashboard/logs, not the reply.
-func (s *service) submitJob(req JobRequest, reply *JobReply) error {
-	if req.Magic != JobMagic {
+func (s *service) submitJob(req jobRequest, reply *jobReply) error {
+	if req.Magic != jobMagic {
 		return nil // ignore unauthenticated submissions, matching status/shutdown
 	}
 	if len(req.Args) > maxArgs {
-		return fmt.Errorf("proc: JobRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
+		return fmt.Errorf("proc: jobRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
 	}
-	if req.Protocol != "" && req.Protocol != ProtocolV2 {
+	if req.Protocol != "" && req.Protocol != protocolV2 {
 		return ErrProtocolMismatch
 	}
 	if !s.versionAdmits(req.Version) {
@@ -709,11 +715,11 @@ func (s *service) submitJob(req JobRequest, reply *JobReply) error {
 	return nil
 }
 
-func (s *service) status(req StatusRequest, reply *StatusReply) error {
-	if req.Magic != StatusMagic {
+func (s *service) status(req statusRequest, reply *StatusReply) error {
+	if req.Magic != statusMagic {
 		return nil
 	}
-	if req.Protocol != "" && req.Protocol != ProtocolV2 {
+	if req.Protocol != "" && req.Protocol != protocolV2 {
 		return ErrProtocolMismatch
 	}
 	reply.ParentPID = os.Getpid()
@@ -747,11 +753,11 @@ func (s *service) status(req StatusRequest, reply *StatusReply) error {
 	return nil
 }
 
-func (s *service) shutdown(req ShutdownRequest, _ *ShutdownReply) error {
-	if req.Magic != ShutdownMagic {
+func (s *service) shutdown(req shutdownRequest, _ *shutdownReply) error {
+	if req.Magic != shutdownMagic {
 		return nil
 	}
-	if req.Protocol != "" && req.Protocol != ProtocolV2 {
+	if req.Protocol != "" && req.Protocol != protocolV2 {
 		return ErrProtocolMismatch
 	}
 	if s.shutdownFn != nil {

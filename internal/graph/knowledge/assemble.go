@@ -16,10 +16,10 @@ import (
 // diagnostic registries) onto knowledge nodes and edges. No execution, no LLM.
 // Every Phase 1 edge is EXTRACTED with score 1.0.
 
-// RegistryShardName is the logical name of the singleton shard holding
+// registryShardName is the logical name of the singleton shard holding
 // workspace-independent, compiled-in entities (spells, ops, modules, methods,
 // diagnostics). The leading "@" keeps it from colliding with any project path.
-const RegistryShardName = "@registry"
+const registryShardName = "@registry"
 
 // Inputs are the already-gathered describe outputs the assembler composes. The
 // caller (the CLI/composition root) fetches these from the workspace so that
@@ -57,7 +57,7 @@ type Inputs struct {
 	// Packages maps a project path to the third-party dependencies its manifest
 	// declares, at the versions that manifest resolves to. They merge into the single
 	// @packages shard rather than one per project, because a package node is shared
-	// between the projects that require it - see PackagesShardName. Deterministic, so
+	// between the projects that require it - see packagesShardName. Deterministic, so
 	// remote-shareable like the other extracted shards.
 	Packages map[string][]types.KnowledgePackage
 	// VCS carries per-file git history metadata (empty unless knowledge.vcs.enabled and
@@ -172,18 +172,18 @@ func AssembleShards(in Inputs) []Shard {
 		// so @vcs can attribute them, and their anchors point at nodes the earlier passes
 		// minted.
 		known := knownNodeIDs(shards, in.Graph)
-		if n := assembleNotes(in.Notes, known, SharedNotesShardName, ScopeShared); len(n.Nodes) > 0 {
+		if n := assembleNotes(in.Notes, known, sharedNotesShardName, ScopeShared); len(n.Nodes) > 0 {
 			shards = append(shards, n)
 		}
 		// Personal notes anchor into the same workspace entities but land in their own,
-		// never-exported shard - see PrivateNotesShardName.
-		if n := assembleNotes(in.PrivateNotes, known, PrivateNotesShardName, ScopePrivate); len(n.Nodes) > 0 {
+		// never-exported shard - see privateNotesShardName.
+		if n := assembleNotes(in.PrivateNotes, known, privateNotesShardName, ScopePrivate); len(n.Nodes) > 0 {
 			shards = append(shards, n)
 		}
 	}
 	// Third-party dependencies, read from the manifests the project shards already
 	// named. One singleton shard rather than one per project, because a package node is
-	// shared by every project requiring it - see PackagesShardName.
+	// shared by every project requiring it - see packagesShardName.
 	if pk := assemblePackages(in.Packages); len(pk.Nodes) > 0 {
 		shards = append(shards, pk)
 	}
@@ -260,7 +260,7 @@ func AssembleShards(in Inputs) []Shard {
 		// The symbol layer keeps its own aggregates, so a loaded symbol view is still
 		// complete rather than merely deterministic.
 		for i, sh := range shards {
-			if !IsSymbolsShard(sh.Name) {
+			if !isSymbolsShard(sh.Name) {
 				continue
 			}
 			own := map[string]string{}
@@ -387,7 +387,7 @@ func knownTargetIDs(g types.TargetGraphOutput) map[string]bool {
 // carrying their doc URL.
 func assembleRegistry(in Inputs) Shard {
 	var s Shard
-	s.Name = RegistryShardName
+	s.Name = registryShardName
 
 	toolSeen := map[string]bool{}      // tool nodes minted once per registry shard
 	spellToolSeen := map[string]bool{} // spell->tool edges deduped per (spell, tool)
@@ -404,7 +404,7 @@ func assembleRegistry(in Inputs) Shard {
 			// A workspace project declares this spell, so an unused one is genuinely dead
 			// (the orphan lens flags it); a compiled-in builtin no project declares is
 			// merely available and never flagged.
-			spellAttrs[AttrDeclared] = "true"
+			spellAttrs[attrDeclared] = "true"
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:    sID,
@@ -423,8 +423,8 @@ func assembleRegistry(in Inputs) Shard {
 			if len(argv) > 0 {
 				toolName = filepath.Base(argv[0])
 				opAttrs = map[string]string{
-					AttrArgv: sanitize(strings.Join(argv, " "), maxLabelLen),
-					AttrTool: sanitize(toolName, maxLabelLen),
+					attrArgv: sanitize(strings.Join(argv, " "), maxLabelLen),
+					attrTool: sanitize(toolName, maxLabelLen),
 				}
 			}
 			s.Nodes = append(s.Nodes, types.KnowledgeNode{
@@ -448,7 +448,7 @@ func assembleRegistry(in Inputs) Shard {
 					ID:    tID,
 					Kind:  types.KindTool,
 					Label: sanitize(toolName, maxLabelLen),
-					Attrs: map[string]string{AttrTool: sanitize(toolName, maxLabelLen)},
+					Attrs: map[string]string{attrTool: sanitize(toolName, maxLabelLen)},
 				})
 			}
 			s.Edges = append(s.Edges, extractedEdge(oID, tID, types.RelationUses, ""))
@@ -543,7 +543,7 @@ func assembleProject(p types.TargetGraphProject) Shard {
 			if tAttrs == nil {
 				tAttrs = map[string]string{}
 			}
-			tAttrs[AttrDeclaredAs] = n.Declared
+			tAttrs[attrDeclaredAs] = n.Declared
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     tID,
@@ -630,15 +630,15 @@ func nilIfEmpty(m map[string]string) map[string]string {
 // last captured-output ref plus its outcome (last_output_ref / last_run_ok) so an agent
 // can hop from a target to its last output.
 
-// RuntimeShardName is the isolated shard holding runtime "emits" edges; the leading
+// runtimeShardName is the isolated shard holding runtime "emits" edges; the leading
 // "@" keeps it clear of any project path and is the remote-export exclusion key.
-const RuntimeShardName = "@runtime"
+const runtimeShardName = "@runtime"
 
 // ProvenanceRuntime marks an edge the runtime shard contributed, so consumers that must
 // not depend on local run history can drop it after the shard boundary is gone. It keeps
 // the "@" because provenance otherwise holds a source path, often a bare top-level
 // directory name: plain "runtime" would collide with a runtime/ directory.
-const ProvenanceRuntime = RuntimeShardName
+const ProvenanceRuntime = runtimeShardName
 
 // assembleRuntime builds the isolated shard from the non-deterministic inputs:
 // one "emits" edge per (unit, code) from the target/project node to the diagnostic
@@ -648,7 +648,7 @@ const ProvenanceRuntime = RuntimeShardName
 // node. The emits edges are NOT gated on known, so a stale unit yields a dangling edge;
 // that is safe only because AddEdge never materializes an endpoint.
 func assembleRuntime(events []types.DiagnosticEvent, timings []types.KnowledgeTiming, refs []types.KnowledgeOutputRef, known map[string]bool) Shard {
-	s := Shard{Name: RuntimeShardName}
+	s := Shard{Name: runtimeShardName}
 	seen := map[string]bool{}
 	for _, ev := range events {
 		unit := runtimeUnitID(ev.Unit)
@@ -711,10 +711,10 @@ func timingAttrs(t types.KnowledgeTiming) map[string]string {
 	attrs := map[string]string{}
 	if t.P75Ms > 0 && t.Samples > 0 {
 		attrs[AttrDurationP75Ms] = strconv.FormatInt(t.P75Ms, 10)
-		attrs[AttrRunSamples] = strconv.Itoa(t.Samples)
+		attrs[attrRunSamples] = strconv.Itoa(t.Samples)
 	}
 	if t.HitRateSamples > 0 {
-		attrs[AttrCacheHitRate] = strconv.FormatFloat(t.HitRate, 'f', 2, 64)
+		attrs[attrCacheHitRate] = strconv.FormatFloat(t.HitRate, 'f', 2, 64)
 	}
 	return attrs
 }
@@ -732,6 +732,6 @@ func runtimeUnitID(unit string) string {
 	return projectID(unit)
 }
 
-// IsRuntimeShard reports whether name is the isolated runtime shard, excluded from
+// isRuntimeShard reports whether name is the isolated runtime shard, excluded from
 // remote export (local run history, not shareable derived data).
-func IsRuntimeShard(name string) bool { return name == RuntimeShardName }
+func isRuntimeShard(name string) bool { return name == runtimeShardName }

@@ -34,8 +34,8 @@ func TestSubmitJobRunsAsync(t *testing.T) {
 		return nil
 	})
 
-	var reply JobReply
-	require.NoError(t, s.submitJob(JobRequest{Magic: JobMagic, Args: []string{"graph", "build"}}, &reply))
+	var reply jobReply
+	require.NoError(t, s.submitJob(jobRequest{Magic: jobMagic, Args: []string{"graph", "build"}}, &reply))
 	assert.NotEmpty(t, reply.Inv, "an accepted job returns an invocation id")
 
 	select {
@@ -58,8 +58,8 @@ func TestSubmitJobInvokesOnJobDone(t *testing.T) {
 		done <- call{args, err}
 	}
 
-	var reply JobReply
-	require.NoError(t, s.submitJob(JobRequest{Magic: JobMagic, Args: []string{"reindex"}}, &reply))
+	var reply jobReply
+	require.NoError(t, s.submitJob(jobRequest{Magic: jobMagic, Args: []string{"reindex"}}, &reply))
 
 	select {
 	case got := <-done:
@@ -73,8 +73,8 @@ func TestSubmitJobInvokesOnJobDone(t *testing.T) {
 func TestSubmitJobIgnoresBadMagic(t *testing.T) {
 	var ran bool
 	s := newJobService(func(context.Context, []string) error { ran = true; return nil })
-	var reply JobReply
-	require.NoError(t, s.submitJob(JobRequest{Magic: "wrong", Args: []string{"x"}}, &reply))
+	var reply jobReply
+	require.NoError(t, s.submitJob(jobRequest{Magic: "wrong", Args: []string{"x"}}, &reply))
 	assert.Empty(t, reply.Inv, "an unauthenticated submission is ignored")
 	time.Sleep(50 * time.Millisecond)
 	assert.False(t, ran, "the handler never runs for a bad-magic request")
@@ -92,8 +92,8 @@ func TestSubmitJobCoalescesDuplicates(t *testing.T) {
 		return nil
 	})
 
-	req := JobRequest{Magic: JobMagic, Args: []string{"graph", "build"}}
-	var r1, r2 JobReply
+	req := jobRequest{Magic: jobMagic, Args: []string{"graph", "build"}}
+	var r1, r2 jobReply
 	require.NoError(t, s.submitJob(req, &r1))
 	// Give the first job's goroutine a moment to register as in-flight.
 	time.Sleep(50 * time.Millisecond)
@@ -224,9 +224,9 @@ func TestRunAdoptsClientAncestry(t *testing.T) {
 		return nil
 	})
 
-	var reply RunReply
+	var reply runReply
 	want := []string{"inv-outer", "inv-nested"}
-	require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}, Ancestors: want}, &reply))
+	require.NoError(t, s.run(runRequest{Args: []string{"run", "build"}, Ancestors: want}, &reply))
 	assert.Equal(t, 0, reply.ExitCode)
 	assert.Equal(t, want, <-got, "the handler must see the ancestry the client sent")
 }
@@ -241,8 +241,8 @@ func TestRunAdoptsClientLease(t *testing.T) {
 		return nil
 	})
 
-	var reply RunReply
-	require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}, Lease: "fleet/f3"}, &reply))
+	var reply runReply
+	require.NoError(t, s.run(runRequest{Args: []string{"run", "build"}, Lease: "fleet/f3"}, &reply))
 	assert.Equal(t, 0, reply.ExitCode)
 	assert.Equal(t, "fleet/f3", <-got)
 }
@@ -263,8 +263,8 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 				return nil
 			})
 
-			var reply RunReply
-			require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}, Lease: id}, &reply))
+			var reply runReply
+			require.NoError(t, s.run(runRequest{Args: []string{"run", "build"}, Lease: id}, &reply))
 			assert.Empty(t, <-got, "an id that fails the rule is dropped, matching the environment reader")
 		})
 	}
@@ -276,38 +276,38 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 // decode to "" rather than failing the frame.
 func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeFrame(&buf, typeRun, RunRequest{
-		Args: []string{"run", "build"}, Cwd: "/w", Protocol: ProtocolV2, Lease: "fleet/f3",
+	require.NoError(t, writeFrame(&buf, typeRun, runRequest{
+		Args: []string{"run", "build"}, Cwd: "/w", Protocol: protocolV2, Lease: "fleet/f3",
 	}))
 
 	typ, line, err := readFrame(&buf)
 	require.NoError(t, err)
 	require.Equal(t, typeRun, typ)
-	var got RunRequest
+	var got runRequest
 	require.NoError(t, json.Unmarshal(line, &got))
 	assert.Equal(t, "fleet/f3", got.Lease)
 
-	var old RunRequest
+	var old runRequest
 	require.NoError(t, json.Unmarshal([]byte(`{"type":"run","args":["run","build"],"cwd":"/w"}`), &old))
 	assert.Empty(t, old.Lease)
 }
 
 // TestRunWithholdsReportedError pins that a failure the handler already explained does not
-// come back as its sentinel's text. The client PRINTS RunReply.Err, so a dispatch that
+// come back as its sentinel's text. The client PRINTS runReply.Err, so a dispatch that
 // printed a diagnostic and returned a bare "silent exit" would have that phrase reported
 // to the user as the reason their run failed.
 func TestRunWithholdsReportedError(t *testing.T) {
-	var reply RunReply
+	var reply runReply
 	s := newJobService(func(context.Context, []string) error { return reportedErr{} })
-	require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}}, &reply))
+	require.NoError(t, s.run(runRequest{Args: []string{"run", "build"}}, &reply))
 	assert.Equal(t, 1, reply.ExitCode, "the run still failed")
 	assert.Empty(t, reply.Err, "an already-reported failure must not ship its placeholder text")
 
 	// An ordinary error is the other half: its message IS the only account of the failure
 	// an adopted client gets, so it must cross.
-	reply = RunReply{}
+	reply = runReply{}
 	s = newJobService(func(context.Context, []string) error { return errors.New("no such target") })
-	require.NoError(t, s.run(RunRequest{Args: []string{"run", "nope"}}, &reply))
+	require.NoError(t, s.run(runRequest{Args: []string{"run", "nope"}}, &reply))
 	assert.Equal(t, 1, reply.ExitCode)
 	assert.Equal(t, "no such target", reply.Err)
 }
@@ -328,9 +328,9 @@ func (misuseErr) ExitCode() int { return 2 }
 // non-ExitError failure used to reply 1, so a misuse reported 2 with no daemon running
 // and 1 with one.
 func TestRunHonorsTheErrorsOwnExitCode(t *testing.T) {
-	var reply RunReply
+	var reply runReply
 	s := newJobService(func(context.Context, []string) error { return misuseErr{} })
-	require.NoError(t, s.run(RunRequest{Args: []string{"run", "bogus-target"}}, &reply))
+	require.NoError(t, s.run(runRequest{Args: []string{"run", "bogus-target"}}, &reply))
 	assert.Equal(t, 2, reply.ExitCode, "a misuse stays a misuse when the daemon adopts it")
 	assert.Equal(t, "no such target", reply.Err, "and it still says why")
 }
@@ -472,9 +472,9 @@ func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 // and a differing release version trips it.
 func TestSubmitJobVersionGate(t *testing.T) {
 	t.Run("mismatched version refused", func(t *testing.T) {
-		var reply JobReply
+		var reply jobReply
 		s := &service{gateVersion: "v1.0.0", parentCtx: context.Background()}
-		err := s.submitJob(JobRequest{Magic: JobMagic, Version: "v2.0.0", Args: []string{"graph", "build"}}, &reply)
+		err := s.submitJob(jobRequest{Magic: jobMagic, Version: "v2.0.0", Args: []string{"graph", "build"}}, &reply)
 		assert.ErrorIs(t, err, ErrVersionMismatch)
 		assert.Empty(t, reply.Inv, "a refused job returns no invocation id")
 	})

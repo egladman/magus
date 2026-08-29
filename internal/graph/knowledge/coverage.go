@@ -17,14 +17,14 @@ import (
 // This mirrors the run-history pattern: an overlay of partial typed nodes whose attrs
 // merge onto the real nodes order-independently once the symbol shards are loaded.
 
-// CoverageShardName is the isolated shard holding the observed coverage overlay. Like
+// coverageShardName is the isolated shard holding the observed coverage overlay. Like
 // @symbols it is omitted from the default graph (its merge targets - Go file and symbol
 // nodes - are themselves lazy) and pulled in alongside the symbol shards; like @runtime
 // it is local-only, never pushed to a remote.
-const CoverageShardName = "@coverage"
+const coverageShardName = "@coverage"
 
-// IsCoverageShard reports whether name is the observed coverage overlay shard.
-func IsCoverageShard(name string) bool { return name == CoverageShardName }
+// isCoverageShard reports whether name is the observed coverage overlay shard.
+func isCoverageShard(name string) bool { return name == coverageShardName }
 
 // CoverageBlock is one line-range record from a Go coverage profile: the statement
 // count the range holds and whether the run hit it. Retained per file (not just
@@ -155,7 +155,7 @@ func coverageAttrs(covered, total int) map[string]string {
 	}
 	ratio := float64(covered) / float64(total)
 	return map[string]string{
-		AttrCoverage:     strconv.FormatFloat(ratio, 'f', 2, 64),
+		attrCoverage:     strconv.FormatFloat(ratio, 'f', 2, 64),
 		AttrCoveredStmts: strconv.Itoa(covered),
 		AttrTotalStmts:   strconv.Itoa(total),
 	}
@@ -174,7 +174,7 @@ func coverageAttrs(covered, total int) map[string]string {
 // All nodes are partial (ID + kind + attrs): they merge onto the real file/symbol nodes
 // the @symbols shards define, whichever shard the loader reaches first.
 func assembleCoverage(cov []FileCoverage, symbols map[string][]types.KnowledgeSymbol) Shard {
-	s := Shard{Name: CoverageShardName}
+	s := Shard{Name: coverageShardName}
 	if len(cov) == 0 {
 		return s
 	}

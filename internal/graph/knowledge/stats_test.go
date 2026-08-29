@@ -22,7 +22,7 @@ func statsFixture() *Graph {
 	spell := func(id, label string, declared bool) {
 		var attrs map[string]string
 		if declared {
-			attrs = map[string]string{AttrDeclared: "true"}
+			attrs = map[string]string{attrDeclared: "true"}
 		}
 		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSpell, Label: label, Attrs: attrs})
 	}
@@ -69,7 +69,7 @@ func TestStatsOrphans(t *testing.T) {
 
 func TestStatsDirectSpellDispatchCountsAsUse(t *testing.T) {
 	g := NewGraph()
-	g.AddNode(types.KnowledgeNode{ID: "spell:ts", Kind: types.KindSpell, Label: "ts", Attrs: map[string]string{AttrDeclared: "true"}})
+	g.AddNode(types.KnowledgeNode{ID: "spell:ts", Kind: types.KindSpell, Label: "ts", Attrs: map[string]string{attrDeclared: "true"}})
 	g.AddNode(types.KnowledgeNode{ID: "op:ts:tsc", Kind: types.KindOp, Label: "tsc"})
 	g.AddNode(types.KnowledgeNode{ID: "target:.:build", Kind: types.KindTarget, Label: "build"})
 	g.AddEdge(types.KnowledgeEdge{Source: "spell:ts", Target: "op:ts:tsc", Relation: types.RelationContains, Confidence: types.ConfidenceExtracted, Score: 1})
@@ -106,7 +106,7 @@ func TestStatsOrphanCapExemptsSpells(t *testing.T) {
 		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindDiagnostic, Label: id})
 	}
 	// A declared, op-providing, unused spell: a semantic orphan (has edges), ID sorts after every diagnostic.
-	g.AddNode(types.KnowledgeNode{ID: "spell:zzz", Kind: types.KindSpell, Label: "zzz", Attrs: map[string]string{AttrDeclared: "true"}})
+	g.AddNode(types.KnowledgeNode{ID: "spell:zzz", Kind: types.KindSpell, Label: "zzz", Attrs: map[string]string{attrDeclared: "true"}})
 	g.AddNode(types.KnowledgeNode{ID: "op:zzz:x", Kind: types.KindOp, Label: "x"})
 	g.AddEdge(types.KnowledgeEdge{Source: "spell:zzz", Target: "op:zzz:x", Relation: types.RelationContains, Confidence: types.ConfidenceExtracted, Score: 1})
 

@@ -96,7 +96,7 @@ func (g *Graph) FileFacts(relPath string) FileFacts {
 // returning nil when the node carries no coverage attr (the file/symbol was not in the
 // profile). It is the read counterpart to coverageAttrs.
 func coverageOf(n types.KnowledgeNode) *CoverageFacts {
-	raw, ok := n.Attrs[AttrCoverage]
+	raw, ok := n.Attrs[attrCoverage]
 	if !ok {
 		return nil
 	}
@@ -158,12 +158,12 @@ func (g *Graph) SymbolAt(relPath string, line int) SymbolSpan {
 	return best
 }
 
-// defEndLine reads AttrDefEndLine, or 0 where the indexer emitted no enclosing range.
+// defEndLine reads attrDefEndLine, or 0 where the indexer emitted no enclosing range.
 //
 // An unparseable value is 0 for the same reason a missing one is: the attr bounds a symbol, and a
 // bound magus cannot read is a bound it does not have.
 func defEndLine(n types.KnowledgeNode) int {
-	end, err := strconv.Atoi(n.Attrs[AttrDefEndLine])
+	end, err := strconv.Atoi(n.Attrs[attrDefEndLine])
 	if err != nil {
 		return 0
 	}

@@ -53,27 +53,6 @@ func TagRaw(raw, key string) string {
 	return reflect.StructTag(strings.Trim(raw, "`")).Get(key)
 }
 
-// DocLine returns the first sentence-ish line of a doc comment, flattened to one
-// line with the leading slashes and the declared name stripped.
-//
-// Generators put this in a --help string or a generated comment, where a multi-line
-// doc would break the output it is embedded in.
-func DocLine(cg *ast.CommentGroup, declName string) string {
-	if cg == nil {
-		return ""
-	}
-	for _, c := range cg.List {
-		line := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(c.Text, "//"), "/*"))
-		if line == "" {
-			continue
-		}
-		// Go doc convention opens with the declared name; a flag usage string reads
-		// better without it ("Cache dir overrides..." -> "overrides...").
-		return strings.TrimSpace(strings.TrimPrefix(line, declName))
-	}
-	return ""
-}
-
 // StructLiteral is one entry of a slice-of-struct declaration: its field names mapped
 // to their string values. Only string-valued fields are captured, which is all a
 // generator reading a declaration table needs.
@@ -144,22 +123,6 @@ var flagBinders = map[string]bool{
 // catch slog.Bool and similar, so the receiver must be spelled `fs`, which is the
 // convention every FlagSet in this repo follows.
 func FlagNames(file *ast.File) []string { return flagNames(file) }
-
-// FlagNamesIn returns the flag names bound inside one named function.
-//
-// This is the other question, and it is not the same one: "what flags does this
-// COMMAND bind" is per-function, because a file can hold several commands. affected.go
-// binds flags in affected, affectedPlan and affectedImpact, so a whole-file read would
-// mix a sub-mode's flags into the parent command's set. Both scopes share one
-// extractor so the two answers cannot drift the way three hand-rolled copies did.
-func FlagNamesIn(file *ast.File, funcName string) []string {
-	for _, d := range file.Decls {
-		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == funcName && fn.Body != nil {
-			return flagNames(fn.Body)
-		}
-	}
-	return nil
-}
 
 func flagNames(root ast.Node) []string {
 	var out []string

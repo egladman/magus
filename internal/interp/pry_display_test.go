@@ -11,12 +11,12 @@ import (
 )
 
 func TestColorEnabledForFile_Nil(t *testing.T) {
-	assert.False(t, ColorEnabledForFile(nil))
+	assert.False(t, colorEnabledForFile(nil))
 }
 
 func TestPrintSourceContext_NonexistentFile(t *testing.T) {
 	var sb strings.Builder
-	PrintSourceContext(&sb, "/no/such/file/xyz.go", 1, 2, false)
+	printSourceContext(&sb, "/no/such/file/xyz.go", 1, 2, false)
 	assert.Contains(t, sb.String(), "cannot read source")
 }
 
@@ -27,7 +27,7 @@ func TestPrintSourceContext_ValidFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	var sb strings.Builder
-	PrintSourceContext(&sb, path, 3, 1, false)
+	printSourceContext(&sb, path, 3, 1, false)
 	out := sb.String()
 	assert.Contains(t, out, "line2")
 	assert.Contains(t, out, "line3")
@@ -40,7 +40,7 @@ func TestPrintSourceContext_ClampsToFileBounds(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("a\nb\n"), 0o644))
 	var sb strings.Builder
 	// Radius extends past both ends; output must clamp without panicking.
-	PrintSourceContext(&sb, path, 1, 10, false)
+	printSourceContext(&sb, path, 1, 10, false)
 	out := sb.String()
 	assert.Contains(t, out, "a")
 	assert.Contains(t, out, "b")

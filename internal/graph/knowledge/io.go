@@ -8,10 +8,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// IOShardName holds the produces/consumes edges tying a target to the file and doc
+// ioShardName holds the produces/consumes edges tying a target to the file and doc
 // nodes its declared magus.outputs / magus.inputs match. Deterministic (a static read
 // of the magusfile), so it is remote-shareable like the other extracted shards.
-const IOShardName = "@io"
+const ioShardName = "@io"
 
 // maxIOFanout caps how many nodes a single output/input glob may link. A declaration
 // broad enough to exceed it (a stray `**/*.go` in outputs) would turn the target into a
@@ -29,7 +29,7 @@ const maxIOFanout = 40
 // self-labels a generated file - `docs/spells/go.md` gains an incoming `produces` edge
 // from content_generate, so the doc layer needs no separate "is it generated" test.
 func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]string) Shard {
-	s := Shard{Name: IOShardName}
+	s := Shard{Name: ioShardName}
 	paths := make([]string, 0, len(pathToNode))
 	for p := range pathToNode {
 		paths = append(paths, p)

@@ -25,7 +25,7 @@ func TestAssembleNotes(t *testing.T) {
 		},
 	}}
 
-	out := mergeAll([]Shard{assembleNotes(in, known, SharedNotesShardName, ScopeShared)}).Output()
+	out := mergeAll([]Shard{assembleNotes(in, known, sharedNotesShardName, ScopeShared)}).Output()
 
 	n, ok := nodeByID(out, "note:cache-invalidation-pairing")
 	require.True(t, ok)
@@ -33,7 +33,7 @@ func TestAssembleNotes(t *testing.T) {
 	assert.Equal(t, "The two caches invalidate together", n.Label)
 	assert.Equal(t, "notes/cache-invalidation-pairing.md", n.Source,
 		"Source is the file path, which is what lets @vcs attribute the note to its author")
-	assert.Equal(t, "cache,gotcha", n.Attrs[AttrTags])
+	assert.Equal(t, "cache,gotcha", n.Attrs[attrTags])
 
 	// A note anchored to several entities is the case no single comment could express.
 	assert.True(t, hasEdge(out, "note:cache-invalidation-pairing", "symbol:m internal/cache/Store#Put().", types.RelationAnnotates))
@@ -53,7 +53,7 @@ func TestAssembleNotes_UnresolvedAnchorEmitsNoEdge(t *testing.T) {
 		Anchors: []string{"symbol:m gone/Removed#", "project:."},
 	}}
 
-	out := mergeAll([]Shard{assembleNotes(in, known, SharedNotesShardName, ScopeShared)}).Output()
+	out := mergeAll([]Shard{assembleNotes(in, known, sharedNotesShardName, ScopeShared)}).Output()
 
 	_, ok := nodeByID(out, "note:points-at-a-ghost")
 	assert.True(t, ok, "the note itself is still a node")
@@ -67,13 +67,13 @@ func TestAssembleNotes_UnresolvedAnchorEmitsNoEdge(t *testing.T) {
 // store: shared notes are committed content everyone who clones already has, so
 // withholding them from the remote cache would hide team knowledge for no benefit.
 func TestSharedNotesShardIsExportable(t *testing.T) {
-	assert.False(t, IsLocalShard(SharedNotesShardName))
-	assert.Equal(t, "@notes/shared", SharedNotesShardName)
-	assert.Equal(t, "@notes/private", PrivateNotesShardName)
+	assert.False(t, isLocalShard(sharedNotesShardName))
+	assert.Equal(t, "@notes/shared", sharedNotesShardName)
+	assert.Equal(t, "@notes/private", privateNotesShardName)
 }
 
 func TestAssembleNotes_SkipsUnnamed(t *testing.T) {
-	out := mergeAll([]Shard{assembleNotes([]types.KnowledgeNote{{Title: "no name"}}, nil, SharedNotesShardName, ScopeShared)}).Output()
+	out := mergeAll([]Shard{assembleNotes([]types.KnowledgeNote{{Title: "no name"}}, nil, sharedNotesShardName, ScopeShared)}).Output()
 	assert.Empty(t, out.Nodes)
 }
 
@@ -83,14 +83,14 @@ func TestAssembleNotes_SkipsUnnamed(t *testing.T) {
 // in nobody's repo, so pushing that shard would leak private content into a shared cache -
 // the same hazard @memory's exclusion exists to prevent.
 func TestPrivateNotesShardIsNeverExported(t *testing.T) {
-	assert.True(t, IsLocalShard(PrivateNotesShardName), "personal notes must never reach the remote cache")
-	assert.True(t, IsLocalShard(RuntimeShardName))
-	assert.True(t, IsLocalShard(CoverageShardName))
+	assert.True(t, isLocalShard(privateNotesShardName), "personal notes must never reach the remote cache")
+	assert.True(t, isLocalShard(runtimeShardName))
+	assert.True(t, isLocalShard(coverageShardName))
 
-	assert.False(t, IsLocalShard(SharedNotesShardName),
+	assert.False(t, isLocalShard(sharedNotesShardName),
 		"the workspace's own notes ARE shared - they are committed, and withholding them would hide team knowledge for no benefit")
-	assert.False(t, IsLocalShard(RegistryShardName))
-	assert.False(t, IsLocalShard(DocsShardName))
+	assert.False(t, isLocalShard(registryShardName))
+	assert.False(t, isLocalShard(docsShardName))
 }
 
 // TestNotesCarryTheirScope: the two stores hold the same shape of node, so without this a
@@ -98,16 +98,16 @@ func TestPrivateNotesShardIsNeverExported(t *testing.T) {
 func TestNotesCarryTheirScope(t *testing.T) {
 	in := []types.KnowledgeNote{{Name: "n", Title: "T", Path: "notes/n.md"}}
 
-	ws := mergeAll([]Shard{assembleNotes(in, nil, SharedNotesShardName, ScopeShared)}).Output()
+	ws := mergeAll([]Shard{assembleNotes(in, nil, sharedNotesShardName, ScopeShared)}).Output()
 	n, ok := nodeByID(ws, "note:n")
 	require.True(t, ok)
-	assert.Equal(t, ScopeShared, n.Attrs[AttrScope])
+	assert.Equal(t, ScopeShared, n.Attrs[attrScope])
 
-	priv := assembleNotes(in, nil, PrivateNotesShardName, ScopePrivate)
-	assert.Equal(t, PrivateNotesShardName, priv.Name)
+	priv := assembleNotes(in, nil, privateNotesShardName, ScopePrivate)
+	assert.Equal(t, privateNotesShardName, priv.Name)
 	p, ok := nodeByID(mergeAll([]Shard{priv}).Output(), "note:private/n")
 	require.True(t, ok)
-	assert.Equal(t, ScopePrivate, p.Attrs[AttrScope])
+	assert.Equal(t, ScopePrivate, p.Attrs[attrScope])
 }
 
 // TestSharedAndPrivateNotesDoNotCollide: the two stores share a name space on disk, and
@@ -119,8 +119,8 @@ func TestSharedAndPrivateNotesDoNotCollide(t *testing.T) {
 	private := []types.KnowledgeNote{{Name: "auth", Title: "mine", Path: "/vault/auth.md", Anchors: []string{"file:a.go"}}}
 
 	out := mergeAll([]Shard{
-		assembleNotes(shared, known, SharedNotesShardName, ScopeShared),
-		assembleNotes(private, known, PrivateNotesShardName, ScopePrivate),
+		assembleNotes(shared, known, sharedNotesShardName, ScopeShared),
+		assembleNotes(private, known, privateNotesShardName, ScopePrivate),
 	}).Output()
 
 	s, ok := nodeByID(out, "note:auth")

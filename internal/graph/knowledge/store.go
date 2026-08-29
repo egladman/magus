@@ -123,7 +123,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 		// merged into the default graph: they can dwarf the domain graph, so a query
 		// that needs them loads them lazily (MergeSymbolShards). The @symbols name
 		// suffix is the routing marker.
-		if !IsSymbolsShard(sh.Name) && !IsCoverageShard(sh.Name) {
+		if !isSymbolsShard(sh.Name) && !isCoverageShard(sh.Name) {
 			g.Merge(sh.Nodes, sh.Edges)
 		}
 		newMan.Shards[sh.Name] = shardMeta{Fingerprint: fp, NodeCount: len(sh.Nodes), EdgeCount: len(sh.Edges)}
@@ -210,7 +210,7 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 	// gen/*.json and a freshly built one disagreed on "source" lines alone.
 	names := make([]string, 0, len(man.Shards))
 	for name := range man.Shards {
-		if IsSymbolsShard(name) || IsCoverageShard(name) {
+		if isSymbolsShard(name) || isCoverageShard(name) {
 			continue // lazily loaded via MergeSymbolShards, not part of the default graph
 		}
 		names = append(names, name)
@@ -260,7 +260,7 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 	// keeps the merged node deterministic (the domain Sync path merges a sorted slice).
 	names := make([]string, 0, len(man.Shards))
 	for name := range man.Shards {
-		if IsSymbolsShard(name) {
+		if isSymbolsShard(name) {
 			names = append(names, name)
 		}
 	}
@@ -282,10 +282,10 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 // or unreadable overlay just leaves the coverage attrs absent, never an error, so a
 // workspace that never ran `magus run coverage` behaves exactly as before.
 func (s *Store) mergeCoverageShard(ctx context.Context, g *Graph, man *manifest) error {
-	if _, ok := man.shard(CoverageShardName); !ok {
+	if _, ok := man.shard(coverageShardName); !ok {
 		return nil
 	}
-	if err := s.readMergeShard(ctx, g, man, CoverageShardName); err != nil {
+	if err := s.readMergeShard(ctx, g, man, coverageShardName); err != nil {
 		s.log.DebugContext(ctx, "knowledge: coverage overlay merge failed", slog.String("error", err.Error()))
 	}
 	return nil
@@ -461,7 +461,7 @@ const remotePushTimeout = 15 * time.Second
 // content fingerprint, so teammates and CI can restore it. A remote error or slow
 // backend is logged and dropped: the local write already succeeded.
 func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
-	if s.remote == nil || IsLocalShard(name) {
+	if s.remote == nil || isLocalShard(name) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, remotePushTimeout)

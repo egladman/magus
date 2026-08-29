@@ -9,24 +9,24 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// PromptFileLimit caps how many files a prompt names individually. The changeset arrives ordered
+// promptFileLimit caps how many files a prompt names individually. The changeset arrives ordered
 // by what magus recommends reading first, so the cut takes the tail rather than an arbitrary
 // slice - and the count of what was left out is always stated, because a silently truncated list
 // reads as a complete one.
-const PromptFileLimit = 25
+const promptFileLimit = 25
 
-// PromptBranchLimit caps how many colliding branches a prompt names. On a repository where every
+// promptBranchLimit caps how many colliding branches a prompt names. On a repository where every
 // branch touches the same few shared files, the honest answer is "many", and listing forty of them
 // buries the changeset the prompt is actually about.
-const PromptBranchLimit = 6
+const promptBranchLimit = 6
 
-// PromptOverlapPathLimit caps the shared paths named for any ONE branch.
+// promptOverlapPathLimit caps the shared paths named for any ONE branch.
 //
 // The branch cap alone stopped bounding this once local branches were scanned: against a large
 // changeset a single long-lived branch shares seventy files, and six of those lines is most of the
 // prompt. What the reader needs is which branch and roughly how much, not a manifest - the exact
 // list is a `magus diff -o json` away, and this is the section's second cut rather than its first.
-const PromptOverlapPathLimit = 6
+const promptOverlapPathLimit = 6
 
 // The skills a review prompt points a reader's model at.
 //
@@ -39,8 +39,8 @@ const PromptOverlapPathLimit = 6
 // naming one would send every other magus user looking for a file they do not have - and
 // MustSkill refuses it.
 var (
-	SkillQuery        = agent.MustSkill("magus-query")
-	SkillArchitecture = agent.MustSkill("magus-architecture-review")
+	skillQuery        = agent.MustSkill("magus-query")
+	skillArchitecture = agent.MustSkill("magus-architecture-review")
 )
 
 // PromptInput is everything a review prompt is built from. A struct because these arrive from
@@ -100,7 +100,7 @@ func Prompt(in PromptInput) string {
 		Note("magus ranked these by what they can break, consequence first.").
 		Because("Role, blast radius and coverage below are magus's own annotations. They are",
 			"evidence, not verdicts - a file magus ranks low can still be the wrong change.").
-		Items(promptFiles(in.Changeset.Files), PromptFileLimit,
+		Items(promptFiles(in.Changeset.Files), promptFileLimit,
 			"Ask magus for the rest with `magus diff -o json`.")
 
 	b.Section("What magus could not measure").
@@ -112,13 +112,13 @@ func Prompt(in PromptInput) string {
 		Because("A collision here is worth flagging before the merge finds it.").
 		// No command is named for the remainder, because none reports it. A pointer at something
 		// that does not answer the question is worse than admitting the list was cut.
-		Items(promptOverlap(in.Changeset, in.Overlap), PromptBranchLimit,
+		Items(promptOverlap(in.Changeset, in.Overlap), promptBranchLimit,
 			"Shared files this widely contested are usually the workspace's own config.")
 
 	b.Section("Use what is already installed").
 		Note("Load these rather than inferring from the diff alone:").
-		Skill(SkillQuery, "what references what, without guessing from a text search").
-		Skill(SkillArchitecture, "where code belongs, grounded in the graph").
+		Skill(skillQuery, "what references what, without guessing from a text search").
+		Skill(skillArchitecture, "where code belongs, grounded in the graph").
 		Because("A graph answer is checked against declared sources; a text search is a guess.").
 		Text("Follow the conventions this workspace documents over generic ones.").
 		Text("Before reporting a finding, look for the test that PINS the behavior you are about").
@@ -183,11 +183,11 @@ func promptOverlap(rev types.Diff, branches []types.BranchChange) []string {
 // a truncated list that does not admit it reads as the whole answer, and here that would understate
 // how contested a file is at exactly the moment the reader is deciding whether to care.
 func promptPaths(paths []string) string {
-	if len(paths) <= PromptOverlapPathLimit {
+	if len(paths) <= promptOverlapPathLimit {
 		return strings.Join(paths, ", ")
 	}
 	return fmt.Sprintf("%s, and %d more",
-		strings.Join(paths[:PromptOverlapPathLimit], ", "), len(paths)-PromptOverlapPathLimit)
+		strings.Join(paths[:promptOverlapPathLimit], ", "), len(paths)-promptOverlapPathLimit)
 }
 
 // overlapWith narrows each branch to the paths it shares with this changeset, dropping the

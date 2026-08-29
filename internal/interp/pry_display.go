@@ -18,18 +18,18 @@ func pryColorize(useColor bool, s string, attrs ...color.Attribute) string {
 	return color.New(attrs...).Sprint(s)
 }
 
-// ColorEnabledForFile reports whether ANSI color should be used when writing
+// colorEnabledForFile reports whether ANSI color should be used when writing
 // to f. Returns false when f is not a terminal, TERM=dumb, or NO_COLOR is set.
-func ColorEnabledForFile(f *os.File) bool {
+func colorEnabledForFile(f *os.File) bool {
 	if f == nil {
 		return false
 	}
 	return tty.WantsColor(f, tty.SystemProbe)
 }
 
-// PrintSourceContext prints radius lines on each side of line from path, with
+// printSourceContext prints radius lines on each side of line from path, with
 // the target line highlighted.
-func PrintSourceContext(w io.Writer, path string, line, radius int, useColor bool) {
+func printSourceContext(w io.Writer, path string, line, radius int, useColor bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(w, "  (cannot read source: %v)\n", err)
@@ -53,9 +53,9 @@ func PrintSourceContext(w io.Writer, path string, line, radius int, useColor boo
 	}
 }
 
-// PrintHistory writes pry REPL history to w; rest is the .history argument
+// printHistory writes pry REPL history to w; rest is the .history argument
 // (empty = last 50, "!N" = Nth-most-recent, "N" = last N lines).
-func PrintHistory(w io.Writer, hist *History, rest string) {
+func printHistory(w io.Writer, hist *history, rest string) {
 	if hist == nil {
 		fmt.Fprintln(w, "(history unavailable)")
 		return
@@ -66,7 +66,7 @@ func PrintHistory(w io.Writer, hist *History, rest string) {
 			fmt.Fprintln(w, "usage: .history!<n>  (1 = most recent)")
 			return
 		}
-		line := hist.Recall(n)
+		line := hist.recall(n)
 		if line == "" {
 			fmt.Fprintln(w, "(out of range)")
 			return

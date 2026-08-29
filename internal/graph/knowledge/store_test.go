@@ -55,7 +55,7 @@ func TestBuildPersistsAndReloads(t *testing.T) {
 
 	man := readManifest(t, cacheDir)
 	assert.Equal(t, types.KnowledgeSchemaVersion, man.SchemaVersion)
-	for _, name := range []string{RegistryShardName, "pkg/a", "pkg/b"} {
+	for _, name := range []string{registryShardName, "pkg/a", "pkg/b"} {
 		_, ok := man.Shards[name]
 		assert.Truef(t, ok, "manifest missing shard %q", name)
 	}
@@ -112,7 +112,7 @@ func TestFingerprintInvalidation(t *testing.T) {
 
 	assert.NotEqual(t, before.Shards["pkg/a"].Fingerprint, after.Shards["pkg/a"].Fingerprint, "pkg/a fingerprint should change")
 	assert.Equal(t, before.Shards["pkg/b"].Fingerprint, after.Shards["pkg/b"].Fingerprint, "pkg/b fingerprint should be stable")
-	assert.Equal(t, before.Shards[RegistryShardName].Fingerprint, after.Shards[RegistryShardName].Fingerprint, "registry fingerprint should be stable")
+	assert.Equal(t, before.Shards[registryShardName].Fingerprint, after.Shards[registryShardName].Fingerprint, "registry fingerprint should be stable")
 }
 
 // TestCrossProjectInvalidation: content fingerprinting catches a change that a
@@ -277,7 +277,7 @@ func TestRuntimeShardNotPushed(t *testing.T) {
 	require.NoError(t, err)
 
 	// The runtime shard's blob must not be on the remote (local history, not shared).
-	runtimeFile := filepath.Join(StoreDir(dir), "shards", shardSlug(RuntimeShardName)+".json")
+	runtimeFile := filepath.Join(StoreDir(dir), "shards", shardSlug(runtimeShardName)+".json")
 	require.FileExists(t, runtimeFile)
 	evictAllShardFiles(t, dir)
 
@@ -285,7 +285,7 @@ func TestRuntimeShardNotPushed(t *testing.T) {
 	// the exclusion; a deterministic-only graph would have loaded fine.
 	_, err = NewStore(dir, false, 0, rem, nil).Load(ctx)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), RuntimeShardName)
+	assert.Contains(t, err.Error(), runtimeShardName)
 }
 
 func TestPruneToSizeEvictsOverCap(t *testing.T) {

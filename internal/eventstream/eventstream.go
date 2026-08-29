@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// FromJournal maps one journal event onto the stream envelope, reporting false
+// fromJournal maps one journal event onto the stream envelope, reporting false
 // for kinds with no external equivalent.
 //
 // Skipping is the normal case, not a failure. The journal records things the
@@ -34,7 +34,7 @@ import (
 // workspace is stamped on every result because journal events carry an
 // invocation id but not a root, and a subscriber watching two repositories
 // cannot route an event without one.
-func FromJournal(workspace string, e journal.Event) (types.StreamEvent, bool) {
+func fromJournal(workspace string, e journal.Event) (types.StreamEvent, bool) {
 	out := types.StreamEvent{Ts: e.Ts, Workspace: workspace, Inv: e.Inv}
 	switch e.Kind {
 	case journal.KindStarted:

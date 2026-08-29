@@ -32,17 +32,6 @@ func TestTag(t *testing.T) {
 	assert.Empty(t, Tag("", "json"), "an empty tag is not an error")
 }
 
-func TestDocLineStripsTheDeclaredName(t *testing.T) {
-	f := parseSrc(t, `package p
-// Dir overrides the default cache location.
-// A second line is dropped.
-var Dir string
-`)
-	decl := f.Decls[0].(*ast.GenDecl)
-	assert.Equal(t, "overrides the default cache location.", DocLine(decl.Doc, "Dir"))
-	assert.Empty(t, DocLine(nil, "Dir"), "no doc comment is not an error")
-}
-
 func TestSliceOfStructs(t *testing.T) {
 	f := parseSrc(t, `package p
 type sc struct{ Name, Short string }
@@ -93,67 +82,6 @@ func notAFlagSet() {
 		"flags from every function, and only from an fs receiver")
 	assert.NotContains(t, got, "attr", "slog.Bool is not a flag binding")
 	assert.NotContains(t, got, "nope", "a non-fs receiver is not a flag binding")
-}
-
-// TestFlagNamesInScopesToOneFunction is the distinction that made a shared extractor
-// worth it: a file can hold several commands, so "what this FILE exposes" and "what
-// this COMMAND binds" are different questions with different right answers.
-func TestFlagNamesInScopesToOneFunction(t *testing.T) {
-	f := parseSrc(t, `package p
-
-func parent() { fs.Bool("dry-run", false, "") }
-
-func subMode() { fs.Int("max-shards", 0, "") }
-`)
-	assert.Equal(t, []string{"dry-run"}, FlagNamesIn(f, "parent"),
-		"a sibling function's flags must not leak into the parent command's set")
-	assert.Equal(t, []string{"max-shards"}, FlagNamesIn(f, "subMode"))
-	assert.ElementsMatch(t, []string{"dry-run", "max-shards"}, FlagNames(f),
-		"the whole-file scope still sees both")
-	assert.Nil(t, FlagNamesIn(f, "nosuchfunc"), "an absent function yields nothing, not a panic")
-}
-
-// TestDocLineHandlesBlockCommentsAndBareNames covers the two doc shapes the
-// sentence-ish reader has to survive. A /* */ comment reaches DocLine with a
-// different prefix than //, and a doc whose whole first line IS the declared name
-// must yield empty rather than the name back - a flag usage string reading
-// "CacheDir" tells the user nothing they did not just type.
-func TestDocLineHandlesBlockCommentsAndBareNames(t *testing.T) {
-	f := parseSrc(t, `package p
-
-/* CacheDir overrides the cache location. */
-var CacheDir string
-
-// Verbose
-var Verbose bool
-
-// Quiet suppresses progress.
-// Second lines are dropped.
-var Quiet bool
-`)
-	docOf := func(name string) string {
-		t.Helper()
-		var got string
-		ast.Inspect(f, func(n ast.Node) bool {
-			gd, ok := n.(*ast.GenDecl)
-			if !ok || len(gd.Specs) == 0 {
-				return true
-			}
-			vs, ok := gd.Specs[0].(*ast.ValueSpec)
-			if !ok || len(vs.Names) == 0 || vs.Names[0].Name != name {
-				return true
-			}
-			got = DocLine(gd.Doc, name)
-			return false
-		})
-		return got
-	}
-
-	assert.Equal(t, "overrides the cache location. */", docOf("CacheDir"),
-		"a block comment is read; the trailing delimiter is not stripped today")
-	assert.Empty(t, docOf("Verbose"), "a doc that is only the declared name has nothing left to say")
-	assert.Equal(t, "suppresses progress.", docOf("Quiet"), "only the first line is taken")
-	assert.Empty(t, DocLine(nil, "Anything"), "no doc comment at all")
 }
 
 // TestSliceOfStructsIgnoresWhatItCannotRead pins the reader's tolerance. A
@@ -298,24 +226,6 @@ fs.Bool("verbose",false,"")
 		"a reformatted declaration table reads identically")
 	assert.Equal(t, FlagNames(before), FlagNames(after),
 		"reformatting does not move a flag binding")
-	assert.Equal(t, FlagNamesIn(before, "bind"), FlagNamesIn(after, "bind"),
-		"nor does it change which function binds it")
-}
-
-// TestDocLineSkipsEmptyCommentLines covers the two remaining doc shapes: a comment
-// group that opens with a bare "//" spacer line (the reader must look past it rather
-// than return empty), and one that is nothing BUT spacers (which has genuinely
-// nothing to report).
-func TestDocLineSkipsEmptyCommentLines(t *testing.T) {
-	spaced := &ast.CommentGroup{List: []*ast.Comment{
-		{Text: "//"},
-		{Text: "// Quiet suppresses progress."},
-	}}
-	assert.Equal(t, "suppresses progress.", DocLine(spaced, "Quiet"),
-		"a leading spacer line is skipped, not treated as the doc")
-
-	blank := &ast.CommentGroup{List: []*ast.Comment{{Text: "//"}, {Text: "//"}}}
-	assert.Empty(t, DocLine(blank, "Quiet"), "a doc of only spacers reports nothing")
 }
 
 // TestSliceOfStructsIgnoresNonSliceAndNonIdentKeys covers the two remaining

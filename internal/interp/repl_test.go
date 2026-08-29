@@ -385,7 +385,7 @@ func (s *debugSession) Locals(int) map[string]engine.Value {
 func (s *debugSession) Upvalues(int) map[string]engine.Value { return s.upvalues }
 func (s *debugSession) CallDepth() int                       { return len(s.frames) }
 
-// isolatePryHistory points history at a temp dir so Pry's OpenHistory(DefaultHistoryPath())
+// isolatePryHistory points history at a temp dir so Pry's openHistory(defaultHistoryPath())
 // never touches the real user state directory.
 func isolatePryHistory(t *testing.T) {
 	t.Helper()
@@ -620,7 +620,7 @@ func TestPry_HistoryCommand(t *testing.T) {
 	// Evaluate x (recorded to history), then request the history listing.
 	_, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, "x\n.history\n.exit\n")
 	require.NoError(t, err)
-	// Assert on PrintHistory's numbered-listing form ("%4d: %s"), not the bare
+	// Assert on printHistory's numbered-listing form ("%4d: %s"), not the bare
 	// echoed eval line "x": the recall index proves .history actually rendered.
 	assert.Contains(t, out, "   1: x")
 }

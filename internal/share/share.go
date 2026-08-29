@@ -32,12 +32,12 @@ import (
 	"github.com/egladman/magus/internal/trail"
 )
 
-// DefaultTTL is how long a share stays live before the listener closes and the
+// defaultTTL is how long a share stays live before the listener closes and the
 // token expires when the caller does not request a specific lifetime. Short by
 // default: the common case is a "glance at my phone" affordance, not a standing
 // remote endpoint. Fifteen minutes is long enough to scan and look, short enough
 // that a leaked QR is worth little.
-const DefaultTTL = 15 * time.Minute
+const defaultTTL = 15 * time.Minute
 
 // MinTTL and MaxTTL bound a caller-requested share lifetime. The console lets the
 // operator pick a duration before minting (a quick phone glance versus an all-day
@@ -57,11 +57,11 @@ const (
 	MaxTTL = 90 * 24 * time.Hour
 )
 
-// Iface is the minimal, testable projection of a network interface that
+// iface is the minimal, testable projection of a network interface that
 // pickLANIPv4 needs: whether it is up and a loopback, and its addresses. The
 // real selector maps net.Interface into this; tests construct it directly so the
 // filtering logic is exercised without a live network.
-type Iface struct {
+type iface struct {
 	Up       bool
 	Loopback bool
 	Addrs    []netip.Addr
@@ -74,7 +74,7 @@ type Iface struct {
 // are all skipped. It reports false when nothing qualifies - the caller turns
 // that into a clear "no LAN interface" error rather than sharing on a public or
 // nonexistent address.
-func pickLANIPv4(ifaces []Iface) (netip.Addr, bool) {
+func pickLANIPv4(ifaces []iface) (netip.Addr, bool) {
 	for _, ifc := range ifaces {
 		if !ifc.Up || ifc.Loopback {
 			continue
@@ -96,9 +96,9 @@ func SelectLANIPv4() (netip.Addr, error) {
 	if err != nil {
 		return netip.Addr{}, fmt.Errorf("share: list interfaces: %w", err)
 	}
-	ifaces := make([]Iface, 0, len(raw))
+	ifaces := make([]iface, 0, len(raw))
 	for _, ri := range raw {
-		ifc := Iface{
+		ifc := iface{
 			Up:       ri.Flags&net.FlagUp != 0,
 			Loopback: ri.Flags&net.FlagLoopback != 0,
 		}
@@ -177,25 +177,25 @@ type Manager struct {
 	cur *active
 }
 
-// Option configures a Manager at construction. It is the variadic-options seam so a
+// option configures a Manager at construction. It is the variadic-options seam so a
 // caller adds behavior (a trail dir today) without a wider NewManager signature or a
 // post-construction setter whose ordering the caller has to get right.
-type Option func(*Manager)
+type option func(*Manager)
 
 // WithTrailDir points the manager at the activity-trail base directory so that the
 // first request from each remote device on a live share records a "share link opened"
 // event. Empty disables recording (the trail is never a precondition for serving a
 // share). It replaces the old SetTrailDir setter, so the wiring is set once at
 // construction and there is no "call it before Start" ordering trap.
-func WithTrailDir(dir string) Option {
+func WithTrailDir(dir string) option {
 	return func(m *Manager) { m.trailDir = dir }
 }
 
-// NewManager returns a Manager whose shares live for ttl (<=0 uses DefaultTTL)
+// NewManager returns a Manager whose shares live for ttl (<=0 uses defaultTTL)
 // and whose listeners are torn down when parent is cancelled (daemon shutdown).
-func NewManager(parent context.Context, ttl time.Duration, log *slog.Logger, opts ...Option) *Manager {
+func NewManager(parent context.Context, ttl time.Duration, log *slog.Logger, opts ...option) *Manager {
 	if ttl <= 0 {
-		ttl = DefaultTTL
+		ttl = defaultTTL
 	}
 	if log == nil {
 		log = slog.Default()

@@ -84,12 +84,12 @@ func ParseFrontmatter(content string) (Frontmatter, bool) {
 // them. A page with no page_type/aliases leaves those fields zero.
 func WriteFrontmatter(b *strings.Builder, f Frontmatter) {
 	b.WriteString("---\n")
-	fmt.Fprintf(b, "title: %s\n", YAMLScalar(f.Title))
+	fmt.Fprintf(b, "title: %s\n", yamlScalar(f.Title))
 	if f.PageType != "" {
-		fmt.Fprintf(b, "page_type: %s\n", YAMLScalar(f.PageType))
+		fmt.Fprintf(b, "page_type: %s\n", yamlScalar(f.PageType))
 	}
 	if f.GeneratedFrom != "" {
-		fmt.Fprintf(b, "generated_from: %s\n", YAMLScalar(f.GeneratedFrom))
+		fmt.Fprintf(b, "generated_from: %s\n", yamlScalar(f.GeneratedFrom))
 	}
 	if len(f.Aliases) > 0 {
 		b.WriteString("aliases: [")
@@ -97,25 +97,25 @@ func WriteFrontmatter(b *strings.Builder, f Frontmatter) {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(YAMLScalar(a))
+			b.WriteString(yamlScalar(a))
 		}
 		b.WriteString("]\n")
 	}
-	fmt.Fprintf(b, "description: %s\n", YAMLScalar(f.Description))
+	fmt.Fprintf(b, "description: %s\n", yamlScalar(f.Description))
 	b.WriteString("tags: [")
 	for i, t := range f.Tags {
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		b.WriteString(YAMLScalar(t))
+		b.WriteString(yamlScalar(t))
 	}
 	b.WriteString("]\n---\n\n")
 }
 
-// YAMLScalar quotes a scalar when it would otherwise confuse a YAML parser: a
+// yamlScalar quotes a scalar when it would otherwise confuse a YAML parser: a
 // colon reads as a mapping, a quote as a string delimiter, and leading/trailing
 // spaces are trimmed by the parser unless quoted.
-func YAMLScalar(s string) string {
+func yamlScalar(s string) string {
 	if !strings.ContainsAny(s, ":\"'") && (len(s) == 0 || (s[0] != ' ' && s[len(s)-1] != ' ')) {
 		return s
 	}

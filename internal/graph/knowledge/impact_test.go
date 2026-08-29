@@ -13,12 +13,12 @@ func TestFileFacts(t *testing.T) {
 	// A changed file with file-level coverage and two defined symbols.
 	g.AddNode(types.KnowledgeNode{
 		ID: fileID("a.go"), Kind: types.KindFile, Label: "a.go",
-		Attrs: map[string]string{AttrCoverage: "0.50", AttrCoveredStmts: "5", AttrTotalStmts: "10"},
+		Attrs: map[string]string{attrCoverage: "0.50", AttrCoveredStmts: "5", AttrTotalStmts: "10"},
 	})
 	g.AddNode(types.KnowledgeNode{ID: symbolID("a.Foo"), Kind: types.KindSymbol, Label: "Foo", Source: "a.go:3"})
 	g.AddNode(types.KnowledgeNode{
 		ID: symbolID("a.Bar"), Kind: types.KindSymbol, Label: "Bar", Source: "a.go:20",
-		Attrs: map[string]string{AttrCoverage: "1.00", AttrCoveredStmts: "4", AttrTotalStmts: "4"},
+		Attrs: map[string]string{attrCoverage: "1.00", AttrCoveredStmts: "4", AttrTotalStmts: "4"},
 	})
 	g.AddEdge(types.KnowledgeEdge{Source: fileID("a.go"), Target: symbolID("a.Foo"), Relation: types.RelationDefines})
 	g.AddEdge(types.KnowledgeEdge{Source: fileID("a.go"), Target: symbolID("a.Bar"), Relation: types.RelationDefines})
@@ -55,7 +55,7 @@ func TestSymbolAt(t *testing.T) {
 	g.AddNode(types.KnowledgeNode{ID: fileID("a.go"), Kind: types.KindFile, Label: "a.go"})
 	g.AddNode(types.KnowledgeNode{
 		ID: symbolID("a.Foo"), Kind: types.KindSymbol, Label: "Foo", Source: "a.go:10",
-		Attrs: map[string]string{AttrDefEndLine: "20"},
+		Attrs: map[string]string{attrDefEndLine: "20"},
 	})
 	// Bar's indexer emitted no enclosing range, which several do not.
 	g.AddNode(types.KnowledgeNode{ID: symbolID("a.Bar"), Kind: types.KindSymbol, Label: "Bar", Source: "a.go:30"})

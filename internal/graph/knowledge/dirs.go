@@ -10,8 +10,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// DirsShardName is the singleton shard holding directory aggregate attrs.
-const DirsShardName = "@dirs"
+// dirsShardName is the singleton shard holding directory aggregate attrs.
+const dirsShardName = "@dirs"
 
 // assembleDirs folds aggregate metadata onto each directory node: how many files it
 // holds transitively, the summed git churn (commit counts) across those files, and the
@@ -57,7 +57,7 @@ func assembleDirs(projects []types.TargetGraphProject, leafPaths []string, churn
 		}
 	}
 
-	s := Shard{Name: DirsShardName}
+	s := Shard{Name: dirsShardName}
 	for _, d := range slices.Sorted(maps.Keys(byDir)) {
 		a := byDir[d]
 		attrs := map[string]string{

@@ -69,7 +69,7 @@ func TestQueryAndExplainTool(t *testing.T) {
 	assert.ElementsMatch(t, []string{"tool:go"}, matchIDs(g.Resolve("kind:tool", 0)))
 	op, ok := g.Explain("op:go:go-build")
 	require.True(t, ok)
-	assert.Equal(t, "go build ./...", op.Node.Attrs[AttrArgv], "the op carries the base argv")
+	assert.Equal(t, "go build ./...", op.Node.Attrs[attrArgv], "the op carries the base argv")
 
 	out, ok := g.Explain("tool:go")
 	require.True(t, ok)

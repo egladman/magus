@@ -229,7 +229,7 @@ func TestAssembleRuntimeEmitsEdges(t *testing.T) {
 		{Unit: "", Code: types.ExecDenied}, // no unit -> skipped
 	}
 	s := assembleRuntime(events, nil, nil, nil)
-	require.Equal(t, RuntimeShardName, s.Name)
+	require.Equal(t, runtimeShardName, s.Name)
 	require.Len(t, s.Edges, 2)
 
 	// A target-scoped event becomes a target->diagnostic emits edge.
@@ -267,8 +267,8 @@ func TestAssembleRuntimeTimingAttrs(t *testing.T) {
 	assert.Equal(t, "target:pkg/a:build", n.ID)
 	assert.Equal(t, types.KindTarget, n.Kind, "typed so the merge is order-independent")
 	assert.Equal(t, "4200", n.Attrs[AttrDurationP75Ms])
-	assert.Equal(t, "9", n.Attrs[AttrRunSamples])
-	assert.Equal(t, "0.75", n.Attrs[AttrCacheHitRate])
+	assert.Equal(t, "9", n.Attrs[attrRunSamples])
+	assert.Equal(t, "0.75", n.Attrs[attrCacheHitRate])
 }
 
 // TestRuntimeTimingMergesOntoTarget: a timing node merges its attrs onto the
@@ -282,7 +282,7 @@ func TestRuntimeTimingMergesOntoTarget(t *testing.T) {
 	build, ok := nodeByID(out, "target:pkg/a:build")
 	require.True(t, ok)
 	assert.Equal(t, "500", build.Attrs[AttrDurationP75Ms])
-	assert.Equal(t, "0.50", build.Attrs[AttrCacheHitRate])
+	assert.Equal(t, "0.50", build.Attrs[attrCacheHitRate])
 	assert.Equal(t, "buzz", build.Attrs[AttrEngine], "static engine attr survives the timing merge")
 }
 
@@ -340,8 +340,8 @@ func TestAssembleOpTools(t *testing.T) {
 	n, ok := nodeByID(out, opID)
 	require.True(t, ok, "the op node exists")
 	assert.Equal(t, types.KindOp, n.Kind)
-	assert.Equal(t, "/usr/bin/go build ./...", n.Attrs[AttrArgv], "the op carries its base argv")
-	assert.Equal(t, "go", n.Attrs[AttrTool], "the op's tool is argv[0]'s basename")
+	assert.Equal(t, "/usr/bin/go build ./...", n.Attrs[attrArgv], "the op carries its base argv")
+	assert.Equal(t, "go", n.Attrs[attrTool], "the op's tool is argv[0]'s basename")
 
 	// Exactly one tool node for the shared tool, workspace-scoped.
 	tID := "tool:go"
@@ -359,7 +359,7 @@ func TestAssembleOpTools(t *testing.T) {
 	// The function-op carries no argv and links to no tool.
 	noop, ok := nodeByID(out, "op:go:noop")
 	require.True(t, ok, "the function-op still mints an op node")
-	assert.Empty(t, noop.Attrs[AttrArgv], "a function-op has no static argv")
+	assert.Empty(t, noop.Attrs[attrArgv], "a function-op has no static argv")
 	assert.False(t, hasEdge(out, "op:go:noop", tID, types.RelationUses), "a function-op links to no tool")
 
 	var tools, spellToolEdges int
@@ -399,9 +399,9 @@ func TestRuntimeAttrsCoversAssembled(t *testing.T) {
 }
 
 func TestIsRuntimeShard(t *testing.T) {
-	assert.True(t, IsRuntimeShard(RuntimeShardName))
-	assert.False(t, IsRuntimeShard(RegistryShardName))
-	assert.False(t, IsRuntimeShard("pkg/foo"))
+	assert.True(t, isRuntimeShard(runtimeShardName))
+	assert.False(t, isRuntimeShard(registryShardName))
+	assert.False(t, isRuntimeShard("pkg/foo"))
 }
 
 // TestDeclaredAsAttr checks a target whose raw name the normalizer rewrote carries
@@ -417,9 +417,9 @@ func TestDeclaredAsAttr(t *testing.T) {
 	n, ok := nodeByID(out, "target:.:go-build")
 	require.True(t, ok)
 	assert.Equal(t, "go-build", n.Label, "node identity stays normalized")
-	assert.Equal(t, "goBuild", n.Attrs[AttrDeclaredAs], "raw spelling surfaced as declared_as")
+	assert.Equal(t, "goBuild", n.Attrs[attrDeclaredAs], "raw spelling surfaced as declared_as")
 	plain, _ := nodeByID(out, "target:.:build")
-	assert.Empty(t, plain.Attrs[AttrDeclaredAs], "no declared_as when the name matches")
+	assert.Empty(t, plain.Attrs[attrDeclaredAs], "no declared_as when the name matches")
 }
 
 func TestOwningProjectPath(t *testing.T) {

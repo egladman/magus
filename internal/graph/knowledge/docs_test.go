@@ -24,7 +24,7 @@ func TestDocsDanglingCodeReferenceMGS7002(t *testing.T) {
 	assert.False(t, ok, "no dangling edge to an unregistered code")
 	d, ok := nodeByID(out, "doc:docs/x.md")
 	require.True(t, ok)
-	assert.Equal(t, string(types.DanglingDocReference), d.Attrs[AttrDiagnostic])
+	assert.Equal(t, string(types.DanglingDocReference), d.Attrs[attrDiagnostic])
 	assert.Contains(t, d.Attrs["unknown_codes"], "MGS9998")
 }
 
@@ -39,13 +39,13 @@ func TestDocsFrontmatterAttrs(t *testing.T) {
 
 	charms, ok := nodeByID(out, "doc:docs/charms.md")
 	require.True(t, ok)
-	assert.Equal(t, "Charms", charms.Attrs[AttrTitle])
-	assert.Equal(t, "reference,argv", charms.Attrs[AttrTags])
+	assert.Equal(t, "Charms", charms.Attrs[attrTitle])
+	assert.Equal(t, "reference,argv", charms.Attrs[attrTags])
 
 	plain, ok := nodeByID(out, "doc:docs/plain.md")
 	require.True(t, ok)
-	assert.Empty(t, plain.Attrs[AttrTitle], "no frontmatter, no title attr")
-	assert.Empty(t, plain.Attrs[AttrTags])
+	assert.Empty(t, plain.Attrs[attrTitle], "no frontmatter, no title attr")
+	assert.Empty(t, plain.Attrs[attrTags])
 }
 
 // TestDocsFrontmatterCoexistsWithDiagnostic guards that a page carrying BOTH
@@ -59,8 +59,8 @@ func TestDocsFrontmatterCoexistsWithDiagnostic(t *testing.T) {
 
 	d, ok := nodeByID(out, "doc:docs/x.md")
 	require.True(t, ok)
-	assert.Equal(t, "X", d.Attrs[AttrTitle], "frontmatter survives the diagnostic branch")
-	assert.Equal(t, string(types.DanglingDocReference), d.Attrs[AttrDiagnostic])
+	assert.Equal(t, "X", d.Attrs[attrTitle], "frontmatter survives the diagnostic branch")
+	assert.Equal(t, string(types.DanglingDocReference), d.Attrs[attrDiagnostic])
 }
 
 // TestMagusMdNotIngested guards the fixpoint fix: MAGUS.md is a generated catalog,
@@ -158,16 +158,16 @@ func TestDocsSectionAttr(t *testing.T) {
 
 	n, ok := nodeByID(out, "doc:docs/guides/mcp.md")
 	require.True(t, ok)
-	assert.Equal(t, "guides", n.Attrs[AttrSection], "section derived from path")
+	assert.Equal(t, "guides", n.Attrs[attrSection], "section derived from path")
 
 	n, ok = nodeByID(out, "doc:docs/glossary.md")
 	require.True(t, ok)
-	_, has := n.Attrs[AttrSection]
+	_, has := n.Attrs[attrSection]
 	assert.False(t, has, "top-level doc has no section")
 
 	n, ok = nodeByID(out, "doc:README.md")
 	require.True(t, ok)
-	_, has = n.Attrs[AttrSection]
+	_, has = n.Attrs[attrSection]
 	assert.False(t, has, "doc outside docs/ has no section")
 }
 

@@ -14,9 +14,9 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// DocsShardName is the singleton shard holding markdown doc nodes and the edges
+// docsShardName is the singleton shard holding markdown doc nodes and the edges
 // that tie them to what they document.
-const DocsShardName = "@docs"
+const docsShardName = "@docs"
 
 var (
 	// mgsRe finds MGS#### diagnostic-code mentions in doc bodies.
@@ -34,7 +34,7 @@ var (
 // are references. Extracted edges win over inferred on dedup, so a code page's own
 // path edge is not weakened by the same code appearing in its body.
 func assembleDocs(root string, spells []types.Spell, projects []types.TargetGraphProject, notesPath string) Shard {
-	s := Shard{Name: DocsShardName}
+	s := Shard{Name: docsShardName}
 	files := findDocFiles(root, notesPath)
 	scanned := make(map[string]bool, len(files))
 	for _, f := range files {
@@ -74,16 +74,16 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 		// present, so a query result reads as the doc's human name and an agent can ask
 		// `kind:doc role:agent` in any repo. A page with no frontmatter (a README, a stub)
 		// simply carries no title/tags.
-		docAttrs := map[string]string{AttrRole: roleFromRel(rel)}
+		docAttrs := map[string]string{attrRole: roleFromRel(rel)}
 		if sec := sectionFromRel(rel); sec != "" {
-			docAttrs[AttrSection] = sec
+			docAttrs[attrSection] = sec
 		}
 		if fm, ok := docs.ParseFrontmatter(content); ok {
 			if fm.Title != "" {
-				docAttrs[AttrTitle] = fm.Title
+				docAttrs[attrTitle] = fm.Title
 			}
 			if len(fm.Tags) > 0 {
-				docAttrs[AttrTags] = strings.Join(fm.Tags, ",")
+				docAttrs[attrTags] = strings.Join(fm.Tags, ",")
 			}
 		}
 		node.Attrs = docAttrs
@@ -125,7 +125,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 			if node.Attrs == nil {
 				node.Attrs = map[string]string{}
 			}
-			node.Attrs[AttrDiagnostic] = string(types.DanglingDocReference)
+			node.Attrs[attrDiagnostic] = string(types.DanglingDocReference)
 			node.Attrs["unknown_codes"] = strings.Join(unknownCodes, ",")
 		}
 		s.Nodes = append(s.Nodes, node)
