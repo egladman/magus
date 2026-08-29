@@ -78,8 +78,10 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 		be = watch.FsnotifyBackend
 	case "poll":
 		be = watch.PollBackend
+	case "auto":
+		be = watch.ProbeBackend(ws.Root())
 	default:
-		return fmt.Errorf("magus watch: unknown backend %q (choose: fsnotify, poll)", wf.Backend)
+		return fmt.Errorf("magus watch: unknown backend %q (choose: fsnotify, poll, auto)", wf.Backend)
 	}
 
 	// Collect output globs from all registered projects to avoid

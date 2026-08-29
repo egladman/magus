@@ -12,11 +12,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Obj is a read view over a spell record (a Buzz map, wrapped in the buzzSpellObj
+// obj is a read view over a spell record (a Buzz map, wrapped in the buzzSpellObj
 // adapter). Decoupling Decode from the concrete value type keeps the marshaling in
-// one place: Obj is the single boundary that knows a spell's shape, and the seam a
+// one place: obj is the single boundary that knows a spell's shape, and the seam a
 // second authoring backend would implement.
-type Obj interface {
+type obj interface {
 	// Str returns the string at key and whether it was present as a string.
 	Str(key string) (string, bool)
 	// Bool returns the bool at key; absent or non-bool yields false.
@@ -29,10 +29,10 @@ type Obj interface {
 	// otherwise resolve nothing at spawn with no signal until the run that needed it.
 	StrMap(key string) (map[string]string, error)
 	// Obj returns the nested record at key and whether it was present as one.
-	Obj(key string) (Obj, bool)
+	Obj(key string) (obj, bool)
 	// Objs returns the list of nested records at key, for a field that is an
 	// array of objects (a charm's JSON Patch ops). Absent or non-array yields nil.
-	Objs(key string) []Obj
+	Objs(key string) []obj
 	// Keys returns this record's keys, for iterating ops and charms.
 	Keys() []string
 	// CallStrs resolves the field at key to a []string. It accepts either form
@@ -47,14 +47,14 @@ type Obj interface {
 
 // decodeManifests reads the manifests field, which is a list of records rather than
 // the list of strings every other path-bearing field decodes to (see
-// ContractEntry.Shape). Each record is a Manifest - the file dependencies are declared
+// contractEntry.Shape). Each record is a Manifest - the file dependencies are declared
 // in, plus the lockfiles its ecosystem might resolve them into.
 //
 // A record carrying only .value decodes as a manifest with no lock candidates, which
 // is what makes a spell written against the older [Path] contract keep loading. That
 // is the entire compat surface: Path and Manifest agree on .value, and the extra Path
 // fields (base, isDir) are meaningless for a manifest, so ignoring them loses nothing.
-func decodeManifests(src Obj) []spells.Manifest {
+func decodeManifests(src obj) []spells.Manifest {
 	objs := src.Objs("manifests")
 	if len(objs) == 0 {
 		return nil
@@ -75,7 +75,7 @@ func decodeManifests(src Obj) []spells.Manifest {
 // is the single reader the Buzz engine routes through, so a spell's shape is
 // known in exactly one place. Decode is pure: it neither registers the spell nor
 // touches any global state.
-func Decode(src Obj) (spells.Descriptor, error) {
+func Decode(src obj) (spells.Descriptor, error) {
 	name, _ := src.Str("name")
 	if name == "" {
 		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
@@ -277,7 +277,7 @@ func validEnvName(s string) bool {
 // decodeCommand reads a Command field map (bin/args/charms), validating each charm's
 // RFC 6902 patch. It is shared by a command op and by each of a service op's
 // run/ready/stop commands, so every command shape decodes identically.
-func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
+func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 	c := spells.Command{
 		Args:        o.Strs("args"),
 		Capture:     o.Bool("capture"),
@@ -308,7 +308,7 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 	}
 	if len(secrets) == 0 {
 		// Normalized HERE, once, so "declared nothing" and "declared an empty map"
-		// are one value with one cache spelling, and no Obj implementation has to
+		// are one value with one cache spelling, and no obj implementation has to
 		// remember the rule.
 		secrets = nil
 	}
@@ -408,7 +408,7 @@ func validateTools(m spells.Descriptor) error {
 // decodeTools reads the per-binary declarations: what prints its version, what part of
 // that keys the cache, and what proves it is usable. An entry with none of the three is
 // dropped rather than kept as a tool magus knows nothing about.
-func decodeTools(src Obj) (map[string]spells.Tool, error) {
+func decodeTools(src obj) (map[string]spells.Tool, error) {
 	rec, ok := src.Obj("tools")
 	if !ok {
 		//nolint:nilnil // declaring no tools is not an error, and a nil map is the correct empty value here: every caller ranges it or takes its len, both of which read a nil map fine.

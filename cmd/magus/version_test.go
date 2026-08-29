@@ -6,9 +6,18 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// unknownVersion's doc says to keep it in sync with proc.devVersionSentinel (see
+// TestDevVersionSentinelMatchesWard in internal/proc). This package can see proc's package
+// but not its unexported sentinel, so it proves its half through the same shared anchor,
+// ward.DevVersion, rather than comparing the two directly.
+func TestUnknownVersionMatchesWardDevVersion(t *testing.T) {
+	assert.Equal(t, ward.DevVersion, unknownVersion)
+}
 
 func TestDaemonLine(t *testing.T) {
 	cases := []struct {

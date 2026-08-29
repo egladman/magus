@@ -90,7 +90,15 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
 export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
-export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](ctx); }
+// README.md's "Contributing gotchas" claims value changes are checked against all
+// three build tags (default + buzz_safe in CI, buzz_unsafe by hand) - the second exec
+// is what makes that true; before it, nothing here ever built or ran a single test
+// under -tags buzz_safe.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(format);
+    go["go-test"](ctx);
+    proc\exec("go", ["test", "-tags", "buzz_safe", "./..."]);
+}
 
 // The CLI is independently versioned from the gopherbuzz module tag namespace.
 // A local checkout before its first nested tag stays explicitly "dev"; it must

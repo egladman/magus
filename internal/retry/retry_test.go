@@ -71,42 +71,19 @@ func TestDoRespectsContext(t *testing.T) {
 	assert.Less(t, time.Since(start), 500*time.Millisecond)
 }
 
-func TestDoCallsOnRetry(t *testing.T) {
-	t.Parallel()
-	var retries []int
-	err := Do(
-		context.Background(), func() error { return errFake },
-		WithAttempts(4),
-		WithDelay(time.Millisecond),
-		WithMaxDelay(time.Millisecond),
-		WithOnRetry(func(attempt int, _ error) {
-			retries = append(retries, attempt)
-		}),
-	)
-
-	require.Error(t, err)
-	// OnRetry fires between attempts — not after the last failure.
-	assert.Len(t, retries, 3)
-	for i, got := range retries {
-		assert.Equal(t, i+1, got)
-	}
-}
-
 func TestDoAppliesDefaults(t *testing.T) {
 	t.Parallel()
-	// No options → default 3 attempts, 1s delay, 30s maxDelay.
-	// Override Delay to keep the test fast; observe Attempts via OnRetry.
+	// No options -> default 3 attempts, 1s delay, 30s maxDelay.
+	// Override Delay to keep the test fast; observe Attempts via the call count.
 	calls := 0
 	err := Do(
-		context.Background(), func() error { return errFake },
+		context.Background(), func() error { calls++; return errFake },
 		WithDelay(time.Millisecond),
 		WithMaxDelay(time.Millisecond),
-		WithOnRetry(func(_ int, _ error) { calls++ }),
 	)
 
 	require.Error(t, err)
-	// Default Attempts == 3, so OnRetry fires 2 times.
-	assert.Equal(t, 2, calls)
+	assert.Equal(t, 3, calls, "default Attempts == 3")
 }
 
 func TestDoBackoffCaps(t *testing.T) {
@@ -116,22 +93,21 @@ func TestDoBackoffCaps(t *testing.T) {
 	prev := time.Now()
 
 	Do(
-		context.Background(), func() error { return errFake },
-		WithAttempts(5),
-		WithDelay(2*time.Millisecond),
-		WithMaxDelay(cap),
-		WithOnRetry(func(_ int, _ error) {
+		context.Background(), func() error {
 			now := time.Now()
 			gaps = append(gaps, now.Sub(prev))
 			prev = now
-		}),
+			return errFake
+		},
+		WithAttempts(5),
+		WithDelay(2*time.Millisecond),
+		WithMaxDelay(cap),
 	)
 
-	// gaps[i] is the time between attempt i completing and OnRetry being called —
-	// essentially zero. The sleep happens after OnRetry. So we verify that the
-	// total duration of the test is bounded by (Attempts-1) * MaxDelay.
-	for i, g := range gaps {
-		assert.LessOrEqualf(t, g, cap+20*time.Millisecond, "gap[%d]", i) // generous for scheduler jitter
+	// gaps[0] is the time to the first attempt, which carries no backoff; every
+	// later gap is the sleep between attempts and must respect the cap.
+	for i, g := range gaps[1:] {
+		assert.LessOrEqualf(t, g, cap+20*time.Millisecond, "gap[%d]", i+1) // generous for scheduler jitter
 	}
 }
 

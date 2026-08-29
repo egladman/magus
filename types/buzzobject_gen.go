@@ -723,62 +723,6 @@ func (v VolatilityReport) BuzzObject() BuzzObject {
 	}
 }
 
-func (v KnowledgeGodNode) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"id":     v.ID,
-		"kind":   v.Kind,
-		"label":  v.Label,
-		"degree": v.Degree,
-		"in":     v.In,
-		"out":    v.Out,
-	}
-}
-
-func (v KnowledgeOrphan) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"id":     v.ID,
-		"kind":   v.Kind,
-		"label":  v.Label,
-		"reason": v.Reason,
-	}
-}
-
-func (v KnowledgeDocCoverage) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"kind":         v.Kind,
-		"total":        v.Total,
-		"documented":   v.Documented,
-		"percent":      v.Percent,
-		"undocumented": v.Undocumented,
-	}
-}
-
-func (v KnowledgeStats) BuzzObject() BuzzObject {
-	itemsGods := make([]any, len(v.Gods))
-	for indexGods := range v.Gods {
-		itemsGods[indexGods] = v.Gods[indexGods].BuzzObject()
-	}
-	itemsOrphans := make([]any, len(v.Orphans))
-	for indexOrphans := range v.Orphans {
-		itemsOrphans[indexOrphans] = v.Orphans[indexOrphans].BuzzObject()
-	}
-	itemsCoverage := make([]any, len(v.Coverage))
-	for indexCoverage := range v.Coverage {
-		itemsCoverage[indexCoverage] = v.Coverage[indexCoverage].BuzzObject()
-	}
-	return BuzzObject{
-		"definition":           v.Definition,
-		"nodeCount":            v.NodeCount,
-		"edgeCount":            v.EdgeCount,
-		"gods":                 itemsGods,
-		"orphans":              itemsOrphans,
-		"coverage":             itemsCoverage,
-		"isolatedCount":        v.IsolatedCount,
-		"componentCount":       v.ComponentCount,
-		"largestComponentSize": v.LargestComponentSize,
-	}
-}
-
 func (v ProjectRef) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path": v.Path,

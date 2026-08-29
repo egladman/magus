@@ -95,7 +95,7 @@ func ExampleCache_RunAll() {
 	results, err := c.RunAll(
 		context.Background(), steps,
 		func(_ context.Context, _ Step) error { return nil },
-		WithConcurrency(4),
+		WithLimiter(NewLimiter(4)),
 		OnMiss(func(r *Result) {
 			mu.Lock()
 			missed = append(missed, r.ProjectPath)

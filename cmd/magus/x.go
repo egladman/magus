@@ -101,10 +101,6 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 
 	m.LogScope(ctx, chosen.Path, "")
 
-	if *step && !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal; rerun without --step, or from a terminal")
-		return errSilent{exitCode: 2}
-	}
 	if *step {
 		ctx = withStepGate(ctx)
 	}

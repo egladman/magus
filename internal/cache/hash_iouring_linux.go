@@ -24,11 +24,11 @@ func iouringHashBatch(files []relAbs) ([]string, error) {
 	}
 
 	const ringSize = 64
-	ring, err := NewRing(ringSize)
+	ring, err := newRing(ringSize)
 	if err != nil {
 		return nil, err
 	}
-	defer ring.Close()
+	defer ring.close()
 
 	results := make([]string, len(files))
 
@@ -73,7 +73,7 @@ func iouringHashBatch(files []relAbs) ([]string, error) {
 				if fds[i] < 0 || bufs[i] == nil {
 					continue
 				}
-				if err := ring.SubmitRead(fds[i], bufs[i], uint64(winStart+i)); err != nil {
+				if err := ring.submitRead(fds[i], bufs[i], uint64(winStart+i)); err != nil {
 					continue
 				}
 				submitted++
@@ -82,7 +82,7 @@ func iouringHashBatch(files []relAbs) ([]string, error) {
 				continue
 			}
 
-			if _, err := ring.SubmitAndWait(submitted); err != nil {
+			if _, err := ring.submitAndWait(submitted); err != nil {
 				for _, fd := range fds {
 					if fd >= 0 {
 						_ = syscall.Close(fd)
@@ -90,13 +90,13 @@ func iouringHashBatch(files []relAbs) ([]string, error) {
 				}
 				return nil, err
 			}
-			ring.DrainCompletions(func(c CQE) {
+			ring.drainCompletions(func(c CQE) {
 				idx := int(c.UserData)
 				if idx < 0 || idx >= len(files) {
 					return
 				}
 				localIdx := idx - winStart
-				if err := c.ReadErr(len(bufs[localIdx])); err != nil {
+				if err := c.readErr(len(bufs[localIdx])); err != nil {
 					return
 				}
 				h := sha256.Sum256(bufs[localIdx])

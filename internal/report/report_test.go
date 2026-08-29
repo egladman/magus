@@ -17,6 +17,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// openFileWriter opens path in append+create mode and wraps it in a Writer, the
+// file-backed construction OpenWriter used to expose. Kept local to the tests that
+// need a real file (append-mode reopening, on-disk fidelity) rather than restoring
+// an exported constructor nothing in production called.
+func openFileWriter(t *testing.T, path string, opts ...Option) *Writer {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	require.NoError(t, err, "open %q", path)
+	return newWriter(f, f, opts...)
+}
+
 // failWriter returns an error on every Write. Used to verify that the
 // drain goroutine surfaces I/O errors via Stats.LastErr.
 type failWriter struct{}
@@ -63,8 +74,7 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 func TestRoundTripAllTypes(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
-	w, err := OpenWriter(path, WithBlockOnFull())
-	require.NoError(t, err)
+	w := openFileWriter(t, path, WithBlockOnFull())
 	events := []any{
 		TargetResult{Status: "ok", CacheHit: true, Project: "svc-a", Target: "build", DurationMs: 342},
 		TargetResult{Status: "ok", Project: "svc-b", Target: "build", DurationMs: 12},
@@ -73,7 +83,6 @@ func TestRoundTripAllTypes(t *testing.T) {
 		GraphQuery{Op: "affected", Nodes: 120, Seeds: 3, Strategy: "reverse", ResultCount: 12, DurationMs: 4},
 		GraphError{Op: "build", Message: "cycle"},
 		VolatilityCall{Project: "svc-a", Target: "test", Status: "retried_volatile", Attempts: 2, RetryReason: "predicted_volatile"},
-		ShardSetup{Shard: "0", NShards: 4, DurationMs: 230},
 		ShardTotal{Shard: "0", NShards: 4, DurationMs: 78321},
 	}
 	for _, e := range events {
@@ -88,7 +97,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 	wantTypes := []string{
 		TypeTargetResult, TypeTargetResult, TypeTargetResult,
 		TypeGraphBuild, TypeGraphQuery, TypeGraphError,
-		TypeVolatility, TypeShardSetup, TypeShardTotal,
+		TypeVolatility, TypeShardTotal,
 	}
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
@@ -111,8 +120,7 @@ func TestAppend(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	for i := 0; i < 2; i++ {
-		w, err := OpenWriter(path, WithBlockOnFull())
-		require.NoError(t, err, "Open round %d", i)
+		w := openFileWriter(t, path, WithBlockOnFull())
 		require.NoError(t, Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "svc-a", Target: "build", DurationMs: 10}), "Record round %d", i)
 		require.NoError(t, w.Close(), "Close round %d", i)
 	}
@@ -134,8 +142,7 @@ func TestConcurrentWrites(t *testing.T) {
 	const goroutines = 64
 	const perG = 16
 	path := filepath.Join(t.TempDir(), "run.jsonl")
-	w, err := OpenWriter(path, WithBlockOnFull())
-	require.NoError(t, err)
+	w := openFileWriter(t, path, WithBlockOnFull())
 
 	var wg sync.WaitGroup
 	for i := 0; i < goroutines; i++ {
@@ -176,7 +183,11 @@ func TestDropOnFullPolicy(t *testing.T) {
 	// Slow-writer pattern: a writer that blocks on every Write so the
 	// drain goroutine is parked and the channel fills.
 	bw := &blockingWriter{ch: make(chan struct{})}
-	w := NewWriter(bw, WithQueueSize(4))
+	// Shrinks the queue enough that a stalled drain fills it within `total` sends.
+	// No exported way to do this (nothing in production ever needed one), so the
+	// test reaches the unexported field directly rather than restoring one.
+	withQueueSize := func(n int) Option { return func(c *writerCfg) { c.queueSize = n } }
+	w := NewWriter(bw, withQueueSize(4))
 	const total = 200
 	for i := 0; i < total; i++ {
 		_ = Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "t"})
@@ -271,8 +282,7 @@ func TestRecordNilWriterIsNoop(t *testing.T) {
 func TestCacheRunOptions(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
-	w, err := OpenWriter(path, WithBlockOnFull())
-	require.NoError(t, err)
+	w := openFileWriter(t, path, WithBlockOnFull())
 
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
@@ -331,8 +341,7 @@ func TestCacheRunOptions(t *testing.T) {
 func TestWriterContextRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
-	w, err := OpenWriter(path)
-	require.NoError(t, err)
+	w := openFileWriter(t, path)
 	defer w.Close()
 	ctx := WithWriter(context.Background(), w)
 	got := WriterFromContext(ctx)

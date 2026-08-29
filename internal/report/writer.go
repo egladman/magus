@@ -71,31 +71,12 @@ type Option func(*writerCfg)
 // Default is drop+count.
 func WithBlockOnFull() Option { return func(c *writerCfg) { c.block = true } }
 
-// WithQueueSize sets the buffered channel capacity. Default 4096.
-func WithQueueSize(n int) Option {
-	return func(c *writerCfg) {
-		if n > 0 {
-			c.queueSize = n
-		}
-	}
-}
-
 // WithFilter installs a parsed Filter; non-admitted events are counted in Stats.Filtered.
 func WithFilter(f *Filter) Option { return func(c *writerCfg) { c.filter = f } }
 
 // NewWriter wraps w in a Writer. The caller owns w; Close flushes but does not close w.
 func NewWriter(w io.Writer, opts ...Option) *Writer {
 	return newWriter(nil, w, opts...)
-}
-
-// OpenWriter opens path in append+create mode and returns a Writer.
-// The caller must call Close when done to flush and release the file.
-func OpenWriter(path string, opts ...Option) (*Writer, error) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
-	if err != nil {
-		return nil, fmt.Errorf("report: open %q: %w", path, err)
-	}
-	return newWriter(f, f, opts...), nil
 }
 
 func newWriter(f *os.File, dst io.Writer, opts ...Option) *Writer {
@@ -206,7 +187,7 @@ func (w *Writer) drain() {
 	}
 }
 
-// Close signals the drain goroutine, waits for it, and (for OpenWriter files) closes the file. Idempotent.
+// Close signals the drain goroutine, waits for it, and (when constructed over a file) closes it. Idempotent.
 func (w *Writer) Close() error {
 	w.closeOnce.Do(func() {
 		close(w.quit)

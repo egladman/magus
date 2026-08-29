@@ -23,7 +23,7 @@ var _ io.Writer = (*devNullWriter)(nil)
 // Uses WithBlockOnFull so the drain stays caught up and we measure
 // steady-state throughput, not drop-rate.
 func BenchmarkRecord_serial(b *testing.B) {
-	w := NewWriter(&devNullWriter{}, WithBlockOnFull(), WithQueueSize(1024))
+	w := NewWriter(&devNullWriter{}, WithBlockOnFull())
 	defer w.Close()
 	e := TargetResult{Status: "ok", CacheHit: true, Project: "apps/my-service", Target: "build", DurationMs: 342}
 	b.ResetTimer()
@@ -39,7 +39,7 @@ func BenchmarkRecord_serial(b *testing.B) {
 // will accumulate; ns/op should still be very low because the hot
 // path is a non-blocking select.
 func BenchmarkRecord_serial_dropOnFull(b *testing.B) {
-	w := NewWriter(&devNullWriter{}, WithQueueSize(1024))
+	w := NewWriter(&devNullWriter{})
 	defer w.Close()
 	e := TargetResult{Status: "ok", CacheHit: true, Project: "apps/my-service", Target: "build", DurationMs: 342}
 	b.ResetTimer()
@@ -52,7 +52,7 @@ func BenchmarkRecord_serial_dropOnFull(b *testing.B) {
 // b.RunParallel. Demonstrates the win of an async writer over the
 // previous Mutex-around-encode design.
 func BenchmarkRecord_parallel(b *testing.B) {
-	w := NewWriter(&devNullWriter{}, WithBlockOnFull(), WithQueueSize(8192))
+	w := NewWriter(&devNullWriter{}, WithBlockOnFull())
 	defer w.Close()
 	e := TargetResult{Status: "ok", CacheHit: true, Project: "apps/my-service", Target: "build", DurationMs: 342}
 	b.ResetTimer()
@@ -68,7 +68,7 @@ func BenchmarkRecord_parallel(b *testing.B) {
 // BenchmarkRecord_mixed records a realistic ratio of cache vs graph
 // events to surface any per-type cost imbalance.
 func BenchmarkRecord_mixed(b *testing.B) {
-	w := NewWriter(&devNullWriter{}, WithBlockOnFull(), WithQueueSize(8192))
+	w := NewWriter(&devNullWriter{}, WithBlockOnFull())
 	defer w.Close()
 	hit := TargetResult{Status: "ok", CacheHit: true, Project: "a", Target: "build", DurationMs: 1}
 	miss := TargetResult{Status: "ok", Project: "a", Target: "build", DurationMs: 1}

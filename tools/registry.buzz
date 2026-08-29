@@ -43,7 +43,7 @@ import "assert";
 // UPSTREAM is the API this republishes. One machine reads it once a day.
 final UPSTREAM = "https://endoflife.date/api/v1/products";
 
-// SCHEMA_VERSION must match internal/registry.SchemaVersion. Additive only.
+// SCHEMA_VERSION must match internal/registry's schemaVersion constant. Additive only.
 final SCHEMA_VERSION = 1;
 
 // MIN_PRODUCTS is the floor below which a build refuses to publish. endoflife.date

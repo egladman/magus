@@ -321,6 +321,11 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if err != nil {
 		return nil, err
 	}
+	// vcs.Resolve falls back to MAGUS_VCS_* env vars on a zero VCSOptions, so this
+	// wiring was the only thing standing between magus.yaml's vcs.* keys and every
+	// caller of vcs.Resolve(..., m.ws.VCSOptions) - without it the keys parsed and
+	// validated but never reached a resolution.
+	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version}
 	var o workspace.Load
 	for _, fn := range opts {

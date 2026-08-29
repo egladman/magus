@@ -758,7 +758,7 @@ func TestRunAllSlotsThrottles(t *testing.T) {
 
 	heavy := depStep(root, "heavy")
 	heavy.NoCache = true
-	heavy.Slots = 2 // == WithConcurrency below, so it holds every slot
+	heavy.Slots = 2 // == the WithLimiter budget below, so it holds every slot
 
 	steps := []Step{heavy}
 	for _, p := range []string{"l1", "l2", "l3"} {
@@ -780,7 +780,7 @@ func TestRunAllSlotsThrottles(t *testing.T) {
 		return nil
 	}
 
-	_, err := c.RunAll(context.Background(), steps, fn, WithConcurrency(2))
+	_, err := c.RunAll(context.Background(), steps, fn, WithLimiter(NewLimiter(2)))
 	require.NoError(t, err, "RunAll")
 
 	assert.Equal(t, int32(1), duringHeavy.Load(), "no step may run while a slots==budget step holds every slot")
@@ -821,7 +821,7 @@ func TestRunAllSlotsHandbackNoDeadlock(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := c.RunAll(context.Background(), []Step{heavy}, fn, WithConcurrency(2))
+		_, err := c.RunAll(context.Background(), []Step{heavy}, fn, WithLimiter(NewLimiter(2)))
 		done <- err
 	}()
 

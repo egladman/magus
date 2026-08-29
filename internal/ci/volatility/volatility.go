@@ -30,17 +30,6 @@ type Config struct {
 	Annotate bool
 }
 
-// DefaultConfig returns sensible defaults.
-func DefaultConfig() Config {
-	return Config{
-		Enabled:          true,
-		BootstrapSamples: 20,
-		MinSamples:       20,
-		Threshold:        0.05,
-		Annotate:         true,
-	}
-}
-
 // RetryReason identifies why a retry was or was not issued.
 type RetryReason string
 

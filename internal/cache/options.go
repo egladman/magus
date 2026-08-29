@@ -94,17 +94,6 @@ func OnResult(fn func(*Step, *Result, error)) RunOption {
 	return func(rc *runCtx) { rc.onResults = append(rc.onResults, fn) }
 }
 
-// OnStep fires before hashing, allowing the caller to mutate the Step (e.g. extend EnvAllow).
-func OnStep(fn func(*Step)) RunOption {
-	return func(rc *runCtx) { rc.onStep = fn }
-}
-
-// WithConcurrency caps in-flight RunAll builds. 1 = serial, 0 = unlimited.
-// WithLimiter takes precedence when both are supplied.
-func WithConcurrency(n int) RunOption {
-	return func(rc *runCtx) { rc.concurrency = n }
-}
-
 // WithMaxFailures bounds how many steps may fail before RunAll stops admitting more,
 // as a budget rather than a boolean: 1 is fail-fast, 3 tolerates three, and 0 (the
 // default) is unlimited. A step that fails only because a dependency failed does not

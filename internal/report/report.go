@@ -27,7 +27,6 @@ const (
 	TypeGraphQuery            = "graph.query"
 	TypeGraphError            = "graph.error"
 	TypeVolatility            = "volatile"
-	TypeShardSetup            = "shard.setup"
 	TypeShardTotal            = "shard.total"
 	TypeRaceDetected          = "race.detected"
 	TypeOutputOverlapDetected = "race.output_overlap"
@@ -86,13 +85,6 @@ type VolatilityCall struct {
 	VolatilityScore float64 `json:"volatility_score,omitempty"`
 }
 
-// ShardSetup is one observation of per-shard fixed cost (job start → first project start); consumed by the CI forecaster.
-type ShardSetup struct {
-	Shard      string `json:"shard"`
-	NShards    int    `json:"n_shards"`
-	DurationMs int64  `json:"duration_ms"`
-}
-
 // ShardTotal is one observation of total per-shard wall clock (job start → last project end); fits α.
 type ShardTotal struct {
 	Shard      string `json:"shard"`
@@ -149,7 +141,6 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
 	reflect.TypeOf(GraphError{}):            TypeGraphError,
 	reflect.TypeOf(VolatilityCall{}):        TypeVolatility,
-	reflect.TypeOf(ShardSetup{}):            TypeShardSetup,
 	reflect.TypeOf(ShardTotal{}):            TypeShardTotal,
 	reflect.TypeOf(RaceDetected{}):          TypeRaceDetected,
 	reflect.TypeOf(OutputOverlapDetected{}): TypeOutputOverlapDetected,

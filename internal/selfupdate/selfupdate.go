@@ -604,32 +604,6 @@ func CheckFileWritable(path string) error {
 	return nil
 }
 
-// DefaultUserBinDir returns the XDG-aware default installation directory (~/.local/bin).
-func DefaultUserBinDir() string {
-	if data := os.Getenv("XDG_DATA_HOME"); data != "" {
-		return filepath.Join(filepath.Dir(data), "bin")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "bin")
-}
-
-// DefaultUserManDir returns the XDG-aware default directory for section-1 man pages (~/.local/share/man/man1).
-func DefaultUserManDir() string {
-	if data := os.Getenv("XDG_DATA_HOME"); data != "" {
-		return filepath.Join(data, "man", "man1")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "share", "man", "man1")
-}
-
-// EnsureDir creates dir and all parents with 0755 permissions; no-op if already exists.
-func EnsureDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create directory %s: %w", dir, err)
-	}
-	return nil
-}
-
 // CheckParentWritable probes the parent directory of path by creating a temp file.
 func CheckParentWritable(path string) error {
 	dir := filepath.Dir(path)

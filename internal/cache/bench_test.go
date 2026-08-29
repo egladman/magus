@@ -155,7 +155,7 @@ func BenchmarkRunAll(b *testing.B) {
 					// fn not called on hit; this closure is only needed for the
 					// RunAll signature. The warm cache ensures it is never invoked.
 					return nil
-				}, WithConcurrency(concurrency)); err != nil {
+				}, WithLimiter(NewLimiter(concurrency))); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -213,7 +213,7 @@ func BenchmarkRunAllColdMtime(b *testing.B) {
 		c := openBenchCache(b, cdir, true)
 		if _, err := c.RunAll(ctx, steps, func(ctx context.Context, s Step) error {
 			return fns[indexOfStep(steps, s.ProjectPath)](ctx)
-		}, WithConcurrency(8)); err != nil {
+		}, WithLimiter(NewLimiter(8))); err != nil {
 			b.Fatal(err)
 		}
 	}

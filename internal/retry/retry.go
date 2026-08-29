@@ -63,12 +63,6 @@ func WithDelay(d time.Duration) Option { return func(o *options) { o.delay = d }
 // WithMaxDelay caps the exponential backoff. Defaults to 30s.
 func WithMaxDelay(d time.Duration) Option { return func(o *options) { o.maxDelay = d } }
 
-// WithOnRetry sets a callback invoked after each failed attempt before sleeping.
-// attempt is 1-based. Not called after the final failure.
-func WithOnRetry(fn func(attempt int, err error)) Option {
-	return func(o *options) { o.onRetry = fn }
-}
-
 // WithFixedDelay holds the backoff constant at the [WithDelay] value rather than
 // doubling it each attempt — the curl --retry-delay behavior. It has no effect
 // on [Do].

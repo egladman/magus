@@ -116,10 +116,6 @@ type evalConfig struct {
 	// path: install the tracing magus/spell host, probe every target, and return
 	// the host-op Trace instead.
 	tracer bool
-	// spells names extra spells (import name -> op names) to register beyond the
-	// built-ins, so a workspace or third-party spell's example traces too. Non-nil
-	// implies tracer mode.
-	spells map[string][]string
 	// catalog supplies the built-in spell surface; nil means the real registry
 	// (builtinCatalog). Set by WithCatalog for tests that drive a controlled set.
 	catalog SpellCatalog
@@ -146,22 +142,6 @@ func WithTracer() EvalOption {
 	return func(c *evalConfig) { c.tracer = true }
 }
 
-// WithSpells registers additional spells (import name -> op names) as tracing
-// `magus/spell/<name>` modules on top of the built-ins, so an example binding a
-// workspace or third-party spell traces its ops like a built-in's. Implies
-// WithTracer. This is the first-class hook for documenting non-built-in spells.
-func WithSpells(spells map[string][]string) EvalOption {
-	return func(c *evalConfig) {
-		c.tracer = true
-		if c.spells == nil {
-			c.spells = map[string][]string{}
-		}
-		for name, ops := range spells {
-			c.spells[name] = ops
-		}
-	}
-}
-
 // WithCatalog overrides the built-in spell catalog the tracer stubs, so a test can
 // drive the tracer with a controlled built-in set (e.g. a mock) instead of the real
 // registry. Implies tracer mode. Production callers omit it and get the registry.
@@ -177,7 +157,7 @@ func WithCatalog(c SpellCatalog) EvalOption {
 // (strings / json / crypto / ...), evaluated once, returning the trailing value's
 // Result and any print Output. This runs the stdlib-module doc examples.
 //
-// With WithTracer (or WithSpells), it instead runs src as a magusfile dry run:
+// With WithTracer, it instead runs src as a magusfile dry run:
 // the tracing magus/spell host is layered on, every target is probed once, and
 // the ordered host-op Trace those targets would perform is returned - so a spell
 // example like `import "magus/spell/go"; go["go-build"]()` reports a `go build` op
@@ -189,13 +169,13 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 		opt(&cfg)
 	}
 
-	// Tracer mode (WithTracer/WithSpells): probe every target under the tracing host
+	// Tracer mode (WithTracer): probe every target under the tracing host
 	// and flatten their ops into one Trace, in discovery (sorted-key) order so a
 	// multi-target example reads top to bottom. Unlike Run it does not walk a single
 	// target's dependency closure: an example is self-contained, so every op it wires
 	// is worth showing.
 	if cfg.tracer {
-		tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, mergeSpells(cfg.spellCatalog(), cfg.spells))
+		tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, cfg.spellCatalog().BuiltinOps())
 		if diag != nil {
 			return EvalResult{Output: tr.out.String(), Diag: diag}
 		}
@@ -239,24 +219,6 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 		return EvalResult{Output: out.String(), Diag: toDiag(err)}
 	}
 	return EvalResult{OK: true, Result: v.String(), Output: testBlockNote(src) + out.String()}
-}
-
-// mergeSpells returns the catalog's built-in spell surface with extra merged over it
-// (extra wins on a name clash), so a caller's WithSpells adds to rather than replaces
-// the built-ins. A nil extra returns the built-ins unchanged.
-func mergeSpells(cat SpellCatalog, extra map[string][]string) map[string][]string {
-	base := cat.BuiltinOps()
-	if len(extra) == 0 {
-		return base
-	}
-	merged := make(map[string][]string, len(base)+len(extra))
-	for name, ops := range base {
-		merged[name] = ops
-	}
-	for name, ops := range extra {
-		merged[name] = ops
-	}
-	return merged
 }
 
 // EvalInContext evaluates expr in a session that has first executed magusfileSrc,

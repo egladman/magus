@@ -673,6 +673,33 @@ func TestMagus_proxies(t *testing.T) {
 	assert.Empty(t, r.Affected, "AffectedFromPaths(nil).Affected: want empty")
 }
 
+// TestInspectWiresVCSOptionsFromConfig locks down that magus.yaml's vcs.name,
+// vcs.base_ref, and vcs.enabled reach every vcs.Resolve call through
+// m.ws.VCSOptions. This wiring was previously missing: the fields parsed and
+// validated but inspect() never copied them onto the discovered workspace, so
+// only the MAGUS_VCS_* env vars (read directly by package vcs) had any effect.
+func TestInspectWiresVCSOptionsFromConfig(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	cfg := config.Defaults()
+	cfg.VCS.Name = "git"
+	cfg.VCS.BaseRef = "origin/main"
+	disabled := false
+	cfg.VCS.Enabled = &disabled
+
+	ws, err := Inspect(context.Background(), root, WithLoadedConfig(cfg))
+	require.NoError(t, err, "Inspect")
+
+	got := ws.VCSOptions()
+	assert.Equal(t, "git", got.Name, "VCSOptions.Name")
+	assert.Equal(t, "origin/main", got.BaseRef, "VCSOptions.BaseRef")
+	if assert.NotNil(t, got.Enabled, "VCSOptions.Enabled") {
+		assert.False(t, *got.Enabled, "VCSOptions.Enabled")
+	}
+}
+
 func b64Pub(t *testing.T) (pub string, seed string) {
 	t.Helper()
 	pk, priv, err := ed25519.GenerateKey(rand.Reader)

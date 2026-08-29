@@ -212,6 +212,10 @@ func (c *Cache) StepKey(ctx context.Context, s *Step) (key string, lines []strin
 // Sources baseline expand and hash that source set once instead of once per
 // target/charm combination. Pass nil for ordinary StepKey behavior; see
 // SourceMemo's doc for the safety condition on passing a real one.
+//
+// computeTargetKey (run.go), the implementation behind the `describe target --cache` seam
+// StepKey's own doc describes, calls StepKeyMemo directly rather than through StepKey;
+// only tests exercise StepKey itself.
 func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key string, lines []string, err error) {
 	key, err = c.hashStepInputsMemo(ctx, s, &lines, memo)
 	return key, lines, err

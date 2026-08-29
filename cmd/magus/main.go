@@ -23,7 +23,7 @@
 //
 // Run any subcommand with -h/--help for its own flag list.
 //
-//go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
+//go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
 //go:generate go run ../magus-utils cliflags -out gen/cli_flags.go
 package main
 
@@ -1031,11 +1031,11 @@ var daemonServices *service.Registry
 
 // daemonTrailBase is the ONE daemon-wide activity-trail location: the bridge Magus's cache dir,
 // the same base the MCP handler writes to and the ActivityService reads from. startMCPWithDaemon
-// sets it after loading the bridge Magus; the proc OnJobDone callback reads it so every producer
-// (MCP calls, background jobs) appends to a single trail, disambiguated by Event.Workspace rather
-// than fragmented across per-workspace directories. Empty until the bridge starts (and stays
-// empty when MCP is disabled, when there is no console to read the trail anyway), so a job that
-// completes in that window is dropped best-effort.
+// publishes it before the MCP gate, since the location is a cache dir rather than anything MCP
+// owns; the proc OnJobDone callback reads it so every producer (MCP calls, background jobs)
+// appends to a single trail, disambiguated by Event.Workspace rather than fragmented across
+// per-workspace directories. Empty only until daemon startup reaches that call, or where the
+// root does not resolve, so a job completing in that window is dropped best-effort.
 var daemonTrailBase string
 
 // startMultiWorkspaceDaemon starts the stable multi-workspace proc server for `magus server start`.

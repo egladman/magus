@@ -2006,10 +2006,10 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("golangci-lint", ["custom"], "libs/testlayout");
 }
 
-// Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and
-// shellcheck. STATIC ANALYSIS only - govulncheck lives in `security` with the other
-// scanners, because a scanner's answer changes when its advisory database does, with no
-// edit to this tree.
+// Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
+// shellcheck, and actionlint. STATIC ANALYSIS only - govulncheck lives in `security`
+// with the other scanners, because a scanner's answer changes when its advisory
+// database does, with no edit to this tree.
 // golangci-lint USED to go through the go spell's op so the spell's version probe
 // (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which
 // code passes while every cache entry replays the old verdict. It no longer can: the binary
@@ -2023,6 +2023,9 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 // shellcheck covers the shell magus SHIPS - the completion script users source into their
 // shell and the install script served at /magus/install - which was unlinted until it broke
 // in a way only a user would have noticed.
+// actionlint covers the workflows themselves - nothing else checked a `.github/workflows/*.yaml`
+// edit before it ran on GitHub. It auto-detects the shellcheck binary already on PATH and
+// lints every `run:` step's shell with it, so this needs no separate wiring for that half.
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
@@ -2038,13 +2041,14 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this
     // key. golangci-lint and go vet compile the module (hence the assembly and cgo globs),
-    // markdownlint reads the markdown and .markdownlintignore, shellcheck the shell, and
-    // .golangci.yml is the rule set whose edit must never replay the verdict from the old
-    // one. No **/*.txtar: nothing here parses the fixtures.
+    // markdownlint reads the markdown and .markdownlintignore, shellcheck the shell,
+    // actionlint the workflows, and .golangci.yml is the rule set whose edit must never
+    // replay the verdict from the old one. No **/*.txtar: nothing here parses the fixtures.
     ctx.readsFiles("**/*.go", "**/*.s", "**/*.S", "**/*.c", "**/*.h",
                    "go.mod", "go.sum", "go.work", "go.work.sum", ".golangci.yml",
                    "**/*.md", ".markdownlintignore",
                    "**/*.sh", "**/*.bash", ".shellcheckrc",
+                   ".github/workflows/*.yaml",
                    "mise.toml", "magus.yaml");
     // The linter cache lives inside this checkout, not at the user-global default.
     // golangci-lint (v2.12) keys package results by module-relative path + content,
@@ -2087,6 +2091,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md");
     proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
+    proc\exec("actionlint", []);
 }
 // Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than
 // prettier because it needs no Node in the format path, and rather than biome because

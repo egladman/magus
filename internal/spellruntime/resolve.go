@@ -238,7 +238,7 @@ func DecodeCommandValue(v vm.Value) (spells.Command, error) {
 }
 
 // buzzSpellObj adapts a Buzz data map (a resolved definition or a bound handle)
-// to Obj. All fields are plain data - needs/provides/ops were already resolved by
+// to obj. All fields are plain data - needs/provides/ops were already resolved by
 // Resolve or marshaled into the handle - so there is no function-calling here.
 type buzzSpellObj struct {
 	v vm.Value
@@ -274,7 +274,7 @@ func (o buzzSpellObj) Strs(key string) []string { return mapStrSlice(o.v, key) }
 // holds string keys (see vm.Value.MapKeys), so the only reachable type error is a
 // wrong-typed VALUE - checked here so a mistyped entry fails loudly at load rather
 // than silently zeroing. Absent-vs-empty is NOT this method's problem: decodeCommand
-// normalizes both to nil once, for every Obj implementation.
+// normalizes both to nil once, for every obj implementation.
 func (o buzzSpellObj) StrMap(key string) (map[string]string, error) {
 	x, ok := o.v.MapGet(key)
 	if !ok {
@@ -296,7 +296,7 @@ func (o buzzSpellObj) StrMap(key string) (map[string]string, error) {
 	return out, nil
 }
 
-func (o buzzSpellObj) Obj(key string) (Obj, bool) {
+func (o buzzSpellObj) Obj(key string) (obj, bool) {
 	x, ok := o.v.MapGet(key)
 	if !ok {
 		return nil, false
@@ -311,12 +311,12 @@ func (o buzzSpellObj) Obj(key string) (Obj, bool) {
 	return buzzSpellObj{v: mv}, true
 }
 
-func (o buzzSpellObj) Objs(key string) []Obj {
+func (o buzzSpellObj) Objs(key string) []obj {
 	x, ok := o.v.MapGet(key)
 	if !ok || !x.IsList() {
 		return nil
 	}
-	var out []Obj
+	var out []obj
 	for _, it := range x.ListItems() {
 		if mv, ok := it.MapView(); ok {
 			out = append(out, buzzSpellObj{v: mv})
@@ -369,7 +369,7 @@ func valStrSlice(v vm.Value) []string {
 // It validates rather than merely passing through because the alternative is the
 // failure this package keeps relearning - a malformed declaration decoding to empty
 // with nothing naming the cause. decodeManifests reads the structure back out with
-// Obj.Objs.
+// obj.Objs.
 //
 // A spell still returning [Path] passes: this checks only for a .value string, which
 // both objects carry, so the pre-Manifest contract keeps loading and simply declares

@@ -394,7 +394,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 func TestOptionalContract_PathEntriesAreSelfDescribing(t *testing.T) {
 	// Every entry's Buzz element type, stated by NAME - the stable half of the contract, since a
 	// Field rename must not be able to change this map. Absent means ShapeStrs.
-	shapes := map[string]ContractShape{
+	shapes := map[string]contractShape{
 		"mgs_listRequiredGlobs": ShapePaths,
 		"mgs_listProvidedGlobs": ShapePaths,
 		"mgs_listClaimedGlobs":  ShapePaths,

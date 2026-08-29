@@ -109,10 +109,14 @@ var boundaryTypes = []boundaryType{
 	{Name: "Trend", Type: reflect.TypeFor[types.TrendOutput](), RuntimeObject: true},
 	{Name: "VolatilityTarget", Type: reflect.TypeFor[types.VolatilityTarget](), RuntimeObject: true},
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
-	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode](), RuntimeObject: true},
-	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan](), RuntimeObject: true},
-	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage](), RuntimeObject: true},
-	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats](), RuntimeObject: true},
+	// Not RuntimeObject: unlike their insight-bundle siblings above, nothing declares
+	// these for Buzz (no gen/decls entry reaches them), so no method call ever surfaces
+	// one as a typed return - moduledecls.go's KnowledgeGodNode comment is the fossil
+	// of that gap (an `in:` field that shipped unparsable because nothing checked it).
+	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode]()},
+	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan]()},
+	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage]()},
+	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats]()},
 	{Name: "ProjectRef", Type: reflect.TypeFor[types.ProjectRef](), RuntimeObject: true},
 	{Name: "KnowledgeSymbolGap", Type: reflect.TypeFor[types.KnowledgeSymbolGap](), RuntimeObject: true},
 	{Name: "KnowledgeAnswer", Type: reflect.TypeFor[types.KnowledgeAnswer](), RuntimeObject: true},

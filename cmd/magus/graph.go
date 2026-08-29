@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -867,16 +868,21 @@ func safeBrowserURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
+// errNoBrowserEnvEntry means no $BROWSER entry launched (or BROWSER was unset), so the
+// caller falls back to the platform opener. The specific entries tried are not worth
+// carrying: openBrowser only branches on nil-vs-non-nil, so a richer error would be
+// built and immediately discarded.
+var errNoBrowserEnvEntry = errors.New("no BROWSER entry launched")
+
 // openViaBrowserEnv tries the $BROWSER convention: a colon-separated list of commands,
 // each either containing "%s" (replaced by the URL) or taking the URL as a trailing
-// argument. The first entry that launches wins. Returns an error if BROWSER is unset
-// or no entry starts, so the caller falls back to the platform opener.
+// argument. The first entry that launches wins. Returns errNoBrowserEnvEntry if BROWSER
+// is unset or no entry starts, so the caller falls back to the platform opener.
 func openViaBrowserEnv(url string) error {
 	env := strings.TrimSpace(os.Getenv("BROWSER"))
 	if env == "" {
-		return fmt.Errorf("BROWSER not set; falling back to the OS default browser to open %s", url)
+		return errNoBrowserEnvEntry
 	}
-	var tried []string
 	for _, entry := range strings.Split(env, ":") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
@@ -891,13 +897,12 @@ func openViaBrowserEnv(url string) error {
 		if len(fields) == 0 {
 			continue
 		}
-		tried = append(tried, fields[0])
 		cmd := exec.Command(fields[0], fields[1:]...) //nolint:gosec // G702: user's own configured browser-open command, not remote input
 		if err := cmd.Start(); err == nil {
 			return nil
 		}
 	}
-	return fmt.Errorf("no BROWSER entry launched (tried: %s); falling back to the OS default browser to open %s", strings.Join(tried, ", "), url)
+	return errNoBrowserEnvEntry
 }
 
 // probeLiveBridgeTimeout bounds the real HTTP probe of the console below.

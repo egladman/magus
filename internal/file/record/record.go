@@ -207,10 +207,6 @@ func Remove(dir string) error {
 	return nil
 }
 
-// IsPartial reports whether name is a record being written rather than a
-// published one. A directory walk must skip these.
-func IsPartial(name string) bool { return strings.HasPrefix(name, partialPrefix) }
-
 // marshal renders v's tagged fields. An omitempty field at its zero value is
 // left out entirely, so a reader can tell "not applicable" from "failed to render".
 func marshal(v any) (map[string]string, error) {

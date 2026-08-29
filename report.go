@@ -40,6 +40,10 @@ func (rw *ReportWriter) GraphObserver() types.Observer { return report.GraphObse
 // RecordShardTotal appends a shard-level wall-clock observation (job start → last
 // project end) for adaptive CI forecast. Call after the run completes when running
 // in a CI matrix; shardID and nShards come from --shard / --n-shards.
+//
+// Written, not yet read: nothing ingests the shard.total JSONL line back into a
+// forecast.History, so it does not (yet) feed the SetupP50Ms/AlphaMs fit described
+// at forecast.DefaultSetupMs.
 func (rw *ReportWriter) RecordShardTotal(shardID string, nShards int, duration time.Duration) error {
 	return report.Record(rw.w, report.ShardTotal{
 		Shard:      shardID,

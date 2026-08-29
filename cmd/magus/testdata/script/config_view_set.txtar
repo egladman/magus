@@ -12,7 +12,6 @@ stdout 'concurrency: 2'
 stdout 'history_path: '
 stdout 'cache:'
 stdout 'ci:'
-stdout 'graph:'
 
 # yaml: same snake_case keys, yaml form.
 exec magus config view -o yaml

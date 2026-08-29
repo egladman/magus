@@ -16,7 +16,6 @@ type Config struct {
 	Cache      Cache      `json:"cache" yaml:"cache"`
 	CI         CI         `json:"ci" yaml:"ci"`
 	Volatility Volatility `json:"volatility" yaml:"volatility"`
-	Graph      Graph      `json:"graph" yaml:"graph"`
 	Watch      Watch      `json:"watch" yaml:"watch"`
 	Telemetry  Telemetry  `json:"telemetry" yaml:"telemetry"`
 	Daemon     Daemon     `json:"daemon" yaml:"daemon"`
@@ -326,21 +325,12 @@ type MCP struct {
 	Address string `json:"address" yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
 }
 
-// DefaultConsoleURL is the hosted console base URL, used as the Console.URL default and as the
-// fallback wherever a console page URL is built. One definition so the literal is not re-typed.
-const DefaultConsoleURL = "https://eli.gladman.cc/magus/console/"
-
 // Console controls the console service. The console mounts read-only GET endpoints on the MCP
 // HTTP server (/api/v1/graph, /api/v1/events) plus the typed StatusService, so a browser running
 // the hosted Graph Explorer can read the current workspace, plus the bearer-gated magus.job.v1alpha1 JobService
 // for triggering maintenance jobs (the daemon's one mutating surface). Loopback only; bearer auth.
 type Console struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
-	// URL is the base URL of the hosted console (with a trailing slash, without
-	// a trailing "graph/"). Deep-link helpers append their sub-path to it, e.g.
-	// the Graph Explorer base is this value + "graph/". Defaults to the canonical
-	// hosted console at https://eli.gladman.cc/magus/console/.
-	URL string `json:"url" yaml:"url"`
 }
 
 // Daemon controls the proc server's listen address and multi-workspace behavior.
@@ -355,8 +345,6 @@ type Daemon struct {
 	Address string `json:"address" yaml:"address" validate:"omitempty,magus_endpoint"`
 	// IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.
 	IdleTTL time.Duration `json:"idle_ttl" yaml:"idle_ttl"`
-	// Socket is the runtime socket path set by the daemon for forwarded children; unix:// URL or bare path.
-	Socket string `json:"socket" yaml:"socket"`
 	// Workspaces is the explicit list of workspace roots to serve; non-empty enables eager union of sandbox
 	// policies and rejects out-of-list workspaces (MGS2010).
 	Workspaces []string `json:"workspaces" yaml:"workspaces"`
@@ -394,14 +382,6 @@ type VCS struct {
 	Name    string `json:"name" yaml:"name"`       // pin VCS by name (git/hg/sl/jj); empty = autodetect
 	// BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).
 	BaseRef string `json:"base_ref" yaml:"base_ref"`
-}
-
-// Graph sets defaults for the graph subcommand.
-type Graph struct {
-	Direction string `json:"direction" yaml:"direction" validate:"omitempty,oneof=downstream upstream"` // "downstream" or "upstream"
-	Spell     string `json:"spell" yaml:"spell"`                                                        // filter to a single spell
-	Depth     int    `json:"depth" yaml:"depth" validate:"gte=0"`                                       // 0 = unlimited
-	Roots     string `json:"roots" yaml:"roots"`                                                        // comma-separated starting nodes
 }
 
 // Knowledge configures the cross-workspace knowledge graph.
@@ -592,15 +572,11 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, sl, jj); empty autodetects from .git/.hg/.sl/.jj"},
 		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
 		{"MAGUS_VCS_<NAME>_BASE_REF", "", "", "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
-		{"MAGUS_DAEMON_SOCKET", "daemon.socket", "", "Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path"},
+		{"MAGUS_DAEMON_SOCKET", "", "", "Env-only, no magus.yaml equivalent: runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path, read directly by the process that adopts it"},
 		{"MAGUS_CI_MAX_SHARDS", "ci.max_shards", "8", "Maximum number of parallel CI shards; -1 means unlimited"},
 		{"MAGUS_CI_RUNNER_POOL_BUDGET", "ci.runner_pool_budget", "0", "Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited"},
 		{"MAGUS_SHARD", "", "", "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
 		{"MAGUS_N_SHARDS", "", "", "Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus"},
-		{"MAGUS_GRAPH_DIRECTION", "graph.direction", "downstream", "Default graph direction: downstream or upstream"},
-		{"MAGUS_GRAPH_SPELL", "graph.spell", "", "Filter graph output to a single spell"},
-		{"MAGUS_GRAPH_DEPTH", "graph.depth", "0", "Cap displayed graph depth (0 = unlimited)"},
-		{"MAGUS_GRAPH_ROOTS", "graph.roots", "", "Comma-separated starting nodes for graph traversal"},
 		{"MAGUS_TELEMETRY_ENABLED", "telemetry.enabled", "false", "Turn OTLP export on; magus connects to telemetry.endpoint when true"},
 		{"MAGUS_TELEMETRY_ENDPOINT", "telemetry.endpoint", "", "OTLP collector address as host:port (no scheme); required when telemetry is enabled"},
 		{"MAGUS_TELEMETRY_PROTOCOL", "telemetry.protocol", "grpc", "OTLP wire protocol: grpc or http"},
@@ -652,7 +628,6 @@ func Defaults() Config {
 			AnnotateGHA:      true,
 		},
 		Hints:     Hints{Enabled: boolPtr(true)},
-		Console:   Console{URL: DefaultConsoleURL},
 		Knowledge: Knowledge{VCS: KnowledgeVCSConfig{Authorship: boolPtr(true)}},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",

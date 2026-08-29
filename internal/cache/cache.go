@@ -221,13 +221,11 @@ type Result struct {
 }
 
 type runCtx struct {
-	step        *Step
-	concurrency int
-	limiter     *Limiter
-	onHit       func(*Result)
-	onMiss      func(*Result)
-	onError     func(error)
-	onStep      func(*Step)
+	step    *Step
+	limiter *Limiter
+	onHit   func(*Result)
+	onMiss  func(*Result)
+	onError func(error)
 	// onResults all fire after each Run (in registration order); multiple
 	// observers (report, telemetry, diagnostic capture) coexist without clobbering.
 	onResults []func(*Step, *Result, error)
@@ -391,9 +389,6 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	rc := &runCtx{step: &s}
 	for _, o := range opts {
 		o(rc)
-	}
-	if rc.onStep != nil {
-		rc.onStep(rc.step)
 	}
 
 	start := time.Now()
@@ -799,7 +794,7 @@ func reproTarget(s Step) string {
 	return s.Target + ":" + strings.Join(s.Charms, ",")
 }
 
-// RunAll schedules steps concurrently (bounded by WithConcurrency/WithLimiter).
+// RunAll schedules steps concurrently (bounded by WithLimiter, or DefaultConcurrency).
 // Step.DependsOn imposes scheduling order for in-scope steps only; out-of-scope
 // deps are ignored. A cyclic DependsOn graph is rejected before any goroutine
 // launches. Upstream cache keys fold into dependent Step.Deps transitively
@@ -814,11 +809,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 
 	lim := rc.limiter
 	if lim == nil {
-		n := DefaultConcurrency()
-		if rc.concurrency > 0 {
-			n = rc.concurrency
-		}
-		lim = NewLimiter(n)
+		lim = NewLimiter(DefaultConcurrency())
 	}
 
 	if err := checkAcyclic(steps); err != nil {
