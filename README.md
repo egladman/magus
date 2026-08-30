@@ -449,9 +449,9 @@ matching app.
 
 These are add-ons, not a runtime you depend on. Two decisions keep them that way.
 
-#### The binary serves no HTML
+#### The binary embeds no UI
 
-magus never embeds a web server that ships a UI. The pages are a separate static site (rendered from `docs/` at deploy time, hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/), or self-hosted from any file server). All the daemon exposes over loopback is a small API - read-only views (`/api/v1/...`), one bearer-gated [job-control service](docs/reference/console.md#job-control) for maintenance jobs, and the MCP endpoint. There is no page serving.
+magus never embeds a web server that ships a UI, and a released binary carries no pages: the console is a separate static site (rendered from `docs/` at deploy time, hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/), or self-hosted from any file server). What the daemon exposes over loopback is a small API - read-only views (`/api/v1/...`), one bearer-gated [job-control service](docs/reference/console.md#job-control) for maintenance jobs, and the MCP endpoint. It will also serve a console build you point it at on disk (`console/gen`, or `MAGUS_CONSOLE_DIR`) so you can host your own copy, but it ships none and 404s `/console/` until one is built.
 
 #### Your data never leaves the loopback
 
