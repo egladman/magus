@@ -548,6 +548,41 @@ func TestInvocationEventsByID(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
 }
 
+// TestInvocationReadsRefuseTraversal: the daemon's viewer RPCs pass a caller-supplied name
+// straight to these two readers, so an id that is not shaped like one must be refused before
+// it is joined onto the runs dir - otherwise "inv/../../<path>" serves any .jsonl on the
+// machine over the Connect API.
+func TestInvocationReadsRefuseTraversal(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, RunsDir), 0o755))
+
+	outside := filepath.Join(t.TempDir(), "secrets")
+	require.NoError(t, os.MkdirAll(outside, 0o755))
+	f, err := os.Create(filepath.Join(outside, "hosts.jsonl"))
+	require.NoError(t, err)
+	require.NoError(t, json.NewEncoder(f).Encode(journal.Event{Kind: journal.KindStarted, Text: "not yours"}))
+	require.NoError(t, f.Close())
+
+	// Relative to <runs>/inv, because the id's own leading segment is one of the levels the
+	// climb has to undo.
+	rel, err := filepath.Rel(filepath.Join(dir, RunsDir, "inv"), filepath.Join(outside, "hosts"))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(rel, ".."), "sanity: %q must climb out of the runs dir", rel)
+	traversal := "inv" + string(filepath.Separator) + rel
+	// The refusal, not a missing file, is what has to stop this read: the id below joins onto
+	// a journal that exists and parses.
+	require.FileExists(t, filepath.Join(dir, RunsDir, traversal+runExt))
+
+	s := NewOutputStore(dir)
+	for _, id := range []string{traversal, "inv/../x", "../inv1", "inv 1", ""} {
+		_, _, err := s.InvocationEventsByID(id)
+		assert.ErrorIs(t, err, fs.ErrNotExist, "InvocationEventsByID(%q) must refuse the id", id)
+
+		_, _, err = s.InvocationEventsFrom(id, 0)
+		assert.ErrorIs(t, err, fs.ErrNotExist, "InvocationEventsFrom(%q) must refuse the id", id)
+	}
+}
+
 // TestInvocationEventsFromTailsCompleteLines covers reading a journal that is still being written:
 // a resumed read returns only what arrived since, and a torn final line is held back rather than
 // dropped - the offset must stop at the last newline, so the rest of that line arrives whole on the

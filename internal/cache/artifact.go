@@ -197,7 +197,13 @@ func (c *Cache) projectManifests(ctx context.Context, projectPath string) ([]sto
 		if json.Unmarshal(data, &m) != nil {
 			continue
 		}
-		out = append(out, storedManifest{man: m, hash: strings.TrimSuffix(e.Name(), ".json")})
+		hash := strings.TrimSuffix(e.Name(), ".json")
+		// GetArtifact shards a record's blob under cas/ and writes its bytes wherever the
+		// caller asks, so an entry whose records escape is skipped like a corrupt one.
+		if checkOutputRecords(&m, hash) != nil {
+			continue
+		}
+		out = append(out, storedManifest{man: m, hash: hash})
 	}
 	return out, nil
 }

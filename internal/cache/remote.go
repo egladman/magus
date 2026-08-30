@@ -604,13 +604,9 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 			}
 			sigBytes = buf
 		case strings.HasPrefix(rel, "cas/"):
-			sum, err := c.writeCacheFile(tr, clean, &budget)
+			sum, err := c.writeCacheFile(tr, clean, path.Base(rel), &budget)
 			if err != nil {
 				return err
-			}
-			if want := path.Base(rel); sum != want {
-				_ = os.Remove(clean)
-				return fmt.Errorf("importArtifact: blob %s content hashes to %s", want, sum)
 			}
 			seenBlobs[sum] = struct{}{}
 		case rel == path.Join("manifests", flattenPath(wantProject), wantHash+".json"):
@@ -639,7 +635,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 			// run would read it. The staging suffix carries the member index, so two
 			// members can never contend for one temp path.
 			tmp := fmt.Sprintf("%s.import-%d.tmp", clean, len(extras))
-			sum, err := c.writeCacheFile(tr, tmp, &budget)
+			sum, err := c.writeCacheFile(tr, tmp, "", &budget)
 			if err != nil {
 				return err
 			}
@@ -760,12 +756,20 @@ func readCapped(r io.Reader, budget *int64) ([]byte, error) {
 // shared archive budget so the whole artifact — not each member — is bounded against a
 // decompression bomb. It returns the SHA-256 hex of the bytes written, which lets a
 // CAS blob be checked against the name it is stored under; the build log ignores it.
-func (c *Cache) writeCacheFile(r io.Reader, dst string, budget *int64) (string, error) {
-	tmp := dst + ".import.tmp"
-	f, err := os.Create(tmp)
+//
+// wantSum, when non-empty, is that check and it happens BEFORE the rename: a blob whose
+// content does not hash to the name it claims never reaches dst, so a corrupt artifact
+// cannot destroy the valid CAS blob other manifests still reference. The temp file is
+// uniquely named, so two imports of the same entry cannot contend for it.
+func (c *Cache) writeCacheFile(r io.Reader, dst, wantSum string, budget *int64) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return "", fmt.Errorf("importArtifact: mkdir: %w", err)
+	}
+	f, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".import-*.tmp")
 	if err != nil {
 		return "", fmt.Errorf("importArtifact: create: %w", err)
 	}
+	tmp := f.Name()
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(r, *budget+1))
 	if err != nil {
@@ -783,9 +787,14 @@ func (c *Cache) writeCacheFile(r io.Reader, dst string, budget *int64) (string, 
 		_ = os.Remove(tmp)
 		return "", err
 	}
+	sum := hex.EncodeToString(h.Sum(nil))
+	if wantSum != "" && sum != wantSum {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("importArtifact: blob %s content hashes to %s", wantSum, sum)
+	}
 	if err := os.Rename(tmp, dst); err != nil {
 		_ = os.Remove(tmp)
 		return "", err
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return sum, nil
 }

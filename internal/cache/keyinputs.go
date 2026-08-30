@@ -78,7 +78,7 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, keyInputsName), data, 0o644)
+	return writeAtomic(filepath.Join(dir, keyInputsName), data)
 }
 
 // RedactKeyInputs replaces every value the run's secret resolver has registered with its

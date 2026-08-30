@@ -3,6 +3,7 @@ package cache
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -115,14 +116,56 @@ func (c *Cache) readManifest(projectPath, hash string) (*Manifest, error) {
 	if m.Platform != "" && m.Platform != c.platform {
 		return nil, fmt.Errorf("magus/cache: manifest %s platform mismatch (stored %q, running %q); treating as miss", hash, m.Platform, c.platform)
 	}
-	// Blobs shorter than 2 chars would alias to the "00" shard, causing wrong-content reads.
-	for _, out := range m.Outputs {
-		if out.Blob != "" && len(out.Blob) < 2 {
-			return nil, fmt.Errorf("magus/cache: manifest %s contains malformed blob ref %q (len < 2)", hash, out.Blob)
-		}
+	if err := checkOutputRecords(&m, hash); err != nil {
+		return nil, err
 	}
 	return &m, nil
 }
+
+// checkOutputRecords rejects a manifest whose records would resolve outside the tree they
+// address: Path is joined onto the workspace root by replay, Blob names a file under cas/.
+// A manifest body can arrive from a remote store - importArtifact writes it verbatim once the
+// signature and identity gates pass - so nothing before this inspects the records inside.
+func checkOutputRecords(m *Manifest, hash string) error {
+	for _, out := range m.Outputs {
+		if !relativeToRoot(out.Path) {
+			return fmt.Errorf("magus/cache: manifest %s contains out-of-tree output path %q", hash, out.Path)
+		}
+		if out.Blob != "" && !isBlobRef(out.Blob) {
+			return fmt.Errorf("magus/cache: manifest %s contains malformed blob ref %q", hash, out.Blob)
+		}
+	}
+	return nil
+}
+
+// relativeToRoot reports whether p is a repo-relative path that stays inside the workspace
+// once joined onto its root. A symlink record carries a path with no blob, so an empty path
+// is refused too: it would name the root directory itself.
+func relativeToRoot(p string) bool {
+	if p == "" || filepath.IsAbs(p) || path.IsAbs(p) || filepath.VolumeName(p) != "" {
+		return false
+	}
+	clean := path.Clean(filepath.ToSlash(p))
+	return clean != "." && clean != ".." && !strings.HasPrefix(clean, "../")
+}
+
+// isBlobRef reports whether s is a full sha256 hex digest, the only shape blobPath can shard
+// without resolving outside cas/.
+func isBlobRef(s string) bool {
+	if len(s) != sha256HexLen {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// sha256HexLen is the length of a sha256 digest in lowercase hex.
+const sha256HexLen = 64
 
 // writeAtomic writes data to path atomically (temp + rename).
 func writeAtomic(path string, data []byte) error {

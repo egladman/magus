@@ -445,6 +445,24 @@ func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
 	}
 }
 
+// TestWriteBlob_DedupHitReopensTheGraceWindow covers the T-1 window's second shape: the
+// second write of a payload already stored is still a fresh reference to that file, so
+// the dedup hit must reopen the window. Without it gcBlobs sees an old blob no kept event
+// names yet and deletes the payload the caller is about to Append a reference to.
+func TestWriteBlob_DedupHitReopensTheGraceWindow(t *testing.T) {
+	dir := t.TempDir()
+	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("shared payload"))
+	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
+
+	again, _ := WriteBlob(t.Context(), dir, "mcp", []byte("shared payload"))
+	require.Equal(t, ref, again, "identical content must dedup onto the stored blob")
+
+	gcBlobs(dir, nil) // rotate's snapshot, taken before the pending Append lands
+
+	_, err := ReadBlob(dir, ref)
+	require.NoError(t, err, "a deduped blob must survive the rotate its fresh reference races")
+}
+
 // TestGCBlobs_CollectsOrphanPastGraceWindow pins the other half of the T-1 fix: the grace
 // window only delays collection, it must not disable it, or gcBlobs stops doing its job.
 func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
