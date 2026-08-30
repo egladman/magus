@@ -119,7 +119,7 @@ coverage.hand.out
 # Agent surface: GENERATED, not source.
 #
 # `magus agent install` writes these from the binary and stamps each with the schema and
-# content hashes it was built from - so they are a rendering of cmd/magus/skills/, tracked in
+# content hashes it was built from - so they are a rendering of internal/agent/skills/, tracked in
 # three provider trees at once. Committed, one `magus run build` triplicated 33 files into
 # version control and every merge conflicted on output nobody edits. Regenerate them instead:
 #   magus agent install .claude/skills --force

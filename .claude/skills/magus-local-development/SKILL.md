@@ -69,8 +69,12 @@ In `std/`, a method's `Name` and `Doc` are inputs to codegen, not documentation.
 Renaming `fs.mkdirall` to `fs.mkdirAll` was one word in one descriptor. It left
 `internal/interp/bindings/gen/fs.go`, `internal/spellruntime/gen/decls/fs.buzz`,
 `internal/langservice/manifest_data.go` and the manpage API lock stale, and three
-tests red until regeneration. Regenerate in the SAME commit - `go generate` reaches
-`cmd/magus-utils`, so it works without a magus binary.
+tests red until regeneration. Regenerate in the SAME commit, via `magus run
+generate .` (or the narrower `*-generate` target that owns the stale output).
+Raw `go generate` is DENIED by the guard like every other raw Go entry point,
+and a tree with no loadable magus binary cannot regenerate at all - build one
+first (see "Which magus binary" in CLAUDE.md) or regenerate from a tree that
+has one.
 
 <!-- rule: the-daemon-is-one-process-many-runs; added: 2026-08-11; origin: agent, unreviewed;
      evidence: commits c5cfc0c33, bdc077d33, dce52e193, 985cb26f8;

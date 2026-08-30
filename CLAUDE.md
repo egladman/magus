@@ -12,8 +12,10 @@ hand-edit it.
 
 - `.claude/skills/magus-*` are INSTALLED copies (stamped, checked by
   `magus doctor`); edit the sources in `internal/agent/skills/` and re-run
-  `magus agent install .claude/skills --force`. Exception: `magus-skill-authoring`
-  is hand-authored - read it before touching the agent surface.
+  `magus agent install .claude/skills --force`. Exceptions: `magus-skill-authoring`
+  and `magus-local-development` are hand-authored and tracked (pinned by
+  `conventions_test.go`'s handAuthoredSkills) - edit them in place; read
+  magus-skill-authoring before touching the agent surface.
 - Record decisions worth keeping (with the why) via the `magus_memory` MCP
   tool; read its status/decisions files at session start.
 - Invoke the Skill tool at these moments, before acting - not after something
@@ -92,7 +94,8 @@ a way that is invisible locally: the build stamps
 `-X main.version/commit/buildDate` from `git describe` and the commit hash, so the
 LINK step is unshareable across worktrees and across commits within a worktree.
 Roughly 34 worktrees each rebuilding grew `~/Library/Caches/go-build` to 62 GB.
-Reclaim with `go clean -cache`.
+Reclaim with `go clean -cache` - which the guard also denies, so it is one for
+the human to run from an unguarded shell, not for an agent to work around.
 
 When you do need one: `magus run go-build .` writes `./magus`. It regenerates the compiled
 built-in spells first (they are go:embed'd, so a link before that step bakes in stale
@@ -138,10 +141,13 @@ omitted on purpose: the declared-output globs are what EnsureMergeDriver writes 
 never be tracked and so can never conflict. The relevant part is just that a read-only
 run does not leave a fresh binary behind.
 
-BOTH raw Go entry points are DENIED by the agent guard, verified 2026-08-14
-against this tree. `.claude/settings.json` is now TRACKED - `dogfood_test.go`
-fails when it is missing, because a skip meant the one test covering this repo's
-own guard wiring had effectively never run - so a fresh worktree DOES carry the
+ALL raw Go entry points are DENIED by the agent guard - `go build`, `go run`,
+`go test`, `go vet`, `go generate`, and `go clean` alike (verified 2026-08-29:
+each gets its own deny routing to the magus target that covers it).
+`.claude/settings.json` is TRACKED - the assertion in `conventions_test.go`
+(this file used to name a `dogfood_test.go` that does not exist) fails when it
+is missing, because a skip meant the one test covering this repo's own guard
+wiring had effectively never run - so a fresh worktree DOES carry the
 wiring. (This file used to say the opposite, from when the config was gitignored:
 that a fresh worktree had no guard at all.)
 
@@ -283,8 +289,8 @@ deliberately instead:
   `libs/textsearch` is part of the main module.
 - `spells/` - built-in spell sources (`.buzz`), compiled into the binary
 - `docs/` - markdown sources; `docs/render.buzz` renders them into the
-  static site at `docs/gen/` (generated, NOT committed - .github/workflows/publish-site.yaml
-  renders it at deploy time)
+  static site at `docs/gen/` (generated, NOT committed - cd.yaml renders it at
+  deploy time; see the workflow table above)
 - `console/` - the native console PWA (standalone pnpm project); read
   `console/README.md` before touching it (CSS naming, PF conventions)
 
@@ -343,7 +349,9 @@ deliberately instead:
   no inline styles.
 - Language-level changes in `libs/gopherbuzz/` must match upstream Buzz behavior.
 - Buzz code is tested with in-file `test "..." {}` blocks; run via
-  `magus buzz -t <file>`.
+  `magus buzz -t <file>` - add `--embedded` for files written for the magusfile
+  engine (parsing is upstream-strict by default, so most Buzz in this tree
+  needs it).
 - Commits: subject line only, no area prefix, no Co-Authored-By trailer;
   join multiple ideas with semicolons. Never push unless explicitly asked.
 - Git is the orchestrator's job: do VCS ops yourself, never delegate git to a
