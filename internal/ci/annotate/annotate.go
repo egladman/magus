@@ -191,6 +191,10 @@ func Detect(w io.Writer) Annotator {
 // Dropping the first character rather than inserting one keeps the result
 // plain ASCII and legible - "::error::x" becomes ":error::x". Leading
 // whitespace is preserved.
+//
+// The drop repeats until no prefix matches. A single pass would UPGRADE a
+// nested prefix into the command it was not: ":::error::x" is inert to the
+// runner, and one drop makes it "::error::x", which the runner executes.
 func QuoteWith(text string, prefixes []string) string {
 	if len(prefixes) == 0 {
 		return text
@@ -208,15 +212,23 @@ func QuoteWith(text string, prefixes []string) string {
 	lines := strings.Split(text, "\n")
 	for i, ln := range lines {
 		trimmed := strings.TrimLeft(ln, " \t")
-		for _, p := range prefixes {
-			if p != "" && strings.HasPrefix(trimmed, p) {
-				_, size := utf8.DecodeRuneInString(trimmed)
-				lines[i] = ln[:len(ln)-len(trimmed)] + trimmed[size:]
-				break
-			}
+		rest := trimmed
+		for hasAnyPrefix(rest, prefixes) {
+			_, size := utf8.DecodeRuneInString(rest)
+			rest = rest[size:]
 		}
+		lines[i] = ln[:len(ln)-len(trimmed)] + rest
 	}
 	return strings.Join(lines, "\n")
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if p != "" && strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // Limits on what crosses into a provider. A provider is third-party code

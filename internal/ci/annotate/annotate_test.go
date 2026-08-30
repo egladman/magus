@@ -85,6 +85,12 @@ func TestQuoteWithDefusesInjectedCommands(t *testing.T) {
 		"indentation is preserved so the line still reads as it was written")
 	assert.Equal(t, "ok\n:error::forged\nstill ok",
 		QuoteWith("ok\n::error::forged\nstill ok", gh))
+
+	assert.Equal(t, ":error::forged", QuoteWith(":::error::forged", gh),
+		"a nested prefix must not be dropped down INTO a live command")
+	assert.Equal(t, ":error::forged", QuoteWith("::::error::forged", gh))
+	assert.Equal(t, "  :add-mask::secret", QuoteWith("  :::::add-mask::secret", gh),
+		"stripping repeats under indentation too")
 }
 
 func TestQuoteWithLeavesOrdinaryTextAlone(t *testing.T) {
