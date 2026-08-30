@@ -52,7 +52,7 @@ import "magus/spell/markdown";
 magus\project({
     // The shared node window, by explicit import (tools/toolchain-policy.buzz).
     // This project drives node; it declares no go window because it drives no Go.
-    "tools": {"node": policy.node},
+    "tools": {"node": policy\node},
     "spells": [typescript],
     // ../proto because content-generate reads proto/gen/descriptor.binpb, which the proto
     // project writes. Without the edge the two generate targets are unordered, so a schema
@@ -182,7 +182,7 @@ fun install() > void !> any {
 // magusfile, so it stays in lockstep with the targets. generate calls it; run
 // standalone after editing targets: `magus run index-generate docs`.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("magusfile.buzz", workspace.file("**/magusfile.buzz"));
+    ctx.readsFiles("magusfile.buzz", workspace\file("**/magusfile.buzz"));
     ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown", "docs"], {"quiet": true, "root": ROOT}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
@@ -200,14 +200,14 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // artifact owned by the root magusfile (man-generate). generate depends on this and
 // drift-gates the result.
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(workspace.file("std/**/*.go"), workspace.file("host/**/*.go"),
-        workspace.file("spells/**/*.buzz"), workspace.file("internal/spellruntime/**/*.go"),
-        workspace.file("internal/cli/**/*.go"), workspace.file("internal/config/**/*.go"),
-        workspace.file("internal/render/**/*.go"), workspace.file("internal/graph/**/*.go"),
-        workspace.file("cmd/magus-docs/**/*.go"), workspace.file("cmd/magus-spelldocs/**/*.go"),
-        workspace.file("cmd/magus-manpage/**/*.go"), workspace.file("cmd/magus-examples/**/*.go"),
-        workspace.file("cmd/magus-skilldocs/**/*.go"), workspace.file("internal/agent/**/*.go"),
-        workspace.file("internal/agent/skills/**/*.md"), workspace.file("cmd/magus-protodocs/**/*.go"),
+    ctx.readsFiles(workspace\file("std/**/*.go"), workspace\file("host/**/*.go"),
+        workspace\file("spells/**/*.buzz"), workspace\file("internal/spellruntime/**/*.go"),
+        workspace\file("internal/cli/**/*.go"), workspace\file("internal/config/**/*.go"),
+        workspace\file("internal/render/**/*.go"), workspace\file("internal/graph/**/*.go"),
+        workspace\file("cmd/magus-docs/**/*.go"), workspace\file("cmd/magus-spelldocs/**/*.go"),
+        workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
+        workspace\file("cmd/magus-skilldocs/**/*.go"), workspace\file("internal/agent/**/*.go"),
+        workspace\file("internal/agent/skills/**/*.md"), workspace\file("cmd/magus-protodocs/**/*.go"),
         // The DESCRIPTOR, not the .proto sources: it is the proto project's declared output, so
         // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
         // directly would drag a network-bound buf step into this project's cache boundary,
@@ -225,8 +225,8 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // asking why the API reference regenerated is better served by "the .proto
         // changed" than by "a binary artifact changed". Costs nothing at runtime - a read
         // is hashed, not executed, so no buf step enters this project's boundary.
-        workspace.file("proto/magus/**/*.proto"),
-        workspace.file("proto/gen/descriptor.binpb"), workspace.file("CHANGELOG.md"));
+        workspace\file("proto/magus/**/*.proto"),
+        workspace\file("proto/gen/descriptor.binpb"), workspace\file("CHANGELOG.md"));
     // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
     // entry here that needs a recursive glob; every other generator here writes flat.
     ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/**/*.md", "changelog.md");
@@ -286,8 +286,8 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
-        workspace.file("README.md"), workspace.file("CONTRIBUTING.md"), workspace.file("blog/**"),
-        workspace.file("assets/**"), workspace.file("releases/*.yaml"));
+        workspace\file("README.md"), workspace\file("CONTRIBUTING.md"), workspace\file("blog/**"),
+        workspace\file("assets/**"), workspace\file("releases/*.yaml"));
     ctx.writesFiles("gen/**", "active.urls.lock");
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
         magus\targets(), magus\projectGraph(),
@@ -334,11 +334,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // of these was already dirty, which is the state you are in while editing a generator.
     // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
     // these paths at all - it used to be inert there and fire only in CI.
-    final before = drift.hashes(GENERATED);
+    final before = drift\hashes(GENERATED);
     // changelog-generate runs FIRST, alone: content-generate now copies CHANGELOG.md in as a
     // docs page, so the two no longer own disjoint outputs and cannot share a stage - fanned
     // out together, the page could be written from the previous release's changelog.
-    ctx.needs(workspace.changelog_generate);
+    ctx.needs(workspace\changelog_generate);
     // These producers own disjoint outputs and can fan out. site-generate then reads
     // their completed artifacts, so it intentionally runs in the following stage.
     //
@@ -355,7 +355,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // drifted" tells a reader only that one of nine things moved, and this gate fires
     // where the tree is not in front of them. changedSince expands the directories in
     // GENERATED, so what comes back is the actual files.
-    final moved = drift.changedSince(before, GENERATED);
+    final moved = drift\changedSince(before, GENERATED);
     if (moved.len() > 0) {
         // Print the diff, not just the names: a name alone still leaves the reader
         // guessing WHY a file they regenerated locally came out different on a runner,
@@ -372,7 +372,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
             magus\log.info("generate: what changed on this runner:\n" + body);
         }
         throw "generate: regeneration changed " + moved.join(", ")
-            + "; re-run `magus run generate:rw docs` and commit" + drift.secondCause;
+            + "; re-run `magus run generate:rw docs` and commit" + drift\secondCause;
     }
 }
 
@@ -408,7 +408,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 // two-second check you can run on its own while editing a page.
 export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("**/*.md", "lib/conventions.buzz", "engine/gates.buzz",
-        workspace.file("README.md"), workspace.file("CONTRIBUTING.md"));
+        workspace\file("README.md"), workspace\file("CONTRIBUTING.md"));
     renderer\site_conventions(ROOT, DOCS);
 }
 // lint runs the client-side TypeScript gates: tsc for type errors and Biome for the
@@ -463,7 +463,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // .npmrc cooling period is the stronger half of this.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    audit.audit();
+    audit\audit();
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
@@ -522,7 +522,7 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     // workspace.file, not a project-relative path: the renderer moved out to
     // libs/diagram, and the stale "lib/diagram.buzz" entry left this target's cache
     // key blind to renderer edits - it replayed committed SVGs through a Style change.
-    ctx.readsFiles("site/diagrams/*.buzz", workspace.file("libs/diagram/diagram.buzz"));
+    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/diagram/diagram.buzz"));
     ctx.writesFiles("assets/gen/diagram-*.svg");
     // Verified before writing, not after: a diagram that names a package which no longer
     // exists should fail the target rather than ship a rendered picture of a tree that is

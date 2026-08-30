@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2406,
-  "edge_count": 6300,
+  "node_count": 2407,
+  "edge_count": 6347,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -2151,6 +2151,15 @@
       "source": "README.md",
       "attrs": {
         "role": "readme"
+      }
+    },
+    {
+      "id": "doc:SECURITY.md",
+      "kind": "doc",
+      "label": "SECURITY.md",
+      "source": "SECURITY.md",
+      "attrs": {
+        "role": "doc"
       }
     },
     {
@@ -8096,7 +8105,7 @@
       "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "cmd/magus/starter/magusfile.tmpl.buzz:28",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:26",
       "attrs": {
         "exported": "true"
       }
@@ -8105,8 +8114,8 @@
       "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "doc": "'ci' is the conventional anchor that `magus affected ci` keys off. magus does not hardcode its steps — compose them here with ctx.needs. magus runs ci read-only. Each stage declares its own prerequisites so the DAG is expressed as edges: ci fans out lint/build/test in parallel; they each wait for format, which waits for generate, which waits for preflight. Shared deps run once.",
-      "source": "cmd/magus/starter/magusfile.tmpl.buzz:36",
+      "doc": "'ci' is the conventional anchor that `magus affected ci` keys off. magus does not hardcode its steps - compose them here with ctx.needs. magus runs ci read-only. Each stage declares its own prerequisites so the DAG is expressed as edges: ci fans out lint/build/test in parallel; they each wait for format, which waits for generate, which waits for preflight. Shared deps run once.",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:34",
       "attrs": {
         "exported": "true"
       }
@@ -8115,7 +8124,7 @@
       "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "cmd/magus/starter/magusfile.tmpl.buzz:26",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:24",
       "attrs": {
         "exported": "true"
       }
@@ -8124,7 +8133,7 @@
       "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:generate",
       "kind": "function",
       "label": "generate",
-      "source": "cmd/magus/starter/magusfile.tmpl.buzz:25",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:23",
       "attrs": {
         "exported": "true"
       }
@@ -8133,7 +8142,7 @@
       "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "cmd/magus/starter/magusfile.tmpl.buzz:27",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:25",
       "attrs": {
         "exported": "true"
       }
@@ -8142,7 +8151,7 @@
       "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "cmd/magus/starter/magusfile.tmpl.buzz:24",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:22",
       "attrs": {
         "exported": "true"
       }
@@ -8151,7 +8160,7 @@
       "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "cmd/magus/starter/magusfile.tmpl.buzz:29",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:27",
       "attrs": {
         "exported": "true"
       }
@@ -12894,7 +12903,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:2367",
+      "source": "magusfile.buzz:2340",
       "attrs": {
         "exported": "true"
       }
@@ -13241,7 +13250,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:2414",
+      "source": "magusfile.buzz:2387",
       "attrs": {
         "exported": "true"
       }
@@ -13320,7 +13329,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:2410",
+      "source": "magusfile.buzz:2383",
       "attrs": {
         "exported": "true"
       }
@@ -27380,6 +27389,382 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "AGENTS.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1002",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1017",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1020",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1021",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1026",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1028",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3004",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3005",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3006",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS4003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS6001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS8001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:CONTRIBUTING.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/concepts/compatibility.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/migrating/breaking-changes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1003.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1017.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1020.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1021.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1028.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-clean.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-explain.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-graph.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-path.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-query.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-version.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-x.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:buf",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:github-actions",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:python",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:typescript",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
     },
     {
       "source": "doc:CLAUDE.md",
@@ -47047,14 +47432,6 @@
     },
     {
       "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
-      "target": "import:os",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
-    },
-    {
-      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
       "target": "import:proc",
       "relation": "imports",
       "confidence": "inferred",
@@ -65276,6 +65653,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "README.md"
+    },
+    {
+      "source": "project:.",
+      "target": "doc:SECURITY.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "SECURITY.md"
     },
     {
       "source": "project:.",
