@@ -86,7 +86,7 @@ func (g advisoryGate) once(kind advisoryKind, text string) string {
 	if text == "" || kind == "" || g.base == "" {
 		return text
 	}
-	if g.fired(kind) {
+	if g.fireOnce(kind) {
 		return ""
 	}
 	return text
@@ -97,7 +97,7 @@ func (g advisoryGate) once(kind advisoryKind, text string) string {
 //
 // It exists for the one rule whose TEXT costs a directory walk to produce: asking here
 // first keeps that walk off every later tool call of the session, instead of paying it
-// only to throw the answer away. Every other caller wants fired, which marks.
+// only to throw the answer away. Every other caller wants fireOnce, which marks.
 func (g advisoryGate) seen(kind advisoryKind) bool {
 	if kind == "" || g.base == "" {
 		return false
@@ -109,12 +109,12 @@ func (g advisoryGate) seen(kind advisoryKind) bool {
 	return g.session != "" || time.Since(info.ModTime()) < advisoryAnonWindow
 }
 
-// fired reports whether kind has already been reported for this session, marking it
-// reported when it has not.
+// fireOnce reports whether kind was already reported this session, marking it reported
+// when it was not: a check-and-set, despite the bool return.
 //
 // Every failure returns false, which speaks. State magus cannot write is not a reason to
 // go quiet: a notice repeated is a smaller failure than a notice nobody ever gets.
-func (g advisoryGate) fired(kind advisoryKind) bool {
+func (g advisoryGate) fireOnce(kind advisoryKind) bool {
 	if g.seen(kind) {
 		return true
 	}
