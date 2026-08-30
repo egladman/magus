@@ -11,6 +11,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Save validates what it writes with validateAfterMerge, which layers the file
+// with yaml.Unmarshal - where a written `false` DOES land. Load merges with
+// mergeConfig instead, and the two disagreed: `magus config set daemon.enabled
+// false` accepted the value, wrote it, and then loaded back as enabled. The round
+// trip through both code paths is the only thing that catches that divergence.
+func TestSave_PlainBoolFalseSurvivesTheRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "magus.yaml")
+	require.NoError(t, Save(path, "daemon.enabled", "false"))
+
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.False(t, cfg.Daemon.Enabled, "config set daemon.enabled false must load back disabled")
+}
+
 // TestSave_AllValueTypes exercises config set across every value kind: a *bool,
 // a float, a duration, a map, and a name-addressed slice-of-struct entry
 // (sandbox.allow). Each must Save and Load back to the expected typed value.

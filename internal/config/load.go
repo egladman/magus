@@ -2,7 +2,9 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -226,10 +228,12 @@ func loadFileInto(cfg Config, path string) (Config, error) {
 	}
 	// Probe for unknown keys: use a strict decoder and discard the error
 	// (we still accept the file), but log a warning so users notice typos.
+	// io.EOF is an EMPTY document, not a malformed one - a magus.yaml holding
+	// only comments would otherwise warn about "unknown keys ... detail=EOF".
 	var probe Config
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
-	if decErr := dec.Decode(&probe); decErr != nil {
+	if decErr := dec.Decode(&probe); decErr != nil && !errors.Is(decErr, io.EOF) {
 		slog.Warn("config: unknown or unexpected keys in config file (run 'magus config validate' for details)",
 			"path", path, "detail", decErr.Error())
 	}
@@ -237,7 +241,7 @@ func loadFileInto(cfg Config, path string) (Config, error) {
 	if err := yaml.Unmarshal(data, &overlay); err != nil {
 		return Config{}, fmt.Errorf("config: parse %s: %w", path, err)
 	}
-	return mergeConfig(cfg, overlay), nil
+	return mergeOverlay(cfg, overlay, data), nil
 }
 
 // mergeConfig returns dst with every non-zero field from src applied on top,
@@ -250,26 +254,67 @@ func loadFileInto(cfg Config, path string) (Config, error) {
 // from the Config struct, which the previous hand-written merge repeatedly did
 // (it silently dropped daemon.idle_ttl, vcs.*, mcp.*, health.*, strict, …).
 func mergeConfig(dst, src Config) Config {
-	mergeStruct(reflect.ValueOf(&dst).Elem(), reflect.ValueOf(src))
+	mergeStruct(reflect.ValueOf(&dst).Elem(), reflect.ValueOf(src), nil)
+	return dst
+}
+
+// mergeOverlay is mergeConfig for an overlay decoded from the YAML in data,
+// settling the one thing non-zero-wins cannot express: a plain bool written as
+// `false`. Absent and false both decode to false, so without the document's own
+// key set every bool defaulting true - daemon.enabled, ci.record_runs,
+// volatility.enabled, volatility.annotate_gha - is impossible to turn off from
+// magus.yaml, however plainly it is written there. Only bools consult the key
+// set; every other kind keeps non-zero-wins, which is what lets a partial
+// overlay inherit the tier beneath it.
+func mergeOverlay(dst, src Config, data []byte) Config {
+	var written map[string]any
+	if err := yaml.Unmarshal(data, &written); err != nil {
+		written = nil
+	}
+	mergeStruct(reflect.ValueOf(&dst).Elem(), reflect.ValueOf(src), written)
 	return dst
 }
 
 // mergeStruct applies mergeConfig's non-zero-wins rule field-by-field, recursing
 // into nested structs. dst must be addressable; unsettable fields are skipped.
-func mergeStruct(dst, src reflect.Value) {
+// written is the matching level of the source YAML document's key tree, or nil
+// when the caller has no document to consult (a nil map reads as "no key was
+// written", so every field falls back to non-zero-wins).
+func mergeStruct(dst, src reflect.Value, written map[string]any) {
+	t := src.Type()
 	for i := 0; i < src.NumField(); i++ {
 		df, sf := dst.Field(i), src.Field(i)
 		if !df.CanSet() {
 			continue
 		}
+		key := yamlKey(t.Field(i))
 		if sf.Kind() == reflect.Struct {
-			mergeStruct(df, sf)
+			sub, _ := written[key].(map[string]any)
+			mergeStruct(df, sf, sub)
+			continue
+		}
+		if _, ok := written[key]; ok && sf.Kind() == reflect.Bool {
+			df.Set(sf)
 			continue
 		}
 		if !sf.IsZero() {
 			df.Set(sf)
 		}
 	}
+}
+
+// yamlKey returns the document key a field decodes from: the yaml tag's name, or
+// yaml.v3's default of the lowercased field name. Returns "" for a field the
+// decoder never fills, so no document key can match it.
+func yamlKey(f reflect.StructField) string {
+	name, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+	switch name {
+	case "-":
+		return ""
+	case "":
+		return strings.ToLower(f.Name)
+	}
+	return name
 }
 
 // parseBoolEnv parses a boolean environment variable value using a
@@ -303,7 +348,9 @@ func LoadFile(path string, strict bool) (Config, error) {
 	if strict {
 		dec := yaml.NewDecoder(bytes.NewReader(data))
 		dec.KnownFields(true)
-		if err := dec.Decode(&overlay); err != nil {
+		// io.EOF is an empty document: an empty or comment-only magus.yaml declares
+		// nothing, which is valid, so `magus config validate` must not reject it.
+		if err := dec.Decode(&overlay); err != nil && !errors.Is(err, io.EOF) {
 			return Config{}, err
 		}
 	} else {
@@ -311,7 +358,7 @@ func LoadFile(path string, strict bool) (Config, error) {
 			return Config{}, fmt.Errorf("config: parse %s: %w", path, err)
 		}
 	}
-	merged := mergeConfig(Defaults(), overlay)
+	merged := mergeOverlay(Defaults(), overlay, data)
 	if strict {
 		if err := Validate(merged); err != nil {
 			return Config{}, err
