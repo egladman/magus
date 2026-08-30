@@ -268,7 +268,7 @@ func (o buzzSpellObj) Bool(key string) bool {
 	return ok && x.Bool()
 }
 
-func (o buzzSpellObj) Strs(key string) []string { return mapStrSlice(o.v, key) }
+func (o buzzSpellObj) Strs(key string) ([]string, error) { return mapStrSlice(o.v, key) }
 
 // StrMap reads key as a string-to-string map. Buzz's map backing store only ever
 // holds string keys (see vm.Value.MapKeys), so the only reachable type error is a
@@ -332,33 +332,38 @@ func (o buzzSpellObj) CallStrs(key string, _ ...string) ([]string, error) {
 	if !ok {
 		return nil, nil
 	}
-	return valStrSlice(v), nil
+	return valStrSlice(key, v)
 }
 
 // mapStrSlice reads key from a map value as a string slice, or nil when absent.
-func mapStrSlice(m vm.Value, key string) []string {
+func mapStrSlice(m vm.Value, key string) ([]string, error) {
 	v, ok := m.MapGet(key)
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	return valStrSlice(v)
+	return valStrSlice(key, v)
 }
 
-func valStrSlice(v vm.Value) []string {
+// valStrSlice reads a list of strings, rejecting a non-string element by index
+// rather than dropping it. Dropping is what a shortened argv is made of: the
+// command runs missing a flag, succeeds, and caches as if it were complete. Same
+// posture as StrMap above.
+func valStrSlice(key string, v vm.Value) ([]string, error) {
 	if !v.IsList() {
-		return nil
+		return nil, nil
 	}
 	items := v.ListItems()
 	if len(items) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]string, 0, len(items))
-	for _, it := range items {
-		if it.IsStr() {
-			out = append(out, it.AsString())
+	for i, it := range items {
+		if !it.IsStr() {
+			return nil, fmt.Errorf("%q[%d] must be a string", key, i)
 		}
+		out = append(out, it.AsString())
 	}
-	return out
+	return out, nil
 }
 
 // manifestValues validates a [Manifest] and passes it through UNREDUCED, which is

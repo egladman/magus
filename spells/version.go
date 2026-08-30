@@ -258,6 +258,18 @@ func (b VersionBounds) Check(version string) Verdict {
 	return VerdictInside
 }
 
+// ValidBound reports whether s is a bound [VersionBounds.Check] can compare.
+//
+// Exported so a declaration is validated with the SAME parser that later compares
+// it. Validating with a second, looser one accepts bounds Check then cannot read,
+// and every Check against that tool degrades to VerdictUnknown - a window that
+// silently constrains nothing, which is the failure a declared bound exists to
+// prevent.
+func ValidBound(s string) bool {
+	_, ok := normalizeBound(s)
+	return ok
+}
+
 // normalizeBound puts an authored version into the form x/mod/semver compares.
 //
 // Authors write "1.21", not "v1.21": the `v` is Go's spelling, not the ecosystem's, and

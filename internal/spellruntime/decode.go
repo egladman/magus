@@ -2,7 +2,6 @@ package spellruntime
 
 import (
 	"fmt"
-	semver "github.com/Masterminds/semver/v3"
 	"maps"
 	"slices"
 	"strings"
@@ -21,8 +20,11 @@ type obj interface {
 	Str(key string) (string, bool)
 	// Bool returns the bool at key; absent or non-bool yields false.
 	Bool(key string) bool
-	// Strs returns the list-of-strings at key; absent or empty yields nil.
-	Strs(key string) []string
+	// Strs returns the list-of-strings at key; absent or empty yields (nil, nil).
+	// A non-string element is an error naming its index: dropping it would shorten
+	// an argv or a source list, and the run would then succeed and cache as though
+	// the declaration had been honored.
+	Strs(key string) ([]string, error)
 	// StrMap returns the string-to-string map at key (a Command's `secrets`: env var
 	// name -> provider reference); absent or empty yields (nil, nil). A present value
 	// that is not a string is an error naming key, since a mistyped entry here would
@@ -54,10 +56,10 @@ type obj interface {
 // is what makes a spell written against the older [Path] contract keep loading. That
 // is the entire compat surface: Path and Manifest agree on .value, and the extra Path
 // fields (base, isDir) are meaningless for a manifest, so ignoring them loses nothing.
-func decodeManifests(src obj) []spells.Manifest {
+func decodeManifests(src obj) ([]spells.Manifest, error) {
 	objs := src.Objs("manifests")
 	if len(objs) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]spells.Manifest, 0, len(objs))
 	for _, o := range objs {
@@ -65,9 +67,13 @@ func decodeManifests(src obj) []spells.Manifest {
 		if !ok || value == "" {
 			continue
 		}
-		out = append(out, spells.Manifest{Value: value, LockCandidates: o.Strs("lockCandidates")})
+		locks, err := o.Strs("lockCandidates")
+		if err != nil {
+			return nil, fmt.Errorf("manifests[%q]: %w", value, err)
+		}
+		out = append(out, spells.Manifest{Value: value, LockCandidates: locks})
 	}
-	return out
+	return out, nil
 }
 
 // Decode marshals a spell definition record into the canonical spells.Descriptor,
@@ -85,10 +91,18 @@ func Decode(src obj) (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
+	ignoreDirs, err := src.Strs("ignore_dirs")
+	if err != nil {
+		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
+	manifests, err := decodeManifests(src)
+	if err != nil {
+		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
 	m := spells.Descriptor{
 		Name:       name,
-		IgnoreDirs: src.Strs("ignore_dirs"),
-		Manifests:  decodeManifests(src),
+		IgnoreDirs: ignoreDirs,
+		Manifests:  manifests,
 		Tools:      tools,
 		Language:   language,
 		Opaque:     src.Bool("opaque"),
@@ -278,21 +292,29 @@ func validEnvName(s string) bool {
 // RFC 6902 patch. It is shared by a command op and by each of a service op's
 // run/ready/stop commands, so every command shape decodes identically.
 func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
-	c := spells.Command{
-		Args:        o.Strs("args"),
-		Capture:     o.Bool("capture"),
-		Sources:     o.Strs("sources"),
-		SourcesEach: o.Bool("sourcesEach"),
-	}
-	if bin, ok := o.Str("bin"); ok {
-		c.Bin = bin
-	}
 	// Qualify with spell/op only when named. The by-value entrypoint
 	// (DecodeCommandValue) passes neither, so an empty `spell "" op ""` prefix would
 	// read as a bug in the surfaced message; the engine path always names both.
 	where := ""
 	if spellName != "" || opName != "" {
 		where = fmt.Sprintf("spell %q op %q ", spellName, opName)
+	}
+	args, err := o.Strs("args")
+	if err != nil {
+		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
+	}
+	sources, err := o.Strs("sources")
+	if err != nil {
+		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
+	}
+	c := spells.Command{
+		Args:        args,
+		Capture:     o.Bool("capture"),
+		Sources:     sources,
+		SourcesEach: o.Bool("sourcesEach"),
+	}
+	if bin, ok := o.Str("bin"); ok {
+		c.Bin = bin
 	}
 	secrets, err := o.StrMap("secrets")
 	if err != nil {
@@ -386,9 +408,12 @@ func validateTools(m spells.Descriptor) error {
 			if bound == "" {
 				continue
 			}
-			if _, err := semver.NewVersion(bound); err != nil {
-				return fmt.Errorf("spell %q: tools[%q].supported.%s %q is not a valid version: %w",
-					m.Name, tool, field, bound, err)
+			// spells.ValidBound, not a second parser: a bound only this side accepts
+			// loads fine and then fails every comparison as VerdictUnknown, which is
+			// the silent no-op the check exists to prevent.
+			if !spells.ValidBound(bound) {
+				return fmt.Errorf("spell %q: tools[%q].supported.%s %q is not a valid version; want a plain version like \"1.21\" or \"2.0.0\"",
+					m.Name, tool, field, bound)
 			}
 		}
 		if c := m.Tools[tool].Key.UpTo; !c.Valid() {

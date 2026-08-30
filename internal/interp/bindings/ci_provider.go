@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -199,12 +200,17 @@ func (a *spellAnnotator) quotePrefixes() []string {
 // call invokes an optional op, treating an undeclared op as success. A
 // spell implements only the verbs its provider supports, and the missing
 // rest are not errors: annotations do not exist at all on some providers.
+//
+// That tolerance is the INVOKER's, not this method's: an op the spell does not
+// declare comes back as a nil result with no error (see newBuzzSpellInvoker), so
+// every error reaching here is a real failure - a handler that raised, a spell
+// that would not load, an op that timed out - and is reported. Swallowing it made
+// a broken provider report success for the life of the build.
 func (a *spellAnnotator) call(op string, params map[string]any) error {
 	ctx, cancel := spellCtx()
 	defer cancel()
-	_, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: op, Params: params})
-	if err != nil {
-		return nil
+	if _, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: op, Params: params}); err != nil {
+		return fmt.Errorf("ci provider op %q: %w", op, err)
 	}
 	return nil
 }

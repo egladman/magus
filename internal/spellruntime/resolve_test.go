@@ -133,6 +133,21 @@ export fun mgs_listTargets() > any {
 	assert.Contains(t, err.Error(), "NPM_TOKEN")
 }
 
+// TestResolve_ArgsRejectNonStringElement: a mistyped element used to be dropped,
+// so an argv declared as ["build", 7, "-v"] forked as `build -v` - a shortened
+// command that succeeds and caches as though the declaration had been honored.
+func TestResolve_ArgsRejectNonStringElement(t *testing.T) {
+	const src = `
+export fun mgs_getName() > str { return "badargs"; }
+export fun mgs_listTargets() > any {
+    return {"build": {"bin": "go", "args": ["build", 7, "-v"]}};
+}
+`
+	_, err := resolve(t, src)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `"args"[1]`)
+}
+
 // TestResolve_SecretsRejectsBadEnvName: the key becomes `name=value` in the child
 // environment, so a key that is not an env var name (an "=" inside, an empty
 // string) would silently retarget or corrupt the environment; decode refuses it.

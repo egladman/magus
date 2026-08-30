@@ -32,13 +32,17 @@ func (m mapObj) Bool(key string) bool {
 	return b
 }
 
-func (m mapObj) Strs(key string) []string {
+func (m mapObj) Strs(key string) ([]string, error) {
 	v, ok := m[key]
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	ss, _ := v.([]string)
-	return ss
+	if ss, ok := v.([]string); ok {
+		return ss, nil
+	}
+	// The double's stand-in for a mistyped element: production reports the index,
+	// which a []string literal cannot even express.
+	return nil, fmt.Errorf("%q must be a list of strings", key)
 }
 
 func (m mapObj) StrMap(key string) (map[string]string, error) {
@@ -481,6 +485,44 @@ func TestDecodeToolsRejectsUnknownComponent(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `tools["go"].key.upTo`)
 	assert.Contains(t, err.Error(), "mayor")
+}
+
+// A bound is validated with the parser that later COMPARES it. The two used to
+// differ: the validator (Masterminds, coercing by default) accepted a leading
+// zero that the comparison (x/mod/semver) rejects, so the spell loaded and then
+// every Check against it degraded to VerdictUnknown - a declared window that
+// silently constrained nothing.
+func TestDecodeToolsRejectsABoundTheComparisonCannotRead(t *testing.T) {
+	for _, field := range []string{"min", "below"} {
+		t.Run(field, func(t *testing.T) {
+			bound := "01.2"
+			require.False(t, spells.ValidBound(bound), "the bound this pins must be one Check cannot read")
+			require.Equal(t, spells.VerdictUnknown,
+				spells.VersionBounds{Min: bound}.Check("v1.5.0"),
+				"and it must be the degradation, not a comparison")
+
+			_, err := Decode(mapObj{
+				"name":  "go",
+				"tools": map[string]any{"go": map[string]any{"supported": map[string]any{field: bound}}},
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "tools[\"go\"].supported."+field)
+			assert.Contains(t, err.Error(), bound)
+		})
+	}
+}
+
+// The forms authors actually write - a partial version, a full one, either with
+// or without the v Go spells - keep loading.
+func TestDecodeToolsAcceptsAuthoredBoundForms(t *testing.T) {
+	for _, bound := range []string{"1.21", "25", "2.0.0", "v1.21.0", "1.0.0-rc1"} {
+		m, err := Decode(mapObj{
+			"name":  "go",
+			"tools": map[string]any{"go": map[string]any{"supported": map[string]any{"min": bound}}},
+		})
+		require.NoErrorf(t, err, "bound %q", bound)
+		assert.Equal(t, bound, m.Tools["go"].Supported.Min)
+	}
 }
 
 // An entry declaring nothing at all is dropped rather than kept as a tool magus knows
