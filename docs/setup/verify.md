@@ -41,6 +41,22 @@ The trust chain runs through your already-trusted binary. Nothing else to do.
    failed check report success.
 
 Order matters. Checking a hash against an unverified manifest proves nothing.
+The whole procedure in one picture - each merged cell consumes everything beside
+it, and the tarball deliberately skips the first step, because nothing signs the
+tarball directly:
+
+<figure class="table-scroll">
+<table class="fold-table">
+<tr><td colspan="4">Have OpenSSL 3.0+ with Ed25519 support on <code>PATH</code></td></tr>
+<tr><td><code>magus-release.pem</code> - the key, from this HTTPS page</td>
+    <td rowspan="3">verify the signature<br><code>openssl pkeyutl -verify</code></td>
+    <td rowspan="4">check the hash<br><code>sha256sum -c</code></td>
+    <td rowspan="4">a release<br>you can trust</td></tr>
+<tr><td><code>SHA256SUMS</code> - the manifest, from the release</td></tr>
+<tr><td><code>SHA256SUMS.sig</code> - its signature, from the release</td></tr>
+<tr><td><code>magus-&lt;os&gt;-&lt;arch&gt;.tar.gz</code> - the artifact you downloaded</td><td></td></tr>
+</table>
+</figure>
 
 ## Release signing key (Ed25519)
 

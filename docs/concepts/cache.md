@@ -210,6 +210,30 @@ mtime + size fast path (a per-file memo persisted under the cache dir), so an
 unchanged tree re-keys without re-reading every byte; the memo is a performance
 cache for the hash, never a substitute for it.
 
+The whole fold at a glance - every row is an input, each merged cell consumes
+everything beside it, and the read ends at one verdict. If a change is not on
+this list, it cannot move the key:
+
+<figure class="table-scroll">
+<table class="fold-table">
+<tr><td><code>keyVersion</code> - the schema of this very list</td>
+    <td rowspan="12">serialize<br>one line each,<br>stable order</td>
+    <td rowspan="12">SHA-256<br>= the key</td>
+    <td rowspan="12">look up<br>manifest stored: <strong>hit</strong>, replay outputs<br>none: <strong>miss</strong>, run and store</td></tr>
+<tr><td><code>os</code>, <code>arch</code> - opt-in, for caches shared across platforms</td></tr>
+<tr><td><code>projectPath</code>, <code>target</code></td></tr>
+<tr><td><code>spell</code> - op-direct (<code>spell::op</code>) runs only</td></tr>
+<tr><td><code>charm:</code> - active charms, sorted</td></tr>
+<tr><td><code>arg:</code> - arguments after <code>--</code>, in the order given</td></tr>
+<tr><td><code>src:</code> - every <code>needs</code> file: path, content hash, exec bit; the magusfiles always included</td></tr>
+<tr><td><code>env:</code> - allow-listed variables, sorted</td></tr>
+<tr><td><code>obs:</code> - <code>ctx.observes</code> facts, sorted</td></tr>
+<tr><td><code>exec:</code> - <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
+<tr><td><code>dep:</code> - each upstream target's resolved key, this same fold applied one level up</td></tr>
+<tr><td><code>spellDefVersion</code>, <code>tool:</code> - the spell definition and toolchain versions</td></tr>
+</table>
+</figure>
+
 ## Invalidation: what busts a key
 
 A miss is "no manifest stored under this key." Anything that changes a
