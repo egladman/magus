@@ -145,6 +145,26 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "time npx prettier --write ."},
 		{command: "nice -n 10 cargo build", deny: true},
 		{command: "make deps && mise exec -- go generate ./...", deny: true},
+		// env -S / --split-string takes its whole argument AS the command line and
+		// never reparses it, so a single token used to tunnel any command - git
+		// tier included - straight past the parsed rules. It is peeled like -c now.
+		{command: "env -S'git reset --hard HEAD~5'", deny: true},
+		{command: "timeout 60 env -S'git clean -fdx'", deny: true},
+		{command: "env --split-string='go build -o ./magus ./cmd/magus'", deny: true},
+		{command: "env -S'go test ./...'", deny: true},
+		{command: "env -S 'git reset --hard'", deny: true},
+		{command: "env --split-string 'go vet ./...'", deny: true},
+		// A benign payload inside -S is judged on its own merits, like any peel.
+		{command: "env -S'ls -la'"},
+		// find -exec / -execdir launches a command find never reparses through a
+		// shell, so the payload has to be judged directly. An inner sh -c unwraps too.
+		{command: "find . -type f -exec gofmt -w {} +", deny: true},
+		{command: "find . -name x -exec go test {} +", deny: true},
+		{command: "find . -type d -execdir go build ./... ;", deny: true},
+		{command: "find . -type d -exec sh -c 'go vet ./...' {} ;", deny: true},
+		// find with no -exec, and a benign exec payload, are not the finding.
+		{command: `find . -name "*.go"`, context: "magus refs"},
+		{command: "find . -name '*.tmp' -exec rm {} +", context: "magus refs"},
 		// Stacked wrappers reduce all the way down.
 		{command: "env FOO=1 timeout 60 mise exec -- env -u GOROOT go test ./...", deny: true},
 		// The wrapper is never the finding. Peeling exists so the payload can be
@@ -338,6 +358,20 @@ func TestParseGuardCommands(t *testing.T) {
 		}},
 		{"tool name in prose is an argument", "echo 'run go test to check'", []guardCommand{
 			{Name: "echo", Args: []string{"run go test to check"}},
+		}},
+		// env -S carries its argument AS the command line; every spelling reparses.
+		{"env -S bundled", "env -S'go test ./...'", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"env -S separated", "env -S 'go vet ./...'", []guardCommand{{Name: "go", Args: []string{"vet", "./..."}}}},
+		{"env --split-string=", "env --split-string='go test ./...'", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"env -S after other flags", "env -i -S'go test ./...'", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		// find keeps its own command and adds the -exec payload; the inner sh -c peels.
+		{"find -exec", "find . -exec gofmt -w {} +", []guardCommand{
+			{Name: "find", Args: []string{".", "-exec", "gofmt", "-w", "{}", "+"}},
+			{Name: "gofmt", Args: []string{"-w", "{}"}},
+		}},
+		{"find -exec sh -c", "find . -exec sh -c 'go test ./...' {} +", []guardCommand{
+			{Name: "find", Args: []string{".", "-exec", "sh", "-c", "go test ./...", "{}", "+"}},
+			{Name: "go", Args: []string{"test", "./..."}},
 		}},
 		// `mise run` is a declared task, not a smuggled command.
 		{"mise run is not a wrapper", "mise run setup", []guardCommand{{Name: "mise", Args: []string{"run", "setup"}}}},
