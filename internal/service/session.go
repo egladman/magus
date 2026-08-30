@@ -20,7 +20,9 @@ type Session struct {
 	// daemonAcquire/daemonRelease route to the cross-invocation host when non-nil;
 	// nil means no daemon is reachable, so services run in-process for this run only.
 	daemonAcquire func(ctx context.Context, key string, svc spells.Service) error
-	daemonRelease func(key string)
+	// daemonRelease takes a ctx for the reason ReleaseAll does: a wedged daemon socket
+	// would otherwise hang every run at exit, with no bound anywhere on the path.
+	daemonRelease func(ctx context.Context, key string)
 
 	mu sync.Mutex
 	// daemonKeys counts acquires per key, not just membership: the daemon-side
@@ -31,7 +33,7 @@ type Session struct {
 
 // NewSession returns a Session backed by reg. daemonAcquire/daemonRelease may be nil
 // (no cross-invocation host), in which case every service runs in-process.
-func NewSession(reg *Registry, daemonAcquire func(context.Context, string, spells.Service) error, daemonRelease func(string)) *Session {
+func NewSession(reg *Registry, daemonAcquire func(context.Context, string, spells.Service) error, daemonRelease func(context.Context, string)) *Session {
 	return &Session{
 		reg:           reg,
 		daemonAcquire: daemonAcquire,
@@ -67,7 +69,8 @@ func (s *Session) acquire(ctx context.Context, key string, svc spells.Service) e
 // in-process ones are stopped. Call once at run end. ctx bounds the in-process
 // Shutdown; pass a ctx that can still make progress even if the run's own ctx is
 // already cancelled (see [Registry.Shutdown]), since a cancelled run still has to
-// release what it acquired.
+// release what it acquired. ctx bounds the daemon releases too: it is the RPC to a
+// possibly-wedged socket, so leaving it unbounded would hang teardown outright.
 func (s *Session) ReleaseAll(ctx context.Context) {
 	s.mu.Lock()
 	keys := s.daemonKeys
@@ -76,7 +79,7 @@ func (s *Session) ReleaseAll(ctx context.Context) {
 
 	for k, n := range keys {
 		for range n {
-			s.daemonRelease(k)
+			s.daemonRelease(ctx, k)
 		}
 	}
 	s.reg.Shutdown(ctx)

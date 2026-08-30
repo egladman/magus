@@ -565,6 +565,14 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		tel = built
 	}
 	m.tel = tel
+	// Close is what shuts a provider Open built, and neither error path below reaches it:
+	// they return before the caller has a *Magus to close. An injected provider is the
+	// daemon's, so it is left alone here for the reason Close leaves it alone.
+	shutdownTel := func() {
+		if m.injectedTel == nil {
+			_ = tel.Shutdown(ctx)
+		}
+	}
 	// A magusfile may wire a remote cache backend via magus.cache.remote(<spell>);
 	// resolve it through the bindings-registered opener and attach it. The backend
 	// self-gates, so wiring it is harmless locally; InstrumentRemoteBackend is a
@@ -574,6 +582,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if name := m.wsReg.RemoteBackend(); name != "" {
 		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure)
 		if sErr != nil {
+			shutdownTel()
 			return nil, sErr
 		}
 		cfgOpts = append(cfgOpts, trusted...)
@@ -585,6 +594,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 	c, err := cache.Open(ctx, cacheDir, cfgOpts...)
 	if err != nil {
+		shutdownTel()
 		return nil, err
 	}
 	m.cache = c

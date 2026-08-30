@@ -900,6 +900,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// first run's peak is reported against every later one.
 		vm.ResetHeapStats()
 		watchCtx, stopWatch := context.WithCancel(ctx)
+		// Captured, not closed over: this function reassigns ctx a dozen times below, and
+		// the callback fires from the sampler goroutine for the whole run. Reading the
+		// variable there would race every one of those writes, and multi-second sampling
+		// makes it a race the detector is unlikely ever to catch.
+		logCtx := ctx
 		var watchDone sync.WaitGroup
 		watchDone.Add(1)
 		go func() {
@@ -910,7 +915,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				if sites, _ := vm.HeapHotSites(1); len(sites) > 0 {
 					hot = sites[0].Site
 				}
-				m.cache.LogMemoryPressure(ctx, cache.MemoryPressure{
+				m.cache.LogMemoryPressure(logCtx, cache.MemoryPressure{
 					AvailableBytes:  r.AvailableBytes,
 					TotalBytes:      r.TotalBytes,
 					SwapUsedBytes:   r.SwapUsedBytes,
@@ -1600,7 +1605,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	if err == nil {
 		types.RecordReturn(ctx, p.Path, name, resp.Data)
 	}
-	result := "pass"
+	result := forecast.OutcomePass
 	attempts := 1
 	decision := volatility.Decision{}
 
@@ -1613,14 +1618,14 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 			}
 			attempts = 2
 			if err2 == nil {
-				result = "volatile"
+				result = forecast.OutcomeVolatile
 				err = nil
 			} else {
-				result = "fail"
+				result = forecast.OutcomeFail
 				err = err2
 			}
 		} else {
-			result = "fail"
+			result = forecast.OutcomeFail
 		}
 	}
 
@@ -1639,7 +1644,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 
 	if decision.Retry {
 		status := "retry_failed"
-		if result == "volatile" {
+		if result == forecast.OutcomeVolatile {
 			status = "retried_volatile"
 		} else if rt.IsRegression(p.Path, volatileTarget) {
 			status = "suspected_regression"

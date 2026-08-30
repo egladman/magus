@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -40,7 +41,10 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 	policies := make([]*sandbox.Policy, 0, len(roots))
 	anyEnabled := false
 	for _, root := range roots {
-		cfg := loadWorkspaceConfig(root)
+		cfg, err := loadWorkspaceConfig(root)
+		if err != nil {
+			return err
+		}
 		if cfg.Sandbox.Enabled {
 			anyEnabled = true
 		}
@@ -76,11 +80,18 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 
 // loadWorkspaceConfig loads root's magus.yaml with env overrides applied, falling
 // back to defaults when the file is absent — the resolution used for sandbox union.
-func loadWorkspaceConfig(root string) config.Config {
+//
+// Absence is the only silent fallback, matching loadConfig: a MALFORMED magus.yaml read
+// as defaults would join a workspace that asked to be sandboxed to the daemon with no
+// sandbox at all, and say nothing about it.
+func loadWorkspaceConfig(root string) (config.Config, error) {
 	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
 	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return config.Config{}, fmt.Errorf("magus: load %s: %w", filepath.Join(root, "magus.yaml"), err)
+		}
 		cfg = config.Defaults()
 	}
 	configgen.ApplyEnv(&cfg, os.Getenv)
-	return cfg
+	return cfg, nil
 }
