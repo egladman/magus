@@ -22,7 +22,6 @@
 package annotate
 
 import (
-	"io"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -145,14 +144,14 @@ func (Nop) Defang(text string) string { return text }
 
 var (
 	openerMu sync.RWMutex
-	opener   func(io.Writer) Annotator
+	opener   func() Annotator
 )
 
 // RegisterOpener installs the hook that supplies a spell-backed
 // Annotator. The bindings layer registers it at init, so core selects a
 // provider without linking the Buzz VM - the same indirection
 // [cache.RegisterRemoteBackendOpener] uses for remote cache backends.
-func RegisterOpener(fn func(io.Writer) Annotator) {
+func RegisterOpener(fn func() Annotator) {
 	openerMu.Lock()
 	defer openerMu.Unlock()
 	opener = fn
@@ -167,12 +166,18 @@ func RegisterOpener(fn func(io.Writer) Annotator) {
 // magus. A spell that reports itself inactive - the github spell outside
 // Actions - yields Nop, so an unconditional wiring costs nothing
 // elsewhere.
-func Detect(w io.Writer) Annotator {
+//
+// Detect hands a provider no destination: a provider spell emits markers with
+// std\print to the real stdout, because a workflow command is only a command if
+// the runner reads it there. magus captures and replays subprocess output, so a
+// marker sent through a writer magus holds would land in the stream
+// [Annotator.Defang] scrubs.
+func Detect() Annotator {
 	openerMu.RLock()
 	fn := opener
 	openerMu.RUnlock()
 	if fn != nil {
-		if a := fn(w); a != nil && a.Active() {
+		if a := fn(); a != nil && a.Active() {
 			return a
 		}
 	}

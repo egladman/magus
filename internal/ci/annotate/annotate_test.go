@@ -1,7 +1,6 @@
 package annotate
 
 import (
-	"io"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -35,13 +34,13 @@ func TestNopIsInertButUsable(t *testing.T) {
 // CI syntax of its own, so a workspace that names no provider gets none.
 func TestDetectIsNopWithoutAProvider(t *testing.T) {
 	RegisterOpener(nil)
-	assert.IsType(t, Nop{}, Detect(io.Discard))
+	assert.IsType(t, Nop{}, Detect())
 }
 
 func TestDetectUsesAnActiveProvider(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-	RegisterOpener(func(io.Writer) Annotator { return stubProvider{active: true} })
-	assert.IsType(t, stubProvider{}, Detect(io.Discard))
+	RegisterOpener(func() Annotator { return stubProvider{active: true} })
+	assert.IsType(t, stubProvider{}, Detect())
 }
 
 // TestDetectIgnoresAnInactiveProvider covers the common wiring: a spell is
@@ -49,15 +48,15 @@ func TestDetectUsesAnActiveProvider(t *testing.T) {
 // off its own CI system, which must cost nothing.
 func TestDetectIgnoresAnInactiveProvider(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-	RegisterOpener(func(io.Writer) Annotator { return stubProvider{active: false} })
-	assert.IsType(t, Nop{}, Detect(io.Discard))
+	RegisterOpener(func() Annotator { return stubProvider{active: false} })
+	assert.IsType(t, Nop{}, Detect())
 }
 
 func TestDetectToleratesAProviderReturningNil(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-	RegisterOpener(func(io.Writer) Annotator { return nil })
-	require.NotPanics(t, func() { _ = Detect(io.Discard) })
-	assert.IsType(t, Nop{}, Detect(io.Discard))
+	RegisterOpener(func() Annotator { return nil })
+	require.NotPanics(t, func() { _ = Detect() })
+	assert.IsType(t, Nop{}, Detect())
 }
 
 // stubProvider stands in for a spell-backed provider.

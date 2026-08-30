@@ -1679,7 +1679,7 @@ func annotateVolatility(project, target, status string, rt *volatility.Runtime) 
 	if !rt.Config().Annotate {
 		return
 	}
-	_ = annotate.Detect(os.Stderr).Annotate(annotate.Annotation{
+	_ = annotate.Detect().Annotate(annotate.Annotation{
 		Level:   annotate.LevelWarning,
 		Title:   "magus: volatile target",
 		File:    project,
@@ -1797,7 +1797,7 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	// naming it keeps it visible without making it this author's gate to satisfy.
 	if len(theirs) > 0 {
 		code, msg := types.ClassifyDrift(false, types.MagusVersionFromContext(ctx))
-		_ = annotate.Detect(os.Stderr).Annotate(annotate.Annotation{
+		_ = annotate.Detect().Annotate(annotate.Annotation{
 			Level:   annotate.LevelWarning,
 			Title:   "magus: pre-existing drift",
 			File:    dir,
@@ -1811,7 +1811,7 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	stale := fmt.Sprintf("%s: %s left declared output stale; re-run with the rw charm (%s:rw) and commit:\n%s%s",
 		dir, target, target, strings.Join(mine, "\n"), driftDetail(ctx, res, dir, mine))
 	if !policy.Fails() {
-		_ = annotate.Detect(os.Stderr).Annotate(annotate.Annotation{
+		_ = annotate.Detect().Annotate(annotate.Annotation{
 			Level:   annotate.LevelWarning,
 			Title:   "magus: drift",
 			File:    dir,

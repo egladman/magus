@@ -282,7 +282,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 		mtimes:   newMtimeStore(dir, log),
 		outputs:  NewOutputStore(dir),
 		// Annotations go to stderr alongside the failure dump they wrap.
-		annotator: annotate.Detect(os.Stderr),
+		annotator: annotate.Detect(),
 		platform:  runtime.GOOS + "/" + runtime.GOARCH,
 	}
 	for _, o := range opts {

@@ -3,7 +3,6 @@ package bindings
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
@@ -38,7 +37,7 @@ func SetCIProvider(name string) {
 
 // openSpellAnnotator resolves the selected spell, if any, into an
 // Annotator. Returning nil leaves the built-in providers to apply.
-func openSpellAnnotator(io.Writer) annotate.Annotator {
+func openSpellAnnotator() annotate.Annotator {
 	ciProviderMu.RLock()
 	name := ciProviderName
 	ciProviderMu.RUnlock()
