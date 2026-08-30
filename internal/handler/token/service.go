@@ -1,9 +1,11 @@
 // Package token is the console-facing TokenService handler: the typed management
-// surface for the daemon's auth tokens. It is VIEW-AND-REVOKE ONLY - it lists and
-// revokes tokens but can NEVER mint one. Minting stays a CLI-only operation
-// (`magus config mcp connector`), so a compromised browser session cannot forge a
-// durable credential; the XSS-to-durable-credential escalation is closed by
-// construction. It is a SECOND door onto the exact stores the CLI and the share flow
+// surface for the daemon's auth tokens. It LISTS, REVOKES, and MINTS tokens, but the
+// mint path is narrow: only the two console scopes (CONSOLE and CONSOLE_READ) are
+// mintable, and OPERATOR and CONNECTOR are refused (mintableScope), so a compromised
+// browser session can never forge an /mcp credential or reach the operator token. A
+// browser-minted token is bounded further still - it always expires and its TTL is
+// clamped (CreateToken, consoleTokenExpiry) - so an XSS cannot mint a durable, never-
+// expiring credential. It is a SECOND door onto the exact stores the CLI and the share flow
 // already use - the on-disk connector store (internal/auth) and the daemon's
 // in-memory share manager (internal/share) - never a second store of its own. Two
 // tokens are deliberately beyond its reach: the OPERATOR token (the built-in cli
@@ -104,7 +106,10 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 	return connect.NewResponse(&tokenv1.ListTokensResponse{Tokens: out}), nil
 }
 
-// CreateToken mints a console or viewer token and returns its secret once.
+// CreateToken mints a console or viewer token and returns its secret once. The token
+// always expires: a zero, absent, or past expire_time is refused, and one further out
+// than maxConsoleTokenTTL is clamped to that ceiling, so a credential minted from the
+// browser origin can never be made permanent (see consoleTokenExpiry).
 //
 // There is no caller-class check here on purpose. The service is mounted behind
 // BearerGuard(VerifyCLIBearer) (see internal/daemon), so only the operator tier can
@@ -128,9 +133,9 @@ func (s *Service) CreateToken(_ context.Context, req *connect.Request[tokenv1.Cr
 	if name == "" {
 		name = defaultConsoleTokenName(store)
 	}
-	var expires time.Time
-	if req.Msg.ExpireTime != nil {
-		expires = req.Msg.GetExpireTime().AsTime()
+	expires, err := consoleTokenExpiry(req.Msg.GetExpireTime())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
 	secret, c, err := store.Create(name, expires, scope)
@@ -142,6 +147,34 @@ func (s *Service) CreateToken(_ context.Context, req *connect.Request[tokenv1.Cr
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("token: %w", err))
 	}
 	return connect.NewResponse(&tokenv1.CreateTokenResponse{Token: connectorInfo(c), Secret: secret}), nil
+}
+
+// maxConsoleTokenTTL bounds a browser-minted console token's lifetime. Unlike the CLI
+// mint - which trusts the operator's own shell and may mint a never-expiring token - a
+// token minted from the console origin (where an injected script can reach this surface)
+// is a durable, on-disk, mutating credential, so it must always expire and cannot be
+// made to live indefinitely. Mirrors the share token's bounded-lifetime rule
+// (internal/share, MaxTTL): whoever holds the secret is the audience, and a leaked or
+// forged credential that never expires is a standing one.
+const maxConsoleTokenTTL = 90 * 24 * time.Hour
+
+// consoleTokenExpiry validates and clamps the caller-supplied expiry for a console mint.
+// A zero, absent, or past expiry is refused (it would store as never-expires); an expiry
+// beyond maxConsoleTokenTTL is clamped to that window rather than rejected, so a caller
+// asking for "as long as possible" still succeeds with a bounded token.
+func consoleTokenExpiry(exp *timestamppb.Timestamp) (time.Time, error) {
+	if exp == nil {
+		return time.Time{}, errors.New("token: expire_time is required; a console token minted here must expire (at most 90 days out)")
+	}
+	expires := exp.AsTime()
+	now := time.Now()
+	if !expires.After(now) {
+		return time.Time{}, errors.New("token: expire_time must be in the future; a zero or past expiry would never expire")
+	}
+	if ceiling := now.Add(maxConsoleTokenTTL); expires.After(ceiling) {
+		return ceiling, nil
+	}
+	return expires, nil
 }
 
 // defaultConsoleTokenName picks an unused "console-N" label so a caller that supplies no

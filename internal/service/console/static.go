@@ -11,7 +11,7 @@ import (
 // consoleCSP is the Content-Security-Policy served with every console HTML document, on BOTH
 // listeners that serve the app (the daemon's loopback /console/ mount and the on-demand LAN
 // "share to phone" listener). It is deliberately strict: the console ORIGIN holds the operator
-// token (in the URL fragment, then in memory) and reaches TokenService (list + revoke), and it
+// token (in the URL fragment, then in memory) and reaches TokenService (list, mint, revoke), and it
 // renders attacker-influenced output - build/test logs, graph labels, activity text - so a single
 // injected script would have a large blast radius. Locking script-src to 'self' (no inline, no
 // eval, no CDN - the built console loads only its own bundles) is the primary XSS control;
