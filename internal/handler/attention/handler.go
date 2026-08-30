@@ -117,6 +117,7 @@ func (h *Handler) list(w http.ResponseWriter) {
 }
 
 func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
+	handler.LimitRequestBody(w, r)
 	var body disposeRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)

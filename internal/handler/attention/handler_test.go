@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sessions"
@@ -282,6 +283,20 @@ func TestAttentionHandler_MalformedBodyReturns400(t *testing.T) {
 
 	if w := postDispose(t, h, `{`); w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
+	}
+}
+
+// TestAttentionHandler_OversizedBodyIsRefused proves the request body is capped: a POST
+// larger than handler.MaxWireBodyBytes fails the decode instead of being read whole into
+// memory, so an authenticated or LAN-reachable client cannot exhaust the daemon with one
+// giant body. attention stands in for every raw-JSON route wrapped with LimitRequestBody.
+func TestAttentionHandler_OversizedBodyIsRefused(t *testing.T) {
+	root, _ := plantStore(t)
+	h := NewHandler(root, "v0.0.0-test", nil, nil)
+
+	huge := `{"id":"` + strings.Repeat("a", handler.MaxWireBodyBytes+1<<10) + `"}`
+	if w := postDispose(t, h, huge); w.Code != http.StatusBadRequest {
+		t.Errorf("want 400 for a body past the cap, got %d", w.Code)
 	}
 }
 
