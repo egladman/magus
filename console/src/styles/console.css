@@ -192,8 +192,13 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
    opts out (it is console-app but not console-fill) because its connect screen is meant to scroll. */
 body[data-console-fill] {
   /* An explicit themed page background so the app never relies on the browser's default canvas (which
-     follows the OS, so a "light" choice on a dark OS showed through as a dark page). */
-  background: var(--pf-t--global--background--color--secondary--default);
+     follows the OS, so a "light" choice on a dark OS showed through as a dark page).
+     The CHROME tone, not the raw secondary token: the only place this ground shows is where a child
+     steps back from its cell - the frame's curved bottom-left corner - and what that curve reveals
+     must read as the chrome the pane lifts off. In dark the raw secondary is a plane BELOW the
+     chrome, which is what drew the curve's cutout as a dark notch and got the corner exiled to the
+     status bar. */
+  background: var(--console-chrome, var(--pf-t--global--background--color--secondary--default));
   /* The whole viewport, in a grid: the navigation rail takes the leading column across EVERY row, so
      it runs unbroken from the top of the window to the bottom, and the title bar, the content and the
      status bar all stack in the trailing column beside it. The macOS rule is that a single leading
@@ -1000,13 +1005,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   body[data-console-fill] > footer {
     border-left: 1px solid var(--pf-t--global--border--color--default);
   }
-  /* The curve goes on the FOOTER, which is the row that actually reaches the shell's bottom edge.
-     On the frame it landed at the frame/status-bar seam instead - the frame stops at grid-row 3,
-     the footer starts there - so the cutout exposed the page ground as a dark notch above a square
-     status bar, which is the "black corner" it reads as. overflow clips the bar inside it. */
-  body[data-console-fill] > footer {
+  /* The curve belongs to the PANE, not the status bar: the design is the content stepping forward
+     out of square chrome, so the content's own corner is the one that rounds. It briefly moved to
+     the footer because the cutout exposed the page ground as a dark notch - but that was the
+     ground's defect, fixed above by painting the body in the chrome tone the curve reveals. The
+     frame's existing overflow:hidden clips the surface inside the curve. */
+  #console-frame {
     border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
-    overflow: hidden;
   }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
