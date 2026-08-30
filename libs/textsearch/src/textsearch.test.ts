@@ -103,6 +103,24 @@ test("a star-dense wildcard returns instead of hanging", () => {
   assert.ok(Date.now() - started < 1000, "a pathological wildcard must not lock the thread");
 });
 
+// A search box is a paste target. Both of these ran one parser frame per character, so a
+// pasted run of them overflowed the JS stack - a thrown RangeError out of a keystroke
+// handler, not a slow search.
+test("a long run of negations parses instead of overflowing the stack", () => {
+  const negated = `${"-".repeat(50_000)}graph`;
+  assert.doesNotThrow(() => runSearch(INDEX, negated));
+  // 50000 is even, so the negations cancel and the term stands: parity, not depth.
+  assert.equal(runSearch(INDEX, negated)[0]?.entry.title, "Graph explorer");
+  // One more flips it back to an exclusion, which on its own matches nothing.
+  assert.deepEqual(runSearch(INDEX, `-${negated}`), []);
+});
+
+test("a long run of stray brackets parses instead of overflowing the stack", () => {
+  const strays = `${")".repeat(50_000)}graph`;
+  assert.doesNotThrow(() => runSearch(INDEX, strays));
+  assert.equal(runSearch(INDEX, strays)[0]?.entry.title, "Graph explorer");
+});
+
 test("title matches outrank body-only matches", () => {
   // "graph" is a title hit for the explorer and a body hit for nothing else here.
   const ranked = runSearch(INDEX, "graph");
@@ -199,6 +217,22 @@ test("createTextSearch stays not-ready when the loader yields null, so a later l
   assert.equal(s.isReady(), false);
   assert.equal((await s.load())?.length, INDEX.length);
   assert.equal(s.isReady(), true);
+});
+
+// An empty index is a LOADED index of zero records, not a failed load: the searcher is
+// ready, runSearch returns [] rather than null, and the loader is not re-run. The
+// distinction rode on arrays being truthy until the null tests were made explicit.
+test("createTextSearch treats an empty index as loaded, not as a failure", async () => {
+  let calls = 0;
+  const s = createTextSearch<DocEntry>(() => {
+    calls++;
+    return [];
+  });
+  assert.deepEqual(await s.load(), []);
+  assert.equal(s.isReady(), true);
+  assert.deepEqual(s.runSearch("cache"), []); // [] means "loaded, no matches"; null means "not loaded"
+  await s.load();
+  assert.equal(calls, 1, "a successful load is memoized however few records it carried");
 });
 
 test("createTextSearch recovers when a rejecting loader later succeeds (no inflight wedge)", async () => {
