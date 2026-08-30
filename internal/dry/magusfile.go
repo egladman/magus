@@ -53,6 +53,7 @@ func evalAndProbe(ctx context.Context, src string, charms []string, spells map[s
 	tr = newTracer()
 	tr.charms = charms
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
 	installHost(ctx, sess, tr, spells)
 
 	if err := sess.Exec(ctx, src); err != nil {
@@ -151,6 +152,7 @@ func LoadMagusfile(ctx context.Context, src string) Graph {
 // live-linting counterpart to LoadMagusfile's structural load.
 func Diagnostics(ctx context.Context, src string) []Diag {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
 	installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps())
 
 	ds := sess.Diagnostics(src)

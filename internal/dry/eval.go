@@ -205,6 +205,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	// Plain mode: evaluate the Buzz snippet once and return its trailing value + output.
 	var out bytes.Buffer
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
 	buzzstd.RegisterWithOutput(sess, &out)
 	registerWASMCompatibleMagusModules(ctx, sess)
 	// The pure-compute half of the magus surface, registered as a MODULE so plain
@@ -231,6 +232,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 func EvalInContext(ctx context.Context, magusfileSrc, expr string) EvalResult {
 	tr := newTracer()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
 	installHost(ctx, sess, tr, builtinCatalog{}.BuiltinOps())
 
 	_ = sess.Exec(ctx, magusfileSrc) // best effort: bind whatever compiles
