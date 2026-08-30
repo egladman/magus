@@ -318,9 +318,10 @@ those surfaces, the pasted block included:
 
 magus claims that none of it gates a build: delete every one and `magus run
 build` still works, delete Dagger's bindings and nothing compiles. That
-distinction is thinner than it sounds. This repo's `generate` target regenerates
-the skills and `ci` runs `generate` as a drift gate, so stale skills fail CI
-here. Leaning on build-versus-CI is the move this page exists to catch.
+distinction is thinner than it sounds. Nothing in CI observes the installed
+skills here either - they are gitignored renderings of the binary, invisible to
+the drift gate, and only `magus doctor`'s agent-skills check reports them stale,
+per workspace. Leaning on build-versus-CI is the move this page exists to catch.
 
 **`magus init spell` writes source into your repository.** The scaffold it drops
 at `spells/<name>/spell.buzz` is a real spell: the contract stubbed, each
