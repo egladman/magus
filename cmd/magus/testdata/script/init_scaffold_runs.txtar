@@ -1,0 +1,14 @@
+# The magus init scaffold must RUN, not merely parse. `magus run build` is the exact
+# next command init suggests, so a bad raise-set (the BZZ1006 the compile test guards)
+# or any workspace-load error would break a stranger on their very first try. This
+# scaffolds a project the way `magus init` does and then exercises its targets.
+exec magus init -local -vcs git
+exists magusfile.buzz
+exists magus.yaml
+
+# The scaffolded targets load and execute end to end: build echoes through proc\exec,
+# and test and ci compose the DAG through ctx.needs. Any failure here means the
+# embedded scaffold shipped broken.
+exec magus run build
+exec magus run test
+exec magus run ci
