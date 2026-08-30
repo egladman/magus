@@ -770,8 +770,14 @@ func SourcesChangedSinceBase(ctx context.Context, insp Inspector, res VCSResolut
 		return nil
 	}
 	paths, err := res.VCS.ChangedFiles(ctx, root, res.Base)
-	if err != nil || len(paths) == 0 {
+	if err != nil {
 		return nil
+	}
+	// A diff that read cleanly and named nothing is an ANSWER - "this branch changed no
+	// source" - and returning nil for it would hand a caller the could-not-tell verdict
+	// for a set magus is certain about.
+	if len(paths) == 0 {
+		return map[string]bool{}
 	}
 	files, err := insp.ClassifyFiles(ctx, paths)
 	if err != nil {

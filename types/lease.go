@@ -404,5 +404,6 @@ func (u Lease) Clone() Lease {
 	c.ForbiddenPaths = slices.Clone(u.ForbiddenPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
 	c.Releases = slices.Clone(u.Releases)
+	c.Unattributed = slices.Clone(u.Unattributed)
 	return c
 }

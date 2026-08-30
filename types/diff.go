@@ -734,9 +734,11 @@ func (r Diff) GeneratedCount() int {
 // So the daemon passes its cached scan and the CLI passes a fresh one, and this is the single
 // definition of how the numbers land on a file either way.
 //
-// A file with no hotspot entry gets Churn only when its project has a trend, so "quiet file in
-// an accelerating project" is still expressible; a file with neither is left nil, because nil
-// is what says nobody measured.
+// A file with no hotspot entry gets Churn only when its project's trend actually MOVED, so
+// "quiet file in an accelerating project" is still expressible; a file with neither is left
+// nil, because nil is what says nobody measured. A zero delta is not movement - it is the
+// same absence of evidence a missing trend entry is - and such a row carries no hotspot
+// counts either, only the trend it was built from.
 func (r Diff) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 	rank := make(map[string]int, len(files))
 	hot := make(map[string]FileHotspot, len(files))
@@ -757,20 +759,27 @@ func (r Diff) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 	for i := range r.Files {
 		f := &r.Files[i]
 		h, isHot := hot[f.Path]
-		d, hasTrend := trend[f.Project]
+		d := trend[f.Project]
 		if lensRan && !isHot {
 			f.NoHistory = true
 		}
-		if !isHot && !hasTrend {
+		// A trend entry whose Delta is zero says nothing about this file, so a file with
+		// no hotspot entry and no movement has nothing measured at all - attaching Churn
+		// for it would write "commits: 0, score: 0" where the honest answer is nil.
+		if !isHot && d == 0 {
 			continue
 		}
-		f.Churn = &DiffChurn{
-			Commits:      h.Commits,
-			Authors:      h.Authors,
-			Score:        h.Score,
-			Rank:         rank[f.Path],
-			ProjectTrend: d,
+		churn := DiffChurn{ProjectTrend: d}
+		// The hotspot counts come from the hotspot lens alone. Reading them off the zero
+		// FileHotspot a trend-only file gets is the lie the Churn doc forbids: it renders
+		// "nobody measured" as "this file is quiet".
+		if isHot {
+			churn.Commits = h.Commits
+			churn.Authors = h.Authors
+			churn.Score = h.Score
+			churn.Rank = rank[f.Path]
 		}
+		f.Churn = &churn
 	}
 
 	// Re-sort, because this call is what makes NoHistory known: the review was ordered before

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func reach(n int) *int { return &n }
@@ -97,6 +98,54 @@ func TestAttachChurnWithNoHistoryAtAllMarksNothing(t *testing.T) {
 
 	assert.False(t, d.Files[0].NoHistory)
 	assert.Nil(t, d.Files[0].Churn)
+}
+
+// Churn's zero fields must never stand in for unmeasured ones: a file the hotspot lens
+// never ranked has no commit count, and writing zero renders "nobody measured" as "this
+// file is quiet".
+func TestAttachChurnDoesNotInventHotspotCountsFromATrend(t *testing.T) {
+	t.Parallel()
+
+	d := Diff{Files: []DiffFile{
+		{Path: "quiet.go", Project: "p", Role: DiffRoleSource},
+		{Path: "hot.go", Project: "p", Role: DiffRoleSource},
+	}}
+	d.AttachChurn(
+		[]FileHotspot{{Path: "hot.go", Commits: 12, Authors: 3, Score: 60}},
+		[]TrendEntry{{Path: "p", Delta: 7}},
+	)
+
+	byPath := map[string]*DiffChurn{}
+	for i := range d.Files {
+		byPath[d.Files[i].Path] = d.Files[i].Churn
+	}
+
+	quiet := byPath["quiet.go"]
+	require.NotNil(t, quiet, "an accelerating project is still worth saying about a file in it")
+	assert.Equal(t, 7, quiet.ProjectTrend)
+	assert.Zero(t, quiet.Commits, "the hotspot lens never ranked this file")
+	assert.Zero(t, quiet.Authors)
+	assert.Zero(t, quiet.Score)
+	assert.Zero(t, quiet.Rank)
+
+	hot := byPath["hot.go"]
+	require.NotNil(t, hot)
+	assert.Equal(t, 12, hot.Commits)
+	assert.Equal(t, 3, hot.Authors)
+	assert.Equal(t, 60, hot.Score)
+	assert.Equal(t, 1, hot.Rank)
+	assert.Equal(t, 7, hot.ProjectTrend)
+}
+
+// A trend entry that did not move is evidence of nothing, so it must not manufacture an
+// all-zero Churn where nil is the honest answer.
+func TestAttachChurnLeavesAFlatTrendUnmeasured(t *testing.T) {
+	t.Parallel()
+
+	d := Diff{Files: []DiffFile{{Path: "a.go", Project: "p", Role: DiffRoleSource}}}
+	d.AttachChurn(nil, []TrendEntry{{Path: "p", Delta: 0}})
+
+	assert.Nil(t, d.Files[0].Churn, "a zero delta measured this file no better than a missing one")
 }
 
 func TestNotableRankStopsAtTheCutoff(t *testing.T) {
