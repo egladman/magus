@@ -113,3 +113,23 @@ func TestSourceFromFragment(t *testing.T) {
 		})
 	}
 }
+
+// The name a save lands under is the label the file bar is already showing, so the
+// file the visitor gets is the file the page told them they had. The fallback cases
+// are the ones where that label is not a name at all.
+func TestDownloadName(t *testing.T) {
+	for name, tc := range map[string]struct{ label, want string }{
+		"the seeded example": {"magusfile.buzz", "magusfile.buzz"},
+		"padded label":       {"  magusfile.buzz\n", "magusfile.buzz"},
+		"suffix added":       {"magusfile", "magusfile.buzz"},
+		"no label":           {"", "playground.buzz"},
+		"blank label":        {"   ", "playground.buzz"},
+		"a path":             {"a/b.buzz", "playground.buzz"},
+		"a windows path":     {`a\b.buzz`, "playground.buzz"},
+		"hidden file":        {".buzz", "playground.buzz"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, DownloadName(tc.label))
+		})
+	}
+}

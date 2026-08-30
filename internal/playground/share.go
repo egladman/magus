@@ -90,6 +90,29 @@ func ShareFragment(src string) (string, error) {
 	return "#" + shareKey + "=" + enc, nil
 }
 
+// downloadFallback is the name a save takes when the file bar's label cannot be one.
+const downloadFallback = "playground.buzz"
+
+// DownloadName turns the file bar's label into the filename the Download button
+// saves under. The label is what the page says the editor is holding
+// ("magusfile.buzz" for the seeded example), so it is the name the visitor is
+// already looking at when they press Save.
+//
+// A label that could not be a plain filename - a path separator, a leading dot,
+// nothing at all - falls back rather than being repaired: the label is the page's
+// own text, so a shape it should never take means the page is not in a state to
+// name the file, and a guessed name is worse than the neutral one.
+func DownloadName(label string) string {
+	name := strings.TrimSpace(label)
+	if name == "" || strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
+		return downloadFallback
+	}
+	if !strings.HasSuffix(name, ".buzz") {
+		return name + ".buzz"
+	}
+	return name
+}
+
 // SourceFromFragment pulls the shared magusfile out of a location.hash, with or
 // without its leading "#", ignoring any other parameters in the fragment. It
 // returns ok=false when the fragment carries no source or one that will not

@@ -127,6 +127,7 @@ func main() {
 	doc.Call("getElementById", "term").Call("addEventListener", "click",
 		js.FuncOf(func(js.Value, []js.Value) any { u.in.Call("focus"); return nil }))
 	u.wireShare()
+	u.wireDownload()
 
 	// Seed the editor with the minimal example (loadExample parses + highlights),
 	// then show the sandbox banner.
@@ -217,6 +218,53 @@ func (u *ui) wireShare() {
 		js.Global().Get("navigator").Get("clipboard").
 			Call("writeText", js.Global().Get("location").Get("href")).
 			Call("then", copied, failed)
+		return nil
+	}))
+}
+
+// wireDownload turns the file bar's Download button into a save of whatever is in
+// the editor. Nothing is uploaded and nothing is fetched: the click wraps the
+// textarea's value in a Blob, points a synthetic <a download> at an object URL for
+// it, and clicks that. Same property the Share button has - the snippet never
+// leaves the browser - reached the other way.
+//
+// Hidden rather than left inert where object URLs are missing, for wireShare's
+// reason: a button that cannot do its job should not be drawn.
+//
+// No outcome flash, unlike Share. A copy either reached the clipboard or did not,
+// and the promise says which; a save is handed to the browser, which may still put
+// up a dialog the visitor cancels - so "Saved" would be a claim this code cannot
+// check. The browser's own download UI is the report.
+func (u *ui) wireDownload() {
+	btn := u.doc.Call("getElementById", "download-btn")
+	if !btn.Truthy() {
+		return
+	}
+	urlAPI := js.Global().Get("URL")
+	if !urlAPI.Truthy() || !urlAPI.Get("createObjectURL").Truthy() {
+		btn.Set("hidden", true)
+		return
+	}
+	btn.Call("addEventListener", "click", js.FuncOf(func(js.Value, []js.Value) any {
+		label := ""
+		if name := u.doc.Call("getElementById", "file-name"); name.Truthy() {
+			label = name.Get("textContent").String()
+		}
+		parts := js.Global().Get("Array").New()
+		parts.Call("push", u.src.Get("value").String())
+		blob := js.Global().Get("Blob").New(parts, map[string]any{"type": "text/plain;charset=utf-8"})
+		href := urlAPI.Call("createObjectURL", blob)
+		a := u.doc.Call("createElement", "a")
+		a.Set("href", href)
+		a.Set("download", playground.DownloadName(label))
+		// In the document for the click: a detached anchor's click() is honored by
+		// Chrome and not by every engine, and appending costs one line.
+		u.doc.Get("body").Call("appendChild", a)
+		a.Call("click")
+		a.Call("remove")
+		// The object URL pins the blob for the life of the page. Revoked on the next
+		// turn rather than in this one, because the click only STARTS the save.
+		js.Global().Call("setTimeout", oneShot(func() { urlAPI.Call("revokeObjectURL", href) }), 0)
 		return nil
 	}))
 }
