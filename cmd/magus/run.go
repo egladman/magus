@@ -81,14 +81,22 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// The two env-var defaults below are applied after binding, because they are a
 	// property of THIS process rather than of the documented flag.
 	var rf *gen.RunFlags
+	var shardEnvErr error
 	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
 		rf = bindRunFlags(fs, &skips)
 		// The shard pair defaults from the environment CI sets, so a matrix job
 		// need not repeat itself on every magus call. Applied by seeding the bound
 		// value (an explicit flag still wins, since parsing runs after this) and
 		// mirroring it into DefValue so -h reports what the flag will actually do.
-		envDefault(fs, gen.FlagRunShard, os.Getenv("MAGUS_SHARD"))
-		envDefault(fs, gen.FlagRunNShards, os.Getenv("MAGUS_N_SHARDS"))
+		for _, seed := range []struct{ flag, env string }{
+			{gen.FlagRunShard, "MAGUS_SHARD"},
+			{gen.FlagRunNShards, "MAGUS_N_SHARDS"},
+		} {
+			if err := envDefault(fs, seed.flag, os.Getenv(seed.env)); err != nil {
+				shardEnvErr = fmt.Errorf("%s: %w", seed.env, err)
+				break
+			}
+		}
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -106,6 +114,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
+	// Refused, never ignored: the shard pair decides how much of the selection runs, so
+	// a value magus could not read means this job would gate less than the caller asked
+	// for while still exiting 0.
+	if shardEnvErr != nil {
+		return usagef("magus run: %v", shardEnvErr)
+	}
 	if rf.Wait && !rf.Detach {
 		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
 	}
@@ -115,6 +129,16 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// the un-gated skip this flag exists to prevent.
 		return usagef("magus run: --skip applies to the run selection, not --graph")
 	}
+	// Applied before the --detach branch below, not after it: awaitInvocation polls the
+	// daemon until the run reports a status and has no bound of its own, so `run --detach
+	// --wait --timeout 30s` waited forever on a run that never finished. Its select
+	// already watches ctx.Done, which is all the bound it needs.
+	if rf.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
+		defer cancel()
+	}
+
 	if rf.Detach {
 		return detachToDaemon(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), rf.Wait)
 	}
@@ -136,12 +160,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rf.Step && !isInteractiveTTY() {
 		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
 		return errSilent{exitCode: 2}
-	}
-
-	if rf.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
-		defer cancel()
 	}
 
 	if rf.Step {
@@ -791,18 +809,26 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 // envDefault seeds a bound flag from an environment variable, leaving it alone when
 // the variable is unset. DefValue is updated too, so `-h` shows the value the flag
 // would take rather than the registry's zero.
-func envDefault(fs *flag.FlagSet, name, value string) {
+//
+// A value the flag cannot parse is REPORTED rather than applied. Dropping it left
+// the flag at its default with nothing said, and for the shard pair that default is
+// dangerous: NShards 0 means "do not shard", so a matrix job with a malformed
+// MAGUS_N_SHARDS ran the entire selection in every job and reported success.
+// Returning it keeps the decision with the caller - an unknown flag is still a
+// silent no-op, because that is a wiring mistake and not something a user set.
+func envDefault(fs *flag.FlagSet, name, value string) error {
 	if value == "" {
-		return
+		return nil
 	}
 	f := fs.Lookup(name)
 	if f == nil {
-		return
+		return nil
 	}
 	if err := f.Value.Set(value); err != nil {
-		return
+		return fmt.Errorf("%q is not a valid --%s: %w", value, name, err)
 	}
 	f.DefValue = value
+	return nil
 }
 
 // localOnlyFlags never travel to the daemon. --detach would make it detach

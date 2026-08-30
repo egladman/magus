@@ -3,8 +3,12 @@ package main
 import (
 	"context"
 	"flag"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -496,6 +500,58 @@ func TestLocalOnlyFlagsNeverReachTheDaemon(t *testing.T) {
 		"past the separator the tokens belong to the forwarded tool")
 }
 
+// --detach --wait hands the run to the daemon and then polls awaitInvocation until a
+// status appears. That loop's only bound is ctx.Done, and --timeout was applied AFTER
+// the detach branch returned, so it never reached the loop: `magus run --detach --wait
+// --timeout 30s` waited forever on a run that never finished.
+//
+// Read out of the source rather than exercised: reaching the detach branch at runtime
+// needs a loaded workspace and a live daemon, which is far more than checking that one
+// statement precedes another.
+func TestRunAppliesTheTimeoutBeforeDetaching(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller failed")
+	path := filepath.Join(filepath.Dir(thisFile), "run.go")
+
+	src, err := os.ReadFile(path)
+	require.NoError(t, err)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, src, 0)
+	require.NoError(t, err)
+	cond := func(e ast.Expr) string {
+		return string(src[fset.Position(e.Pos()).Offset:fset.Position(e.End()).Offset])
+	}
+
+	var fn *ast.FuncDecl
+	for _, decl := range file.Decls {
+		if d, isFn := decl.(*ast.FuncDecl); isFn && d.Name.Name == "runTarget" {
+			fn = d
+			break
+		}
+	}
+	require.NotNil(t, fn, "runTarget not found in run.go")
+
+	// Both guards are top-level statements of runTarget, so their order in the body is
+	// the order they execute in.
+	timeoutAt, detachAt := -1, -1
+	for i, stmt := range fn.Body.List {
+		ifStmt, isIf := stmt.(*ast.IfStmt)
+		if !isIf {
+			continue
+		}
+		switch text := cond(ifStmt.Cond); {
+		case timeoutAt < 0 && strings.Contains(text, "rf.Timeout"):
+			timeoutAt = i
+		case detachAt < 0 && text == "rf.Detach":
+			detachAt = i
+		}
+	}
+	require.GreaterOrEqual(t, timeoutAt, 0, "no `if rf.Timeout ...` guard in runTarget")
+	require.GreaterOrEqual(t, detachAt, 0, "no `if rf.Detach` guard in runTarget")
+	assert.Less(t, timeoutAt, detachAt,
+		"--timeout must bind the context before --detach returns, or --detach --wait has no bound at all")
+}
+
 func TestEnvDefaultRewritesTheDefaultNotTheValue(t *testing.T) {
 	newFS := func() *flag.FlagSet {
 		fs := flag.NewFlagSet("t", flag.ContinueOnError)
@@ -516,8 +572,29 @@ func TestEnvDefaultRewritesTheDefaultNotTheValue(t *testing.T) {
 
 	// An unknown flag and an unparseable value are both no-ops rather than failures:
 	// the environment is not the caller's invocation, so it must not abort one.
+	// Unparseable is REPORTED to the caller (see the test below) but still applies
+	// nothing here - which of the two the caller does is the caller's decision.
 	fs = newFS()
 	envDefault(fs, "nosuchflag", "x")
 	envDefault(fs, "max", "not-a-number")
 	assert.Equal(t, "4", fs.Lookup("max").DefValue)
+}
+
+// The dropped Set error left the flag at its zero with nothing said. For the shard
+// pair that is a wrong ANSWER, not a lost convenience: NShards 0 means "do not
+// shard", so every matrix job ran the whole selection and exited 0. An unknown flag
+// stays silent - that is wiring, not something a user set.
+func TestEnvDefaultReportsAValueTheFlagCannotParse(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.Int("max", 4, "")
+
+	err := envDefault(fs, "max", "not-a-number")
+	require.Error(t, err, "a malformed value must not be swallowed")
+	assert.Contains(t, err.Error(), "not-a-number", "the error must name the value the user set")
+	assert.Contains(t, err.Error(), "max", "the error must name the flag it could not seed")
+	assert.Equal(t, "4", fs.Lookup("max").DefValue, "the flag keeps its default; the caller decides what to do")
+
+	assert.NoError(t, envDefault(fs, "nosuchflag", "x"), "an unknown flag is wiring, not user input")
+	assert.NoError(t, envDefault(fs, "max", ""), "an unset variable is not an error")
+	assert.NoError(t, envDefault(fs, "max", "8"))
 }

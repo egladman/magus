@@ -432,9 +432,12 @@ var globalValueFlags = sync.OnceValue(func() map[string]bool {
 	fs := flag.NewFlagSet("global", flag.ContinueOnError)
 	gen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
+	// Both short forms belong here beside their long names: peekSub reads this set to
+	// know a token consumes the next one, and a missing -C made `magus -C /ws run`
+	// misread the path as the subcommand.
 	out := map[string]bool{
-		"-root": true, "--root": true,
-		"-config": true, "--config": true,
+		"-root": true, "--root": true, "-C": true, "--C": true,
+		"-config": true, "--config": true, "-c": true, "--c": true,
 	}
 	fs.VisitAll(func(f *flag.Flag) {
 		if !flagIsBool(f) {
@@ -1199,13 +1202,18 @@ func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	return nil
 }
 
+// extractRootFlag peeks the workspace root before the main flag parse. -C is the
+// bound short form of --root and has to be read here too: skipping it loaded THIS
+// workspace's magus.yaml while the magusfile came from the one -C names. Matching
+// is exact and case-sensitive, so -c stays the short form of --config
+// (config.ExtractFlag owns that one).
 func extractRootFlag(args []string) string {
 	for i, a := range args {
 		if a == "--" {
 			return ""
 		}
 		switch {
-		case a == "-root" || a == "--root":
+		case a == "-root" || a == "--root" || a == "-C" || a == "--C":
 			if i+1 < len(args) {
 				return args[i+1]
 			}
@@ -1213,6 +1221,10 @@ func extractRootFlag(args []string) string {
 			return strings.TrimPrefix(a, "-root=")
 		case strings.HasPrefix(a, "--root="):
 			return strings.TrimPrefix(a, "--root=")
+		case strings.HasPrefix(a, "-C="):
+			return strings.TrimPrefix(a, "-C=")
+		case strings.HasPrefix(a, "--C="):
+			return strings.TrimPrefix(a, "--C=")
 		}
 	}
 	return ""

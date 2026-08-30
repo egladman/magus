@@ -110,6 +110,53 @@ func TestIsUsageOnlyInvocation(t *testing.T) {
 	}
 }
 
+// -C is bound as the short form of --root, but the pre-scan that peeks the root
+// before config loading only matched -root/--root. `magus -C /other/ws build`
+// therefore loaded THIS workspace's magus.yaml and ran it against the OTHER
+// workspace's magusfile, silently. -c stays the short form of --config
+// (config.ExtractFlag owns that one), so the two must not cross.
+func TestExtractRootFlagReadsTheShortForm(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"-C space", []string{"-C", "ws", "build"}, "ws"},
+		{"--C space", []string{"--C", "ws", "build"}, "ws"},
+		{"-C equals", []string{"-C=ws", "build"}, "ws"},
+		{"--C equals", []string{"--C=ws", "build"}, "ws"},
+		{"-C among other args", []string{"run", "-C", "ws", "build"}, "ws"},
+		{"-C stops at the separator", []string{"run", "build", "--", "-C", "ws"}, ""},
+		{"lowercase -c is config, not root", []string{"-c", "a.yaml", "build"}, ""},
+		{"lowercase -c= is config, not root", []string{"-c=a.yaml", "build"}, ""},
+		{"-C with no value", []string{"-C"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := extractRootFlag(tc.args); got != tc.want {
+				t.Fatalf("extractRootFlag(%v) = %q, want %q", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+// peekSub reads globalValueFlags to know a token consumes the one after it. Both
+// short forms were missing, so `magus -C /ws run build` read the PATH as the
+// subcommand and reported an unknown command instead of running.
+func TestPeekSubConsumesTheShortGlobalValues(t *testing.T) {
+	for _, flag := range []string{"-C", "--C", "-c", "--c"} {
+		t.Run(flag, func(t *testing.T) {
+			if !globalValueFlags()[flag] {
+				t.Fatalf("globalValueFlags() is missing %q, so peekSub cannot skip its value", flag)
+			}
+			sub, subArgs := peekSub([]string{flag, "value", "run", "build"})
+			if sub != "run" || !slices.Equal(subArgs, []string{"build"}) {
+				t.Fatalf("peekSub(%s value run build) = (%q, %v), want (\"run\", [build])", flag, sub, subArgs)
+			}
+		})
+	}
+}
+
 // TestPeekSubRecognizesVersion pins `magus --version`: peekSub used to treat
 // --version like any other dash-prefixed token (skip it, keep scanning for a
 // subcommand), so `magus --version` alone found no subcommand, fell through to

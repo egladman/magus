@@ -148,7 +148,7 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 			// The note EXISTS and could not be read. Reporting that as "no such note"
 			// sends the reader hunting for a missing file, and lets `notes edit` scaffold
 			// a second copy in the other store on top of the broken one.
-			return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q exists in the %s store but could not be read: %w", name, st.scope, err)
+			return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q %w (%s store): %w", name, errUnreadableNote, st.scope, err)
 		}
 	}
 	switch len(found) {
@@ -166,6 +166,13 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 // the diagnosis, because it is the text every wrapping caller prints and a reader told
 // the name is ambiguous still needs the flag that resolves it.
 var errAmbiguousNote = errors.New("exists in both stores; say which with --shared or --private")
+
+// errUnreadableNote marks a note whose file is THERE and unreadable, so a caller can
+// tell it apart from "not found" the way errAmbiguousNote separates out "in both". It
+// exists for `notes edit`: without a sentinel to match, an unreadable note fell past
+// every case of that switch and was handled as if the name were free, scaffolding a
+// second copy in the other store on top of the broken one.
+var errUnreadableNote = errors.New("exists but could not be read")
 
 // notesScopeFlags binds the pair of filters every subcommand accepts.
 func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
@@ -441,6 +448,10 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 		// Never guess which store was meant: the two mean different things to a reader,
 		// and silently editing the shared one is the mistake this error exists to prevent.
 		return err
+	case errors.Is(err, errUnreadableNote):
+		// The name is TAKEN, just not readable. Falling through would treat it as free
+		// and scaffold a second copy beside the broken one, so refuse and say what to fix.
+		return fmt.Errorf("%w\n  fix the file's permissions or contents, then edit it again", err)
 	}
 	dir := target.dir
 	path := existing

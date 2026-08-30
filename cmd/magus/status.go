@@ -121,8 +121,13 @@ func status(ctx context.Context, args []string) error {
 	}
 }
 
+// clampStatusWatch floors the poll interval at statusWatchMin. Zero passes
+// through untouched - it is the caller's "not watching" sentinel, answered with a
+// single snapshot before this runs. A NEGATIVE interval clamps rather than
+// passing through, because time.NewTicker panics on anything at or below zero:
+// `magus status --watch -1s` took the whole process down instead of polling.
 func clampStatusWatch(interval time.Duration) time.Duration {
-	if interval > 0 && interval < statusWatchMin {
+	if interval != 0 && interval < statusWatchMin {
 		return statusWatchMin
 	}
 	return interval

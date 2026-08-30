@@ -94,7 +94,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// trail.LeaseFromEnv, never a raw Getenv: the journal producers read the variable
 	// through the same helper, and two readers with different trimming rules split one
 	// exported lease into a journal identity and an unguarded write.
-	envDefault(fset, flagHookLease, trail.LeaseFromEnv())
+	// Discarded, unlike `magus run`'s shard pair: --lease is a plain string flag whose
+	// Set cannot fail, and a hook that refused to answer over a malformed lease would
+	// block the tool call this comment's first line says must always get a verdict.
+	_ = envDefault(fset, flagHookLease, trail.LeaseFromEnv())
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
