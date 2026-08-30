@@ -198,7 +198,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyMCPBearer, mcpHandler)))
+	// Cap the MCP body too: the connector-token client reaches /mcp, not the Connect
+	// services, and mark3labs' streamable handler reads the body with an uncapped
+	// io.ReadAll - so the connectReadMax above does not cover this surface.
+	cappedMCP := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler.LimitRequestBody(w, r)
+		mcpHandler.ServeHTTP(w, r)
+	})
+	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyMCPBearer, cappedMCP)))
 
 	// CORS allows the hosted explorer origin plus the two loopback origins derived from
 	// the server port. Built here (not only inside the console block below) so /livez and
