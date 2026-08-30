@@ -7,6 +7,7 @@ package docs
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -144,12 +145,53 @@ func WriteFrontmatter(b *strings.Builder, f Frontmatter) {
 	b.WriteString("]\n---\n\n")
 }
 
-// yamlScalar quotes a scalar when it would otherwise confuse a YAML parser: a
-// colon reads as a mapping, a quote as a string delimiter, and leading/trailing
-// spaces are trimmed by the parser unless quoted.
+// yamlScalar renders s so a YAML parser reads back the identical string, double-quoting it
+// whenever the plain form would carry YAML meaning. Beyond the structural cases (a ": " opens
+// a mapping, a leading indicator starts a flow collection, tag, anchor, or comment, trailing
+// space is trimmed), a value that resolves as a NON-string scalar - a bare 404, true, or null -
+// must be quoted too: unmarshaled into a string field it errors, and ParseFrontmatter then
+// drops the entire block, losing the page's title and tags silently.
 func yamlScalar(s string) string {
-	if !strings.ContainsAny(s, ":\"'") && (len(s) == 0 || (s[0] != ' ' && s[len(s)-1] != ' ')) {
+	if !yamlNeedsQuote(s) {
 		return s
 	}
-	return "\"" + strings.ReplaceAll(s, "\"", "\\\"") + "\""
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
+}
+
+func yamlNeedsQuote(s string) bool {
+	if s == "" {
+		return false // an empty value reads back as an empty string
+	}
+	if s[0] == ' ' || s[len(s)-1] == ' ' {
+		return true
+	}
+	switch s[0] {
+	case '!', '&', '*', '[', ']', '{', '}', ',', '#', '|', '>', '@', '`', '%', '"', '\'', '?', ':', '-':
+		return true
+	}
+	if strings.Contains(s, ": ") || strings.HasSuffix(s, ":") || strings.Contains(s, " #") {
+		return true
+	}
+	if strings.ContainsAny(s, "\"'\n\t") {
+		return true
+	}
+	return yamlResolvesNonString(s)
+}
+
+// yamlResolvesNonString reports whether s is a plain scalar YAML's core schema would type as
+// something other than a string - a bool, null, or number - so it can be quoted back into one.
+func yamlResolvesNonString(s string) bool {
+	switch strings.ToLower(s) {
+	case "null", "~", "true", "false", "yes", "no", "on", "off":
+		return true
+	}
+	if _, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return true
+	}
+	if _, err := strconv.ParseFloat(s, 64); err == nil {
+		return true
+	}
+	return false
 }

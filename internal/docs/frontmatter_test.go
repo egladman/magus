@@ -28,6 +28,34 @@ func TestParseFrontmatterRoundTrip(t *testing.T) {
 	assert.Equal(t, []string{"reference", "argv"}, f.Tags)
 }
 
+// TestParseFrontmatterRoundTripHazardousTitles pins that titles YAML would read as a flow
+// collection, a comment, or a non-string scalar survive the round trip; unquoted, each makes
+// an unparseable block that drops the page's whole frontmatter.
+func TestParseFrontmatterRoundTripHazardousTitles(t *testing.T) {
+	for _, title := range []string{
+		"[draft] Foo",
+		"#4 release",
+		"404",
+		"true",
+		"null",
+		"1.5 release",
+		"has: a colon",
+		`quote " and \ backslash`,
+		"trailing colon:",
+	} {
+		t.Run(title, func(t *testing.T) {
+			var b strings.Builder
+			WriteFrontmatter(&b, Frontmatter{Title: title, Description: "d", Tags: []string{"t"}})
+			b.WriteString("Body.\n")
+
+			f, ok := ParseFrontmatter(b.String())
+			require.True(t, ok, "block did not parse - frontmatter would be dropped")
+			assert.Equal(t, title, f.Title)
+			assert.Equal(t, []string{"t"}, f.Tags)
+		})
+	}
+}
+
 func TestParseFrontmatterAbsent(t *testing.T) {
 	for _, tc := range []struct {
 		name, in string
