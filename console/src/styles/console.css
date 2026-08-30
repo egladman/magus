@@ -1000,9 +1000,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* One border and one corner for the whole surface, on the frame. Both mark the boundary with the
      RAIL, so both are gated on the rail existing: below this width it is hidden, the frame's left
      edge IS the window's, and an unconditional border ran down the outermost pixel of a phone with
-     nothing on the far side of it while the corner bit a notch out of the content. */
-  #console-frame,
-  body[data-console-fill] > footer {
+     nothing on the far side of it while the corner bit a notch out of the content.
+     The frame ONLY - the footer used to carry the same border to continue the line past the status
+     bar, but the curve pulls the frame's edge rightward at the bottom, so the footer's straight
+     continuation no longer met it and read as a stray vertical stub beside the bar's first item.
+     Rail and footer are one continuous chrome sharing a tone; that seam draws nothing. */
+  #console-frame {
     border-left: 1px solid var(--pf-t--global--border--color--default);
   }
   /* The curve belongs to the PANE, not the status bar: the design is the content stepping forward
@@ -1012,6 +1015,20 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      frame's existing overflow:hidden clips the surface inside the curve. */
   #console-frame {
     border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
+  }
+}
+/* Phone: the elevation between the content and the status bar INVERTS. On a desktop the pane is a
+   card lifted off the chrome, so it casts down onto the bar. On a phone the pane is the page itself -
+   edge to edge, no rail, no gutter - and the bar is a fixed strip the content scrolls beneath, the
+   same relation the title bar has at the top. Scrolled to the bottom, the desktop cast read as the
+   bar sliding UNDER the page. So below the rail's breakpoint the frame stops casting (the left lobe
+   also has no rail to land on down here) and the bar casts up instead, painting above the frame the
+   way the frame paints above it on desktop. */
+@media (max-width: 47.999rem) {
+  #console-frame { box-shadow: none; }
+  body[data-console-fill] > footer {
+    box-shadow: var(--pf-t--global--box-shadow--sm--top);
+    z-index: 22;
   }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out

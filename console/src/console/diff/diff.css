@@ -518,6 +518,9 @@
 .console-diff-toolbar__focus,
 .console-diff-toolbar__verdict {
   flex: 0 0 auto;
+  /* PF secondary is transparent, and on this grey toolbar the pair read as outlines cut into the
+     chrome. Filled like the dashboard's Big Picture button, they sit ON the bar instead. */
+  background: var(--pf-t--global--background--color--primary--default);
 }
 
 /* svgGlyph draws at a fixed pixel size; 1em hands sizing back to the icon tokens PF's wrapper
