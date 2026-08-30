@@ -66,7 +66,11 @@ import (
 // central evidence command - in a fresh worktree `magus refs --occurrences`
 // answers "unknown, not absent" rather than reporting the edit sites, and the
 // partition is then built on a silence.
-const SkillVersion = 47
+// 48: magus-query teaches the doc-section layer - every markdown heading is a
+// `docsection` node, so prose is retrieved with `magus query kind:docsection`
+// (a `path#anchor` pointer to one passage) instead of reading the whole file.
+// Pairs with the guard's doc-search advisory on a cat/grep of a `.md`.
+const SkillVersion = 48
 
 const skillLicense = "GPL-3.0-or-later"
 

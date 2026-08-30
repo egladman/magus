@@ -45,7 +45,14 @@ import (
 // existed, and the magusfile they were extracted from has not changed, so nothing else
 // would invalidate them: the version mismatch is what forces the rebuild that puts the
 // references there.
-const KnowledgeSchemaVersion = 9
+// v10 adds the "docsection" kind: one node per markdown heading, carrying its goldmark
+// auto-heading-id anchor, so an agent retrieves the relevant section of a doc rather than
+// the whole page. A page `contains` its sections and a section `contains` its subsections.
+// The kind is additive, so a v9 consumer parses a v10 graph unchanged - the bump is for a
+// v9 store on disk, whose doc shards were extracted before headings were indexed and whose
+// source markdown has not changed, so only a version mismatch forces the rebuild that adds
+// the sections.
+const KnowledgeSchemaVersion = 10
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".
@@ -73,15 +80,16 @@ const (
 
 	KindMethod     = "method" // a callable bound to a host module (fs.stat) - magus's built-in API surface
 	KindDiagnostic = "diagnostic"
-	KindDoc        = "doc"       // markdown doc page (phase 4)
-	KindFile       = "file"      // a .buzz source file (phase 4)
-	KindDir        = "dir"       // a directory between a project and its files; the containment tree layer
-	KindFunction   = "function"  // a callable defined in a .buzz source file (Buzz-authored)
-	KindImport     = "import"    // an unresolvable buzz import literal (phase 4)
-	KindRationale  = "rationale" // a NOTE/WHY/HACK/TODO comment (phase 4)
-	KindOwner      = "owner"     // a CODEOWNERS owner (@user, @org/team, email)
-	KindSymbol     = "symbol"    // a definition ingested from a SCIP index (compiled-language source, e.g. Go)
-	KindAuthor     = "author"    // a git contributor; `authored` the files they touched (emergent, vs the declared owner)
+	KindDoc        = "doc"        // markdown doc page (phase 4)
+	KindDocSection = "docsection" // a heading within a doc page; the graph's retrieval unit for prose
+	KindFile       = "file"       // a .buzz source file (phase 4)
+	KindDir        = "dir"        // a directory between a project and its files; the containment tree layer
+	KindFunction   = "function"   // a callable defined in a .buzz source file (Buzz-authored)
+	KindImport     = "import"     // an unresolvable buzz import literal (phase 4)
+	KindRationale  = "rationale"  // a NOTE/WHY/HACK/TODO comment (phase 4)
+	KindOwner      = "owner"      // a CODEOWNERS owner (@user, @org/team, email)
+	KindSymbol     = "symbol"     // a definition ingested from a SCIP index (compiled-language source, e.g. Go)
+	KindAuthor     = "author"     // a git contributor; `authored` the files they touched (emergent, vs the declared owner)
 	// KindNote is the one kind that is INJECTED rather than extracted. Every other kind is a
 	// projection of workspace content - a doc from markdown, a rationale from a comment, a
 	// symbol from an index, an author from git - so deleting the graph and rebuilding

@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 11553
-skill_simple_bytes: 9343
+skill_full_bytes: 12745
+skill_simple_bytes: 10313
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `47` |
-| `knowledge-schema-version` | `9` |
-| `skill-content` | `0a52fd75b017` |
+| `agent-skill-version` | `48` |
+| `knowledge-schema-version` | `10` |
+| `skill-content` | `d63957761d95` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -178,6 +178,27 @@ Free-text terms (AND) plus field filters and negation:
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
 (default 50). For a large match set over MCP, pass `limit` and echo the returned
 `next_cursor` to fetch the next page.
+
+## Retrieving prose from the docs
+
+Every markdown heading in the workspace is a `docsection` node, so documentation is
+QUERYABLE, not something to read whole. When you are looking for WHERE something is
+explained - in this repo's docs, a project's README, any tracked markdown - query the
+section rather than cat or grep the file:
+
+- `magus query "kind:docsection <terms>"` returns the heading whose section covers your
+  terms. Each result's id and Source are `<path>#<anchor>` - a citable pointer to the exact
+  passage, the same fragment a link into the rendered page carries. Read that one section,
+  not the whole page.
+- Scope it with `project:<p>` and combine free-text terms. `magus explain
+  "docsection:<path>#<anchor>"` shows the page a section belongs to and what it links to; a
+  page `contains` its sections and a section contains the headings nested under it, so you
+  can walk the outline.
+- Prose only: a code file is not indexed this way - `magus refs` and the entity kinds above
+  still cover code and the domain model.
+
+Reading one file you already know the path of is fine. This replaces the SCAN - the grep or
+cat over markdown to find a passage - not a targeted read.
 
 ## Reading results
 
@@ -359,6 +380,24 @@ Free-text terms (AND) plus field filters and negation:
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
 (default 50). Over MCP, page with `limit` plus the returned
 `next_cursor`.
+
+## Retrieving prose from the docs
+
+Every markdown heading in the workspace is a `docsection` node, so documentation is
+QUERYABLE, not something to read whole. When you are looking for WHERE something is
+explained - in this repo's docs, a project's README, any tracked markdown - query the
+section rather than cat or grep the file:
+
+- `magus query "kind:docsection <terms>"` returns the heading whose section covers your
+  terms. Each result's id and Source are `<path>#<anchor>` - a citable pointer to the exact
+  passage, the same fragment a link into the rendered page carries. Read that one section,
+  not the whole page.
+- Scope it with `project:<p>` and combine free-text terms.
+- Prose only: a code file is not indexed this way - `magus refs` and the entity kinds above
+  still cover code and the domain model.
+
+Reading one file you already know the path of is fine. This replaces the SCAN - the grep or
+cat over markdown to find a passage - not a targeted read.
 
 ## Reading results
 

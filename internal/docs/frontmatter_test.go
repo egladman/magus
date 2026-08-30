@@ -57,3 +57,13 @@ func TestParseFrontmatterMalformedYAML(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, Frontmatter{}, f)
 }
+
+func TestStripFrontmatter(t *testing.T) {
+	assert.Equal(t, "# Heading\nBody.\n", StripFrontmatter("---\ntitle: X\ntags: [a]\n---\n# Heading\nBody.\n"),
+		"the body begins after the closing fence")
+	assert.Equal(t, "# No block\n", StripFrontmatter("# No block\n"),
+		"content with no leading block is returned unchanged")
+	assert.Equal(t, "Body.\n", StripFrontmatter("---\n---\nBody.\n"), "empty block")
+	assert.Equal(t, "---\ntitle: unterminated\nBody.\n", StripFrontmatter("---\ntitle: unterminated\nBody.\n"),
+		"an unterminated block is not a block, so the content is left whole rather than eaten")
+}

@@ -32,6 +32,7 @@ type advisoryKind string
 const (
 	advisoryStaleBinary   advisoryKind = "stale-binary"
 	advisoryCodeSearch    advisoryKind = "code-search"
+	advisoryDocSearch     advisoryKind = "doc-search"
 	advisoryStageClassify advisoryKind = "stage-classify"
 	advisoryUnleasedWrite advisoryKind = "unleased-write"
 	advisorySkillSource   advisoryKind = "skill-source"

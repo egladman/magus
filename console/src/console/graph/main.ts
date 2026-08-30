@@ -141,6 +141,7 @@ const KINDS = [
   "import",
   "package",
   "doc",
+  "docsection",
   "rationale",
   "note",
   "diagnostic",

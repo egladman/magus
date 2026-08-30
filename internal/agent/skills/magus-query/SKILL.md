@@ -140,6 +140,27 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 `next_cursor` to fetch the next page.{{else}} Over MCP, page with `limit` plus the returned
 `next_cursor`.{{end}}
 
+## Retrieving prose from the docs
+
+Every markdown heading in the workspace is a `docsection` node, so documentation is
+QUERYABLE, not something to read whole. When you are looking for WHERE something is
+explained - in this repo's docs, a project's README, any tracked markdown - query the
+section rather than cat or grep the file:
+
+- `magus query "kind:docsection <terms>"` returns the heading whose section covers your
+  terms. Each result's id and Source are `<path>#<anchor>` - a citable pointer to the exact
+  passage, the same fragment a link into the rendered page carries. Read that one section,
+  not the whole page.
+- Scope it with `project:<p>` and combine free-text terms.{{if .Full}} `magus explain
+  "docsection:<path>#<anchor>"` shows the page a section belongs to and what it links to; a
+  page `contains` its sections and a section contains the headings nested under it, so you
+  can walk the outline.{{end}}
+- Prose only: a code file is not indexed this way - `magus refs` and the entity kinds above
+  still cover code and the domain model.
+
+Reading one file you already know the path of is fine. This replaces the SCAN - the grep or
+cat over markdown to find a passage - not a targeted read.
+
 ## Reading results
 
 - Reading as a machine? Add `-o json`: every verb returns a stable,

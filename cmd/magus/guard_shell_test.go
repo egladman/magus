@@ -305,6 +305,14 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// --abbrev-ref takes HEAD and answers with the BRANCH NAME, which a
 		// checkpoint does not replace.
 		{command: "git rev-parse --abbrev-ref HEAD"},
+		// Reading or searching markdown for content routes to the doc-section layer:
+		// prose is queryable, not just greppable. Matches on ".md" so it fires in any repo.
+		{command: "cat docs/doctrine.md", context: "docsection"},
+		{command: "grep host docs/doctrine.md", context: "docsection"},
+		{command: "rg wiring notes.md", context: "docsection"},
+		{command: "head -50 README.md", context: "docsection"},
+		// A code file is not prose; the doc-section advisory must not fire on it.
+		{command: "cat cmd/magus/main.go"},
 	}
 	for _, tt := range tests {
 		v := evaluateBashGuard(tt.command)

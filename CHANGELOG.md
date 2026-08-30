@@ -77,6 +77,16 @@ https://github.com/egladman/magus/compare/v0.3.0...main
 
 ### Added
 
+- **The knowledge graph now indexes markdown by heading, so prose is retrievable a section
+  at a time.** Every heading in a tracked markdown file becomes a `docsection` node whose
+  id and source are `<path>#<anchor>` - the same fragment a link into the rendered page
+  carries, computed with the site's own goldmark auto-heading-id so the two agree. A page
+  `contains` its sections and a section contains the headings nested under it. An agent
+  looking for where something is explained runs `magus query "kind:docsection <terms>"` and
+  gets the passage, not the whole file; the guard advises the pattern when it sees a `cat`
+  or `grep` of a `.md`, and the magus-query skill teaches it. Knowledge schema is now v10,
+  which forces a rebuild so an on-disk v9 store picks up the section layer.
+
 - **`magus diff` reads the working tree's uncommitted changes, annotated and ordered by
   what they can break.** A changeset is a set of consequences, not a list of files, and
   alphabetical order spends a reader's attention at random - it gives a regenerated

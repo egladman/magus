@@ -30,7 +30,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	// three console sites below will tell you they are missing it.
 	kinds := []string{
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
-		KindMethod, KindDiagnostic, KindDoc, KindFile, KindDir, KindFunction, KindImport,
+		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir, KindFunction, KindImport,
 		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage,
 	}
 

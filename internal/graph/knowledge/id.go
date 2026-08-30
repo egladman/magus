@@ -42,6 +42,12 @@ func charmID(name string) string { return types.KindCharm + ":" + name }
 
 func docID(relPath string) string { return types.KindDoc + ":" + relPath }
 
+// docSectionID names a heading inside a doc as "<rel>#<anchor>", the same shape a link into
+// that section takes, so a retrieval result IS a citable pointer to the rendered page.
+func docSectionID(relPath, anchor string) string {
+	return types.KindDocSection + ":" + relPath + "#" + anchor
+}
+
 func fileID(relPath string) string { return types.KindFile + ":" + relPath }
 
 func dirID(relPath string) string { return types.KindDir + ":" + relPath }
@@ -186,6 +192,11 @@ const (
 	// (`query "kind:doc section:guides"`) without hand-tagging every page. Absent for docs
 	// outside a docs/ tree and for top-level docs (docs/glossary.md) that name no section.
 	attrSection = "section"
+	// attrAnchor is a doc-section node's goldmark auto-heading-id: the fragment a link into
+	// the section carries (concepts/review.md#manual-on-purpose). attrLevel is the heading
+	// depth (1 for #, 2 for ##, ...), so a reader can reconstruct the outline.
+	attrAnchor = "anchor"
+	attrLevel  = "level"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are

@@ -79,6 +79,38 @@ func ParseFrontmatter(content string) (Frontmatter, bool) {
 	return f, true
 }
 
+// StripFrontmatter returns content with any leading frontmatter block removed, so a caller
+// parsing the markdown body (heading extraction, rendering) never sees the YAML header - and
+// never mistakes the header's closing "---" for a setext-heading underline of the line above
+// it. Content with no valid block is returned unchanged. It shares ParseFrontmatter's fence
+// detection so the two agree on where the body begins.
+func StripFrontmatter(content string) string {
+	rest := strings.TrimPrefix(content, "\xef\xbb\xbf")
+	if !strings.HasPrefix(rest, "---\n") && !strings.HasPrefix(rest, "---\r\n") {
+		return content
+	}
+	nl := strings.IndexByte(rest, '\n')
+	body := rest[nl+1:]
+	for off := 0; off < len(body); {
+		nlAt := strings.IndexByte(body[off:], '\n')
+		line := body[off:]
+		if nlAt >= 0 {
+			line = line[:nlAt]
+		}
+		if strings.TrimRight(line, "\r") == "---" {
+			if nlAt < 0 {
+				return ""
+			}
+			return body[off+nlAt+1:]
+		}
+		if nlAt < 0 {
+			break
+		}
+		off += nlAt + 1
+	}
+	return content
+}
+
 // WriteFrontmatter emits the site's YAML frontmatter block. Values containing a
 // colon, quote, or edge whitespace are quoted so a YAML parser can't misread
 // them. A page with no page_type/aliases leaves those fields zero.
