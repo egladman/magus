@@ -112,6 +112,42 @@ func TestResolveNegationExcludesKind(t *testing.T) {
 	}
 }
 
+func TestParseQueryOperators(t *testing.T) {
+	q := parseQuery(`kind=spell project=web kind!=op id=~build`)
+	assert.Equal(t, []string{"spell"}, q.fields["kind"])
+	assert.Equal(t, []string{"web"}, q.fields["project"])
+	assert.Equal(t, []string{"op"}, q.negFields["kind"], "!= routes to the same exclusion as -kind:op")
+	require.Len(t, q.reFields["id"], 1)
+	assert.True(t, q.reFields["id"][0].MatchString("target:pkg/a:build"), "=~ compiles a regex over the id target")
+}
+
+func TestResolveEqualsIsColonAlias(t *testing.T) {
+	g := sampleGraph()
+	assert.Equal(t, matchIDs(g.Resolve("kind:spell", 0)), matchIDs(g.Resolve("kind=spell", 0)),
+		"= is the canonical spelling of the : field grammar; both resolve identically")
+}
+
+func TestResolveBangEqualsExcludesKind(t *testing.T) {
+	// kind!=op is the canonical negation and must behave exactly like the compat -kind:op.
+	ids := matchIDs(sampleGraph().Resolve("go kind!=op", 0))
+	assert.Contains(t, ids, "spell:go")
+	for _, id := range ids {
+		assert.NotContains(t, id, "op:")
+	}
+}
+
+func TestResolveRegexFieldMatchesID(t *testing.T) {
+	ids := matchIDs(sampleGraph().Resolve(`id=~build$`, 0))
+	assert.Contains(t, ids, "target:pkg/a:build")
+	assert.Contains(t, ids, "target:pkg/b:build")
+	assert.NotContains(t, ids, "target:pkg/a:gen")
+}
+
+func TestResolveRegexKind(t *testing.T) {
+	assert.Equal(t, []string{"spell:go"}, matchIDs(sampleGraph().Resolve(`kind=~^spell$`, 0)),
+		"a kind regex ranges over node kinds, here anchored to spell alone")
+}
+
 func TestResolveLimit(t *testing.T) {
 	assert.Len(t, sampleGraph().Resolve("kind:target", 2), 2)
 }
