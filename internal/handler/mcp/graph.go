@@ -45,9 +45,9 @@ type gapProbe func() ([]types.KnowledgeSymbolGap, bool)
 func answerFor(matched bool, reason types.KnowledgeUnknownReason, probe gapProbe) types.KnowledgeAnswer {
 	gaps, probed := probe()
 	if !probed {
-		return types.Answer(matched, types.ReasonCoverageUnknown, nil)
+		return types.ClassifyAnswer(matched, types.ReasonCoverageUnknown, nil)
 	}
-	return types.Answer(matched, reason, gaps)
+	return types.ClassifyAnswer(matched, reason, gaps)
 }
 
 // knowledgeGraph resolves the DOMAIN knowledge graph for a tool invocation - the warm

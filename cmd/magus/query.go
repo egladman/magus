@@ -203,7 +203,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	}
 	out := g.Query(input, qf.Budget)
 	reason, gaps := symbolCoverage(ctx, root, input, seedsSymbols)
-	out.Answer = types.Answer(out.MatchCount > 0, reason, gaps)
+	out.Answer = types.ClassifyAnswer(out.MatchCount > 0, reason, gaps)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -741,7 +741,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		// real symbol comes to look nonexistent - but only when the input could have
 		// named one, so a typo'd `kind:target` still gets the absent verdict it deserves.
 		reason, gaps := symbolCoverage(ctx, root, pos[0], seedsSymbols)
-		ans := types.Answer(false, reason, gaps)
+		ans := types.ClassifyAnswer(false, reason, gaps)
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, clihint.Refs.With(pos[0]))
 		return exitForVerdict(ans.Verdict)

@@ -170,7 +170,7 @@ func (m *Magus) Unreferenced(ctx context.Context) (types.UnreferencedOutput, err
 	return types.UnreferencedOutput{
 		Definition: types.UnreferencedDefinition,
 		Symbols:    syms,
-		Answer:     types.Answer(len(syms) > 0, reason, gaps),
+		Answer:     types.ClassifyAnswer(len(syms) > 0, reason, gaps),
 	}, nil
 }
 

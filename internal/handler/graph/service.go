@@ -55,17 +55,17 @@ func (s *Service) graphFor(ctx context.Context, input string) (*knowledge.Graph,
 // rather than to an empty gap list, which would read as verified coverage.
 func (s *Service) answer(ctx context.Context, input string, matched, seededSymbols bool) types.KnowledgeAnswer {
 	if !knowledge.CouldMatchSymbol(input) {
-		return types.Answer(matched, "", nil)
+		return types.ClassifyAnswer(matched, "", nil)
 	}
 	gaps, probed := s.ws.SymbolGaps(ctx)
 	if !probed {
-		return types.Answer(matched, types.ReasonCoverageUnknown, nil)
+		return types.ClassifyAnswer(matched, types.ReasonCoverageUnknown, nil)
 	}
 	var reason types.KnowledgeUnknownReason
 	if !seededSymbols {
 		reason = types.ReasonSymbolsNotLoaded
 	}
-	return types.Answer(matched, reason, gaps)
+	return types.ClassifyAnswer(matched, reason, gaps)
 }
 
 func (s *Service) QueryNodes(

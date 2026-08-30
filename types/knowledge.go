@@ -396,7 +396,7 @@ type KnowledgeAnswer struct {
 	Gaps    []KnowledgeSymbolGap   `json:"gaps,omitempty"      yaml:"gaps,omitempty"`
 }
 
-// Answer classifies a lookup's result against what magus was actually able to search.
+// ClassifyAnswer classifies a lookup's result against what magus was actually able to search.
 //
 // matched reports whether the lookup returned anything. reason is empty when the symbol
 // layer was searched (or was irrelevant to the question); set it when the lookup could not
@@ -407,7 +407,7 @@ type KnowledgeAnswer struct {
 // That is deliberate and it is the difference from a plain emptiness check: a populated
 // list drawn from a half-indexed workspace is as misleading as an empty one, because the
 // projects it omits are invisible either way.
-func Answer(matched bool, reason KnowledgeUnknownReason, gaps []KnowledgeSymbolGap) KnowledgeAnswer {
+func ClassifyAnswer(matched bool, reason KnowledgeUnknownReason, gaps []KnowledgeSymbolGap) KnowledgeAnswer {
 	switch {
 	case reason != "":
 		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: reason, Gaps: gaps}

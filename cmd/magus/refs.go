@@ -66,7 +66,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if !probed {
 			reason = types.ReasonCoverageUnknown
 		}
-		ans := types.Answer(false, reason, gaps)
+		ans := types.ClassifyAnswer(false, reason, gaps)
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, "")
 		if len(ans.Gaps) > 0 {
@@ -81,7 +81,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if !probed {
 		reason = types.ReasonCoverageUnknown
 	}
-	out.Answer = types.Answer(len(out.Refs) > 0, reason, gaps)
+	out.Answer = types.ClassifyAnswer(len(out.Refs) > 0, reason, gaps)
 
 	if rf.Occurrences {
 		return emitOccurrences(ctx, root, opts, out)
@@ -171,7 +171,7 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 	// different source: an index that is merely declared satisfies refs' coverage check and
 	// can still fail to decode here. So the gaps are recomposed rather than inherited, and
 	// an index this read could not open downgrades the verdict even when refs was clean.
-	out.Answer = types.Answer(len(files) > 0, refs.Answer.Reason, append(append([]types.KnowledgeSymbolGap(nil), refs.Answer.Gaps...), read.Unreadable...))
+	out.Answer = types.ClassifyAnswer(len(files) > 0, refs.Answer.Reason, append(append([]types.KnowledgeSymbolGap(nil), refs.Answer.Gaps...), read.Unreadable...))
 	for _, f := range files {
 		out.OccurrenceCount += len(f.Occurrences)
 		if f.Stale {
