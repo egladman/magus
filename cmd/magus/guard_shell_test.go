@@ -164,6 +164,8 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "find . -type d -exec sh -c 'go vet ./...' {} ;", deny: true},
 		// find with no -exec, and a benign exec payload, are not the finding.
 		{command: `find . -name "*.go"`, context: "magus refs"},
+		// Predicates between the path and -name are the common form and must still advise.
+		{command: "find . -type f -name '*.go'", context: "magus refs"},
 		{command: "find . -name '*.tmp' -exec rm {} +", context: "magus refs"},
 		// Stacked wrappers reduce all the way down.
 		{command: "env FOO=1 timeout 60 mise exec -- env -u GOROOT go test ./...", deny: true},
@@ -354,6 +356,9 @@ func TestParseGuardCommands(t *testing.T) {
 		// A -c payload is a script, so it is parsed rather than treated as a word.
 		{"shell -c", "bash -c 'go test ./...'", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
 		{"bundled -c flag", `sh -ec "go vet ./..."`, []guardCommand{{Name: "go", Args: []string{"vet", "./..."}}}},
+		// An option that takes its own argument (--rcfile x) must not end the -c scan early,
+		// or the payload after it slips through unjudged.
+		{"-c behind an option-argument", "bash --rcfile x -c 'go test ./...'", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
 		// Both sides of a compound are commands.
 		{"compound", "make deps && mise exec -- go vet ./...", []guardCommand{
 			{Name: "make", Args: []string{"deps"}},

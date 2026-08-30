@@ -454,7 +454,7 @@ var (
 	// grep hit is a guess. Deliberately narrow: a recursive grep, a bare ripgrep
 	// (effectively always repo-wide), or a find-by-name. A plain `grep pattern
 	// file` is reading one file and is left alone.
-	guardCodeSearchRe = regexp.MustCompile(`\bgrep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s|\bfind\s+\S+\s+-name\b`)
+	guardCodeSearchRe = regexp.MustCompile(`\bgrep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s|\bfind\s+[^|&;]*-name\b`)
 	// guardDocSearchRe fires when a read or search command names a markdown file - an agent
 	// looking for something IN prose. Markdown headings are indexed as doc-section nodes, so
 	// the answer is a section query, not a whole-file scan. Matches on ".md" so it fires in

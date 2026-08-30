@@ -261,14 +261,15 @@ func findExecCommands(args []string) []guardCommand {
 	return out
 }
 
-// shellDashC returns the script argument of a `-c` invocation. The flag may be
-// bundled (`sh -ec ...`) and other options may precede it.
+// shellDashC returns the script argument of a `-c` invocation. -c consumes the next word as
+// the script and, taking an argument, is always the last flag of a short bundle (`sh -ec ...`);
+// a long option (`--rcfile`, `--norc`) is never -c even when it contains the letter. The scan
+// does not stop at the first non-flag word: an option-argument such as the path after
+// `--rcfile` would otherwise end it before the real -c and let `bash --rcfile x -c '<payload>'`
+// through unjudged.
 func shellDashC(args []string) (string, bool) {
 	for i, a := range args {
-		if !strings.HasPrefix(a, "-") {
-			return "", false
-		}
-		if strings.Contains(a, "c") && i+1 < len(args) {
+		if len(a) >= 2 && a[0] == '-' && a[1] != '-' && a[len(a)-1] == 'c' && i+1 < len(args) {
 			return args[i+1], true
 		}
 	}
