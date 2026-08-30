@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -361,6 +363,23 @@ func TestWantsUsage(t *testing.T) {
 // being usage, and that is the regression worth catching.
 //
 // Every printer here writes to os.Stderr, which is the convention across the package:
+// TestDiffUsageNamesEveryBoundFlag catches the drift that hid --rev, --patch and
+// --prompt from `magus diff -h`: the flag set is generated from the registry, but the
+// usage prose is hand-written, so a new flag lands in the binding and never in the help.
+// Deriving the expectation from the bound flags rather than a hand-list makes the help
+// self-check against what the command actually accepts.
+func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
+	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
+	gen.BindDiff(fs)
+	var buf bytes.Buffer
+	diffUsage(&buf)
+	out := buf.String()
+	fs.VisitAll(func(f *flag.Flag) {
+		assert.Contains(t, out, "--"+f.Name,
+			"magus diff -h must name --%s; the hand-written help has drifted from the bound flags", f.Name)
+	})
+}
+
 // help is not the command's output, so it must not land in a pipe that expects data.
 func TestUsagePrintersNameTheirSurface(t *testing.T) {
 	tests := []struct {

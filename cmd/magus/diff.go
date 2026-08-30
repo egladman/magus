@@ -1119,7 +1119,7 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 	_, _ = io.Copy(io.Discard, resp.Body)
 }
 
-func diffUsage(w *os.File) {
+func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus diff [--generated] [--impact] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]")
 	fmt.Fprintln(w, "       magus diff --ack [<changed-path>...]")
 	fmt.Fprintln(w, "")
