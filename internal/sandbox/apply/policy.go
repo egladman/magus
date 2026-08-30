@@ -70,10 +70,10 @@ func FromConfig(ctx context.Context, root string, cfg config.Config) *sandbox.Po
 	var exact, globs []string
 	for _, name := range cfg.Sandbox.Env.Passthrough {
 		if strings.Contains(name, "*") {
-			if bad := env.ValidateGlobs([]string{name}); bad != "" {
+			if err := env.ValidateGlobs([]string{name}); err != nil {
 				slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
 					"sandbox.env.passthrough pattern must end in '*'; ignoring"),
-					"pattern", name)
+					"pattern", name, "err", err)
 				continue
 			}
 			globs = append(globs, name)

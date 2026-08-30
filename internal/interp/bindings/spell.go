@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -95,20 +94,34 @@ func docsByTarget(targets map[string]spells.Op) map[string]string {
 	return out
 }
 
+// maxProbeOutput bounds what one probe contributes. A version line is one short
+// line; a tool that ignores its version flag and prints its whole help - or a log -
+// would otherwise be held whole and mixed into the cache key whole.
+const maxProbeOutput = 4 << 10
+
 // versionProber runs one tool's version argv in the project dir and returns trimmed
-// stdout. One function for every tool now that no binary is privileged: the argv comes
-// from the Tool entry rather than being baked into a per-tool closure.
+// stdout, bounded by maxProbeOutput. One function for every tool now that no binary
+// is privileged: the argv comes from the Tool entry rather than being baked into a
+// per-tool closure.
+//
+// It forks through run.Exec, like every other spell-declared command, rather than
+// exec.Command directly. A spell's `probe` argv is authored input, so it must meet
+// the sandbox's exec check; and the fork wants the process group and wait delay that
+// let a probe which hangs be reaped with its children.
 func versionProber(ctx context.Context, probe spells.Command, dir string) (string, error) {
 	if probe.Bin == "" {
 		return "", nil
 	}
-	c := exec.CommandContext(ctx, probe.Bin, probe.Args...)
-	c.Dir = dir
-	out, err := c.Output()
+	res, err := run.Exec(ctx, probe.Bin, probe.Args, run.ExecOptions{Dir: dir, Capture: true, Quiet: true})
 	if err != nil {
 		return "", fmt.Errorf("version probe %s %v in %s: %w", probe.Bin, probe.Args, dir, err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	out := strings.TrimSpace(res.Stdout)
+	if len(out) > maxProbeOutput {
+		// The cut can land inside a rune, and the token is displayed as well as hashed.
+		out = strings.ToValidUTF8(out[:maxProbeOutput], "")
+	}
+	return out, nil
 }
 
 // newCommandRenderer returns the command preview used by `magus describe`: it

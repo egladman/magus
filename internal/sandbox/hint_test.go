@@ -324,9 +324,9 @@ func TestMagusRuntimeEnvPassesThrough(t *testing.T) {
 }
 
 func TestValidateGlobs(t *testing.T) {
-	assert.Empty(t, env.ValidateGlobs([]string{"MISE_*", "NPM_CONFIG_*"}), "valid globs should pass")
+	assert.NoError(t, env.ValidateGlobs([]string{"MISE_*", "NPM_CONFIG_*"}), "valid globs should pass")
 	for _, bad := range []string{"*_TOKEN", "FOO*BAR", "EXACT"} {
-		assert.NotEmpty(t, env.ValidateGlobs([]string{bad}), "expected %q to be invalid", bad)
+		assert.Error(t, env.ValidateGlobs([]string{bad}), "expected %q to be invalid", bad)
 	}
 }
 

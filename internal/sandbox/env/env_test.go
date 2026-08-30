@@ -11,40 +11,39 @@ import (
 // entire environment (secrets included) through Scrub.
 func TestValidateGlobs_RejectsBareWildcard(t *testing.T) {
 	t.Run("bare wildcard", func(t *testing.T) {
-		assert.Equal(t, "*", ValidateGlobs([]string{"*"}))
+		assert.ErrorIs(t, ValidateGlobs([]string{"*"}), ErrInvalidGlob)
 	})
 	t.Run("bare wildcard among valid", func(t *testing.T) {
-		assert.Equal(t, "*", ValidateGlobs([]string{"MISE_*", "*"}))
+		err := ValidateGlobs([]string{"MISE_*", "*"})
+		assert.ErrorIs(t, err, ErrInvalidGlob)
+		assert.ErrorContains(t, err, `"*"`, "the error names the offending pattern")
 	})
 	t.Run("valid prefix glob", func(t *testing.T) {
-		assert.Empty(t, ValidateGlobs([]string{"MISE_*"}))
+		assert.NoError(t, ValidateGlobs([]string{"MISE_*"}))
 	})
 	t.Run("valid single-char prefix", func(t *testing.T) {
-		assert.Empty(t, ValidateGlobs([]string{"M*"}))
+		assert.NoError(t, ValidateGlobs([]string{"M*"}))
 	})
 	t.Run("interior wildcard", func(t *testing.T) {
-		assert.Equal(t, "A*B*", ValidateGlobs([]string{"A*B*"}))
+		assert.ErrorContains(t, ValidateGlobs([]string{"A*B*"}), `"A*B*"`)
 	})
 	t.Run("no wildcard", func(t *testing.T) {
-		assert.Equal(t, "PATH", ValidateGlobs([]string{"PATH"}))
+		assert.ErrorContains(t, ValidateGlobs([]string{"PATH"}), `"PATH"`)
 	})
 	t.Run("empty", func(t *testing.T) {
-		assert.Empty(t, ValidateGlobs(nil))
+		assert.NoError(t, ValidateGlobs(nil))
 	})
 }
 
-// TestValidateGlobs_EmptyStringPatternIsDistinguishableFromSuccess guards against a
-// validator whose failure and success outputs collide: an empty-string glob is
-// invalid (it satisfies none of the well-formed-pattern rules), but before the fix
-// ValidateGlobs returned the offending pattern verbatim - so ValidateGlobs([""])
-// returned "", the same value used to report "all patterns valid".
-func TestValidateGlobs_EmptyStringPatternIsDistinguishableFromSuccess(t *testing.T) {
-	got := ValidateGlobs([]string{""})
-	assert.NotEmpty(t, got, "an empty-string pattern must be reported as invalid, not conflated with success")
+// TestValidateGlobs_EmptyStringPatternIsInvalid keeps the case that forced the
+// signature: an empty-string glob is invalid, and while the result was a string it
+// could not say so - the report and the all-valid sentinel were both "", so a
+// caller checking `!= ""` read it as valid.
+func TestValidateGlobs_EmptyStringPatternIsInvalid(t *testing.T) {
+	assert.ErrorIs(t, ValidateGlobs([]string{""}), ErrInvalidGlob)
 
 	t.Run("empty pattern among valid ones", func(t *testing.T) {
-		got := ValidateGlobs([]string{"MISE_*", ""})
-		assert.NotEmpty(t, got, "an empty-string pattern anywhere in the list must fail validation")
+		assert.ErrorIs(t, ValidateGlobs([]string{"MISE_*", ""}), ErrInvalidGlob)
 	})
 }
 
