@@ -25,7 +25,7 @@ func TestAdviseNewSourceDirFiresOnTheFirstFile(t *testing.T) {
 	got := adviseNewSourceDir(filepath.Join("kvdir", "kvdir.go"))
 
 	assert.Contains(t, got, "creates a NEW DIRECTORY")
-	assert.Contains(t, got, "magus-architecture", "the advisory has to name what to load")
+	assert.Contains(t, got, "magus-architecture-review", "the advisory has to name the installed skill exactly, or it routes into a wall")
 }
 
 // The host sends an ABSOLUTE path, and this repo is routinely checked out under
