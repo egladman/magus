@@ -120,7 +120,7 @@ type Annotator interface {
 	EndGroup(id string) error
 	// Annotate raises a message outside the job log.
 	Annotate(a Annotation) error
-	// Quote returns text safe to replay into the job log, neutralizing any
+	// Defang returns text safe to replay into the job log, neutralizing any
 	// provider command syntax it contains.
 	//
 	// Not cosmetic: magus replays captured subprocess output, so a test
@@ -128,9 +128,9 @@ type Annotator interface {
 	// by the runner, forging annotations or closing a section magus opened.
 	//
 	// Providers supply their command prefixes once rather than being
-	// consulted per line (see QuoteWith), which is what keeps this
+	// consulted per line (see DefangWith), which is what keeps this
 	// affordable over every replayed line of a failing build.
-	Quote(text string) string
+	Defang(text string) string
 }
 
 // Nop is the Annotator used when no provider is detected. Every method
@@ -141,7 +141,7 @@ func (Nop) Active() bool              { return false }
 func (Nop) StartGroup(Group) error    { return nil }
 func (Nop) EndGroup(string) error     { return nil }
 func (Nop) Annotate(Annotation) error { return nil }
-func (Nop) Quote(text string) string  { return text }
+func (Nop) Defang(text string) string { return text }
 
 var (
 	openerMu sync.RWMutex
@@ -179,7 +179,7 @@ func Detect(w io.Writer) Annotator {
 	return Nop{}
 }
 
-// QuoteWith neutralizes any line in text that begins with one of the
+// DefangWith neutralizes any line in text that begins with one of the
 // given command prefixes, by dropping the prefix's first character so
 // the provider no longer recognizes the line as a command.
 //
@@ -195,7 +195,7 @@ func Detect(w io.Writer) Annotator {
 // The drop repeats until no prefix matches. A single pass would UPGRADE a
 // nested prefix into the command it was not: ":::error::x" is inert to the
 // runner, and one drop makes it "::error::x", which the runner executes.
-func QuoteWith(text string, prefixes []string) string {
+func DefangWith(text string, prefixes []string) string {
 	if len(prefixes) == 0 {
 		return text
 	}
@@ -241,10 +241,10 @@ const (
 	maxMessageLen = 4096
 	// maxFieldLen bounds the short fields, which are headings and paths.
 	maxFieldLen = 512
-	// maxQuotePrefixes bounds what a provider can make magus match against
-	// every replayed line. QuoteWith is O(lines x prefixes), so an
+	// maxDefangPrefixes bounds what a provider can make magus match against
+	// every replayed line. DefangWith is O(lines x prefixes), so an
 	// unbounded list turns a failing build into a hang.
-	maxQuotePrefixes = 16
+	maxDefangPrefixes = 16
 )
 
 // Sanitize returns a copy of a bounded to the limits above and stripped
@@ -296,7 +296,7 @@ func ClampPrefixes(in []string) []string {
 			continue
 		}
 		out = append(out, p)
-		if len(out) == maxQuotePrefixes {
+		if len(out) == maxDefangPrefixes {
 			break
 		}
 	}

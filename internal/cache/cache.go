@@ -1466,7 +1466,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				if omitted > 0 {
 					_, _ = fmt.Fprintf(os.Stderr, "... %d line(s) omitted; showing likely diagnostics; full log: %s\n", omitted, logPath)
 				}
-				_, _ = io.WriteString(os.Stderr, ann.Quote(string(excerpt)))
+				_, _ = io.WriteString(os.Stderr, ann.Defang(string(excerpt)))
 				if len(excerpt) > 0 && excerpt[len(excerpt)-1] != '\n' {
 					_, _ = fmt.Fprintln(os.Stderr)
 				}
@@ -1483,7 +1483,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				if omitted > 0 {
 					_, _ = fmt.Fprintf(os.Stderr, "... %d log line(s) omitted; showing likely diagnostics\n", omitted)
 				}
-				_, _ = io.WriteString(os.Stderr, ann.Quote(string(excerpt)))
+				_, _ = io.WriteString(os.Stderr, ann.Defang(string(excerpt)))
 				if len(excerpt) > 0 && excerpt[len(excerpt)-1] != '\n' {
 					_, _ = fmt.Fprintln(os.Stderr)
 				}
@@ -1491,7 +1491,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		case quiet:
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
-				_, _ = io.WriteString(os.Stderr, ann.Quote(string(data)))
+				_, _ = io.WriteString(os.Stderr, ann.Defang(string(data)))
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
 		default:

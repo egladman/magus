@@ -117,8 +117,13 @@ func (a *spellAnnotator) Active() bool {
 	}
 	if resp.Data == nil {
 		a.active = true // no enabled() op declared -> always active
+	} else if b, ok := resp.Data.(bool); ok {
+		a.active = b
 	} else {
-		a.active, _ = resp.Data.(bool)
+		// A declared enabled() that returns a non-bool is a spell contract violation. Stay
+		// inactive rather than guess: activating on a malformed signal could emit a provider's
+		// markers outside its CI, the exact misfire Active exists to prevent.
+		a.active = false
 	}
 	a.activeKnown = true
 	return a.active
@@ -154,7 +159,7 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 	})
 }
 
-// Quote neutralizes the provider's own command syntax in replayed output.
+// Defang neutralizes the provider's own command syntax in replayed output.
 //
 // The spell declares its command prefixes once, via quote_prefixes, and
 // the matching runs here in Go. That split is the point: this is called
@@ -162,8 +167,8 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 // spell per line would cost far more than the feature is worth, while
 // asking it once costs nothing and keeps the syntax knowledge in the
 // spell where it belongs.
-func (a *spellAnnotator) Quote(text string) string {
-	return annotate.QuoteWith(text, a.quotePrefixes())
+func (a *spellAnnotator) Defang(text string) string {
+	return annotate.DefangWith(text, a.quotePrefixes())
 }
 
 // quotePrefixes reads the spell's optional quote_prefixes op once. A
