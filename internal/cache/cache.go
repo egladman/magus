@@ -9,11 +9,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -1228,6 +1231,18 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 					continue
 				}
 			}
+			// A cas/ entry is content-addressed: its bytes must hash to the name it
+			// is stored under, so a poisoned archive cannot slip content that never
+			// hashes to its address into the store (replay never re-hashes on read).
+			// This matches importArtifact's CAS check. Manifests are NOT authenticated
+			// here: `magus config cache import` is an explicit operator action - the
+			// operator vouches for the archive by running it - and replay-side path
+			// containment bounds where any imported manifest can write.
+			rel, err := filepath.Rel(c.dir, clean)
+			if err != nil {
+				return fmt.Errorf("magus/cache: import rel %q: %w", clean, err)
+			}
+			isBlob := strings.HasPrefix(filepath.ToSlash(rel), "cas/")
 			f, err := os.Create(clean)
 			if err != nil {
 				return fmt.Errorf("magus/cache: import create %q: %w", clean, err)
@@ -1236,7 +1251,12 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			// truncating: io.LimitReader alone stops at the cap and io.Copy
 			// returns nil, which would commit a corrupt/truncated blob.
 			limit := c.importLimit()
-			n, err := io.Copy(f, io.LimitReader(tr, limit+1))
+			h := sha256.New()
+			var w io.Writer = f
+			if isBlob {
+				w = io.MultiWriter(f, h)
+			}
+			n, err := io.Copy(w, io.LimitReader(tr, limit+1))
 			if err != nil {
 				_ = f.Close()
 				return fmt.Errorf("magus/cache: import write %q: %w", clean, err)
@@ -1248,6 +1268,12 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			}
 			if err := f.Close(); err != nil {
 				return fmt.Errorf("magus/cache: import close %q: %w", clean, err)
+			}
+			if isBlob {
+				if want, got := path.Base(filepath.ToSlash(rel)), hex.EncodeToString(h.Sum(nil)); got != want {
+					_ = os.Remove(clean)
+					return fmt.Errorf("magus/cache: import blob %s content hashes to %s", want, got)
+				}
 			}
 		}
 	}

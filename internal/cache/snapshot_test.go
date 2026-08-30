@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -559,6 +560,65 @@ func TestReplayCancelledCtx(t *testing.T) {
 	m := &Manifest{Outputs: []OutputRecord{{Path: "x", Blob: "deadbeef"}}}
 	_, err := c.replay(ctx, m, t.TempDir())
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// TestReplayRefusesSymlinkEscape verifies replay refuses a hostile manifest
+// whose symlink output would let a later file record escape the workspace root,
+// and that nothing is written or deleted outside root. The manifest here is the
+// shape an insecure remote or a signed supply-chain artifact could carry.
+func TestReplayRefusesSymlinkEscape(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation is restricted on Windows")
+	}
+	c := newBareCache(t)
+	base := t.TempDir()
+	root := filepath.Join(base, "ws")
+	outside := filepath.Join(base, "outside")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	require.NoError(t, os.MkdirAll(outside, 0o755))
+
+	// A real CAS blob, so a write that reaches replayBlob would actually escape.
+	// Without this the missing-blob error would mask the guard - the refusal must
+	// be the guard's, not a failed copy of a nonexistent blob.
+	src := filepath.Join(base, "payload")
+	require.NoError(t, os.WriteFile(src, []byte("attacker bytes"), 0o644))
+	evilRec, err := c.snapshotOne(src, "payload")
+	require.NoError(t, err)
+
+	// Positive control: prove a symlink named inside root but pointing at `outside`
+	// really lets a nested write ESCAPE root, so a later refusal is meaningful and
+	// not an artifact of the path never actually leaving root.
+	require.NoError(t, os.Symlink(outside, filepath.Join(root, "probe")))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "probe", "canary"), []byte("x"), 0o644))
+	require.FileExists(t, filepath.Join(outside, "canary"), "control: write through symlink must escape root")
+	require.NoError(t, os.RemoveAll(filepath.Join(root, "probe")))
+	require.NoError(t, os.Remove(filepath.Join(outside, "canary")))
+
+	// Attack A: a symlink output whose target escapes root is refused outright, so
+	// the symlink is never even created.
+	mA := &Manifest{Outputs: []OutputRecord{{Path: "link", Symlink: outside}}}
+	_, err = c.replay(context.Background(), mA, root)
+	require.Error(t, err, "replay must refuse an escaping symlink target")
+	assert.NoFileExists(t, filepath.Join(root, "link"))
+
+	// Attack B: a real-blob file record whose parent is a pre-existing symlink out
+	// of root. replay must refuse before MkdirAll/Remove/write follow the link;
+	// the seeded blob means an unguarded replay would land bytes at outside/evil.
+	require.NoError(t, os.Symlink(outside, filepath.Join(root, "link")))
+	mB := &Manifest{Outputs: []OutputRecord{{Path: "link/evil", Blob: evilRec.Blob}}}
+	_, err = c.replay(context.Background(), mB, root)
+	require.Error(t, err, "replay must refuse a write through a symlink parent")
+	assert.NoFileExists(t, filepath.Join(outside, "evil"), "no bytes may land outside root")
+
+	// Attack C: a plain ".." in the output path escapes root and is refused. Uses
+	// the real blob too, so a missing-blob error cannot stand in for the guard.
+	escape := filepath.Join(root, "..", "evil")
+	require.False(t, strings.HasPrefix(filepath.Clean(escape), filepath.Clean(root)+string(filepath.Separator)),
+		"control: ../evil must resolve outside root")
+	mC := &Manifest{Outputs: []OutputRecord{{Path: "../evil", Blob: evilRec.Blob}}}
+	_, err = c.replay(context.Background(), mC, root)
+	require.Error(t, err, "replay must refuse a .. output path")
+	assert.NoFileExists(t, escape)
 }
 
 // TestCopyFileRoundTrip verifies copyFile creates parent dirs and copies bytes.
