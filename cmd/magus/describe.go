@@ -100,7 +100,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "  spell        language/runtime adapters")
 	fmt.Fprintln(os.Stderr, "  charm        execution modifiers (rw, gha) and the targets that declare them")
 	fmt.Fprintln(os.Stderr, "  target       targets dispatched to projects; `target <path:target>` evaluates one")
-	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (magus.needs DAG) per project")
+	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (ctx.needs DAG) per project")
 	fmt.Fprintln(os.Stderr, "  project      directories recognized as units of work; `project <path>` details one")
 	fmt.Fprintln(os.Stderr, "  workspace    the active workspace root and its config")
 	fmt.Fprintln(os.Stderr, "  module       magus stdlib modules; `module <name>` lists its methods + signatures")

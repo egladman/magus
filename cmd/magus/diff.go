@@ -1120,11 +1120,12 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 }
 
 func diffUsage(w *os.File) {
-	fmt.Fprintln(w, "Usage: magus diff [--generated] [--impact] [flags]")
+	fmt.Fprintln(w, "Usage: magus diff [--generated] [--impact] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]")
 	fmt.Fprintln(w, "       magus diff --ack [<changed-path>...]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
-	fmt.Fprintln(w, "It takes no ref: the subject is always the uncommitted tree.")
+	fmt.Fprintln(w, "The uncommitted tree is the default subject; --rev reviews a committed range")
+	fmt.Fprintln(w, "and --patch reviews a patch somebody handed you.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Generated files - declared target outputs - are folded away: reading one is")
 	fmt.Fprintln(w, "reading a machine's restatement of a change made elsewhere, so the source edit")
@@ -1169,6 +1170,11 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "                them when you name none. Needs a terminal.")
 	fmt.Fprintln(w, "  --reason      an optional note kept with an --ack")
 	fmt.Fprintln(w, "  --watch       re-read and re-render whenever the working tree changes")
+	fmt.Fprintln(w, "  --rev         review a committed range instead of the working tree, as")
+	fmt.Fprintln(w, "                base...head: a colleague's branch, or an agent's finished work")
+	fmt.Fprintln(w, "  --patch       review a patch file instead of the working tree; - reads stdin")
+	fmt.Fprintln(w, "  --prompt      print a review prompt to paste into your own LLM: the context")
+	fmt.Fprintln(w, "                magus has, never a drafted review")
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
