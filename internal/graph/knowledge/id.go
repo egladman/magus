@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/egladman/magus/types"
 )
@@ -97,15 +98,15 @@ func noteID(scope, name string) string {
 // assembly had minted the edge correctly all along.
 func AnchorNodeID(kind, target, scope string) string {
 	switch kind {
-	case "symbol":
+	case types.KindSymbol:
 		return symbolID(target)
-	case "file":
+	case types.KindFile:
 		return fileID(target)
-	case "project":
+	case types.KindProject:
 		return projectID(target)
-	case "target":
+	case types.KindTarget:
 		return target // already a fully-formed target id
-	case "note":
+	case types.KindNote:
 		return noteID(scope, target)
 	default:
 		return ""
@@ -130,7 +131,13 @@ func sanitize(s string, limit int) string {
 	}, s)
 	s = strings.TrimSpace(s)
 	if limit > 0 && len(s) > limit {
-		s = strings.TrimSpace(s[:limit])
+		// Back up to a rune boundary so a multibyte rune (a CJK or accented char in a label
+		// drawn from repo text) is not split into invalid UTF-8 that ships as mojibake.
+		cut := limit
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = strings.TrimSpace(s[:cut])
 	}
 	return s
 }
