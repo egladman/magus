@@ -49,12 +49,10 @@ Open the `magusfile.buzz` that `magus init` created. It looks like this: every e
 ```buzz
 import "magus";
 
-// The magus host utilities are imported under bare names - os, fs, vcs, http -
-// the same convention as Buzz's stdlib. magus layers its methods onto Buzz's
-// stdlib, so `import "os"` carries both surfaces (os\env from Buzz, proc\exec from
-// magus). Methods are camelCase (Buzz's convention). Import each module you use.
-import "os";
-
+// The magus host utilities are imported under bare names - proc, fs, vcs, http, os -
+// the same convention as Buzz's stdlib, and magus layers its own methods onto that
+// stdlib. Members are reached with a backslash (proc\exec, fs\readFile) and named in
+// camelCase. Import each module you use; an unused import warns.
 import "proc";
 // This directory is already a project - its magusfile registers it, and it runs
 // on defaults with no further ceremony. Customize only when you need to: call
@@ -74,7 +72,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); }
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
-export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); proc\exec("echo", ["Hello from magus"]); }
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(format); proc\exec("echo", ["Hello from magus"]); }
 export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off. magus does
