@@ -31,7 +31,7 @@ func buildRuntime(results []string, affected bool) *Runtime {
 	now := time.Now()
 	for i, r := range results {
 		rt.Record(testProject, testTarget, forecast.Outcome{
-			Result:         r,
+			Result:         forecast.OutcomeResult(r),
 			AffectedByDiff: affected,
 			DurationMs:     1000,
 			At:             now.Add(time.Duration(i) * time.Minute),
@@ -126,7 +126,11 @@ func TestIsSuspectedRegression_UnaffectedFails(t *testing.T) {
 	t.Parallel()
 	h := &forecast.History{}
 	rt := NewRuntime(h, "", testCfg, nil, true)
-	results := []string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "fail", "fail"}
+	results := []forecast.OutcomeResult{
+		forecast.OutcomePass, forecast.OutcomePass, forecast.OutcomePass, forecast.OutcomePass,
+		forecast.OutcomePass, forecast.OutcomePass, forecast.OutcomePass, forecast.OutcomePass,
+		forecast.OutcomeFail, forecast.OutcomeFail,
+	}
 	now := time.Now()
 	for i, r := range results {
 		affected := true
@@ -153,9 +157,9 @@ func TestRecordOutcome_Eviction(t *testing.T) {
 	now := time.Now()
 	total := forecast.OutcomeWindow + 10
 	for i := range total {
-		result := "pass"
+		result := forecast.OutcomePass
 		if i == 0 {
-			result = "volatile" // first entry should be evicted
+			result = forecast.OutcomeVolatile // first entry should be evicted
 		}
 		rt.Record(testProject, testTarget, forecast.Outcome{
 			Result: result, AffectedByDiff: true, DurationMs: 1000,
@@ -175,7 +179,9 @@ func TestLastPassTime(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	h := &forecast.History{}
 	rt := NewRuntime(h, "", testCfg, nil, true)
-	for i, r := range []string{"pass", "pass", "fail", "fail"} {
+	for i, r := range []forecast.OutcomeResult{
+		forecast.OutcomePass, forecast.OutcomePass, forecast.OutcomeFail, forecast.OutcomeFail,
+	} {
 		rt.Record(testProject, testTarget, forecast.Outcome{
 			Result: r, At: now.Add(time.Duration(i) * time.Minute),
 		})
@@ -337,4 +343,34 @@ func TestMergeKeepsTheNewerShardsOutcomes(t *testing.T) {
 	if !got.LastUpdated.Equal(at.Add(time.Hour)) {
 		t.Fatalf("LastUpdated = %v, want the newer shard's timestamp", got.LastUpdated)
 	}
+}
+
+// The vocabulary is what the counters are computed from, so it has to stay exactly the
+// three strings a cached history file already holds: retyping the field must not have
+// moved a byte on the wire.
+func TestOutcomeResultsKeepTheirWireSpelling(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "pass", string(forecast.OutcomePass))
+	assert.Equal(t, "fail", string(forecast.OutcomeFail))
+	assert.Equal(t, "volatile", string(forecast.OutcomeVolatile))
+}
+
+// A result this magus does not recognize - a newer writer's vocabulary, or a hand-edited
+// file - must move no counter. Counting it as a pass or a fail would score a target on a
+// verdict nothing here can read.
+func TestRecordIgnoresAnUnrecognizedResult(t *testing.T) {
+	t.Parallel()
+
+	h := &forecast.History{}
+	rt := NewRuntime(h, "", testCfg, nil, true)
+	now := time.Now()
+	rt.Record(testProject, testTarget, forecast.Outcome{Result: forecast.OutcomePass, At: now})
+	rt.Record(testProject, testTarget, forecast.Outcome{Result: "quarantined", At: now.Add(time.Minute)})
+
+	s := rt.Stats(testProject, testTarget)
+	assert.Len(t, s.RecentOutcomes, 2, "the row is kept; only the counters decline to read it")
+	assert.Equal(t, 1, s.PassCount)
+	assert.Zero(t, s.FailCount)
+	assert.Zero(t, s.VolatileCount)
 }
