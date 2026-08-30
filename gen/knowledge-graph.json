@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2407,
-  "edge_count": 6347,
+  "node_count": 2406,
+  "edge_count": 6346,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -2151,15 +2151,6 @@
       "source": "README.md",
       "attrs": {
         "role": "readme"
-      }
-    },
-    {
-      "id": "doc:SECURITY.md",
-      "kind": "doc",
-      "label": "SECURITY.md",
-      "source": "SECURITY.md",
-      "attrs": {
-        "role": "doc"
       }
     },
     {
@@ -65653,14 +65644,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "README.md"
-    },
-    {
-      "source": "project:.",
-      "target": "doc:SECURITY.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "SECURITY.md"
     },
     {
       "source": "project:.",

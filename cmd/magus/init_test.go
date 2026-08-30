@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
@@ -53,15 +52,6 @@ func TestStarterMagusfileNoRemovedAPI(t *testing.T) {
 // top level. It returns the diagnostic Exec raises, if any. This is the real loader,
 // not a string scan - it is what surfaces a checker diagnostic like BZZ1006 that a
 // parse (buzz.ParseEmbedded) and a grep both miss.
-func loadStarterEmbedded(ctx context.Context, src string) error {
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	defer func() { _ = sess.Close() }()
-	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(io.Discard))
-	bindings.RegisterMagusNamespace(ctx, sess)
-	bindings.RegisterSpellSourceModules(sess)
-	return sess.Exec(ctx, src)
-}
-
 // TestStarterMagusfileChecksClean is the enforcement point the string scan in
 // TestStarterMagusfileNoRemovedAPI cannot be: it LOADS and CHECKS the embedded starter
 // through the magusfile engine and requires zero error-level diagnostics, so the
@@ -69,21 +59,17 @@ func loadStarterEmbedded(ctx context.Context, src string) error {
 // init suggests - can load. A BZZ1006 (a proc\exec under `> void` missing `!> any`)
 // shipped once precisely because the scan never compiled the template. Unused-import
 // warnings (BZZ3001) are tolerated here; the hard requirement is no error diagnostic.
+// The guard that this check cannot pass vacuously is TestScripts/init_scaffold_runs,
+// which runs the scaffolded targets rather than only loading them.
 func TestStarterMagusfileChecksClean(t *testing.T) {
-	require.NoError(t, loadStarterEmbedded(context.Background(), starterMagusfileBuzz),
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(io.Discard))
+	bindings.RegisterMagusNamespace(ctx, sess)
+	bindings.RegisterSpellSourceModules(sess)
+	require.NoError(t, sess.Exec(ctx, starterMagusfileBuzz),
 		"embedded starter magusfile must check clean under the magusfile engine")
-}
-
-// TestStarterMagusfileCheckCanFail proves the check above can actually fail: strip the
-// build target's `!> any` and the same loader raises BZZ1006. A regression test that
-// cannot fail is the failure mode that let the original bug through, so this guards the
-// guard - and, like the test above, it also stays red until the template carries the fix.
-func TestStarterMagusfileCheckCanFail(t *testing.T) {
-	broken := strings.Replace(starterMagusfileBuzz, "!> any", "", 1)
-	require.NotEqual(t, starterMagusfileBuzz, broken, "starter build target must declare !> any")
-	err := loadStarterEmbedded(context.Background(), broken)
-	require.Error(t, err, "removing !> any must raise a diagnostic")
-	assert.Contains(t, err.Error(), "BZZ1006")
 }
 
 func TestInitSpellCmd(t *testing.T) {
