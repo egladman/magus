@@ -635,6 +635,35 @@ test("the toolbar's controls sit in a row, actions apart from the readout", asyn
   dispose.deactivate();
 });
 
+// Focus mode collapses the toolbar rather than emptying it. Hiding the counts alone left the
+// readout standing at its own min-block-size with the key disclosure floating in an otherwise
+// blank band - a mode whose claim is less chrome, spending a row on nothing. jsdom computes no
+// layout, so what a test can hold is the row being hidden and the legend having moved to the row
+// that is still on screen; the band itself is what the committed console-diff-focus shot shows.
+test("focus mode hides the readout row and takes the key legend with it", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const readout = document.querySelector<HTMLElement>(".console-diff-toolbar__readout");
+  const keys = document.querySelector<HTMLElement>(".console-diff-toolbar__keyswrap");
+  const progress = document.querySelector<HTMLElement>(".console-diff-progress");
+  assert.ok(readout && keys && progress);
+  assert.equal(readout.hidden, false);
+  assert.equal(keys.parentElement, readout, "the legend rides the readout in the dense view");
+
+  await setFocusMode(true);
+  assert.equal(readout.hidden, true, "the row goes, not just the chips inside it");
+  assert.equal(progress.hidden, false);
+  assert.equal(keys.parentElement, progress, "the legend moves to the row that is still drawn");
+
+  await setFocusMode(false);
+  assert.equal(readout.hidden, false);
+  assert.equal(keys.parentElement, readout, "and comes back with it");
+
+  dispose.deactivate();
+});
+
 // The head is the only place the surface says what it is and what it is comparing. Both were
 // missing outright: the diff was the one surface opening with an unheaded row of numbers, and
 // nothing on it named the two sides of the diff being read.

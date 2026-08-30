@@ -473,14 +473,17 @@
 }
 
 /* Its own strip under the readout rather than an item on it: the toolbar spends no inline gutter
-   of its own now, so each direct child pays for its own. */
+   of its own now, so each direct child pays for its own.
+   In focus mode the readout above it is hidden and this becomes the toolbar's only second row, so
+   its padding is symmetric - the key legend it takes in from the readout there would otherwise sit
+   flush against the head's hairline. */
 .console-diff-progress {
   display: flex;
   flex: 0 1 auto;
   gap: var(--pf-t--global--spacer--sm);
   align-items: center;
   min-width: 0;
-  padding-block-end: var(--pf-t--global--spacer--xs);
+  padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: var(--console-pad);
 }
 

@@ -26,6 +26,11 @@ body[data-dash-native] { margin: 0; }
 [data-dash-native] .console-dashboard-main,
 .console-dashboard-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
 
+/* It carries tabindex="-1" so the surface's own keys (b, p) have somewhere to be dispatched from,
+   and main.ts focuses it on arrival. That is a programmatic focus on a whole page rather than on a
+   control, so a ring around everything would say a thing about this element that is not true. */
+.console-dashboard-main { outline: none; }
+
 .console-dashboard-main[data-mode="plan"] {
   display: flex;
   flex-direction: column;

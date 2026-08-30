@@ -57,7 +57,9 @@ import {
   activeWorkspace,
   enterBigPictureRoute,
   resetBigPicture,
+  toggleBigPicture,
 } from "./tiles/bigPicture";
+import { registerCommand, unregisterCommand } from "../commands";
 // The dashboard is only ever mounted as a console surface now (the decoupled console has no standalone
 // docs page), so it wires NO docs-site chrome of its own - the console frame owns the title bar, tab
 // strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
@@ -138,6 +140,33 @@ function setDashboardMode(mode: DashboardMode): void {
   // it on return is deliberate: it leaves no hidden command owner or retained canvas behind.
   disposePlan();
 }
+
+// The dashboard's two modes were reachable only by pointer: the Big Picture button and the Work
+// plan's cross-link. Both are declared as COMMANDS so they appear in the palette, the Actions
+// surface and the cheat sheet, and both carry a surface-local single key rather than a console-wide
+// chord - the diff surface's shape, and for its reason: a bare "b" must not present a dashboard
+// while somebody is reading a log in another pane. The keys are dispatched from #dash-main below,
+// so they mean something only while this surface holds focus, and they are NOT rebindable (nothing
+// reads the keymap for them, so an override would change the display and not the behavior).
+//
+// b and p are free everywhere they could collide: no dashboard tile binds a bare letter (only
+// Escape, the arrows and Home), the Plan mounted inside this surface takes j/k/r/0/+/-/Escape, and
+// every CONSOLE_KEYMAP default and preset binding is either modifier-led or - the Vim preset's "g t"
+// - prefixed by g, which is why neither of these is g or t.
+const COMMANDS: readonly { id: string; label: string; key: string; run: () => void }[] = [
+  {
+    id: "dashboard.bigPicture.toggle",
+    label: "Dashboard: present full-screen with no console chrome",
+    key: "b",
+    run: () => toggleBigPicture(),
+  },
+  {
+    id: "dashboard.plan.toggle",
+    label: "Dashboard: show the work plan",
+    key: "p",
+    run: () => setDashboardMode(dashboardMode === "plan" ? "overview" : "plan"),
+  },
+];
 
 function takeDashboardViewIntent(): DashboardMode | null {
   const win = window as DashboardViewWindow;
@@ -666,6 +695,37 @@ function onNewVersion(): void {
   });
 }
 
+// wireKeys registers the two commands and binds their keys on #dash-main, then focuses it so the
+// keys work on arrival rather than only after something inside has been clicked - the same pair of
+// moves the diff surface makes with its scroll container.
+//
+// The listener is on the surface root, not on document: the plan mounted inside it dispatches its
+// own single keys from a descendant, and this handler skips an event that one already claimed.
+function wireKeys(): void {
+  const main = opt("dash-main");
+  if (!main) return;
+  for (const c of COMMANDS)
+    registerCommand({ id: c.id, label: c.label, group: "Dashboard", run: c.run, key: c.key });
+  const byKey = new Map(COMMANDS.map((c) => [c.key, c.run]));
+  main.tabIndex = -1;
+  main.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const t = e.target;
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
+      const run = byKey.get(e.key);
+      if (!run) return;
+      e.preventDefault();
+      run();
+    },
+    { signal: lifecycleAbort?.signal },
+  );
+  // preventScroll: the dashboard is a long scrolling page, and focusing its root would otherwise
+  // be indistinguishable from the reader having scrolled somewhere.
+  main.focus({ preventScroll: true });
+}
+
 // ---- boot ------------------------------------------------------------------
 // activate boots the dashboard against the scaffold already in the document. Every DOM handle is
 // resolved at call time (el()/opt() are getElementById), so it needs no separate resolve step - it
@@ -690,6 +750,7 @@ export function activate(): void {
     wireNotifications();
   }
   wireResumeForm();
+  wireKeys();
   opt("dash-plan-back")?.addEventListener("click", () => setDashboardMode("overview"), {
     signal: lifecycleAbort?.signal,
   });
@@ -785,6 +846,7 @@ export function activate(): void {
 // The standalone page never calls this (the surface lives for the page's lifetime); the console's
 // dashboard PageModule calls it on deactivate.
 export function deactivate(): void {
+  for (const c of COMMANDS) unregisterCommand(c.id);
   resetBigPicture();
   disposePlan();
   transport.stop();

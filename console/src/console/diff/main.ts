@@ -1815,7 +1815,17 @@ export function activate(host: HTMLElement): SurfaceInstance {
       ? "Show the whole changeset again (f)"
       : "Read one hunk at a time (f)";
     progressEl.hidden = !state.focus;
-    statsEl.hidden = state.focus;
+    // The whole READOUT goes, not just the counts inside it. Hiding statsEl alone left the row
+    // standing at its --console-diff-head-block-size floor with the key disclosure floating alone
+    // in an otherwise empty band - a mode whose claim is less chrome, spending a toolbar row on
+    // nothing. So the row is hidden and the legend moves to the progress line, which is the row
+    // that IS on screen in this mode and is sized to its content.
+    //
+    // The legend rides along rather than being hidden with the counts because focus mode is the
+    // keyboard mode: the reader advances with ] and marks with v, and taking the only on-screen
+    // statement of those keys away from the mode that depends on them is the wrong half to cut.
+    readout.hidden = state.focus;
+    (state.focus ? progressEl : readout).append(keysWrap);
     renderVerdict();
     if (!state.focus) return;
     const total = state.pairs.length;

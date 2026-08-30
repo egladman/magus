@@ -45,10 +45,15 @@ find_chrome() {
 
 # name|path under the served tree|width|height|scale|mobile(0|1)|keys (optional)
 #
-# The trailing keys field presses its comma-separated list once the surface has settled. Two of
-# the review pictures live behind a keystroke and cannot be reached by a URL: the send box, which
-# is the only place magus names the host a write is about to reach, and the overview that carries
-# the threads the stream has nowhere to put.
+# The trailing keys field presses its comma-separated list once the surface has settled. Five of
+# these pictures live behind a keystroke and cannot be reached by a URL: the send box, which is the
+# only place magus names the host a write is about to reach; the overview that carries the threads
+# the stream has nowhere to put; the diff's one-hunk reading mode; and the dashboard's two modes,
+# the presentation board and the work plan.
+#
+# A key only lands if the surface has focus, which is why each of these surfaces focuses its own
+# root once it is ready. A binding added without that comes out here as a silent recapture of the
+# resting state.
 # The #demo fragment is what each surface reads to enter the daemon-free showcase, so
 # these need no daemon and no workspace.
 # Only what the site actually shows. Adding a surface here is the whole cost of adding a
@@ -64,10 +69,13 @@ find_chrome() {
 # hacks/screenshot.mjs is that driver and explains the two limits it exists to get past.
 shots=(
   "console-dashboard|console/dashboard/#demo|1280|820|2|0"
+  "console-dashboard-bigpicture|console/dashboard/#demo|1280|820|2|0|b"
+  "console-dashboard-plan|console/dashboard/#demo|1280|820|2|0|p"
   "console-graph|console/graph/#demo|1280|820|2|0"
   "console-logs|console/logs/#demo|1280|820|2|0"
   "console-activity|console/activity/#demo|1280|820|2|0"
   "console-diff|console/diff/#demo|1280|820|2|0"
+  "console-diff-focus|console/diff/#demo|1280|820|2|0|f"
   "console-diff-send|console/diff/#demo|1280|820|2|0|s"
   "console-diff-overview|console/diff/#demo|1280|820|2|0|Escape"
   "console-diff-mobile|console/diff/#demo|375|812|3|1"
