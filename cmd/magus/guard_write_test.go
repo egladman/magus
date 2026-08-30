@@ -203,6 +203,17 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "lease-a")
 	})
+
+	t.Run("a valid entry still denies through an earlier malformed one", func(t *testing.T) {
+		// The malformed pattern comes first, the valid glob that covers the write second.
+		// Short-circuiting on the bad pattern downgraded this deny to an advisory - a valid
+		// forbidden boundary must still hold when a sibling entry is unreadable.
+		leases := fleetLeases()
+		leases[1].ForbiddenPaths = []string{"cmd/magus/[gen/**", "cmd/magus/gen/**"}
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		require.Equal(t, "deny", got.Decision, "the valid forbidden pattern must deny even though an earlier entry could not be read")
+	})
 }
 
 // TestGradeLeasedWriteUnenrolled is the doctrine case: a writer magus cannot attribute

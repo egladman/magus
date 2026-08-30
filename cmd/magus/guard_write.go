@@ -469,11 +469,14 @@ func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool, error)
 // human reads and wrong here, where the answer denies a write: a guard that blocks
 // legitimate edits is one agents learn to route around, and routing around it is the
 // failure the whole ledger design is built to avoid.
-// A declaration the matcher cannot read is reported rather than discarded. Swallowing the
-// error made a malformed pattern match nothing, so a forbidden path spelled with a stray
-// bracket silently stopped denying - a deny that fails open while still looking enforced,
-// which the notes rule above names as the worst way to be wrong.
+// A declaration the matcher cannot read is surfaced only when nothing else matched, never
+// in place of a real match: a valid "src/**" that covers rel still denies even if an earlier
+// entry was a malformed pattern. Swallowing the error entirely let a forbidden path spelled
+// with a stray bracket stop denying; short-circuiting on the first error would let one bad
+// entry mask a valid sibling that should deny. So a match wins, and an unreadable pattern is
+// reported as the residual uncertainty only when no declaration covered the path.
 func declarationCovering(decls []string, rel string) (string, bool, error) {
+	var firstErr error
 	for _, raw := range decls {
 		decl := path.Clean(strings.TrimSpace(raw))
 		if decl == "." || decl == "/" {
@@ -484,20 +487,26 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 		}
 		ok, err := doublestar.Match(decl, rel)
 		if err != nil {
-			return "", false, fmt.Errorf("%q: %w", raw, err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%q: %w", raw, err)
+			}
+			continue
 		}
 		if ok {
 			return raw, true, nil
 		}
 		ok, err = doublestar.Match(decl+"/**", rel)
 		if err != nil {
-			return "", false, fmt.Errorf("%q: %w", raw, err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%q: %w", raw, err)
+			}
+			continue
 		}
 		if ok {
 			return raw, true, nil
 		}
 	}
-	return "", false, nil
+	return "", false, firstErr
 }
 
 // adviseMalformedDeclaration reports a boundary the guard could not check. An advisory

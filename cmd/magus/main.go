@@ -1195,7 +1195,9 @@ func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	bindDisplayFlags(fs)
 	var discardRoot, discardConfig string
 	fs.StringVar(&discardRoot, "root", "", "")
+	fs.StringVar(&discardRoot, "C", "", "")
 	fs.StringVar(&discardConfig, "config", "", "")
+	fs.StringVar(&discardConfig, "c", "", "")
 	if err := fs.Parse(pre); err != nil {
 		return usagef("magus: %v", err)
 	}

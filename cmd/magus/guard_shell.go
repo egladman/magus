@@ -629,15 +629,21 @@ func denyWholeTree(op string) string {
 // magusInvokes reports whether any resolved command runs magus carrying all of the given
 // words among its arguments.
 //
-// Position-free on purpose: magus accepts its global flags before the verb, so `magus
-// --root . notes edit x` and `magus -o json diff --ack` are the same invocations the
-// anchored patterns are written for, and both walked past them.
+// Position-free among magus's OWN arguments on purpose: magus accepts its global flags
+// before the verb, so `magus --root . notes edit x` and `magus -o json diff --ack` are the
+// same invocations the anchored patterns are written for, and both walked past them. Tokens
+// after a bare `--` are passed through to a spell's tool, not read by magus, so they are
+// excluded - otherwise `magus run go::go-test . -- notes edit` reads as note-authoring.
 func magusInvokes(cmds []guardCommand, words ...string) bool {
 	for _, c := range cmds {
 		if c.Name != "magus" {
 			continue
 		}
-		if !slices.ContainsFunc(words, func(w string) bool { return !slices.Contains(c.Args, w) }) {
+		args := c.Args
+		if i := slices.Index(args, "--"); i >= 0 {
+			args = args[:i]
+		}
+		if !slices.ContainsFunc(words, func(w string) bool { return !slices.Contains(args, w) }) {
 			return true
 		}
 	}
