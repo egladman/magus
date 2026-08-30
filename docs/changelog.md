@@ -1227,7 +1227,7 @@ file` explains any one of them in full. `magus doctor` reports the standing set.
   behavior and they share one content digest - `magus graph verify` reports staleness the
   same way whichever is installed, and the file's stamp records `skill-variant`. Across the
   eight skills the short form is 14% smaller. The docs site now reproduces every skill in
-  both forms with a size comparison (`reference/skills/`), generated from the embedded
+  both forms with a size comparison (`docs/reference/skills/`), generated from the embedded
   bodies so it cannot drift from what install writes.
 - The `magus-changes` skill now serves three outputs rather than one: the evidence-backed
   brief it already wrote, a `CHANGELOG.md` entry in this file's existing Keep a Changelog
