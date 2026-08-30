@@ -49,6 +49,14 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git reset && tool --hard-mode"},
 		{command: "git checkout .", deny: true},
 		{command: "git checkout -- .", deny: true},
+		// A TREE-ISH before the pathspec is still the whole tree. These read as narrow
+		// reverts while the first operand was compared against ".", so the revision was
+		// what got tested and the pathspec was never reached.
+		{command: "git checkout HEAD -- .", deny: true},
+		{command: "git checkout HEAD .", deny: true},
+		{command: "git checkout origin/main -- .", deny: true},
+		{command: "git restore --source HEAD .", deny: true},
+		{command: "git restore --source=HEAD .", deny: true},
 		{command: "git checkout main"},
 		{command: "git checkout -b feat/x"},
 		{command: "git restore .", deny: true},
@@ -58,7 +66,16 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git checkout -- gen/", context: "role=output"},
 		{command: "git checkout HEAD -- docs/gen", context: "role=output"},
 		{command: "git clean -fd", deny: true},
+		{command: "git clean -fdx", deny: true},
+		{command: "git clean --force", deny: true},
 		{command: "git clean -n"},
+		// READ-ONLY clean invocations. Matching any word containing one of fdxX denied
+		// both of these on the letters inside the flag NAME - "dry" and "exclude" - for
+		// commands that delete nothing.
+		{command: "git clean --dry-run"},
+		{command: "git clean --exclude=build"},
+		{command: "git clean -n -fd"},
+		{command: "git clean -ndx"},
 		{command: "git commit -m 'x'", context: "magus-vcs-hygiene"},
 		// Push, not commit: committing mid-mess is ordinary, publishing is the
 		// moment the work stops being yours alone.
@@ -71,6 +88,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git add --all", deny: true},
 		{command: "git add .", deny: true},
 		{command: "git add -u", deny: true},
+		// The deny holds wherever the stage-everything call sits on the line. It used to
+		// be graded in the ADVISORY pass, so any earlier git command that advised answered
+		// first and the deny was never reached.
+		{command: "git restore -- x && git add -A", deny: true},
+		{command: "git status && git add .", deny: true},
+		{command: "git add -A && git push", deny: true},
 		// Deliberate staging is still only advised - that IS the replacement.
 		{command: "git add cmd/magus/agent.go", context: "magus-vcs-hygiene"},
 		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs-hygiene"},
@@ -616,6 +639,34 @@ func TestGuardKnownHoles(t *testing.T) {
 	}
 }
 
+// TestGitGuardFallbackPrefersTheDeny pins the unparsable-line half, where the file's own
+// invariant is that an over-eager deny is the safe direction: there is no AST, and the work
+// these rules protect cannot be recovered.
+//
+// Both cases answered with something weaker. The push ADVISORY was ordered above the
+// stage-all deny, and the safe-stash pattern listed the destructive restores as safe, so
+// each line got a reminder or nothing where the parsed path denies.
+func TestGitGuardFallbackPrefersTheDeny(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"git add -A && git push && (",
+		"git stash pop && (",
+		"git stash apply && (",
+		"git stash drop && (",
+		"git stash branch wip && (",
+	} {
+		_, parsed := parseGuardCommands(cmd)
+		require.False(t, parsed, "%q must be unparsable or it does not exercise the fallback", cmd)
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "%q must deny on the fallback path", cmd)
+	}
+
+	// Reading a stash is still safe, whether or not the line parses.
+	for _, cmd := range []string{"git stash list && (", "git stash show && ("} {
+		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q only reads", cmd)
+	}
+}
+
 // TestDenyOutranksHeldAdvisory pins severity ordering across rules. A git rule
 // that merely ADVISES used to answer first and return, so appending `git commit`
 // to an otherwise-denied line downgraded the whole verdict to an advisory. That is
@@ -846,6 +897,13 @@ func TestGuardDeniesReadAck(t *testing.T) {
 		`magus diff ` + "--ack",
 		`./magus diff --impact ` + "--ack",
 		`cd /tmp && magus diff ` + "--ack" + ` --reason x`,
+		// A GLOBAL FLAG before the verb is the same invocation, and the anchored pattern
+		// walked past every one of them: magus accepts its display and workspace flags
+		// ahead of the subcommand, so this spelling minted a receipt unguarded.
+		`magus -o json diff ` + "--ack",
+		`magus --root . diff ` + "--ack",
+		// A line the parser cannot read still falls back to the pattern.
+		`magus diff ` + "--ack" + ` && (`,
 	} {
 		v := evaluateBashGuard(cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)

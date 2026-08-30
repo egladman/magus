@@ -362,8 +362,12 @@ func guardCommandPrefix(args []string) []string {
 // These remain ONLY as the unparsable-line fallback: gitGuard above is the
 // primary path, and it reads an AST instead of the raw text.
 var (
-	guardStashRe     = regexp.MustCompile(`\bgit\s+stash\b`)
-	guardStashSafeRe = regexp.MustCompile(`\bgit\s+stash\s+(list|show|pop|apply|drop|branch)\b`)
+	guardStashRe = regexp.MustCompile(`\bgit\s+stash\b`)
+	// Reading a stash is safe; RESTORING one is not, and the parsed rule denies the bare
+	// restore forms. Listing pop/apply/drop/branch as safe here left the destructive
+	// spellings with no verdict at all on a line that does not parse, which is the one
+	// place an over-eager deny is the right answer.
+	guardStashSafeRe = regexp.MustCompile(`\bgit\s+stash\s+(list|show)\b`)
 	guardResetRe     = regexp.MustCompile(`\bgit\s+reset\b[^&|;]*--hard`)
 	guardCheckoutRe  = regexp.MustCompile(`\bgit\s+checkout\s+(--\s+)?\.(\s|$)`)
 	guardRestoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
@@ -394,7 +398,9 @@ var (
 	// answer is --root, not a cd.
 	guardCdMagusRe = regexp.MustCompile(`\bcd\s+\S+\s*(&&|;)\s*(\S*/)?magus\s`)
 
-	// guardNotesWriteRe matches an invocation that would AUTHOR a note.
+	// guardNotesWriteRe matches an invocation that would AUTHOR a note. It is the
+	// unparsable-line fallback for magusInvokes below, the way gitGuardFallback is for
+	// gitGuard: anchoring the verb to the program misses every global flag in between.
 	//
 	// The path rule already refuses an agent write into a notes store, but it only ever
 	// sees file writes - and `magus notes edit` reading piped prose is a command, not a
@@ -413,6 +419,7 @@ var (
 	// The guard is the right place precisely because of what it sees: it is wired into
 	// agent hosts, so every command reaching it came from an agent by construction. A
 	// person at a terminal never meets this rule.
+	// The unparsable-line fallback for magusInvokes, as above.
 	guardReadAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
 
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
@@ -619,6 +626,34 @@ func denyWholeTree(op string) string {
 		"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill."
 }
 
+// magusInvokes reports whether any resolved command runs magus carrying all of the given
+// words among its arguments.
+//
+// Position-free on purpose: magus accepts its global flags before the verb, so `magus
+// --root . notes edit x` and `magus -o json diff --ack` are the same invocations the
+// anchored patterns are written for, and both walked past them.
+func magusInvokes(cmds []guardCommand, words ...string) bool {
+	for _, c := range cmds {
+		if c.Name != "magus" {
+			continue
+		}
+		if !slices.ContainsFunc(words, func(w string) bool { return !slices.Contains(c.Args, w) }) {
+			return true
+		}
+	}
+	return false
+}
+
+// magusRuleFires answers off the resolved argv when the line parses and off the anchored
+// pattern when it does not - the same split gitGuard and gitGuardFallback make, and for the
+// same reason: a line with no AST to read must still be judged.
+func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *regexp.Regexp, words ...string) bool {
+	if parsed {
+		return magusInvokes(cmds, words...)
+	}
+	return fallback.MatchString(command)
+}
+
 // evaluateBashGuard applies the guard rules in severity order.
 //
 // magus denies on three independent triggers and explains everything else:
@@ -644,15 +679,16 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	// A matched git rule that only ADVISES is held, not returned: returning here
 	// let a trailing `git commit` downgrade a deny to an advisory. Deny always
 	// outranks advise, whichever rule saw the line first.
+	cmds, parsed := parseGuardCommands(command)
 	// Authoring a note is refused before anything else, because it is the one rule whose
 	// whole point is that it holds on EVERY surface: the path rule sees file writes, and a
 	// note authored from piped prose is a command, so only this catches it.
-	if guardNotesWriteRe.MatchString(command) {
+	if magusRuleFires(cmds, parsed, command, guardNotesWriteRe, "notes", "edit") {
 		return bashGuardVerdict{Deny: denyNotesAuthor}
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
-	if guardReadAckRe.MatchString(command) {
+	if magusRuleFires(cmds, parsed, command, guardReadAckRe, "diff", "--ack") {
 		return bashGuardVerdict{Deny: denyReadAck}
 	}
 	if guardSedInPlaceRe.MatchString(command) {
@@ -667,7 +703,6 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	if guardChainedRunRe.MatchString(command) {
 		advisory = bashGuardVerdict{Context: adviseChainedRun}
 	}
-	cmds, parsed := parseGuardCommands(command)
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {
 			if v.Deny != "" {

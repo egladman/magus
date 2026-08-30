@@ -295,7 +295,11 @@ func gradeLeasedWrite(ctx context.Context, actingLease, writePath string) writeG
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose ledger row is simply stale.
-	if owner, owned := ownerOf(live, rel, ""); owned {
+	owner, owned, err := ownerOf(live, rel, "")
+	if err != nil {
+		return adviseMalformedDeclaration(err)
+	}
+	if owned {
 		// Recorded as well as reported, so the lease whose file just moved can find out by
 		// asking the ledger. Telling only the writer left the one party who needed it - the agent
 		// still holding a stale read of this path - as the only party never informed.
@@ -364,13 +368,21 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 				"Lease %s (%s) has not registered the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
 			me.ID, me.ID, goalLine(me))}
 	}
-	if decl, forbidden := declarationCovering(me.ForbiddenPaths, rel); forbidden {
+	decl, forbidden, err := declarationCovering(me.ForbiddenPaths, rel)
+	if err != nil {
+		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
+	}
+	if forbidden {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: work inside your own owned paths, or report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this.\n"+
 				"%s is covered by %q, which your lease %s (%s) declared FORBIDDEN. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
 			rel, decl, me.ID, goalLine(me))}
 	}
-	if _, mine := declarationCovering(me.OwnedPaths, rel); mine {
+	_, mine, err := declarationCovering(me.OwnedPaths, rel)
+	if err != nil {
+		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
+	}
+	if mine {
 		// Advisory rather than a block: an orchestrator may have rebased the plan deliberately,
 		// and magus cannot tell that from a worker that wandered. What it can do is refuse to let
 		// the divergence stay silent until the merge finds it.
@@ -382,7 +394,11 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 		}
 		return writeGrade{}
 	}
-	if owner, owned := ownerOf(live, rel, me.ID); owned {
+	owner, owned, err := ownerOf(live, rel, me.ID)
+	if err != nil {
+		return adviseMalformedDeclaration(err)
+	}
+	if owned {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If lease %s has finished with this file, have it release the path by shrinking its owned_paths with the magus_ledger tool, then retry.\n"+
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the lease ledger exists to make visible; this guard is where the declaration gets read.",
@@ -424,16 +440,20 @@ func liveLease(live []types.Lease, id string) (types.Lease, bool) {
 // reports as a fact, and naming the first-recorded one keeps the guard's answer stable
 // between two runs over the same file - an answer that changes run to run is one nobody
 // can act on.
-func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool) {
+func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool, error) {
 	for _, u := range live {
 		if u.ID == exclude {
 			continue
 		}
-		if _, ok := declarationCovering(u.OwnedPaths, rel); ok {
-			return u, true
+		_, ok, err := declarationCovering(u.OwnedPaths, rel)
+		if err != nil {
+			return types.Lease{}, false, fmt.Errorf("lease %s: %w", u.ID, err)
+		}
+		if ok {
+			return u, true, nil
 		}
 	}
-	return types.Lease{}, false
+	return types.Lease{}, false, nil
 }
 
 // declarationCovering reports which declaration covers rel, and whether any did. rel is
@@ -449,7 +469,11 @@ func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool) {
 // human reads and wrong here, where the answer denies a write: a guard that blocks
 // legitimate edits is one agents learn to route around, and routing around it is the
 // failure the whole ledger design is built to avoid.
-func declarationCovering(decls []string, rel string) (string, bool) {
+// A declaration the matcher cannot read is reported rather than discarded. Swallowing the
+// error made a malformed pattern match nothing, so a forbidden path spelled with a stray
+// bracket silently stopped denying - a deny that fails open while still looking enforced,
+// which the notes rule above names as the worst way to be wrong.
+func declarationCovering(decls []string, rel string) (string, bool, error) {
 	for _, raw := range decls {
 		decl := path.Clean(strings.TrimSpace(raw))
 		if decl == "." || decl == "/" {
@@ -458,14 +482,31 @@ func declarationCovering(decls []string, rel string) (string, bool) {
 			// entry for the same reason. An explicit "**" is a different thing and stands.
 			continue
 		}
-		if ok, _ := doublestar.Match(decl, rel); ok {
-			return raw, true
+		ok, err := doublestar.Match(decl, rel)
+		if err != nil {
+			return "", false, fmt.Errorf("%q: %w", raw, err)
 		}
-		if ok, _ := doublestar.Match(decl+"/**", rel); ok {
-			return raw, true
+		if ok {
+			return raw, true, nil
+		}
+		ok, err = doublestar.Match(decl+"/**", rel)
+		if err != nil {
+			return "", false, fmt.Errorf("%q: %w", raw, err)
+		}
+		if ok {
+			return raw, true, nil
 		}
 	}
-	return "", false
+	return "", false, nil
+}
+
+// adviseMalformedDeclaration reports a boundary the guard could not check. An advisory
+// rather than a deny, like every other uncertainty here: a pattern magus cannot read says
+// nothing about whether this write is legitimate, only that nothing graded it.
+func adviseMalformedDeclaration(err error) writeGrade {
+	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
+		"magus workspace: fix the path pattern with the magus_ledger tool, then retry this write.\n"+
+			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means an owned or forbidden path spelled this way is not being enforced at all.", err)}
 }
 
 // workspaceRelative resolves an incoming path to a workspace-relative, slash-separated

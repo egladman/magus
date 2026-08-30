@@ -547,6 +547,32 @@ func TestDecodeHookEnvelope(t *testing.T) {
 	}
 }
 
+// TestHookCmd_EnvelopeWithNothingToJudge pins the arm that produced false denies: a host
+// envelope for a tool the guard has no rule for - a todo list, a search - carries no
+// command, path or prompt, and used to fall through to being judged as the literal JSON.
+// The shell rules then read a denied command QUOTED inside the payload as the command
+// about to run, so writing a todo that says not to run `sed -i` was itself blocked.
+func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
+	const payload = `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"TodoWrite",` +
+		`"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`
+
+	req, ok := decodeHookEnvelope(payload)
+	require.True(t, ok, "a payload naming a host hook event is an envelope")
+	assert.True(t, req.NothingToJudge)
+	assert.Empty(t, req.Value)
+
+	global = globalFlags{}
+	var out bytes.Buffer
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: t.TempDir(), workspace: "/repo/magus"})
+	require.NoError(t, hookCmd(ctx, strings.NewReader(payload), &out, []string{"-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	// The same JSON with no envelope marker on it is still judged as the text it is: only a
+	// payload that identifies itself as a host hook may claim the exemption.
+	_, ok = decodeHookEnvelope(`{"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`)
+	assert.False(t, ok)
+}
+
 // TestEnforceVerdictBlocksOnlyDeny pins the half that makes the guard real. Every rule was
 // reachable and correct while the process exited 0, so a host read success and ran the
 // command anyway: the guard looked installed and enforced nothing.
