@@ -14,9 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
-	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -113,9 +111,8 @@ func agentFromRequest(req *mcp.InitializeRequest) string {
 }
 
 // buildServer constructs the MCPServer with the standard magus options and
-// registers all tools. The two transports (HTTPHandler, ServeStdio) share this
-// so the server name, instructions, capabilities, recovery, and tool set can
-// never drift between them; each caller supplies only the transport-specific
+// registers all tools: the server name, instructions, capabilities, recovery,
+// and tool set live in one place. The caller supplies only the transport-specific
 // hooks (agent tracking) and the originFn used at tool-call time.
 func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originFn func(context.Context) origin.Origin) *mcpserver.MCPServer {
 	srv := mcpserver.NewMCPServer(
@@ -202,37 +199,4 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 			return withUserAgent(ctx, r.Header.Get("User-Agent"))
 		}),
 	), nil
-}
-
-// ServeStdio runs the magus MCP server over standard I/O, blocking until
-// stdin closes or the context is cancelled. Kept for testing and scripted
-// smoke-checks; daemon mode uses HTTPHandler instead.
-func ServeStdio(ctx context.Context, opts Options) error {
-	if err := opts.validate(); err != nil {
-		return err
-	}
-	log := opts.logger()
-
-	// Stdio is single-client; track the origin atomically so the BeforeInitialize
-	// write and the originFn reads across worker goroutines are race-free. Stdio
-	// carries no request headers, so UserAgent is always empty here.
-	var currentOrigin atomic.Value
-	hooks := &mcpserver.Hooks{}
-	hooks.AddBeforeInitialize(func(_ context.Context, _ any, req *mcp.InitializeRequest) {
-		agent := agentFromRequest(req)
-		currentOrigin.Store(origin.Origin{Agent: agent})
-		log.InfoContext(ctx, "[AGENT] client connected", slog.String("agent", agent))
-	})
-
-	originFn := func(_ context.Context) origin.Origin {
-		if o, ok := currentOrigin.Load().(origin.Origin); ok && o.Agent != "" {
-			return o
-		}
-		return unknownOrigin
-	}
-
-	srv := buildServer(opts, log, hooks, originFn)
-
-	log.InfoContext(ctx, "[AGENT] stdio server started")
-	return mcpserver.NewStdioServer(srv).Listen(ctx, os.Stdin, os.Stdout)
 }

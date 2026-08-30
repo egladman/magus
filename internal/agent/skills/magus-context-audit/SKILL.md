@@ -41,7 +41,7 @@ not the exception - they were usually written in the same sitting by the same
 person.{{end}} So resolve every claim against something that executes.
 
 ```sh
-magus session hook -o name "<the exact command a document recommends>"
+printf '%s' "<the exact command a document recommends>" | magus session hook
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```
@@ -58,6 +58,12 @@ grep -rn "<the command or rule>" <every surface you enumerated>
 ```
 
 ## Rank what you find
+
+Every finding carries the command that REPRODUCES it{{if .Full}} - the exact line a reader
+runs to see the contradiction for themselves, not a description of where you saw
+it. A finding nobody can re-run is an opinion about a document, and it gets
+argued with instead of fixed{{else}} - a finding nobody can re-run is an opinion about a
+document{{end}}.
 
 Report findings in this order.{{if .Full}} Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".{{end}}

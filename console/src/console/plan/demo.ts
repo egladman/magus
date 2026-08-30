@@ -1,38 +1,38 @@
 // demo.ts - the Plan surface's daemon-free showcase (the shared #demo fragment).
 //
-// It supplies the one thing the daemon would have supplied - a delegation ledger - and nothing
+// It supplies the one thing the daemon would have supplied - a lease ledger - and nothing
 // else changes: buildPlan(), treeOrder(), layoutPlan(), the overlap warnings, the staleness rule
 // and the detail pane are all the production paths. So what a reader meets at /console/plan/#demo
 // is the real surface with fabricated input, not a screenshot of one.
 //
-// It is the SAME story every other showcase tells (demo-scenario.ts), seen from the delegation
+// It is the SAME story every other showcase tells (demo-scenario.ts), seen from the lease
 // side: the acme monorepo's shared token library grew an audience on its claims type, and the
 // blast radius took out a Go verifier and a TypeScript web client. The diff surface shows the
 // resulting patch; the activity trail shows the failing services/identity:test run at 92m and the
 // apps/dashboard typecheck diagnostics; THIS shows the plan an agent cut to do the work, with the
-// same units owning the same paths that appear as changed files over there. A reader who opens
+// same leases owning the same paths that appear as changed files over there. A reader who opens
 // two surfaces finds the same names, files and reasons in both.
 //
 // It is written to exercise the surface honestly rather than flatteringly. All five states are
-// present, including the two nobody wants: a unit that FAILED and one that NEVER RETURNED, which
+// present, including the two nobody wants: a lease that FAILED and one that NEVER RETURNED, which
 // is the state the surface exists to surface - nobody is coming to tell you about that one. There
-// is a real overlap (two units whose declared paths intersect) and a stale non-terminal unit, so
+// is a real overlap (two leases whose declared paths intersect) and a stale non-terminal lease, so
 // both warnings the surface draws are visible on arrival instead of only in a fault a demo never
 // reaches. They land on different rows by necessity: a terminal row draws neither, so the stale
-// one has to be a unit still nominally in flight.
+// one has to be a lease still nominally in flight.
 //
 // A pure function of an injected `now` with FIXED offsets and no Math.random, matching
 // demo-scenario.ts: determinism is the point, so demo.test.ts can assert the plan's shape and the
 // ages stay put across reads.
 
-import type { DelegationUnit, UnitOverlap } from "./ledger";
+import type { Lease, LeaseOverlap } from "./ledger";
 
 const MIN = 60;
 
-// The paths are the diff showcase's changed files, unit by unit. That correspondence is the whole
+// The paths are the diff showcase's changed files, lease by lease. That correspondence is the whole
 // reason both fixtures are worth having: the plan says who was told to touch what, and the diff
 // shows what they did to it.
-export function demoUnits(nowMs: number): DelegationUnit[] {
+export function demoLeases(nowMs: number): Lease[] {
   const now = Math.floor(nowMs / 1000);
   const at = (minsAgo: number): number => now - minsAgo * MIN;
 
@@ -89,7 +89,7 @@ export function demoUnits(nowMs: number): DelegationUnit[] {
       created: at(96),
       updated: at(80),
     },
-    // The overlap's other half: it claims one file INSIDE the directory the unit above claims. Both
+    // The overlap's other half: it claims one file INSIDE the directory the lease above claims. Both
     // declarations are legitimate and the surface does not rule on it - it draws the intersection
     // and the reader decides whether the plan meant it.
     {
@@ -135,7 +135,7 @@ export function demoUnits(nowMs: number): DelegationUnit[] {
       created: at(104),
       updated: at(104),
     },
-    // A read-only unit: it inspects and reports, and owns nothing. Its presence is what keeps
+    // A read-only lease: it inspects and reports, and owns nothing. Its presence is what keeps
     // "owns no paths" a rendered case rather than a theoretical one.
     {
       id: "reach-survey",
@@ -151,15 +151,15 @@ export function demoUnits(nowMs: number): DelegationUnit[] {
   ];
 }
 
-// The intersection the two Go units declared. Reported as the route reports it: each side's own
+// The intersection the two Go leases declared. Reported as the route reports it: each side's own
 // declaration, because "services/identity/internal/token/" and the one _test.go file inside it are
-// rarely the same string and a reader who cannot tell which unit claimed which has nothing to act
+// rarely the same string and a reader who cannot tell which lease claimed which has nothing to act
 // on.
-export function demoOverlaps(): UnitOverlap[] {
+export function demoOverlaps(): LeaseOverlap[] {
   return [
     {
-      unit_a: "identity-verify",
-      unit_b: "verify-tests",
+      lease_a: "identity-verify",
+      lease_b: "verify-tests",
       paths_a: ["services/identity/internal/token/"],
       paths_b: ["services/identity/internal/token/verify_test.go"],
     },

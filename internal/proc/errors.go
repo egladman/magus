@@ -14,7 +14,7 @@ var (
 	// ErrAlreadyAdopted is returned by New when MAGUS_DAEMON_SOCKET is already set.
 	ErrAlreadyAdopted = errors.New("proc: already running under a parent magus")
 
-	// ErrCycleDetected is set in RunReply.Err when the same (target, project) pair is already in-flight.
+	// ErrCycleDetected is set in runReply.Err when the same (target, project) pair is already in-flight.
 	ErrCycleDetected = errors.New("proc: cycle detected in nested magus invocation")
 )
 
@@ -63,13 +63,26 @@ func NotAdopted(err error) bool {
 // case: the sentinel's message describes magus's control flow, not the failure.
 //
 // It exists because that fact has to cross a process boundary. The server sends the
-// error's text in RunReply.Err and the client prints it; without a way to ask, every
+// error's text in runReply.Err and the client prints it; without a way to ask, every
 // adopted failure would report itself with whatever placeholder the sentinel carries.
 // Same shape as NotAdopted above, for the same reason: the classification belongs on the
 // error, not in a list of strings to match.
 func AlreadyReported(err error) bool {
 	var e interface{ AlreadyReported() bool }
 	return errors.As(err, &e) && e.AlreadyReported()
+}
+
+// ExitCode reports the process status err - or any error it wraps - asks for, and
+// whether it asked at all. Same shape as NotAdopted and AlreadyReported above, and for
+// the same reason: the classification has to cross a process boundary that erases the
+// Go type. The CLI's own error types (a usage misuse exits 2, never 1) are in another
+// package proc must not import, so the daemon asks the error rather than naming them.
+func ExitCode(err error) (int, bool) {
+	var e interface{ ExitCode() int }
+	if !errors.As(err, &e) {
+		return 0, false
+	}
+	return e.ExitCode(), true
 }
 
 // decodeWireError rebuilds a typed proc error from the message string a server sent

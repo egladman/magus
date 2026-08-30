@@ -52,7 +52,7 @@ func symbolShardsKey(man *manifest) string {
 	}
 	var names []string
 	for name := range man.Shards {
-		if IsSymbolsShard(name) {
+		if isSymbolsShard(name) {
 			names = append(names, name)
 		}
 	}
@@ -77,7 +77,7 @@ func symbolShardsKey(man *manifest) string {
 func buildXref(shards []Shard) map[string][]string {
 	byKey := map[string]map[string]bool{}
 	for _, sh := range shards {
-		if !IsSymbolsShard(sh.Name) {
+		if !isSymbolsShard(sh.Name) {
 			continue
 		}
 		for _, n := range sh.Nodes {

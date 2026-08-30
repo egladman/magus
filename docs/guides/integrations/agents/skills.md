@@ -185,4 +185,4 @@ those, so a local skill is neither overwritten nor reported as drift, and no
 configuration is needed to make a host find it. The `magus-workspace-rules`
 skill carries the stamp format and the rest of the method. When a local rule
 turns out to be true everywhere, it graduates upstream as a pull request against
-`cmd/magus/skills/`, or as an issue quoting the stamped rule.
+`internal/agent/skills/`, or as an issue quoting the stamped rule.

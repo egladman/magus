@@ -77,7 +77,7 @@ type Options struct {
 // a signature must check this first.
 func checkKeys(ring Keyring) error {
 	if len(ring) == 0 {
-		return errors.New("no release key: set Options.Keys")
+		return errors.New("no release key configured: pass selfupdate.ReleaseKeys via Options.Keys (or, if every key was revoked, download the release manually from the release site)")
 	}
 	for _, key := range ring {
 		if len(key.Pub) != ed25519.PublicKeySize {
@@ -601,32 +601,6 @@ func CheckFileWritable(path string) error {
 		return fmt.Errorf("check writability of %s: %w", path, err)
 	}
 	_ = f.Close()
-	return nil
-}
-
-// DefaultUserBinDir returns the XDG-aware default installation directory (~/.local/bin).
-func DefaultUserBinDir() string {
-	if data := os.Getenv("XDG_DATA_HOME"); data != "" {
-		return filepath.Join(filepath.Dir(data), "bin")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "bin")
-}
-
-// DefaultUserManDir returns the XDG-aware default directory for section-1 man pages (~/.local/share/man/man1).
-func DefaultUserManDir() string {
-	if data := os.Getenv("XDG_DATA_HOME"); data != "" {
-		return filepath.Join(data, "man", "man1")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "share", "man", "man1")
-}
-
-// EnsureDir creates dir and all parents with 0755 permissions; no-op if already exists.
-func EnsureDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create directory %s: %w", dir, err)
-	}
 	return nil
 }
 

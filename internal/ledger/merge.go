@@ -10,7 +10,7 @@ import (
 
 // Merge builds the field merge one put applies to a row, from a param map shaped like
 // the magus_ledger MCP tool's request and magus\ledger.put's opts: only the keys the
-// caller named, so the second put in a delegation's lifecycle (state=running) advances the
+// caller named, so the second put in a lease's lifecycle (state=running) advances the
 // state without erasing the row an earlier put declared, and a key present with an
 // empty value is an explicit clear.
 //
@@ -23,47 +23,47 @@ import (
 // Store.Update runs it while holding the lock and has no way to report a failure. Errors
 // are joined rather than returned at the first one: a client that mistyped two params
 // should learn about both in one round trip.
-func Merge(params map[string]any) (func(*types.Delegation), error) {
+func Merge(params map[string]any) (func(*types.Lease), error) {
 	var (
-		set []func(*types.Delegation)
+		set []func(*types.Lease)
 		err error
 	)
-	str := func(key string, apply func(*types.Delegation, string)) {
+	str := func(key string, apply func(*types.Lease, string)) {
 		v, ok, e := mergeString(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case ok:
-			set = append(set, func(u *types.Delegation) { apply(u, v) })
+			set = append(set, func(u *types.Lease) { apply(u, v) })
 		}
 	}
-	list := func(key string, apply func(*types.Delegation, []string)) {
+	list := func(key string, apply func(*types.Lease, []string)) {
 		v, ok, e := mergeList(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case ok:
-			set = append(set, func(u *types.Delegation) { apply(u, v) })
+			set = append(set, func(u *types.Lease) { apply(u, v) })
 		}
 	}
 
-	str("parent", func(u *types.Delegation, v string) { u.Parent = strings.TrimSpace(v) })
-	str("goal", func(u *types.Delegation, v string) { u.Goal = v })
-	str("checkpoint", func(u *types.Delegation, v string) { u.Checkpoint = strings.TrimSpace(v) })
-	list("owned_paths", func(u *types.Delegation, v []string) { u.OwnedPaths = v })
-	list("forbidden_paths", func(u *types.Delegation, v []string) { u.ForbiddenPaths = v })
-	list("depends_on", func(u *types.Delegation, v []string) { u.DependsOn = v })
-	str("tier", func(u *types.Delegation, v string) { u.Tier = strings.TrimSpace(v) })
-	str("validation", func(u *types.Delegation, v string) { u.Validation = v })
+	str("parent", func(u *types.Lease, v string) { u.Parent = strings.TrimSpace(v) })
+	str("goal", func(u *types.Lease, v string) { u.Goal = v })
+	str("checkpoint", func(u *types.Lease, v string) { u.Checkpoint = strings.TrimSpace(v) })
+	list("owned_paths", func(u *types.Lease, v []string) { u.OwnedPaths = v })
+	list("forbidden_paths", func(u *types.Lease, v []string) { u.ForbiddenPaths = v })
+	list("depends_on", func(u *types.Lease, v []string) { u.DependsOn = v })
+	str("tier", func(u *types.Lease, v string) { u.Tier = strings.TrimSpace(v) })
+	str("validation", func(u *types.Lease, v string) { u.Validation = v })
 
 	// state is the one param with a vocabulary, so it is checked against it here.
 	if v, ok, e := mergeString(params, "state"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		s := types.DelegationState(strings.TrimSpace(v))
+		s := types.LeaseState(strings.TrimSpace(v))
 		switch s {
 		case types.StateDeclared, types.StateRunning, types.StatePass, types.StateFail, types.StateNoReturn:
-			set = append(set, func(u *types.Delegation) { u.State = s })
+			set = append(set, func(u *types.Lease) { u.State = s })
 		default:
 			err = errors.Join(err, errors.New("ledger: state must be one of declared, running, pass, fail, no_return"))
 		}
@@ -73,13 +73,13 @@ func Merge(params map[string]any) (func(*types.Delegation), error) {
 		if !ok {
 			err = errors.Join(err, errors.New("ledger: read_only must be a boolean"))
 		} else {
-			set = append(set, func(u *types.Delegation) { u.ReadOnly = b })
+			set = append(set, func(u *types.Lease) { u.ReadOnly = b })
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
-	return func(u *types.Delegation) {
+	return func(u *types.Lease) {
 		for _, apply := range set {
 			apply(u)
 		}

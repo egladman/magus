@@ -84,7 +84,7 @@ func TestRunAllUpstreamKeyPropagatesToDependent(t *testing.T) {
 	run := func() (keyA, keyB string) {
 		results, err := c.RunAll(context.Background(), mkSteps(),
 			func(_ context.Context, _ Step) error { return nil },
-			WithConcurrency(4))
+			WithLimiter(NewLimiter(4)))
 		require.NoError(t, err, "RunAll")
 		return results[0].Hash, results[1].Hash
 	}
@@ -130,7 +130,7 @@ func TestRunAllDependencyOrdering(t *testing.T) {
 		rec.start(s.ProjectPath)
 		rec.finish(s.ProjectPath)
 		return nil
-	}, WithConcurrency(8))
+	}, WithLimiter(NewLimiter(8)))
 	require.NoError(t, err, "RunAll")
 
 	assert.Len(t, rec.started, 3, "expected 3 projects to run")
@@ -159,7 +159,7 @@ func TestRunAllDependencyDiamond(t *testing.T) {
 		rec.start(s.ProjectPath)
 		rec.finish(s.ProjectPath)
 		return nil
-	}, WithConcurrency(8))
+	}, WithLimiter(NewLimiter(8)))
 	require.NoError(t, err, "RunAll")
 }
 
@@ -176,7 +176,7 @@ func TestRunAllDependencyOutOfScope(t *testing.T) {
 	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		ran = true
 		return nil
-	}, WithConcurrency(4))
+	}, WithLimiter(NewLimiter(4)))
 	require.NoError(t, err, "RunAll")
 	assert.True(t, ran, "X did not run despite its only dependency being out of scope")
 }
@@ -195,7 +195,7 @@ func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		ran = true
 		return nil
-	}, WithConcurrency(4))
+	}, WithLimiter(NewLimiter(4)))
 	require.NoError(t, err, "RunAll")
 	assert.True(t, ran, "self-dependent step deadlocked instead of running")
 }
@@ -247,7 +247,7 @@ func TestRunAllExclusiveRunsAlone(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 		leave(s)
 		return nil
-	}, WithConcurrency(8))
+	}, WithLimiter(NewLimiter(8)))
 	require.NoError(t, err, "RunAll")
 	assert.Empty(t, violations, "exclusive step overlapped with others")
 	assert.GreaterOrEqual(t, peak, 2, "non-exclusive steps never overlapped; the read lock is over-serializing")
@@ -276,7 +276,7 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 		bRan = true
 		mu.Unlock()
 		return nil
-	}, WithConcurrency(8))
+	}, WithLimiter(NewLimiter(8)))
 	assert.Error(t, err, "expected RunAll to return the upstream error")
 	mu.Lock()
 	defer mu.Unlock()
@@ -354,7 +354,7 @@ func TestRunAllDependencyCycleRejected(t *testing.T) {
 	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		ran = true
 		return nil
-	}, WithConcurrency(4))
+	}, WithLimiter(NewLimiter(4)))
 	assert.Error(t, err, "expected RunAll to reject the cyclic batch")
 	assert.False(t, ran, "fn ran despite the batch being cyclic; nothing should execute")
 }
@@ -372,7 +372,7 @@ func TestRunAllDependencyCycleThreeNode(t *testing.T) {
 
 	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
 		return nil
-	}, WithConcurrency(4))
+	}, WithLimiter(NewLimiter(4)))
 	assert.Error(t, err, "expected RunAll to reject the 3-node cycle")
 	assert.NotContains(t, err.Error(), nodeKeySep,
 		"the cycle report must not leak the raw node-key separator into a user-facing error")
@@ -407,7 +407,7 @@ func TestRunAllNoDependencies(t *testing.T) {
 		count++
 		mu.Unlock()
 		return nil
-	}, WithConcurrency(4))
+	}, WithLimiter(NewLimiter(4)))
 	require.NoError(t, err, "RunAll")
 	assert.Equal(t, 3, count, "expected 3 fn invocations")
 	require.Len(t, results, 3, "expected 3 results")
@@ -437,7 +437,7 @@ func TestRunAllKeepsGoingPastAnIndependentFailure(t *testing.T) {
 			return boom
 		}
 		return nil
-	}, WithConcurrency(1)) // serialized, so A finishes (and would have cancelled) first
+	}, WithLimiter(NewLimiter(1))) // serialized, so A finishes (and would have cancelled) first
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, boom, "the failure is still reported")
@@ -462,7 +462,7 @@ func TestRunAllReportsEveryFailure(t *testing.T) {
 			return cBoom
 		}
 		return nil
-	}, WithConcurrency(4))
+	}, WithLimiter(NewLimiter(4)))
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, aBoom)
@@ -495,7 +495,7 @@ func TestRunAllMaxFailuresStops(t *testing.T) {
 		case <-release:
 			return nil
 		}
-	}, WithConcurrency(4), WithMaxFailures(1))
+	}, WithLimiter(NewLimiter(4)), WithMaxFailures(1))
 	close(release)
 
 	require.Error(t, err)
@@ -524,7 +524,7 @@ func TestRunAllDependentFailureDoesNotSpendTheBudget(t *testing.T) {
 			return boom
 		}
 		return nil
-	}, WithConcurrency(1), WithMaxFailures(2))
+	}, WithLimiter(NewLimiter(1)), WithMaxFailures(2))
 
 	require.Error(t, err)
 	mu.Lock()

@@ -177,7 +177,7 @@ message Sample {
   google.protobuf.Timestamp sample_time = 1;
   optional int32 running = 2;       // pool slots running at this tick; unset = pool unreadable
   optional int32 capacity = 3;      // pool capacity (0 = unlimited); unset = pool unreadable
-  optional int32 queued = 4;        // tasks queued for a slot; unset = pool unreadable
+  optional int32 queued = 4;        // targets queued for a slot; unset = pool unreadable
   optional int64 cache_hits = 5;    // cumulative; diff adjacent samples for a hit rate
   optional int64 cache_misses = 6;  // cumulative
   optional int64 target_runs = 7;   // cumulative target executions

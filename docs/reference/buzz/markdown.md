@@ -16,9 +16,9 @@ GitHub-Flavored Markdown to semantic HTML.
 
 ### toHtml
 
-Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a "---" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md → index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).
+Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a "---" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md -> index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).
 
-**Signature:** `markdown\toHtml(source) → string` · [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L80)
+**Signature:** `markdown\toHtml(source) -> string` - [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L80)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -30,7 +30,7 @@ Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmat
 
 Parse the leading YAML frontmatter block (a "---" fenced header at the top of the document) and return it as a JSON object string; decode with serialize.jsonDecode. Returns "{}" when no frontmatter is present.
 
-**Signature:** `markdown\frontmatter(source) → string` · [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L94)
+**Signature:** `markdown\frontmatter(source) -> string` - [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L94)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -42,7 +42,7 @@ Parse the leading YAML frontmatter block (a "---" fenced header at the top of th
 
 Return the Markdown body with any leading YAML frontmatter block removed (the source unchanged when none is present).
 
-**Signature:** `markdown\stripFrontmatter(source) → string` · [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L117)
+**Signature:** `markdown\stripFrontmatter(source) -> string` - [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L117)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

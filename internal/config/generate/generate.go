@@ -284,19 +284,42 @@ func lookupTagRaw(raw, key string) string {
 	return rest[:end]
 }
 
+// firstDocLine returns a doc comment's opening sentence, joining gofmt-wrapped
+// physical lines so a sentence broken across lines is not truncated mid-clause
+// (a plain first-physical-line read was cutting the warning half off sentences
+// like the CacheRemote.Insecure field's). Joining stops at the first blank
+// line (a new paragraph) or once a sentence-ending period is found.
 func firstDocLine(cg *ast.CommentGroup) string {
 	if cg == nil {
 		return ""
 	}
+	var prose []string
 	for _, c := range cg.List {
 		line := strings.TrimPrefix(c.Text, "// ")
 		line = strings.TrimPrefix(line, "//")
 		line = strings.TrimSpace(line)
-		if line != "" {
-			return line
+		if line == "" {
+			if len(prose) > 0 {
+				break
+			}
+			continue
+		}
+		prose = append(prose, line)
+	}
+	return firstSentence(strings.Join(prose, " "))
+}
+
+// firstSentence returns s up to and including the first period that ends a
+// sentence (followed by a space or end of string), godoc-style; a period
+// inside a token like "e.g." or "-cache-remote-insecure" is not a sentence
+// end. Mirrors internal/describe/extract.go's helper of the same name.
+func firstSentence(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' && (i == len(s)-1 || s[i+1] == ' ') {
+			return s[:i+1]
 		}
 	}
-	return ""
+	return s
 }
 
 // sanitizeUsage strips quotes/backticks from s and truncates to 120 chars for safe Go string literals.

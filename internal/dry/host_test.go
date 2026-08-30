@@ -494,7 +494,7 @@ func TestRunSpell_unknownOp(t *testing.T) {
 	r := Run(context.Background(), twoOpSpell, "gamma", nil)
 	require.False(t, r.OK, "an unknown spell op must fail")
 	require.NotNil(t, r.Diag)
-	assert.Contains(t, r.Diag.Msg, "unknown op: gamma")
+	assert.Contains(t, r.Diag.Msg, "unknown op gamma (one of: alpha, beta)")
 }
 
 // TestProbeSpell_nonFunHandler: a mgs_listTargets whose map value is not a

@@ -115,6 +115,9 @@ function hotspotFilesTile(): Tile {
     term: "Hotspot",
     label: "hotspots",
     note: "churn x complexity, per file",
+    why:
+      "The files that change most and are hardest to change. A file high on both is where the next" +
+      " defect is most likely to land, and the best candidate for splitting before it gets worse.",
   });
   const table = new SortableTable<FileHotspotView>(hotspotFileCols, {
     sortKey: "score",
@@ -146,6 +149,9 @@ function hotspotsTile(): Tile {
     term: "Hotspot",
     label: "hotspots",
     note: "churn x complexity",
+    why:
+      "The same reading as Hotspot files, rolled up to whatever the graph knows a node to be." +
+      " Use it to find which PROJECT is carrying the risk before drilling into which file.",
   });
   const table = new SortableTable<HotspotNodeView>(hotspotCols, {
     sortKey: "churn",
@@ -193,6 +199,9 @@ function affinityTile(): Tile {
     term: "Affinity",
     label: "affinity",
     note: "co-change coupling",
+    why:
+      "Files that keep getting committed together. A high pair with no import between them is" +
+      " coupling the code does not declare, so an edit to one silently needs an edit to the other.",
   });
   const table = new SortableTable<AffinityPairView>(affinityCols, {
     sortKey: "count",
@@ -254,6 +263,9 @@ function ownershipTile(): Tile {
     term: "Ownership",
     label: "ownership",
     note: "author concentration",
+    why:
+      "Who has actually been editing each project, and how concentrated that is. Bus factor 1 means" +
+      " one person holds it: that is who to ask, and the first place to spread knowledge.",
   });
   const table = new SortableTable<OwnershipRowView>(ownershipCols, {
     sortKey: "share",
@@ -309,6 +321,9 @@ function trendTile(): Tile {
     term: "Trend",
     label: "trend",
     note: "rising vs cooling",
+    why:
+      "Where the work moved recently, measured as this window's commits against the one before it." +
+      " Rising says attention is arriving; cooling says a project is being left alone, not that it is done.",
   });
   const table = new SortableTable<TrendRowView>(trendCols, {
     sortKey: "delta",
@@ -373,6 +388,9 @@ function volatilityTile(): Tile {
     term: "Volatility",
     label: "volatility",
     note: "run-outcome flakiness",
+    why:
+      "Targets whose result changes without their inputs changing. A volatile target is one whose" +
+      " green you cannot spend, so it costs more than a target that simply fails.",
   });
   const table = new SortableTable<VolatilityRowView>(volatilityCols, {
     sortKey: "score",
@@ -428,6 +446,7 @@ export function insightSection(
   const lastRan = h("span", "console-dashboard-insight__lastran");
   head.append(lastRan);
   const refresh = h("button", "console-dashboard-insight__refresh");
+  refresh.dataset.controlSize = "default";
   refresh.type = "button";
   refresh.title = "Refetch the insight lenses now";
   refresh.append(svgGlyph(REFRESH, 14));

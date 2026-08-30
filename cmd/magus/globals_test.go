@@ -345,3 +345,54 @@ func TestFlagValueOfAndIsFlagNamedAgreeOnTheSameFlag(t *testing.T) {
 	require.False(t, isFlagNamed("--explain=web", "explain"))
 	require.Equal(t, "web", flagValueOf("--explain=web", "explain"))
 }
+
+// -o is bound into every subcommand's FlagSet, so a verb that renders nothing structured
+// accepted `-o json`, printed prose and exited 0. Setting it there is a usage error now.
+func TestOutputRefusedByCommandsThatRenderNothing(t *testing.T) {
+	parsed := func(args ...string) *flag.FlagSet {
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		bindDisplayFlags(fs)
+		require.NoError(t, fs.Parse(args))
+		return fs
+	}
+
+	err := checkOutputSupported("clean", parsed("-o", "json"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "magus clean: -o is not supported by this command")
+	assert.Equal(t, exitUsage, exitCodeOf(err), "a flag that could never act is misuse, not a failed run")
+
+	assert.NoError(t, checkOutputSupported("ls", parsed("-o", "json")), "a verb that consults -o is untouched")
+	assert.NoError(t, checkOutputSupported("clean", parsed()), "an unset -o is not a misuse")
+}
+
+// The verdict is keyed on the flag being TYPED, not on global.output, which every
+// FlagSet seeds its default from: a value another dispatch on this process left behind
+// must not fail the next command for a flag nobody passed it.
+func TestOutputRefusalIgnoresAmbientGlobal(t *testing.T) {
+	prev := global.output
+	t.Cleanup(func() { global.output = prev })
+	global.output = "json"
+
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	bindDisplayFlags(fs)
+	require.NoError(t, fs.Parse(nil))
+	assert.NoError(t, checkOutputSupported("clean", fs))
+}
+
+// The check rides cmdParse, so it fires on the real parse path for every spelling of the
+// flag - including one written AFTER the positional, which reorderFlagsFirst hoists.
+func TestCmdParseRefusesUnsupportedOutput(t *testing.T) {
+	prev := global.output
+	t.Cleanup(func() { global.output = prev })
+
+	for _, args := range [][]string{
+		{"-o", "json"},
+		{"--output=json"},
+		{"./web", "-o", "json"},
+	} {
+		global.output = ""
+		_, err := cmdParse("clean", args, nil)
+		require.Error(t, err, "args %v", args)
+		assert.Contains(t, err.Error(), "-o is not supported by this command")
+	}
+}

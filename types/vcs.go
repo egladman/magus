@@ -815,8 +815,9 @@ type StagingPlan struct {
 	// writes outside any target's globs (.gitattributes).
 	Undeclared []string `json:"undeclared,omitempty" yaml:"undeclared,omitempty"`
 	Maintained []string `json:"maintained,omitempty" yaml:"maintained,omitempty"`
-	// Staged is what actually reached the index, empty on a dry run.
-	Staged []string `json:"staged" yaml:"staged"`
+	// Staged is what actually reached the index, empty on a dry run. It is the plan's
+	// product, so it is what -o jsonl streams.
+	Staged []string `json:"staged" yaml:"staged" jsonl:"primary"`
 	// Code, Message and URL classify Unexplained via ClassifyDrift, and are empty when
 	// nothing is unexplained.
 	Code    string `json:"code,omitempty" yaml:"code,omitempty"`
@@ -831,7 +832,7 @@ type StagingPlan struct {
 // It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file - a
 // checkpoint is a pure read, so nothing about it can be lost by not keeping it and
 // nothing about the tree changes by taking it. That is what makes it safe to take
-// one per delegation, and it is why this is a plain value with no id of its own:
+// one per lease, and it is why this is a plain value with no id of its own:
 // an identity magus invented would be a fact only magus could confirm.
 //
 // Two things a reader can do with it. Revision feeds anything that takes a rev

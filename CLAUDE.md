@@ -21,7 +21,7 @@ hand-edit it.
   Skill(magus-vcs-hygiene); about to build/test/lint/generate -> Skill(magus-run);
   "what exists / depends on / uses X" -> Skill(magus-query); "how does magus
   X work" -> Skill(magus-docs-lookup); creating a package, moving code between
-  packages, or deciding where new code belongs -> Skill(magus-architecture).
+  packages, or deciding where new code belongs -> Skill(magus-architecture-review).
 
   Treat this list as necessary and NOT sufficient. Measured 2026-08-24 over one
   long session: the only skills that loaded on their own were the two a hook
@@ -53,10 +53,10 @@ every command fails at workspace load with:
 magus: workspace://.: magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./tools/toolchain": [BZZ2001] buzz: import "proc": module not found
 ```
 
-So build one and use `./magus`. `magus run go_build .` CANNOT do it from a fresh
+So build one and use `./magus`. `magus run go-build .` CANNOT do it from a fresh
 worktree, and that instruction stood here until it was measured on 2026-08-27: the
 released binary is missing `proc`, `io`, `serialize`, and `std`, so it fails at
-workspace load before it can run any target, go_build included. The escape is one raw
+workspace load before it can run any target, go-build included. The escape is one raw
 `go build`. The guard DENIES it - there is no exception, and `TestEvaluateBashGuard`
 pins the deny at every output path, `-o ./magus` included - so this is a command you
 have to get the guard overridden for, not one it will let through:
@@ -66,7 +66,7 @@ go build -o ./magus ./cmd/magus
 ```
 
 That binary loads this tree fine, after which everything normal works - including
-`./magus run go_build .` to produce a properly stamped one, which is worth doing
+`./magus run go-build .` to produce a properly stamped one, which is worth doing
 because the raw build carries no version ldflags.
 
 This is a temporary state that ends when the next release ships; re-check it by
@@ -94,7 +94,7 @@ LINK step is unshareable across worktrees and across commits within a worktree.
 Roughly 34 worktrees each rebuilding grew `~/Library/Caches/go-build` to 62 GB.
 Reclaim with `go clean -cache`.
 
-When you do need one: `magus run go_build .` writes `./magus`. It regenerates the compiled
+When you do need one: `magus run go-build .` writes `./magus`. It regenerates the compiled
 built-in spells first (they are go:embed'd, so a link before that step bakes in stale
 bytecode - about 11s), and unlike
 `magus run build .` it skips the `format` -> `generate` -> `deploy-generate`
@@ -110,7 +110,7 @@ bare `magus`; if neither loads the workspace, use the two-hop below or ask.
 Bootstrap deadlock: after a magusfile schema change, EVERY magus command fails at
 workspace load, including the one that would build the binary that understands it.
 Escape by shelving just that hunk - `git stash push -- <file>`, `magus run
-go_build .`, `git stash pop`.
+go-build .`, `git stash pop`.
 
 The same deadlock has a SECOND shape, and `git stash` does not fix it: pulling a
 change that adds a type the spell runtime provides (`Secret`, 2026-08-12). The spells
@@ -120,7 +120,7 @@ behind. Escape by putting the pre-pull spell sources back just long enough to bu
 
 ```sh
 git show <pre-pull-ref>:spells/github/actions/spell.buzz > spells/github/actions/spell.buzz
-magus run go_build .
+magus run go-build .
 git checkout HEAD -- spells/github/actions/spell.buzz
 ```
 
@@ -159,7 +159,7 @@ to obey it and said so.
   wrapper, an env prefix, or `bash -c` all reach the same verdict.
 
 Producing a binary is a write, and writes go through magus - the toolchain verb
-is what has to change, not the destination. `magus run go_build .` writes
+is what has to change, not the destination. `magus run go-build .` writes
 `./magus`; prefer top-level targets over `spell::op` forms, which exist for
 passing arguments through to the underlying tool, not as an everyday spelling.
 
@@ -185,15 +185,19 @@ Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
-Six workflows, one trigger each, and the name says which:
+Seven workflows. The name says which, but the trigger does not follow from it -
+read the table, and `regenerate.yaml` in particular is the one that fires three
+ways:
 
-| File                 | Runs on                        | Ships                                                     |
-| -------------------- | ------------------------------ | --------------------------------------------------------- |
-| `ci.yaml`            | pull request, and main push    | nothing                                                   |
-| `cd.yaml`            | main push                      | docs site (Pages), per-commit container image (GHCR)      |
-| `release.yaml`       | `v*` tag                       | binaries and release images                               |
-| `release-index.yaml` | manual                         | a PR carrying the signed `public/release/index.json` pair |
-| `audit.yaml`         | cron 05:17 UTC Mondays, manual | nothing                                                   |
+| File                 | Runs on                                             | Ships                                                     |
+| -------------------- | --------------------------------------------------- | --------------------------------------------------------- |
+| `ci.yaml`            | pull request, and main push                         | nothing                                                   |
+| `cd.yaml`            | main push, manual                                   | docs site (Pages), per-commit container image (GHCR)      |
+| `release.yaml`       | `v*` tag, manual (pick a TAG, not a branch)         | binaries and release images                               |
+| `release-index.yaml` | manual                                              | a PR carrying the signed `public/release/index.json` pair |
+| `regenerate.yaml`    | pull request labeled or synchronized, and main push | a push of regenerated output onto the PR branch           |
+| `registry.yaml`      | cron 05:40 UTC daily, manual                        | a PR carrying the signed endoflife.date registry          |
+| `audit.yaml`         | cron 05:17 UTC Mondays, manual                      | nothing                                                   |
 
 ci also runs on a main push, and that is not a publish step: the push run is what
 populates the shared cache and the run history a pull request may only read.
@@ -208,9 +212,9 @@ admin role - so each opens one instead, and merging it is what publishes the ind
 
 `setup-magus` is called two ways, on purpose:
 
-- `source-path: .` - nearly everything: ci's `preflight`, `ci`, `advice`,
-  `report`, both cd jobs, and audit's `determinism`, `toolchain` and
-  `skill-evals`. Builds the magus
+- `source-path: .` - nearly everything: ci's `plan`, `ci`, `advice` and
+  `report`, both cd jobs, audit's `determinism` and `toolchain`,
+  regenerate's `fix`, and registry's `build`. Builds the magus
   THIS commit defines and runs it against this commit's magusfile, so a change that
   `magusfile.buzz` needs is exercised by the very run that introduces it - there is
   no "release first" chicken-and-egg.
@@ -244,21 +248,22 @@ stop` stops it and prints what it stopped, exiting non-zero when it found nothin
   daemon logs go to `<sockdir>/magus-daemon.log`. Use `--foreground` (for a
   supervisor like systemd --user, or when debugging) to run it blocking in the
   current process instead.
-- Iterating on daemon code: `go run ./cmd/magus server start --foreground` runs HEAD
-  in the foreground, but the process is long-lived, so a source edit does NOT take
-  effect until you stop and restart it: `magus server stop && go run ./cmd/magus
-server start --foreground`. There is no hot reload.
+- Iterating on daemon code: `magus run go-build .`, then `./magus server start
+  --foreground`. The raw `go run ./cmd/magus server start --foreground` this line
+  used to teach is DENIED by the guard, like every other raw Go entry point - see
+  "Which magus binary" above. The process is long-lived and there is no hot reload,
+  so a source edit does not take effect until you rebuild and restart: `./magus
+server stop`, `magus run go-build .`, `./magus server start --foreground`.
 
 Do NOT wire a watch-rebuild loop for magus itself. magus is the task
 orchestrator, so a "rebuild on every file change" loop would have the tool
 rebuilding and restarting itself mid-run - it fights itself and thrashes. Rebuild
 deliberately instead:
 
-- One-off HEAD check: `go run ./cmd/magus <cmd>` (compiles fresh each invocation;
-  fine for a single command, slow as a loop).
-- Exercising a change repeatedly: `magus run build .` once, then run `./magus ...`;
-  rebuild when you change the code, not when any file moves. Blocked on MGS3001
-  right now - see "Which magus binary" above.
+- One-off HEAD check: `magus run go-build .`, then `./magus <cmd>`. There is no raw
+  `go run` shortcut; the guard denies that spelling too.
+- Exercising a change repeatedly: `magus run go-build .` once, then run `./magus ...`;
+  rebuild when you change the code, not when any file moves.
 - The daemon: restart it (stop + start) after a rebuild to pick up new code.
 
 ## Layout
@@ -299,9 +304,12 @@ deliberately instead:
   MGS1002 when running magus at the repo root; remove dead worktrees first.
 - `magus affected ci` has NO known local-environment failure any more. The
   doctor console check used to need a running daemon and made this red on every
-  machine with the daemon stopped; `probeBridgeReachability` now skips instead,
-  under the standing rule that the daemon is an accelerant and never a
-  capability gate (see `docs/guides/integrations/editor/design.md`).
+  machine with the daemon stopped. `probeBridgeReachability` now skips unless a
+  PERSISTENT daemon is up - proc mode `daemon`, which only `magus server start`
+  produces - because the earlier skip keyed on the proc daemon being reachable
+  and magus adopts a per-process one for ordinary commands, so it could never
+  fire. The rule it serves: the daemon is an accelerant and never a capability
+  gate (see `docs/guides/integrations/editor/design.md`).
   `magus run lint .` is GREEN as of 2026-08-02 - the "pre-existing lint
   findings" this file used to warn about are gone - so treat any failure in the
   gate as yours rather than assuming it is background noise.
@@ -360,14 +368,10 @@ deliberately instead:
   one comment convention worth enforcing, and even it is served better by a
   structural check than by keyword matching.
 - Regenerate in the SAME commit as the source change that invalidated the output.
-  A one-word `Name:` edit in a `std/` descriptor left four generated files stale
-  and three tests red across three commits; `go generate` reaches
-  `cmd/magus-utils`, so it needs no magus binary. CI runs generate as a drift
-  gate, so a split commit is also a red CI you did not have to have.
-- Before "fixing" behavior that looks wrong, look for the test that pins it.
-  `TestCheckExecRequiresReadNotExec` exists to say exec-collapsing-into-read is
-  deliberate and names the "fix" as a known mistake. Roughly one review finding in
-  ten is wrong this way. See the `magus-local-development` skill for the rest of this method.
+  The `magus-local-development` skill carries this one stamped, under "A std/
+  descriptor edit is never local", with the evidence and the retire-when.
+- Before "fixing" behavior that looks wrong, look for the test that pins it. Same
+  skill, under "Look for the pinning test before you 'fix' something".
 
 ## Working style
 
@@ -386,3 +390,7 @@ deliberately instead:
   and loop until the checks pass.
 - Lead with the command, path, or snippet; explanation after, no preamble or
   recap. Raise one issue at a time. Keep estimates concrete.
+- Be terse. Lead with the result; no status narration ("now I'll..."), no
+  recap of finished work, no restating a plan before doing it, no selling.
+  A mid-task update earns its place only when direction changes or something
+  load-bearing surfaced. When a reply runs long, cut detail, never clarity.

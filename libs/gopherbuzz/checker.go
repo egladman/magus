@@ -34,6 +34,26 @@ func (e typeError) Error() string {
 	return fmt.Sprintf("[%s] %s\n  see: %s", e.Code, msg, bzz.URL(e.Code))
 }
 
+// As hands errors.As a *diagnostics.Error carrying this error's code, so a caller can branch
+// on BZZ1002 without naming this unexported type.
+//
+// The embedder needs that and cannot have it any other way: magus sits ABOVE this module and
+// its lowest layers sit below it, so the code was only reachable by substring-matching a
+// sentence written for humans. Its stale-binary explainer reached for errors.As instead, found
+// nothing to match, and the explanation it exists to print never appeared for the direct
+// undefined-name case.
+//
+// An uncoded error declines: there is no diagnostic to hand back, and inventing one with an
+// empty code would make every plain type error look like a coded one.
+func (e typeError) As(target any) bool {
+	p, ok := target.(**diagnostics.Error)
+	if !ok || e.Code == "" {
+		return false
+	}
+	*p = bzz.Errorf(e.Code, "%s", e.Msg)
+	return true
+}
+
 type scopeEntry struct {
 	typ     types.Type
 	isConst bool

@@ -673,6 +673,33 @@ func TestMagus_proxies(t *testing.T) {
 	assert.Empty(t, r.Affected, "AffectedFromPaths(nil).Affected: want empty")
 }
 
+// TestInspectWiresVCSOptionsFromConfig locks down that magus.yaml's vcs.name,
+// vcs.base_ref, and vcs.enabled reach every vcs.Resolve call through
+// m.ws.VCSOptions. This wiring was previously missing: the fields parsed and
+// validated but inspect() never copied them onto the discovered workspace, so
+// only the MAGUS_VCS_* env vars (read directly by package vcs) had any effect.
+func TestInspectWiresVCSOptionsFromConfig(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	cfg := config.Defaults()
+	cfg.VCS.Name = "git"
+	cfg.VCS.BaseRef = "origin/main"
+	disabled := false
+	cfg.VCS.Enabled = &disabled
+
+	ws, err := Inspect(context.Background(), root, WithLoadedConfig(cfg))
+	require.NoError(t, err, "Inspect")
+
+	got := ws.VCSOptions()
+	assert.Equal(t, "git", got.Name, "VCSOptions.Name")
+	assert.Equal(t, "origin/main", got.BaseRef, "VCSOptions.BaseRef")
+	if assert.NotNil(t, got.Enabled, "VCSOptions.Enabled") {
+		assert.False(t, *got.Enabled, "VCSOptions.Enabled")
+	}
+}
+
 func b64Pub(t *testing.T) (pub string, seed string) {
 	t.Helper()
 	pk, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -947,6 +974,7 @@ func (p *recordingProvider) RecordCacheHit(context.Context, ...observability.Att
 func (p *recordingProvider) RecordCacheMiss(context.Context, ...observability.Attr)              {}
 func (p *recordingProvider) RecordCacheError(context.Context, ...observability.Attr)             {}
 func (p *recordingProvider) RecordCacheDuration(context.Context, float64, ...observability.Attr) {}
+func (p *recordingProvider) RecordCacheSaved(context.Context, float64)                           {}
 func (p *recordingProvider) RecordGraphQuery(context.Context, float64, ...observability.Attr)    {}
 func (p *recordingProvider) RecordRemoteOp(context.Context, observability.RemoteOp)              {}
 func (p *recordingProvider) StartSpan(ctx context.Context, _ string, _ ...observability.Attr) (context.Context, func(error)) {
@@ -973,6 +1001,10 @@ func (p *recordingProvider) RecordBuzzSpellResolve(context.Context, float64, str
 func (p *recordingProvider) RecordBuzzSpellBuiltinsWarm(context.Context, float64, string)    {}
 func (p *recordingProvider) RecordBuzzJITRun(context.Context)                                {}
 func (p *recordingProvider) RecordBuzzVMFault(context.Context, string)                       {}
+func (p *recordingProvider) RecordLeaseRegistration(context.Context, string)                 {}
+func (p *recordingProvider) RecordAttentionDisposition(context.Context, float64, string)     {}
+func (p *recordingProvider) RecordReviewRemark(context.Context, string)                      {}
+func (p *recordingProvider) RecordReviewPublish(context.Context, string, bool)               {}
 func (p *recordingProvider) Snapshot(context.Context) ([]byte, error)                        { return nil, nil }
 func (p *recordingProvider) Shutdown(context.Context) error {
 	p.shutdownCalled = true

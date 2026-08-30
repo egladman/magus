@@ -128,7 +128,6 @@ func TestWriteLeavesNoTemporaryBehind(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "rec", entries[0].Name())
-	assert.False(t, IsPartial(entries[0].Name()))
 }
 
 // An unsupported field type is an error, never a silent skip.

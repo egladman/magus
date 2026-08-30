@@ -213,16 +213,19 @@ type Result struct {
 	Duration    time.Duration
 	Outputs     []string // absolute paths written or replayed
 	Ref         string   // per-execution output reference id (see recordOutput); "" when the output store is absent or persistence failed
+	// Saved is the per-hit half of [Stats.SavedMs]: the duration the entry recorded when it
+	// was written, which this hit replayed instead of running. Zero on a miss, and zero for
+	// an entry written before the manifest carried a duration - the same understatement
+	// SavedMs carries, for the same reason.
+	Saved time.Duration
 }
 
 type runCtx struct {
-	step        *Step
-	concurrency int
-	limiter     *Limiter
-	onHit       func(*Result)
-	onMiss      func(*Result)
-	onError     func(error)
-	onStep      func(*Step)
+	step    *Step
+	limiter *Limiter
+	onHit   func(*Result)
+	onMiss  func(*Result)
+	onError func(error)
 	// onResults all fire after each Run (in registration order); multiple
 	// observers (report, telemetry, diagnostic capture) coexist without clobbering.
 	onResults []func(*Step, *Result, error)
@@ -387,9 +390,6 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	for _, o := range opts {
 		o(rc)
 	}
-	if rc.onStep != nil {
-		rc.onStep(rc.step)
-	}
 
 	start := time.Now()
 	result := Result{ProjectPath: s.ProjectPath}
@@ -482,6 +482,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// The work this hit avoided, as measured when the entry was written. Entries from
 				// before the field existed carry zero and add nothing, so the total understates.
 				c.savedMs.Add(manifest.DurationMs)
+				result.Saved = time.Duration(manifest.DurationMs) * time.Millisecond
 				logData, _ := os.ReadFile(c.logPath(s.ProjectPath, hash))
 				// Quiet mode suppresses log replay; passing projects stay silent.
 				// Stderr, not stdout, matching captureRun's miss path: stdout is
@@ -741,7 +742,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 			ref = stored.Ref
 		}
 		// Persist the key's pre-hash lines beside the attempts - the explanation
-		// `--meta` and `describe target --cache --against` diff. Recomputed (cheap:
+		// `--identity` and `describe target --cache --against` diff. Recomputed (cheap:
 		// source hashing is mtime-cached) rather than threaded from Run, and only
 		// written when the recomputed key still equals the one being recorded, so a
 		// source edited mid-run can never store lines that misdescribe the key.
@@ -793,7 +794,7 @@ func reproTarget(s Step) string {
 	return s.Target + ":" + strings.Join(s.Charms, ",")
 }
 
-// RunAll schedules steps concurrently (bounded by WithConcurrency/WithLimiter).
+// RunAll schedules steps concurrently (bounded by WithLimiter, or DefaultConcurrency).
 // Step.DependsOn imposes scheduling order for in-scope steps only; out-of-scope
 // deps are ignored. A cyclic DependsOn graph is rejected before any goroutine
 // launches. Upstream cache keys fold into dependent Step.Deps transitively
@@ -808,11 +809,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 
 	lim := rc.limiter
 	if lim == nil {
-		n := DefaultConcurrency()
-		if rc.concurrency > 0 {
-			n = rc.concurrency
-		}
-		lim = NewLimiter(n)
+		lim = NewLimiter(DefaultConcurrency())
 	}
 
 	if err := checkAcyclic(steps); err != nil {

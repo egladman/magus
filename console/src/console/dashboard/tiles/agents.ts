@@ -88,7 +88,7 @@ export function agentsTile(): Tile {
     note: "no agent traffic",
     why:
       "Who is driving magus, what they are doing, and whether the guard stopped anything. This is" +
-      " the bridge between a live delegation plan and the targets actually moving through the pool.",
+      " the bridge between a live lease plan and the targets actually moving through the pool.",
   });
 
   const posture = h("div", "console-dashboard-orchestration");

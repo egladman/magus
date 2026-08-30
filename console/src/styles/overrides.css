@@ -33,7 +33,8 @@
      chrome surface wrapping the content, so no seam is drawn BETWEEN them. The border faces the
      content above, which is where the chrome ends. The CAST that used to face that way is gone: it
      had the frame lifted over the content it wraps, which is backwards. The outlet casts down onto
-     this bar now (console.css), so the elevation sits on the raised body instead of the ground.
+     this bar now (console.css), so the elevation sits on the raised body instead of the ground -
+     except on a phone, where console.css inverts the pair and this bar casts up over the page.
      NO border either, at any width. One mark per seam: the hairline and the cast were both drawing
      this same edge, and because the cast is offset a pixel DOWNWARD its strongest lobe landed
      directly beneath the hairline - a crisp line with a soft one under it, which reads as a doubled
@@ -369,8 +370,9 @@
   margin: 0 0 0.5rem; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle);
 }
 [data-kbeditor] h3 {
-  margin: 0.9rem 0 0.3rem; font-size: 0.72rem; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle);
+  margin: 0.9rem 0 0.3rem;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle);
 }
 [data-kbeditor] [data-rows] > h3:first-child { margin-top: 0; }
 [data-kbeditor] [data-krow] {
@@ -588,7 +590,8 @@
 .console-shell-activity__section { display: flex; flex-direction: column; gap: 0.35rem; }
 .console-shell-activity__sectionhead {
   margin: 0; display: flex; align-items: center; gap: 0.4rem;
-  font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  text-transform: uppercase; letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
@@ -608,7 +611,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .console-shell-activity__rowmeta { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
-/* The delegation unit a row belongs to. Nothing sets it yet (phase 2 does); the rule exists so the
+/* The lease a row belongs to. Nothing sets it yet (phase 2 does); the rule exists so the
    field's arrival is a data change rather than a styling one. */
 .console-shell-activity__rowunit {
   align-self: flex-start; font-size: 0.66rem; letter-spacing: 0.03em;

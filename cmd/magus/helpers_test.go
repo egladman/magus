@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
 
@@ -169,6 +171,28 @@ func TestErrSilentIsAlreadyReported(t *testing.T) {
 	reported, ok := e.(interface{ AlreadyReported() bool })
 	require.True(t, ok)
 	assert.True(t, reported.AlreadyReported())
+}
+
+// TestCLIErrorsCarryTheirExitCode pins the method the DAEMON reads. exitCodeOf sees the
+// concrete types and could go on reading the fields; a forwarded run cannot, so without
+// the method `magus run bogus-target` exited 2 alone and 1 under a daemon.
+func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{errSilent{exitCode: 2}, 2},
+		{errSilent{exitCode: 1}, 1},
+		{usagef("no such target"), exitUsage},
+		{fmt.Errorf("wrapped: %w", errSilent{exitCode: 2}), 2},
+	} {
+		code, ok := proc.ExitCode(tc.err)
+		require.True(t, ok, "%v must state its exit code", tc.err)
+		assert.Equal(t, tc.want, code)
+	}
+
+	_, ok := proc.ExitCode(errors.New("the work failed"))
+	assert.False(t, ok, "an ordinary failure names no code and stays the daemon's default 1")
 }
 
 func TestUsagefCarriesTheMisuseMessage(t *testing.T) {

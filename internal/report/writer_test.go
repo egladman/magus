@@ -40,10 +40,3 @@ func TestWriter_RecordAndClose(t *testing.T) {
 	assert.Contains(t, out, `"schema"`, "output missing schema field")
 	assert.Contains(t, out, TypeTargetResult, "output missing event type")
 }
-
-func TestWriter_WithQueueSize(t *testing.T) {
-	var buf bytes.Buffer
-	w := NewWriter(&buf, WithQueueSize(4))
-	require.NotNil(t, w, "NewWriter with custom queue returned nil")
-	w.Close()
-}

@@ -683,7 +683,7 @@ export type Sample = Message<"magus.metrics.v1alpha1.Sample"> & {
   capacity?: number;
 
   /**
-   * tasks queued for a slot; unset = pool unreadable
+   * targets queued for a slot; unset = pool unreadable
    *
    * @generated from field: optional int32 queued = 4;
    */

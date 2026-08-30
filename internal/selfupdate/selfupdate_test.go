@@ -716,32 +716,6 @@ func TestCompareParsed_unparseableIsNotEqual(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestDefaultUserBinDir(t *testing.T) {
-	t.Parallel()
-	dir := DefaultUserBinDir()
-	assert.NotEmpty(t, dir)
-	assert.Contains(t, dir, "bin")
-}
-
-func TestDefaultUserManDir(t *testing.T) {
-	t.Parallel()
-	dir := DefaultUserManDir()
-	assert.NotEmpty(t, dir)
-	assert.Contains(t, dir, "man")
-}
-
-func TestEnsureDir(t *testing.T) {
-	t.Parallel()
-	base := t.TempDir()
-	dir := filepath.Join(base, "a", "b", "c")
-	require.NoError(t, EnsureDir(dir))
-	info, err := os.Stat(dir)
-	require.NoError(t, err)
-	assert.True(t, info.IsDir())
-	// Idempotent: calling again must not error.
-	require.NoError(t, EnsureDir(dir))
-}
-
 func TestCheckFileWritable_Writable(t *testing.T) {
 	t.Parallel()
 	f, err := os.CreateTemp(t.TempDir(), "writable-*")

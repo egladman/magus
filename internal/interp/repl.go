@@ -590,7 +590,7 @@ func Pry(ctx context.Context, sess engine.Session, pctx PryContext, opts ReplOpt
 	}
 
 	stdoutFile, _ := opts.Stdout.(*os.File)
-	useColor := ColorEnabledForFile(stdoutFile)
+	useColor := colorEnabledForFile(stdoutFile)
 
 	for name, val := range opts.Locals {
 		sess.SetGlobal(name, val)
@@ -600,7 +600,7 @@ func Pry(ctx context.Context, sess engine.Session, pctx PryContext, opts ReplOpt
 	fmt.Fprintln(opts.Stdout, banner)
 	fmt.Fprintln(opts.Stdout, "Type .help for pry commands, .continue (or .exit) to resume.")
 
-	hist, _ := OpenHistory(DefaultHistoryPath(), 0)
+	hist, _ := openHistory(defaultHistoryPath(), 0)
 	debug, _ := sess.(engine.DebugReader)
 
 	drivers := replDrivers(sess)
@@ -679,7 +679,7 @@ func Pry(ctx context.Context, sess engine.Session, pctx PryContext, opts ReplOpt
 				}
 			}
 			if hist != nil {
-				hist.Append(input)
+				hist.append(input)
 			}
 			pending.Reset()
 		}
@@ -696,7 +696,7 @@ type pryState struct {
 	useColor     bool
 	debug        engine.DebugReader
 	pctx         PryContext
-	hist         *History
+	hist         *history
 	sess         engine.Session
 }
 
@@ -712,21 +712,21 @@ func handlePryMeta(ctx context.Context, stdout, stderr io.Writer, line string, s
 		return ResumeContinue, true
 	case ".step":
 		if _, ok := st.sess.(engine.Stepper); !ok {
-			fmt.Fprintln(stdout, "(stepping not supported on this engine — resuming)")
+			fmt.Fprintln(stdout, "(stepping not supported on this engine - resuming)")
 			return ResumeContinue, true
 		}
 		fmt.Fprintln(stdout, pryColorize(st.useColor, "(stepping into next line)", color.Faint))
 		return ResumeStep, true
 	case ".next":
 		if _, ok := st.sess.(engine.Stepper); !ok {
-			fmt.Fprintln(stdout, "(stepping not supported on this engine — resuming)")
+			fmt.Fprintln(stdout, "(stepping not supported on this engine - resuming)")
 			return ResumeContinue, true
 		}
 		fmt.Fprintln(stdout, pryColorize(st.useColor, "(stepping over current line)", color.Faint))
 		return ResumeNext, true
 	case ".finish":
 		if _, ok := st.sess.(engine.Stepper); !ok {
-			fmt.Fprintln(stdout, "(stepping not supported on this engine — resuming)")
+			fmt.Fprintln(stdout, "(stepping not supported on this engine - resuming)")
 			return ResumeContinue, true
 		}
 		fmt.Fprintln(stdout, pryColorize(st.useColor, "(running until current frame returns)", color.Faint))
@@ -774,12 +774,12 @@ func handlePryMeta(ctx context.Context, stdout, stderr io.Writer, line string, s
 		expr := strings.TrimSpace(strings.TrimPrefix(trim, ".pp "))
 		evalAndPrettyPrint(st.driver, expr, stdout, stderr, st.useColor)
 		if st.hist != nil {
-			st.hist.Append(line)
+			st.hist.append(line)
 		}
 		return pryMetaConsumed, true
 	case strings.HasPrefix(trim, ".history"):
 		rest := strings.TrimSpace(strings.TrimPrefix(trim, ".history"))
-		PrintHistory(stdout, st.hist, rest)
+		printHistory(stdout, st.hist, rest)
 		return pryMetaConsumed, true
 	case strings.HasPrefix(trim, ".load "):
 		path := strings.TrimSpace(strings.TrimPrefix(trim, ".load "))
@@ -826,7 +826,7 @@ func visibleFrames(debug engine.DebugReader, pctx PryContext) []engine.Frame {
 func printBacktrace(w io.Writer, debug engine.DebugReader, pctx PryContext, current int, useColor bool) {
 	frames := visibleFrames(debug, pctx)
 	if len(frames) == 0 {
-		fmt.Fprintln(w, "(no frames — engine does not expose stack introspection)")
+		fmt.Fprintln(w, "(no frames - engine does not expose stack introspection)")
 		return
 	}
 	for i, f := range frames {
@@ -856,12 +856,12 @@ func printWhereami(w io.Writer, debug engine.DebugReader, pctx PryContext, curre
 	}
 	header := fmt.Sprintf("From: %s:%d in %s", displaySource(src, frame.Source), frame.CurrentLine, frame.Name)
 	fmt.Fprintln(w, pryColorize(useColor, header, color.Bold))
-	PrintSourceContext(w, src, frame.CurrentLine, 3, useColor)
+	printSourceContext(w, src, frame.CurrentLine, 3, useColor)
 }
 
 func printLocals(w io.Writer, debug engine.DebugReader, frame int, useColor bool) {
 	if debug == nil {
-		fmt.Fprintln(w, "(engine does not expose locals — try .globals)")
+		fmt.Fprintln(w, "(engine does not expose locals - try .globals)")
 		return
 	}
 	locals := debug.Locals(frame)
@@ -895,7 +895,7 @@ func printLocals(w io.Writer, debug engine.DebugReader, frame int, useColor bool
 
 func printGlobals(w io.Writer, driver engine.ReplDriver, useColor bool) {
 	if driver == nil {
-		fmt.Fprintln(w, "(no REPL driver — cannot list globals)")
+		fmt.Fprintln(w, "(no REPL driver - cannot list globals)")
 		return
 	}
 	globals := driver.UserGlobals()

@@ -383,7 +383,7 @@ func (r *runner) checkConfigFile() types.DoctorCheck {
 	return types.DoctorCheck{
 		Name:    "config-file",
 		Status:  types.DoctorFail,
-		Message: fmt.Sprintf("%d problem(s) in config file(s)", len(all)),
+		Message: fmt.Sprintf("%d finding(s) in config file(s)", len(all)),
 		Details: all,
 	}
 }
@@ -570,6 +570,7 @@ var runtimeEnvVars = map[string]struct{}{
 	"MAGUS_SHARD":                {},
 	"MAGUS_N_SHARDS":             {},
 	"MAGUS_CACHE_SIGNING_KEY":    {},
+	"MAGUS_DAEMON_SOCKET":        {},
 }
 
 func (*runner) checkEnvVars() types.DoctorCheck {
@@ -598,6 +599,10 @@ func (*runner) checkEnvVars() types.DoctorCheck {
 		//   MAGUS_CACHE_SIGNING_KEY  the remote-cache signing seed. It must stay
 		//                            env-only: a signing secret that could be set in a
 		//                            committed magus.yaml is not a secret.
+		//   MAGUS_DAEMON_SOCKET      the proc-server socket magus exports for its own
+		//                            forwarded children (cmd/magus/server.go); a child
+		//                            magus legitimately sees it, and it stopped being a
+		//                            config field when daemon.socket was removed.
 		if _, ok := runtimeEnvVars[key]; ok {
 			continue
 		}
@@ -1893,7 +1898,7 @@ func checkGuardWiring(ctx context.Context, root, home string, budget time.Durati
 			Status:  types.DoctorFail,
 			Message: "the guard canary did not return a deny",
 			Details: []string{
-				"command: printf 'git stash' | " + bin + " hook -o name",
+				"command: printf 'git stash' | " + bin + " session hook -o name",
 				"stdout:  " + firstLine,
 				"exit:    " + exit,
 				"rebuild: magus run build .",

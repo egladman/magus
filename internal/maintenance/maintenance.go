@@ -9,6 +9,8 @@ package maintenance
 
 import (
 	"context"
+	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/config"
@@ -22,6 +24,10 @@ import (
 // a job runs at most once per its configured interval regardless. Keeping it coarse is what makes
 // the scheduler low-key - a quiet daemon does a cheap idle check four times an hour, not a poll.
 const checkInterval = 15 * time.Minute
+
+// unusable bounds runDue's "this scheduler will never run anything" warning to one line per
+// process. Package-level because one daemon runs one scheduler.
+var unusable sync.Once
 
 // Options are the runtime handles the scheduler needs from the daemon wiring. Socket and Trail are
 // funcs because both are set during daemon startup and may not be ready when Start is called; the
@@ -90,7 +96,16 @@ func buildSchedule(m config.Maintenance) []scheduledJob {
 func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 	base, addr := opts.Trail(), opts.Socket()
 	if base == "" || addr == "" {
-		return // trail base or socket not up yet
+		// Not "not up yet". Both are published during startup, so a tick that still finds
+		// one empty is a scheduler that will never run a job for the daemon's whole life -
+		// and it used to reach that state in silence, which is how mcp.enabled: false came
+		// to disable every scheduled job with nothing said. Once, because the condition
+		// does not change and a line every quarter hour is a line people filter.
+		unusable.Do(func() {
+			slog.WarnContext(ctx, "maintenance: scheduler idle for the life of this daemon; no job will run",
+				slog.String("trail_base", base), slog.String("socket", addr))
+		})
+		return
 	}
 	st, err := proc.QueryStatus(ctx, addr)
 	if err != nil || st == nil || st.Running > 0 {

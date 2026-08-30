@@ -251,7 +251,7 @@ func TestBuildReport(t *testing.T) {
 func TestRuntimeRecordsWithoutRetryingWhenNotOptedIn(t *testing.T) {
 	t.Parallel()
 	h := &forecast.History{}
-	rt := NewRuntime(h, "", DefaultConfig(), nil, false)
+	rt := NewRuntime(h, "", testCfg, nil, false)
 
 	// Bootstrap conditions: with no history at all, shouldRetry would return
 	// Retry=true for an opted-in target. This one did not opt in.
@@ -269,7 +269,7 @@ func TestRuntimeRecordsWithoutRetryingWhenNotOptedIn(t *testing.T) {
 
 	// The same runtime WITH the opt-in does retry, so the gate is the flag and
 	// nothing else.
-	assert.True(t, NewRuntime(h, "", DefaultConfig(), nil, true).Decide("svc/api", "go/test", true).Retry)
+	assert.True(t, NewRuntime(h, "", testCfg, nil, true).Decide("svc/api", "go/test", true).Retry)
 }
 
 // Recording an outcome must feed the DURATION model as well as the volatility counters.

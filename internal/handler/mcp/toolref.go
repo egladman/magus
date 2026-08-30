@@ -17,37 +17,37 @@ func (t ToolName) String() string { return string(t) }
 // The full MCP tool surface. Every Registry[].Name is bound to one of these, so
 // this block is the one place a tool name is spelled out.
 const (
-	ToolDescribe        ToolName = "magus_describe"
-	ToolDescribeFile    ToolName = "magus_describe_file"
-	ToolWhere           ToolName = "magus_where"
-	ToolAffectedExplain ToolName = "magus_affected_explain"
-	ToolInsight         ToolName = "magus_insight"
-	ToolRunTarget       ToolName = "magus_run_target"
-	ToolRunAffected     ToolName = "magus_run_affected"
-	ToolDoctor          ToolName = "magus_doctor"
-	ToolStatus          ToolName = "magus_status"
-	ToolAffectedPlan    ToolName = "magus_affected_plan"
-	ToolConfigGet       ToolName = "magus_config_get"
-	ToolTailLog         ToolName = "magus_tail_log"
-	ToolMemory          ToolName = "magus_memory"
-	ToolQuery           ToolName = "magus_query"
-	ToolOutput          ToolName = "magus_output"
-	ToolExplain         ToolName = "magus_explain"
-	ToolRefs            ToolName = "magus_refs"
-	ToolPath            ToolName = "magus_path"
-	ToolStats           ToolName = "magus_stats"
-	ToolDiff            ToolName = "magus_diff"
-	ToolVCSCheckpoint   ToolName = "magus_vcs_checkpoint"
-	ToolLedger          ToolName = "magus_ledger"
+	toolDescribe        ToolName = "magus_describe"
+	toolDescribeFile    ToolName = "magus_describe_file"
+	toolWhere           ToolName = "magus_where"
+	toolAffectedExplain ToolName = "magus_affected_explain"
+	toolInsight         ToolName = "magus_insight"
+	toolRunTarget       ToolName = "magus_run_target"
+	toolRunAffected     ToolName = "magus_run_affected"
+	toolDoctor          ToolName = "magus_doctor"
+	toolStatus          ToolName = "magus_status"
+	toolAffectedPlan    ToolName = "magus_affected_plan"
+	toolConfigGet       ToolName = "magus_config_get"
+	toolTailLog         ToolName = "magus_tail_log"
+	toolMemory          ToolName = "magus_memory"
+	toolQuery           ToolName = "magus_query"
+	toolOutput          ToolName = "magus_output"
+	toolExplain         ToolName = "magus_explain"
+	toolRefs            ToolName = "magus_refs"
+	toolPath            ToolName = "magus_path"
+	toolStats           ToolName = "magus_stats"
+	toolDiff            ToolName = "magus_diff"
+	toolVCSCheckpoint   ToolName = "magus_vcs_checkpoint"
+	toolLedger          ToolName = "magus_ledger"
 )
 
 // allToolNames is every declared tool-name constant, for the drift test to walk.
 // Keep new constants registered here.
 var allToolNames = []ToolName{
-	ToolDescribe, ToolDescribeFile, ToolWhere, ToolAffectedExplain, ToolInsight,
-	ToolRunTarget, ToolRunAffected, ToolDoctor, ToolStatus,
-	ToolAffectedPlan, ToolConfigGet, ToolTailLog, ToolMemory,
-	ToolQuery, ToolOutput, ToolExplain, ToolRefs, ToolPath, ToolStats,
-	ToolDiff,
-	ToolVCSCheckpoint, ToolLedger,
+	toolDescribe, toolDescribeFile, toolWhere, toolAffectedExplain, toolInsight,
+	toolRunTarget, toolRunAffected, toolDoctor, toolStatus,
+	toolAffectedPlan, toolConfigGet, toolTailLog, toolMemory,
+	toolQuery, toolOutput, toolExplain, toolRefs, toolPath, toolStats,
+	toolDiff,
+	toolVCSCheckpoint, toolLedger,
 }

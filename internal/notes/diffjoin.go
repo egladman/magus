@@ -25,6 +25,9 @@ const (
 	MatchFile MatchStrength = "file"
 	// MatchNeighbor: the anchor names a symbol the diff did NOT change, in a file it did. The
 	// note may be about untouched code that merely shares a file with the edit.
+	//
+	// Unreachable in the shipped path as of this writing: it needs ResolvedAnchor.File on a
+	// SYMBOL anchor, which only a caller holding the graph can supply, and no caller does yet.
 	MatchNeighbor MatchStrength = "neighbor"
 )
 
@@ -64,6 +67,15 @@ type ResolvedAnchor struct {
 	// package deliberately never learns (see internal/graph/knowledge.NoteResolver, whose doc
 	// states the one-way dependency). Empty costs the weaker neighbor match and nothing else.
 	File string `json:"file,omitempty" yaml:"file,omitempty"`
+	// NodeID is the knowledge graph's id for this anchor's subject, and "" when the caller
+	// did not mint one. SUPPLIED for the same reason File is: the id spelling belongs to the
+	// graph (knowledge.AnchorNodeID), and this package must not learn it.
+	//
+	// A symbol anchor without one cannot match at all. A diff names its changed symbols by
+	// node id while an anchor carries the bare SCIP key, so comparing the two vocabularies
+	// directly never matched anything, and the headline case - the note attached to the
+	// symbol you just edited - silently reported nothing.
+	NodeID string `json:"node_id,omitempty" yaml:"node_id,omitempty"`
 	// Status is the IssueCode resolution reported for this anchor, "" when it is clean, and
 	// StatusUngraded when nothing graded it.
 	Status IssueCode `json:"status,omitempty" yaml:"status,omitempty"`
@@ -78,8 +90,8 @@ type AnchorHit struct {
 	Pos    int        `json:"pos" yaml:"pos"`
 	Kind   AnchorKind `json:"kind" yaml:"kind"`
 	Target string     `json:"target" yaml:"target"`
-	// Matched is the changed thing that produced this hit: a symbol id for MatchSymbol, a file
-	// path for MatchFile and MatchNeighbor. It answers the reader's next question - which of
+	// Matched is the changed thing that produced this hit: a symbol NODE ID for MatchSymbol, a
+	// file path for MatchFile and MatchNeighbor. It answers the reader's next question - which of
 	// the diff's many paths pulled this note in - which neither the anchor nor the strength
 	// can answer alone.
 	Matched string        `json:"matched" yaml:"matched"`
@@ -97,8 +109,10 @@ type AnchorHit struct {
 // editing requires already suspecting the note exists. That is the case the store was least
 // able to serve, and the one it exists for.
 //
-// files are the diff's changed paths and symbols its changed symbol ids, both workspace
-// relative and matched by EXACT equality. Nothing here guesses - no prefix match, no basename
+// files are the diff's changed paths, matched against a file anchor's target. symbols are its
+// changed symbols' GRAPH NODE IDS, matched against ResolvedAnchor.NodeID - never against the
+// anchor's bare target, which is spelled in a different vocabulary and matched nothing.
+// Both are compared by EXACT equality. Nothing here guesses - no prefix match, no basename
 // fallback, no fuzzy symbol lookup. AnchorIssues' doc records the measurement behind that
 // refusal, and it binds harder here: an unresolved anchor at least admits it failed, while a
 // note surfaced against code it is not about spends the reader's trust in every later hit.
@@ -159,8 +173,8 @@ func (r ResolvedAnchor) hit(files, symbols map[string]bool) (AnchorHit, bool) {
 		}
 	case AnchorSymbol:
 		switch {
-		case symbols[r.Anchor.Target]:
-			matched, strength = r.Anchor.Target, MatchSymbol
+		case symbols[r.NodeID]:
+			matched, strength = r.NodeID, MatchSymbol
 		case r.File != "" && files[r.File]:
 			matched, strength = r.File, MatchNeighbor
 		}

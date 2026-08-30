@@ -60,13 +60,13 @@ func TestRequestIDDigestsTheSameBytesAsTheFourArgumentForm(t *testing.T) {
 	// is now one struct hop from one it must not, so the two are pinned apart here.
 	assert.Equal(t, "att-4003a0391273",
 		RequestID("sess1", AttentionOpen{
-			Request:    "att-whatever",
-			Outcome:    "permission",
-			Severity:   "critical",
-			Delegation: "fleet/f9",
-			Source:     "agent/claude",
-			Where:      "/repo",
-			Message:    "needs a decision",
+			Request:  "att-whatever",
+			Outcome:  "permission",
+			Severity: "critical",
+			Lease:    "fleet/f9",
+			Source:   "agent/claude",
+			Where:    "/repo",
+			Message:  "needs a decision",
 		}))
 }
 

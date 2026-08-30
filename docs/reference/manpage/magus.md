@@ -89,7 +89,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Inspect concurrency pool and configuration. See [**magus-status**(1)](magus-status.md).
 
 **clean**
-: Remove declared Outputs (regenerable build artifacts). See [**magus-clean**(1)](magus-clean.md).
+: Remove declared outputs (regenerable, never sources). See [**magus-clean**(1)](magus-clean.md).
 
 **vcs**
 : Staging and conflict resolution that knows what is generated. See [**magus-vcs**(1)](magus-vcs.md).
@@ -115,6 +115,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **server**
 : Manage the persistent magus daemon. See [**magus-server**(1)](magus-server.md).
 
+**mcp**
+: Print how to reach the MCP server. See [**magus-mcp**(1)](magus-mcp.md).
+
 **buzz**
 : Run a Buzz script. See [**magus-buzz**(1)](magus-buzz.md).
 
@@ -128,10 +131,10 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See [**magus-init**(1)](magus-init.md).
 
 **agent**
-: Install the knowledge-graph agent skills into a repo. See [**magus-agent**(1)](magus-agent.md).
+: Install the knowledge-graph agent skills into a repository. See [**magus-agent**(1)](magus-agent.md).
 
 **self**
-: Manage the magus binary (update, install-shorthand). See [**magus-self**(1)](magus-self.md).
+: Manage the magus binary (update, refresh, registry, install-shorthand). See [**magus-self**(1)](magus-self.md).
 
 **version**
 : Print the client and daemon versions. See [**magus-version**(1)](magus-version.md).
@@ -148,7 +151,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay (default: false). Equivalent magus.yaml key: **cache.include.os.enabled**.
 
 **MAGUS_CACHE_INCLUDE_ARCH_ENABLED**
-: When false (or 0), the host architecture is left out of every cache key (default: true). Equivalent magus.yaml key: **cache.include.arch.enabled**.
+: When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay (default: false). Equivalent magus.yaml key: **cache.include.arch.enabled**.
 
 **MAGUS_CACHE_SIZE_MB**
 : Cache disk usage cap in MB (binary, 1\<\<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: **cache.size_mb**.
@@ -187,7 +190,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 
 **MAGUS_DAEMON_SOCKET**
-: Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: **daemon.socket**.
+: Env-only, no magus.yaml equivalent: runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path, read directly by the process that adopts it
 
 **MAGUS_CI_MAX_SHARDS**
 : Maximum number of parallel CI shards; -1 means unlimited (default: 8). Equivalent magus.yaml key: **ci.max_shards**.
@@ -200,18 +203,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_N_SHARDS**
 : Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus
-
-**MAGUS_GRAPH_DIRECTION**
-: Default graph direction: downstream or upstream (default: downstream). Equivalent magus.yaml key: **graph.direction**.
-
-**MAGUS_GRAPH_SPELL**
-: Filter graph output to a single spell. Equivalent magus.yaml key: **graph.spell**.
-
-**MAGUS_GRAPH_DEPTH**
-: Cap displayed graph depth (0 = unlimited) (default: 0). Equivalent magus.yaml key: **graph.depth**.
-
-**MAGUS_GRAPH_ROOTS**
-: Comma-separated starting nodes for graph traversal. Equivalent magus.yaml key: **graph.roots**.
 
 **MAGUS_TELEMETRY_ENABLED**
 : Turn OTLP export on; magus connects to telemetry.endpoint when true (default: false). Equivalent magus.yaml key: **telemetry.enabled**.
@@ -286,5 +277,5 @@ MAGUS_CACHE_DIR.
 
 ## See Also
 
-[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

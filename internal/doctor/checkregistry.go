@@ -107,6 +107,7 @@ var allChecks = []checkDef{
 	{
 		Name:           "cache-yield",
 		Doc:            "targets running uncached without declaring skip_cache and a reason",
+		Code:           types.TargetNeverReplays,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            (*runner).checkCacheYield,
@@ -244,8 +245,12 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkGraphBounds() },
 	},
 	{
-		Name:           "generated-output",
-		Doc:            "declared outputs that moved with no declared input dirty to account for them",
+		Name: "generated-output",
+		Doc:  "declared outputs that moved with no declared input dirty to account for them",
+		// types.ClassifyDrift picks between this and EnvironmentalDrift per run, and only
+		// the binary's own version decides which. The defect one is listed: a dev build
+		// disagreeing with the pinned release is the reader's environment, not their tree.
+		Code:           types.NondeterministicOutput,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkGeneratedDrift() },

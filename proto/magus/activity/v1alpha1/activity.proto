@@ -29,7 +29,7 @@ enum Kind {
   KIND_JOB = 2;             // a daemon background job: SCIP reindex, graph build, VCS refresh (emitted)
   KIND_CONFIG_CHANGE = 3;   // reserved: magus.yaml changed on reload, or a `magus config set` mutation
   KIND_TOKEN_LIFECYCLE = 4; // reserved: a connector token was minted or revoked
-  KIND_SANDBOX_DENIAL = 5;  // reserved: a target attempted a disallowed filesystem write
+  KIND_SANDBOX_DENIAL = 5;  // magus's own read/write/exec check refused an access; not a kernel-landlock denial, which reports nothing back (emitted)
   KIND_MEMORY = 6;          // a console MemoryService action on the durable magus_memory files (reads audited too)
   // An agent host observed a shell or file-tool invocation. The request blob contains normalized
   // host/tool/session data and the command or path; the response blob contains the guard decision.
@@ -43,7 +43,7 @@ enum Kind {
   // agent's tool call to the credential it made spendable.
   KIND_CREDENTIAL_GRANT = 8;
   // An orchestrating agent handed work to a sub-agent. The request blob carries the CONTEXT
-  // that was handed over - the delegation's whole point, and routinely kilobytes, so only its
+  // that was handed over - the lease's whole point, and routinely kilobytes, so only its
   // ref rides the event. There is no response blob and no guard decision: a spawn is an
   // observation, not a judged surface. OUTCOME_OK means the handoff was observed, NOT that the
   // sub-agent later succeeded.
@@ -104,10 +104,11 @@ message ActivityEvent {
   string host = 14;
   string session = 15;
 
-  // The work-ledger unit this action belongs to, empty when the producer could not correlate
-  // one. Set today only by KIND_AGENT_SPAWN, and only when the handed context declared it: no
-  // host event names a magus unit, so the producer scans the delegation prompt for a documented
-  // marker line ("unit: <id>") instead. Correlation is COOPERATIVE - an orchestrator that wants
+  // The work-ledger lease this action belongs to, empty when the producer could not correlate
+  // one. The field keeps the "unit" spelling; magus calls the concept a lease. Set today only by
+  // KIND_AGENT_SPAWN, and only when the handed context declared it: no host event names a magus
+  // lease, so the producer scans the lease prompt for a documented marker line
+  // ("lease: <id>") instead. Correlation is COOPERATIVE - an orchestrator that wants
   // the join writes the marker, and one that does not leaves this empty, which is a missing join
   // rather than a wrong one. It rides the event rather than the blob for the same reason host and
   // session do: joining a page of rows to a ledger must not cost a GetPayload per row.

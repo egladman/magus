@@ -25,10 +25,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ManagerGo is the package-manager name recorded for Go modules. It matches the
+// managerGo is the package-manager name recorded for Go modules. It matches the
 // manager segment SCIP monikers use ("gomod"), so a package node and the symbols
 // ingested for that same dependency agree on which namespace they are in.
-const ManagerGo = "gomod"
+const managerGo = "gomod"
 
 // GoModule reads the require block of the go.mod at path.
 //
@@ -76,7 +76,7 @@ func GoModule(path string) []types.KnowledgePackage {
 			continue
 		}
 		pkg := types.KnowledgePackage{
-			Manager:  ManagerGo,
+			Manager:  managerGo,
 			Name:     r.Mod.Path,
 			Version:  r.Mod.Version,
 			Indirect: r.Indirect,

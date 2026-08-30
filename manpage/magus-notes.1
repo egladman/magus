@@ -3,7 +3,7 @@
 magus\-notes \- Human\-authored notes committed to the repository
 .SH SYNOPSIS
 .B magus
-.RI "notes <ls|get|edit|verify> [flags]"
+.RI "notes <ls|get|edit|verify|capture|promote> [flags]"
 .SH DESCRIPTION
 Read the workspace's human\-authored notes.
 .PP
@@ -25,6 +25,30 @@ There is no put. Notes are written by a person in their own editor and
 committed under their own name, which is what makes git attribution meaningful
 and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
 to declare where they live; with nothing declared the feature is inert.
+.SS notes capture options
+.RS
+.TP
+\fB\-\-name\fR \fIstring\fR
+Note name (defaults to review\-<patch digest>)
+.TP
+\fB\-\-private\fR
+Only your own notes (default for capture)
+.TP
+\fB\-\-shared\fR
+Only notes committed to this repository (your team has these)
+.TP
+\fB\-\-tag\fR \fIstring\fR
+Tag to set on the note; repeatable
+.TP
+\fB\-\-title\fR \fIstring\fR
+Title for the note (defaults to naming the reviewed base)
+.RE
+.SS notes promote options
+.RS
+.TP
+\fB\-\-name\fR \fIstring\fR
+Note name (defaults to the record's name)
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -39,6 +63,12 @@ Open one note in $VISUAL or $EDITOR
 .TP
 \fBverify\fR
 Check malformed notes and anchors that no longer resolve
+.TP
+\fBcapture\fR
+Capture the review under way as a note: your own remarks plus any colleagues' comments
+.TP
+\fBpromote\fR
+Open an agent\-drafted memory record for editing and write it to the shared notes store under your own name
 .RE
 .SH EXAMPLES
 \fIList every note\fR
@@ -65,6 +95,18 @@ magus notes edit cache-invalidation-pairing
 magus notes verify
 .EE
 .PP
+\fICapture the review under way\fR
+.PP
+.EX
+magus notes capture
+.EE
+.PP
+\fIPromote a memory record into a shared note\fR
+.PP
+.EX
+magus notes promote release-checklist
+.EE
+.PP
 .SH SEE ALSO
 \fBmagus\fR(1),
 \fBmagus\-ls\fR(1),
@@ -89,6 +131,7 @@ magus notes verify
 \fBmagus\-memory\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
 \fBmagus\-man\fR(1),

@@ -335,15 +335,15 @@ func TestSummarizeOrdersMostRecentFirst(t *testing.T) {
 	assert.Equal(t, []string{"new", "mid", "old"}, ids)
 }
 
-// The delegation rides BOTH payloads, and the target result is the one that matters: a reader joining
-// one fact to a delegation does not hold the session-start record that opened the file.
-func TestDelegationSurvivesTheStoreOnBothPayloads(t *testing.T) {
+// The lease rides BOTH payloads, and the target result is the one that matters: a reader joining
+// one fact to a lease does not hold the session-start record that opened the file.
+func TestLeaseSurvivesTheStoreOnBothPayloads(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := Open(dir, "sess1", SessionStart{Workspace: "/repo", Command: "run build", Delegation: "fleet/f3"})
+	w, err := Open(dir, "sess1", SessionStart{Workspace: "/repo", Command: "run build", Lease: "fleet/f3"})
 	require.NoError(t, err)
-	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Delegation: "fleet/f3"}))
+	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Lease: "fleet/f3"}))
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
@@ -351,20 +351,57 @@ func TestDelegationSurvivesTheStoreOnBothPayloads(t *testing.T) {
 
 	var start SessionStart
 	require.NoError(t, json.Unmarshal(fold.Records[0].Payload, &start))
-	assert.Equal(t, "fleet/f3", start.Delegation)
+	assert.Equal(t, "fleet/f3", start.Lease)
 
 	var result TargetResult
 	require.NoError(t, json.Unmarshal(fold.Records[1].Payload, &result))
-	assert.Equal(t, "fleet/f3", result.Delegation)
+	assert.Equal(t, "fleet/f3", result.Lease)
 
 	sessions := Summarize(fold)
 	require.Len(t, sessions, 1)
-	assert.Equal(t, "fleet/f3", sessions[0].Delegation, "the view reads the delegation off the session, not off each fact")
+	assert.Equal(t, "fleet/f3", sessions[0].Lease, "the view reads the lease off the session, not off each fact")
+}
+
+// The trace context survives the store and reaches the view, so a child session's parent span can
+// be joined to the session that minted it. The ancestry is that relation and nothing else: no
+// record holds a chain, the way no process holds its ancestors' pids.
+func TestTraceContextSurvivesTheStoreAndSummarizes(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	parent := SessionStart{Workspace: "/repo", Command: "run build", SpanID: "00f067aa0ba902b7"}
+	child := SessionStart{
+		Workspace:    "/repo",
+		Command:      "run test",
+		Lease:        "fleet/f3",
+		TraceID:      "4bf92f3577b34da6a3ce929d0e0e4736",
+		SpanID:       "a1b2c3d4e5f60718",
+		ParentSpanID: "00f067aa0ba902b7",
+		Spawner:      "claude code",
+	}
+	for id, start := range map[string]SessionStart{"sess1": parent, "sess2": child} {
+		w, err := Open(dir, id, start)
+		require.NoError(t, err)
+		require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+	}
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	byID := make(map[string]Summary)
+	for _, s := range Summarize(fold) {
+		byID[s.Session] = s
+	}
+	require.Len(t, byID, 2)
+
+	assert.Equal(t, child.TraceID, byID["sess2"].TraceID)
+	assert.Equal(t, child.Spawner, byID["sess2"].Spawner)
+	assert.Equal(t, byID["sess1"].SpanID, byID["sess2"].ParentSpanID, "the child names the span the parent minted")
+	assert.Empty(t, byID["sess1"].ParentSpanID, "a session nothing spawned claims no parent")
 }
 
 // The field is additive: a session file written before it existed still reads, and the sessions in it
 // summarize as unattributed rather than as damage.
-func TestASessionWrittenWithoutADelegationStillReads(t *testing.T) {
+func TestASessionWrittenWithoutALeaseStillReads(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
@@ -380,9 +417,9 @@ func TestASessionWrittenWithoutADelegationStillReads(t *testing.T) {
 
 	sessions := Summarize(fold)
 	require.Len(t, sessions, 1)
-	assert.Empty(t, sessions[0].Delegation)
+	assert.Empty(t, sessions[0].Lease)
 	require.Len(t, sessions[0].Targets, 1)
-	assert.Empty(t, sessions[0].Targets[0].Delegation)
+	assert.Empty(t, sessions[0].Targets[0].Lease)
 }
 
 func TestReadAllMissingStoreIsEmptyNotAnError(t *testing.T) {

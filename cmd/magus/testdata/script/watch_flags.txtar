@@ -22,7 +22,7 @@ stderr 'Usage: magus watch \[flags\]'
 
 # An unknown backend is rejected by name, naming the valid choices.
 ! exec magus watch -backend bogus
-stderr 'unknown backend "bogus" \(choose: fsnotify, poll\)'
+stderr 'unknown backend "bogus" \(choose: fsnotify, poll, auto\)'
 
 # --ignore takes a labeled type=<t>,pattern=<p> form; each way of breaking
 # that form is rejected before the loop ever starts, with a message that

@@ -34,10 +34,11 @@ A named operation (`build`, `test`, ...) you invoke with `magus run <target>`; i
 may compose a spell's tool-native operations and depend on other targets. See
 [targets.md](concepts/targets.md).
 
-### Operation
+### Op
 
-A single tool-native command a target composes; the middle of the work hierarchy
-(Spell to Operation to Target). See [operations.md](concepts/operations.md).
+A single tool-native command a target composes (long form: operation); the
+middle of the work hierarchy (Spell to Op to Target). See
+[operations.md](concepts/operations.md).
 
 ### Spell
 
@@ -80,7 +81,7 @@ work is skipped. See [cache.md](concepts/cache.md).
 ### Affected
 
 The set of projects touched by a change; `magus affected <target>` runs a target
-only over them. See [affected.md](guides/affected.md).
+only over them. See [affected.md](concepts/workspace/affected.md).
 
 ### Sandbox
 
@@ -95,7 +96,7 @@ one-shot target. See [services.md](concepts/services.md).
 ### Daemon
 
 The background magus host that owns shared state such as services and the warm
-knowledge graph. See [daemon.md](guides/daemon.md).
+knowledge graph. See [daemon.md](guides/integrations/daemon.md).
 
 ### CI
 
@@ -111,7 +112,7 @@ A short, shareable id (`out1a2b3c`, "ref" for short) for one target execution's
 captured output; it appears on each target's line, and
 `magus query output out1a2b3c` prints those exact bytes. In OpenTelemetry terms
 it corresponds to a **span** (one target execution) within its **trace** (the
-whole `magus` invocation). See [output-refs.md](concepts/output-refs.md).
+whole `magus` invocation). See [output-refs.md](concepts/cache/output-refs.md).
 
 ### Trace
 
@@ -129,56 +130,56 @@ captured output. See [telemetry.md](concepts/telemetry.md).
 The concurrency pool: the shared set of slots that caps how many targets run in
 parallel on one machine. Its capacity defaults to `MAGUS_CONCURRENCY`, then 4 on
 GitHub-hosted runners, then `min(NumCPU, 8)`; `magus status` and the
-[dashboard](guides/daemon.md) report it live. See [daemon.md](guides/daemon.md).
+[dashboard](guides/integrations/daemon.md) report it live. See [daemon.md](guides/integrations/daemon.md).
 
 ### Slot
 
 One unit of the pool's capacity. A target acquires the slots it needs to run
 (most take one) and releases them when it finishes; the pool tracks capacity
 (total slots), running (acquired), and queued (blocked). See
-[daemon.md](guides/daemon.md).
+[daemon.md](guides/integrations/daemon.md).
 
 ### Concurrency
 
 How many targets run at once. It is bounded by the pool's capacity and set with
 `--concurrency`, `MAGUS_CONCURRENCY`, or the `concurrency` config key. See
-[daemon.md](guides/daemon.md).
+[daemon.md](guides/integrations/daemon.md).
 
 ### Queued
 
 A target that wants a slot while the pool is full; it blocks first-in-first-out
 until a slot frees. The dashboard colors a sample with queued > 0 accordingly.
-See [daemon.md](guides/daemon.md).
+See [daemon.md](guides/integrations/daemon.md).
 
 ### Pool mode
 
 Which pool a run uses: **daemon** (one shared pool the background daemon owns
 across every workspace and client) or **proc** (a per-process pool for a single
-one-off invocation). See [daemon.md](guides/daemon.md).
+one-off invocation). See [daemon.md](guides/integrations/daemon.md).
 
 ### One-off
 
 A single `magus` invocation that runs a target and exits, using a per-process
 pool; the opposite of the long-lived daemon or a service. See
-[daemon.md](guides/daemon.md).
+[daemon.md](guides/integrations/daemon.md).
 
 ### Remote cache
 
 A CI-only backend that shares content-addressed artifacts across runners: a cold
 machine replays a build another runner already did instead of rebuilding. Every
 remote artifact must be signed by a trusted key. See
-[remote-cache.md](concepts/remote-cache.md).
+[remote.md](concepts/cache/remote.md).
 
 ### Snapshot
 
 A point-in-time view of live state - the pool's occupancy or a tick of exported
-metrics - as opposed to accumulated history. See [daemon.md](guides/daemon.md).
+metrics - as opposed to accumulated history. See [daemon.md](guides/integrations/daemon.md).
 
 ### Backfill
 
 The recent history the daemon replays to a dashboard on connect, so its charts
 start populated instead of empty. It is served from a bounded ring buffer of the
-last few hundred samples. See [daemon.md](guides/daemon.md).
+last few hundred samples. See [daemon.md](guides/integrations/daemon.md).
 
 ## Telemetry and health
 
@@ -198,7 +199,7 @@ about. See [telemetry.md](concepts/telemetry.md).
 
 The at-a-glance daemon state derived from the pool: **healthy** when the pool is
 reporting, **degraded** when it reports an error, **down** when there is no pool.
-The dashboard color-codes each state. See [daemon.md](guides/daemon.md).
+The dashboard color-codes each state. See [daemon.md](guides/integrations/daemon.md).
 
 ### Volatility
 
@@ -225,31 +226,31 @@ so it is the entry point an agent reads first. See
 ### Insight
 
 The reports magus derives over the graph and history (hotspots, affinity,
-ownership, trend, volatility, unreferenced). See [insight.md](guides/insight.md).
+ownership, trend, volatility, unreferenced). See [insight.md](concepts/knowledge/insight.md).
 
 ### Hotspot
 
 An insight lens: edit frequency times complexity, the prime refactoring targets.
 The project view heat-colors the dependency graph by churn; `--files` ranks
-individual files. See [insight.md](guides/insight.md).
+individual files. See [insight.md](concepts/knowledge/insight.md).
 
 ### Affinity
 
 An insight lens: projects that change together (temporal coupling). A pair that
 co-changes without either declaring a dependency on the other is a candidate
-architectural smell. See [insight.md](guides/insight.md).
+architectural smell. See [insight.md](concepts/knowledge/insight.md).
 
 ### Ownership
 
 An insight lens: author concentration - the primary author and their share, the
 distinct-author count (the bus factor), and abandonment. See
-[insight.md](guides/insight.md).
+[insight.md](concepts/knowledge/insight.md).
 
 ### Trend
 
 An insight lens: the recent half of the window against the earlier half. A
 positive delta is a rising hotspot; a negative one is cooling. See
-[insight.md](guides/insight.md).
+[insight.md](concepts/knowledge/insight.md).
 
 ### Diagnostic code
 
@@ -257,7 +258,24 @@ A stable `MGSxxxx` identifier attached to a magus warning or error, so it can be
 referenced and looked up; some are guardrails (see [wards](concepts/wards.md)), others hard
 errors.
 
-## Sessions and delegation
+## Design and scope
+
+Two rules named often enough elsewhere to need a definition of their own.
+
+### Scope test
+
+The question every proposed capability has to answer: does it read the model
+magus already had to build, or does it make magus learn something new about the
+world? Reads stay small; acquisitions are where a tool loses its shape. See
+[scope.md](scope.md).
+
+### One-vocabulary rule
+
+Each concept gets one name, used everywhere: target, spell, charm, op. A second
+word for the same thing is a house dialect, and it costs every reader (and every
+agent) a lookup that never ends. See [doctrine.md](doctrine.md).
+
+## Sessions and leases
 
 The vocabulary of magus watching work happen: who ran what, what an agent is
 blocked on, and which agent owns which paths. The policy behind these terms
@@ -266,7 +284,7 @@ lives in [doctrine.md](doctrine.md).
 ### Session
 
 One magus process's recorded facts - the targets it finished, their outcomes,
-and the delegation it acted as - kept in a repo-scoped store every worktree shares.
+and the lease it acted as - kept in a repo-scoped store every worktree shares.
 `magus session` lists them; the store prunes itself by last-fact age.
 
 ### Attention request
@@ -282,18 +300,28 @@ The human act of closing an attention request: a judgment rendered, recorded
 with who and why. Distinct from resolving a review thread or a merge conflict -
 a disposition answers a request; it does not merge anything.
 
-### Delegation
+### Lease
 
-One row of the delegation ledger: a piece of work an orchestrating agent handed
+One row of the lease ledger: a piece of work an orchestrating agent handed
 out, with its goal, the checkpoint it was cut against, and the paths it owns or
 must not touch. The ledger records; the agent guard is what reads those facts
 back when grading a write. See [doctrine.md](doctrine.md).
 
-### Delegation id
+### Lease id
 
-The short identifier a worker carries (the `--delegation` flag or `MAGUS_DELEGATION`) so
-its runs, journal facts, and guard verdicts attribute to its delegation.
-Letters, digits and `-_./:` only.
+The short identifier a worker carries (the `--lease` flag, or the
+`magus.lease` member of the W3C `BAGGAGE` environment channel) so its runs,
+journal facts, and guard verdicts attribute to its lease. Letters, digits
+and `-_./:` only.
+
+### Spawn claim
+
+What a spawning tool said about itself in the environment: `TRACEPARENT` (the
+W3C trace and the parent span this process runs under) and the
+`magus.spawner` baggage member (a label for whoever spawned it). magus records
+each verbatim beside the session's own minted span id, and no verdict reads
+any of them - the ancestry is a relation between recorded sessions, the way a
+process tree is a relation between pids.
 
 ### Advisor
 

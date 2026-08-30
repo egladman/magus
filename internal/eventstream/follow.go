@@ -216,7 +216,7 @@ func (f *Follower) drain(name string, emit func(types.StreamEvent) error) error 
 		if err := json.Unmarshal(line, &je); err != nil {
 			continue
 		}
-		se, ok := FromJournal(f.workspace, je)
+		se, ok := fromJournal(f.workspace, je)
 		if !ok {
 			continue
 		}

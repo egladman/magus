@@ -26,7 +26,7 @@ func TestBuzzProducerMatchesThisReader(t *testing.T) {
 	var reg Registry
 	require.NoError(t, json.Unmarshal(raw, &reg))
 
-	assert.Equal(t, SchemaVersion, reg.SchemaVersion)
+	assert.Equal(t, schemaVersion, reg.SchemaVersion)
 	assert.False(t, reg.GeneratedAt.IsZero(), "generated_at must parse as a time, not just be present")
 	assert.Equal(t, "2027-01-01T00:00:00Z", reg.ExpiresAt)
 	assert.Equal(t, "endoflife.date", reg.Sources["eol"].Name)

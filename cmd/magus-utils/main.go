@@ -4,7 +4,7 @@
 //
 //	//go:generate go run ../../cmd/magus-utils types -type Target -out gen/types/target.buzz
 //	//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../internal/interp/bindings/gen/fs.go
-//	//go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go
+//	//go:generate go run ../magus-utils config -config ../../internal/config/config.go -bind-out gen/bind.go
 //	//go:generate go run ../../cmd/magus-utils spells -spells ../../spells -out gen
 //
 // Each subcommand reads a Go or Buzz source of truth and emits its mirror; none

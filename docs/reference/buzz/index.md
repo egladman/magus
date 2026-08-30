@@ -25,7 +25,7 @@ These are the runtime utility modules. Import each under its bare name (`import 
 |--------|-------------|
 | [`os`](os.md) | The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module. |
 | [`env`](env.md) | Process environment variable access. |
-| [`platform`](platform.md) | Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin). |
+| [`platform`](platform.md) | Normalize OS/architecture identifiers across naming conventions (aarch64<->arm64, Darwin<->darwin). |
 
 ## Text and formatting
 
@@ -75,7 +75,7 @@ These are the runtime utility modules. Import each under its bare name (`import 
 
 Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 
-`import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, `where` and `insight` all answer in-process, and so does `magus\ledger` (list, put, register, clear): the delegation ledger an orchestrating agent declares about work it handed out (see types.Delegation). There is deliberately no `magus ledger` CLI subcommand, so this namespace and the magus_ledger MCP tool are the only doors onto it. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves. |
+`import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, `where` and `insight` all answer in-process, and so does `magus\ledger` (list, put, register, clear): the lease ledger an orchestrating agent declares about work it handed out (see types.Lease). There is deliberately no `magus ledger` CLI subcommand, so this namespace and the magus_ledger MCP tool are the only doors onto it. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves. |
 | [`charm`](charm.md) | Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md). |
 
 ## Other
@@ -103,6 +103,6 @@ Three provider namespaces are wired by the runtime rather than declared here, so
 ## See also
 
 - [Targets](../../concepts/targets.md): the runnable units whose magusfiles call these modules.
-- [Spells](../../concepts/spells.md): language and toolchain adapters that compose these modules into operations.
+- [Spells](../../concepts/spells.md): language and toolchain adapters that compose these modules into ops.
 - [Charms](../../concepts/charms.md): the execution modifiers the `charm` module constructs.
 - [Playground](../../playground.html): exercise these modules live in the browser.

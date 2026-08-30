@@ -42,7 +42,8 @@ type recorder struct {
 	errs      []recCall
 	durs      []recDur
 	remoteOps []RemoteOp
-	spans     []string // names of spans started, in order
+	saved     []float64 // seconds passed to RecordCacheSaved, in order
+	spans     []string  // names of spans started, in order
 	stops     int
 }
 
@@ -72,6 +73,10 @@ func (r *recorder) RecordCacheError(ctx context.Context, attrs ...Attr) {
 
 func (r *recorder) RecordCacheDuration(ctx context.Context, secs float64, attrs ...Attr) {
 	r.durs = append(r.durs, recDur{ctx, secs, attrs})
+}
+
+func (r *recorder) RecordCacheSaved(_ context.Context, secs float64) {
+	r.saved = append(r.saved, secs)
 }
 
 func (r *recorder) RecordGraphQuery(_ context.Context, _ float64, _ ...Attr) {}
@@ -127,6 +132,14 @@ func (r *recorder) RecordBuzzJITRun(_ context.Context) {}
 
 func (r *recorder) RecordBuzzVMFault(_ context.Context, _ string) {}
 
+func (r *recorder) RecordLeaseRegistration(_ context.Context, _ string) {}
+
+func (r *recorder) RecordAttentionDisposition(_ context.Context, _ float64, _ string) {}
+
+func (r *recorder) RecordReviewRemark(_ context.Context, _ string) {}
+
+func (r *recorder) RecordReviewPublish(_ context.Context, _ string, _ bool) {}
+
 func (r *recorder) Snapshot(_ context.Context) ([]byte, error) { return nil, nil }
 
 func (r *recorder) Shutdown(_ context.Context) error { r.stops++; return nil }
@@ -179,6 +192,7 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 	require.NotEmpty(t, rec.misses[0].attrs)
 	assert.Equal(t, "outcome", rec.misses[0].attrs[0].Key)
 	assert.Equal(t, "miss", rec.misses[0].attrs[0].Value)
+	assert.Empty(t, rec.saved, "a miss ran the work, so it saved nothing")
 
 	// Hit: identical Run, fn not called, OnHit + duration fire.
 	r2, err := c.Run(context.Background(), spec, func(_ context.Context) error {
@@ -189,6 +203,47 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 	require.True(t, r2.Hit, "second Run should hit; r2 = %+v", r2)
 	assert.Len(t, rec.hits, 1, "after hit")
 	assert.Len(t, rec.durs, 2, "after hit")
+}
+
+// TestCacheRunOptions_HitRecordsSavedTime is the end-to-end guard on the savings lens: the
+// value has to travel manifest -> cache.Result.Saved -> RecordCacheSaved, and a break anywhere
+// on that path leaves an instrument that registers and can never fire.
+//
+// The producing run sleeps past a millisecond deliberately. Manifest.DurationMs has millisecond
+// resolution, so a target that finishes inside one records zero saved and CacheRunOptions skips
+// it - which would make this assertion pass or fail on timing rather than on the wiring.
+func TestCacheRunOptions_HitRecordsSavedTime(t *testing.T) {
+	root, c := newCache(t)
+	srcDir := filepath.Join(root, "p")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
+	outPath := filepath.Join(srcDir, "out.txt")
+	spec := cache.Step{
+		ProjectPath:   "p",
+		Sources:       []string{"p/*.go"},
+		Outputs:       []string{"p/out.txt"},
+		WorkspaceRoot: root,
+	}
+
+	rec := &recorder{}
+	opts := CacheRunOptions(context.Background(), rec)
+
+	_, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+		time.Sleep(5 * time.Millisecond)
+		return os.WriteFile(outPath, []byte("ok"), 0o644)
+	}, opts...)
+	require.NoError(t, err, "Run(miss)")
+
+	r2, err := c.Run(context.Background(), spec, func(_ context.Context) error {
+		t.Error("fn should not run on a hit")
+		return nil
+	}, opts...)
+	require.NoError(t, err, "Run(hit)")
+	require.True(t, r2.Hit)
+	require.Positive(t, r2.Saved, "the hit must carry what the entry recorded")
+
+	require.Len(t, rec.saved, 1, "one observation per hit")
+	assert.InDelta(t, r2.Saved.Seconds(), rec.saved[0], 1e-9)
 }
 
 // TestMetricRecordNoProjectAttr ensures CacheRunOptions never stamps a

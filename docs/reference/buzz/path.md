@@ -18,7 +18,7 @@ Pure path-string math: abs, rel, clean, is_abs, expand_user, and glob matching.
 
 Return the absolute form of path, resolved against the current directory and lexically cleaned.
 
-**Signature:** `path\abs(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L95)
+**Signature:** `path\abs(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/path.go#L95)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -30,7 +30,7 @@ Return the absolute form of path, resolved against the current directory and lex
 
 Return a relative path from base to target; errors if no relative path exists.
 
-**Signature:** `path\rel(base, target) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L104)
+**Signature:** `path\rel(base, target) -> string` - [source](https://github.com/egladman/magus/blob/main/std/path.go#L104)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -43,7 +43,7 @@ Return a relative path from base to target; errors if no relative path exists.
 
 Return the shortest lexically-equivalent path (resolves . and .., collapses separators).
 
-**Signature:** `path\clean(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L113)
+**Signature:** `path\clean(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/path.go#L113)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -55,7 +55,7 @@ Return the shortest lexically-equivalent path (resolves . and .., collapses sepa
 
 Report whether path is absolute.
 
-**Signature:** `path\isAbs(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L145)
+**Signature:** `path\isAbs(path) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/path.go#L145)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -67,7 +67,7 @@ Report whether path is absolute.
 
 Report whether path matches a doublestar glob (** crosses directory separators, * does not). Purely lexical: unlike fs.glob it touches no filesystem, so it is what filters a list already in hand - the changed files from vcs.changed_files, the entries from archive.list - against the same pattern syntax a target's sources use. Raises on a malformed pattern rather than reporting no match, so a typo is not read as "nothing changed".
 
-**Signature:** `path\matches(pattern, path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L122)
+**Signature:** `path\matches(pattern, path) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/path.go#L122)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -80,7 +80,7 @@ Report whether path matches a doublestar glob (** crosses directory separators, 
 
 Report whether path matches ANY of the patterns; an empty pattern list is false. The common shape of a declared source or ignore set, which is a list rather than one glob.
 
-**Signature:** `path\matchesAny(patterns, path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L131)
+**Signature:** `path\matchesAny(patterns, path) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/path.go#L131)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -93,7 +93,7 @@ Report whether path matches ANY of the patterns; an empty pattern list is false.
 
 Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.
 
-**Signature:** `path\expandUser(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L152)
+**Signature:** `path\expandUser(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/path.go#L152)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

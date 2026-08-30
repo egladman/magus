@@ -89,7 +89,7 @@ func (r NoteResolver) Digest(_ context.Context, a notes.Anchor) (string, error) 
 		if !ok {
 			return "", fmt.Errorf("symbol %q has no source location", a.Target)
 		}
-		end, err := strconv.Atoi(n.Attrs[AttrDefEndLine])
+		end, err := strconv.Atoi(n.Attrs[attrDefEndLine])
 		if err != nil || end < start {
 			// No enclosing range from this indexer: the symbol's extent is unknown, and a
 			// guessed one would fingerprint the wrong lines.
@@ -131,7 +131,7 @@ func (r NoteResolver) DeclDigest(_ context.Context, a notes.Anchor) (string, err
 	if !ok {
 		return "", fmt.Errorf("symbol %q has no source location", a.Target)
 	}
-	end, err := strconv.Atoi(n.Attrs[AttrDefEndLine])
+	end, err := strconv.Atoi(n.Attrs[attrDefEndLine])
 	if err != nil || end < start {
 		return "", fmt.Errorf("symbol %q has no enclosing range; this indexer did not report one", a.Target)
 	}

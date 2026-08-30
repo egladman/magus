@@ -18,18 +18,18 @@ query is also the retrieval verb for the two ids magus prints, each an EXPLICIT
 subcommand rather than a shape\-routed positional, so a search term can never collide
 with an id:
 .PP
-output <ref>       One target execution's captured output, by the reference id
+output <ref>       One target run's captured output, by the output ref
                      shown when the target ran (out1a2b3c). The default prints the
-                     exact bytes, so it pipes anywhere. \-\-meta shows the run's
+                     exact bytes, so it pipes anywhere. \-\-identity shows the run's
                      identity instead \- descriptor, lineage, cache key, and the
                      digests of the key's component classes, which is the
                      machine\-comparable half of a works\-on\-my\-machine report.
-                     \-\-attempts lists the ref's stored executions, \-\-publish uploads
+                     \-\-attempts lists the ref's stored attempts, \-\-publish uploads
                      the output to the remote cache as a signed bundle, and \-\-open
                      hands the bytes to the browser log viewer in a URL fragment
                      (delivered privately; never uploaded).
   invocation <id>    One run's journal, by the invocation id shown as inv: in
-                     query output <ref> \-\-meta. \-\-secrets narrows it to the
+                     query output <ref> \-\-identity. \-\-secrets narrows it to the
                      credential reads \- which references the run reached for and
                      through which provider, never the value \- which is how an audit
                      answers "what did this run touch". Run logs are trimmed to a cap
@@ -42,7 +42,7 @@ changed are rebuilt, so a query is cheap to repeat; \-\-refresh forces a full re
 .RS
 .TP
 \fB\-\-attempts\fR
-output <ref>: list the ref's stored executions (newest first)
+output <ref>: list the ref's stored attempts (newest first)
 .TP
 \fB\-\-budget\fR \fIint\fR
 Max nodes in the returned neighborhood (default 50)
@@ -50,11 +50,11 @@ Max nodes in the returned neighborhood (default 50)
 \fB\-\-global\fR
 Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace
 .TP
+\fB\-\-identity\fR
+output <ref>: show the run's identity \- descriptor, lineage, cache key, component digests
+.TP
 \fB\-\-kind\fR \fIstring\fR
 Restrict matches to these node kinds (comma\-separated)
-.TP
-\fB\-\-meta\fR
-output <ref>: show the run's identity \- descriptor, lineage, cache key, component digests
 .TP
 \fB\-\-open\fR
 output <ref>: open the captured output in the browser log viewer (delivered privately)
@@ -78,7 +78,7 @@ With \-\-open, base URL of the log viewer page (override for a self\-hosted mirr
 .RS
 .TP
 \fBoutput\fR
-Retrieve one target execution's captured output by reference id
+Retrieve one target run's captured output by output ref
 .TP
 \fBinvocation\fR
 Read one run's journal by invocation id (\-\-secrets for the credential reads)
@@ -111,7 +111,7 @@ magus query output out1a2b3c
 \fICompare a run's cache key\fR
 .PP
 .EX
-magus query output out1a2b3c --meta
+magus query output out1a2b3c --identity
 .EE
 .PP
 \fIAudit a run's credential reads\fR
@@ -144,6 +144,7 @@ magus query invocation invmsm3vcou1 --secrets
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
 \fBmagus\-man\fR(1),

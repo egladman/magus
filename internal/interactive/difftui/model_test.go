@@ -37,13 +37,13 @@ func move(t *testing.T, m *Model, key rune) bool {
 	t.Helper()
 	switch key {
 	case ']':
-		return m.NextHunk()
+		return m.nextHunk()
 	case '[':
-		return m.PrevHunk()
+		return m.prevHunk()
 	case '}':
-		return m.NextFile()
+		return m.nextFile()
 	case '{':
-		return m.PrevFile()
+		return m.prevFile()
 	}
 	t.Fatalf("unknown move %q", key)
 	return false
@@ -61,11 +61,11 @@ func TestCursorPublishesThePatchIndexNotTheRowPosition(t *testing.T) {
 		{Index: 4, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"+one"}, Digest: "d0"},
 		{Index: 7, Header: "@@ -9 +9 @@", Lines: []string{"+two"}, Digest: "d1"},
 	}}}})
-	assert.Equal(t, at("a.go", -1), m.Cursor(), "a heading names no hunk")
-	require.True(t, m.NextHunk())
-	assert.Equal(t, at("a.go", 4), m.Cursor(), "the first row is patch hunk 4")
-	require.True(t, m.NextHunk())
-	assert.Equal(t, at("a.go", 7), m.Cursor(), "the second row is patch hunk 7, not hunk 1")
+	assert.Equal(t, at("a.go", -1), m.cursor(), "a heading names no hunk")
+	require.True(t, m.nextHunk())
+	assert.Equal(t, at("a.go", 4), m.cursor(), "the first row is patch hunk 4")
+	require.True(t, m.nextHunk())
+	assert.Equal(t, at("a.go", 7), m.cursor(), "the second row is patch hunk 7, not hunk 1")
 }
 
 func TestCursorMotionCrossesFileAndHunkBoundaries(t *testing.T) {
@@ -99,7 +99,7 @@ func TestCursorMotionCrossesFileAndHunkBoundaries(t *testing.T) {
 			for _, k := range tc.keys {
 				moved = move(t, m, k)
 			}
-			assert.Equal(t, tc.want, m.Cursor())
+			assert.Equal(t, tc.want, m.cursor())
 			if tc.keys != "" {
 				assert.Equal(t, tc.wantMoved, moved)
 			}
@@ -114,7 +114,7 @@ func TestFoldRecomputesTheVisibleRows(t *testing.T) {
 	assert.Equal(t, 1, countKind(m, RowFold), "a generated file folds to one line")
 	assert.Zero(t, hunkRowsFor(m, 2), "a folded file shows no hunks")
 
-	m.ToggleGenerated()
+	m.toggleGenerated()
 	assert.Zero(t, countKind(m, RowFold))
 	assert.Equal(t, 1, hunkRowsFor(m, 2), "unfolding shows the generated file's hunks")
 
@@ -126,13 +126,13 @@ func TestFoldRecomputesTheVisibleRows(t *testing.T) {
 func TestFoldingRetreatsACursorItWouldStrand(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles(), Unfolded: true})
-	require.True(t, m.NextFile())
-	require.True(t, m.NextFile())
-	require.True(t, m.NextHunk())
-	require.Equal(t, at("gen/out.json", 0), m.Cursor())
+	require.True(t, m.nextFile())
+	require.True(t, m.nextFile())
+	require.True(t, m.nextHunk())
+	require.Equal(t, at("gen/out.json", 0), m.cursor())
 
-	m.ToggleGenerated()
-	assert.Equal(t, at("gen/out.json", -1), m.Cursor(), "the cursor retreats to the heading it can still see")
+	m.toggleGenerated()
+	assert.Equal(t, at("gen/out.json", -1), m.cursor(), "the cursor retreats to the heading it can still see")
 	assert.GreaterOrEqual(t, m.CursorRow(), 0, "and still points at a row that exists")
 }
 
@@ -140,18 +140,18 @@ func TestViewedTogglesOnHunksOnly(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles()})
 
-	_, ok := m.ToggleViewed()
+	_, ok := m.toggleViewed()
 	assert.False(t, ok, "a file heading has no hunk to mark")
 
-	require.True(t, m.NextHunk())
-	change, ok := m.ToggleViewed()
+	require.True(t, m.nextHunk())
+	change, ok := m.toggleViewed()
 	require.True(t, ok)
 	assert.Equal(t, ViewedChange{Digest: "da0", On: true}, change)
 	assert.True(t, m.Viewed("da0"))
 	assert.Contains(t, rowTextFor(m, RowHunk, 0), "[x]")
 	assert.Contains(t, rowTextFor(m, RowFile, 0), "2 hunks, 1 read")
 
-	change, ok = m.ToggleViewed()
+	change, ok = m.toggleViewed()
 	require.True(t, ok)
 	assert.False(t, change.On, "the second press unmarks it")
 	assert.False(t, m.Viewed("da0"))
@@ -168,64 +168,64 @@ func TestViewedAdoptsThePersistedSet(t *testing.T) {
 func TestOverviewEntersAndReturns(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles()})
-	require.True(t, m.NextHunk())
+	require.True(t, m.nextHunk())
 
-	m.ToggleOverview()
+	m.toggleOverview()
 	require.True(t, m.Overview())
-	assert.Equal(t, 0, m.OverviewCursor(), "it opens on the file being read")
-	rows := m.OverviewRows()
+	assert.Equal(t, 0, m.overviewCursor(), "it opens on the file being read")
+	rows := m.overviewRows()
 	require.Len(t, rows, 3)
 	assert.Equal(t, OverviewRow{Path: "a.go", HunkCount: 2, Read: 0, Rendered: "a.go  2 hunks, 0 read"}, rows[0])
 	assert.True(t, rows[2].Generated)
 
-	m.OverviewMove(-4)
-	assert.Equal(t, 0, m.OverviewCursor(), "clamped at the top")
-	m.OverviewMove(9)
-	assert.Equal(t, 2, m.OverviewCursor(), "clamped at the bottom")
+	m.overviewMove(-4)
+	assert.Equal(t, 0, m.overviewCursor(), "clamped at the top")
+	m.overviewMove(9)
+	assert.Equal(t, 2, m.overviewCursor(), "clamped at the bottom")
 
-	m.OverviewEnter()
+	m.overviewEnter()
 	assert.False(t, m.Overview())
-	assert.Equal(t, at("gen/out.json", -1), m.Cursor(), "entering jumps to that file's heading")
+	assert.Equal(t, at("gen/out.json", -1), m.cursor(), "entering jumps to that file's heading")
 
 	// Escaping back out leaves the cursor exactly where it was: the overview is a look, not
 	// a move.
-	m.ToggleOverview()
-	m.OverviewMove(-2)
-	m.ToggleOverview()
-	assert.Equal(t, at("gen/out.json", -1), m.Cursor())
+	m.toggleOverview()
+	m.overviewMove(-2)
+	m.toggleOverview()
+	assert.Equal(t, at("gen/out.json", -1), m.cursor())
 }
 
 func TestScrollClampsAtBothEnds(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles()})
-	m.Resize(4)
+	m.resize(4)
 	maxTop := len(m.Rows()) - 4
 	require.Positive(t, maxTop, "the fixture must be taller than the viewport for this to mean anything")
 
-	m.Scroll(-10)
+	m.scroll(-10)
 	assert.Equal(t, 0, m.Top())
-	m.Scroll(1000)
+	m.scroll(1000)
 	assert.Equal(t, maxTop, m.Top(), "scrolling past the end stops at the last row")
-	m.Page(1)
+	m.page(1)
 	assert.Equal(t, maxTop, m.Top())
-	m.Page(-1)
+	m.page(-1)
 	assert.Equal(t, maxTop-4, m.Top())
-	m.Page(-100)
+	m.page(-100)
 	assert.Equal(t, 0, m.Top())
 }
 
 func TestShortViewportKeepsTheCursorInView(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles()})
-	m.Resize(3)
+	m.resize(3)
 	for range 4 {
-		m.NextHunk()
+		m.nextHunk()
 		require.GreaterOrEqual(t, m.CursorRow(), m.Top())
 		require.Less(t, m.CursorRow(), m.Top()+m.Height())
 	}
 	// And back, which is the direction a follow-forward-only implementation gets wrong.
 	for range 4 {
-		m.PrevHunk()
+		m.prevHunk()
 		require.GreaterOrEqual(t, m.CursorRow(), m.Top())
 		require.Less(t, m.CursorRow(), m.Top()+m.Height())
 	}
@@ -267,8 +267,8 @@ func TestLinkDecoratesOnlyTheFileHeading(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles(), Link: func(p string) string { return "<" + p + ">" }})
 	assert.Contains(t, rowTextFor(m, RowFile, 0), "<a.go>")
-	assert.Contains(t, m.OverviewRows()[0].Rendered, "<a.go>")
-	assert.Equal(t, "a.go", m.OverviewRows()[0].Path, "the decoration is in Rendered and nowhere else")
+	assert.Contains(t, m.overviewRows()[0].Rendered, "<a.go>")
+	assert.Equal(t, "a.go", m.overviewRows()[0].Path, "the decoration is in Rendered and nowhere else")
 	assert.NotContains(t, rowTextFor(m, RowHunk, 0), "<")
 }
 
@@ -281,10 +281,10 @@ func TestFrameIsExactlyAsTallAsItClaims(t *testing.T) {
 	for _, unranked := range []bool{false, true} {
 		for _, color := range []bool{false, true} {
 			m := New(Input{Files: testFiles(), Unranked: unranked})
-			m.Resize(6)
+			m.resize(6)
 			assert.Len(t, strings.Split(Frame(m, color), "\n"), Chrome(m)+m.Height())
 
-			m.ToggleOverview()
+			m.toggleOverview()
 			assert.Len(t, strings.Split(Frame(m, color), "\n"), Chrome(m)+m.Height())
 		}
 	}
@@ -293,8 +293,8 @@ func TestFrameIsExactlyAsTallAsItClaims(t *testing.T) {
 func TestFrameMarksExactlyOneRow(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles()})
-	m.Resize(8)
-	require.True(t, m.NextHunk())
+	m.resize(8)
+	require.True(t, m.nextHunk())
 	marked := 0
 	for _, line := range strings.Split(Frame(m, false), "\n") {
 		if strings.HasPrefix(line, gutter(true)) {
@@ -309,15 +309,15 @@ func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 	m := New(Input{})
 	assert.Empty(t, m.Rows())
 	assert.Equal(t, -1, m.CursorRow())
-	assert.Equal(t, types.DiffCursor{Hunk: -1}, m.Cursor())
-	assert.False(t, m.NextHunk())
-	assert.False(t, m.PrevHunk())
-	assert.False(t, m.NextFile())
-	assert.False(t, m.PrevFile())
-	_, ok := m.ToggleViewed()
+	assert.Equal(t, types.DiffCursor{Hunk: -1}, m.cursor())
+	assert.False(t, m.nextHunk())
+	assert.False(t, m.prevHunk())
+	assert.False(t, m.nextFile())
+	assert.False(t, m.prevFile())
+	_, ok := m.toggleViewed()
 	assert.False(t, ok)
-	m.ToggleOverview()
-	m.OverviewEnter()
+	m.toggleOverview()
+	m.overviewEnter()
 	assert.False(t, m.Overview())
 }
 
@@ -353,7 +353,7 @@ func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
 		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{" ctx", "-call(a, b)", "+call(a, c)"}, Digest: "d0"},
 	}}}})
-	m.Resize(5)
+	m.resize(5)
 
 	// Spelled out rather than composed from the renderer's own parts: this is the output a
 	// reader gets down a pipe, under NO_COLOR and on a dumb terminal, and the point of the
@@ -371,11 +371,11 @@ func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 	// And the property behind the golden, over the fixture that has every row kind in it:
 	// colour is purely additive, so stripping it lands back on exactly the plain frame.
 	big := New(Input{Files: testFiles(), Unranked: true})
-	big.Resize(9)
+	big.resize(9)
 	for range 2 {
 		assert.NotContains(t, Frame(big, false), "\x1b", "the plain frame carries no escape at all")
 		assert.Equal(t, Frame(big, false), stripSGR(Frame(big, true)))
-		big.ToggleOverview()
+		big.toggleOverview()
 	}
 }
 
@@ -384,7 +384,7 @@ func TestNoColorSilencesTheWholeFrame(t *testing.T) {
 	out := termWriter{io.Discard}
 	probe := tty.FixedProbe(80, 24)
 	m := New(Input{Files: testFiles()})
-	m.Resize(9)
+	m.resize(9)
 
 	t.Setenv("TERM", "xterm-256color")
 	t.Setenv("NO_COLOR", "1")
@@ -405,7 +405,7 @@ func TestColourDrawsTheChangedPartHarderThanItsLine(t *testing.T) {
 		Emph:   []changeset.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
 		Digest: "d0",
 	}}}}})
-	m.Resize(5)
+	m.resize(5)
 	lines := strings.Split(Frame(m, true), "\n")
 	require.Len(t, lines, 6)
 
@@ -421,7 +421,7 @@ func TestColourDrawsTheChangedPartHarderThanItsLine(t *testing.T) {
 	whole := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
 		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "d0"},
 	}}}})
-	whole.Resize(4)
+	whole.resize(4)
 	styled := strings.Split(Frame(whole, true), "\n")
 	assert.Equal(t, "  \x1b[31m-one\x1b[0m", styled[2])
 	assert.Equal(t, "  \x1b[32m+two\x1b[0m", styled[3])
@@ -430,14 +430,14 @@ func TestColourDrawsTheChangedPartHarderThanItsLine(t *testing.T) {
 func TestWheelScrollsTheViewportAndNothingElseDoes(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles()})
-	m.Resize(4)
-	where := m.Cursor()
+	m.resize(4)
+	where := m.cursor()
 
 	assert.False(t, apply(m, wheel(tty.MouseWheelDown), nil))
 	assert.Equal(t, wheelRows, m.Top(), "a notch down moves the viewport by three rows")
 	apply(m, wheel(tty.MouseWheelDown), nil)
 	assert.Equal(t, 2*wheelRows, m.Top())
-	assert.Equal(t, where, m.Cursor(), "scrolling is looking around, so the cursor stays put")
+	assert.Equal(t, where, m.cursor(), "scrolling is looking around, so the cursor stays put")
 
 	apply(m, wheel(tty.MouseWheelUp), nil)
 	assert.Equal(t, wheelRows, m.Top())
@@ -593,6 +593,68 @@ func TestAThreadOnAFoldedFileIsListedRatherThanDropped(t *testing.T) {
 	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "regenerate this"))
 }
 
+// twoThreadFile is a file tall enough that a short viewport can hold one of its two remarks and
+// not the other, which is the only fixture that can tell "handed to the viewer" from "drawn on
+// the reader's screen" apart.
+func twoThreadFile() Input {
+	return Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+fresh"}, Digest: "d0"},
+			{Index: 1, Header: "@@ -9 +9 @@", NewStart: 9, Lines: []string{"-x", "+y"}, Digest: "d1"},
+		}}},
+		Threads: []types.ReviewThread{
+			{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "near the top"},
+			{ID: "t2", Path: "a.go", Hunk: 1, Author: "marcus", Body: "further down"},
+		},
+	}
+}
+
+// The watermark is the reader's claim to have HAD a remark in front of them, so it follows the
+// viewport and not the changeset. Advancing it at open would consume the mark - and the
+// notification that exists to send the reader back - for a thread three screens down that
+// nobody looked at.
+func TestOnlyTheThreadsTheViewportDrewAreReportedSeen(t *testing.T) {
+	t.Parallel()
+	m := New(twoThreadFile())
+	m.resize(5)
+
+	assert.Equal(t, []string{"t1"}, m.takeShownThreads(), "the second remark is below the fold")
+	assert.Nil(t, m.takeShownThreads(), "a remark still on screen is not claimed twice")
+
+	m.scroll(4)
+	assert.Equal(t, []string{"t2"}, m.takeShownThreads(), "scrolling to it is what shows it")
+}
+
+// The overview is a file list with no remarks on it at all, so holding it open must not claim
+// the conversation underneath.
+func TestTheOverviewShowsNoThreads(t *testing.T) {
+	t.Parallel()
+	m := New(twoThreadFile())
+	m.resize(5)
+	m.toggleOverview()
+
+	assert.Nil(t, m.takeShownThreads())
+}
+
+// Drawing a remark is also what marks it seen, so the viewer has to say which ones had arrived
+// since last time. Unsaid, the reader loses that distinction to their own scrolling.
+func TestARemarkNewToThisReaderSaysSo(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+two"}, Digest: "d0"},
+		}}},
+		Threads: []types.ReviewThread{
+			{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "arrived since you looked", New: true},
+			{ID: "t2", Path: "a.go", Hunk: 0, Author: "marcus", Body: "you weighed this one already"},
+		},
+	})
+
+	text := everyRowText(m)
+	assert.Contains(t, text[indexOfSubstring(text, "arrived since you looked")], "new to you")
+	assert.NotContains(t, text[indexOfSubstring(text, "you weighed this one already")], "new to you")
+}
+
 // everyRowText is the visible text of every row, for asserting on order and presence. Named
 // away from render.go's rowText, which renders ONE row and is the package's real one.
 func everyRowText(m *Model) []string {
@@ -628,7 +690,7 @@ func TestSettledFilesFoldByDefault(t *testing.T) {
 		"a folded file must say why, and how to see it")
 
 	// n reveals them, and says nothing is hidden any more.
-	m.ToggleSettled()
+	m.toggleSettled()
 	assert.Contains(t, allRowText(m), "ALREADY-WEIGHED")
 	assert.True(t, m.Unsettled())
 }

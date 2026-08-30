@@ -164,9 +164,9 @@ func configConsoleTokenCreate(args []string) error {
 	fmt.Fprintln(os.Stderr, "This secret is shown once and cannot be retrieved later. Store it now.")
 	if scope == auth.ScopeConsoleRead {
 		fmt.Fprintln(os.Stderr, "Tier: viewer. It can READ the console and cannot submit jobs, edit memory,")
-		fmt.Fprintln(os.Stderr, "or open a share. It is rejected at /mcp.")
+		fmt.Fprintln(os.Stderr, "or open a share. It is denied at /mcp.")
 	} else {
-		fmt.Fprintln(os.Stderr, "Tier: read-write. It reaches every console surface and is rejected at /mcp.")
+		fmt.Fprintln(os.Stderr, "Tier: read-write. It reaches every console surface and is denied at /mcp.")
 	}
 	return nil
 }

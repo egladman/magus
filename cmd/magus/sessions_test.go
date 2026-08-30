@@ -43,14 +43,14 @@ func TestSummarizeTargetsCollapsesRepeats(t *testing.T) {
 	assert.Equal(t, "build api (pass), build web (fail), lint web (pass, cached)", got)
 }
 
-// sessionsDelegationCell returns the DELEGATION cell of the row for session, which is the column the console
+// sessionsLeaseCell returns the LEASE cell of the row for session, which is the column the console
 // drawer's join is waiting on. Reading it positionally rather than searching the whole listing is
 // what makes the "-" case assertable: a dash appears in every unattributed column.
-func sessionsDelegationCell(t *testing.T, out, session string) string {
+func sessionsLeaseCell(t *testing.T, out, session string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		// SESSION, date, time, HOST, DELEGATION, FACTS, TARGETS...
+		// SESSION, date, time, HOST, LEASE, SPAWNER, PARENT, FACTS, TARGETS...
 		if len(fields) > 4 && fields[0] == session {
 			return fields[4]
 		}
@@ -59,25 +59,58 @@ func sessionsDelegationCell(t *testing.T, out, session string) string {
 	return ""
 }
 
-func TestSessionsRendersTheDelegationColumnAttributedAndNot(t *testing.T) {
+func TestSessionsRendersTheLeaseColumnAttributedAndNot(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	global = globalFlags{}
 	root := t.TempDir()
 
-	t.Setenv(trail.EnvDelegation, "fleet/f3")
-	recordSession(t, root, "run", []string{"build"}, "invDelegation")
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
+	recordSession(t, root, "run", []string{"build"}, "invLease")
 
-	// A person at a keyboard carries no delegation, and the same store has to render both.
-	t.Setenv(trail.EnvDelegation, "")
+	// A person at a keyboard carries no lease, and the same store has to render both.
+	t.Setenv(trail.EnvBaggage, "")
 	recordSession(t, root, "run", []string{"test"}, "invBare")
 
 	out := captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, nil))
 	})
 
-	assert.Contains(t, out, "DELEGATION")
-	assert.Equal(t, "fleet/f3", sessionsDelegationCell(t, out, "invDelegation"))
-	assert.Equal(t, "-", sessionsDelegationCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
+	assert.Contains(t, out, "LEASE")
+	assert.Equal(t, "fleet/f3", sessionsLeaseCell(t, out, "invLease"))
+	assert.Equal(t, "-", sessionsLeaseCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
+}
+
+// What the environment CLAIMED reaches the listing verbatim: the spawner label a person reads,
+// and the parent span a later session can be joined to.
+func TestSessionsRendersTheSpawnerAndParentFromTheEnvironment(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+
+	t.Setenv(trail.EnvTraceparent, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3,"+trail.BaggageSpawner+"=claude%20code")
+	recordSession(t, root, "run", []string{"build"}, "invSpawned")
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, nil))
+	})
+
+	assert.Contains(t, out, "SPAWNER")
+	assert.Contains(t, out, "PARENT")
+	assert.Contains(t, out, "claude code", "the label is percent-decoded and shown as claimed")
+	assert.Contains(t, out, "00f067aa0ba902b7", "an unknown parent shows as the span id rather than as a blank")
+	assert.Equal(t, "fleet/f3", sessionsLeaseCell(t, out, "invSpawned"))
+}
+
+// A parent span this store has a record of reads as that session's name; one it does not is
+// still shown, because "magus has no record of it" and "spawned by nobody" are different facts.
+func TestSessionParentResolvesOnlyWhatTheStoreHolds(t *testing.T) {
+	t.Parallel()
+	bySpan := map[string]string{"00f067aa0ba902b7": "invParent"}
+
+	assert.Equal(t, "invParent", sessionParent(bySpan, "00f067aa0ba902b7"))
+	assert.Equal(t, "a1b2c3d4e5f60718", sessionParent(bySpan, "a1b2c3d4e5f60718"))
+	assert.Empty(t, sessionParent(bySpan, ""), "a session that claimed no parent has nothing to resolve")
 }
 
 // The listing answers "what happened", but its reader is often looking for "what needs

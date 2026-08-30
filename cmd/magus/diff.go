@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -677,11 +678,11 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// Ctrl-C read as a key, a cancelled context. A raw SIGINT unwinds nothing, and the reader
 	// loses the queue along with the restored terminal.
 	defer sync.close()
-	// Re-placed against THIS patch. The daemon resolved each thread's hunk against the working
-	// tree, which is not what the viewer is showing when the patch came from a file or stdin -
+	// Re-placed against THIS patch. A thread arrives placed against the working tree or not
+	// placed at all, and neither is what the viewer is showing when the patch came from a file -
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
-	threads, _ := daemonReviewThreads(ctx)
+	threads, _ := reviewThreads(ctx, m)
 	threads = changeset.PlaceThreads(changeset.ParseHunks(patch), threads)
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
@@ -810,6 +811,12 @@ func (s diffStoreSync) SetViewed(digest string, on bool) {
 	s.store.MarkViewed(s.root, digest, on)
 }
 
+// SetThreadsSeen advances the watermark through the same store call the console's session route
+// makes, so a terminal-only reader leaves the same record a browser one does.
+func (s diffStoreSync) SetThreadsSeen(ids []string) {
+	s.store.MarkThreadsSeen(s.root, ids)
+}
+
 func (diffStoreSync) close() {}
 
 // diffBridge is the running daemon's session, reached over the same loopback routes the
@@ -936,6 +943,9 @@ type diffSessionOp struct {
 	Hunk   int    `json:"hunk,omitempty"`
 	Digest string `json:"digest,omitempty"`
 	On     bool   `json:"on,omitempty"`
+	// IDs are the host thread ids of a `seen` op - the only op that carries a set rather than
+	// one coordinate, because the watermark advances by what a frame showed.
+	IDs []string `json:"ids,omitempty"`
 }
 
 // SetCursor publishes where the reader is looking. The reply is discarded on purpose: it
@@ -948,6 +958,13 @@ func (b *diffBridge) SetCursor(c types.DiffCursor) {
 // SetViewed publishes a read mark, which the daemon persists for every client at once.
 func (b *diffBridge) SetViewed(digest string, on bool) {
 	b.queueMark(diffSessionOp{Op: "viewed", Digest: digest, On: on})
+}
+
+// SetThreadsSeen publishes the watermark on the MARK queue, not the cursor one: like a read
+// mark it is replaceable by nothing, and the viewer sends each thread once, so a dropped op is
+// a remark the reader saw that no client will ever be told about.
+func (b *diffBridge) SetThreadsSeen(ids []string) {
+	b.queueMark(diffSessionOp{Op: "seen", IDs: ids})
 }
 
 // queueCursor hands the newest cursor to the sender, evicting the OLDEST when the queue is
@@ -1962,10 +1979,19 @@ func changedPathsFromPatch(patch string) []string {
 // anchorHit is one note anchor that names something in the changeset, shaped for the
 // impact report rather than for the store.
 type anchorHit struct {
-	Note   string           `json:"note"            yaml:"note"`
-	Title  string           `json:"title,omitempty" yaml:"title,omitempty"`
-	Kind   notes.AnchorKind `json:"kind"            yaml:"kind"`
-	Target string           `json:"target"          yaml:"target"`
+	Note  string `json:"note"            yaml:"note"`
+	Title string `json:"title,omitempty" yaml:"title,omitempty"`
+	// Pos is the anchor's index in its note, and Matched the changed thing that pulled the
+	// note in - a symbol node id or a file path. Both are carried rather than dropped because
+	// a note with several anchors is otherwise reported without saying WHICH of them fired.
+	Pos     int              `json:"pos"             yaml:"pos"`
+	Kind    notes.AnchorKind `json:"kind"            yaml:"kind"`
+	Target  string           `json:"target"          yaml:"target"`
+	Matched string           `json:"matched"         yaml:"matched"`
+	// Match is notes.MatchStrength: how the hit was found. It restates Kind for every hit this
+	// caller can currently produce, and stops doing so once one supplies a symbol anchor's file
+	// - the weak neighbor match must never render with the exact match's authority.
+	Match string `json:"match" yaml:"match"`
 	// Drift is the notes.IssueCode this anchor resolved to. Empty is graded CLEAN;
 	// notes.StatusUngraded is unmeasured, which grading needs the knowledge graph for and
 	// cannot report when the graph will not load. The two are distinct so a renderer cannot
@@ -1993,17 +2019,33 @@ func impactAnchors(ctx context.Context, root string, files, symbols []string) []
 		if raErr != nil {
 			continue
 		}
-		resolved = append(resolved, ra...)
+		resolved = append(resolved, stampAnchorNodeIDs(ra, string(st.scope))...)
 	}
 
 	hits := notes.AnchorHits(resolved, files, symbols)
 	out := make([]anchorHit, 0, len(hits))
 	for _, h := range hits {
 		out = append(out, anchorHit{
-			Note: h.Note, Title: h.Title, Kind: h.Kind, Target: h.Target, Drift: string(h.Status),
+			Note: h.Note, Title: h.Title, Pos: h.Pos, Kind: h.Kind, Target: h.Target,
+			Matched: h.Matched, Match: string(h.Match), Drift: string(h.Status),
 		})
 	}
 	return out
+}
+
+// stampAnchorNodeIDs mints each anchor's graph node id in place and returns the same slice.
+//
+// This is the only layer allowed to know both vocabularies: internal/notes must not learn the
+// graph (see its Resolver doc), and the graph mints ids from one place so two hand-kept copies
+// cannot diverge (knowledge.AnchorNodeID). Without it a symbol anchor is compared bare against
+// a node id and never matches, which is the join's headline case.
+//
+// scope is the ANCHORING store's, because a note-to-note anchor names a note in the same store.
+func stampAnchorNodeIDs(res []notes.ResolvedAnchor, scope string) []notes.ResolvedAnchor {
+	for i := range res {
+		res[i].NodeID = knowledge.AnchorNodeID(string(res[i].Anchor.Kind), res[i].Anchor.Target, scope)
+	}
+	return res
 }
 
 // earnedSync watches a viewer session and turns finished files into read receipts.
@@ -2477,7 +2519,7 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 
 	mainFn := sess.GetGlobal("main")
 	if !mainFn.IsFun() {
-		return out.String(), warnings, fmt.Errorf("no main() to run")
+		return out.String(), warnings, fmt.Errorf("no main() to run (an advisor must define `fun main() > void` or `fun main() > int`)")
 	}
 	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(nil)})
 	if err != nil {
@@ -2487,7 +2529,7 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 	// so an advisor may report failure by returning rather than by throwing. Discarding the
 	// value read that advisor as having succeeded.
 	if ret.IsInt() && ret.AsInt() != 0 {
-		return out.String(), warnings, fmt.Errorf("main() returned %d", ret.AsInt())
+		return out.String(), warnings, fmt.Errorf("main() returned %d (non-zero means the advisor failed)", ret.AsInt())
 	}
 	return out.String(), warnings, nil
 }

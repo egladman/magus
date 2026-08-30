@@ -75,19 +75,19 @@ func TestAssembleCoverageFileAndSymbolNodes(t *testing.T) {
 
 	sh := assembleCoverage(cov, symbols)
 
-	require.Equal(t, CoverageShardName, sh.Name)
+	require.Equal(t, coverageShardName, sh.Name)
 	byID := map[string]map[string]string{}
 	for _, n := range sh.Nodes {
 		byID[n.ID] = n.Attrs
 	}
 	assert.Equal(t, map[string]string{
-		AttrCoverage:     "0.67",
+		attrCoverage:     "0.67",
 		AttrCoveredStmts: "4",
 		AttrTotalStmts:   "6",
 	}, byID[fileID("internal/foo.go")])
-	assert.Equal(t, "1.00", byID[symbolID("m FuncA#")][AttrCoverage])
+	assert.Equal(t, "1.00", byID[symbolID("m FuncA#")][attrCoverage])
 	assert.Equal(t, map[string]string{
-		AttrCoverage:     "0.00",
+		attrCoverage:     "0.00",
 		AttrCoveredStmts: "0",
 		AttrTotalStmts:   "3",
 	}, byID[symbolID("m FuncB#")])

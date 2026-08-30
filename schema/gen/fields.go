@@ -58,7 +58,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CACHE_REMOTE_INSECURE",
 		Flag:     fieldtype.FlagNames{Long: "cache-remote-insecure"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are",
+		Usage:    "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are imported and produced with no trust set.",
 	},
 	{
 		GoPath:   "CI.MaxShards",
@@ -82,7 +82,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CI_RECORD_RUNS",
 		Flag:     fieldtype.FlagNames{Long: "ci-record-runs"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_CI_RECORD_RUNS: RecordRuns keeps the per-branch run log (forecast.Run) in the history file:",
+		Usage:    "MAGUS_CI_RECORD_RUNS: RecordRuns keeps the per-branch run log (forecast.Run) in the history file: which commit a branch passed or failed a ...",
 	},
 	{
 		GoPath:   "Volatility.Enabled",
@@ -123,38 +123,6 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "volatility-annotate-gha"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_VOLATILITY_ANNOTATE_GHA",
-	},
-	{
-		GoPath:   "Graph.Direction",
-		YamlPath: "graph.direction",
-		EnvVar:   "MAGUS_GRAPH_DIRECTION",
-		Flag:     fieldtype.FlagNames{Long: "graph-direction"},
-		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_GRAPH_DIRECTION",
-	},
-	{
-		GoPath:   "Graph.Spell",
-		YamlPath: "graph.spell",
-		EnvVar:   "MAGUS_GRAPH_SPELL",
-		Flag:     fieldtype.FlagNames{Long: "graph-spell"},
-		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_GRAPH_SPELL",
-	},
-	{
-		GoPath:   "Graph.Depth",
-		YamlPath: "graph.depth",
-		EnvVar:   "MAGUS_GRAPH_DEPTH",
-		Flag:     fieldtype.FlagNames{Long: "graph-depth"},
-		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_GRAPH_DEPTH",
-	},
-	{
-		GoPath:   "Graph.Roots",
-		YamlPath: "graph.roots",
-		EnvVar:   "MAGUS_GRAPH_ROOTS",
-		Flag:     fieldtype.FlagNames{Long: "graph-roots"},
-		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_GRAPH_ROOTS",
 	},
 	{
 		GoPath:   "Telemetry.Enabled",
@@ -210,7 +178,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DAEMON_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: "daemon-enabled"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_DAEMON_ENABLED: Enabled uses a shared, persistent daemon; false runs each invocation self-contained. Default true.",
+		Usage:    "MAGUS_DAEMON_ENABLED: Enabled uses a shared, persistent daemon; false runs each invocation self-contained.",
 	},
 	{
 		GoPath:   "Daemon.Address",
@@ -229,20 +197,12 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_DAEMON_IDLE_TTL: IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.",
 	},
 	{
-		GoPath:   "Daemon.Socket",
-		YamlPath: "daemon.socket",
-		EnvVar:   "MAGUS_DAEMON_SOCKET",
-		Flag:     fieldtype.FlagNames{Long: "daemon-socket"},
-		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_DAEMON_SOCKET: Socket is the runtime socket path set by the daemon for forwarded children; unix:// URL or bare path.",
-	},
-	{
 		GoPath:   "Daemon.Workspaces",
 		YamlPath: "daemon.workspaces",
 		EnvVar:   "MAGUS_DAEMON_WORKSPACES",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
-		Usage:    "MAGUS_DAEMON_WORKSPACES: Workspaces is the explicit list of workspace roots to serve; non-empty enables eager union of sandbox",
+		Usage:    "MAGUS_DAEMON_WORKSPACES: Workspaces is the explicit list of workspace roots to serve; non-empty enables eager union of sandbox policies and re...",
 	},
 	{
 		GoPath:   "Daemon.Maintenance.RotateActivities",
@@ -274,7 +234,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW",
 		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-check-review"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW: CheckReview notices a merge or a new remark on a review this tree took part in. The only",
+		Usage:    "MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW: CheckReview notices a merge or a new remark on a review this tree took part in.",
 	},
 	{
 		GoPath:   "VCS.Enabled",
@@ -298,7 +258,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_VCS_BASE_REF",
 		Flag:     fieldtype.FlagNames{Long: "vcs-base-ref"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).",
+		Usage:    "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref.",
 	},
 	{
 		GoPath:   "MCP.Enabled",
@@ -323,14 +283,6 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_CONSOLE_ENABLED",
-	},
-	{
-		GoPath:   "Console.URL",
-		YamlPath: "console.url",
-		EnvVar:   "MAGUS_CONSOLE_URL",
-		Flag:     fieldtype.FlagNames{Long: "console-url"},
-		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_CONSOLE_URL: URL is the base URL of the hosted console (with a trailing slash, without",
 	},
 	{
 		GoPath:   "Report.Filter",
@@ -362,7 +314,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_LOG_SILENT",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_LOG_SILENT: Silent suppresses progress like --quiet, and additionally bounds the failing-project",
+		Usage:    "MAGUS_LOG_SILENT: Silent suppresses progress like --quiet, and additionally bounds the failing-project dump (tail + path to the full lo...",
 	},
 	{
 		GoPath:   "Log.Stream",
@@ -370,7 +322,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_LOG_STREAM",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_LOG_STREAM: Stream shows every target's subprocess output live and interleaved, instead of",
+		Usage:    "MAGUS_LOG_STREAM: Stream shows every target's subprocess output live and interleaved, instead of withholding a passing target's output ...",
 	},
 	{
 		GoPath:   "Hints.Enabled",
@@ -378,7 +330,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_HINTS_ENABLED",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_HINTS_ENABLED: Enabled controls whether hint messages (actionable nudges) are printed",
+		Usage:    "MAGUS_HINTS_ENABLED: Enabled controls whether hint messages (actionable nudges) are printed to stderr.",
 	},
 	{
 		GoPath:   "Knowledge.Workspaces",
@@ -386,7 +338,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_WORKSPACES",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
-		Usage:    "MAGUS_KNOWLEDGE_WORKSPACES: Workspaces are additional workspace roots to union into a '--global'",
+		Usage:    "MAGUS_KNOWLEDGE_WORKSPACES: Workspaces are additional workspace roots to union into a '--global' knowledge-graph query (query/explain/path and gr...",
 	},
 	{
 		GoPath:   "Knowledge.MaxSizeMB",
@@ -394,7 +346,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_MAX_SIZE_MB",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-max-size-mb"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When",
+		Usage:    "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge).",
 	},
 	{
 		GoPath:   "Knowledge.VCS.Enabled",
@@ -410,7 +362,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-vcs-max-commits"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits. 0 uses a",
+		Usage:    "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits.",
 	},
 	{
 		GoPath:   "Knowledge.VCS.Authorship",
@@ -418,7 +370,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_VCS_AUTHORSHIP",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_KNOWLEDGE_VCS_AUTHORSHIP: Authorship includes the 'author' nodes and 'authored' edges (who touched which",
+		Usage:    "MAGUS_KNOWLEDGE_VCS_AUTHORSHIP: Authorship includes the 'author' nodes and 'authored' edges (who touched which files) in the graph.",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.Disabled",
@@ -426,7 +378,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-disabled"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED: Disabled opts out of background auto-indexing. Auto-indexing is on by default",
+		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED: Disabled opts out of background auto-indexing.",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.QuietSeconds",
@@ -434,7 +386,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-quiet-seconds"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS: QuietSeconds is how long a project's sources must be quiet after the last change",
+		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS: QuietSeconds is how long a project's sources must be quiet after the last change before it is re-indexed, so a burst ...",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.MinIntervalSeconds",
@@ -442,7 +394,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-min-interval-seconds"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a",
+		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a ceiling on how often the indexer fire...",
 	},
 	{
 		GoPath:   "Knowledge.Notes.Shared",
@@ -450,7 +402,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_NOTES_SHARED",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-notes-shared"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_KNOWLEDGE_NOTES_SHARED: Shared is the workspace-relative directory holding notes the TEAM has: committed,",
+		Usage:    "MAGUS_KNOWLEDGE_NOTES_SHARED: Shared is the workspace-relative directory holding notes the TEAM has: committed, so git attributes each one to whoev...",
 	},
 	{
 		GoPath:   "Knowledge.Notes.Private",
@@ -458,7 +410,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_NOTES_PRIVATE",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-notes-private"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_KNOWLEDGE_NOTES_PRIVATE: Private is a SECOND notes location, yours rather than the team's, and it may sit",
+		Usage:    "MAGUS_KNOWLEDGE_NOTES_PRIVATE: Private is a SECOND notes location, yours rather than the team's, and it may sit anywhere on disk - a vault, a scratc...",
 	},
 	{
 		GoPath:   "Secret.Interactive",
@@ -466,7 +418,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_SECRET_INTERACTIVE_TIMEOUT",
 		Flag:     fieldtype.FlagNames{Long: "secret-interactive-timeout"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_SECRET_INTERACTIVE_TIMEOUT: Interactive bounds a provider read when stdin is a terminal. Default 60s.",
+		Usage:    "MAGUS_SECRET_INTERACTIVE_TIMEOUT: Interactive bounds a provider read when stdin is a terminal.",
 	},
 	{
 		GoPath:   "Secret.Unattended",
@@ -474,7 +426,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_SECRET_UNATTENDED_TIMEOUT",
 		Flag:     fieldtype.FlagNames{Long: "secret-unattended-timeout"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on. Default 10s.",
+		Usage:    "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on.",
 	},
 	{
 		GoPath:   "Diff.Tui",
@@ -482,7 +434,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DIFF_TUI",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
-		Usage:    "MAGUS_DIFF_TUI: Tui opens the interactive viewer when the terminal can draw it. nil = default true.",
+		Usage:    "MAGUS_DIFF_TUI: Tui opens the interactive viewer when the terminal can draw it.",
 	},
 	{
 		GoPath:   "Concurrency",
@@ -490,7 +442,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_CONCURRENCY",
 		Flag:     fieldtype.FlagNames{Long: "concurrency", Short: "j"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).",
+		Usage:    "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter.",
 	},
 	{
 		GoPath:   "MaxFailures",
@@ -498,7 +450,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_MAX_FAILURES",
 		Flag:     fieldtype.FlagNames{Long: "max-failures"},
 		Kind:     fieldtype.KindInt,
-		Usage:    "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting",
+		Usage:    "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting more.",
 	},
 	{
 		GoPath:   "TargetTimeout",
@@ -506,7 +458,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_TARGET_TIMEOUT",
 		Flag:     fieldtype.FlagNames{Long: "target-timeout"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus",
+		Usage:    "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus cancels it.",
 	},
 	{
 		GoPath:   "HistoryPath",
@@ -514,7 +466,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_HISTORY_PATH",
 		Flag:     fieldtype.FlagNames{Long: "history-path"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,",
+		Usage:    "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection, CI forecaster, graph timing, and bi...",
 	},
 	{
 		GoPath:   "DryRun",
@@ -522,7 +474,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DRY_RUN",
 		Flag:     fieldtype.FlagNames{Long: "dry-run", Short: "u"},
 		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.",
+		Usage:    "MAGUS_DRY_RUN: DryRun prints what would run without executing.",
 	},
 	{
 		GoPath:   "DefaultCharms",
@@ -530,7 +482,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DEFAULT_CHARMS",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
-		Usage:    "MAGUS_DEFAULT_CHARMS: DefaultCharms are execution charms applied to every 'magus run' / 'magus x' by",
+		Usage:    "MAGUS_DEFAULT_CHARMS: DefaultCharms are execution charms applied to every 'magus run' / 'magus x' by default, e.g.",
 	},
 	{
 		GoPath:   "Sandbox.Enabled",
@@ -546,6 +498,6 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_SANDBOX_ENV_PASSTHROUGH",
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
-		Usage:    "MAGUS_SANDBOX_ENV_PASSTHROUGH: Passthrough adds names/globs (e.g. 'MISE_*') to the built-in env allowlist.",
+		Usage:    "MAGUS_SANDBOX_ENV_PASSTHROUGH: Passthrough adds names/globs (e.g.",
 	},
 }

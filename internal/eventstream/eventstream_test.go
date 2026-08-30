@@ -59,7 +59,7 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := FromJournal("/repo", tc.in)
+			got, ok := fromJournal("/repo", tc.in)
 			require.True(t, ok)
 			assert.Equal(t, tc.want, got)
 		})
@@ -70,7 +70,7 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 // journal conflates "succeeded" and "ran" into one three-valued status, and a
 // subscriber asks those separately.
 func TestFromJournalSplitsCachedFromSucceeded(t *testing.T) {
-	got, ok := FromJournal("/repo", journal.Event{Kind: journal.KindResult, Status: journal.StatusCached})
+	got, ok := fromJournal("/repo", journal.Event{Kind: journal.KindResult, Status: journal.StatusCached})
 	require.True(t, ok)
 	assert.Equal(t, types.StreamTarget{Status: "ok", CacheHit: true}, got.Body)
 }
@@ -78,7 +78,7 @@ func TestFromJournalSplitsCachedFromSucceeded(t *testing.T) {
 // TestFromJournalUnknownStatusIsNotGreen: a status magus grows later must not
 // present as a silent pass to every existing subscriber.
 func TestFromJournalUnknownStatusIsNotGreen(t *testing.T) {
-	got, ok := FromJournal("/repo", journal.Event{Kind: journal.KindResult, Status: "quarantined"})
+	got, ok := fromJournal("/repo", journal.Event{Kind: journal.KindResult, Status: "quarantined"})
 	require.True(t, ok)
 	assert.Equal(t, types.StreamTarget{Status: "failed"}, got.Body)
 }
@@ -88,7 +88,7 @@ func TestFromJournalUnknownStatusIsNotGreen(t *testing.T) {
 func TestFromJournalSkipsKindsWithNoStreamEquivalent(t *testing.T) {
 	for _, kind := range []string{journal.KindExec, journal.KindScope, journal.KindWarn, journal.KindSecret} {
 		t.Run(kind, func(t *testing.T) {
-			_, ok := FromJournal("/repo", journal.Event{Kind: kind, Text: "x"})
+			_, ok := fromJournal("/repo", journal.Event{Kind: kind, Text: "x"})
 			assert.False(t, ok)
 		})
 	}
@@ -151,7 +151,7 @@ func TestWriterIsConcurrencySafe(t *testing.T) {
 // TestFromJournalCarriesTheFailureReason pins the run error onto the stream; the
 // journal carries it in Text.
 func TestFromJournalCarriesTheFailureReason(t *testing.T) {
-	got, ok := FromJournal("/repo", journal.Event{
+	got, ok := fromJournal("/repo", journal.Event{
 		Kind: journal.KindResult, Project: "api", Target: "build",
 		Status: journal.StatusFail, Text: "exit status 2",
 	})

@@ -11,6 +11,8 @@ magus installs through [mise](https://mise.jdx.dev) with no plugin, via its
 GitHub release asset matching your platform:
 
 ```bash
+# The hosted docs substitute the latest release tag below; on GitHub it reads
+# literally - get the real value from https://github.com/egladman/magus/releases
 mise use -g ubi:egladman/magus@__MAGUS_VERSION__
 ```
 
@@ -50,8 +52,8 @@ upstream pull request to
 [aquaproj/aqua-registry](https://github.com/aquaproj/aqua-registry), and it would
 close the verification gap above.
 
-The `go` backend resolves and compiles. It is documented here because people find
-it anyway, not because it is supported.
+The `go` backend does not currently work at all. It is documented here because
+people find it anyway, not because it is supported.
 
 > **Not the golden path, and not a route to adopt.** magus is a build tool, and a
 > build tool installed through the package manager of a toolchain it manages puts
@@ -63,30 +65,24 @@ it anyway, not because it is supported.
 > tool with npm, cargo, or pip. Use the [install script](../setup.md#install).
 
 ```bash
-# builds, but reports: magus unknown (unknown) built unknown
+# fails outright, before it ever reaches a compile step
 mise use -g go:github.com/egladman/magus/cmd/magus@latest
 ```
 
-Two concrete problems on top of the structural one.
+`go.mod` requires `github.com/egladman/magus/libs/diagnostics` and
+`.../libs/gopherbuzz` - nested modules with their own `go.mod` - at `v0.0.0`,
+resolved only through this repo's own LOCAL `replace` directives; neither nested
+module has ever had a tagged release. `go install pkg@version` (what the `go`
+backend runs under the hood) refuses outright to build any module whose `go.mod`
+contains a `replace` directive, local or not, unless that module is the main
+module of the build - so the install dies on the replace directives themselves,
+before dependency resolution or compilation ever starts. There is no flag that
+gets around this from the consuming side; it is fixed only by the nested modules
+getting real tags, at which point the `require` lines above would point at a real
+version and the `replace` directives could be dropped for a downstream install.
 
-`go install` cannot pass the `-ldflags` that stamp the version, commit, and build
-date. `unknown` is not cosmetic - it is the dev-build sentinel magus keys on
-internally to fingerprint an unstamped build, so a go-backend install presents
-itself to magus as a development binary rather than the release it came from.
-
-It used to fail outright on many clean machines, and the fix is worth knowing about
-if you are packaging magus. `internal/compress` selected its implementation on the
-`cgo` build tag, and `CGO_ENABLED` defaults to 1 wherever a C compiler is present,
-which covers a typical Linux dev box and any Mac with the Xcode command line tools.
-That path needs `liblzma` and `libzstd` development headers discoverable by
-pkg-config, so without them the build died at the pkg-config step with an error
-naming neither magus nor the fix. It was invisible from a maintainer's machine,
-where the headers are always present.
-
-The native codec is now opt-in, one tag per system library, so every build that does
-not ask for it gets the pure-Go implementation that static releases have always
-shipped. Only the dynamically linked release asset asks:
-
-```sh
-go build -tags liblzma,libzstd ./cmd/magus
-```
+Even if that were fixed, `go install` still cannot pass the `-ldflags` that stamp
+the version, commit, and build date - a go-backend install would present itself
+to magus as `unknown (unknown) built unknown`, the dev-build sentinel magus keys
+on internally to fingerprint an unstamped build, rather than the release it came
+from.

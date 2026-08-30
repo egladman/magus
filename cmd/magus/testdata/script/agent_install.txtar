@@ -4,9 +4,9 @@ exists .claude/skills/magus-query/SKILL.md
 exists .claude/skills/magus-run/SKILL.md
 exists .claude/skills/magus-vcs-hygiene/SKILL.md
 exists .claude/skills/magus-architecture-review/SKILL.md
-exists .claude/skills/magus-delegate-multi-agent/SKILL.md
+exists .claude/skills/magus-multi-agent/SKILL.md
 grep 'name: magus-query' .claude/skills/magus-query/SKILL.md
-grep 'name: magus-delegate-multi-agent' .claude/skills/magus-delegate-multi-agent/SKILL.md
+grep 'name: magus-multi-agent' .claude/skills/magus-multi-agent/SKILL.md
 grep 'agent-skill-version: \d' .claude/skills/magus-query/SKILL.md
 
 # several destinations in one call; the destination is the caller's choice

@@ -203,9 +203,6 @@ func (b *Builder) Details(summary string, body func(*Builder)) {
 // cover. Callers own the trailing blank line.
 func (b *Builder) Raw(s string) { b.buf.WriteString(s) }
 
-// Rawf writes a formatted string verbatim.
-func (b *Builder) Rawf(format string, args ...any) { fmt.Fprintf(&b.buf, format, args...) }
-
 // Bytes returns the accumulated document.
 func (b *Builder) Bytes() []byte { return b.buf.Bytes() }
 

@@ -37,7 +37,7 @@ func TestAssemblePackages_SharesANodeBetweenProjects(t *testing.T) {
 	n := packageNode(t, s, "package:gomod connectrpc.com/connect")
 	assert.Equal(t, types.KindPackage, n.Kind)
 	assert.Equal(t, "v1.20.0", n.Attrs[AttrPackageVersion])
-	assert.NotContains(t, n.Attrs, AttrPackageVersionConflict, "agreeing pins are not a conflict")
+	assert.NotContains(t, n.Attrs, attrPackageVersionConflict, "agreeing pins are not a conflict")
 }
 
 // TestAssemblePackages_ManagerSeparatesNamespaces pins the collision packageID exists to
@@ -69,7 +69,7 @@ func TestAssemblePackages_DisagreeingPinsAreFlagged(t *testing.T) {
 	})
 	n := packageNode(t, s, "package:gomod example.com/x")
 	assert.Equal(t, "v1.2.0", n.Attrs[AttrPackageVersion], "the lowest pin, chosen deterministically")
-	assert.Equal(t, "v1.2.0,v1.5.0", n.Attrs[AttrPackageVersionConflict], "every version involved")
+	assert.Equal(t, "v1.2.0,v1.5.0", n.Attrs[attrPackageVersionConflict], "every version involved")
 }
 
 // TestAssemblePackages_DirectAnywhereIsDirect pins the fold direction on the indirect
@@ -83,9 +83,9 @@ func TestAssemblePackages_DirectAnywhereIsDirect(t *testing.T) {
 		"b": {{Manager: "gomod", Name: "example.com/x", Version: "v1.0.0"}},
 		"c": {{Manager: "gomod", Name: "example.com/y", Version: "v1.0.0", Indirect: true}},
 	})
-	assert.NotContains(t, packageNode(t, s, "package:gomod example.com/x").Attrs, AttrPackageIndirect,
+	assert.NotContains(t, packageNode(t, s, "package:gomod example.com/x").Attrs, attrPackageIndirect,
 		"direct to one project is direct")
-	assert.Equal(t, "true", packageNode(t, s, "package:gomod example.com/y").Attrs[AttrPackageIndirect],
+	assert.Equal(t, "true", packageNode(t, s, "package:gomod example.com/y").Attrs[attrPackageIndirect],
 		"indirect everywhere stays indirect")
 }
 

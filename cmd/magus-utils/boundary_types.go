@@ -109,10 +109,14 @@ var boundaryTypes = []boundaryType{
 	{Name: "Trend", Type: reflect.TypeFor[types.TrendOutput](), RuntimeObject: true},
 	{Name: "VolatilityTarget", Type: reflect.TypeFor[types.VolatilityTarget](), RuntimeObject: true},
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
-	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode](), RuntimeObject: true},
-	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan](), RuntimeObject: true},
-	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage](), RuntimeObject: true},
-	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats](), RuntimeObject: true},
+	// Not RuntimeObject: unlike their insight-bundle siblings above, nothing declares
+	// these for Buzz (no gen/decls entry reaches them), so no method call ever surfaces
+	// one as a typed return - moduledecls.go's KnowledgeGodNode comment is the fossil
+	// of that gap (an `in:` field that shipped unparsable because nothing checked it).
+	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode]()},
+	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan]()},
+	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage]()},
+	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats]()},
 	{Name: "ProjectRef", Type: reflect.TypeFor[types.ProjectRef](), RuntimeObject: true},
 	{Name: "KnowledgeSymbolGap", Type: reflect.TypeFor[types.KnowledgeSymbolGap](), RuntimeObject: true},
 	{Name: "KnowledgeAnswer", Type: reflect.TypeFor[types.KnowledgeAnswer](), RuntimeObject: true},
@@ -126,13 +130,13 @@ var boundaryTypes = []boundaryType{
 	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
-	// magus\ledger's bundle (put/list), leaf-first: Delegation.releases and
-	// DelegationReport.overlaps are each a list of the other two.
-	{Name: "DelegationRelease", Type: reflect.TypeFor[types.DelegationRelease](), RuntimeObject: true},
-	{Name: "DelegationUnattributedWrite", Type: reflect.TypeFor[types.DelegationUnattributedWrite](), RuntimeObject: true},
-	{Name: "Delegation", Type: reflect.TypeFor[types.Delegation](), RuntimeObject: true},
-	{Name: "DelegationOverlap", Type: reflect.TypeFor[types.DelegationOverlap](), RuntimeObject: true},
-	{Name: "DelegationReport", Type: reflect.TypeFor[types.DelegationReport](), RuntimeObject: true},
+	// magus\ledger's bundle (put/list), leaf-first: Lease.releases and
+	// LeaseReport.overlaps are each a list of the other two.
+	{Name: "LeaseRelease", Type: reflect.TypeFor[types.LeaseRelease](), RuntimeObject: true},
+	{Name: "LeaseUnattributedWrite", Type: reflect.TypeFor[types.LeaseUnattributedWrite](), RuntimeObject: true},
+	{Name: "Lease", Type: reflect.TypeFor[types.Lease](), RuntimeObject: true},
+	{Name: "LeaseOverlap", Type: reflect.TypeFor[types.LeaseOverlap](), RuntimeObject: true},
+	{Name: "LeaseReport", Type: reflect.TypeFor[types.LeaseReport](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

@@ -57,7 +57,7 @@ func memoryUsage() {
 }
 
 type memoryListOutput struct {
-	Records []store.Record `json:"records"`
+	Records []store.Record `json:"records" jsonl:"primary"`
 	Issues  []store.Issue  `json:"issues"`
 }
 
@@ -84,20 +84,13 @@ func memoryList(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	// -o name is the ids-one-per-line form every other listing command answers, and
-	// writeFormatted does not implement it: a command that offers it renders it here.
-	// Without this arm `magus memory ls -o name` reaches the renderer's default case and
-	// dies with "unsupported format", which reads as a broken flag rather than a gap.
 	if opts.Format == outputName {
-		w, cleanup, err := outputDst()
-		if err != nil {
-			return err
+		names := make([]string, len(recs))
+		for i, rec := range recs {
+			names[i] = rec.Name
 		}
-		defer func() { _ = cleanup() }()
-		for _, rec := range recs {
-			if _, err := fmt.Fprintln(w, rec.Name); err != nil {
-				return err
-			}
+		if err := emitNames(names); err != nil {
+			return err
 		}
 		return memoryIssuesError(issues)
 	}
@@ -143,6 +136,9 @@ func memoryGet(root string, args []string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
+	}
+	if opts.Format == outputName {
+		return emitNames([]string{rec.Name})
 	}
 	if opts.Format != outputText {
 		return emitFormatted(opts, rec)
@@ -202,6 +198,9 @@ func memoryPut(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if opts.Format == outputName {
+		return emitNames([]string{rec.Name})
+	}
 	if opts.Format != outputText {
 		return emitFormatted(opts, rec)
 	}
@@ -234,6 +233,9 @@ func memoryDelete(root string, args []string) error {
 	out := struct {
 		Deleted string `json:"deleted"`
 	}{Deleted: pos[0]}
+	if opts.Format == outputName {
+		return emitNames([]string{pos[0]})
+	}
 	if opts.Format != outputText {
 		return emitFormatted(opts, out)
 	}
@@ -262,6 +264,15 @@ func memoryVerify(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A verification has no name of its own, so the one-token-per-line identity is what
+	// the reader would act on next: the entry each issue is about (its file, for an issue
+	// about the store rather than a record). A clean journal prints nothing.
+	if opts.Format == outputName {
+		if err := emitNames(memoryIssueSubjects(report.Issues)); err != nil {
+			return err
+		}
+		return memoryIssuesError(report.Issues)
+	}
 	if opts.Format != outputText {
 		if err := emitFormatted(opts, report); err != nil {
 			return err
@@ -273,6 +284,19 @@ func memoryVerify(root string, args []string) error {
 		return nil
 	}
 	return printMemoryIssues(report.Issues)
+}
+
+// memoryIssueSubjects names what each issue is about, for `-o name`.
+func memoryIssueSubjects(issues []store.Issue) []string {
+	out := make([]string, 0, len(issues))
+	for _, i := range issues {
+		if i.Record != "" {
+			out = append(out, i.Record)
+			continue
+		}
+		out = append(out, i.Path)
+	}
+	return out
 }
 
 func printMemoryRecord(rec store.Record) {

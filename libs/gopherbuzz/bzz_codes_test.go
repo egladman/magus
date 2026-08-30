@@ -1,6 +1,8 @@
 package buzz
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -80,5 +82,37 @@ func TestTypeErrorNoCodeRendersPlain(t *testing.T) {
 	want := "buzz: line 2:1: void function cannot return a value"
 	if got != want {
 		t.Errorf("Error() = %q, want exactly %q (no code, no see: link)", got, want)
+	}
+}
+
+// TestTypeErrorAsDiagnostic pins the errors.As bridge an embedder branches on. magus sits
+// above this module and its lowest layers below it, so nothing outside this package can name
+// typeError - without As the BZZ code is reachable only by substring-matching a sentence
+// written for humans, and the one caller that tried instead matched nothing at all.
+func TestTypeErrorAsDiagnostic(t *testing.T) {
+	// Wrapped the way a workspace load wraps it, so this exercises the chain rather than a
+	// top-level assertion that would pass for the wrong reason.
+	err := fmt.Errorf("magusfile: exec magusfile.buzz: %w",
+		typeError{Line: 4, Col: 3, Code: UndefinedType, Msg: `undefined type "Secret"`})
+
+	var d *diagnostics.Error
+	if !errors.As(err, &d) {
+		t.Fatal("errors.As found no *diagnostics.Error in a coded type error")
+	}
+	if d.Code != UndefinedType {
+		t.Errorf("code = %q, want %q", d.Code, UndefinedType)
+	}
+	if !strings.Contains(d.Error(), `undefined type "Secret"`) {
+		t.Errorf("message did not survive: %q", d.Error())
+	}
+}
+
+// TestTypeErrorWithNoCodeIsNotADiagnostic keeps the bridge honest: an unclassified error has
+// no diagnostic to hand back, and answering with an empty code would make every plain type
+// error look like a coded one to a caller switching on the code.
+func TestTypeErrorWithNoCodeIsNotADiagnostic(t *testing.T) {
+	var d *diagnostics.Error
+	if errors.As(typeError{Line: 2, Col: 1, Msg: "void function cannot return a value"}, &d) {
+		t.Errorf("an uncoded type error reported itself as %v", d)
 	}
 }

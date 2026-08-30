@@ -26,3 +26,33 @@ at it. An existing mgs is left alone unless --force is given.`,
 		{"Replace an existing mgs", "magus self install-shorthand --force"},
 	},
 }
+
+// selfRefreshCommand documents `magus self refresh`. It lives outside the
+// build-tagged self pages for the same reason as the shorthand: it downloads a
+// data file (the EOL/version registry), not the magus binary, so -tags
+// noselfupdate does not remove it.
+var selfRefreshCommand = Command{
+	Name:  "refresh",
+	Short: "Fetch, verify, and cache the registry (a data file; does not upgrade magus)",
+	Long: `Fetch, verify, and cache the registry each source in
+$XDG_CONFIG_HOME/magus/registry.d/ declares.
+
+This downloads a DATA FILE - the EOL and version registry describing tools
+and languages - and does not upgrade magus itself; see "magus self update"
+for that. Set MAGUS_OFFLINE=1 to make any outbound attempt a named error.`,
+	Examples: []Example{
+		{"Refresh every configured source", "magus self refresh"},
+	},
+}
+
+// selfRegistryCommand documents `magus self registry`. Read-only: reports what
+// is cached, how old, and from where, and sends nothing.
+var selfRegistryCommand = Command{
+	Name:  "registry",
+	Short: "What is cached, how old, and from where",
+	Long: `Report each configured registry source: its state, the age of its
+data, and where it came from. Reads the local cache; sends nothing.`,
+	Examples: []Example{
+		{"Show cached registry state", "magus self registry"},
+	},
+}

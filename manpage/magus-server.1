@@ -3,7 +3,7 @@
 magus\-server \- Manage the persistent magus daemon
 .SH SYNOPSIS
 .B magus
-.RI "server <start|stop> [flags]"
+.RI "server <start|stop|reload|job> [flags]"
 .SH DESCRIPTION
 Start, stop, or check the liveness of a persistent magus daemon.
 .PP
@@ -35,6 +35,12 @@ Stop the daemon's hosted services, leaving the daemon running
 \fB\-\-socket\fR \fIstring\fR
 Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto\-detect)
 .RE
+.SS server reload options
+.RS
+.TP
+\fB\-\-socket\fR \fIstring\fR
+Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto\-detect)
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -43,6 +49,12 @@ Start a persistent daemon (auto\-backgrounds by default; \-\-foreground blocks)
 .TP
 \fBstop\fR
 Send a graceful shutdown request to a running daemon
+.TP
+\fBreload\fR
+Re\-read configuration without restarting: drop the daemon's open workspaces
+.TP
+\fBjob\fR
+Submit a background maintenance job to a running daemon (no\-op with no daemon)
 .RE
 .SH EXAMPLES
 \fIStart the daemon (auto\-backgrounds)\fR
@@ -61,6 +73,18 @@ magus server start --foreground
 .PP
 .EX
 magus server stop
+.EE
+.PP
+\fIReload configuration without restarting\fR
+.PP
+.EX
+magus server reload
+.EE
+.PP
+\fISubmit a background job\fR
+.PP
+.EX
+magus server job rotate-logs
 .EE
 .PP
 \fIInspect daemon pool state\fR
@@ -99,6 +123,7 @@ magus --daemon-address unix:///tmp/m.sock server start
 \fBmagus\-memory\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
 \fBmagus\-man\fR(1),

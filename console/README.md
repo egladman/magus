@@ -52,6 +52,80 @@ These PF status tokens are **theme-aware** - they resolve to the right value in 
 dark - so charts that read `--console-status-*` at runtime via `getComputedStyle` color
 correctly in both themes with no per-theme code.
 
+### Surface chrome (one bar, one head, one gutter)
+
+Every surface opens with a strip, and each one used to size its own: measured across the nine
+surfaces they came out 38, 40, 46, 52, 54, 57 and 68px tall, over five different inline gutters.
+Three tokens decide it now, and a surface sheet reads them rather than picking a number.
+
+| Token                       | What it sizes                                                     |
+| --------------------------- | ----------------------------------------------------------------- |
+| `--console-surface-bar-h`   | a BAR: the strip carrying a surface's controls (Runs filter, log viewer toolbar, Notes filter, graph stage header, plan toolbar). Derived from `--console-control-block-size`, so it is exactly a default control plus a symmetric spacer pair |
+| `--console-surface-head-h`  | a HEAD: the strip carrying a label over a column (Activity's Events/Details, the diff's file index and its REVIEW head, the log viewer's Recent runs/Output) |
+| `--console-pad`             | the inline gutter for every surface-level strip AND the content under it, so a header label starts on the same x as what it heads |
+
+Use a bar's height as a FLOOR (`min-block-size`), never a fixed size: these rows wrap in a narrow
+pane and have to be free to grow. Zero the strip's own `padding-block` when you do, or the two stack
+and the row comes out taller than every other bar again.
+
+`--log-pad` (logs) and `--notes-pad` (notes) still exist as local names, both defined as
+`var(--console-pad)`. They are the re-scaling seam, not a second opinion: the dashboard's activity
+tile and Big Picture narrow `--log-pad` for a preview that is not a whole page.
+
+A strip's hairline must reach both edges of the region it heads. That means the CHILD spends the
+gutter, not the container - a container's inline padding holds the child's `border-block-end` short
+at each end, which is how the diff's head hairline came to stop 8px before the rail and 8px before
+the sidebar/stream seam while its comment claimed a straight line across the surface.
+
+Two families, and the difference is deliberate. A CHROME surface (runs, logs, graph, diff, notes,
+activity, plan) paints a full-bleed bar and lets its content meet the pane edge. A DOCUMENT surface
+(dashboard, settings, shortcuts) is a padded scrolling page whose content is inset. Both take their
+inset from `--console-pad`, so content starts on the same x either way.
+
+### Control size and type (`data-control-size`)
+
+Two tiers, and which one a control takes is decided by WHERE it sits, not by the surface it belongs
+to. A container declares its tier once with `data-control-size`; `tokens.css` then sizes every
+`pf-v6-c-button`, toggle-group button, tabs link and form control inside it.
+
+| Tier      | Height | Type | Where                                                                 |
+| --------- | ------ | ---- | --------------------------------------------------------------------- |
+| `default` | 37px   | 14px | a surface BAR: the Runs filter row, the log viewer toolbar, the graph stage header, the Notes filter, the diff's remark composer, the dashboard's own control row |
+| `compact` | 29px   | 12px | an in-panel RAIL, HEAD or card: the graph sidebar, the log viewer's run index, the diff file index and the diff head's own actions, a dashboard card's own controls, the title bar's tray |
+
+Neither number is picked - both restate PatternFly's own button formula (one line box plus its
+vertical control spacer) at the default and compact steps.
+
+The tier APPLIES the size rather than only publishing it. Publishing it was not enough: the token
+reached five containers and every control inside still had to opt in by hand, so the log viewer's
+filter row ran a 37px input beside 29px buttons - one row's controls disagreeing with each other.
+Text inputs are in the set for that reason; a `textarea` is excluded (its height is its rows), and
+so is `pf-m-inline`, which is a link inside a sentence rather than a control on a row.
+
+Before this, four surfaces carried eight control heights (21, 22, 24, 25, 26, 28, 29, 37) and five
+control font sizes (14, 12.48, 12, 11.52, 10.88px). `magus/control-size-token` pins both halves.
+
+Its reach is PARTIAL and worth knowing: stylelint has no DOM, so the rule only fires on a rule whose
+SELECTOR mentions `[data-control-size]`. A per-surface override written against a `console-*` class
+still lands on a tiered control without being caught. The tiers are the fix; the rule is a backstop.
+
+### The uppercase label (`--console-label-*` / `--console-chip-*`)
+
+The console has exactly two uppercase voices, and `magus/label-token` (stylelint, tested in
+`scripts/stylelint-label-token.test.mjs`) fails the build on a third. Written out by hand this ran
+to 35 near-misses across seven sheets - six font sizes between 0.62 and 0.72rem, six tracking values
+between 0.04 and 0.09em, three weights - with adjacent labels on one surface disagreeing.
+
+- **`--console-label-size` / `-weight` / `-tracking`** - a section, column, facet, stat or panel
+  label. Case and colour are all that separate it from the content around it.
+- **`--console-chip-size` / `-weight` / `-tracking`** - the run inside a chip: a status badge on a
+  log line, a scope pill, a run's verdict. Smaller and heavier, because the fill or outline it sits
+  on already does the separating.
+
+Write `text-transform: uppercase` yourself - it is the label's defining property, and the rule keys
+on it to require the three tokens. Which recipe an element takes is the author's call; what is not
+optional is taking one of them.
+
 ### Corner style (squarish, locked house style)
 
 PF builds every radius from global primitives `--pf-t--global--border--radius--{100..500}`
@@ -101,7 +175,7 @@ maintainable. There are NO bare, ad-hoc, or unprefixed class names. This mirrors
     columns, the file sidebar). Authored rather than PF because PF has no diff component, and
     because the row geometry is load-bearing: the stream is virtualized against a fixed row
     height, so these rules are part of the scroll math rather than decoration.
-  - `console-plan-*` the delegation-plan surface (the unit-tree stage and its edges, the unit
+  - `console-plan-*` the lease-plan surface (the lease-tree stage and its edges, the lease
     list that is the stage's accessible twin, the detail sheet). Authored for the same reason as
     the graph stage: PF has no component for a laid-out node/edge drawing, and the node geometry
     is shared with the layout that places it.

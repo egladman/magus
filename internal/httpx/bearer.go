@@ -9,11 +9,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Verifier decides whether a presented bearer token is accepted. It is the one
+// verifier decides whether a presented bearer token is accepted. It is the one
 // knob that varies across loopback endpoints: the daemon passes auth.VerifyMCPBearer
 // (cli token or a non-expired named connector token), while the ephemeral live
 // and blob servers pass SingleTokenVerifier over their per-run token.
-type Verifier func(presented string) bool
+type verifier func(presented string) bool
 
 // BearerGuard rejects any request whose token fails verify. The token is read
 // ONLY from the `Authorization: Bearer <token>` header. This is the default and
@@ -28,7 +28,7 @@ type Verifier func(presented string) bool
 // without restarting the server; it must fail closed (return false) on any error.
 // Failures return 401 with a WWW-Authenticate challenge and a generic body that
 // does not distinguish a missing token from a wrong one.
-func BearerGuard(verify Verifier, next http.Handler) http.Handler {
+func BearerGuard(verify verifier, next http.Handler) http.Handler {
 	return guard(verify, headerToken, next)
 }
 
@@ -38,13 +38,13 @@ func BearerGuard(verify Verifier, next http.Handler) http.Handler {
 // set an Authorization header, so the query carrier is the sole option. It is a
 // deliberate, scoped exception to the header-only rule (RFC 6750 section 2.3) -
 // keep it off the MCP endpoint, which every supported client reaches with a header.
-func BearerGuardWithQueryToken(verify Verifier, next http.Handler) http.Handler {
+func BearerGuardWithQueryToken(verify verifier, next http.Handler) http.Handler {
 	return guard(verify, presentedToken, next)
 }
 
 // guard is the shared 401-or-pass core; extract names the token carriers a given
 // mount accepts (header-only, or header-plus-query).
-func guard(verify Verifier, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
+func guard(verify verifier, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		presented, ok := extract(r)
 		if !ok {
@@ -59,7 +59,7 @@ func guard(verify Verifier, extract func(*http.Request) (string, bool), next htt
 	})
 }
 
-// SingleTokenVerifier returns a [Verifier] that accepts exactly the one token
+// SingleTokenVerifier returns a [verifier] that accepts exactly the one token
 // yielded by expected. It compares the SHA-256 digests of the presented and
 // expected tokens with subtle.ConstantTimeCompare: the digests are equal-length,
 // so the comparison reveals neither the secret's bytes nor its length. (Hashing
@@ -68,7 +68,7 @@ func guard(verify Verifier, extract func(*http.Request) (string, bool), next htt
 // The ephemeral live and blob servers use this with their per-run token; the
 // daemon uses a richer, per-surface verifier (auth.VerifyMCPBearer or
 // auth.VerifyConsoleBearer) instead.
-func SingleTokenVerifier(expected func() (string, error)) Verifier {
+func SingleTokenVerifier(expected func() (string, error)) verifier {
 	return func(presented string) bool {
 		want, err := expected()
 		if err != nil {

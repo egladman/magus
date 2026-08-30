@@ -1,5 +1,5 @@
 /* plan.css - page-scoped styles for the console Plan surface: a plan drawn as the DAG it is, from
- * either of its two sources (the declared delegation ledger, and the derived run plan).
+ * either of its two sources (the declared lease ledger, and the derived run plan).
  *
  * PatternFly owns everything it has a component for: the source ToggleGroup, the target override's
  * form control, the empty state, the path chips are PF Labels. What PF has no
@@ -10,8 +10,8 @@
  *
  * The states read from the PF-native status tokens, so a theme toggle re-tints the plan with no
  * per-theme rule here. no_return gets its OWN color (the neutral-but-marked purple family used for
- * spells), deliberately NOT the danger red a failure gets: a unit that never returned is not a unit
- * that failed, and a reader must be able to tell them apart at a glance and by mark. */
+ * spells), deliberately NOT the danger red a failure gets: a lease that never returned is not a
+ * lease that failed, and a reader must be able to tell them apart at a glance and by mark. */
 
 .console-plan-layout {
   display: grid;
@@ -61,7 +61,9 @@
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
-  padding: 0.4rem 0.6rem;
+  min-block-size: var(--console-surface-bar-h);
+  padding-block: 0;
+  padding-inline: var(--console-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-plan-summary {
@@ -86,9 +88,10 @@
 }
 .console-plan-target[hidden] { display: none; }
 .console-plan-target__label {
-  font-size: 0.7rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 /* Deliberately narrow: the override is not the entry point. The run plan follows the live run, and
@@ -159,7 +162,7 @@
   font-size: 0.68rem;
   color: var(--pf-t--global--text--color--subtle);
 }
-/* The two warnings a declared row can carry: another unit claims one of its paths, and nobody has
+/* The two warnings a declared row can carry: another lease claims one of its paths, and nobody has
    touched it in a while. Both read in the PF warning token, the same gold the stale-ledger note
    above uses - a warning, never a failure: the row is still the row, and magus derived neither of
    these from anything but what two agents wrote down. Each carries its own word, so the warning
@@ -192,7 +195,7 @@
 .console-plan-layout [data-state="fail"] { --console-plan-state: var(--console-plan-fail); }
 .console-plan-layout [data-state="no_return"] { --console-plan-state: var(--console-plan-no-return); }
 /* The run plan's idle takes the declared styling, and that is the whole mapping: a target nobody
-   has started and a unit nobody has begun are the same fact told by two different tables, so they
+   has started and a lease nobody has begun are the same fact told by two different tables, so they
    must not be two different colors. running / pass / fail already mean the same in both. */
 .console-plan-layout [data-state="idle"] { --console-plan-state: var(--console-plan-declared); }
 
@@ -213,7 +216,7 @@
   stroke-width: 1.2;
 }
 /* Parent and depends_on must not read as the same relation: one is who spawned whom, the other is
-   what has to finish first. Solid for the delegation spine, dashed and accented for the ordering
+   what has to finish first. Solid for the lease spine, dashed and accented for the ordering
    constraints laid over it. */
 .console-plan-edge[data-kind="depends_on"] {
   stroke: var(--console-accent);
@@ -227,7 +230,7 @@
 .console-plan-arrow[data-kind="depends_on"] { fill: var(--console-accent); }
 
 /* In the run plan EVERY edge is a dependency, so there is nothing to tell it apart from. The dashed
-   accent exists to separate depends_on from the ledger's delegation spine; with no spine to
+   accent exists to separate depends_on from the ledger's lease spine; with no spine to
    separate it from it is just noise, so the run source draws its dependencies plain. The markup
    still says depends_on, because that is what the edge is. */
 .console-plan-layout[data-source="run"] .console-plan-edge[data-kind="depends_on"] {
@@ -257,8 +260,8 @@
 .console-plan-node[data-readonly] .console-plan-node__box { stroke-dasharray: 4 2; }
 
 /* Work in flight breathes. Only the RUNNING state pulses, and only on the box's stroke: it marks
-   the one or two units something is actually happening in, which a static drawing cannot
-   distinguish from the units merely declared around them.
+   the one or two leases something is actually happening in, which a static drawing cannot
+   distinguish from the leases merely declared around them.
  *
  * Slow (2.4s) and shallow (down to 0.45), because this runs for as long as the work does - a fast
  * or high-contrast blink beside text somebody is reading is an irritant within a minute. Nothing
@@ -295,7 +298,7 @@
   animation: none;
 }
 /* A warned node keeps its state color on the box - the state is still what it is - and turns its
-   id gold, so a contested or untouched unit is findable in the drawing without reading the list.
+   id gold, so a contested or untouched lease is findable in the drawing without reading the list.
    The words themselves are in the node's title and in the list row beside it; a color on the
    picture is never the only place a warning is told. */
 .console-plan-node[data-warn] .console-plan-node__id,
@@ -354,21 +357,23 @@
 .console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: 0.1rem; margin: 0; }
 .console-plan-detail__label {
   margin-top: 0.9rem;
-  font-size: 0.68rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-plan-detail__label:first-child { margin-top: 0; }
 .console-plan-detail__value { margin: 0; overflow-wrap: anywhere; }
 .console-plan-detail__runshead {
   margin: 0.9rem 0 0.2rem;
-  font-size: 0.72rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* The released paths: what the unit gave up, and which version of it the next one inherits. Two
+/* The released paths: what the lease gave up, and which version of it the next one inherits. Two
    lines per entry so a long path never squeezes the digest it has to be compared against. */
 .console-plan-detail__releases { margin: 0; padding: 0; list-style: none; }
 .console-plan-detail__release { display: flex; flex-direction: column; padding: 0.15rem 0; }
@@ -396,7 +401,7 @@
 }
 
 /* One column on a phone: the drawing is the first thing to go, since the list carries the same
-   units with the same states in words. */
+   leases with the same states in words. */
 @media (max-width: 900px) {
   .console-plan-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -408,7 +413,7 @@
   .console-plan-stage { display: none; }
 }
 
-/* ---- the collapsible unit index ------------------------------------------- */
+/* ---- the collapsible lease index ------------------------------------------ */
 
 /* Collapsed, the index gives its column back to the stage and leaves only the reopen rail, the
    same affordance the diff's file index and the activity trail's event index use. */
@@ -421,11 +426,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.35rem;
-  padding: 0.3rem 0.5rem;
+  min-block-size: var(--console-surface-head-h);
+  padding-block: 0;
+  padding-inline: var(--console-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-plan-tree__heading {
-  font-size: 0.7rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-plan-tree__toggle,

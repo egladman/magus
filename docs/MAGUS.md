@@ -7,7 +7,7 @@
 
 Default charms: rw (local runs write; CI strips them with `--no-default-charms`).
 
-A **target** is a named operation (build, test, lint, …) declared as an `export fun` in a project's magusfile. This is a routing index: every target with a one-line summary, plus the commands that expand any one of them. It is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.
+A **target** is a named unit of work (build, test, lint, ...) declared as an `export fun` in a project's magusfile. This is a routing index: every target with a one-line summary, plus the commands that expand any one of them. It is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.
 
 ## Route by question
 
@@ -57,7 +57,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage` |
 | file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
-| function | 800+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
+| function | 900+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
 | import | 100+ | `magus query kind:import` | `magus`, `fs`, `std` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
 | package | 100+ | `magus query kind:package` | `github.com/davecgh/go-spew`, `github.com/dlclark/regexp2`, `github.com/ebitengine/purego` |

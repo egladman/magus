@@ -7,7 +7,7 @@
 
 Default charms: rw (local runs write; CI strips them with `--no-default-charms`).
 
-A **target** is a named operation (build, test, lint, …) declared as an `export fun` in a project's magusfile. This is a routing index: every target with a one-line summary, plus the commands that expand any one of them. It is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.
+A **target** is a named unit of work (build, test, lint, ...) declared as an `export fun` in a project's magusfile. This is a routing index: every target with a one-line summary, plus the commands that expand any one of them. It is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.
 
 ## Route by question
 
@@ -57,7 +57,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage` |
 | file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
-| function | 800+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
+| function | 900+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
 | import | 100+ | `magus query kind:import` | `magus`, `fs`, `std` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
 | package | 100+ | `magus query kind:package` | `github.com/davecgh/go-spew`, `github.com/dlclark/regexp2`, `github.com/ebitengine/purego` |
@@ -101,7 +101,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` | Tests with race detection and a coverage floor. |
 | `coverage-badge` | Writes assets/coverage.svg, and is the only target that may. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
-| `lint` | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck. |
+| `lint` | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint. |
 | `format` | Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. |
 | `ci` | Runs the CI gates through their declared dependencies. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
@@ -198,7 +198,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `format` |  |
 | `lint` |  |
 | `build` |  |
-| `test` |  |
+| `test` | README.md's "Contributing gotchas" claims value changes are checked against all three build tags (default + buzz_safe in CI, buzz_unsafe by hand) - the second exec is what makes that true; before it, nothing here ever built or ran a single test under -tags buzz_safe. |
 | `buzz-build` | Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version. |
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `conformance` | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). |

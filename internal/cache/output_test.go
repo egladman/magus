@@ -548,6 +548,59 @@ func TestInvocationEventsByID(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
 }
 
+// TestInvocationEventsFromTailsCompleteLines covers reading a journal that is still being written:
+// a resumed read returns only what arrived since, and a torn final line is held back rather than
+// dropped - the offset must stop at the last newline, so the rest of that line arrives whole on the
+// next read instead of being skipped as unparsable.
+func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
+	dir := t.TempDir()
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	path := filepath.Join(runs, "invtail1.jsonl")
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	enc := json.NewEncoder(f)
+	require.NoError(t, enc.Encode(journal.Event{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}))
+	require.NoError(t, f.Close())
+
+	store := NewOutputStore(dir)
+	events, next, err := store.InvocationEventsFrom("invtail1", 0)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "compiling", events[0].Text)
+
+	// The writer appends a whole line plus the first half of the next one.
+	line, err := json.Marshal(journal.Event{Ts: 2, Kind: journal.KindOutput, Text: "linking"})
+	require.NoError(t, err)
+	torn, err := json.Marshal(journal.Event{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass})
+	require.NoError(t, err)
+	f, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	_, err = f.Write(append(append(line, '\n'), torn[:len(torn)/2]...))
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	events, next, err = store.InvocationEventsFrom("invtail1", next)
+	require.NoError(t, err)
+	require.Len(t, events, 1, "the torn line is held back, not parsed")
+	assert.Equal(t, "linking", events[0].Text)
+
+	// Completing the line makes it readable, and the read that skipped it picks it up whole.
+	f, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	_, err = f.Write(append(torn[len(torn)/2:], '\n'))
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	events, _, err = store.InvocationEventsFrom("invtail1", next)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, journal.KindFinished, events[0].Kind)
+
+	_, _, err = store.InvocationEventsFrom("invmissing", 0)
+	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
+}
+
 // TestListRunLogsReadsHeadAndTailOnly is the run browser's feed: the invocation list has to come off
 // bounded reads, because a journal holds every output line its run captured and listing hundreds of
 // them by parsing each in full would read hundreds of megabytes to paint a sidebar. The padding here

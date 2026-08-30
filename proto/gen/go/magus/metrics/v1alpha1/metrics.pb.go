@@ -1129,7 +1129,7 @@ type Sample struct {
 	SampleTime  *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=sample_time,json=sampleTime,proto3" json:"sample_time,omitempty"`
 	Running     *int32                 `protobuf:"varint,2,opt,name=running,proto3,oneof" json:"running,omitempty"`                            // pool slots running at this tick; unset = pool unreadable
 	Capacity    *int32                 `protobuf:"varint,3,opt,name=capacity,proto3,oneof" json:"capacity,omitempty"`                          // pool capacity (0 = unlimited); unset = pool unreadable
-	Queued      *int32                 `protobuf:"varint,4,opt,name=queued,proto3,oneof" json:"queued,omitempty"`                              // tasks queued for a slot; unset = pool unreadable
+	Queued      *int32                 `protobuf:"varint,4,opt,name=queued,proto3,oneof" json:"queued,omitempty"`                              // targets queued for a slot; unset = pool unreadable
 	CacheHits   *int64                 `protobuf:"varint,5,opt,name=cache_hits,json=cacheHits,proto3,oneof" json:"cache_hits,omitempty"`       // cumulative; diff adjacent samples for a hit rate
 	CacheMisses *int64                 `protobuf:"varint,6,opt,name=cache_misses,json=cacheMisses,proto3,oneof" json:"cache_misses,omitempty"` // cumulative
 	TargetRuns  *int64                 `protobuf:"varint,7,opt,name=target_runs,json=targetRuns,proto3,oneof" json:"target_runs,omitempty"`    // cumulative target executions

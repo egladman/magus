@@ -25,20 +25,20 @@ import (
 // constants (toolref.go), so a tool rename is a compile error rather than a hint
 // that silently points at a tool that no longer exists.
 var errorHints = map[string]string{
-	ToolRunTarget.String():   "next: list valid targets with " + ToolDescribe.String() + " (kind=targets)",
-	ToolRunAffected.String(): "next: list valid targets with " + ToolDescribe.String() + " (kind=targets)",
-	ToolWhere.String():       "next: list projects with " + ToolDescribe.String() + " (kind=projects)",
-	ToolOutput.String():      "next: output refs come from " + ToolRunTarget.String() + " or " + ToolTailLog.String(),
-	ToolExplain.String():     "next: locate a node with " + ToolQuery.String() + ", then explain it",
-	ToolPath.String():        "next: locate the endpoints with " + ToolQuery.String(),
-	ToolRefs.String():        "next: locate a symbol with " + ToolQuery.String(),
+	toolRunTarget.String():   "next: list valid targets with " + toolDescribe.String() + " (kind=targets)",
+	toolRunAffected.String(): "next: list valid targets with " + toolDescribe.String() + " (kind=targets)",
+	toolWhere.String():       "next: list projects with " + toolDescribe.String() + " (kind=projects)",
+	toolOutput.String():      "next: output refs come from " + toolRunTarget.String() + " or " + toolTailLog.String(),
+	toolExplain.String():     "next: locate a node with " + toolQuery.String() + ", then explain it",
+	toolPath.String():        "next: locate the endpoints with " + toolQuery.String(),
+	toolRefs.String():        "next: locate a symbol with " + toolQuery.String(),
 }
 
 // staticChainHints maps a tool to a chain hint appended on a SUCCESS that always
 // leads somewhere fixed. Only tools whose whole purpose is to feed a follow-up
 // tool belong here - never general read tools, which get no footer.
 var staticChainHints = map[string]string{
-	ToolAffectedPlan.String(): "next: run the affected set with " + ToolRunAffected.String(),
+	toolAffectedPlan.String(): "next: run the affected set with " + toolRunAffected.String(),
 }
 
 // refChainTools mint an output reference the agent chains into magus_output. On
@@ -46,8 +46,8 @@ var staticChainHints = map[string]string{
 // fetch hint names that exact ref so the agent can pull the captured output
 // without re-reading the run's event wall.
 var refChainTools = map[string]bool{
-	ToolRunTarget.String():   true,
-	ToolRunAffected.String(): true,
+	toolRunTarget.String():   true,
+	toolRunAffected.String(): true,
 }
 
 // decorateResult appends at most one cross-link line to a tool result, chosen by
@@ -70,7 +70,7 @@ func decorateResult(result *mcplib.CallToolResult, toolName string) {
 	}
 	if refChainTools[toolName] {
 		if ref := firstRef(result); ref != "" {
-			appendHint(result, "next: fetch the captured output with "+ToolOutput.String()+" (ref="+ref+")")
+			appendHint(result, "next: fetch the captured output with "+toolOutput.String()+" (ref="+ref+")")
 		}
 	}
 }

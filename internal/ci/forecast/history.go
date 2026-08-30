@@ -74,7 +74,12 @@ const OutcomeWindow = 100
 // hitColdStart is the minimum hit+miss observations before PredictDuration applies the hit-rate discount.
 const hitColdStart = 5
 
-// Default scheduling constants used until History.Constants is fitted from real observations.
+// Default scheduling constants used until History.Constants is fitted from real
+// observations - which is currently never: nothing in this tree calls Update with
+// shardSamples, so SetupP50Ms and AlphaMs stay these defaults forever. The raw
+// numbers Update would fit from exist - report.ShardTotal, written by
+// (*magus.ReportWriter).RecordShardTotal in a CI matrix run (see report.go) - but
+// nothing reads that JSONL stream back into a History to close the loop.
 const (
 	DefaultSetupMs    Millis = 30_000
 	DefaultAlphaMs    Millis = 5_000

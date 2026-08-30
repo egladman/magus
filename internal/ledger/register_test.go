@@ -23,7 +23,7 @@ func TestStoreRegister(t *testing.T) {
 		name       string
 		checkpoint string
 		reported   string
-		want       types.DelegationBaseVerdict
+		want       types.LeaseBaseVerdict
 		says       []string
 	}{
 		{
@@ -49,7 +49,7 @@ func TestStoreRegister(t *testing.T) {
 			says:       []string{baseA, baseB, "Respawn from"},
 		},
 		{
-			name:       "a delegation declared without a checkpoint has nothing to compare against",
+			name:       "a lease declared without a checkpoint has nothing to compare against",
 			checkpoint: "",
 			reported:   baseA,
 			want:       types.BaseUnknown,
@@ -63,7 +63,7 @@ func TestStoreRegister(t *testing.T) {
 
 			ctx := t.Context()
 			s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-			_, err := s.Put(ctx, types.Delegation{ID: "u1", Checkpoint: tt.checkpoint, State: types.StateDeclared})
+			_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: tt.checkpoint, State: types.StateDeclared})
 			require.NoError(t, err)
 
 			got, err := s.Register(ctx, "u1", tt.reported)
@@ -93,16 +93,16 @@ func TestStoreRegister(t *testing.T) {
 
 // A worker registering an id nobody declared has been handed the wrong id. Every other
 // write here creates the row it names, so the message has to say where the real ids are.
-func TestStoreRegisterRefusesAnUnknownDelegation(t *testing.T) {
+func TestStoreRegisterRefusesAnUnknownLease(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	_, err := s.Put(ctx, types.Delegation{ID: "declared", Checkpoint: baseA})
+	_, err := s.Put(ctx, types.Lease{ID: "declared", Checkpoint: baseA})
 	require.NoError(t, err)
 
 	_, err = s.Register(ctx, "typo", baseA)
-	require.ErrorIs(t, err, ErrUnknownDelegation)
+	require.ErrorIs(t, err, ErrUnknownLease)
 	assert.Contains(t, err.Error(), "magus_ledger list", "the message names where the declared ids are")
 	assert.Contains(t, err.Error(), "typo")
 
@@ -117,7 +117,7 @@ func TestStoreRegisterRequiresABase(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	_, err := s.Put(ctx, types.Delegation{ID: "u1", Checkpoint: baseA})
+	_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: baseA})
 	require.NoError(t, err)
 
 	_, err = s.Register(ctx, "u1", "   ")
@@ -137,7 +137,7 @@ func TestStoreRegisterIsIdempotentPerBase(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	_, err := s.Put(ctx, types.Delegation{ID: "u1", Checkpoint: baseA, Goal: "declared goal"})
+	_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: baseA, Goal: "declared goal"})
 	require.NoError(t, err)
 
 	diverged, err := s.Register(ctx, "u1", baseB)
@@ -157,7 +157,7 @@ func TestCompareBase(t *testing.T) {
 	tests := []struct {
 		name                 string
 		checkpoint, reported string
-		want                 types.DelegationBaseVerdict
+		want                 types.LeaseBaseVerdict
 	}{
 		{name: "identical clean tokens", checkpoint: baseA, reported: baseA, want: types.BaseMatch},
 		{name: "identical dirty tokens", checkpoint: baseADirty, reported: baseADirty, want: types.BaseMatch},

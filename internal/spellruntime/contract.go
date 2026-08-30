@@ -1,10 +1,10 @@
 package spellruntime
 
-// ContractEntry describes one optional entry in the mgs_ spell contract. The
+// contractEntry describes one optional entry in the mgs_ spell contract. The
 // resolver (resolve.go) iterates OptionalContract, so the optional functions and
 // the decoder keys they map to live in one canonical list rather than being
 // spelled out at each call site.
-type ContractEntry struct {
+type contractEntry struct {
 	Name  string // exported mgs_ function name
 	Field string // decoder field key the resolved value is stored under
 	// Shape is what the entry's Buzz value is made of, and therefore which reduction
@@ -22,15 +22,15 @@ type ContractEntry struct {
 	//
 	// An enum rather than a bool per shape: with three of them, a second bool beside the
 	// first encodes "both set" as a reachable state that means nothing.
-	Shape ContractShape
+	Shape contractShape
 }
 
-// ContractShape is the element type of a contract entry's Buzz list value.
-type ContractShape uint8
+// contractShape is the element type of a contract entry's Buzz list value.
+type contractShape uint8
 
 const (
 	// ShapeStrs is the zero value: a [str] stored as-is.
-	ShapeStrs ContractShape = iota
+	ShapeStrs contractShape = iota
 	// ShapePaths is a [Path], reduced to a [str] by pathValues. The Path object's
 	// other fields (base, isDir) are DISCARDED - the cache descriptor wants the
 	// lexical value, because glob matching does not resolve filesystem paths.
@@ -57,7 +57,7 @@ const (
 // resolveOps post-processes it to extract function-valued op handlers into
 // command records (the form the built-in spells use). Record-shaped ops pass
 // through unchanged. See docs/engines.md.
-var OptionalContract = []ContractEntry{
+var OptionalContract = []contractEntry{
 	{Name: "mgs_listRequiredGlobs", Field: "needs", Shape: ShapePaths},
 	{Name: "mgs_listProvidedGlobs", Field: "provides", Shape: ShapePaths},
 	{Name: "mgs_listClaimedGlobs", Field: "claims", Shape: ShapePaths},

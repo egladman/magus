@@ -42,7 +42,7 @@ _magus() {
             # magus-utils:subcommands:begin
             subcommands=(
                 'ls:list all discovered projects'
-                'describe:define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)'
+                'describe:define a magus concept and list all entities (spell|charm|target|graph|project|workspace|module|mcp-tool|file|tool)'
                 'where:print the absolute path of a project (fuzzy match)'
                 'run:run a target for selected projects'
                 'affected:run a target for VCS-diff affected projects'
@@ -57,17 +57,18 @@ _magus() {
                 'vcs:staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)'
                 'session:what sessions did and what they are blocked on\: humans read (ls, attention) and dispose; hosts write (hook, notify)'
                 'memory:durable cross-session project memory (ls, get, put, delete, verify)'
-                'notes:human-authored notes committed to the repo (ls, get, edit, verify)'
+                'notes:human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)'
                 'watch:emit changed file paths (pipe into affected --stdin)'
                 'events:stream workspace events as JSONL for an editor plugin or other integration'
                 'server:manage the persistent daemon (start / stop / status; MCP starts with it)'
+                'mcp:print how to reach the MCP server (served by the daemon, not a standalone command)'
                 'status:inspect the concurrency pool of a running parent magus'
                 'buzz:run a Buzz script (Buzz stdlib + every magus host module)'
                 'agent:install the knowledge-graph agent skills into a repo (agent install <dir>)'
                 'init:bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)'
                 'doctor:validate the workspace'
                 'config:view or update magus configuration'
-                'completion:print a shell completion script (bash, zsh, fish)'
+                'completion:print a shell completion script (bash, zsh, fish, powershell)'
                 'man:install the man pages embedded in this binary'
                 'self:manage the magus binary (self update / install)'
                 'version:print version, commit, and build date'
@@ -78,15 +79,21 @@ _magus() {
             ;;
         args)
             case $words[1] in
-                attention)
+                session)
                     # dispose completes from the live queue, the way run completes
                     # targets from the workspace.
                     if (( CURRENT == 2 )); then
-                        local -a verbs=('ls:list the open requests' 'dispose:close one request with a reason')
+                        local -a verbs=(
+                            'ls:list past sessions'
+                            'attention:list the open requests'
+                            'dispose:close one request with a reason'
+                            'hook:evaluate one shell command or file path'
+                            'notify:normalize an attention event'
+                        )
                         _describe 'verb' verbs
                     elif [[ $words[2] == dispose ]] && (( CURRENT == 3 )); then
                         local -a ids
-                        ids=("${(@f)$(magus attention -o name 2>/dev/null)}")
+                        ids=("${(@f)$(magus session attention -o name 2>/dev/null)}")
                         _describe 'request id' ids
                     fi
                     ;;
@@ -138,10 +145,13 @@ _magus() {
                             'spell:list every spell'
                             'charm:list every charm'
                             'target:list every target'
+                            'graph:emit the target catalog and dependency graph'
                             'project:list every project'
                             'workspace:describe the workspace'
                             'module:list every module'
                             'mcp-tool:list every MCP tool'
+                            'file:classify a path (generated, source, maintained)'
+                            'tool:list external tools spells require'
                         )
                         _describe 'noun' nouns
                     else
@@ -158,22 +168,6 @@ _magus() {
                         local -a projects
                         projects=("${(@f)$(magus ls -o name 2>/dev/null)}")
                         _describe 'project' projects
-                    fi
-                    ;;
-                insight)
-                    if (( CURRENT == 2 )); then
-                        local -a lenses=(
-                            'hotspots:edit frequency x complexity, prime refactoring targets'
-                            'affinity:projects that change together (temporal coupling)'
-                            'ownership:author concentration and bus factor'
-                            'trend:rising vs cooling activity'
-                            'unreferenced:code symbols nothing in the workspace names'
-                            'report:every lens plus graph stats as one document'
-                        )
-                        _describe 'lens' lenses
-                    else
-                        local -a flags=(--commits --since --workspace --files)
-                        _describe 'flag' flags
                     fi
                     ;;
                 graph)

@@ -778,7 +778,7 @@ func anchor(name string) string {
 
 // pagePath is a page's output path relative to outDir, with no extension: the same path the
 // .proto it documents has, minus the "magus/" prefix every magus package shares (redundant
-// under reference/api/) - "magus/graph/v1/graph.proto" becomes "graph/v1/graph". A generated
+// under reference/api/) - "magus/graph/v1alpha1/graph.proto" becomes "graph/v1alpha1/graph". A generated
 // page then sits at the same depth as its source, so knowing one locates the other, and two
 // files can never collide on output path without already colliding on input path.
 func pagePath(protoFile string) string {
@@ -999,7 +999,11 @@ func renderIndex(a api) string {
 
 	if names := streamingMethods(a); len(names) > 0 {
 		b.WriteString("## Streaming methods\n\n")
-		b.WriteString("A server-streaming method returns a sequence of messages over one HTTP response rather than one body, so a single `curl -d` request cannot cleanly demux it. Use a generated Connect client, or a tool built for streaming RPCs such as [grpcurl](https://github.com/fullstorydev/grpcurl) (`grpcurl -plaintext ... /magus.viewer.v1.ViewerService/StreamEvents`). Streaming methods:\n\n")
+		b.WriteString("A server-streaming method returns a sequence of messages over one HTTP response rather than one body, so a single `curl -d` request cannot cleanly demux it. Use a generated Connect client, or a tool built for streaming RPCs such as [grpcurl](https://github.com/fullstorydev/grpcurl)")
+		if s, m, ok := firstServerStreaming(a); ok {
+			fmt.Fprintf(&b, " (`grpcurl -plaintext ... /%s.%s/%s`)", s.Package, s.Name, m.Name)
+		}
+		b.WriteString(". Streaming methods:\n\n")
 		for _, n := range names {
 			b.WriteString("- " + n + "\n")
 		}
@@ -1072,6 +1076,17 @@ func firstUnary(a api) (service, method, bool) {
 	for _, s := range a.services {
 		for _, m := range s.Methods {
 			if !m.ClientStreaming && !m.ServerStreaming {
+				return s, m, true
+			}
+		}
+	}
+	return service{}, method{}, false
+}
+
+func firstServerStreaming(a api) (service, method, bool) {
+	for _, s := range a.services {
+		for _, m := range s.Methods {
+			if m.ServerStreaming && !m.ClientStreaming {
 				return s, m, true
 			}
 		}

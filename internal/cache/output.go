@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -130,7 +131,7 @@ type AmbiguousRefError struct {
 }
 
 func (e *AmbiguousRefError) Error() string {
-	return fmt.Sprintf("output ref %q is ambiguous; matches %d executions: %s",
+	return fmt.Sprintf("output ref %q is ambiguous; matches %d attempts: %s",
 		e.Prefix, len(e.Candidates), strings.Join(e.Candidates, ", "))
 }
 
@@ -866,7 +867,7 @@ func (s *OutputStore) newestDescriptor(cacheKey string) (OutputDescriptor, error
 }
 
 // DescriptorByRef resolves a ref (or unique prefix) to its stored descriptor alone,
-// without reading the output blob - the identity views (`--meta`, `--against`) want
+// without reading the output blob - the identity views (`--identity`, `--against`) want
 // the metadata, and a captured log can be large. A resolvable ref whose descriptor is
 // missing or unreadable yields the error, unlike ByRef, which still has bytes to
 // return and so degrades to a zero descriptor.
@@ -898,7 +899,7 @@ func (s *OutputStore) ByRef(ref string) ([]byte, OutputDescriptor, error) {
 // InvocationByID reads the union run log (<cacheDir>/runs/<inv>.jsonl) for one invocation
 // id and rebuilds its header: the command lineage (subcommand/args/trigger), timing, and outcome.
 // It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it -
-// `magus query output <ref> --meta` and the viewer surface this lineage. Reads off the cache
+// `magus query output <ref> --identity` and the viewer surface this lineage. Reads off the cache
 // ROOT (RunsDir), not outputsDir. Returns fs.ErrNotExist when the run log has aged out.
 func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 	_, events, err := s.InvocationEventsByID(inv)
@@ -910,7 +911,7 @@ func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 
 // InvocationEventsByID reads one invocation's run log and returns its header alongside the
 // EVENTS it was reconstructed from. [OutputStore.InvocationByID] keeps only the header, which
-// is all a `--meta` line needs; this is for a caller that wants the stream itself.
+// is all a `--identity` line needs; this is for a caller that wants the stream itself.
 //
 // It exists because the events were being read and discarded: journal.KindSecret records
 // every credential a run reached for, and the docs offer that as the answer to "what did this
@@ -926,6 +927,57 @@ func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []jo
 		return journal.Invocation{}, nil, err
 	}
 	return journal.InvocationFromEvents(inv, events), events, nil
+}
+
+// InvocationEventsFrom reads one invocation's journal starting at byte offset from and returns the
+// events on COMPLETE lines plus the offset just past the last one. It is the tailing counterpart to
+// [OutputStore.InvocationEventsByID], which reads the file whole.
+//
+// A journal is appended while its run is still going (journal.FileHandler flushes every kind but
+// output), so a follower resumes from where it stopped instead of re-reading megabytes it has
+// already delivered - which is what keeps watching a long build proportional to what arrived.
+// Stopping at the last newline is what makes a concurrent writer safe to read: a half-written line
+// is left for the next call rather than parsed as corruption.
+//
+// A file shorter than from means the id was reused after a cache clean, so the read restarts at
+// zero rather than seeking past the end and reporting nothing forever. Returns fs.ErrNotExist when
+// the log never existed or has aged out.
+func (s *OutputStore) InvocationEventsFrom(inv string, from int64) ([]journal.Event, int64, error) {
+	f, err := os.Open(filepath.Join(s.cacheDir, RunsDir, inv+runExt))
+	if err != nil {
+		return nil, from, err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, from, err
+	}
+	if info.Size() < from {
+		from = 0
+	}
+	if info.Size() == from {
+		return nil, from, nil
+	}
+	chunk := make([]byte, info.Size()-from)
+	n, err := f.ReadAt(chunk, from)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, from, err
+	}
+	end := bytes.LastIndexByte(chunk[:n], '\n')
+	if end < 0 {
+		return nil, from, nil
+	}
+	var events []journal.Event
+	for _, line := range bytes.Split(chunk[:end], []byte{'\n'}) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var e journal.Event
+		if json.Unmarshal(line, &e) == nil {
+			events = append(events, e)
+		}
+	}
+	return events, from + int64(end) + 1, nil
 }
 
 // RunLog summarizes one retained invocation journal - the row the console's run browser lists

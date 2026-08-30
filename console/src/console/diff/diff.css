@@ -73,7 +73,7 @@
      Independently, the two are sized by unrelated content - a title versus a row of PF chips -
      and drift out of alignment the moment either one's content changes. One number, read by
      both, is what keeps that from happening again. */
-  --console-diff-head-block-size: 2.5rem;
+  --console-diff-head-block-size: var(--console-surface-head-h);
 }
 
 /* Collapsed, the index gives its column back to the diff and leaves only the reopen rail. The
@@ -93,13 +93,18 @@
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--xs);
   min-block-size: var(--console-diff-head-block-size);
+  padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 
-/* No uppercase, no letter-spacing. Both are shouting devices, and this is the quietest thing on
-   the surface - it labels a column whose contents already say what they are. */
+/* The console's one label voice (tokens.css), not a quieter one of this surface's own. It labels a
+   column, the same job Activity's Events/Details and the log viewer's Recent runs do, and a reader
+   switching tabs should meet one treatment rather than three. */
 .console-diff-sidebar__heading {
-  font-size: var(--pf-t--global--font--size--xs);
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -137,12 +142,16 @@
   background: var(--console-diff-panel);
   overflow: hidden;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
-  padding: var(--pf-t--global--spacer--sm);
-  /* The toolbar it has to line up with carries no padding above itself at all - its header row
-     is centered by height, not pushed down by padding. Matching that here is what the shared
-     header height above needs to land the two hairlines on the same row, not merely give the
-     two headers the same height starting from different tops. */
-  padding-block-start: 0;
+  /* No INLINE padding, and that is what makes the head's hairline reach both edges of the column.
+     An 8px inset here held the head's border-block-end 8px short at each end, so the line across
+     the surface broke twice - once at the rail and once at the sidebar/stream seam - which is the
+     opposite of what the shared head height above is for. Each child spends the gutter itself.
+
+     The toolbar it has to line up with carries no padding above itself at all - its header row is
+     centered by height, not pushed down by padding. Matching that here is what lands the two
+     hairlines on the same row, not merely gives the two headers the same height from different tops. */
+  padding-inline: 0;
+  padding-block: 0 var(--pf-t--global--spacer--sm);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -152,10 +161,14 @@
 .console-diff-sidebar__filter {
   flex: none;
   min-width: 0;
-  width: 100%;
-}
-.console-diff-sidebar__filter .pf-v6-c-form-control__text {
-  font: var(--pf-t--global--font--body--sm);
+  /* The gutter as a MARGIN: the sidebar gave up its inline padding so the head's hairline could
+     reach the column edges, and a bordered control still has to stand off them.
+     The width has to be stated against those margins. PatternFly's FormControl sets width: 100%
+     on itself, which a margin does not reduce - the field came out as wide as the whole column and
+     then sat 16px further right, hanging 15px past the sidebar's own edge. */
+  box-sizing: border-box;
+  margin-inline: var(--console-pad);
+  inline-size: calc(100% - 2 * var(--console-pad));
 }
 
 /* Virtualized file index. */
@@ -199,7 +212,8 @@
   gap: var(--pf-t--global--spacer--xs);
   box-sizing: border-box;
   height: 40px; /* MUST equal SIDEBAR_FILE_HEIGHT in main.ts. */
-  padding: 2px var(--pf-t--global--spacer--xs);
+  padding-block: 2px;
+  padding-inline: var(--console-pad);
   background: none;
   border: 0;
   cursor: pointer;
@@ -221,6 +235,7 @@
   box-sizing: border-box;
   height: 28px; /* MUST equal SIDEBAR_PROJECT_HEIGHT in main.ts. */
   padding-block: 2px;
+  padding-inline: var(--console-pad);
   background: var(--console-diff-panel);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
@@ -304,25 +319,103 @@
   container: diff-main / inline-size;
 }
 
-/* display:column rather than the block flow this replaced, so the chip row and (when shown) the
-   collaboration sentence still stack top to bottom - only now as flex items, so justify-content
-   can center that stack inside the fixed min-block-size shared with the sidebar head above. */
+/* Two strips stacked, plus the occasional sentence under them: a HEAD naming the surface and what
+   it compares, and a READOUT carrying the counts. It was one box centring a chip row over a
+   control row, which is how a reader met eleven chips, six key hints and two buttons with nothing
+   saying which of the three kinds of thing each was.
+
+   No padding-inline HERE. The gutter is spent by the children, so the head's own hairline reaches
+   both edges of the region it heads (README, "Surface chrome") - a container's inline padding
+   holds a child's border-block-end short at each end, and that is the T-junction this surface had
+   where its head met the sidebar's. */
 .console-diff-toolbar {
   background: var(--console-diff-panel);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  min-block-size: var(--console-diff-head-block-size);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  padding-inline: var(--pf-t--global--spacer--sm);
+}
+
+/* Sized and tiered exactly like .console-diff-sidebar__head beside it, which is what
+   --console-diff-head-block-size was introduced for and could not do while the toolbar's own
+   content set its height: the two hairlines now meet as one straight line across the seam. */
+.console-diff-toolbar__head {
+  display: flex;
+  align-items: center;
+  /* Wraps, and the height is a FLOOR. On a phone the two actions and the scope cannot share a
+     line: unwrapped, the actions ran past the pane's clipped edge and the scope truncated to two
+     letters, which is a label that tells nobody anything. */
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--md);
+  min-block-size: var(--console-diff-head-block-size);
+  padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--console-pad);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+
+/* The surface's eyebrow, in the console's one label voice (tokens.css) - the slot the dashboard's
+   OPERATIONS and the Runs bar's label hold. The diff was the surface without one, so it was also
+   the surface that opened with an unheaded row of numbers. */
+.console-diff-toolbar__eyebrow {
+  flex: 0 0 auto;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* What is being compared. A sentence rather than a chip: it is the thing every count on the row
+   below is about, and a twelfth pill would have made it one of them. Truncates rather than
+   wrapping, because the head is one line and a ref can be any length. */
+.console-diff-toolbar__scope {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The actions, at the trailing edge the dashboard's Big Picture button holds. They stay a PAIR:
+   the auto margin is on the group, not on the first of two buttons, so nothing spreads them. */
+.console-diff-toolbar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  margin-inline-start: auto;
+}
+
+/* The counts, and the key legend they share a row with. Wraps in a narrow pane, so the bar height
+   is a FLOOR and the row spends its own padding-block rather than inheriting a fixed height. */
+.console-diff-toolbar__readout {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--md);
+  min-block-size: var(--console-diff-head-block-size);
+  padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--console-pad);
 }
 
 .console-diff-scroll {
   background: var(--console-diff-surface);
 }
 
+/* Clusters separate wider than a cluster holds together, the same ratio the key legend below uses
+   and for the same reason: at one gap the eleven chips read as one undifferentiated run, and the
+   one red number in it has to be hunted for. */
 .console-diff-toolbar__stats {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--lg);
+  align-items: center;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+}
+
+.console-diff-toolbar__cluster {
   display: flex;
   gap: var(--pf-t--global--spacer--xs);
   align-items: center;
@@ -379,12 +472,19 @@
   text-decoration: underline;
 }
 
+/* Its own strip under the readout rather than an item on it: the toolbar spends no inline gutter
+   of its own now, so each direct child pays for its own.
+   In focus mode the readout above it is hidden and this becomes the toolbar's only second row, so
+   its padding is symmetric - the key legend it takes in from the readout there would otherwise sit
+   flush against the head's hairline. */
 .console-diff-progress {
   display: flex;
   flex: 0 1 auto;
   gap: var(--pf-t--global--spacer--sm);
   align-items: center;
   min-width: 0;
+  padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--console-pad);
 }
 
 .console-diff-progress__bar {
@@ -415,24 +515,17 @@
   white-space: nowrap;
 }
 
-/* One row for the verdict, the focus toggle and the key legend, so the legend's auto margin below
-   has a row to push it to the trailing edge of. */
-.console-diff-toolbar__controls {
-  display: flex;
-  /* BASELINE: the buttons are bordered boxes and the legend is bare text, so centering the
-     boxes leaves the two sets of words a pixel apart. */
-  align-items: baseline;
-  gap: var(--pf-t--global--spacer--sm);
-}
-
 .console-diff-toolbar__focus,
 .console-diff-toolbar__verdict {
   flex: 0 0 auto;
+  /* PF secondary is transparent, and on this grey toolbar the pair read as outlines cut into the
+     chrome. Filled like the dashboard's Big Picture button, they sit ON the bar instead. */
+  background: var(--pf-t--global--background--color--primary--default);
 }
 
 /* svgGlyph draws at a fixed pixel size; 1em hands sizing back to the icon tokens PF's wrapper
    already carries. */
-.console-diff-toolbar__controls .pf-v6-c-icon__content svg {
+.console-diff-toolbar__actions .pf-v6-c-icon__content svg {
   width: 1em;
   height: 1em;
 }
@@ -457,18 +550,46 @@
   text-decoration-thickness: 1px;
 }
 
-.console-diff-toolbar__keys {
-  display: flex;
-  /* Groups separate wider than a group holds together; at equal gaps the row reads as one run
-     of punctuation. */
-  gap: var(--pf-t--global--spacer--lg);
+/* The legend lives behind a disclosure: always-on it wrapped the readout to a second line, and
+   it teaches a reader who does not know the bindings - a reader who does has stopped looking. */
+.console-diff-toolbar__keyswrap {
+  position: relative;
   margin-inline-start: auto;
+  flex: 0 0 auto;
+}
+.console-diff-toolbar__keystoggle {
+  list-style: none;
+  cursor: pointer;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+.console-diff-toolbar__keystoggle::-webkit-details-marker { display: none; }
+.console-diff-toolbar__keyswrap[open] .console-diff-toolbar__keystoggle {
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-diff-toolbar__keys {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + var(--pf-t--global--spacer--xs));
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: var(--pf-t--global--spacer--sm);
   color: var(--pf-t--global--text--color--subtle);
   font-size: var(--pf-t--global--font--size--body--sm);
   font-family: var(--pf-t--global--font--family--mono);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  background: var(--pf-t--global--background--color--floating--default, var(--pf-t--global--background--color--primary--default));
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  box-shadow: var(--pf-t--global--box-shadow--md);
 }
 
 .console-diff-toolbar__key {
@@ -499,7 +620,8 @@
 }
 
 @media (max-width: 60rem) {
-  .console-diff-toolbar__keys {
+  /* Touch layouts have no keyboard to teach. */
+  .console-diff-toolbar__keyswrap {
     display: none;
   }
 }
@@ -509,6 +631,8 @@
 .console-diff-collaboration:not(:empty) {
   color: var(--console-status-warn-text);
   font-size: var(--pf-t--global--font--size--sm);
+  padding-block-end: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--console-pad);
 }
 
 /* Draws the eye to the sentence above when a keyboard-only action (v/c/r/g) was refused for the
@@ -993,10 +1117,10 @@
 
 .console-diff-row__who {
   flex: 0 0 auto;
-  font-weight: var(--pf-t--global--font--weight--body--bold);
-  font-size: var(--pf-t--global--font--size--xs);
+  font-weight: var(--console-chip-weight);
+  font-size: var(--console-chip-size);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--console-chip-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -1030,14 +1154,22 @@
   white-space: nowrap;
 }
 
-/* The field and the button that commits it sit on one row, the button pinned to the bottom of a
- * textarea that grows: the commit control has to stay where the eye last left it as the remark
- * gets longer. */
+/* The Write/Preview pair and the control that commits the remark share the head row; the field
+ * runs the full width beneath it. The commit control has to stay where the eye last left it as the
+ * remark gets longer, and a textarea grows DOWNWARD - so anchored above the field it does not move
+ * at all, where beside the field it had a three-line box and an empty width to be aligned against. */
 .console-diff-composer__input {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--xs);
+  min-width: 0;
+}
+
+.console-diff-composer__head {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
   min-width: 0;
 }
 
@@ -1050,7 +1182,10 @@
 
 .console-diff-composer__tabs {
   display: flex;
+  flex: 1 1 auto;
   gap: var(--pf-t--global--spacer--xs);
+  align-items: center;
+  min-width: 0;
 }
 
 .console-diff-composer__tab {
@@ -1184,6 +1319,7 @@
   align-items: center;
   gap: 0.4rem;
   margin-block-start: var(--pf-t--global--spacer--sm);
+  margin-inline: var(--console-pad);
   padding: 2px var(--pf-t--global--spacer--xs);
   border: 1px dashed var(--pf-t--global--border--color--default);
   background: none;

@@ -168,7 +168,7 @@ type describeFileTool struct {
 	ws types.Inspector
 }
 
-func (t *describeFileTool) Name() string { return ToolDescribeFile.String() }
+func (t *describeFileTool) Name() string { return toolDescribeFile.String() }
 
 func (t *describeFileTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	raw := paramString(req.Params, "paths", "")

@@ -18,11 +18,17 @@ import (
 // one thing the whole suggestion design exists to prevent - see types.DiffSuggestion. An
 // agent suggests; only the person at the keyboard navigates.
 //
-// Neither method reports an error, and that is the contract rather than an omission: a
+// No method reports an error, and that is the contract rather than an omission: a
 // coordination write that failed must not interrupt somebody reading a diff.
 type Sync interface {
 	SetCursor(c types.DiffCursor)
 	SetViewed(digest string, on bool)
+	// SetThreadsSeen records that these of the host's review threads have been in front of the
+	// reader, which is the watermark deciding what still counts as NEW. A workspace whose
+	// watermark nobody ever advances is one the forge-watching job reads as never reviewed in,
+	// and it then reports no colleague's remark at all - so a terminal reader has to write it
+	// for the same reason a browser one does.
+	SetThreadsSeen(ids []string)
 }
 
 // Options is one interactive session.
@@ -71,7 +77,7 @@ func Run(ctx context.Context, opts Options) error {
 	defer func() { _ = input.Close() }()
 
 	if opts.Sync != nil {
-		opts.Sync.SetCursor(m.Cursor())
+		opts.Sync.SetCursor(m.cursor())
 	}
 
 	// Asked once: nothing it reads - the descriptor, TERM, NO_COLOR - changes while the viewer
@@ -79,9 +85,17 @@ func Run(ctx context.Context, opts Options) error {
 	color := tty.WantsColor(opts.Out, opts.Probe)
 
 	for {
-		m.Resize(viewportRows(opts.Out, opts.Probe, Chrome(m)))
+		m.resize(viewportRows(opts.Out, opts.Probe, Chrome(m)))
 		if !view.Paint(Frame(m, color)) {
 			return errors.New("magus diff: the terminal is too short to draw the changeset")
+		}
+		// AFTER the paint, because the claim being made is that these remarks were on the reader's
+		// screen. TakeShownThreads reports each one once, so this costs a keypress nothing on
+		// every frame that exposed nothing new.
+		if opts.Sync != nil {
+			if ids := m.takeShownThreads(); len(ids) > 0 {
+				opts.Sync.SetThreadsSeen(ids)
+			}
 		}
 		ev, err := input.Read(ctx)
 		if err != nil {
@@ -118,9 +132,9 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 		// because opening the input turns tracking on.
 		switch ev.Button {
 		case tty.MouseWheelUp:
-			m.Scroll(-wheelRows)
+			m.scroll(-wheelRows)
 		case tty.MouseWheelDown:
-			m.Scroll(wheelRows)
+			m.scroll(wheelRows)
 		}
 		return false
 	}
@@ -131,52 +145,52 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 		case 'q':
 			return true
 		case ']':
-			moved = m.NextHunk()
+			moved = m.nextHunk()
 		case '[':
-			moved = m.PrevHunk()
+			moved = m.prevHunk()
 		case '}':
-			moved = m.NextFile()
+			moved = m.nextFile()
 		case '{':
-			moved = m.PrevFile()
+			moved = m.prevFile()
 		case 'v':
-			if change, ok := m.ToggleViewed(); ok && sync != nil {
+			if change, ok := m.toggleViewed(); ok && sync != nil {
 				sync.SetViewed(change.Digest, change.On)
 			}
 		case '.':
-			m.ToggleGenerated()
+			m.toggleGenerated()
 		case 'n':
 			// n for what is NEW to this reader: the files a receipt does not already cover at
 			// their current content. Folded by default, so the second pass opens on the work.
-			m.ToggleSettled()
+			m.toggleSettled()
 		}
 	case tty.KeyCtrlC, tty.KeyCtrlD:
 		return true
 	case tty.KeyEscape:
-		m.ToggleOverview()
+		m.toggleOverview()
 	case tty.KeyEnter:
 		if m.Overview() {
-			m.OverviewEnter()
+			m.overviewEnter()
 			moved = true
 		}
 	case tty.KeyUp:
 		if m.Overview() {
-			m.OverviewMove(-1)
+			m.overviewMove(-1)
 		} else {
-			m.Scroll(-1)
+			m.scroll(-1)
 		}
 	case tty.KeyDown:
 		if m.Overview() {
-			m.OverviewMove(1)
+			m.overviewMove(1)
 		} else {
-			m.Scroll(1)
+			m.scroll(1)
 		}
 	case tty.KeyPageUp, tty.KeyCtrlP:
-		m.Page(-1)
+		m.page(-1)
 	case tty.KeyPageDown, tty.KeyCtrlN:
-		m.Page(1)
+		m.page(1)
 	}
 	if moved && sync != nil {
-		sync.SetCursor(m.Cursor())
+		sync.SetCursor(m.cursor())
 	}
 	return false
 }

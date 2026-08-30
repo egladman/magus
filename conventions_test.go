@@ -13,6 +13,9 @@ package magus
 import (
 	"bufio"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -637,6 +640,128 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 	}
 }
 
+// failOpenArmRe matches the tests a shipped template makes before answering
+// WITHOUT a verdict from magus: the binary is missing or not executable, or it
+// ran and left nothing to report. Both spellings the templates use, sh and TS.
+var failOpenArmRe = regexp.MustCompile(`! -x "\$GUARD_MAGUS_BIN"|-z "\$verdict"|stdout === null`)
+
+// failOpenRetryRe marks a block that re-invokes magus rather than answering. Two
+// of the templates test the same `-z "$verdict"` condition twice - once to retry
+// without the attribution flags, once to give up - and only the second is a
+// fail-open arm.
+var failOpenRetryRe = regexp.MustCompile(`\$\(guard\b|runOnce\(`)
+
+// failOpenNoticeRe matches an arm SAYING it did not judge the call: prose on
+// stderr, a console warning, or one of the GUARD_*_RESPONSE envelopes.
+var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$GUARD_[A-Z_]+_RESPONSE`)
+
+// failOpenOptInRe matches the shape that makes a notice OPT-IN: the arm prints
+// only when the reader has set the variable, so by default it prints nothing.
+var failOpenOptInRe = regexp.MustCompile(`^\[ -n "\$GUARD_[A-Z_]+" \] &&`)
+
+// failOpenDefaultRe extracts the variable an arm's notice comes from, so the
+// default assigned to it can be checked for emptiness.
+var failOpenDefaultRe = regexp.MustCompile(`\$(GUARD_[A-Z_]+_RESPONSE)`)
+
+// failOpenSilentByDesign records the verdict-carrying templates whose fail-open
+// arms deliberately announce NOTHING, and where that decision is written down.
+//
+// An exemption rather than a fix, because the decision is recorded with its
+// tradeoff named and pinned by an executed case: cmd/magus/testdata/script/
+// guard_templates.txtar asserts the path template's silence under a missing
+// magus, on the grounds that an empty response on that surface already means
+// allow for most hosts and an announcement on every file edit was judged the
+// worse noise. Overturning that is a decision for whoever made it; leaving it
+// undeclared here is what this table refuses.
+var failOpenSilentByDesign = map[string]string{
+	"magus-guard-path.sh": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; GUARD_UNAVAILABLE_RESPONSE and GUARD_FAILED_RESPONSE are the opt-in",
+}
+
+// TestFailOpenArmsAnnounceThemselves is the doctrine's enforcement point: a
+// template that cannot judge a call must SAY so.
+//
+// Silence and a clean session are the same observation. Every other gate here
+// checks what a template does with a verdict it received; this one checks the
+// case where it received none, which is the case a reader never notices - the
+// guard stops enforcing and the transcript looks exactly as it did before.
+//
+// Structural on purpose: it finds the arms by the conditions the templates test
+// and asks each one for an unconditional notice, so rewording a message costs
+// nothing and DELETING one fails. A template with no coverage declaration is not
+// asked, which is how magus-guard-observe.sh is exempt - it carries no verdict,
+// so it has no fail-open to announce.
+func TestFailOpenArmsAnnounceThemselves(t *testing.T) {
+	for _, name := range hookTemplates {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+		doc := string(body)
+		if !strings.Contains(doc, guardCoverageMarker) {
+			continue
+		}
+
+		lines := strings.Split(doc, "\n")
+		arms := 0
+		for i, line := range lines {
+			if !failOpenArmRe.MatchString(line) {
+				continue
+			}
+			block := lines[i:failOpenArmEnd(lines, i)]
+			if failOpenRetryRe.MatchString(strings.Join(block, "\n")) {
+				continue
+			}
+			arms++
+			if why, exempt := failOpenSilentByDesign[name]; exempt {
+				t.Logf("%s: fail-open arm at line %d is silent by design (%s)", name, i+1, why)
+				continue
+			}
+			assertFailOpenNotice(t, name, doc, block, i+1)
+		}
+		assert.NotZero(t, arms,
+			"%s carries a verdict but no fail-open arm was recognized in it.\n"+
+				"Either it now answers some other way - update failOpenArmRe - or it blocks when magus\n"+
+				"is unavailable, which is a change this gate should have been told about.", name)
+	}
+}
+
+// failOpenArmEnd returns the line index just past the block opened at start: the
+// next `fi` or bare `}` at any indent. Adequate for these templates, which never
+// nest a block inside a fail-open arm.
+func failOpenArmEnd(lines []string, start int) int {
+	for i := start + 1; i < len(lines); i++ {
+		switch strings.TrimSpace(lines[i]) {
+		case "fi", "}":
+			return i + 1
+		}
+	}
+	return len(lines)
+}
+
+// assertFailOpenNotice requires one arm to emit a notice unconditionally, and
+// requires whatever variable carries that notice to have a non-empty default.
+// The second half is the half that matters: an arm printing a variable nobody
+// assigned is silent, and reads like an announcement.
+func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line int) {
+	t.Helper()
+	for _, l := range block {
+		trimmed := strings.TrimSpace(l)
+		if failOpenOptInRe.MatchString(trimmed) || !failOpenNoticeRe.MatchString(trimmed) {
+			continue
+		}
+		for _, m := range failOpenDefaultRe.FindAllStringSubmatch(trimmed, -1) {
+			assert.Regexp(t, `\|\| `+m[1]+`='.+'`, doc,
+				"%s prints $%s on its fail-open arm at line %d, but assigns it no non-empty default,\n"+
+					"so the arm is silent unless the reader sets it.", name, m[1], line)
+		}
+		return
+	}
+	assert.Fail(t, "fail-open arm says nothing",
+		"%s answers without a magus verdict at line %d and emits no default notice.\n"+
+			"A guard that stopped enforcing looks exactly like a clean session, so every fail-open arm\n"+
+			"announces itself (see magus-guard-command.sh's GUARD_UNAVAILABLE_RESPONSE). Add a notice,\n"+
+			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
+		name, line)
+}
+
 // transportCorpus is the testscript that executes the sh templates against real
 // host events. Its cases are labeled so the contract can demand one per cell.
 const transportCorpus = "cmd/magus/testdata/script/guard_templates.txtar"
@@ -1053,6 +1178,105 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 		strings.Join(violations, "\n"))
 }
 
+// The test above is one layer shallower than the rule it enforces. A branch keyed
+// on a host's TOOL VOCABULARY rather than its name - `switch tool { case "Read":
+// ... case "Bash": }` - is a per-host branch in everything but spelling, and no
+// host name appears in it, so the name scan waves it through. The test below is
+// that second layer.
+
+// hostToolVocabularyScope is where this rule bites: the guard's own source, the
+// only code that ever sees a host's hook payload. Scoped rather than tree-wide
+// because "Read", "Write" and "Task" are ordinary words elsewhere in this module -
+// method names, struct fields, JSON tags, graph kinds, spell ops - and a tree-wide
+// scan would report hundreds of them and be turned off within the week. A per-host
+// branch that is not deciding a verdict is not the failure this exists to prevent.
+var hostToolVocabularyScope = []string{
+	filepath.Join("cmd", "magus", "guard*.go"),
+	filepath.Join("internal", "agent", "*.go"),
+}
+
+// hostToolVocabulary is what agent hosts call their tools. magus's own labels -
+// hookToolCommand, hookToolWrite, hookToolRead in cmd/magus/guard.go - are
+// deliberately none of these, and are the positive example: a wrapper maps its
+// host's name to magus's label by which flag it passes, so a host renaming a tool
+// costs its reader one config line instead of costing magus a release.
+var hostToolVocabulary = map[string]bool{
+	"Read": true, "Write": true, "Edit": true, "MultiEdit": true, "NotebookEdit": true,
+	"Glob": true, "Grep": true, "Bash": true, "Task": true, "TodoWrite": true,
+	"WebFetch": true, "WebSearch": true, "ExitPlanMode": true,
+	"read_file": true, "write_file": true, "edit_file": true, "list_dir": true,
+	"apply_patch": true, "run_terminal_cmd": true, "str_replace_editor": true,
+	"codebase_search": true, "shell": true,
+}
+
+// hostToolVocabularyByDesign is the escape hatch, in the shape
+// failOpenSilentByDesign uses: "<path>:<literal>" mapped to WHERE the decision to
+// write a host's word into guard code is recorded. There is no per-line exemption
+// comment in this repo, so an entry here - reviewable, and readable as a list - is
+// the only way past this gate.
+//
+// Empty, and expected to stay that way: the wire contract in
+// internal/agent/guard.go is magus's vocabulary end to end. It exists so the next
+// author has somewhere to put the argument rather than somewhere to hide it.
+var hostToolVocabularyByDesign = map[string]string{}
+
+// TestGuardDoesNotBranchOnHostToolVocabulary rejects a host's tool NAME appearing
+// as a string literal anywhere in guard code, not merely in a comparison.
+//
+// The literal is the whole signal. There is no innocent reason for the guard to
+// spell a host's word for "read a file", and reading only == and case clauses
+// would pass a `map[string]surface{"Read": ...}`, which is the same branch with
+// the dispatch moved into a table. AST rather than a text scan so the prose that
+// explains the rule - including guard.go's own comment, which quotes "Read" and
+// "Bash" - is not itself a violation.
+func TestGuardDoesNotBranchOnHostToolVocabulary(t *testing.T) {
+	var violations []string
+
+	fset := token.NewFileSet()
+	for _, glob := range hostToolVocabularyScope {
+		paths, err := filepath.Glob(glob)
+		require.NoErrorf(t, err, "glob %s", glob)
+		require.NotEmptyf(t, paths, "%s matched no files; the guard moved and this gate stopped looking", glob)
+
+		for _, path := range paths {
+			if strings.HasSuffix(path, "_test.go") {
+				continue // a test may name a host's tool: it describes a real payload rather than judging one
+			}
+			f, err := parser.ParseFile(fset, path, nil, 0)
+			require.NoErrorf(t, err, "parse %s", path)
+
+			ast.Inspect(f, func(n ast.Node) bool {
+				lit, ok := n.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				value, err := strconv.Unquote(lit.Value)
+				if err != nil || !hostToolVocabulary[value] {
+					return true
+				}
+				if why, exempt := hostToolVocabularyByDesign[path+":"+value]; exempt {
+					t.Logf("%s: %q is host vocabulary by design (%s)", path, value, why)
+					return true
+				}
+				pos := fset.Position(lit.Pos())
+				violations = append(violations, fmt.Sprintf("%s:%d: %q", path, pos.Line, value))
+				return true
+			})
+		}
+	}
+
+	assert.Empty(t, violations,
+		"guard code must not know what a host calls its tools.\n"+
+			"A switch or a lookup table over \"Read\"/\"Bash\" is a per-host branch with the host's name\n"+
+			"filed off: it passes TestNoHostSpecificBehaviorInCode, and the next time any host renames a\n"+
+			"tool it costs a magus release. Record magus's own label instead (hookToolCommand,\n"+
+			"hookToolWrite, hookToolRead in cmd/magus/guard.go) and let the wrapper in the reader's own\n"+
+			"config do the mapping - which flag it passes IS the mapping. If a literal genuinely has to\n"+
+			"be here, add it to hostToolVocabularyByDesign with where that decision is written down.\n\n"+
+			"violations:\n%s",
+		strings.Join(violations, "\n"))
+}
+
 // The landing headline rotates through N stacked spans on one shared keyframe
 // animation, each offset by a negative delay of one slot. The count lives in
 // landing.buzz and the slot arithmetic lives in site.css, so nothing but agreement
@@ -1123,4 +1347,255 @@ func TestLandingRotatorSlotsMatchHeadlineCount(t *testing.T) {
 	assert.Equalf(t, strconv.Itoa(headlines*slot), dur[1],
 		"landing-rotate runs %ss for %d headlines at %ds a slot; it must be %ds",
 		dur[1], headlines, slot, headlines*slot)
+}
+
+// nonASCIIGlyphs are the punctuation substitutes user-facing strings must not
+// carry (CLAUDE.md: "user-facing message strings are plain ASCII"). Named
+// rather than a blanket >127 check, because a blanket check would also flag
+// the deliberate drawing glyphs excluded below.
+var nonASCIIGlyphs = map[rune]string{
+	'—': "em dash",
+	'–': "en dash",
+	'‘': "left single quote",
+	'’': "right single quote",
+	'“': "left double quote",
+	'”': "right double quote",
+	'→': "right arrow",
+	'↔': "left-right arrow",
+	'…': "ellipsis",
+	'≥': "greater-or-equal sign",
+	'≤': "less-or-equal sign",
+	'×': "multiplication sign",
+	'·': "middle dot",
+}
+
+// asciiScanFiles is the exact set of non-test Go sources this pass swept for
+// the glyphs above (the P2-19/20 audit). It is a file list rather than a
+// package walk on purpose: cmd/magus, status.go's box-drawing pool display and
+// internal/cache/log.go's log-preview divider deliberately keep non-ASCII
+// glyphs (spinner frames, "|"-drawn borders), and files this pass did not
+// touch may carry pre-existing drift this pass was not scoped to fix. Scanning
+// exactly the fixed files still catches the regression this test exists for:
+// reverting any one fix here fails it.
+var asciiScanFiles = []string{
+	"types/describe.go",
+	"internal/render/targetgraph.go",
+	"cmd/magus-docs/main.go",
+	"internal/observability/otlp/provider.go",
+	"internal/handler/mcp/registry.go",
+	"internal/handler/mcp/output.go",
+	"internal/handler/mcp/where.go",
+	"cmd/magus/query.go",
+	"cmd/magus/guard_shell.go",
+	"cmd/magus/guard_write.go",
+	"cmd/magus/config_console.go",
+	"internal/doctor/checks.go",
+	"cmd/magus/init.go",
+	"internal/config/load.go",
+	"internal/config/validate.go",
+	"internal/interp/repl.go",
+	"internal/interp/bindings/pry.go",
+	"std/platform.go",
+	"std/env.go",
+	"std/markdown.go",
+	"std/buzz_stdlib.go",
+	"std/archive.go",
+	"std/buzz_signature.go",
+	"internal/cache/output.go",
+}
+
+// TestUserFacingStringsAreASCII scans string literals (not comments - CLAUDE.md
+// exempts those) in asciiScanFiles for the glyphs in nonASCIIGlyphs. It is scoped
+// to files this pass swept, not entire packages: see asciiScanFiles's comment.
+func TestUserFacingStringsAreASCII(t *testing.T) {
+	var violations []string
+
+	fset := token.NewFileSet()
+	for _, path := range asciiScanFiles {
+		f, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		require.NoErrorf(t, err, "parse %s", path)
+
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			for _, r := range lit.Value {
+				if name, bad := nonASCIIGlyphs[r]; bad {
+					pos := fset.Position(lit.Pos())
+					violations = append(violations, fmt.Sprintf("%s:%d: %s in %s", path, pos.Line, name, lit.Value))
+				}
+			}
+			return true
+		})
+	}
+
+	assert.Empty(t, violations,
+		"user-facing strings must be plain ASCII (CLAUDE.md): no em/en dash, curly quotes, arrows, "+
+			"ellipsis, >=/<= glyphs, or multiplication sign. Use the ASCII spelling instead (-, ->, "+
+			"<->, ..., >=, <=, x).\n\nviolations:\n%s",
+		strings.Join(violations, "\n"))
+}
+
+// TestTargetIsTheTaughtNoun pins the worst vocabulary-drift regression: the
+// printed target definition and the magus-run skill's opening both teaching
+// "target" as the unit of work, rather than sliding back to "operation" or
+// "task" (docs/concepts/targets.md bans both as a Target substitute). This is
+// deliberately narrow - a broad synonym grep false-positives too easily - so it
+// only pins these two known-worst sites.
+func TestTargetIsTheTaughtNoun(t *testing.T) {
+	lower := strings.ToLower(types.TargetDefinition)
+	assert.Contains(t, lower, "target", "TargetDefinition must teach target as the unit of work")
+	assert.NotContains(t, lower, "operation", "TargetDefinition must not substitute operation for target")
+	assert.NotContains(t, lower, "task", "TargetDefinition must not substitute task for target")
+
+	data, err := os.ReadFile(filepath.Join("internal", "agent", "skills", "magus-run", "SKILL.md"))
+	require.NoError(t, err, "read magus-run SKILL.md")
+	paragraphs := strings.SplitN(string(data), "\n\n", 3)
+	require.GreaterOrEqual(t, len(paragraphs), 2, "SKILL.md must have an opening paragraph after its heading")
+	opening := strings.ToLower(paragraphs[1])
+
+	assert.Contains(t, opening, "target", "the magus-run skill opening must teach target as the unit of work")
+	assert.NotContains(t, opening, "operation", "the magus-run skill opening must not substitute operation for target")
+	// "task orchestrator" is the blessed product-positioning phrase (README.md uses it);
+	// strip it before checking, so this pins task NOT being used as the taught noun
+	// without banning the positioning phrase itself.
+	withoutBlessedPhrase := strings.ReplaceAll(opening, "task orchestrator", "")
+	assert.NotContains(t, withoutBlessedPhrase, "task",
+		"the magus-run skill opening must not teach task as the unit of work (task orchestrator excepted)")
+}
+
+// mgsDeclarationFile declares and enumerates every diagnostic code. References there are
+// the code EXISTING, not the code firing, so the raise-site scan looks past this one file.
+const mgsDeclarationFile = "types/diagnostic.go"
+
+// mgsCodeRe matches a diagnostic code written out as text, which is how a Buzz spell
+// raises one - it throws the string, having no Go constant to reach for.
+var mgsCodeRe = regexp.MustCompile(`MGS[0-9]{4}`)
+
+// raiseSiteSkipDirs are trees a raise site cannot live in: version control and cache
+// state, generated output, fixtures, and vendored code.
+var raiseSiteSkipDirs = map[string]bool{
+	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
+	"node_modules": true, "gen": true, "testdata": true,
+}
+
+// mgsCodesWithoutRaiseSite are the codes that fail TestEveryDiagnosticCodeHasARaiseSite
+// today, listed rather than tolerated so the gate is green and the debt is named.
+var mgsCodesWithoutRaiseSite = map[types.DiagnosticCode]string{}
+
+// TestEveryDiagnosticCodeHasARaiseSite pins the property the code registry silently lost:
+// a code magus can never emit.
+//
+// An enumerated code is a promise - it becomes a knowledge-graph node, a docs page, and a
+// string a reader is told to search for. A code with no production raise site keeps every
+// one of those and honours none: the page exists, the node exists, and the condition it
+// describes reports as something else or as nothing. Nothing at runtime can observe the
+// absence, which is why it is asserted over the source shape instead.
+//
+// Declaring the code in a doctor check registry counts, since that routes a real finding.
+// Naming it only in a test does not: a code no shipped path reaches is the defect.
+func TestEveryDiagnosticCodeHasARaiseSite(t *testing.T) {
+	fset := token.NewFileSet()
+	decl, err := parser.ParseFile(fset, mgsDeclarationFile, nil, 0)
+	require.NoError(t, err, "parse %s", mgsDeclarationFile)
+
+	// identifier per code, so the scan can look for the Go name a raise site would use
+	// rather than the string literal, which almost nothing writes out.
+	name := map[types.DiagnosticCode]string{}
+	for _, d := range decl.Decls {
+		gd, ok := d.(*ast.GenDecl)
+		if !ok || gd.Tok != token.CONST {
+			continue
+		}
+		for _, s := range gd.Specs {
+			vs, ok := s.(*ast.ValueSpec)
+			if !ok || len(vs.Names) != 1 || len(vs.Values) != 1 {
+				continue
+			}
+			lit, ok := vs.Values[0].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				continue
+			}
+			code, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				continue
+			}
+			name[types.DiagnosticCode(code)] = vs.Names[0].Name
+		}
+	}
+
+	raised := map[string]bool{}
+	err = filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if raiseSiteSkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		slash := filepath.ToSlash(path)
+		// The built-in spells are shipped code too, and one of them is the only thing that
+		// raises MGS1016 - a spell throws the code as a STRING, so there is no identifier
+		// to find. Only spells/: every other .buzz naming a code is a tour page or a
+		// glossary entry describing one, which is the opposite of raising it.
+		if strings.HasSuffix(slash, ".buzz") {
+			if strings.HasPrefix(slash, "spells/") {
+				body, rerr := os.ReadFile(path)
+				if rerr != nil {
+					return rerr
+				}
+				for _, code := range mgsCodeRe.FindAllString(string(body), -1) {
+					if id, ok := name[types.DiagnosticCode(code)]; ok {
+						raised[id] = true
+					}
+				}
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		if slash == mgsDeclarationFile {
+			return nil
+		}
+		f, perr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if perr != nil {
+			return nil //nolint:nilerr // a file that does not parse is the build's finding, not this gate's
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok {
+				raised[id.Name] = true
+			}
+			return true
+		})
+		return nil
+	})
+	require.NoError(t, err, "walk")
+
+	var unraised []string
+	for _, code := range types.AllDiagnosticCodes() {
+		id, ok := name[code]
+		require.True(t, ok, "code %s is enumerated but declared by no constant", code)
+		if raised[id] {
+			assert.NotContains(t, mgsCodesWithoutRaiseSite, code,
+				"%s (%s) now has a raise site; drop it from mgsCodesWithoutRaiseSite", code, id)
+			continue
+		}
+		if why, excepted := mgsCodesWithoutRaiseSite[code]; excepted {
+			t.Logf("known exception %s (%s): %s", code, id, why)
+			continue
+		}
+		unraised = append(unraised, fmt.Sprintf("%s (%s)", code, id))
+	}
+	sort.Strings(unraised)
+
+	assert.Empty(t, unraised,
+		"every enumerated diagnostic code must have at least one production raise site.\n"+
+			"A code nothing emits still ships a docs page, a graph node, and a promise that the\n"+
+			"condition will be reported under it. Raise it where the condition is detected, or\n"+
+			"remove it from types.allDiagnosticCodes.\n\nunraised:\n%s",
+		strings.Join(unraised, "\n"))
 }

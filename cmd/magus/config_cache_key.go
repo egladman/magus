@@ -104,6 +104,14 @@ func configCacheKeyGenerate(args []string) error {
 	if err != nil {
 		return err
 	}
+	// A key's identity is its keyid, and the keyid ALONE: the seed is the one value that
+	// must never be what a bare token means. That makes -o name a lossy form here rather
+	// than a broken one - the key exists, and only its identity was asked for - so it says
+	// on stderr that the seed went nowhere, since it cannot be recovered afterwards.
+	if opts.Format == outputName {
+		fmt.Fprintln(os.Stderr, "-o name prints the keyid only; this key's seed was NOT emitted and cannot be recovered. Rerun with -o json or -o template='{{.seed}}' to capture one.")
+		return emitNames([]string{km.KeyID})
+	}
 	if opts.Format != outputText {
 		// Warnings to stderr so a pipe gets only the requested field. Printed BEFORE
 		// the value: on a terminal the caller should read them, and on a pipe they

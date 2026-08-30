@@ -195,6 +195,12 @@ func (errSilent) Error() string { return "silent exit" }
 // "silent exit", which is a sentence about magus's internals and not about the failure.
 func (errSilent) AlreadyReported() bool { return true }
 
+// ExitCode states the process status this failure carries, for the ADOPTED path.
+// exitCodeOf reads the field directly; the daemon holds the error as a plain `error`
+// and cannot, so without the method every forwarded failure collapsed to 1 and the
+// documented 1-vs-2 split existed only when no daemon was running.
+func (e errSilent) ExitCode() int { return e.exitCode }
+
 // exitUsage is the exit code for a command-line misuse: a missing or unknown
 // subcommand, a wrong argument count, an unrecognized value. It is deliberately
 // distinct from 1:
@@ -205,7 +211,7 @@ func (errSilent) AlreadyReported() bool { return true }
 //
 // 2 matches Go's own flag package (flag.ExitOnError) and the long-standing Unix
 // convention, and it is already what magus returns when a request cannot be carried
-// out as stated (an unresolvable `path` node, an ambiguous `where`, a `tail` with no
+// out as stated (an unresolvable `path` node, an ambiguous `where`, an `x` with no
 // terminal). Before this was unified, the same "you forgot the subcommand" situation
 // exited 0 from `config`, `self` and `merge-driver`, 1 from `man` and `completion`,
 // and 2 from `self <unknown>` - so nothing scripting magus could branch on it.
@@ -217,6 +223,9 @@ const exitUsage = 2
 type errUsage struct{ msg string }
 
 func (e errUsage) Error() string { return e.msg }
+
+// ExitCode carries exitUsage across the daemon boundary; see errSilent.ExitCode.
+func (errUsage) ExitCode() int { return exitUsage }
 
 // usagef builds an errUsage with a formatted message.
 func usagef(format string, a ...any) error {

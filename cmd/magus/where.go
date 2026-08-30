@@ -111,7 +111,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 	}
 	all := ws.All()
 	if len(all) == 0 {
-		return fmt.Errorf("no projects in workspace")
+		return fmt.Errorf("magus where: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project); run `magus init` to bootstrap one")
 	}
 
 	var matchFn func(string) bool

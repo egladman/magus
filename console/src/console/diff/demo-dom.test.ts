@@ -601,22 +601,85 @@ test("#demo gives no reason when nothing narrowed the verdicts", async () => {
 // how the key legend's "sits at the trailing edge" auto margin ended up with no row to sit in.
 // jsdom computes no layout, so the sibling relationship is what a test can hold; it is also the
 // thing that was actually wrong.
-test("the toolbar's controls share one row rather than stacking", async () => {
+//
+// It also pins the two ZONES apart. The head carries the surface's identity and its actions, the
+// readout carries the counts and the key legend; putting an action back among the chips is the
+// regression this row was restructured to undo.
+test("the toolbar's controls sit in a row, actions apart from the readout", async () => {
   location.hash = "#demo";
   const dispose = activate(document.body);
   await settle();
 
-  const controls = document.querySelector(".console-diff-toolbar__controls");
-  assert.ok(controls, "the controls row exists");
-  for (const cls of [
-    "console-diff-toolbar__verdict",
-    "console-diff-toolbar__focus",
-    "console-diff-toolbar__keys",
-  ]) {
-    const el = document.querySelector(`.${cls}`);
-    assert.ok(el, `${cls} is rendered`);
-    assert.equal(el.parentElement, controls, `${cls} is in the controls row, not the stack`);
+  const zones: [string, string[]][] = [
+    [
+      "console-diff-toolbar__actions",
+      ["console-diff-toolbar__verdict", "console-diff-toolbar__focus"],
+    ],
+    [
+      "console-diff-toolbar__readout",
+      ["console-diff-toolbar__stats", "console-diff-toolbar__keyswrap"],
+    ],
+    // The legend itself sits behind the disclosure, not loose in the readout.
+    ["console-diff-toolbar__keyswrap", ["console-diff-toolbar__keys"]],
+  ];
+  for (const [row, members] of zones) {
+    const parent = document.querySelector(`.${row}`);
+    assert.ok(parent, `${row} exists`);
+    for (const cls of members) {
+      const el = document.querySelector(`.${cls}`);
+      assert.ok(el, `${cls} is rendered`);
+      assert.equal(el.parentElement, parent, `${cls} is in ${row}, not the stack`);
+    }
   }
+
+  dispose.deactivate();
+});
+
+// Focus mode collapses the toolbar rather than emptying it. Hiding the counts alone left the
+// readout standing at its own min-block-size with the key disclosure floating in an otherwise
+// blank band - a mode whose claim is less chrome, spending a row on nothing. jsdom computes no
+// layout, so what a test can hold is the row being hidden and the legend having moved to the row
+// that is still on screen; the band itself is what the committed console-diff-focus shot shows.
+test("focus mode hides the readout row and takes the key legend with it", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const readout = document.querySelector<HTMLElement>(".console-diff-toolbar__readout");
+  const keys = document.querySelector<HTMLElement>(".console-diff-toolbar__keyswrap");
+  const progress = document.querySelector<HTMLElement>(".console-diff-progress");
+  assert.ok(readout && keys && progress);
+  assert.equal(readout.hidden, false);
+  assert.equal(keys.parentElement, readout, "the legend rides the readout in the dense view");
+
+  await setFocusMode(true);
+  assert.equal(readout.hidden, true, "the row goes, not just the chips inside it");
+  assert.equal(progress.hidden, false);
+  assert.equal(keys.parentElement, progress, "the legend moves to the row that is still drawn");
+
+  await setFocusMode(false);
+  assert.equal(readout.hidden, false);
+  assert.equal(keys.parentElement, readout, "and comes back with it");
+
+  dispose.deactivate();
+});
+
+// The head is the only place the surface says what it is and what it is comparing. Both were
+// missing outright: the diff was the one surface opening with an unheaded row of numbers, and
+// nothing on it named the two sides of the diff being read.
+test("the head names the surface and the two sides being compared", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const head = document.querySelector(".console-diff-toolbar__head");
+  assert.equal(head?.querySelector(".console-diff-toolbar__eyebrow")?.textContent, "Review");
+  // The demo session's base is "working", the STATE the daemon reports for the uncommitted tree
+  // (types.Diff.Base) - so both sides have to be spelled out rather than echoed.
+  assert.equal(
+    head?.querySelector(".console-diff-toolbar__scope")?.textContent,
+    "working tree vs HEAD",
+  );
 
   dispose.deactivate();
 });

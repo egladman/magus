@@ -111,12 +111,6 @@ func printConfigText(cfg config.Config) {
 	fmt.Println("ci:")
 	fmt.Printf("  max_shards:          %d\n", cfg.CI.MaxShards)
 	fmt.Printf("  runner_pool_budget:  %s\n", intOrDef(cfg.CI.RunnerPoolBudget, "(unlimited)"))
-	fmt.Println()
-	fmt.Println("graph:")
-	fmt.Printf("  direction: %s\n", strOrDef(cfg.Graph.Direction, "(default: downstream)"))
-	fmt.Printf("  spell:     %s\n", strOrDef(cfg.Graph.Spell, "(all)"))
-	fmt.Printf("  depth:     %s\n", intOrDef(cfg.Graph.Depth, "(unlimited)"))
-	fmt.Printf("  roots:     %s\n", strOrDef(cfg.Graph.Roots, "(all)"))
 }
 
 func strOrDef(s, def string) string {

@@ -3,7 +3,7 @@
    they do, so it gets the identical ANSI colors, status badges and line markup instead of a plain
    monospace dump. Bundled at build time, so this is an inline, not a runtime request. */
 @import "../render/render.css";
-/* Delegation is a Dashboard mode. */
+/* The lease plan is a Dashboard mode. */
 @import "../plan/plan.css";
 
 /* dashboard.css - page-scoped styles for the /dashboard/ control surface: the edge-to-edge
@@ -26,6 +26,11 @@ body[data-dash-native] { margin: 0; }
 [data-dash-native] .console-dashboard-main,
 .console-dashboard-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
 
+/* It carries tabindex="-1" so the surface's own keys (b, p) have somewhere to be dispatched from,
+   and main.ts focuses it on arrival. That is a programmatic focus on a whole page rather than on a
+   control, so a ring around everything would say a thing about this element that is not true. */
+.console-dashboard-main { outline: none; }
+
 .console-dashboard-main[data-mode="plan"] {
   display: flex;
   flex-direction: column;
@@ -38,16 +43,38 @@ body[data-dash-native] { margin: 0; }
 }
 #dash-plan-host > .console-plan-layout { flex: 1 1 auto; min-height: 0; }
 
+/* The dashboard's SURFACE BAR - the same row every other surface opens with, not a strip of text
+   above the board. It holds the related-work links at the leading edge and the view control at the
+   trailing one (mountTiles appends dashboardHeader here).
+
+   It used to be two stacked rows: this one, then a full-width row carrying a single right-aligned
+   button with its label above it. Together with their margins they spent 189px of a 900px window
+   before the first tile, most of it on a 1009px row that was empty for 900 of them.
+
+   FULL-BLEED. The pane insets its content by --console-pad (console.css) and every other surface's
+   bar reaches the pane's own edges, so this pulls back out through the inset and spends it as its
+   own padding instead. Without that its hairline stops short at both ends and reads as a different
+   kind of line from the ones on Runs, Notes and the log viewer. */
 .console-dashboard-related {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 0.7rem;
-  margin-block-end: var(--console-gap);
-  padding-block-end: var(--pf-t--global--spacer--sm);
+  min-block-size: var(--console-surface-bar-h);
+  margin-block: calc(-1 * var(--console-pad)) 0;
+  margin-inline: calc(-1 * var(--console-pad));
+  padding-block: 0;
+  padding-inline: var(--console-pad);
+  background: var(--console-chrome);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-dashboard-related__label { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
+.console-dashboard-related__label {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+}
 .console-dashboard-plan-controls {
   display: flex;
   align-items: center;
@@ -62,11 +89,11 @@ body[data-dash-native] { margin: 0; }
   align-items: baseline;
   gap: 0.7rem;
   padding-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xs);
-  /* Matches the card body's own inline padding below (#dash-panels > [data-card] >
-     .pf-v6-c-card__body) - without it this heading's text sits flush against the grid's edge
-     while every card's title sits inset behind its own padding, so the row above the cards
-     reads as unindented even though it occupies the same grid column. */
-  padding-inline: clamp(0.75rem, 1vw, 1rem);
+  /* Flush with the CARD's outer edge, not inset to match the card's inner body padding. The inset
+     was chasing the card TITLE, which sits behind a header and a body padding it never caught -
+     the heading landed at 85px against a title at 116 - and it cost the section a third left edge
+     in a column that should have one. A heading is not in a box; the cards it heads are. */
+  padding-inline: 0;
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-dashboard-section h2 { margin: 0; font-size: var(--pf-t--global--font--size--lg); }
@@ -93,12 +120,12 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-orchestration__line { min-width: 0; }
 .console-dashboard-orchestration__detail { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
 
-.console-dashboard-delegation__summary {
+.console-dashboard-lease__summary {
   margin: 0 0 0.75rem;
   font-size: var(--pf-t--global--font--size--md);
   font-weight: 600;
 }
-.console-dashboard-delegation__list {
+.console-dashboard-lease__list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: 0.45rem;
@@ -106,7 +133,7 @@ body[data-dash-native] { margin: 0; }
   padding: 0;
   list-style: none;
 }
-.console-dashboard-delegation__item {
+.console-dashboard-lease__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 0.45rem;
@@ -116,18 +143,18 @@ body[data-dash-native] { margin: 0; }
   border-inline-start: 3px solid var(--console-status-running);
   background: var(--pf-t--global--background--color--secondary--default);
 }
-.console-dashboard-delegation__item[data-state="declared"] { border-inline-start-color: var(--console-status-queued); }
-.console-dashboard-delegation__item[data-state="pass"] { border-inline-start-color: var(--console-status-ok); }
-.console-dashboard-delegation__item[data-state="fail"],
-.console-dashboard-delegation__item[data-state="no_return"] { border-inline-start-color: var(--console-status-danger); }
-.console-dashboard-delegation__mark { font-size: 0.68rem; font-weight: 700; color: var(--console-status-running); }
-.console-dashboard-delegation__item[data-state="declared"] .console-dashboard-delegation__mark { color: var(--console-status-queued); }
-.console-dashboard-delegation__item[data-state="pass"] .console-dashboard-delegation__mark { color: var(--console-status-ok); }
-.console-dashboard-delegation__item[data-state="fail"] .console-dashboard-delegation__mark,
-.console-dashboard-delegation__item[data-state="no_return"] .console-dashboard-delegation__mark { color: var(--console-status-danger); }
-.console-dashboard-delegation__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.console-dashboard-delegation__state { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-delegation__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn-text); font-size: var(--pf-t--global--font--size--sm); }
+.console-dashboard-lease__item[data-state="declared"] { border-inline-start-color: var(--console-status-queued); }
+.console-dashboard-lease__item[data-state="pass"] { border-inline-start-color: var(--console-status-ok); }
+.console-dashboard-lease__item[data-state="fail"],
+.console-dashboard-lease__item[data-state="no_return"] { border-inline-start-color: var(--console-status-danger); }
+.console-dashboard-lease__mark { font-size: 0.68rem; font-weight: 700; color: var(--console-status-running); }
+.console-dashboard-lease__item[data-state="declared"] .console-dashboard-lease__mark { color: var(--console-status-queued); }
+.console-dashboard-lease__item[data-state="pass"] .console-dashboard-lease__mark { color: var(--console-status-ok); }
+.console-dashboard-lease__item[data-state="fail"] .console-dashboard-lease__mark,
+.console-dashboard-lease__item[data-state="no_return"] .console-dashboard-lease__mark { color: var(--console-status-danger); }
+.console-dashboard-lease__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.console-dashboard-lease__state { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-lease__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn-text); font-size: var(--pf-t--global--font--size--sm); }
 
 /* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact tile opts
    into a single column with [data-half] so it pairs with a neighbor instead of eating a whole
@@ -139,14 +166,13 @@ body[data-dash-native] { margin: 0; }
   grid-auto-flow: row dense;
   align-items: stretch;
   gap: var(--console-gap);
-  /* The shell's shared pane <main> is deliberately padding-inline: 0 (console.css) so surfaces
-     that want edge-to-edge (the graph, notes) get it - which left the dashboard's own cards
-     butted against the rail on the left, the pane's own edge on the right, and the tab strip /
-     status bar top and bottom, with no line of their own to answer the rail's and status bar's.
-     ONE rule here, reusing the same --console-gap already used between cards, rather than a
-     margin patched onto whichever card happens to sit at an edge this week. Big Picture mode
-     overrides this with its own --bp-pad immediately below, so a wall display stays edge-to-edge. */
-  padding: var(--console-gap);
+  /* BLOCK only. The inline gutter is the PANE's now (console.css gives every pane's <main>
+     padding-inline: var(--console-pad)), and taking it again here made the grid a second inset
+     inside the first: the Operations row above sat on the pane's edge while every card sat 9.6px
+     further in, so one column had two left edges. Big Picture overrides the whole shorthand with
+     its own --bp-pad below, so a wall display still goes edge-to-edge. */
+  padding-block: var(--console-gap);
+  padding-inline: 0;
 }
 #dash-panels > * { grid-column: 1 / -1; }
 #dash-panels > [data-half] { grid-column: span 1; }
@@ -185,7 +211,7 @@ body[data-dash-native] { margin: 0; }
   #dash-panels { grid-template-columns: repeat(12, minmax(0, 1fr)); }
   #dash-panels > [data-card] { grid-column: span 4; }
 
-  #dash-panels > [data-card="delegation"],
+  #dash-panels > [data-card="lease"],
   #dash-panels > [data-card="agents"],
   #dash-panels > [data-card="activity"],
   #dash-panels > [data-card="gantt"],
@@ -202,7 +228,7 @@ body[data-dash-native] { margin: 0; }
   #dash-panels > [data-card="util"] { grid-column: span 4; }
 
   #dash-panels > [data-card] { min-block-size: 0; }
-  #dash-panels > [data-card="delegation"],
+  #dash-panels > [data-card="lease"],
   #dash-panels > [data-card="activity"],
   #dash-panels > [data-card="gantt"] { min-block-size: 13rem; }
 
@@ -235,6 +261,17 @@ button[data-collapse] {
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--pf-t--global--border--radius--small);
   transition: color 0.12s ease, background 0.12s ease;
+}
+/* Centred on the title, not top-aligned to the header. PatternFly gives card__header-toggle
+   align-self: flex-start while the header itself centres everything else, so the caret rode 7.6px
+   above the words it folds. */
+.pf-v6-c-card__header-toggle { align-self: center; }
+/* A command named inside a tile's prose (attention.ts's setProse). Mono and tinted, no box: it sits
+   mid-sentence and a filled chip at this size reads as a control. */
+.console-dashboard-code {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.92em;
+  color: var(--pf-t--global--text--color--regular);
 }
 button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default); }
 [data-caret]::before { content: "\25BE"; font-size: 1.1rem; line-height: 1; }
@@ -285,7 +322,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-stat[data-accent="err"]::before { background: var(--console-status-danger); }
 .console-dashboard-stat[data-accent="size"]::before { background: var(--console-status-running); }
 .console-dashboard-stat[data-accent="info"]::before { background: var(--console-status-running); }
-.console-dashboard-stat__key { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-stat__key { font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-stat__value { font-size: 1.5rem; font-weight: 700; font-family: var(--pf-t--global--font--family--mono); line-height: 1.1; }
 /* A KPI numeral is 24px bold, so it is WCAG "large text" at a 3:1 floor rather than 4.5 - and the
    warn icon value is 2.21:1, under even that. Text tier for all three so they move together. */
@@ -523,14 +560,14 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
    are the tallest FIXED element in a panel whose other content already knows how to shrink. */
 [data-bigpicture] [data-card="agents"] .console-dashboard-activity__caption,
 [data-bigpicture] [data-card="activity"] .console-dashboard-activity__caption { display: none; }
-[data-bigpicture] [data-card="delegation"] .pf-v6-c-button { display: none; }
-[data-bigpicture] .console-dashboard-delegation__summary { font-size: calc(var(--bp-u) * 1.25); }
-[data-bigpicture] .console-dashboard-delegation__list { gap: calc(var(--bp-u) * 0.35); }
-[data-bigpicture] .console-dashboard-delegation__item { padding: calc(var(--bp-u) * 0.45) calc(var(--bp-u) * 0.6); }
-[data-bigpicture] .console-dashboard-delegation__mark,
-[data-bigpicture] .console-dashboard-delegation__state { font-size: calc(var(--bp-u) * 0.95); }
-[data-bigpicture] .console-dashboard-delegation__id { font-size: calc(var(--bp-u) * 1.05); }
-[data-bigpicture] .console-dashboard-delegation__note { display: none; }
+[data-bigpicture] [data-card="lease"] .pf-v6-c-button { display: none; }
+[data-bigpicture] .console-dashboard-lease__summary { font-size: calc(var(--bp-u) * 1.25); }
+[data-bigpicture] .console-dashboard-lease__list { gap: calc(var(--bp-u) * 0.35); }
+[data-bigpicture] .console-dashboard-lease__item { padding: calc(var(--bp-u) * 0.45) calc(var(--bp-u) * 0.6); }
+[data-bigpicture] .console-dashboard-lease__mark,
+[data-bigpicture] .console-dashboard-lease__state { font-size: calc(var(--bp-u) * 0.95); }
+[data-bigpicture] .console-dashboard-lease__id { font-size: calc(var(--bp-u) * 1.05); }
+[data-bigpicture] .console-dashboard-lease__note { display: none; }
 
 /* Legend swatches, shared by the charts and the utilization grid.
    The label takes the TEXT tier and the swatch keeps the ICON tier: the square is a shape and wants
@@ -561,7 +598,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 /* Latency: a responsive grid of small per-family charts, each with an exact readout. */
 .console-dashboard-chart__grid { display: grid; gap: var(--console-gap); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .console-dashboard-chart { margin: 0; }
-.console-dashboard-chart figcaption { font-size: 0.72rem; font-weight: 600; color: var(--pf-t--global--text--color--subtle); margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.console-dashboard-chart figcaption { font-size: var(--console-label-size); font-weight: var(--console-label-weight); color: var(--pf-t--global--text--color--subtle); margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: var(--console-label-tracking); }
 .console-dashboard-chart__readout { font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem; color: var(--pf-t--global--text--color--regular); margin-top: 0.25rem; overflow-wrap: anywhere; }
 
 /* Pool utilization grid: GitHub-contribution-style squares. The SVG scales to the tile width
@@ -775,7 +812,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* Configuration card: key/value rows; default charms are PF Labels colored by effect (built in config.ts). */
 .console-dashboard-config__body { display: flex; flex-direction: column; gap: 0.5rem; }
 .console-dashboard-config__row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
-.console-dashboard-config__key { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-config__key { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-config__value { font-size: 0.85rem; color: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
 .console-dashboard-config__charms { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
 
@@ -793,7 +830,9 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    kept unobtrusive otherwise - on the left, and the Big Picture fullscreen-presentation button
    pinned to the top-right via margin-left: auto. Always visible, first in the panels grid, above
    both the board tiles and the Big Picture summary it swaps to. */
-.console-dashboard-viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.2rem; }
+/* Inside the bar above, pushed to the trailing edge. No bottom margin: it is no longer a row of
+   its own. */
+.console-dashboard-viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-inline-start: auto; }
 /* Label ABOVE the control, not beside it - the standard form-field stack.
    Inline, the label read as a stray word that happened to sit next to some chips: nothing tied the
    two together, so it looked like loose text rather than part of one control. Stacked, the label
@@ -805,18 +844,23 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   align-items: flex-start;
   gap: 0.2rem;
 }
+/* Label BESIDE the control, not stacked above it. Stacking was right when this was a row of its
+   own - the pair read as one labeled field rather than a stray word next to a button - but on a
+   shared bar the stack is what made the row 54px tall to hold a 37px control, and the bar's own
+   grouping now does the tying the stack was there for. */
 .console-dashboard-viewbar__view {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
-  margin-left: auto;
+  align-items: center;
+  gap: 0.4rem;
 }
 /* Quiet - a standing field label, not a heading - but present, because two bare chips reading
-   "acme" and "magus" do not say what choosing one does. Sentence case, per the console's
-   no-all-caps convention. */
+   "acme" and "magus" do not say what choosing one does. The console's one label voice, the same
+   one the bar's own OPERATIONS label takes, so the bar reads with two ends rather than two fonts. */
 .console-dashboard-viewbar__label {
-  font-size: 0.7rem;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
   line-height: 1.2;
   color: var(--pf-t--global--text--color--subtle);
   white-space: nowrap;
@@ -845,19 +889,19 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
  * Adding a button means adding its selector to these two rules - not copying the declarations into
  * a private block, which is exactly how the log-viewer button drifted from the Big Picture button
  * it was supposed to match. */
+/* One shape, two SIZES, and the difference is where each one sits. Big Picture is on the dashboard's
+   own control row, which is a surface bar like the Runs filter row, so it takes the default tier.
+   "Open in log viewer" is inside a card, which is a panel, so it takes the compact tier. Both come
+   from data-control-size on their container (bigPicture.ts, activity.ts) rather than from a size
+   written here - a shared 28px block was what let the two drift from every other bar in the console
+   while still matching each other. */
 .console-dashboard-viewbar__bigpicture,
 .console-dashboard-activity__open {
   display: inline-flex;
   align-items: center;
   gap: var(--pf-t--global--spacer--xs);
-  /* COMPACT, to the shell's own control scale. These were left at PatternFly's default button size -
-     37px tall at 14px type - next to a title bar whose workspace control is 28px at 12.5px, so the
-     dashboard's buttons read as a size larger than everything around them. Matching the shell means
-     one control scale across the app instead of one per surface. */
-  min-block-size: 1.75rem;
   padding-block: 0;
   padding-inline: 0.55rem;
-  font-size: 0.78rem;
   border-radius: var(--pf-t--global--border--radius--small);
 }
 /* Big Picture is a TOGGLE-GROUP button, not a plain one, and PatternFly rounds a group's outer corners
@@ -978,8 +1022,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   [data-bigpicture] #dash-panels > .console-dashboard-hero {
     grid-row: 1 / 3; grid-column: 1 / var(--bp-split-next, 9);
   }
-  /* Delegation belongs directly under the verdict. */
-  [data-bigpicture] #dash-panels > [data-card="delegation"] {
+  /* The lease plan belongs directly under the verdict. */
+  [data-bigpicture] #dash-panels > [data-card="lease"] {
     grid-row: 3 / 5; grid-column: 1 / var(--bp-split-next, 9);
   }
   [data-bigpicture] #dash-panels > [data-card="agents"] {
@@ -1100,7 +1144,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-area: cache; }
   [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-area: ws; }
   [data-bigpicture] #dash-panels > [data-card="locks"] { grid-area: locks; }
-  [data-bigpicture] #dash-panels > [data-card="delegation"] { grid-area: plan; }
+  [data-bigpicture] #dash-panels > [data-card="lease"] { grid-area: plan; }
   [data-bigpicture] #dash-panels > [data-card="agents"] { grid-area: agents; }
   [data-bigpicture] #dash-panels > [data-rotate] { grid-area: rotate; }
 }
@@ -1318,6 +1362,14 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    A person at the machine needs a way out that is not "guess that Escape works" - and Escape in
    fact does nothing when the mode was entered by route rather than by fullscreen. It stays out of
    the way otherwise, and out of the tab order it never leaves, so a cast screen shows nothing. */
+[data-bigpicture] .console-dashboard-related {
+  min-block-size: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-block-end: 0;
+}
+[data-bigpicture] .console-dashboard-related > :not(.console-dashboard-viewbar) { display: none; }
 [data-bigpicture] .console-dashboard-viewbar {
   position: fixed;
   top: 0; right: 0;
@@ -1545,11 +1597,11 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   font-size: 0.72rem;
 }
 .console-dashboard-attention__age,
-.console-dashboard-attention__delegation {
+.console-dashboard-attention__lease {
   font-size: 0.7rem;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-dashboard-attention__delegation { font-family: var(--pf-t--global--font--family--mono); }
+.console-dashboard-attention__lease { font-family: var(--pf-t--global--font--family--mono); }
 /* The dispose control sits at the far end of the row, away from the id it closes: it is the one
    write on this board, and it should not be a mis-click away from reading. */
 .console-dashboard-attention__dispose { margin-left: auto; display: inline-flex; align-items: center; }
@@ -1668,7 +1720,10 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 
 .console-dashboard-hero__metrics {
   display: grid;
-  grid-template-columns: repeat(3, 5.2rem);
+  /* minmax, not a fixed track: the linked label carries an arrow via ::after, and a track
+     sized to the bare word wraps the arrow onto its own line the moment the label tokens
+     grow. The floor keeps the three cards even; a wider label stretches its card instead. */
+  grid-template-columns: repeat(3, minmax(5.2rem, auto));
   gap: 0.6rem;
   flex: 0 0 auto;
   justify-content: end;
@@ -1692,7 +1747,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   font-family: var(--pf-t--global--font--family--mono);
   font-variant-numeric: tabular-nums;
 }
-.console-dashboard-hero__l { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); margin-top: 0.2rem; }
+.console-dashboard-hero__l { font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); margin-top: 0.2rem; white-space: nowrap; }
 /* Counts stay quiet at zero and only light up when there is something to report. */
 .console-dashboard-hero__metric .console-dashboard-hero__n { color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-hero__fail[data-n="some"] .console-dashboard-hero__n  { color: var(--console-status-danger-text); }
@@ -1789,8 +1844,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-table thead th { position: sticky; top: 0; background: var(--pf-t--global--background--color--primary--default); }
 .console-dashboard-table__sort {
   margin: 0; padding: 0; width: auto; border: 0; background: none; cursor: pointer;
-  font: inherit; font-weight: 600; color: var(--pf-t--global--text--color--subtle); text-transform: uppercase;
-  letter-spacing: 0.03em; font-size: 0.66rem;
+  font: inherit; font-weight: var(--console-label-weight); color: var(--pf-t--global--text--color--subtle); text-transform: uppercase;
+  letter-spacing: var(--console-label-tracking); font-size: var(--console-label-size);
 }
 .console-dashboard-table__sort:hover { color: var(--console-status-running); }
 .console-dashboard-table th[data-sort="desc"] .console-dashboard-table__sort::after { content: " \25BE"; }
@@ -1799,14 +1854,14 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 
 /* Metric grid (Buzz, Sandbox): dense captioned groups of label + monospace value. */
 .console-dashboard-metric__groups { display: flex; flex-direction: column; gap: 0.6rem; }
-.console-dashboard-metric__caption { margin: 0 0 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-metric__caption { margin: 0 0 0.3rem; font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-metric__grid { display: grid; gap: 0.55rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .console-dashboard-metric {
   display: flex; flex-direction: column; gap: 0.15rem; padding: 0.55rem 0.7rem;
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
-.console-dashboard-metric__key { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-metric__key { font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-metric__value { font-size: 0.95rem; font-weight: 600; font-family: var(--pf-t--global--font--family--mono); color: var(--pf-t--global--text--color--regular); }
 
 /* Insight section band: a labeled divider above the five insight lens tiles, with a manual
@@ -1821,7 +1876,9 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    one cluster ("last answered - refresh it") while the title and its "?" stay leading. */
 .console-dashboard-insight__lastran { margin-inline-start: auto; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-insight__refresh {
-  padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
+  block-size: var(--console-control-block-size);
+  padding-block: 0; padding-inline: 0.6rem; width: auto;
+  font-size: var(--console-control-font-size);
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default); color: var(--console-status-running); cursor: pointer;
   display: inline-flex; align-items: center; gap: 0.35rem;

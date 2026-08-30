@@ -1,7 +1,9 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"path/filepath"
 	"testing"
 
@@ -74,7 +76,7 @@ func TestRecordEnvDropped(t *testing.T) {
 	ctx := WithMetrics(context.Background(), rec)
 
 	policy := &Policy{EnvDropped: []string{"AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"}}
-	RecordEnvDropped(ctx, policy)
+	RecordEnvDropped(ctx, "go", policy)
 
 	if len(rec.dropped) != 1 {
 		t.Fatalf("recorded %d env-dropped calls, want 1: %+v", len(rec.dropped), rec.dropped)
@@ -85,8 +87,63 @@ func TestRecordEnvDropped(t *testing.T) {
 
 	// Nothing dropped: no call.
 	rec.dropped = nil
-	RecordEnvDropped(ctx, &Policy{})
+	RecordEnvDropped(ctx, "go", &Policy{})
 	if len(rec.dropped) != 0 {
 		t.Errorf("expected no env-dropped call for an empty policy, got %+v", rec.dropped)
+	}
+}
+
+// TestRecordEnvDropped_LogsMGS2003Notice pins the raise site: sandbox enabled (a
+// non-nil policy) plus at least one dropped var must log MGS2003 with the command
+// and the drop count, matching docs/reference/codes/sandbox/MGS2003.md's shape.
+func TestRecordEnvDropped_LogsMGS2003Notice(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	policy := &Policy{EnvDropped: []string{"AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "VAULT_TOKEN"}}
+	RecordEnvDropped(context.Background(), "go", policy)
+
+	got := buf.String()
+	if !bytes.Contains(buf.Bytes(), []byte("MGS2003")) {
+		t.Fatalf("expected MGS2003 in log output, got: %s", got)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("cmd=go")) {
+		t.Errorf("expected cmd=go in log output, got: %s", got)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("stripped_count=3")) {
+		t.Errorf("expected stripped_count=3 in log output, got: %s", got)
+	}
+}
+
+// TestRecordEnvDropped_SilentWhenSandboxOff is the negative control: a nil policy
+// (sandbox disabled) must log nothing, matching MGS2003's "sandbox must be
+// enabled" gate.
+func TestRecordEnvDropped_SilentWhenSandboxOff(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	RecordEnvDropped(context.Background(), "go", nil)
+
+	if buf.Len() != 0 {
+		t.Errorf("expected no log output with sandbox off, got: %s", buf.String())
+	}
+}
+
+// TestRecordEnvDropped_SilentWhenNothingDropped covers a policy that is present
+// (sandbox on) but stripped nothing - the count-must-be-positive half of the gate.
+func TestRecordEnvDropped_SilentWhenNothingDropped(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	RecordEnvDropped(context.Background(), "go", &Policy{})
+
+	if buf.Len() != 0 {
+		t.Errorf("expected no log output when nothing was dropped, got: %s", buf.String())
 	}
 }

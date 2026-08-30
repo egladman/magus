@@ -78,9 +78,21 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 		if err := applyDoctorFixes(ctx, root, rc, out); err != nil {
 			return err
 		}
+		// A dry run applied nothing, so there is nothing new to judge: it lists the
+		// remedies and exits 0 even where the workspace is unhealthy, which is what
+		// doctor_agent_skills.txtar pins against a deliberately imperfect fixture.
+		if globalCfg.DryRun {
+			return nil
+		}
 		// The report above described the workspace BEFORE the remedies ran, so its
-		// summary is no longer what is true. Re-run doctor to see the result rather
-		// than trusting a count that predates the fixes.
+		// summary is no longer what is true. Re-run the checks for the count to gate on,
+		// rather than returning nil - which reported a still-broken workspace as healthy
+		// to anything scripting `doctor --fix`. ws is reused: every remedy writes a file
+		// the checks re-read here, and none changes the shape magus.Inspect models.
+		out = doctor.Run(ctx, root, ws, wsErr, dopts...)
+		if out.Summary.Fail > 0 {
+			return fmt.Errorf("magus doctor: %d check(s) still failing after --fix", out.Summary.Fail)
+		}
 		return nil
 	}
 	if out.Summary.Fail > 0 {
@@ -222,6 +234,7 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	// explicitly set to false (mirrors how MCP.Enabled works).
 	di.MCPAddr = mcpAddrString()
 	di.BridgeEnabled = globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled
+	di.MCPEnabled = globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled
 
 	// daemon.enabled=false means this invocation is self-contained, so there is nothing
 	// to ask. Without this check the probe still discovers and dials whatever daemon the
@@ -243,6 +256,10 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 		return di
 	}
 	di.Reachable = true
+	// Mode separates the `magus server start` daemon from the per-process proc server
+	// this very invocation may have spun up. Only the former starts the MCP HTTP server,
+	// so only it makes a bridge something to expect.
+	di.Persistent = reply.Mode == "daemon"
 	di.ParentPID = reply.ParentPID
 	di.DaemonVersion = reply.DaemonVersion
 	di.Capacity = reply.Capacity

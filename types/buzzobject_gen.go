@@ -723,62 +723,6 @@ func (v VolatilityReport) BuzzObject() BuzzObject {
 	}
 }
 
-func (v KnowledgeGodNode) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"id":     v.ID,
-		"kind":   v.Kind,
-		"label":  v.Label,
-		"degree": v.Degree,
-		"in":     v.In,
-		"out":    v.Out,
-	}
-}
-
-func (v KnowledgeOrphan) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"id":     v.ID,
-		"kind":   v.Kind,
-		"label":  v.Label,
-		"reason": v.Reason,
-	}
-}
-
-func (v KnowledgeDocCoverage) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"kind":         v.Kind,
-		"total":        v.Total,
-		"documented":   v.Documented,
-		"percent":      v.Percent,
-		"undocumented": v.Undocumented,
-	}
-}
-
-func (v KnowledgeStats) BuzzObject() BuzzObject {
-	itemsGods := make([]any, len(v.Gods))
-	for indexGods := range v.Gods {
-		itemsGods[indexGods] = v.Gods[indexGods].BuzzObject()
-	}
-	itemsOrphans := make([]any, len(v.Orphans))
-	for indexOrphans := range v.Orphans {
-		itemsOrphans[indexOrphans] = v.Orphans[indexOrphans].BuzzObject()
-	}
-	itemsCoverage := make([]any, len(v.Coverage))
-	for indexCoverage := range v.Coverage {
-		itemsCoverage[indexCoverage] = v.Coverage[indexCoverage].BuzzObject()
-	}
-	return BuzzObject{
-		"definition":           v.Definition,
-		"nodeCount":            v.NodeCount,
-		"edgeCount":            v.EdgeCount,
-		"gods":                 itemsGods,
-		"orphans":              itemsOrphans,
-		"coverage":             itemsCoverage,
-		"isolatedCount":        v.IsolatedCount,
-		"componentCount":       v.ComponentCount,
-		"largestComponentSize": v.LargestComponentSize,
-	}
-}
-
 func (v ProjectRef) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path": v.Path,
@@ -939,7 +883,7 @@ func (v StatusRun) BuzzObject() BuzzObject {
 	}
 }
 
-func (v DelegationRelease) BuzzObject() BuzzObject {
+func (v LeaseRelease) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path":       v.Path,
 		"digest":     v.Digest,
@@ -947,7 +891,7 @@ func (v DelegationRelease) BuzzObject() BuzzObject {
 	}
 }
 
-func (v DelegationUnattributedWrite) BuzzObject() BuzzObject {
+func (v LeaseUnattributedWrite) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path":   v.Path,
 		"digest": v.Digest,
@@ -955,7 +899,7 @@ func (v DelegationUnattributedWrite) BuzzObject() BuzzObject {
 	}
 }
 
-func (v Delegation) BuzzObject() BuzzObject {
+func (v Lease) BuzzObject() BuzzObject {
 	itemsReleases := make([]any, len(v.Releases))
 	for indexReleases := range v.Releases {
 		itemsReleases[indexReleases] = v.Releases[indexReleases].BuzzObject()
@@ -986,26 +930,26 @@ func (v Delegation) BuzzObject() BuzzObject {
 	}
 }
 
-func (v DelegationOverlap) BuzzObject() BuzzObject {
+func (v LeaseOverlap) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"delegationA": v.DelegationA,
-		"delegationB": v.DelegationB,
-		"pathsA":      v.PathsA,
-		"pathsB":      v.PathsB,
+		"leaseA": v.LeaseA,
+		"leaseB": v.LeaseB,
+		"pathsA": v.PathsA,
+		"pathsB": v.PathsB,
 	}
 }
 
-func (v DelegationReport) BuzzObject() BuzzObject {
-	itemsDelegations := make([]any, len(v.Delegations))
-	for indexDelegations := range v.Delegations {
-		itemsDelegations[indexDelegations] = v.Delegations[indexDelegations].BuzzObject()
+func (v LeaseReport) BuzzObject() BuzzObject {
+	itemsLeases := make([]any, len(v.Leases))
+	for indexLeases := range v.Leases {
+		itemsLeases[indexLeases] = v.Leases[indexLeases].BuzzObject()
 	}
 	itemsOverlaps := make([]any, len(v.Overlaps))
 	for indexOverlaps := range v.Overlaps {
 		itemsOverlaps[indexOverlaps] = v.Overlaps[indexOverlaps].BuzzObject()
 	}
 	return BuzzObject{
-		"delegations": itemsDelegations,
-		"overlaps":    itemsOverlaps,
+		"leases":   itemsLeases,
+		"overlaps": itemsOverlaps,
 	}
 }

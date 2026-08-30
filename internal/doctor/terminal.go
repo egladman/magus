@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -85,8 +86,12 @@ func (r *runner) checkTerminal() types.DoctorCheck {
 	// row is emitted at info - so the band still pins failures and never shows
 	// progress. Worth saying, because the row simply not appearing looks like a
 	// terminal problem and is not one.
-	if r.opts.cfg.Log.Silent != nil && *r.opts.cfg.Log.Silent {
-		degraded = append(degraded, "quiet or silent is set, so the live status row is suppressed; failures still pin")
+	//
+	// The LEVEL is what --quiet moves; only --silent sets Log.Silent. Testing the flag
+	// this names meant asking the level too, or the one case a reader is most likely to
+	// hit - the plain -q - was the one case the advice stayed silent about.
+	if r.opts.cfg.Log.IsSilent() || r.opts.cfg.Log.SlogLevel() > slog.LevelInfo {
+		degraded = append(degraded, "quiet, silent, or a log level above info is set, so the live status row is suppressed; failures still pin")
 	}
 	if !mouse {
 		degraded = append(degraded, "no mouse (this terminal does not report the cursor position, so a click cannot be resolved against an inline view)")

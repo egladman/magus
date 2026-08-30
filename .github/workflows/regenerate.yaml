@@ -160,6 +160,8 @@ jobs:
           pr-number: ${{ matrix.pr.number }}
           base-ref: ${{ matrix.pr.baseRef }}
           head-sha: ${{ matrix.pr.headSha }}
+          head-ref: ${{ matrix.pr.headRef }}
+          head-repo: ${{ matrix.pr.headRepo }}
           merge-conflicts: 'false'
           hand-edited-generated: 'false'
           target-outputs: 'false'

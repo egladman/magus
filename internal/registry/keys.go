@@ -13,7 +13,7 @@ import (
 //go:embed registry-keys.json
 var embeddedKeys []byte
 
-// PinnedKeys is the set of Ed25519 public keys the BUILT-IN registry source is
+// pinnedKeys is the set of Ed25519 public keys the BUILT-IN registry source is
 // verified against, pinned in every binary the way the release key is.
 //
 // A SEPARATE keyring from internal/selfupdate's, and that separation is the point.
@@ -27,7 +27,7 @@ var embeddedKeys []byte
 // with a clear reason, which is the correct behavior for a binary that has been
 // given no way to check what it would download. Filling it in is a one-line change
 // plus the matching MAGUS_REGISTRY_KEY secret.
-var PinnedKeys []ed25519.PublicKey
+var pinnedKeys []ed25519.PublicKey
 
 type keyFile struct {
 	Keys []string `json:"keys"`
@@ -43,14 +43,14 @@ func init() {
 		if err != nil {
 			panic(fmt.Sprintf("registry: embedded key %d: %v", i, err))
 		}
-		PinnedKeys = append(PinnedKeys, ed25519.PublicKey(raw))
+		pinnedKeys = append(pinnedKeys, ed25519.PublicKey(raw))
 	}
 }
 
 // pinnedHex renders the pinned keys for an error that has to say what was tried.
 func pinnedHex() string {
-	out := make([]string, len(PinnedKeys))
-	for i, k := range PinnedKeys {
+	out := make([]string, len(pinnedKeys))
+	for i, k := range pinnedKeys {
 		out[i] = hex.EncodeToString(k)
 	}
 	return strings.Join(out, ", ")

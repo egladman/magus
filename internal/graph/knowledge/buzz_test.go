@@ -83,10 +83,10 @@ export fun f(ctx: magus\Context, args: [str]) > void {}
 	for _, id := range []string{"import:fs", "import:buzz:os", "import:magus/spell"} {
 		n, ok := nodeByID(out, id)
 		require.Truef(t, ok, "missing import node %q", id)
-		assert.Emptyf(t, n.Attrs[AttrDiagnostic], "%q should not be flagged", id)
+		assert.Emptyf(t, n.Attrs[attrDiagnostic], "%q should not be flagged", id)
 	}
 	// A dangling workspace-relative import is flagged MGS7001.
 	miss, ok := nodeByID(out, "import:spells/missing")
 	require.True(t, ok)
-	assert.Equal(t, string(types.UnresolvableBuzzImport), miss.Attrs[AttrDiagnostic])
+	assert.Equal(t, string(types.UnresolvableBuzzImport), miss.Attrs[attrDiagnostic])
 }

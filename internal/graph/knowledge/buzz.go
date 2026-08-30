@@ -16,9 +16,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// BuzzShardName is the singleton shard holding buzz-source nodes (files,
+// buzzShardName is the singleton shard holding buzz-source nodes (files,
 // functions, imports, rationale comments) across the whole workspace.
-const BuzzShardName = "@buzz"
+const buzzShardName = "@buzz"
 
 // markerRe matches a rationale marker inside a comment block (the Graphify idea
 // worth copying: NOTE/WHY/HACK/TODO comments carry the "why" a reader most wants).
@@ -39,7 +39,7 @@ type fnLine struct {
 // possible, else an inferred edge to the literal), and rationale nodes tied to
 // their enclosing function. Deterministic and LLM-free.
 func assembleBuzz(root string) Shard {
-	s := Shard{Name: BuzzShardName}
+	s := Shard{Name: buzzShardName}
 	files := findBuzzFiles(root)
 	scanned := make(map[string]bool, len(files))
 	for _, f := range files {
@@ -98,7 +98,7 @@ func assembleBuzz(root string) Shard {
 					// (MGS7001); a compiled-in module (magus/*, buzz stdlib) is expected
 					// to be unresolvable and stays untagged.
 					if !isBuiltinImport(d.Path) {
-						n.Attrs = map[string]string{AttrDiagnostic: string(types.UnresolvableBuzzImport)}
+						n.Attrs = map[string]string{attrDiagnostic: string(types.UnresolvableBuzzImport)}
 					}
 					s.Nodes = append(s.Nodes, n)
 					s.Edges = append(s.Edges, inferredEdge(fID, iID, types.RelationImports, rel, 0.7))

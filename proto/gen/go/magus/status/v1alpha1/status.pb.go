@@ -755,7 +755,7 @@ type Pool struct {
 	Mode           string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`                                           // "daemon" | "proc" | ""
 	Capacity       int32                  `protobuf:"varint,4,opt,name=capacity,proto3" json:"capacity,omitempty"`                                  // total concurrency slots (0 = unlimited)
 	Running        int32                  `protobuf:"varint,5,opt,name=running,proto3" json:"running,omitempty"`                                    // slots currently running
-	Queued         int32                  `protobuf:"varint,6,opt,name=queued,proto3" json:"queued,omitempty"`                                      // tasks queued for a slot
+	Queued         int32                  `protobuf:"varint,6,opt,name=queued,proto3" json:"queued,omitempty"`                                      // targets queued for a slot
 	RunningTargets []*RunningTarget       `protobuf:"bytes,7,rep,name=running_targets,json=runningTargets,proto3" json:"running_targets,omitempty"` // what is running right now
 	Workspaces     []*Workspace           `protobuf:"bytes,8,rep,name=workspaces,proto3" json:"workspaces,omitempty"`
 	Affected       []string               `protobuf:"bytes,9,rep,name=affected,proto3" json:"affected,omitempty"`

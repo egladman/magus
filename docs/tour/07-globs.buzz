@@ -6,7 +6,7 @@
 // suffix - proto-generate, mock-generate, sql-generate - and one umbrella target
 // pulls in the whole set with a single glob, instead of listing each by hand.
 // ctx.glob("*-generate") resolves to every target ending in -generate, and
-// magus.needs depends on the handles it returns - so adding sql-generate later
+// ctx.needs depends on the handles it returns - so adding sql-generate later
 // needs NO edit to `generate`. Try `run generate` and watch it fan out; `ls`
 // shows the family and its edges.
 
@@ -21,8 +21,8 @@ export fun proto_generate(ctx: magus\Context, args: [str]) > void { buf["buf-gen
 export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-generate"](ctx); }
 export fun sql_generate(ctx: magus\Context, args: [str])   > void { go["go-generate"](ctx); }
 
-// The umbrella: magus.glob collects every current AND future *-generate target as
-// handles, and magus.needs depends on them. glob("name") with no wildcard is
+// The umbrella: ctx.glob collects every current AND future *-generate target as
+// handles, and ctx.needs depends on them. glob("name") with no wildcard is
 // shorthand for "anything ending in -name", so glob("generate") would read the
 // same as glob("*-generate") here. A pattern matching nothing yields no handles,
 // so needs of it is just a no-op.
@@ -75,7 +75,7 @@ export fun generate_fast(ctx: magus\Context, args: [str]) > void {
 // That gap is what "!" fills.
 
 // When a set is not a clean suffix family, skip the pattern and pass the target
-// functions to magus.needs directly. proto-all gathers just the proto- family
+// functions to ctx.needs directly. proto-all gathers just the proto- family
 // (its generate and its lint), and nothing else - the handles say exactly which.
 // Either way needs only ever takes handles: a function, or the handles glob
 // resolves a pattern to.

@@ -3,8 +3,17 @@ package proc
 import (
 	"testing"
 
+	"github.com/egladman/magus/internal/ward"
 	"github.com/stretchr/testify/assert"
 )
+
+// devVersionSentinel's doc says to keep it in sync with ward.DevVersion (and cmd/magus's
+// unknownVersion, checked by TestUnknownVersionMatchesWardDevVersion in cmd/magus). Neither
+// half of that pair could see the other without this test: cmd/magus cannot see proc's
+// unexported sentinel, so each package only proves the half reachable from ward.DevVersion.
+func TestDevVersionSentinelMatchesWard(t *testing.T) {
+	assert.Equal(t, ward.DevVersion, devVersionSentinel)
+}
 
 // adoptionIdentity is symmetric and total: "" and stamped releases pass through, only the
 // dev sentinel is rewritten to a fingerprint. These cases pin the pass-through halves; the

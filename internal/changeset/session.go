@@ -231,15 +231,6 @@ func (s *Store) AnchorFor(root, path string, line int) types.CommentAnchor {
 	return CaptureAnchor(s.parsed[root][path], line)
 }
 
-// HunksFor returns the hunks this session last tracked for path, for a caller re-finding a
-// remark's anchor against what the reader is being shown now.
-func (s *Store) HunksFor(root, path string) []Hunk {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.parsed[root][path]
-}
-
 // ContentAt is the fingerprint file had when this session's changeset was tracked, empty when
 // the file was not tracked or could not be read. A caller mints a receipt from THIS rather
 // than from the file's current bytes, so the receipt attests to what the reader saw.

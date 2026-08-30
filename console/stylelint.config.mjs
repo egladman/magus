@@ -1,8 +1,9 @@
 import controlSizing from "./stylelint-control-sizing.mjs";
+import labelToken from "./stylelint-label-token.mjs";
 
 export default {
   extends: ["stylelint-config-standard"],
-  plugins: [controlSizing],
+  plugins: [controlSizing, labelToken],
   rules: {
     // Existing console CSS intentionally uses BEM names, PatternFly custom properties,
     // dense declaration groups, and legacy-compatible color/media syntax. Keep the
@@ -32,5 +33,9 @@ export default {
     // A component author opts a shared control group into the stronger invariant with
     // data-control-size; the local rule then makes its block sizing use one token.
     "magus/control-size-token": true,
+    // The console has ONE uppercase label and ONE uppercase chip. Written out by hand it came to 35
+    // near-misses across seven sheets - six font sizes, six tracking values, three weights - which is
+    // the drift a reader sees as "every surface looks slightly different".
+    "magus/label-token": true,
   },
 };

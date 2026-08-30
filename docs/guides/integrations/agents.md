@@ -70,7 +70,7 @@ The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install surface, [The guard](agents/guard.md) for what is denied and why,
 [Guard hook templates](agents/guard-templates.md) for the two files Claude Code
 and Codex run, [Attention hooks](agents/notifications.md) for `magus session notify`,
-and [Delegation](agents/delegation.md) for the surface an agent uses when it
+and [Leases](agents/leases.md) for the surface an agent uses when it
 fans work out across several.
 
 ## Parity across hosts
@@ -156,14 +156,14 @@ at now" without re-reading the whole workspace:
    marks key off content digest, not position, so a hunk that has not
    changed stays marked reviewed and one that has resurfaces on its own.
 
-## Delegating across agents
+## Leasing work across agents
 
 The same checkpoint identifies a piece of work handed to another agent, and it
-is one leg of a wider surface: a declared delegation ledger, a console Plan
+is one leg of a wider surface: a declared lease ledger, a console Plan
 surface that draws it, and a spawn recorded but never judged. magus records what
 an orchestrating agent says it intends and enforces none of it - ownership is
-settled by diffing against the checkpoint each unit was handed.
-[Delegation](agents/delegation.md) covers that loop.
+settled by diffing against the checkpoint each lease was handed.
+[Leases](agents/leases.md) covers that loop.
 
 ## The MCP daemon
 

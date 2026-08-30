@@ -19,8 +19,8 @@ import (
 // fingerprint cache can reuse it whole. The scan lives in the composition root (git is not
 // a dependency of this package); here we only shape the gathered metadata into a shard.
 
-// VCSShardName is the singleton shard holding git-history attrs and author edges.
-const VCSShardName = "@vcs"
+// vcsShardName is the singleton shard holding git-history attrs and author edges.
+const vcsShardName = "@vcs"
 
 // assembleVCS folds git history metadata onto the file nodes named by fileNodePaths - a
 // typed partial file node per file so the merge is order-independent - and mints an author
@@ -32,7 +32,7 @@ const VCSShardName = "@vcs"
 // and any single query stays bounded by its neighborhood budget. Nodes and edges are sorted
 // for deterministic output.
 func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool, authorship bool) Shard {
-	s := Shard{Name: VCSShardName}
+	s := Shard{Name: vcsShardName}
 	authorFiles := map[string][]string{}
 	for _, e := range entries {
 		if !fileNodePaths[e.Path] {

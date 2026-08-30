@@ -15,26 +15,27 @@ The console holds no privileged access: it is one client of the same contract
 anyone can code against. The full schema - every service, method, message, and
 enum, generated from the `.proto` files - is the [daemon API reference](api/index.md).
 
-**None of these routes can change your workspace.** They read what the daemon
-already knows: they cannot trigger a build, run a target, edit a file, or change
-configuration. Every route in the table below answers GET only and rejects any
-other method with a 405 - with one named exception, `POST /api/v1/diff/session`,
-which records a person's own review state (where they are looking, which hunks
-they have read, what they said) in the cache directory and touches no source
-file. This is a design decision, not just a security posture (see section 0.3 of
-the PWA plan).
+**Most of these routes cannot change your workspace.** They read what the daemon
+already knows: they cannot edit a file or change configuration. Most of the
+table below answers GET only and rejects any other method with a 405, with two
+named exceptions. `POST /api/v1/diff/session` records a person's own review
+state (where they are looking, which hunks they have read, what they said) in
+the cache directory and touches no source file. `POST /api/v1/diff/run` starts
+a run - the one read-surface route that is genuinely mutating, bounded to
+whatever targets the magusfile declares. This is a design decision, not just a
+security posture (see section 0.3 of the PWA plan).
 
-What can mutate sits beside this read surface rather than in it, and none of it
-runs an arbitrary command or writes into your working tree:
+What else can mutate sits beside this read surface rather than in it, and none
+of it runs an arbitrary command or writes into your working tree:
 
 - The [job-control service](#job-control), which submits a fixed set of
   maintenance jobs (reconcile the graph, rotate the activity trail or run-logs,
   clear the cache).
-- `POST /api/v1/diff/session`, the review-session route above.
+- `POST /api/v1/diff/session` and `POST /api/v1/diff/run`, the two exceptions above.
 - `POST /api/v1/share`, which opens the time-boxed LAN listener described under
   [what the console serves](#what-the-console-serves). It requires a loopback
   peer as well as the bearer token, so only the local console can trigger it.
-- `magus.memory.v1.MemoryService`, which edits your own handoff journal
+- `magus.memory.v1alpha1.MemoryService`, which edits your own handoff journal
   ([`magus memory`](manpage/magus-memory.md)). That journal lives in the user
   state directory outside the repository, so it is not workspace state either.
 
@@ -54,9 +55,13 @@ Every route on the console's `/api/v1/` surface, enumerated:
 | `GET /api/v1/insight`              | Every [insight lens](../concepts/knowledge/insight.md): hotspots, affinity, ownership, trend, volatility                           |
 | `GET /api/v1/diff`                 | Working-tree changes annotated with role, blast radius, changed-symbol reach, and coverage ([`magus diff`](manpage/magus-diff.md)) |
 | `GET /api/v1/diff/patch`           | The same changes as one unified patch, without the annotation (much cheaper)                                                       |
+| `GET /api/v1/diff/context`         | Supporting context for a changed symbol (callers, definitions) beyond the patch itself                                             |
 | `POST /api/v1/diff/session`        | The human's half of a paired review: cursor, viewed marks, comments                                                                |
+| `GET /api/v1/diff/review`          | Which review this branch has open on the forge, and what colleagues have already said on it                                        |
+| `GET /api/v1/diff/branches`        | Other branches changing the same files                                                                                             |
+| `POST /api/v1/diff/run`            | Run a target against the working tree; the one MUTATING route in this table, bounded to what the magusfile declares                |
 | `GET /api/v1/plan`                 | The derived run plan: the target DAG the engine resolves, with each node's live state                                              |
-| `GET /api/v1/ledger`               | The delegation plan an agent [declared](../guides/integrations/agents/delegation.md); magus enforces none of it                    |
+| `GET /api/v1/ledger`               | The lease plan an agent [declared](../guides/integrations/agents/leases.md); magus enforces none of it                             |
 | `GET /api/v1/attention`            | The attention queue: blocks waiting on a person, same shape as `magus session attention -o json`                                   |
 | `POST /api/v1/attention`           | Dispose one request (`{"id","reason"}`). Nothing else closes one                                                                   |
 
@@ -64,12 +69,12 @@ One more route sits under `/api/v1/` without belonging to this read surface:
 `POST /api/v1/share`, described below. The daemon's typed Connect
 services - status, activity, metrics, insight, viewer, memory, notes, tool, and
 [job control](#job-control) - are mounted at their own
-`magus.<service>.v1.<Service>/` prefixes rather than here, and the
+`magus.<service>.v1alpha1.<Service>/` prefixes rather than here, and the
 [daemon API reference](api/index.md) is their schema. The console mounts at
 `/api/v1/` on the same port as the MCP server (`127.0.0.1:7391` by default).
 
 There is no `GET /api/v1/status` any more. The typed
-`magus.status.v1.StatusService/GetStatus` route replaced it and serves the same
+`magus.status.v1alpha1.StatusService/GetStatus` route replaced it and serves the same
 live snapshot plus `observing_since` and config on a typed wire contract; the
 console reads it there.
 
@@ -83,16 +88,24 @@ agent cannot reach the human route, so it cannot post as the person.
 
 **The share subset is smaller on purpose.** `POST /api/v1/share` opens an
 on-demand, time-boxed LAN listener behind a fresh read-only token, so you can
-watch a run from a phone. It serves only `events`, `insight`, `outputs`,
-`output`, `runs` and `run`, plus the activity, metrics, status and insight Connect
-reads. The two run routes are in the set for the same reason the two output ones
-are: a past run's journal holds the captured output `output` already serves, plus
-the command that produced it - which a `magus query output --open` link has always
-carried in its fragment. `graph`, `diff`,
-`diff/patch`, `diff/session`, `plan`, `ledger`, `/mcp` and the job service are
-deliberately loopback-only: a working diff is unreviewed source, a plan names
-every target in the workspace, and a share link is a URL handed to a phone. A
-leaked share link reaches the small set and nothing else.
+watch a run from a phone. It serves only the plain-JSON `events` and `insight`
+routes, plus the metrics, activity, status, insight, and viewer Connect
+services (`internal/daemon/daemon.go`'s `shareGuarded` map is the exact list).
+The viewer service is the typed twin of the run browser - a past run's journal
+holds the captured output plus the command that produced it, which a
+`magus query output --open` link has always carried in its fragment; the
+plain-JSON `outputs`/`output`/`runs`/`run` routes it replaced are retired (see
+`docs/concepts/compatibility.md`). `--open` (on `magus run`, `magus affected`,
+and `magus query output`) points a browser at the hosted log viewer by
+default; `MAGUS_LOG_VIEWER_URL` overrides that base for a self-hosted mirror,
+the same override `magus query output --open --url` takes as a flag
+(`cmd/magus/live.go`, `cmd/magus/query.go`). The tool Connect service is deliberately
+excluded even though it is read-only: it execs the argv a workspace's spells
+declare, which is not something a link handed to a phone should reach. `graph`,
+`diff`, `diff/patch`, `diff/session`, `plan`, `ledger`, `/mcp` and the job
+service are deliberately loopback-only too: a working diff is unreviewed
+source, a plan names every target in the workspace, and a share link is a URL
+handed to a phone. A leaked share link reaches the small set and nothing else.
 
 **Error bodies.** When a route fails (5xx), the response body contains
 `err.Error()` detail to help an authenticated loopback caller diagnose the
@@ -112,25 +125,40 @@ serialization). This is a known limitation; memoization per variant is deferred.
 ## Job control
 
 Separate from the read routes above, the daemon hosts a **mutating** Connect
-service, `magus.job.v1.JobService`, so a browser client (or the CLI) can trigger
+service, `magus.job.v1alpha1.JobService`, so a browser client (or the CLI) can trigger
 background maintenance without an open action endpoint. It is the only surface
 that changes anything magus computed - the others record a person's own review
 state, open a share listener, or edit their handoff journal - and it is bounded:
 it submits a fixed set of named jobs, never an arbitrary command.
 
-| RPC                | Effect                                                      |
-| ------------------ | ----------------------------------------------------------- |
-| `SyncGraph`        | Reconcile the knowledge graph to current source             |
-| `RotateActivities` | Trim the activity trail to its cap                          |
-| `RotateLogs`       | Trim the invocation run-log journals to their cap           |
-| `ClearCache`       | Invalidate cached build entries                             |
-| `ListJobs`         | Report every job's running state, last run, and target size |
+The service exposes two RPCs, not one per job: `RunJob(name)` submits any
+registered job by its resource name (`jobs/{job}`), and `ListJobs` reports every
+job's running state, last run, and target size. A job name nobody registered is
+a NotFound error rather than a third RPC.
+
+| Job                 | Effect                                               |
+| ------------------- | ---------------------------------------------------- |
+| `sync-graph`        | Reconcile the knowledge graph to current source      |
+| `rotate-activities` | Trim the activity trail to its cap                   |
+| `rotate-logs`       | Trim the invocation run-log journals to their cap    |
+| `clear-cache`       | Invalidate cached build entries                      |
+| `check-review`      | Note when a review this tree took part in has merged |
 
 Each submit is fire-and-forget and coalesced (an identical in-flight job is not
 started twice) and returns a metadata snapshot - the job's last run and the
-current size of what it maintains. The same jobs are reachable from the CLI with
-`magus server job <name>`. The service is mounted behind the same loopback bind
-and bearer token as everything else here; it is never served unauthenticated.
+current size of what it maintains. The service is mounted behind the same loopback
+bind and bearer token as everything else here; it is never served unauthenticated.
+
+Two doors reach it. In the console, the **Activity** surface carries a
+maintenance control above the trail: it lists every registered job with its
+running state, last run and target size (`ListJobs`), and each row runs that job
+(`RunJob`). It sits on Activity because a job's result is a trail entry - what a
+job did is read on that surface, so what starts it belongs there. From a
+terminal, `magus server job <name>` submits the same jobs down the same path. The
+control exists because the console is where the prompt to run one already fires:
+the daemon-storage notification watches the cache figure from inside the console,
+and used to end by naming a shell command, so the surface that noticed the
+problem could not act on it.
 
 ## How it is secured
 
@@ -186,9 +214,6 @@ console:
 
 Or via environment variable: `MAGUS_CONSOLE_ENABLED=false`.
 
-The console only exists when the daemon binary is compiled with `-tags mcp`.
-A binary built without that tag has no console and no `/api/v1/` routes.
-
 ## Privacy statement
 
 The console serves your workspace graph over loopback. It does not:
@@ -197,8 +222,9 @@ The console serves your workspace graph over loopback. It does not:
 - Log request payloads
 - Store anything beyond what the daemon already caches on disk, plus the review
   state a person records through `POST /api/v1/diff/session`
-- Accept a write into your working tree, or any request that runs a target,
-  edits a file, or changes configuration
+- Accept a write into your working tree, or edit a file or change
+  configuration. It CAN run a target - `POST /api/v1/diff/run` - but only one
+  the magusfile declares, the same as `magus run` at a terminal
 - Expose any path outside the routes listed above
 
 The hosted explorer page loads your graph via the bearer-authenticated fetch.
@@ -261,7 +287,7 @@ Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed con
 
 ### Affected view
 
-When the daemon has computed an affected set (from `magus affected` in a CI context), the pool in the `magus.status.v1.StatusService/GetStatus` response carries an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
+When the daemon has computed an affected set (from `magus affected` in a CI context), the pool in the `magus.status.v1alpha1.StatusService/GetStatus` response carries an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
 
 ## Verify our claims - don't take our word for it
 
@@ -375,23 +401,45 @@ hide anything.
 
 ### Claim: the code running here is the code in the repo
 
-This site is generated from the open [magus repository](https://github.com/egladman/magus),
-and the built assets are committed and CI-checked. `site-manifest.sha256`
-(at the site root, e.g. `https://eli.gladman.cc/magus/site-manifest.sha256`)
-lists every served file with its SHA-256, in `sha256sum(1)` format. To verify
-any asset:
+This site is generated from the open [magus repository](https://github.com/egladman/magus)
+by a CI-checked build; the served bytes are not, themselves, committed.
+`console/gen/` (the console's build output) is entirely gitignored - `git
+ls-files console/gen` lists nothing - and `docs/gen/` (the docs site) commits
+only a handful of carve-outs (the installer script, the signed release and
+registry manifests), not the rendered HTML/JS. So "compare against the repo's
+committed copy" is not something you can do against a checkout as it sits;
+what you can do:
+
+- Build it yourself from source (`magus run build docs` for the docs site;
+  `console/README.md` for the console's own pnpm build) and diff the output
+  against what the site serves.
+- Read the CI workflow that publishes it
+  (`.github/workflows/cd.yaml`) to confirm the published bytes are exactly
+  what that build produces from the commit it ran on, with nothing hand-edited
+  in between.
+
+`site-manifest.sha256` (at the site root, e.g.
+`https://eli.gladman.cc/magus/site-manifest.sha256`) lists every served file
+with its SHA-256, in `sha256sum(1)` format, so a rebuild-and-diff has something
+to check against without re-downloading every asset:
 
 ```sh
 curl -s <asset-url> | sha256sum
 ```
 
-and compare against the manifest and the repo's committed copy (the docs site
-under `docs/gen/`, the console app under `console/gen/`). The JavaScript is
-unminified enough to read; start at the console's `console/src/console/graph/main.ts` -
-`loadGraph` and `readGraphFile` are the functions that
-ingest a graph (the `#data=`/`#src=`/demo fallback chain, and drag-drop/
-file-input/`launchQueue` respectively), and there is no function that sends
-it out.
+The JavaScript is unminified enough to read; start at the console's
+`console/src/console/graph/main.ts` - `loadGraph` and `readGraphFile` are the
+functions that ingest a graph (the `#data=`/`#src=`/demo fallback chain, and
+drag-drop/file-input/`launchQueue` respectively), and there is no function
+that sends it out.
+
+A locally built console is not limited to the hosted site's copy: the daemon's
+LAN share listener (`POST /api/v1/share`) and its own `/console/` mount both
+resolve which built console to serve via `resolveConsoleDir`
+(`internal/daemon/share.go`), which honors `MAGUS_CONSOLE_DIR` as an override
+before falling back to `<workspace root>/console/gen`. Point it at a console
+you built and audited yourself to serve that copy instead of trusting any
+prebuilt one.
 
 ### The one nuance: the service worker is not covered by this policy
 

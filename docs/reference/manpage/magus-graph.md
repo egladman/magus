@@ -11,7 +11,7 @@ The workspace's graphs as objects: deps, export, stats
 
 ## Synopsis
 
-**magus** graph \<deps|export|stats|open\> [flags]
+**magus** graph \<build|deps|export|stats|diff\> [flags]
 
 ## Description
 
@@ -21,7 +21,11 @@ home of the graph itself.
 
 Subcommands (the first argument):
 
-deps     The project dependency DAG. A trailing list of project paths roots
+build    Rebuild the knowledge graph now, reindexing code symbols first (runs
+           each symbol-capable project's scip op) unless --no-symbols. The
+           daemon does this automatically in the background; this is the manual
+           trigger, after a branch switch or when the daemon is not running.
+  deps     The project dependency DAG. A trailing list of project paths roots
            the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
            same view scoped to a run is available as magus run \<target\> --graph
            and magus affected \<target\> --graph.
@@ -34,16 +38,28 @@ deps     The project dependency DAG. A trailing list of project paths roots
            and -o mermaid render only with --select, since the full graph has too
            many nodes to lay out. The graph is cache-backed under
            \<cache\>/knowledge; only shards whose sources changed are rebuilt.
+           --open sends it to the hosted, interactive Graph Explorer instead of
+           stdout (there is no separate "open" subcommand): by default the graph
+           rides in the URL fragment (#data=...), which browsers never send to a
+           server; --serve instead hands it from an ephemeral 127.0.0.1 loopback
+           server (no size limit), and --targets opens the target dependency
+           graph instead of the knowledge graph.
   stats    The graph's shape: god nodes (the most connected spells, modules,
            targets - where structural risk concentrates), orphans (docs that
            document nothing, spells no target uses), and doc coverage (the
            share of diagnostics, spells, and modules with a doc). --kind scopes
-           every section to one node kind. insight report embeds this section.
-  open     Open the workspace's knowledge graph (or target dependency graph with
-           --targets) in the hosted, interactive Graph Explorer. The graph is
-           delivered privately: by default it rides in the URL fragment
-           (#data=...), which browsers never send to a server; --serve instead
-           hands it from an ephemeral 127.0.0.1 loopback server (no size limit).
+           every section to one node kind. The VCS-history lenses (hotspots,
+           affinity, ownership, trend, unreferenced) are a separate view, served
+           by the magus_insight MCP tool and the console's Insight page - not by
+           this command.
+  diff     Nodes and edges added, removed, or changed relative to a baseline
+           export or a git revision (--rev): the PR-review blast-radius
+           artifact, emit as json or markdown for a CI comment.
+
+### graph build options
+
+**--no-symbols**
+: Rebuild the domain graph only; do not reindex code symbols
 
 ### graph deps options
 
@@ -111,7 +127,21 @@ deps     The project dependency DAG. A trailing list of project paths roots
 **--symbols**
 : Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph
 
+### graph diff options
+
+**--global**
+: Diff the global (all-workspaces) graph; match this to how the baseline was exported
+
+**--refresh**
+: Force a full graph rebuild of the current graph before diffing
+
+**--rev** *string*
+: Diff against a git revision (e.g. HEAD~1, main) instead of an export file
+
 ## Subcommands
+
+**build**
+: Rebuild the knowledge graph now, reindexing code symbols first
 
 **deps**
 : Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)
@@ -121,6 +151,9 @@ deps     The project dependency DAG. A trailing list of project paths roots
 
 **stats**
 : Report the knowledge graph's shape: god nodes, orphans, doc coverage
+
+**diff**
+: Nodes/edges added, removed, or changed vs a baseline export or --rev; PR blast-radius
 
 ## Examples
 
@@ -192,5 +225,5 @@ magus graph export --open --targets --print
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

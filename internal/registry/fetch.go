@@ -12,8 +12,8 @@ import (
 // Size caps on every read. Parsing is the attack surface, so nothing unbounded
 // reaches a decoder.
 const (
-	MaxSig      = 1 << 10  // 1 KB
-	MaxRegistry = 16 << 20 // 16 MB; the eol half grows with the upstream product list
+	maxSig      = 1 << 10  // 1 KB
+	maxRegistry = 16 << 20 // 16 MB; the eol half grows with the upstream product list
 )
 
 // fetchTimeout bounds one refresh including retries.
@@ -33,7 +33,7 @@ const fetchTimeout = 60 * time.Second
 // persist, bounded reads. Nothing here writes to the cache path until the bytes
 // have been checked against a key pinned on this machine.
 func Refresh(ctx context.Context, src Source, client *http.Client) (Cached, error) {
-	if Offline() {
+	if offline() {
 		return Cached{Source: src}, fmt.Errorf("%w (wanted %s)", ErrOffline, src.URL)
 	}
 	if err := requireHTTPS(src.URL); err != nil {
@@ -51,11 +51,11 @@ func Refresh(ctx context.Context, src Source, client *http.Client) (Cached, erro
 		client = defaultClient()
 	}
 
-	sig, err := fetchLimited(ctx, client, src.URL+".sig", MaxSig)
+	sig, err := fetchLimited(ctx, client, src.URL+".sig", maxSig)
 	if err != nil {
 		return Cached{Source: src}, fmt.Errorf("registry: %s: signature unreachable (%s.sig): %w", src.Name, src.URL, err)
 	}
-	data, err := fetchLimited(ctx, client, src.URL, MaxRegistry)
+	data, err := fetchLimited(ctx, client, src.URL, maxRegistry)
 	if err != nil {
 		return Cached{Source: src}, fmt.Errorf("registry: %s: unreachable (%s): %w", src.Name, src.URL, err)
 	}
@@ -65,7 +65,7 @@ func Refresh(ctx context.Context, src Source, client *http.Client) (Cached, erro
 		return Cached{Source: src}, err
 	}
 
-	dir, err := CacheDir()
+	dir, err := cacheDir()
 	if err != nil {
 		return Cached{Source: src}, err
 	}

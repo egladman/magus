@@ -1,7 +1,6 @@
 package doctor
 
 import (
-	"context"
 	"fmt"
 	"github.com/egladman/magus/spells"
 	"os/exec"
@@ -65,7 +64,11 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 	})
 
 	details := make([]string, 0, len(gates))
-	status := types.DoctorAdvice
+	// Declaring a gate is not a finding. Starting at advice made every workspace whose
+	// spells reach docker or podman permanently yellow, including one where --probe had
+	// just confirmed every tool was up - and a level that cannot be cleared is one people
+	// learn to skip past, taking the real ones with it. Only a failed probe lowers this.
+	status := types.DoctorOK
 	var down int
 	for _, g := range gates {
 		if !r.opts.probe {
@@ -75,7 +78,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 		// --probe was asked for, so the gate is actually exercised. A tool that is
 		// down is a FAIL rather than advice: the caller asked whether their
 		// environment is ready, and the honest answer is no.
-		if err := exec.CommandContext(context.Background(), g.probe.Bin, g.probe.Args...).Run(); err != nil {
+		if err := exec.CommandContext(r.runCtx(), g.probe.Bin, g.probe.Args...).Run(); err != nil {
 			down++
 			status = types.DoctorFail
 			details = append(details, fmt.Sprintf("%s: %s NOT ready: `%s` failed", g.spell, g.tool, g.cmd))
@@ -88,8 +91,12 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 	// registry's default cannot know which one this run made.
 	msg := fmt.Sprintf("%d tool(s) gated on a readiness probe", len(gates))
 	evidence := types.EvidenceDeclared
-	if r.opts.probe {
+	switch {
+	case r.opts.probe && down > 0:
 		msg = fmt.Sprintf("%d of %d gated tool(s) not ready", down, len(gates))
+		evidence = types.EvidenceMeasured
+	case r.opts.probe:
+		msg = fmt.Sprintf("%d gated tool(s), all ready", len(gates))
 		evidence = types.EvidenceMeasured
 	}
 	return types.DoctorCheck{Name: "tool-readiness", Status: status, Evidence: evidence, Message: msg, Details: details}

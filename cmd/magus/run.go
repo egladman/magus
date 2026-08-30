@@ -144,10 +144,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		defer cancel()
 	}
 
-	if rf.Step && !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
-		return errSilent{exitCode: 2}
-	}
 	if rf.Step {
 		ctx = withStepGate(ctx)
 	}
@@ -336,8 +332,22 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
 		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName))
+	case outputName:
+		return emitProjectNames(m, targets)
 	}
 	return nil
+}
+
+// emitProjectNames is `-o name` for a run: the projects the run covered, one path per
+// line - the identity of what executed, and the form the next command takes as arguments.
+// Shared by run and affected so the two cannot disagree about what a run is named by.
+func emitProjectNames(m *magus.Magus, selection []types.Target) error {
+	projects := m.ResolveProjects(selection)
+	names := make([]string, len(projects))
+	for i, p := range projects {
+		names[i] = p.Path
+	}
+	return emitNames(names)
 }
 
 // runSelection is how one run's project selection is named on the command line: the

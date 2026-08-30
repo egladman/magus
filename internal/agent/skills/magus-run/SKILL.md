@@ -1,7 +1,8 @@
 # Running work through magus
 
-magus is the task orchestrator: targets declare their inputs, outputs, and
-sandbox, and magus caches results and computes what a change affects. Invoking a
+magus is the task orchestrator: its unit of work is the target, and targets
+declare their inputs, outputs, and sandbox; magus caches results and computes
+what a change affects. Invoking a
 raw language tool directly bypasses all of that{{if .Full}}, so the cache goes stale, declared
 outputs drift, and `magus affected` can no longer vouch for your change{{else}}, so the cache goes
 stale and `magus affected` can no longer vouch for your change{{end}}.
@@ -40,7 +41,11 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
    full pipeline over every project your change reaches, which is how you learn
    about ramifications in projects you never touched{{end}}. Hand-running lint,
    format, and test one at a time re-derives an order the magusfile already
-   owns, and the step you forget fails silently by omission. Verify in place;
+   owns, and the step you forget fails silently by omission. A gate you ADDED
+   this session is not proven by its green: make it FAIL once - break the input
+   it checks, watch it go red, restore - before you count its pass as
+   verification. A check wired to the wrong path passes exactly the same way.
+   Verify in place;
    never `git stash`/`reset` first{{if .Full}} (data-loss-prone and pointless - the tree is
    already what you want to verify){{else}} (it destroys a concurrent agent's untracked
    work, and the tree is already what you want to verify){{end}}.

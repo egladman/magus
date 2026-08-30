@@ -161,7 +161,7 @@ func methodSourceLink(meth std.Method) string {
 	if line > 0 {
 		url += fmt.Sprintf("#L%d", line)
 	}
-	return fmt.Sprintf(" · [source](%s)", url)
+	return fmt.Sprintf(" - [source](%s)", url)
 }
 
 func writeModule(dir string, m std.Module) error {
@@ -442,7 +442,7 @@ func renderIndex(modules []std.Module) string {
 
 	fmt.Fprintf(&b, "## See also\n\n")
 	fmt.Fprintf(&b, "- [Targets](../../concepts/targets.md): the runnable units whose magusfiles call these modules.\n")
-	fmt.Fprintf(&b, "- [Spells](../../concepts/spells.md): language and toolchain adapters that compose these modules into operations.\n")
+	fmt.Fprintf(&b, "- [Spells](../../concepts/spells.md): language and toolchain adapters that compose these modules into ops.\n")
 	fmt.Fprintf(&b, "- [Charms](../../concepts/charms.md): the execution modifiers the `charm` module constructs.\n")
 	fmt.Fprintf(&b, "- [Playground](../../playground.html): exercise these modules live in the browser.\n")
 	return b.String()

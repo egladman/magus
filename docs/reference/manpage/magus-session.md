@@ -62,11 +62,11 @@ still working stays listed however long ago it began.
 **--agent-name** *string*
 : Name of the agent host this invocation came from (attribution only)
 
-**--delegation** *string*
-: The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)
-
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)
+
+**--lease** *string*
+: The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)
 
 **--observe**
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
@@ -166,10 +166,10 @@ printf '%s' 'go build ./...' | magus session hook
 printf '%s' 'internal/cache/output.go' | magus session hook --observe
 ```
 
-*Grade a write as a delegation*
+*Grade a write as a lease*
 
 ```sh
-printf '%s' 'internal/ledger/store.go' | magus session hook --path --delegation f2-guard
+printf '%s' 'internal/ledger/store.go' | magus session hook --path --lease f2-guard
 ```
 
 *Raise a permission prompt on the desktop (host-wired)*
@@ -180,5 +180,5 @@ printf '%s\n' 'needs approval' | magus session notify --outcome permission --des
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

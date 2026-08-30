@@ -12,19 +12,19 @@ import (
 
 // fakeLedgerSource is a ledgerSource returning canned rows or a fixed error.
 type fakeLedgerSource struct {
-	delegations []types.Delegation
-	err         error
+	leases []types.Lease
+	err    error
 }
 
-func (f fakeLedgerSource) List() ([]types.Delegation, error) { return f.delegations, f.err }
+func (f fakeLedgerSource) List() ([]types.Lease, error) { return f.leases, f.err }
 
-func TestLedgerHandler_Returns200WithDelegations(t *testing.T) {
-	src := fakeLedgerSource{delegations: []types.Delegation{
+func TestLedgerHandler_Returns200WithLeases(t *testing.T) {
+	src := fakeLedgerSource{leases: []types.Lease{
 		{
-			ID: "delegation-a", Goal: "ship the store", Checkpoint: "60dc9151",
+			ID: "lease-a", Goal: "ship the store", Checkpoint: "60dc9151",
 			OwnedPaths: []string{"internal/ledger"}, State: types.StateRunning,
 			Updated:  1755300000,
-			Releases: []types.DelegationRelease{{Path: "types/delegation.go", Digest: "sha256:abc", ReleasedAt: 1755299000}},
+			Releases: []types.LeaseRelease{{Path: "types/lease.go", Digest: "sha256:abc", ReleasedAt: 1755299000}},
 		},
 		{ID: "scout", ReadOnly: true, State: types.StateNoReturn},
 	}}
@@ -34,29 +34,29 @@ func TestLedgerHandler_Returns200WithDelegations(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	var out types.DelegationReport
+	var out types.LeaseReport
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
 	}
-	if len(out.Delegations) != 2 {
-		t.Fatalf("want 2 rows, got %d", len(out.Delegations))
+	if len(out.Leases) != 2 {
+		t.Fatalf("want 2 rows, got %d", len(out.Leases))
 	}
 	// The join key the console drawer needs, and the two fields a row cannot be read
 	// without: which state it ended in, and what tree it was handed.
-	if out.Delegations[0].ID != "delegation-a" || out.Delegations[0].Checkpoint != "60dc9151" {
-		t.Errorf("want the declared row verbatim, got %+v", out.Delegations[0])
+	if out.Leases[0].ID != "lease-a" || out.Leases[0].Checkpoint != "60dc9151" {
+		t.Errorf("want the declared row verbatim, got %+v", out.Leases[0])
 	}
-	if out.Delegations[1].State != types.StateNoReturn || !out.Delegations[1].ReadOnly {
-		t.Errorf("want the abbreviated no_return row, got %+v", out.Delegations[1])
+	if out.Leases[1].State != types.StateNoReturn || !out.Leases[1].ReadOnly {
+		t.Errorf("want the abbreviated no_return row, got %+v", out.Leases[1])
 	}
-	// The heartbeat: a reader watching for a delegation nobody has touched needs the row's
+	// The heartbeat: a reader watching for a lease nobody has touched needs the row's
 	// own timestamp, not the moment it happened to read the route.
-	if out.Delegations[0].Updated != 1755300000 {
-		t.Errorf("want the row's updated stamp on the wire, got %d", out.Delegations[0].Updated)
+	if out.Leases[0].Updated != 1755300000 {
+		t.Errorf("want the row's updated stamp on the wire, got %d", out.Leases[0].Updated)
 	}
 	// What the next agent inherits, and which version of it.
-	if len(out.Delegations[0].Releases) != 1 || out.Delegations[0].Releases[0].Digest != "sha256:abc" {
-		t.Errorf("want the released path and its digest, got %+v", out.Delegations[0].Releases)
+	if len(out.Leases[0].Releases) != 1 || out.Leases[0].Releases[0].Digest != "sha256:abc" {
+		t.Errorf("want the released path and its digest, got %+v", out.Leases[0].Releases)
 	}
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("want no-store, got %q", got)
@@ -67,32 +67,32 @@ func TestLedgerHandler_Returns200WithDelegations(t *testing.T) {
 // without either row saying anything about the other. A fact for the reader, not a
 // verdict: nothing is blocked, reordered, or failed on account of it.
 func TestLedgerHandler_ReportsOverlappingOwnedPaths(t *testing.T) {
-	src := fakeLedgerSource{delegations: []types.Delegation{
-		{ID: "delegation-a", OwnedPaths: []string{"internal/ledger"}, State: types.StateRunning},
-		{ID: "delegation-b", OwnedPaths: []string{"internal/ledger/store.go"}, State: types.StateDeclared},
-		{ID: "delegation-done", OwnedPaths: []string{"internal/ledger"}, State: types.StatePass},
+	src := fakeLedgerSource{leases: []types.Lease{
+		{ID: "lease-a", OwnedPaths: []string{"internal/ledger"}, State: types.StateRunning},
+		{ID: "lease-b", OwnedPaths: []string{"internal/ledger/store.go"}, State: types.StateDeclared},
+		{ID: "lease-done", OwnedPaths: []string{"internal/ledger"}, State: types.StatePass},
 	}}
 	h := NewHandler(src, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
 
-	var out types.DelegationReport
+	var out types.LeaseReport
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
 	}
 	if len(out.Overlaps) != 1 {
-		t.Fatalf("want one pair - the finished delegation is not competing for anything - got %+v", out.Overlaps)
+		t.Fatalf("want one pair - the finished lease is not competing for anything - got %+v", out.Overlaps)
 	}
-	if out.Overlaps[0].DelegationA != "delegation-a" || out.Overlaps[0].DelegationB != "delegation-b" {
+	if out.Overlaps[0].LeaseA != "lease-a" || out.Overlaps[0].LeaseB != "lease-b" {
 		t.Errorf("want the pair in ledger order, got %+v", out.Overlaps[0])
 	}
 	// Each side's own declaration, kept apart: they are different strings here, and a
-	// reader who cannot tell which delegation claimed which has nothing to act on.
+	// reader who cannot tell which lease claimed which has nothing to act on.
 	if len(out.Overlaps[0].PathsA) != 1 || out.Overlaps[0].PathsA[0] != "internal/ledger" {
-		t.Errorf("want delegation-a's declaration, got %v", out.Overlaps[0].PathsA)
+		t.Errorf("want lease-a's declaration, got %v", out.Overlaps[0].PathsA)
 	}
 	if len(out.Overlaps[0].PathsB) != 1 || out.Overlaps[0].PathsB[0] != "internal/ledger/store.go" {
-		t.Errorf("want delegation-b's declaration, got %v", out.Overlaps[0].PathsB)
+		t.Errorf("want lease-b's declaration, got %v", out.Overlaps[0].PathsB)
 	}
 }
 
@@ -103,9 +103,9 @@ func TestLedgerHandler_EmptyLedgerServesEmptyList(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	// [] not null: a workspace where nobody has delegated yet is empty, not broken.
-	if got := w.Body.String(); got != `{"units":[]}` {
-		t.Errorf(`want {"units":[]}, got %s`, got)
+	// [] not null: a workspace where nobody has handed out a lease yet is empty, not broken.
+	if got := w.Body.String(); got != `{"leases":[]}` {
+		t.Errorf(`want {"leases":[]}, got %s`, got)
 	}
 }
 

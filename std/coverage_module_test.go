@@ -276,9 +276,8 @@ func TestTypeTagGoType(t *testing.T) {
 	}
 }
 
-// covArrow is signature.go's return separator, surrounding spaces included,
-// spelled as an escape so this file stays ASCII.
-const covArrow = " \u2192 "
+// covArrow is signature.go's return separator, surrounding spaces included.
+const covArrow = " -> "
 
 // TestBuzzSignature pins the call form docs and `magus describe module` render.
 func TestBuzzSignature(t *testing.T) {

@@ -82,20 +82,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_VOLATILITY_ANNOTATE_GHA"); v != "" {
 		cfg.Volatility.AnnotateGHA = parseBoolEnv(v, cfg.Volatility.AnnotateGHA)
 	}
-	if v := getenv("MAGUS_GRAPH_DIRECTION"); v != "" {
-		cfg.Graph.Direction = v
-	}
-	if v := getenv("MAGUS_GRAPH_SPELL"); v != "" {
-		cfg.Graph.Spell = v
-	}
-	if v := getenv("MAGUS_GRAPH_DEPTH"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.Graph.Depth = n
-		}
-	}
-	if v := getenv("MAGUS_GRAPH_ROOTS"); v != "" {
-		cfg.Graph.Roots = v
-	}
 	if v := getenv("MAGUS_TELEMETRY_ENABLED"); v != "" {
 		cfg.Telemetry.Enabled = parseBoolEnv(v, cfg.Telemetry.Enabled)
 	}
@@ -126,9 +112,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Daemon.IdleTTL = d
 		}
-	}
-	if v := getenv("MAGUS_DAEMON_SOCKET"); v != "" {
-		cfg.Daemon.Socket = v
 	}
 	if v := getenv("MAGUS_DAEMON_WORKSPACES"); v != "" {
 		parts := strings.Split(v, ",")
@@ -180,9 +163,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_CONSOLE_ENABLED"); v != "" {
 		b := parseBoolEnv(v, cfg.Console.Enabled != nil && *cfg.Console.Enabled)
 		cfg.Console.Enabled = &b
-	}
-	if v := getenv("MAGUS_CONSOLE_URL"); v != "" {
-		cfg.Console.URL = v
 	}
 	if v := getenv("MAGUS_REPORT_FILTER"); v != "" {
 		parts := strings.Split(v, ",")

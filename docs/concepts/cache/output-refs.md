@@ -57,7 +57,7 @@ refactor` always searches the graph.
   status, duration) plus the output as one record; `-o yaml` too.
 - `magus query output out1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
 - `magus query output out1a2b3c --attempts` - list the ref's stored executions.
-- `magus query output out1a2b3c --meta` - the run's identity: descriptor, lineage,
+- `magus query output out1a2b3c --identity` - the run's identity: descriptor, lineage,
   cache key, per-class key digests, and the VCS revision its inputs were read at.
 
 Refs prefix-match like a git short hash: type as few characters as are unique, and
@@ -95,7 +95,7 @@ name the input. Each run stores the deterministic label:value lines its key was
 hashed from (secret-redacted), so:
 
 ```sh
-magus query output out4ef30de6abcd --meta
+magus query output out4ef30de6abcd --identity
 ```
 
 shows one digest per component class (`src`, `env`, `tool`, `charm`, `dep`, ...) -
@@ -154,13 +154,14 @@ account for most of the questions people ask.
   (`internal/cache/hash.go`), never the machine-specific one. Your checkout and
   CI's disagree on everything above the workspace root and agree below it, which is
   what carries a ref across machines.
-- **No machine identity, beyond platform.** Hostname, user, and runner id are not
-  inputs, and a tool's _version_ is, through the `tool:` lines. But the host **OS and
-  architecture are** hashed by default (`cache.include.os` / `cache.include.arch`), so
-  two refs from different platforms differ even when everything else matches. Comparing a
-  laptop's ref against a Linux runner's with `--against` will report a difference that is
-  the platform, not the change you are chasing; turn the two switches off for that
-  comparison, or compare like with like.
+- **No machine identity.** Hostname, user, and runner id are not
+  inputs, and a tool's _version_ is, through the `tool:` lines. The host OS and
+  architecture are not hashed either, by default, so a laptop's ref and a Linux
+  runner's are directly comparable with `--against`. Replay correctness does not
+  rest on those lines: the cache manifest records the platform a result ran on
+  and refuses a cross-platform hit regardless. Turning on `cache.include.os` /
+  `cache.include.arch` keys entries per platform and makes refs machine-local;
+  compare like with like after that.
 
 `Step.Label` is also excluded, so renaming what a log line calls a project (root
 prints as `magus`, not `.`) cannot change a ref.
@@ -210,7 +211,7 @@ them with no class prefix. Class digests cut at the first colon, so those three
 surface as classes named `Scanner`, `DB`, and `DB updated`:
 
 ```text
-$ magus query output out0931f826468f --meta
+$ magus query output out0931f826468f --identity
 ...
   tool             8944986013e2  3 lines
   Scanner          aed443a297a2  1 line
@@ -342,7 +343,7 @@ equivalent).
 
 ## For agents and MCP
 
-The [MCP](../../guides/mcp.md) `magus_output` tool is the agent analog of `magus query output`:
+The [MCP](../../guides/integrations/mcp.md) `magus_output` tool is the agent analog of `magus query output`:
 pass a `ref` (`out1a2b3c`, or a unique prefix) and it returns that execution's exact
 bytes plus its descriptor. An agent that saw a ref in a run fetches the full output
 directly, instead of re-reading a wall of text or asking you to paste it. It is a

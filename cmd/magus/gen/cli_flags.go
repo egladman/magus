@@ -177,6 +177,8 @@ const (
 	FlagExplainGlobal = "global"
 	// explain: --refresh
 	FlagExplainRefresh = "refresh"
+	// graph build: --no-symbols
+	FlagGraphBuildNoSymbols = "no-symbols"
 	// graph deps: --depth
 	FlagGraphDepsDepth = "depth"
 	// graph deps: --spell
@@ -185,6 +187,12 @@ const (
 	FlagGraphDepsTarget = "target"
 	// graph deps: --upstream
 	FlagGraphDepsUpstream = "upstream"
+	// graph diff: --global
+	FlagGraphDiffGlobal = "global"
+	// graph diff: --refresh
+	FlagGraphDiffRefresh = "refresh"
+	// graph diff: --rev
+	FlagGraphDiffRev = "rev"
 	// graph export: --budget
 	FlagGraphExportBudget = "budget"
 	// graph export: --follow
@@ -227,6 +235,10 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
+	// man install: --dir
+	FlagManInstallDir = "dir"
+	// man install: --dry-run
+	FlagManInstallDryRun = "dry-run"
 	// memory put: --body
 	FlagMemoryPutBody = "body"
 	// memory put: --ref
@@ -237,6 +249,18 @@ const (
 	FlagMemoryPutStatus = "status"
 	// memory put: --type
 	FlagMemoryPutType = "type"
+	// notes capture: --name
+	FlagNotesCaptureName = "name"
+	// notes capture: --private
+	FlagNotesCapturePrivate = "private"
+	// notes capture: --shared
+	FlagNotesCaptureShared = "shared"
+	// notes capture: --tag
+	FlagNotesCaptureTag = "tag"
+	// notes capture: --title
+	FlagNotesCaptureTitle = "title"
+	// notes promote: --name
+	FlagNotesPromoteName = "name"
 	// path: --global
 	FlagPathGlobal = "global"
 	// path: --refresh
@@ -247,10 +271,10 @@ const (
 	FlagQueryBudget = "budget"
 	// query: --global
 	FlagQueryGlobal = "global"
+	// query: --identity
+	FlagQueryIdentity = "identity"
 	// query: --kind
 	FlagQueryKind = "kind"
-	// query: --meta
-	FlagQueryMeta = "meta"
 	// query: --open
 	FlagQueryOpen = "open"
 	// query: --print
@@ -315,6 +339,8 @@ const (
 	FlagSelfUpdateY = "y"
 	// self update: --yes
 	FlagSelfUpdateYes = "yes"
+	// server reload: --socket
+	FlagServerReloadSocket = "socket"
 	// server start: --foreground
 	FlagServerStartForeground = "foreground"
 	// server stop: --services
@@ -325,10 +351,10 @@ const (
 	FlagSessionDisposeReason = "reason"
 	// session hook: --agent-name
 	FlagSessionHookAgentName = "agent-name"
-	// session hook: --delegation
-	FlagSessionHookDelegation = "delegation"
 	// session hook: --event
 	FlagSessionHookEvent = "event"
+	// session hook: --lease
+	FlagSessionHookLease = "lease"
 	// session hook: --observe
 	FlagSessionHookObserve = "observe"
 	// session hook: --path
@@ -377,6 +403,18 @@ const (
 	FlagWatchInitial = "initial"
 	// watch: --null
 	FlagWatchNull = "null"
+	// where: --A
+	FlagWhereA = "A"
+	// where: --all
+	FlagWhereAll = "all"
+	// where: --filter
+	FlagWhereFilter = "filter"
+	// where: --glob
+	FlagWhereGlob = "glob"
+	// where: --literal
+	FlagWhereLiteral = "literal"
+	// where: --regex
+	FlagWhereRegex = "regex"
 )
 
 // DescribeTargetFlags are the flags declared for `magus describe target`.
@@ -460,6 +498,27 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.StringVar(&f.Shard, FlagRunShard, "", "This run's shard index within a CI matrix; paired with --n-shards")
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Total shard count for this CI matrix run; paired with --shard")
 	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
+	return &f
+}
+
+// WhereFlags are the flags declared for `magus where`.
+type WhereFlags struct {
+	All     bool   // --all, -A
+	Filter  string // --filter
+	Glob    string // --glob
+	Regex   string // --regex
+	Literal string // --literal
+}
+
+// BindWhere registers `magus where`'s flags on fs and returns the destination.
+func BindWhere(fs *flag.FlagSet) *WhereFlags {
+	var f WhereFlags
+	fs.BoolVar(&f.All, FlagWhereAll, false, "Print all matching paths to stdout; do not error on ambiguity")
+	fs.BoolVar(&f.All, FlagWhereA, false, "Short for --all")
+	fs.StringVar(&f.Filter, FlagWhereFilter, "", "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>")
+	fs.StringVar(&f.Glob, FlagWhereGlob, "", "Restrict file search to paths matching a doublestar glob (shorthand for --filter type=glob,...)")
+	fs.StringVar(&f.Regex, FlagWhereRegex, "", "Restrict file search to paths matching a Go regexp (shorthand for --filter type=regex,...)")
+	fs.StringVar(&f.Literal, FlagWhereLiteral, "", "Restrict file search to paths containing this exact segment (shorthand for --filter type=literal,...)")
 	return &f
 }
 
@@ -563,6 +622,18 @@ func BindAffectedBisect(fs *flag.FlagSet) *AffectedBisectFlags {
 	return &f
 }
 
+// GraphBuildFlags are the flags declared for `magus graph build`.
+type GraphBuildFlags struct {
+	NoSymbols bool // --no-symbols
+}
+
+// BindGraphBuild registers `magus graph build`'s flags on fs and returns the destination.
+func BindGraphBuild(fs *flag.FlagSet) *GraphBuildFlags {
+	var f GraphBuildFlags
+	fs.BoolVar(&f.NoSymbols, FlagGraphBuildNoSymbols, false, "Rebuild the domain graph only; do not reindex code symbols")
+	return &f
+}
+
 // GraphDepsFlags are the flags declared for `magus graph deps`.
 type GraphDepsFlags struct {
 	Upstream bool   // --upstream
@@ -640,13 +711,29 @@ func BindGraphStats(fs *flag.FlagSet) *GraphStatsFlags {
 	return &f
 }
 
+// GraphDiffFlags are the flags declared for `magus graph diff`.
+type GraphDiffFlags struct {
+	Refresh bool   // --refresh
+	Global  bool   // --global
+	Rev     string // --rev
+}
+
+// BindGraphDiff registers `magus graph diff`'s flags on fs and returns the destination.
+func BindGraphDiff(fs *flag.FlagSet) *GraphDiffFlags {
+	var f GraphDiffFlags
+	fs.BoolVar(&f.Refresh, FlagGraphDiffRefresh, false, "Force a full graph rebuild of the current graph before diffing")
+	fs.BoolVar(&f.Global, FlagGraphDiffGlobal, false, "Diff the global (all-workspaces) graph; match this to how the baseline was exported")
+	fs.StringVar(&f.Rev, FlagGraphDiffRev, "", "Diff against a git revision (e.g. HEAD~1, main) instead of an export file")
+	return &f
+}
+
 // QueryFlags are the flags declared for `magus query`.
 type QueryFlags struct {
 	Budget   int    // --budget
 	Kind     string // --kind
 	Refresh  bool   // --refresh
 	Global   bool   // --global
-	Meta     bool   // --meta
+	Identity bool   // --identity
 	Attempts bool   // --attempts
 	Publish  bool   // --publish
 	Open     bool   // --open
@@ -668,8 +755,8 @@ func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
 	fs.StringVar(&f.Kind, FlagQueryKind, "", "Restrict matches to these node kinds (comma-separated)")
 	fs.BoolVar(&f.Refresh, FlagQueryRefresh, false, "Force a full graph rebuild before querying")
 	fs.BoolVar(&f.Global, FlagQueryGlobal, false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
-	fs.BoolVar(&f.Meta, FlagQueryMeta, false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
-	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored executions (newest first)")
+	fs.BoolVar(&f.Identity, FlagQueryIdentity, false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
+	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored attempts (newest first)")
 	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
 	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
 	fs.BoolVar(&f.Print, FlagQueryPrint, false, "With --open, print the viewer URL instead of launching a browser")
@@ -734,7 +821,7 @@ func BindWatch(fs *flag.FlagSet) *WatchFlags {
 	fs.DurationVar(&f.Debounce, FlagWatchDebounce, time.Duration(200000000), "Quiet window before emitting a batch")
 	fs.BoolVar(&f.Initial, FlagWatchInitial, true, "Emit an --all batch on startup before watching")
 	fs.BoolVar(&f.Null, FlagWatchNull, false, "NUL-separate paths; double-NUL between batches")
-	fs.StringVar(&f.Backend, FlagWatchBackend, "fsnotify", "Notification backend: fsnotify or poll")
+	fs.StringVar(&f.Backend, FlagWatchBackend, "fsnotify", "Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)")
 	return &f
 }
 
@@ -992,7 +1079,7 @@ func BindSessionDispose(fs *flag.FlagSet) *SessionDisposeFlags {
 type SessionHookFlags struct {
 	Path       bool   // --path
 	Observe    bool   // --observe
-	Delegation string // --delegation
+	Lease      string // --lease
 	AgentName  string // --agent-name
 	Session    string // --session
 	Transcript string // --transcript
@@ -1004,7 +1091,7 @@ func BindSessionHook(fs *flag.FlagSet) *SessionHookFlags {
 	var f SessionHookFlags
 	fs.BoolVar(&f.Path, FlagSessionHookPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
 	fs.BoolVar(&f.Observe, FlagSessionHookObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
-	fs.StringVar(&f.Delegation, FlagSessionHookDelegation, "", "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)")
+	fs.StringVar(&f.Lease, FlagSessionHookLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)")
 	fs.StringVar(&f.AgentName, FlagSessionHookAgentName, "", "Name of the agent host this invocation came from (attribution only)")
 	fs.StringVar(&f.Session, FlagSessionHookSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Transcript, FlagSessionHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
@@ -1039,6 +1126,36 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, or plan")
 	fs.StringVar(&f.Status, FlagMemoryPutStatus, "", "Lifecycle label, e.g. accepted, active, done, stale")
 	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision and plan only")
+	return &f
+}
+
+// NotesCaptureFlags are the flags declared for `magus notes capture`.
+type NotesCaptureFlags struct {
+	Title   string // --title
+	Name    string // --name
+	Shared  bool   // --shared
+	Private bool   // --private
+}
+
+// BindNotesCapture registers `magus notes capture`'s flags on fs and returns the destination.
+func BindNotesCapture(fs *flag.FlagSet) *NotesCaptureFlags {
+	var f NotesCaptureFlags
+	fs.StringVar(&f.Title, FlagNotesCaptureTitle, "", "Title for the note (defaults to naming the reviewed base)")
+	fs.StringVar(&f.Name, FlagNotesCaptureName, "", "Note name (defaults to review-<patch digest>)")
+	fs.BoolVar(&f.Shared, FlagNotesCaptureShared, false, "Only notes committed to this repository (your team has these)")
+	fs.BoolVar(&f.Private, FlagNotesCapturePrivate, false, "Only your own notes (default for capture)")
+	return &f
+}
+
+// NotesPromoteFlags are the flags declared for `magus notes promote`.
+type NotesPromoteFlags struct {
+	Name string // --name
+}
+
+// BindNotesPromote registers `magus notes promote`'s flags on fs and returns the destination.
+func BindNotesPromote(fs *flag.FlagSet) *NotesPromoteFlags {
+	var f NotesPromoteFlags
+	fs.StringVar(&f.Name, FlagNotesPromoteName, "", "Note name (defaults to the record's name)")
 	return &f
 }
 
@@ -1096,6 +1213,18 @@ func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	return &f
 }
 
+// ServerReloadFlags are the flags declared for `magus server reload`.
+type ServerReloadFlags struct {
+	Socket string // --socket
+}
+
+// BindServerReload registers `magus server reload`'s flags on fs and returns the destination.
+func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
+	var f ServerReloadFlags
+	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
+	return &f
+}
+
 // BuzzFlags are the flags declared for `magus buzz`.
 type BuzzFlags struct {
 	E          string // -e
@@ -1114,6 +1243,20 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
 	fs.StringVar(&f.C, FlagBuzzC, "", "Working directory for the REPL's import resolution (default: cwd)")
+	return &f
+}
+
+// ManInstallFlags are the flags declared for `magus man install`.
+type ManInstallFlags struct {
+	Dir    string // --dir
+	DryRun bool   // --dry-run
+}
+
+// BindManInstall registers `magus man install`'s flags on fs and returns the destination.
+func BindManInstall(fs *flag.FlagSet) *ManInstallFlags {
+	var f ManInstallFlags
+	fs.StringVar(&f.Dir, FlagManInstallDir, "", "Directory for section 1 man pages (default: the user manpath)")
+	fs.BoolVar(&f.DryRun, FlagManInstallDryRun, false, "Print what would be written without touching the filesystem")
 	return &f
 }
 

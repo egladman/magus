@@ -40,6 +40,27 @@ func emitFormatted(opts OutputOptions, v any) error {
 	return writeFormatted(w, opts, v)
 }
 
+// emitNames writes the `-o name` form: one bare token per line, to the structured-output
+// destination (stdout, mirrored to --tee).
+//
+// writeFormatted does not implement outputName and cannot: which field IS the identity of
+// a record is the command's to say, not the renderer's. So a command that offers -o name
+// renders it through here. Without an arm, -o name reached writeFormatted's default case
+// and died with "unsupported format", which reads as a broken flag rather than a gap.
+func emitNames(names []string) error {
+	w, cleanup, err := outputDst()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = cleanup() }()
+	for _, n := range names {
+		if _, err := fmt.Fprintln(w, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func writeJSON(w io.Writer, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -61,36 +82,86 @@ func writeYAML(w io.Writer, v any) error {
 	return enc.Close()
 }
 
-// writeJSONL writes each element of the single slice field of v as a JSON line; falls back to one line.
+// jsonlPrimaryTag is the struct tag naming the collection -o jsonl streams:
+// `jsonl:"primary"` on exactly one slice field of an output type.
+const jsonlPrimaryTag = "jsonl"
+
+// writeJSONL streams v's primary collection as one JSON value per line.
+//
+// Which collection that is must be DECLARED (`jsonl:"primary"`) once a type carries more
+// than one. The rule used to be "the only slice field", which silently degraded to
+// printing the whole object as a single line the day a type grew a second list - so
+// -o jsonl became -o json, at exit 0, for the consumer least able to notice. An
+// undeclared ambiguity is an error naming the candidates instead.
 func writeJSONL(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Pointer {
+	for rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
 	}
-	if rv.Kind() == reflect.Struct {
-		rt := rv.Type()
-		sliceIdx := -1
-		for i := range rt.NumField() {
-			if rt.Field(i).Type.Kind() == reflect.Slice {
-				if sliceIdx >= 0 {
-					sliceIdx = -1 // more than one slice field — fall back
-					break
-				}
-				sliceIdx = i
-			}
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		return encodeEach(enc, rv)
+	case reflect.Struct:
+		idx, err := jsonlPrimaryField(rv.Type())
+		if err != nil {
+			return err
 		}
-		if sliceIdx >= 0 {
-			sliceVal := rv.Field(sliceIdx)
-			for i := range sliceVal.Len() {
-				if err := enc.Encode(sliceVal.Index(i).Interface()); err != nil {
-					return err
-				}
-			}
-			return nil
+		if idx >= 0 {
+			return encodeEach(enc, rv.Field(idx))
 		}
 	}
 	return enc.Encode(v)
+}
+
+// jsonlPrimaryField returns the index of rt's streamable collection, or -1 when rt has
+// none. It errors when the choice is ambiguous: more than one field marked primary, or
+// several collections with none marked.
+func jsonlPrimaryField(rt reflect.Type) (int, error) {
+	tagged := -1
+	var candidates []int
+	for i := range rt.NumField() {
+		f := rt.Field(i)
+		if !f.IsExported() || jsonFieldKey(f) == "" {
+			continue
+		}
+		if f.Type.Kind() != reflect.Slice && f.Type.Kind() != reflect.Array {
+			continue
+		}
+		if f.Tag.Get(jsonlPrimaryTag) == "primary" {
+			if tagged >= 0 {
+				return -1, fmt.Errorf("-o jsonl: %s marks both %q and %q as jsonl:\"primary\"; exactly one collection streams",
+					typeLabel(rt), jsonFieldKey(rt.Field(tagged)), jsonFieldKey(f))
+			}
+			tagged = i
+		}
+		candidates = append(candidates, i)
+	}
+	if tagged >= 0 {
+		return tagged, nil
+	}
+	switch len(candidates) {
+	case 0:
+		return -1, nil
+	case 1:
+		return candidates[0], nil
+	}
+	names := make([]string, len(candidates))
+	for i, idx := range candidates {
+		names[i] = jsonFieldKey(rt.Field(idx))
+	}
+	return -1, fmt.Errorf("-o jsonl: %s carries %d collections (%s) and none is marked jsonl:\"primary\", so there is no single stream to emit; use -o json for the whole record",
+		typeLabel(rt), len(names), strings.Join(names, ", "))
+}
+
+// encodeEach writes one JSON line per element of list.
+func encodeEach(enc json.Encoder, list reflect.Value) error {
+	for i := range list.Len() {
+		if err := enc.Encode(list.Index(i).Interface()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // writeFormatted dispatches v to json/yaml/jsonl/template based on opts.Format.
@@ -247,6 +318,13 @@ func templateJoin(list any, sep string) string {
 // cannot read Go doc comments, so this is field names + types only, no per-field docs.
 func writeTemplateFields(w io.Writer, v any) error {
 	rt := structType(reflect.TypeOf(v))
+	if rt == nil {
+		// A command whose whole output is a list (or a map of records) still has fields
+		// worth listing - the ELEMENT's, which are what a template body ranges over.
+		// Refusing there left `describe target -o template` with nothing to read the
+		// field names off, which is the one thing bare -o template exists for.
+		rt = structType(elemType(reflect.TypeOf(v)))
+	}
 	if rt == nil {
 		return fmt.Errorf("-o template: %T has no fields to list", v)
 	}

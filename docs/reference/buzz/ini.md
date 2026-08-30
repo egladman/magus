@@ -18,7 +18,7 @@ INI/properties config parsing and rendering (.npmrc, .gitconfig, .editorconfig).
 
 Parse INI text into {section: {key: value}}. Entries before the first [section] header are under the "" key, which is where a flat file like .npmrc puts everything. Values are always strings; a repeated key takes the last value.
 
-**Signature:** `ini\parse(source) → map[string]map[string]string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/ini/ini.go#L74)
+**Signature:** `ini\parse(source) -> map[string]map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/ini/ini.go#L74)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -30,7 +30,7 @@ Parse INI text into {section: {key: value}}. Entries before the first [section] 
 
 Render {section: {key: value}} back to INI text. The "" section is written first with no header, then the rest sorted by name with their keys sorted, so the output is byte-stable and diffs cleanly.
 
-**Signature:** `ini\stringify(sections) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/ini/ini.go#L124)
+**Signature:** `ini\stringify(sections) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/ini/ini.go#L124)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

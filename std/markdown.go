@@ -31,7 +31,7 @@ var Markdown = Module{
 	Methods: []Method{
 		{
 			Name:    "to_html",
-			Doc:     "Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a \"---\" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md → index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).",
+			Doc:     "Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a \"---\" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md -> index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).",
 			Args:    []Arg{{Name: "source", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    MarkdownToHTML,

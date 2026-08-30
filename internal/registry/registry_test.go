@@ -59,7 +59,7 @@ func signedRegistry(t *testing.T, priv ed25519.PrivateKey, reg Registry) *httpte
 
 func fresh() Registry {
 	return Registry{
-		SchemaVersion: SchemaVersion,
+		SchemaVersion: schemaVersion,
 		GeneratedAt:   time.Now().Add(-time.Hour),
 		EOL: map[string]Product{
 			"nodejs": {Label: "Node.js", Cycles: []Cycle{{Cycle: "24", EOL: "2028-04-30", LTS: true}}},
@@ -206,8 +206,8 @@ func TestBuiltinSourceShipsByDefault(t *testing.T) {
 	sources, err := LoadSources()
 	require.NoError(t, err)
 	require.Len(t, sources, 1)
-	assert.Equal(t, BuiltinSourceName, sources[0].Name)
-	assert.Equal(t, DefaultRegistryURL, sources[0].URL)
+	assert.Equal(t, builtinSourceName, sources[0].Name)
+	assert.Equal(t, defaultRegistryURL, sources[0].URL)
 	assert.True(t, sources[0].Builtin)
 	assert.Empty(t, sources[0].PubKey, "the built-in source verifies against the pinned ring")
 
@@ -222,7 +222,7 @@ func TestBuiltinSourceShipsByDefault(t *testing.T) {
 // give two caches of one fact.
 func TestBuiltinSourceIsReplacedNotDuplicated(t *testing.T) {
 	cfg, _ := isolate(t)
-	writeSource(t, cfg, BuiltinSourceName, "https://mirror.invalid/index.json", "")
+	writeSource(t, cfg, builtinSourceName, "https://mirror.invalid/index.json", "")
 
 	sources, err := LoadSources()
 	require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestBuiltinSourceMirrorNeedsNoKeyOfItsOwn(t *testing.T) {
 	cfg, _ := isolate(t)
 	dir := filepath.Join(cfg, "magus", "registry.d")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, BuiltinSourceName+".yaml"),
+	require.NoError(t, os.WriteFile(filepath.Join(dir, builtinSourceName+".yaml"),
 		[]byte("url: https://mirror.invalid/index.json\n"), 0o600))
 
 	sources, err := LoadSources()
@@ -251,7 +251,7 @@ func TestBuiltinSourceCanBeDeclined(t *testing.T) {
 	cfg, _ := isolate(t)
 	dir := filepath.Join(cfg, "magus", "registry.d")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, BuiltinSourceName+".yaml"),
+	require.NoError(t, os.WriteFile(filepath.Join(dir, builtinSourceName+".yaml"),
 		[]byte("url: https://unused.invalid/i.json\nenabled: false\n"), 0o600))
 
 	sources, err := LoadSources()
@@ -263,7 +263,7 @@ func TestBuiltinSourceCanBeDeclined(t *testing.T) {
 // registry keypair does not exist yet, so the ring is empty and a refresh must say
 // exactly that rather than fetch something it cannot check.
 func TestBuiltinSourceRefusesWithoutAPinnedKey(t *testing.T) {
-	if len(PinnedKeys) > 0 {
+	if len(pinnedKeys) > 0 {
 		t.Skip("a registry key is pinned now; this covers the window before that")
 	}
 	isolate(t)

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func applyMerge(t *testing.T, params map[string]any, base types.Delegation) types.Delegation {
+func applyMerge(t *testing.T, params map[string]any, base types.Lease) types.Lease {
 	t.Helper()
 	apply, err := Merge(params)
 	require.NoError(t, err)
@@ -19,7 +19,7 @@ func applyMerge(t *testing.T, params map[string]any, base types.Delegation) type
 func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	t.Parallel()
 
-	base := types.Delegation{ID: "u1", Goal: "original goal", Tier: "standard"}
+	base := types.Lease{ID: "u1", Goal: "original goal", Tier: "standard"}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
 	assert.Equal(t, types.StateRunning, got.State)
 	assert.Equal(t, "original goal", got.Goal, "an absent key must not erase what an earlier put set")
@@ -29,7 +29,7 @@ func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 	t.Parallel()
 
-	base := types.Delegation{ID: "u1", Goal: "original goal"}
+	base := types.Lease{ID: "u1", Goal: "original goal"}
 	got := applyMerge(t, map[string]any{"goal": ""}, base)
 	assert.Empty(t, got.Goal, "goal present with an empty value clears it, unlike an absent key")
 }
@@ -37,10 +37,10 @@ func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 func TestMergeListAcceptsBothWireForms(t *testing.T) {
 	t.Parallel()
 
-	spaceForm := applyMerge(t, map[string]any{"owned_paths": "a/b c/d"}, types.Delegation{})
+	spaceForm := applyMerge(t, map[string]any{"owned_paths": "a/b c/d"}, types.Lease{})
 	assert.Equal(t, []string{"a/b", "c/d"}, spaceForm.OwnedPaths)
 
-	arrayForm := applyMerge(t, map[string]any{"owned_paths": []any{"a/b", "c/d"}}, types.Delegation{})
+	arrayForm := applyMerge(t, map[string]any{"owned_paths": []any{"a/b", "c/d"}}, types.Lease{})
 	assert.Equal(t, []string{"a/b", "c/d"}, arrayForm.OwnedPaths)
 }
 

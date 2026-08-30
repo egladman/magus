@@ -63,7 +63,7 @@ export interface ActivityRow {
   atMs: number;
   // "" while the answer is not known yet (everything RUNNING), "pass"/"fail" once it is.
   outcome: "" | "pass" | "fail";
-  // The delegation unit this row belongs to. The ledger and its join exist
+  // The lease this row belongs to; the wire spelling stays "unit". The ledger and its join exist
   // (plan/ledger.ts joinRuns); what is still missing is a producer that stamps
   // the field - no run or trail event records its unit yet.
   unit?: string;
@@ -423,7 +423,7 @@ function buildSection(heading: string, initialEmpty: string): Section {
 }
 
 // rowEl renders one row: the command in mono, its meta after, and - once a
-// producer stamps it - the delegation unit it belongs to.
+// producer stamps it - the lease it belongs to.
 function rowEl(row: ActivityRow): HTMLElement {
   const li = document.createElement("li");
   li.className = "console-shell-activity__row";

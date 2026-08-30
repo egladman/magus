@@ -192,8 +192,13 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
    opts out (it is console-app but not console-fill) because its connect screen is meant to scroll. */
 body[data-console-fill] {
   /* An explicit themed page background so the app never relies on the browser's default canvas (which
-     follows the OS, so a "light" choice on a dark OS showed through as a dark page). */
-  background: var(--pf-t--global--background--color--secondary--default);
+     follows the OS, so a "light" choice on a dark OS showed through as a dark page).
+     The CHROME tone, not the raw secondary token: the only place this ground shows is where a child
+     steps back from its cell - the frame's curved bottom-left corner - and what that curve reveals
+     must read as the chrome the pane lifts off. In dark the raw secondary is a plane BELOW the
+     chrome, which is what drew the curve's cutout as a dark notch and got the corner exiled to the
+     status bar. */
+  background: var(--console-chrome, var(--pf-t--global--background--color--secondary--default));
   /* The whole viewport, in a grid: the navigation rail takes the leading column across EVERY row, so
      it runs unbroken from the top of the window to the bottom, and the title bar, the content and the
      status bar all stack in the trailing column beside it. The macOS rule is that a single leading
@@ -995,10 +1000,35 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* One border and one corner for the whole surface, on the frame. Both mark the boundary with the
      RAIL, so both are gated on the rail existing: below this width it is hidden, the frame's left
      edge IS the window's, and an unconditional border ran down the outermost pixel of a phone with
-     nothing on the far side of it while the corner bit a notch out of the content. */
+     nothing on the far side of it while the corner bit a notch out of the content.
+     The frame ONLY - the footer used to carry the same border to continue the line past the status
+     bar, but the curve pulls the frame's edge rightward at the bottom, so the footer's straight
+     continuation no longer met it and read as a stray vertical stub beside the bar's first item.
+     Rail and footer are one continuous chrome sharing a tone; that seam draws nothing. */
   #console-frame {
     border-left: 1px solid var(--pf-t--global--border--color--default);
+  }
+  /* The curve belongs to the PANE, not the status bar: the design is the content stepping forward
+     out of square chrome, so the content's own corner is the one that rounds. It briefly moved to
+     the footer because the cutout exposed the page ground as a dark notch - but that was the
+     ground's defect, fixed above by painting the body in the chrome tone the curve reveals. The
+     frame's existing overflow:hidden clips the surface inside the curve. */
+  #console-frame {
     border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
+  }
+}
+/* Phone: the elevation between the content and the status bar INVERTS. On a desktop the pane is a
+   card lifted off the chrome, so it casts down onto the bar. On a phone the pane is the page itself -
+   edge to edge, no rail, no gutter - and the bar is a fixed strip the content scrolls beneath, the
+   same relation the title bar has at the top. Scrolled to the bottom, the desktop cast read as the
+   bar sliding UNDER the page. So below the rail's breakpoint the frame stops casting (the left lobe
+   also has no rail to land on down here) and the bar casts up instead, painting above the frame the
+   way the frame paints above it on desktop. */
+@media (max-width: 47.999rem) {
+  #console-frame { box-shadow: none; }
+  body[data-console-fill] > footer {
+    box-shadow: var(--pf-t--global--box-shadow--sm--top);
+    z-index: 22;
   }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
@@ -1418,7 +1448,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-scope-btn {
   display: flex; align-items: center; gap: 0.3rem;
   inline-size: auto; padding-inline: 0.5rem;
-  font-size: 0.78rem; color: var(--pf-t--global--text--color--regular);
+  /* The compact tier, which is what the Reference and Notifications buttons beside it already
+     measure. This one carried its own 26px and 12.5px, so the title bar had two control sizes on
+     one row. */
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
+  font-size: var(--console-control-font-size);
+  color: var(--pf-t--global--text--color--regular);
   border: 0; border-radius: 0;
   white-space: nowrap;
 }
@@ -1509,7 +1545,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-scope__tag {
   margin-inline-start: 0.5rem;
   padding: 0.05rem 0.35rem; border-radius: 999px;
-  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  font-size: var(--console-chip-size); font-weight: var(--console-chip-weight);
+  letter-spacing: var(--console-chip-tracking); text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
   background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
@@ -1596,7 +1633,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* App-drawer section label: the "Menu" group heading above the app entries - smaller, uppercase, muted,
    and non-interactive-looking, so it reads as a divider label rather than a menu row. */
 .console-appmenu__group-title {
-  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking); text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -2087,7 +2125,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 .console-cheatsheet-box__empty { margin: 0; color: var(--pf-t--global--text--color--subtle); }
 .console-cheatsheet-group__title {
-  margin: 0 0 0.4rem; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em;
+  margin: 0 0 0.4rem;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
   text-transform: uppercase; color: var(--pf-t--global--text--color--subtle);
 }
 .console-cheatsheet-group__list {
@@ -2114,7 +2154,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    and clips (#console-outlet-content > div), so this just owns its own padding and scroll. */
 #console-outlet [data-surface="actions"] {
   height: 100%; overflow-y: auto; display: flex; flex-direction: column;
-  gap: 1.25rem; padding: 1.5rem 1.5rem 2.5rem;
+  gap: 1.25rem; padding-block: 1.5rem 2.5rem; padding-inline: var(--console-pad);
 }
 /* The banner: a bordered callout leading the surface, replacing the old read-only lede now that a row
    both runs and (for a rebindable command) edits. The Edit-keybindings button sits at the trailing edge

@@ -236,10 +236,10 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	// role filters on the doc-classification attr (readme/agent/changelog/...), so
 	// `kind:doc role:agent` finds the agent-instruction files. A node without the attr
 	// never matches a positive role constraint.
-	if vals, ok := q.fields["role"]; ok && !slices.Contains(vals, n.Attrs[AttrRole]) {
+	if vals, ok := q.fields["role"]; ok && !slices.Contains(vals, n.Attrs[attrRole]) {
 		return 0, false
 	}
-	if vals := q.negFields["role"]; slices.Contains(vals, n.Attrs[AttrRole]) {
+	if vals := q.negFields["role"]; slices.Contains(vals, n.Attrs[attrRole]) {
 		return 0, false
 	}
 

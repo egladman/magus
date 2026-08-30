@@ -436,7 +436,7 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 		}
 	}
 	// A Namespace member's Args/Returns reference objects the same way a top-level
-	// method's do (magus\ledger.list returns DelegationReport), so it needs the same
+	// method's do (magus\ledger.list returns LeaseReport), so it needs the same
 	// declare-before-use walk - otherwise the object never gets emitted and the
 	// namespace's extern signature points at an undeclared type.
 	for _, ns := range mod.Namespaces {

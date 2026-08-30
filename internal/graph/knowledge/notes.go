@@ -7,7 +7,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// SharedNotesShardName is the singleton shard holding human-authored note nodes and the
+// sharedNotesShardName is the singleton shard holding human-authored note nodes and the
 // annotates edges tying each to what it is about.
 //
 // Unlike @memory and @runtime this shard is WORKSPACE-DERIVED, and the difference is the
@@ -16,9 +16,9 @@ import (
 // other extracted shard. There is deliberately no local-shard exclusion here: the hazard
 // that justifies one for @memory - leaking a developer's private journal into a shared
 // cache - cannot arise for content that is already in the repository.
-const SharedNotesShardName = "@notes/shared"
+const sharedNotesShardName = "@notes/shared"
 
-// PrivateNotesShardName holds the reader's OWN notes, which may live anywhere on disk.
+// privateNotesShardName holds the reader's OWN notes, which may live anywhere on disk.
 //
 // It is a separate shard from @notes for one non-negotiable reason: it is never exported
 // to the remote cache. @notes is safe to share because its content is already committed to
@@ -26,19 +26,19 @@ const SharedNotesShardName = "@notes/shared"
 // that shard would leak private content into a shared cache - the same hazard @memory's
 // exclusion exists to prevent, and the reason a looser knowledge.notes.path would have
 // been the wrong way to support this.
-const PrivateNotesShardName = "@notes/private"
+const privateNotesShardName = "@notes/private"
 
-// IsLocalShard reports whether a shard holds machine-local content that must never reach
+// isLocalShard reports whether a shard holds machine-local content that must never reach
 // the remote cache. Kept as one predicate so a new local shard is added in a single place
 // rather than at every push site.
-func IsLocalShard(name string) bool {
-	return IsRuntimeShard(name) || IsCoverageShard(name) || name == PrivateNotesShardName
+func isLocalShard(name string) bool {
+	return isRuntimeShard(name) || isCoverageShard(name) || name == privateNotesShardName
 }
 
-// AttrScope distinguishes a note the team committed from one only this machine has, so
+// attrScope distinguishes a note the team committed from one only this machine has, so
 // the difference is visible wherever a note surfaces rather than inferred from a shard
 // name a reader never sees.
-const AttrScope = "scope"
+const attrScope = "scope"
 
 // Derived from the store's own scopes rather than restated, so the shard names, node
 // IDs, and the config keys a diagnostic prints can never disagree about what a scope is
@@ -66,9 +66,9 @@ func assembleNotes(notes []types.KnowledgeNote, known map[string]bool, shard, sc
 			continue
 		}
 		id := noteID(scope, n.Name)
-		attrs := map[string]string{AttrScope: scope}
+		attrs := map[string]string{attrScope: scope}
 		if len(n.Tags) != 0 {
-			attrs[AttrTags] = strings.Join(n.Tags, ",")
+			attrs[attrTags] = strings.Join(n.Tags, ",")
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     id,

@@ -105,11 +105,14 @@
 }
 /* A quiet filter, not a headline search: the site search field's look (left
    magnifier, angular radius) but small and muted - the canvas is the main event. */
-.console-graph-sidebar__search { padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
+.console-graph-sidebar__search {
+  padding-block: 0.4rem; padding-inline: var(--console-pad);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
 #node-search {
-  margin: 0; width: 100%; height: auto;
-  font-size: 0.78rem; line-height: 1.4;
-  padding: 0.25rem 0.5rem 0.25rem 1.7rem;
+  margin: 0; width: 100%;
+  line-height: 1.4;
+  padding-inline: 1.7rem 0.5rem;
   border-radius: var(--pf-t--global--border--radius--small);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238891a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: 0.5rem center; background-size: 0.85rem 0.85rem;
@@ -125,7 +128,7 @@
 .console-graph-sidebar__count {
   width: 100%; margin: 0; text-align: left; cursor: pointer;
   display: flex; align-items: center; justify-content: flex-start; gap: 0.35rem;
-  padding: 0.4rem 0.6rem; font-size: 0.72rem; line-height: 1.3;
+  padding-block: 0.4rem; padding-inline: var(--console-pad); font-size: 0.72rem; line-height: 1.3;
   color: var(--pf-t--global--text--color--subtle);
   background: transparent; text-decoration: none;
   border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
@@ -145,7 +148,7 @@
 /* Node cloud: wrapping pills (the page-footer tag chip look), not one-per-row, so
    the cloud fills horizontal space and uses the sidebar (and mobile strip) well. */
 #node-list {
-  flex: 1 1 auto; overflow-y: auto; margin: 0; padding: 0.5rem;
+  flex: 1 1 auto; overflow-y: auto; margin: 0; padding-block: 0.5rem; padding-inline: var(--console-pad);
   display: flex; flex-wrap: wrap; gap: 0.3rem; align-content: flex-start;
   list-style: none;
 }
@@ -182,8 +185,14 @@
    lg, shared ../toolbar.ts); only its geometry changed. */
 .console-graph-stage__tools {
   flex: 0 0 auto; z-index: 3;
-  width: 100%; padding: 0.35rem 0.6rem;
-  background: var(--pf-t--global--background--color--secondary--default);
+  width: 100%;
+  /* The console's one gutter and chrome token. This is the surface's bar, playing the same role as
+     the Runs filter row and the log viewer's toolbar; the raw secondary token it painted itself with
+     is what --console-chrome names. The HEIGHT goes on the content section below, not here: this
+     element is the PF Toolbar's own ancestor, and making it a flex container takes the toolbar's
+     width away, which drops the trailing-edge alignment the action group's auto margin depends on. */
+  padding-block: 0; padding-inline: var(--console-pad);
+  background: var(--console-chrome);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-graph-stage__tools .pf-v6-c-toolbar__content { padding: 0; min-width: 0; }
@@ -193,13 +202,15 @@
    the DOM and to a hit test, invisible to a reader. PF's own toggle-group collapse is keyed to the
    VIEWPORT, which cannot see a narrow pane inside a wide window. */
 .console-graph-stage__tools .pf-v6-c-toolbar__content-section {
+  /* The bar's height as a FLOOR, the same one the log viewer's controls row takes. It has to be a
+     floor: the row below wraps in a narrow pane and must be free to grow. */
+  min-block-size: var(--console-surface-bar-h);
   column-gap: 0.4rem; row-gap: 0.3rem; align-items: center; flex-wrap: wrap; min-width: 0;
 }
 .console-graph-stage__tools .pf-m-toggle-group { flex-wrap: wrap; row-gap: 0.3rem; min-width: 0; }
 /* The actions sit at the trailing edge; the provenance badge keeps the leading edge, which is what
    a header bar is for - a reading on the left, what you can do on the right. */
 .console-graph-stage__tools .pf-m-toggle-group { margin-inline-start: auto; }
-.console-graph-stage__tools .pf-v6-c-button { font-size: 0.72rem; }
 .console-graph-stage__tools .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* The live/snapshot provenance badges are PF Labels; PF's .pf-v6-c-label sets `display`,
    which outspecifies the [hidden] attribute's UA `display:none`, so in demo/snapshot-less
@@ -230,7 +241,7 @@
 }
 .console-graph-legend__title {
   margin: 0; padding: 0 0.25rem 0.3rem;
-  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
@@ -385,15 +396,16 @@
 }
 /* Explain card: plain HTML dl content, and the part of the column that scrolls. */
 #explain-card {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0.8rem;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding-block: 0.8rem; padding-inline: var(--console-pad);
   font-size: 0.82rem;
 }
 #explain-card[hidden] { display: none; }
 /* Overline label so the card reads as a distinct "Node details" panel. */
-.console-graph-card__section { margin: 0 0 0.4rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-card__section { margin: 0 0 0.4rem; font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }
 .console-graph-card__head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
 .console-graph-card__head h2 { margin: 0; font-size: 1rem; font-family: var(--pf-t--global--font--family--mono); overflow-wrap: anywhere; }
-.console-graph-card__kindtag { margin-left: auto; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); text-transform: uppercase; letter-spacing: 0.04em; }
+.console-graph-card__kindtag { margin-left: auto; font-size: var(--console-label-size); font-weight: var(--console-label-weight); color: var(--pf-t--global--text--color--subtle); text-transform: uppercase; letter-spacing: var(--console-label-tracking); }
 #explain-card dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.7rem; }
 #explain-card dt { color: var(--pf-t--global--text--color--subtle); font-size: 0.72rem; padding-top: 0.15rem; }
 #explain-card dd { margin: 0; overflow-wrap: anywhere; }
@@ -505,8 +517,8 @@
 .console-graph-help { margin: 0.3rem 0 var(--pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
 .console-graph-help > summary:not([role]), .console-graph-views > summary:not([role]) {
   width: fit-content; cursor: pointer;
-  color: var(--pf-t--global--text--color--subtle); font-size: 0.8rem; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--pf-t--global--text--color--subtle); font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  text-transform: uppercase; letter-spacing: var(--console-label-tracking);
 }
 main .console-graph-help > summary:not([role]), main .console-graph-help[open] > summary:not([role]),
 main .console-graph-views > summary:not([role]), main .console-graph-views[open] > summary:not([role]) { color: var(--pf-t--global--text--color--subtle); }
@@ -676,7 +688,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   /* Match the other sidebar section labels (Graph, Display mode, Explore): uppercase, tracked, muted,
      so the search section reads as a peer, not a stray lowercase command echo. */
   margin: 0 0 0.35rem; padding: 0;
-  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-graph-querybar .pf-v6-c-form-control {
@@ -711,11 +723,12 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
    the graph you are viewing is more fundamental than how it is arranged. Same framed-row
    treatment (label over a bottom-divided row) as the sibling sidebar sections. */
 .console-graph-sidebar__source {
-  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  padding-block: 0.4rem; padding-inline: var(--console-pad);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-graph-sidebar__sourcelabel {
   margin: 0 0 0.35rem; padding: 0;
-  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -723,7 +736,8 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
    search bar and "Ask a question" - same framed-row treatment as the views block below (a label
    over a bottom-divided row) so the two controls read as siblings, not one nested in the other. */
 .console-graph-sidebar__modes {
-  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  padding-block: 0.4rem; padding-inline: var(--console-pad);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 /* Color and Graph side by side. Both are short toggle groups; stacked, they spent two rows of a
    20rem column on controls that together do not fill one, and the column is the scarce axis here
@@ -746,7 +760,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-display__sublabelrow { display: flex; align-items: baseline; gap: 0.35rem; }
 .console-graph-sidebar__modeslabel {
   margin: 0 0 0.35rem; padding: 0;
-  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 /* Compact the sidebar toggle groups (Graph switch + Display mode) down to the sidebar's quiet scale.
@@ -764,13 +778,14 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   padding-inline: 0.6rem;
 }
 .console-graph-sidebar__source .pf-v6-c-toggle-group__text,
-.console-graph-sidebar__modes .pf-v6-c-toggle-group__text { font-size: 0.78rem; line-height: 1.3; }
+.console-graph-sidebar__modes .pf-v6-c-toggle-group__text { line-height: 1.3; }
 
 /* Scope bar: what is currently applied, directly under the query field that is the commonest
    way to change it. Each pill is a button whose whole surface clears the one thing it names, so
    the trailing x is decoration rather than a second hit target. */
 .console-graph-scope {
-  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  padding-block: 0.4rem; padding-inline: var(--console-pad);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
   display: flex; flex-direction: column; gap: 0.3rem;
 }
 .console-graph-scope__pills { display: flex; flex-wrap: wrap; gap: 0.25rem; }
@@ -796,7 +811,8 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 /* Ask a question: the question-first view chips, surfaced directly in the sidebar. The chips
    reuse the sanctioned .console-graph-views__chip styling below; this only frames the group. */
 .console-graph-sidebar__views {
-  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  padding-block: 0.4rem; padding-inline: var(--console-pad);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-graph-sidebar__views .console-graph-views__body { gap: 0.3rem; }
 /* The second group's label needs air above it; the first is flush with the section padding. */
@@ -805,7 +821,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 }
 .console-graph-sidebar__viewslabel {
   margin: 0 0 0.35rem; padding: 0;
-  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -896,11 +912,13 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-qb__box { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .console-graph-qb__head {
   display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-  padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  min-block-size: var(--console-surface-head-h);
+  padding-block: 0; padding-inline: var(--console-pad);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-graph-qb__title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__title { font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }
 .console-graph-qb__close { margin: -0.3rem -0.3rem -0.3rem 0; }
-.console-graph-qb__body { display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0.8rem; }
+.console-graph-qb__body { display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-block: 0.8rem; padding-inline: var(--console-pad); }
 .console-graph-qb__pane[hidden] { display: none; }
 .console-graph-qb__count { margin: 0.4rem 0 0; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); }
 .console-graph-qb__count[hidden] { display: none; }
@@ -919,7 +937,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-qb__empty { margin: 0 0 0.6rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
 .console-graph-qb__add { margin-bottom: 1rem; }
 
-.console-graph-qb__previewlabel { margin: 0 0 0.3rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__previewlabel { margin: 0 0 0.3rem; font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }
 /* The composed query, shown at reading size and not as a caption: it is the thing the builder
    exists to teach, so it gets more weight than the controls that produced it. */
 .console-graph-qb__preview {

@@ -17,9 +17,9 @@ import (
 // job, not a verifiable graph edge. CODEOWNERS is committed and deterministic, so
 // the shard is remote-shareable like the other extracted shards (unlike @runtime).
 
-// OwnersShardName is the singleton shard holding CODEOWNERS owner nodes and the
+// ownersShardName is the singleton shard holding CODEOWNERS owner nodes and the
 // owns edges to the projects and files they cover.
-const OwnersShardName = "@owners"
+const ownersShardName = "@owners"
 
 // codeownersPaths are the locations GitHub recognizes for a CODEOWNERS file, in
 // GitHub's precedence order (first found wins): .github/ takes precedence over the
@@ -49,7 +49,7 @@ type codeownersRule struct {
 // the caller). Owners are matched only against nodes that already exist, so a rule
 // covering paths outside the graph adds no dangling edge.
 func assembleOwners(root string, nodes []ownedNode) Shard {
-	s := Shard{Name: OwnersShardName}
+	s := Shard{Name: ownersShardName}
 	rules := readCodeowners(root)
 	if len(rules) == 0 || len(nodes) == 0 {
 		return s

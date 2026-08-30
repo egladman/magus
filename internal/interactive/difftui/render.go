@@ -94,14 +94,14 @@ func Frame(m *Model, color bool) string {
 func overviewFrame(m *Model) string {
 	var b strings.Builder
 	b.WriteString("changeset overview\n")
-	rows := m.OverviewRows()
+	rows := m.overviewRows()
 	start := 0
-	if m.OverviewCursor() >= m.Height() {
-		start = m.OverviewCursor() - m.Height() + 1
+	if m.overviewCursor() >= m.Height() {
+		start = m.overviewCursor() - m.Height() + 1
 	}
 	end := min(start+m.Height(), len(rows))
 	for i := start; i < end; i++ {
-		b.WriteString(gutter(i == m.OverviewCursor()))
+		b.WriteString(gutter(i == m.overviewCursor()))
 		b.WriteString(rows[i].Rendered)
 		b.WriteString("\n")
 	}

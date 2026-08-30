@@ -57,7 +57,7 @@ func mcpCmd(_ context.Context, _ []string) error {
 	// What each client does with them - a TOML table, a JSON object, an env var
 	// read at launch - is that client's dialect, and it belongs in documentation
 	// the reader owns, not in this binary. Naming clients here would make a
-	// change to any one of them a magus release. See docs/guides/mcp.md.
+	// change to any one of them a magus release. See docs/guides/integrations/mcp.md.
 	fmt.Fprintf(os.Stderr, "Point your MCP client at that endpoint. Most take three settings:\n")
 	fmt.Fprintf(os.Stderr, "  transport  streamable-http\n")
 	fmt.Fprintf(os.Stderr, "  url        http://%s/mcp\n", addr)
@@ -67,8 +67,35 @@ func mcpCmd(_ context.Context, _ []string) error {
 	fmt.Fprintf(os.Stderr, "Then confirm the endpoint is actually serving:\n")
 	fmt.Fprintf(os.Stderr, "  magus status --probe=liveness,mcp\n\n")
 	fmt.Fprintf(os.Stderr, "Per-client configuration, and what to re-register when mcp.address\n")
-	fmt.Fprintf(os.Stderr, "changes, are documented in: docs/guides/mcp.md\n")
-	return nil
+	fmt.Fprintf(os.Stderr, "changes, are documented in: docs/guides/integrations/mcp.md\n")
+	// mcp is a retired verb: everything useful it could do is printed above, and
+	// nothing was run, so it exits like any other misuse (errUsage's 2) rather
+	// than 0 - a script that still invokes `magus mcp` expecting a server should
+	// see a failure, not a silent no-op success.
+	return errSilent{exitCode: exitUsage}
+}
+
+// publishDaemonTrailBase resolves the daemon-wide activity-trail base and publishes it, so
+// background-job recording and the maintenance scheduler land in the same trail the MCP
+// handler writes and the ActivityService reads.
+//
+// ResolveCacheDir is the narrow path: it reads config without discovering projects or
+// evaluating magusfiles, so the value is the bridge Magus's CacheDir without paying a
+// workspace load to learn it - which is what lets this run ahead of the MCP gate. A root
+// that will not resolve leaves the base empty, and every writer already treats an empty
+// base as "drop the record, best-effort".
+func publishDaemonTrailBase() {
+	root, err := magus.FindRoot("")
+	if err != nil {
+		slog.Warn("[AGENT] no workspace root; background jobs and scheduled maintenance will not be recorded", slog.String("error", err.Error()))
+		return
+	}
+	base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		slog.Warn("[AGENT] cache dir unresolvable; background jobs and scheduled maintenance will not be recorded", slog.String("error", err.Error()))
+		return
+	}
+	daemonTrailBase = base
 }
 
 // startMCPWithDaemon starts the MCP HTTP server as a background goroutine
@@ -77,6 +104,12 @@ func mcpCmd(_ context.Context, _ []string) error {
 // exits for any reason other than ctx cancellation, so the daemon shuts down
 // rather than continuing to run with MCP unavailable.
 func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel observability.Provider) {
+	// Before the gate, deliberately. The trail base is the workspace cache dir and has
+	// nothing to do with MCP, but it used to be published from below this return - so
+	// mcp.enabled: false left it empty, the maintenance scheduler bailed at every tick,
+	// and no background job was ever recorded. Turning off one integration silently
+	// turned off all scheduled maintenance.
+	publishDaemonTrailBase()
 	if globalCfg.MCP.Enabled != nil && !*globalCfg.MCP.Enabled {
 		return
 	}
@@ -100,9 +133,6 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 		slog.Warn("[AGENT] skipping: workspace unavailable", slog.String("error", err.Error()))
 		return
 	}
-	// Publish the daemon-wide activity-trail base so background-job recording lands in the same
-	// trail the MCP handler writes and the ActivityService reads (both off this Magus's cache dir).
-	daemonTrailBase = m.CacheDir()
 	// Register this bridge workspace in the per-workspace registry the WorkspaceLister reports,
 	// so /readyz counts the daemon's own MCP workspace as loaded instead of waiting for an
 	// adopted run to populate the pool. Without this the daemon ran two workspace pools and

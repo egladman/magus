@@ -1,13 +1,16 @@
 package attention
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/types"
 )
 
 // consoleSessionHost stamps the disposing session as having been driven by the console.
@@ -45,6 +48,7 @@ type Handler struct {
 	handler.Base
 	root    string
 	version string
+	tel     observability.Provider
 }
 
 // NewHandler returns the /api/v1/attention handler for the repository at root.
@@ -52,8 +56,13 @@ type Handler struct {
 // The store is resolved per request from root rather than once here: sessions.Dir is a hash
 // and a path join, and resolving it live keeps the handler saying what the CLI would say from
 // the same checkout even if the state directory moves under a long-lived daemon.
-func NewHandler(root, version string, log *slog.Logger) *Handler {
-	h := &Handler{root: root, version: version}
+//
+// tel may be nil; it records how long each closed request waited. Only the disposals that come
+// through THIS route are measured - the CLI's `magus session dispose` closes requests in a
+// one-shot process with no collector - which is why the instrument is a wait-time distribution
+// and not a queue depth that would read as the whole queue and be neither.
+func NewHandler(root, version string, log *slog.Logger, tel observability.Provider) *Handler {
+	h := &Handler{root: root, version: version, tel: tel}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -128,10 +137,28 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 		disposeStatus(w, err, body.ID)
 		return
 	}
+	h.recordDisposition(r.Context(), req)
 	// The disposed request as the store now reads it, matching what `magus session dispose
 	// -o json` prints. The caller re-reads the queue on its next poll; answering with the row
 	// that closed lets it say WHICH one closed without waiting for that.
 	handler.WriteJSON(w, req)
+}
+
+// recordDisposition records how long the closed request waited, from raised to disposed.
+//
+// The severity is re-read from the store rather than trusted: it was written by whichever
+// build raised the request, and an attribute is a time series, so a value this build does not
+// know becomes "unknown" instead of a new series. A row missing either timestamp is skipped -
+// there is no duration to report, and zero would read as an instant answer.
+func (h *Handler) recordDisposition(ctx context.Context, req sessions.AttentionRequest) {
+	if h.tel == nil || req.OpenedMs <= 0 || req.DisposedMs < req.OpenedMs {
+		return
+	}
+	sev := types.EventSeverity(req.Severity)
+	if !sev.Valid() {
+		sev = "unknown"
+	}
+	h.tel.RecordAttentionDisposition(ctx, float64(req.DisposedMs-req.OpenedMs)/1000, sev.String())
 }
 
 // disposeStatus maps a refusal from sessions.DisposeRequest onto the status a client can act

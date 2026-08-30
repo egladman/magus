@@ -29,10 +29,9 @@ _magus_complete() {
     cur="${COMP_WORDS[COMP_CWORD]}"
 
 # magus-utils:subcommands:begin
-    local subcommands="ls describe where run affected x clean query refs explain path graph diff vcs session memory notes watch events server status buzz agent init doctor config completion man self version help"
+    local subcommands="ls describe where run affected x clean query refs explain path graph diff vcs session memory notes watch events server mcp status buzz agent init doctor config completion man self version help"
 # magus-utils:subcommands:end
-    local nouns="spell charm target project workspace module mcp-tool"
-    local lenses="hotspots affinity ownership trend unreferenced report"
+    local nouns="spell charm target graph project workspace module mcp-tool file tool"
     local graph_subs="deps export stats"
     local config_subs="view set history cache mcp"
     local server_subs="start stop"
@@ -47,7 +46,6 @@ _magus_complete() {
     local graph_deps_flags="--upstream --depth --spell --target"
     local graph_export_flags="--refresh"
     local graph_stats_flags="--kind --refresh"
-    local insight_flags="--commits --since --workspace --files"
     local watch_flags="--debounce --initial --null --backend --ignore"
     local status_flags="--watch --compact --socket --probe --workspace"
     local init_flags="--global --local --force --vcs"
@@ -60,14 +58,14 @@ _magus_complete() {
     cmd="${COMP_WORDS[1]}"
 
     case "$cmd" in
-        attention)
+        session)
             # dispose wants an open request id; ids come from the queue itself, the
             # same way run's targets come from the workspace. Elsewhere the verb list
             # is static.
             if [[ "$COMP_CWORD" -eq 2 ]]; then
-                COMPREPLY=( $(compgen -W "ls dispose" -- "$cur") )
+                COMPREPLY=( $(compgen -W "ls attention dispose hook notify" -- "$cur") )
             elif [[ "${COMP_WORDS[2]}" == "dispose" && "$COMP_CWORD" -eq 3 ]]; then
-                COMPREPLY=( $(compgen -W "$(magus attention -o name 2>/dev/null)" -- "$cur") )
+                COMPREPLY=( $(compgen -W "$(magus session attention -o name 2>/dev/null)" -- "$cur") )
             fi
             return 0
             ;;
@@ -126,13 +124,6 @@ _magus_complete() {
                 local projects
                 projects=$(magus ls -o name 2>/dev/null)
                 COMPREPLY=( $(compgen -W "$projects" -- "$cur") )
-            fi
-            ;;
-        insight)
-            if [[ "$COMP_CWORD" -eq 2 ]]; then
-                COMPREPLY=( $(compgen -W "$lenses" -- "$cur") )
-            else
-                COMPREPLY=( $(compgen -W "$insight_flags" -- "$cur") )
             fi
             ;;
         graph)

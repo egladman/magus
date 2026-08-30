@@ -31,7 +31,7 @@ func RoffPages(date, version string) []Page {
 
 func renderMainRoff(date, version string) []byte {
 	var buf bytes.Buffer
-	w := NewWriter(&buf)
+	w := newWriter(&buf)
 	w.TH("magus", "1", date, thSource(version), "magus Manual")
 	w.SH("Name")
 	fmt.Fprintln(&buf, `magus \- workspace-aware build orchestrator and content-addressed cache`)
@@ -39,19 +39,19 @@ func renderMainRoff(date, version string) []byte {
 	fmt.Fprintln(&buf, `.B magus`)
 	fmt.Fprintln(&buf, `.RI [ flags ]\ <subcommand>\ [ args ]`)
 	w.SH("Description")
-	w.Para(MainDescription)
+	w.Para(mainDescription)
 	w.SH("Global Flags")
-	w.Para(GlobalFlagsIntro)
-	w.TP(`\fB\-\-root\fR \fIpath\fR`, escapeMulti(FlagRoot))
-	w.TP(`\fB\-\-config\fR \fIpath\fR`, escapeMulti(FlagConfig))
-	w.TP(`\fB\-\-output\fR \fIfmt\fR, \fB\-o\fR \fIfmt\fR`, escapeMulti(FlagOutput))
-	w.TP(`\fB\-\-concurrency\fR \fIN\fR`, escapeMulti(FlagConcurrency))
-	w.TP(`\fB\-v\fR`, escapeMulti(FlagVerbose))
+	w.Para(globalFlagsIntro)
+	w.TP(`\fB\-\-root\fR \fIpath\fR`, escapeMulti(flagRoot))
+	w.TP(`\fB\-\-config\fR \fIpath\fR`, escapeMulti(flagConfig))
+	w.TP(`\fB\-\-output\fR \fIfmt\fR, \fB\-o\fR \fIfmt\fR`, escapeMulti(flagOutput))
+	w.TP(`\fB\-\-concurrency\fR \fIN\fR`, escapeMulti(flagConcurrency))
+	w.TP(`\fB\-v\fR`, escapeMulti(flagVerbose))
 	w.SH("Subcommands")
 	w.Indent()
 	for _, command := range All {
-		ref := fmt.Sprintf(`\fBmagus\-%s\fR(1)`, EscapeHyphen(command.Name))
-		w.TP(w.B(command.Name), Escape(command.Short)+`. See `+ref+`.`)
+		ref := fmt.Sprintf(`\fBmagus\-%s\fR(1)`, escapeHyphen(command.Name))
+		w.TP(w.B(command.Name), escape(command.Short)+`. See `+ref+`.`)
 	}
 	w.Dedent()
 	writeEnvSectionRoff(w)
@@ -62,17 +62,17 @@ func renderMainRoff(date, version string) []byte {
 
 func renderCommandRoff(command Command, date, version string) []byte {
 	var buf bytes.Buffer
-	w := NewWriter(&buf)
+	w := newWriter(&buf)
 	pageName := "magus-" + command.Name
 	w.TH(pageName, "1", date, thSource(version), "magus Manual")
 	w.SH("Name")
-	fmt.Fprintf(&buf, "%s \\- %s\n", EscapeHyphen(pageName), Escape(command.Short))
+	fmt.Fprintf(&buf, "%s \\- %s\n", escapeHyphen(pageName), escape(command.Short))
 	w.SH("Synopsis")
 	if split := strings.Index(command.Usage, " "); split < 0 {
-		fmt.Fprintln(&buf, `.B `+EscapeHyphen(command.Usage))
+		fmt.Fprintln(&buf, `.B `+escapeHyphen(command.Usage))
 	} else {
-		fmt.Fprintln(&buf, `.B `+EscapeHyphen(command.Usage[:split]))
-		fmt.Fprintln(&buf, `.RI "`+Escape(strings.TrimSpace(command.Usage[split:]))+`"`)
+		fmt.Fprintln(&buf, `.B `+escapeHyphen(command.Usage[:split]))
+		fmt.Fprintln(&buf, `.RI "`+escape(strings.TrimSpace(command.Usage[split:]))+`"`)
 	}
 	if command.Long != "" {
 		w.SH("Description")
@@ -89,7 +89,7 @@ func renderCommandRoff(command Command, date, version string) []byte {
 		w.SH("Subcommands")
 		w.Indent()
 		for _, child := range command.Children {
-			w.TP(w.B(child.Name), Escape(child.Short))
+			w.TP(w.B(child.Name), escape(child.Short))
 		}
 		w.Dedent()
 	}
@@ -97,7 +97,7 @@ func renderCommandRoff(command Command, date, version string) []byte {
 		w.SH("Targets")
 		w.Indent()
 		for _, target := range command.Targets {
-			w.TP(w.B(target.Name), Escape(target.Short))
+			w.TP(w.B(target.Name), escape(target.Short))
 		}
 		w.Dedent()
 	}
@@ -107,7 +107,7 @@ func renderCommandRoff(command Command, date, version string) []byte {
 		w.SH("Examples")
 		for _, example := range command.Examples {
 			if example.Comment != "" {
-				fmt.Fprintf(&buf, "\\fI%s\\fR\n", Escape(example.Comment))
+				fmt.Fprintf(&buf, "\\fI%s\\fR\n", escape(example.Comment))
 				w.P()
 			}
 			w.Example(example.Command)
@@ -120,7 +120,7 @@ func renderCommandRoff(command Command, date, version string) []byte {
 
 // writeChildFlagsRoff emits an options section for every descendant that
 // declares flags, naming each by its full path.
-func writeChildFlagsRoff(w *Writer, path string, children []Command) {
+func writeChildFlagsRoff(w *writer, path string, children []Command) {
 	for _, child := range children {
 		sub := path + " " + child.Name
 		if child.HasFlags() {
@@ -130,41 +130,41 @@ func writeChildFlagsRoff(w *Writer, path string, children []Command) {
 	}
 }
 
-func writeFlagsRoff(w *Writer, name string, build func(*flag.FlagSet), heading string) {
+func writeFlagsRoff(w *writer, name string, build func(*flag.FlagSet), heading string) {
 	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	build(flags)
 	if heading == "Options" {
 		w.SH(heading)
 	} else {
-		w.SS(EscapeHyphen(heading))
+		w.SS(escapeHyphen(heading))
 	}
 	w.Indent()
 	flags.VisitAll(func(f *flag.Flag) {
 		typeName, _ := flag.UnquoteUsage(f)
-		w.TP(roffFlagLabel(f.Name, typeName, f.DefValue), Escape(f.Usage))
+		w.TP(roffFlagLabel(f.Name, typeName, f.DefValue), escape(f.Usage))
 	})
 	w.Dedent()
 }
 
-func writeExitStatusRoff(w *Writer, codes []ExitCode) {
+func writeExitStatusRoff(w *writer, codes []ExitCode) {
 	if len(codes) == 0 {
 		return
 	}
 	w.SH("Exit status")
 	w.Indent()
 	for _, code := range codes {
-		w.TP(w.B(strconv.Itoa(code.Code)), Escape(code.Meaning))
+		w.TP(w.B(strconv.Itoa(code.Code)), escape(code.Meaning))
 	}
 	w.Dedent()
 }
 
-func writeEnvSectionRoff(w *Writer) {
+func writeEnvSectionRoff(w *writer) {
 	w.SH("Environment")
 	w.Indent()
 	for _, doc := range config.EnvVarDocs() {
-		body := Escape(doc.Desc)
+		body := escape(doc.Desc)
 		if doc.Default != "" {
-			body += ` (default: ` + Escape(doc.Default) + `)`
+			body += ` (default: ` + escape(doc.Default) + `)`
 		}
 		if doc.YAMLKey != "" {
 			body += `. Equivalent magus.yaml key: ` + w.B(doc.YAMLKey) + `.`
@@ -174,13 +174,13 @@ func writeEnvSectionRoff(w *Writer) {
 	w.Dedent()
 }
 
-func writeFilesSectionRoff(w *Writer) {
+func writeFilesSectionRoff(w *writer) {
 	w.SH("Files")
-	w.TP(`\fBmagus.yaml\fR, \fB.magus.yaml\fR`, escapeMulti(FilesConfig))
-	w.TP(`\fB.magus\-cache/\fR`, escapeMulti(FilesCache))
+	w.TP(`\fBmagus.yaml\fR, \fB.magus.yaml\fR`, escapeMulti(filesConfig))
+	w.TP(`\fB.magus\-cache/\fR`, escapeMulti(filesCache))
 }
 
-func writeSeeAlsoRoff(w *Writer, buf *bytes.Buffer, current string) {
+func writeSeeAlsoRoff(w *writer, buf *bytes.Buffer, current string) {
 	w.SH("See Also")
 	refs := make([]string, 0, len(All))
 	if current != "" {
@@ -188,7 +188,7 @@ func writeSeeAlsoRoff(w *Writer, buf *bytes.Buffer, current string) {
 	}
 	for _, command := range All {
 		if command.Name != current {
-			refs = append(refs, fmt.Sprintf(`\fBmagus\-%s\fR(1)`, EscapeHyphen(command.Name)))
+			refs = append(refs, fmt.Sprintf(`\fBmagus\-%s\fR(1)`, escapeHyphen(command.Name)))
 		}
 	}
 	fmt.Fprintln(buf, strings.Join(refs, ",\n"))
@@ -207,12 +207,12 @@ func roffFlagLabel(name, typeName, defaultValue string) string {
 	if len(name) == 1 {
 		prefix = "-"
 	}
-	label := `\fB` + EscapeHyphen(prefix) + EscapeHyphen(name) + `\fR`
+	label := `\fB` + escapeHyphen(prefix) + escapeHyphen(name) + `\fR`
 	if typeName != "" && typeName != "bool" {
 		label += ` \fI` + typeName + `\fR`
 	}
 	if defaultValue != "" && defaultValue != "false" && defaultValue != "0" && defaultValue != "0s" {
-		label += ` (default: ` + Escape(defaultValue) + `)`
+		label += ` (default: ` + escape(defaultValue) + `)`
 	}
 	return label
 }
@@ -220,7 +220,7 @@ func roffFlagLabel(name, typeName, defaultValue string) string {
 func escapeMulti(text string) string {
 	parts := SplitParas(text)
 	for i := range parts {
-		parts[i] = Escape(parts[i])
+		parts[i] = escape(parts[i])
 	}
 	return strings.Join(parts, "\n")
 }

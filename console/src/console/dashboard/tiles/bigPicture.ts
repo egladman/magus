@@ -159,12 +159,21 @@ export function resetBigPicture(): void {
   exitBigPicture();
 }
 
+// toggleBigPicture is the one flip both entries share: the button below and the dashboard's "b"
+// key. Exported so the key does not re-derive "which way am I going" from viewMode and drift from
+// the button's answer - two readers of one mode is how a toggle ends up half-applied.
+export function toggleBigPicture(): void {
+  if (viewMode.get() === "bigPicture") exitBigPicture();
+  else enterBigPicture();
+}
+
 // dashboardHeader is the dashboard's always-visible chrome row - not a Card, sitting above the
 // panels (like the attention hero). It holds the active-workspace picker (left, only past a
 // single workspace) and the Big Picture button (right, always present).
 export function dashboardHeader(): Tile {
   const root = h("div", "console-dashboard-viewbar");
   root.setAttribute("aria-label", "Dashboard controls");
+  root.dataset.controlSize = "default";
 
   const viewWrap = h("div", "console-dashboard-viewbar__view");
   const viewLabel = h("span", "console-dashboard-viewbar__label", "View");
@@ -182,10 +191,7 @@ export function dashboardHeader(): Tile {
   // thing is just two names for one control, and screen readers announce the override).
   const btnText = h("span", "pf-v6-c-toggle-group__text", "Big Picture");
   bigPictureBtn.append(btnIcon, btnText);
-  bigPictureBtn.addEventListener("click", () => {
-    if (viewMode.get() === "bigPicture") exitBigPicture();
-    else enterBigPicture();
-  });
+  bigPictureBtn.addEventListener("click", () => toggleBigPicture());
   viewItem.append(bigPictureBtn);
   viewGroup.append(viewItem);
   viewWrap.append(viewLabel, viewGroup);

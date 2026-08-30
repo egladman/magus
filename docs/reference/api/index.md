@@ -60,7 +60,7 @@ The path is always `/<package>.<Service>/<Method>`, which every page below state
 
 ## Streaming methods
 
-A server-streaming method returns a sequence of messages over one HTTP response rather than one body, so a single `curl -d` request cannot cleanly demux it. Use a generated Connect client, or a tool built for streaming RPCs such as [grpcurl](https://github.com/fullstorydev/grpcurl) (`grpcurl -plaintext ... /magus.viewer.v1.ViewerService/StreamEvents`). Streaming methods:
+A server-streaming method returns a sequence of messages over one HTTP response rather than one body, so a single `curl -d` request cannot cleanly demux it. Use a generated Connect client, or a tool built for streaming RPCs such as [grpcurl](https://github.com/fullstorydev/grpcurl) (`grpcurl -plaintext ... /magus.metrics.v1alpha1.MetricsService/StreamMetrics`). Streaming methods:
 
 - [MetricsService.StreamMetrics](metrics/v1alpha1/metrics.md#streammetrics) (server streaming)
 - [StatusService.StreamStatus](status/v1alpha1/status.md#streamstatus) (server streaming)

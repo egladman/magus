@@ -474,25 +474,21 @@ fun pathExists(p: str) > bool !> any {
 // fails the wrong target teaches people that the failing target is unreliable, and the next
 // real breakage in it gets waved through.
 //
-// Two tiers, the same split assetIntegrityCheck and axisReport already draw here:
+// Every finding THROWS: a `$ ` prompt in a command block, a pinned version standing in for
+// example output, a backticked path that has since moved, and a markdown link that no
+// longer resolves are all facts about the text, with no judgment in them. A broken path
+// used to be its own reported-not-thrown tier while the count was burned down from the
+// first draft's false positives; pathCheckApplies now scopes the exemption tightly enough
+// (see its comment) that every remaining finding is real, so it joins the same tier as
+// everything else - the same path axisReport is on.
 //
-//   THROWS on the objective rules. A `$ ` prompt in a command block and a pinned version
-//   standing in for example output are facts about the text, with no judgment in them.
-//
-//   REPORTS the broken repo paths. Whether an inline path is a claim about this repo or an
-//   illustration of the reader's is a question the text does not answer (see
-//   looksLikeRepoPath for the cases that defeated the first draft), so this prints and lets
-//   the number be burned down. Promote it to a throw once it sits at zero - the same path
-//   axisReport is on.
-//
-// Every violation is collected before either happens. Failing on the first would turn a
+// Every violation is collected before throwing. Failing on the first would turn a
 // three-minute fix into three round trips.
 export fun conventionsCheck(root: str, docs: str) > void !> any {
     var files: mut [str] = mut [<str>];
     collectMarkdown(root + "/" + docs, "", files);
     final sorted = files.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
-    final broken: mut [str] = mut [<str>];
     final violations: mut [str] = mut [<str>];
     var checked = 0;
 
@@ -500,7 +496,7 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
     foreach (rel in sorted) {
         checked = checked + 1;
         collectFindings(root, file: docs + "/" + rel, abs: root + "/" + docs + "/" + rel,
-            violations: violations, broken: broken);
+            violations: violations);
     }
     // The repo-root prose, where a stale path does the most damage: it is the first thing a
     // newcomer reads, and a backticked path in a sentence is invisible to every markdown
@@ -509,14 +505,10 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
         if (pathExists(root + "/" + name)) {
             checked = checked + 1;
             collectFindings(root, file: name, abs: root + "/" + name,
-                violations: violations, broken: broken);
+                violations: violations);
         }
     }
 
-    if (broken.len() > 0) {
-        std\print("  conventions: {broken.len()} inline path(s) that no longer resolve");
-        foreach (b in broken) { std\print("    " + b); }
-    }
     if (violations.len() > 0) {
         var body = "";
         foreach (v in violations) { body = body + "\n  " + v; }
@@ -526,9 +518,8 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
     std\print("conventions: {checked} files checked, no violations");
 }
 
-// collectFindings runs both halves over one file and sorts what they report into the tier
-// that throws and the tier that prints.
-fun collectFindings(root: str, file: str, abs: str, violations: mut [str], broken: mut [str]) > void !> any {
+// collectFindings runs both halves over one file into the single tier that throws.
+fun collectFindings(root: str, file: str, abs: str, violations: mut [str]) > void !> any {
     final md = fs\readFile(abs);
     foreach (f in lintMarkdown(file, md)) {
         violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);
@@ -536,7 +527,7 @@ fun collectFindings(root: str, file: str, abs: str, violations: mut [str], broke
     if (pathCheckApplies(file) == false) { return; }
     foreach (f in pathReferences(file, md)) {
         if (pathExists(root + "/" + f.path) == false) {
-            broken.append(f.file + ":" + "{f.line}" + ": " + f.message);
+            violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);
         }
     }
 }

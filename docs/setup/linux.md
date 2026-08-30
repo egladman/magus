@@ -18,6 +18,8 @@ magus ships as a single self-contained binary. Download it with `curl`, extract 
 ## Quick install
 
 ```sh
+# The hosted docs substitute the latest release tag below; on GitHub it reads
+# literally - get the real value from https://github.com/egladman/magus/releases
 VERSION=__MAGUS_VERSION__
 ARCH=amd64            # or arm64 - see below
 curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}_static.tar.gz"

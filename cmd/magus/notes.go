@@ -17,7 +17,9 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/memory"
 	store "github.com/egladman/magus/internal/notes"
@@ -155,13 +157,15 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 	case 1:
 		return note, found[0], nil
 	default:
-		return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q exists in both stores; say which with --shared or --private: %w", name, errAmbiguousNote)
+		return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q %w", name, errAmbiguousNote)
 	}
 }
 
 // errAmbiguousNote marks a name present in both stores, so a caller can tell it apart from
-// "not found" instead of treating both as "nothing here".
-var errAmbiguousNote = errors.New("the name exists in more than one store")
+// "not found" instead of treating both as "nothing here". It carries the fix as well as
+// the diagnosis, because it is the text every wrapping caller prints and a reader told
+// the name is ambiguous still needs the flag that resolves it.
+var errAmbiguousNote = errors.New("exists in both stores; say which with --shared or --private")
 
 // notesScopeFlags binds the pair of filters every subcommand accepts.
 func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
@@ -247,7 +251,7 @@ type notesStoreOutput struct {
 
 type notesListOutput struct {
 	Stores []notesStoreOutput `json:"stores"`
-	Notes  []scopedNote       `json:"notes"`
+	Notes  []scopedNote       `json:"notes" jsonl:"primary"`
 	Issues []store.Issue      `json:"issues"`
 }
 
@@ -311,6 +315,16 @@ func notesList(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if opts.Format == outputName {
+		names := make([]string, len(found))
+		for i, n := range found {
+			names[i] = n.Name
+		}
+		if err := emitNames(names); err != nil {
+			return err
+		}
+		return notesIssuesError(issues, false)
+	}
 	if opts.Format != outputText {
 		if err := emitFormatted(opts, notesListOutput{Stores: listed, Notes: found, Issues: issues}); err != nil {
 			return err
@@ -361,6 +375,9 @@ func notesGet(root string, args []string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
+	}
+	if opts.Format == outputName {
+		return emitNames([]string{n.Name})
 	}
 	if opts.Format != outputText {
 		return emitFormatted(opts, scopedNote{
@@ -569,6 +586,15 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A verification has no name of its own, so the one-token-per-line identity is what
+	// the reader would act on next: the note each issue is about (its file, for an issue
+	// about the store rather than a note). A clean store prints nothing.
+	if opts.Format == outputName {
+		if err := emitNames(notesIssueSubjects(report.Issues)); err != nil {
+			return err
+		}
+		return notesIssuesError(report.Issues, strict)
+	}
 	if opts.Format != outputText {
 		if err := emitFormatted(opts, report); err != nil {
 			return err
@@ -642,7 +668,7 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 		// accumulate duplicates on every run, and each duplicate re-reports every dangling
 		// or drifted finding for the rest of the note's life.
 		if len(anchors) != 0 {
-			return fmt.Errorf("magus notes edit: %q already exists, so --anchor is refused; its anchors are what the note is about, and piping new prose does not change that. Edit the note to change them", name)
+			return fmt.Errorf("magus notes edit: %q already exists, so --anchor is refused; its anchors are what the note is about, and piping new prose does not change that. Edit the note with `magus notes edit %s` (no pipe) to change them", name, name)
 		}
 	case errors.Is(err, os.ErrNotExist):
 		n = store.Note{Name: name, Title: strings.ReplaceAll(name, "-", " ")}
@@ -735,6 +761,19 @@ func printNotesIssues(issues []store.Issue, strict bool) error {
 // blocks a merge pending a judgment call is one people route around permanently. The only
 // actively-maintained tool in this space is a CI check that fails a pull request when covered
 // files move - the gate is the mechanism that works, and keeping it narrow is what keeps it.
+// notesIssueSubjects names what each issue is about, for `-o name`.
+func notesIssueSubjects(issues []store.Issue) []string {
+	out := make([]string, 0, len(issues))
+	for _, i := range issues {
+		if i.Note != "" {
+			out = append(out, i.Note)
+			continue
+		}
+		out = append(out, i.Path)
+	}
+	return out
+}
+
 func notesIssuesError(issues []store.Issue, strict bool) error {
 	var failures, dangling int
 	for _, issue := range issues {
@@ -759,15 +798,18 @@ func notesIssuesError(issues []store.Issue, strict bool) error {
 //
 // `capture` is the one write path besides `edit`, and it is not the `put` this file refuses
 // above. The distinction is what a caller supplies: `put` would take PROSE, and prose from a
-// program is prose with nobody behind it. `capture` takes a REFERENCE to a conversation the
-// daemon already holds, and magus renders the transcript itself. The worst a caller can cause
-// is a faithful record of something that actually happened.
+// program is prose with nobody behind it. `capture` takes a REFERENCE to a conversation magus
+// already holds, and magus renders the transcript itself. The worst a caller can cause is a
+// faithful record of something that actually happened.
 //
-// It exists because a review thread is otherwise lost. internal/diff persists which hunks were
-// read and nothing else, so the comments live in the daemon's memory and die with the session
-// - which is exactly when they turn out to have been worth keeping.
+// It exists because a review thread is otherwise scattered. The changeset store persists the
+// unsent remarks a person wrote, and the forge holds what colleagues said back; nothing joins
+// them into one readable record that outlives the review. A running daemon holds MORE than the
+// store does - an agent's remarks, and remarks already published - and capture says so when it
+// had to read the store instead, because a transcript quietly missing half a conversation is
+// worse than no transcript.
 
-// notesCapture writes the daemon's current review thread into a store as one note.
+// notesCapture writes the current review thread into a store as one note.
 func notesCapture(ctx context.Context, root string, args []string) error {
 	var title, name string
 	var tags tagList
@@ -782,16 +824,17 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		return usagef("magus notes capture: unexpected argument %q; the thread to capture is the running session", pos[0])
+		return usagef("magus notes capture: unexpected argument %q; the thread to capture is the review under way", pos[0])
 	}
 
-	sess := daemonDiffSession(ctx)
-	if sess == nil {
-		return errors.New("magus notes capture: no review session to capture. Comments live in the running daemon, so this needs `magus server start` and a review already under way")
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return fmt.Errorf("magus notes capture: %w", err)
 	}
+	sess, fromDaemon := captureSession(ctx, m)
 	// The colleagues' half. Read separately and never required: a review with no forge behind
 	// it is the ordinary case, and the local conversation is worth keeping on its own.
-	threads, partial := daemonReviewThreads(ctx)
+	threads, partial := reviewThreads(ctx, m)
 	if len(sess.Comments) == 0 && len(threads) == 0 {
 		return errors.New("magus notes capture: this review has no comments yet, and a transcript of an empty conversation is not worth a note")
 	}
@@ -850,11 +893,20 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
 		said, pluralSuffix(said, "", "s"),
 		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
+	if line := newRemarkLine(threads); line != "" {
+		fmt.Println(line)
+	}
 	// Said out loud, because a transcript is exactly the artifact nobody re-checks. A capture
 	// that quietly omitted part of the review would be discovered, if ever, by the person who
 	// went looking for what a colleague said and concluded they had said nothing.
 	if partial != "" {
 		fmt.Printf("Part of the review could not be read, so this transcript is incomplete: %s\n", partial)
+	}
+	// Named for the same reason. The store keeps your unsent remarks and nothing else, so a
+	// capture taken without a daemon is missing anything an agent said and anything already
+	// published to the review - and the reader has to be told which record they are holding.
+	if !fromDaemon {
+		fmt.Println("Read from the local review store, so this holds your unsent remarks. A running daemon would also carry an agent's remarks and any already published.")
 	}
 
 	// Fingerprint the anchored files, exactly as a written note is fingerprinted on save. It
@@ -968,6 +1020,36 @@ func captureName(sess *types.DiffSession) string {
 	return "review-" + digest
 }
 
+// captureSession is the local half of the conversation to transcribe, and whether it came from
+// a running daemon.
+//
+// The daemon is preferred because it holds strictly more: an agent's remarks, and remarks
+// already published to the review, neither of which the store keeps. But the store keeps the
+// unsent human ones, which is what a person writing alone in `magus diff` produces, so the
+// absence of a daemon is a smaller transcript rather than no transcript. The caller says which
+// one it got - see notesCapture's output.
+func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffSession, bool) {
+	if sess := daemonDiffSession(ctx); sess != nil {
+		return sess, true
+	}
+	patch, _ := m.WorkingDiff(ctx, nil)
+	return storedDiffSession(m.CacheDir(), patch), false
+}
+
+// storedDiffSession rebuilds what a capture needs from the files the store persists.
+//
+// AsOf is the patch digest attachDiffSession would have stamped with no daemon in the picture,
+// so the note this capture names is the one either path would have named for this tree. No
+// patch leaves it EMPTY rather than digesting the empty string, which would name every such
+// capture the same note and make the second one collide with the first.
+func storedDiffSession(cacheDir, patch string) *types.DiffSession {
+	sess := &types.DiffSession{Comments: changeset.NewStore(cacheDir).LoadDrafts()}
+	if patch != "" {
+		sess.AsOf = changeset.PatchDigest(patch)
+	}
+	return sess
+}
+
 // daemonDiffSession reads the running daemon's review session, or nil when there is no daemon,
 // no token, or nothing attached. Every failure is nil rather than an error: the caller has one
 // message to print for all of them, and it is about the session rather than the transport.
@@ -1003,35 +1085,46 @@ func daemonDiffSession(ctx context.Context) *types.DiffSession {
 	return &sess
 }
 
-// daemonReviewThreads reads the comment threads on the review this branch has open, and the
-// reason the read was incomplete when there is one.
+// reviewThreads reads what colleagues said on the review this branch has open, and the reason
+// the read was incomplete when there is one.
 //
-// Empty on every failure, and there are many ordinary ones: no daemon, no provider wired, no
-// pull request, a forge that did not answer. None of them is a reason to refuse a capture - the
-// local half of the conversation is still worth keeping - so the caller captures what it has.
+// The daemon answers when one is running, because its session also knows which threads the
+// reader has already had on screen. Without one the forge is asked directly: a colleague's
+// remark is a fact about the review, not about whether a background process happens to be up,
+// and the same patch on the same branch must not show a different conversation either way.
+func reviewThreads(ctx context.Context, m *magus.Magus) ([]types.ReviewThread, string) {
+	if threads, reason, served := daemonReviewThreads(ctx); served {
+		return threads, reason
+	}
+	return localReviewThreads(ctx, m.ReviewOrigin(ctx), m.CacheDir())
+}
+
+// daemonReviewThreads reads the threads from a running daemon. served says whether the daemon
+// answered at all, which is what separates "no daemon, ask the forge yourself" from "the daemon
+// looked and there is no review open".
 //
 // The reason is separate from the emptiness, and only non-empty when magus READ the review and
 // could not understand part of it. That is the one case a caller must not pass over quietly: a
 // transcript silently missing a colleague's remark is worse than no transcript.
-func daemonReviewThreads(ctx context.Context) ([]types.ReviewThread, string) {
+func daemonReviewThreads(ctx context.Context) (threads []types.ReviewThread, reason string, served bool) {
 	token, err := auth.Load()
 	if err != nil {
-		return nil, ""
+		return nil, "", false
 	}
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+mcpAddrString()+"/api/v1/diff/review", nil)
 	if err != nil {
-		return nil, ""
+		return nil, "", false
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, ""
+		return nil, "", false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, ""
+		return nil, "", false
 	}
 	var body struct {
 		ID      string               `json:"id"`
@@ -1039,14 +1132,68 @@ func daemonReviewThreads(ctx context.Context) ([]types.ReviewThread, string) {
 		Reason  string               `json:"reason"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, ""
+		return nil, "", false
 	}
 	if body.ID == "" {
 		// No review open. The reason names which ordinary situation that is, and none of them
 		// is worth a line during a capture - there is simply no second half.
+		return nil, "", true
+	}
+	return body.Threads, body.Reason, true
+}
+
+// localReviewThreads asks the forge itself, the way the check-review job and the daemon's own
+// review handler do. Placement is left to the caller: the daemon resolves threads against the
+// working tree, and a caller showing some other patch has to place them against that one.
+//
+// The origin and the cache dir are passed rather than a workspace, so a test can answer them
+// without a repository - the narrowing the daemon's own review source uses.
+func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir string) ([]types.ReviewThread, string) {
+	at := bindings.FindReview(ctx, from.Branch, from.Remote)
+	if !at.Open() {
 		return nil, ""
 	}
-	return body.Threads, body.Reason
+	threads, err := bindings.ReviewThreads(ctx, at)
+	// The watermark is PERSISTED, so the new-thread mark survives without the daemon that
+	// normally applies it. Reading it here never moves it, for the reason the handler gives.
+	watermark := types.DiffSession{SeenThreads: changeset.NewStore(cacheDir).LoadSeenThreads()}
+	fresh := make(map[string]struct{})
+	for _, id := range watermark.UnseenThreads(threads) {
+		fresh[id] = struct{}{}
+	}
+	for i := range threads {
+		if _, ok := fresh[threads[i].ID]; ok {
+			threads[i].New = true
+		}
+	}
+	if err != nil {
+		// The threads that DID decode still travel, and the reason rides beside them - the
+		// handler's posture, for the handler's reason.
+		return threads, err.Error()
+	}
+	return threads, ""
+}
+
+// newRemarkLine says how much of the captured conversation this reader had never had in front
+// of them, or "" when none of it is new to them.
+//
+// Printed rather than written into the note, which is the whole reason it is a line and not a
+// field. New belongs to the READER's history with the review and not to the conversation - see
+// types.ReviewThread.New - so in a transcript a colleague reads next year it would describe
+// somebody else's morning. Said to the person taking the capture, it is the one moment it is
+// worth knowing.
+func newRemarkLine(threads []types.ReviewThread) string {
+	fresh := 0
+	for _, t := range threads {
+		if t.New {
+			fresh++
+		}
+	}
+	if fresh == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `magus diff` marks them new.",
+		fresh, pluralSuffix(fresh, "", "s"))
 }
 
 // tagList collects a repeatable --tag flag.

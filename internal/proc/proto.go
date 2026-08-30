@@ -11,9 +11,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ProtocolV2 identifies the JSONL message shape; distinct from the binary Version.
+// protocolV2 identifies the JSONL message shape; distinct from the binary Version.
 // Servers reject an unknown non-empty protocol with ErrProtocolMismatch.
-const ProtocolV2 = "v2"
+const protocolV2 = "v2"
 
 // Wire-type strings embedded in every JSONL frame's "type" field.
 const (
@@ -39,15 +39,15 @@ const (
 	typeJobReply = "job.reply"
 )
 
-// JobMagic guards JobRequest: a fire-and-forget submission that the daemon runs in the
+// jobMagic guards jobRequest: a fire-and-forget submission that the daemon runs in the
 // background is a privileged operation (it executes arbitrary magus args), so a request
-// without the magic is ignored, matching the StatusRequest/ShutdownRequest pattern.
-const JobMagic = "magus-job-v1"
+// without the magic is ignored, matching the statusRequest/shutdownRequest pattern.
+const jobMagic = "magus-job-v1"
 
-// JobRequest submits a background job: the daemon runs `magus <Args>` asynchronously and
-// replies immediately, unlike RunRequest which blocks until the run completes. Used by
+// jobRequest submits a background job: the daemon runs `magus <Args>` asynchronously and
+// replies immediately, unlike runRequest which blocks until the run completes. Used by
 // the VCS refresh hook to kick a rebuild/reindex without delaying a checkout.
-type JobRequest struct {
+type jobRequest struct {
 	Magic    string   `json:"magic"`
 	Args     []string `json:"args"`
 	Version  string   `json:"version,omitempty"`
@@ -56,16 +56,16 @@ type JobRequest struct {
 	Root     string   `json:"root,omitempty"` // empty → daemon walks up from Cwd
 }
 
-// JobReply acknowledges a submitted job. Inv is the invocation id (a Dashboard deep-link
+// jobReply acknowledges a submitted job. Inv is the invocation id (a Dashboard deep-link
 // into the job's live log); Err is non-empty only when the job could not be accepted
 // (the job's own success/failure is observed via the Dashboard, not this reply).
-type JobReply struct {
+type jobReply struct {
 	Inv string `json:"inv,omitempty"`
 	Err string `json:"err,omitempty"`
 }
 
-// RunRequest is the JSONL payload sent from a child magus to its parent.
-type RunRequest struct {
+// runRequest is the JSONL payload sent from a child magus to its parent.
+type runRequest struct {
 	Args     []string `json:"args"`
 	Version  string   `json:"version,omitempty"`
 	Cwd      string   `json:"cwd"`
@@ -77,28 +77,30 @@ type RunRequest struct {
 	// process holds. Empty from a client that predates the field: re-entry detection is
 	// then unavailable and the acquire falls back to waiting.
 	Ancestors []string `json:"ancestors,omitempty"`
-	// Delegation is the delegation the CLIENT was launched under, carried because the
+	// Lease is the lease the CLIENT was launched under, carried because the
 	// daemon executes the run in its own process and so reads its own environment, not
-	// the client's - without this an adopted run records no delegation at all.
+	// the client's - without this an adopted run records no lease at all.
 	//
-	// It is the client's own claim about itself, exactly what MAGUS_DELEGATION is, and it
+	// It is the client's own claim about itself, exactly what the BAGGAGE channel's
+	// magus.lease member is - the client's trace context does not cross this socket, so
+	// an adopted run records the lease and no ancestry - and it
 	// arrives over a socket any local process may dial. The server therefore re-validates
-	// it with types.ValidDelegationID and drops a value that fails, matching what
-	// trail.DelegationFromEnv does with a malformed environment value: a delegation id is
+	// it with types.ValidLeaseID and drops a value that fails, matching what
+	// trail.LeaseFromEnv does with a malformed environment value: a lease id is
 	// exempt from the trail's redaction, so an unchecked one is a way to carry a
 	// credential onto an event line. Empty from a client that predates the field.
-	Delegation string `json:"delegation,omitempty"`
+	Lease string `json:"lease,omitempty"`
 }
 
-// RunReply is the response from the parent to the child.
-type RunReply struct {
+// runReply is the response from the parent to the child.
+type runReply struct {
 	ExitCode int    `json:"exit_code"`
 	Err      string `json:"err,omitempty"` // human-readable; non-empty when ExitCode != 0
 }
 
-// StatusRequest is the payload for the status JSONL message.
-// Magic must equal StatusMagic; unrecognized requests get an empty reply.
-type StatusRequest struct {
+// statusRequest is the payload for the status JSONL message.
+// Magic must equal statusMagic; unrecognized requests get an empty reply.
+type statusRequest struct {
 	Magic    string `json:"magic"`
 	Protocol string `json:"protocol"`
 }
@@ -144,76 +146,80 @@ type Call struct {
 	Inv       string    `json:"inv,omitempty"`        // the invocation id this call runs under; deep-links to its live log
 }
 
-// StatusMagic is the expected value of StatusRequest.Magic.
-const StatusMagic = "magus-pool-v1"
+// statusMagic is the expected value of statusRequest.Magic.
+const statusMagic = "magus-pool-v1"
 
-// ShutdownRequest is the payload for the shutdown JSONL message.
-// Magic must equal ShutdownMagic; unrecognized requests are ignored.
-type ShutdownRequest struct {
+// shutdownRequest is the payload for the shutdown JSONL message.
+// Magic must equal shutdownMagic; unrecognized requests are ignored.
+type shutdownRequest struct {
 	Magic    string `json:"magic"`
 	Protocol string `json:"protocol"`
 }
 
-// ShutdownReply is the response to a shutdown request.
-type ShutdownReply struct{}
+// shutdownReply is the response to a shutdown request. It carries no fields: the client
+// only checks the frame's type tag, so a field added here would need a matching decode
+// arm added to Shutdown in client.go at the same time.
+type shutdownReply struct{}
 
-// ShutdownMagic is the expected value of ShutdownRequest.Magic.
-const ShutdownMagic = "magus-shutdown-v1"
+// shutdownMagic is the expected value of shutdownRequest.Magic.
+const shutdownMagic = "magus-shutdown-v1"
 
-// ServiceAcquireRequest asks the daemon to start (or reuse) a shared service and
+// serviceAcquireRequest asks the daemon to start (or reuse) a shared service and
 // keep it warm past this invocation. Key is the service fingerprint; Service is the
 // resolved process description (command, readiness, stop, idle).
-type ServiceAcquireRequest struct {
+type serviceAcquireRequest struct {
 	Protocol string         `json:"protocol"`
 	Key      string         `json:"key"`
 	Service  spells.Service `json:"service"`
 }
 
-// ServiceAcquireReply reports whether the service came up. Err is non-empty when it
+// serviceAcquireReply reports whether the service came up. Err is non-empty when it
 // could not be started or did not become ready.
-type ServiceAcquireReply struct {
+type serviceAcquireReply struct {
 	Err string `json:"err,omitempty"`
 }
 
-// ServiceReleaseRequest drops this invocation's hold on a shared service. The daemon
+// serviceReleaseRequest drops this invocation's hold on a shared service. The daemon
 // keeps it warm (idle timeout) and reaps it later, so a later run reuses it.
-type ServiceReleaseRequest struct {
+type serviceReleaseRequest struct {
 	Protocol string `json:"protocol"`
 	Key      string `json:"key"`
 }
 
-// ServiceReleaseReply is the response to a release.
-type ServiceReleaseReply struct{}
+// serviceReleaseReply is the response to a release. It carries no fields: the client
+// only checks the frame's type tag, so a field added here would need a matching decode
+// arm added to ReleaseService in client.go at the same time.
+type serviceReleaseReply struct{}
 
-// ServiceStopAllRequest asks the daemon to stop every service it is hosting while
+// serviceStopAllRequest asks the daemon to stop every service it is hosting while
 // staying up, for `magus server stop --services`. It clears warm services (stale
 // data, held ports) without killing the daemon.
-type ServiceStopAllRequest struct {
+type serviceStopAllRequest struct {
 	Protocol string `json:"protocol"`
 }
 
-// ServiceStopAllReply reports how many services were stopped.
-type ServiceStopAllReply struct {
+// serviceStopAllReply reports how many services were stopped.
+type serviceStopAllReply struct {
 	Count int `json:"count"`
 }
 
-// ConfigReloadRequest asks the daemon to drop the workspaces it is holding open, so the
+// configReloadRequest asks the daemon to drop the workspaces it is holding open, so the
 // next command against each one reopens it and re-reads magus.yaml. It is the config
-// counterpart of ServiceStopAllRequest: a partial reset that leaves the daemon up.
+// counterpart of serviceStopAllRequest: a partial reset that leaves the daemon up.
 //
 // There is no "apply this config" payload, and deliberately so - the daemon does not hold
 // a config to patch, it holds OPEN WORKSPACES that each captured one when they loaded.
 // Dropping them is the reload; the config is then read from disk the ordinary way,
 // through exactly the path a cold start uses. Nothing here can disagree with that path
 // because nothing here duplicates it.
-type ConfigReloadRequest struct {
+type configReloadRequest struct {
 	Protocol string `json:"protocol"`
 }
 
-// ConfigReloadReply reports how many workspaces were dropped and how many were left
+// configReloadReply reports how many workspaces were dropped and how many were left
 // alone because a run was in flight. Busy is not an error: those keep the config they
 // started with, which is what a run in progress should do.
-type ConfigReloadReply struct {
+type configReloadReply struct {
 	Dropped int `json:"dropped"`
 	Busy    int `json:"busy"`
 }
@@ -234,7 +240,7 @@ type ServiceHost interface {
 	StopAll() int
 }
 
-// ErrorReply is returned by the server for transport-level failures.
-type ErrorReply struct {
+// errorReply is returned by the server for transport-level failures.
+type errorReply struct {
 	Message string `json:"message"`
 }

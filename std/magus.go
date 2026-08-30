@@ -51,8 +51,8 @@ var Magus = Module{
 		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile, and a " +
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
 		"`where` and `insight` all answer in-process, and so does `magus\\ledger` (list, put, " +
-		"register, clear): the delegation ledger an orchestrating agent declares about work it handed " +
-		"out (see types.Delegation). There is deliberately no `magus ledger` CLI " +
+		"register, clear): the lease ledger an orchestrating agent declares about work it handed " +
+		"out (see types.Lease). There is deliberately no `magus ledger` CLI " +
 		"subcommand, so this namespace and the magus_ledger MCP tool are the only doors onto " +
 		"it. Only the members that DECLARE into " +
 		"the workspace being loaded (`magus\\project`, the provider selections above) raise " +
@@ -214,7 +214,7 @@ var Magus = Module{
 		},
 		{
 			Name: "attention",
-			Doc:  "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, delegation, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.",
+			Doc:  "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, lease, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -427,12 +427,12 @@ var Magus = Module{
 		},
 		{
 			Name: "ledger",
-			Doc: "The declared delegation ledger: what an orchestrating agent said about work it " +
+			Doc: "The declared lease ledger: what an orchestrating agent said about work it " +
 				"handed out, recorded so a human can see the plan the agents are running. Rows are " +
 				"DECLARATIONS - this store records them and refuses nothing; the agent guard is what " +
 				"reads them to grade a write, and register's verdict is a fact it hands back rather " +
 				"than a gate. See the field docs on " +
-				"types.Delegation. This namespace and the magus_ledger MCP tool are the only " +
+				"types.Lease. This namespace and the magus_ledger MCP tool are the only " +
 				"doors onto it - there is deliberately no `magus ledger` CLI subcommand. Bound by " +
 				"hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's " +
 				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
@@ -440,16 +440,16 @@ var Magus = Module{
 			Methods: []Method{
 				{
 					Name: "list",
-					Doc: "Every row as one typed report: {delegations, overlaps}. delegations are in the order " +
+					Doc: "Every row as one typed report: {leases, overlaps}. leases are in the order " +
 						"they were declared; overlaps are derived on this read - every pair of live " +
-						"(non-terminal) delegations whose declared owned_paths intersect - the same " +
+						"(non-terminal) leases whose declared owned_paths intersect - the same " +
 						"derivation the magus_ledger MCP tool's \"list\" op and the console's " +
 						"/api/v1/ledger route use, so the three cannot disagree about a collision. " +
-						"Annotate the result `> DelegationReport` for compile-checked field access. " +
+						"Annotate the result `> LeaseReport` for compile-checked field access. " +
 						"Read straight off the workspace already open on the context - no subprocess. " +
 						"Works from a magusfile target and from a `magus buzz` script run inside a " +
 						"workspace; raises MGS1022 only when there is no workspace to read.",
-					Returns: []Ret{{Type: TypeAnyMap, Object: "DelegationReport"}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "LeaseReport"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -458,7 +458,7 @@ var Magus = Module{
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
 						"goal, checkpoint, owned_paths, forbidden_paths, depends_on, tier, " +
 						"validation, state (declared, running, pass, fail, no_return), read_only. A " +
-						"key opts omits is left untouched, so a later put in a delegation's lifecycle (e.g. " +
+						"key opts omits is left untouched, so a later put in a lease's lifecycle (e.g. " +
 						"{state = \"running\"}) advances it without erasing what an earlier put " +
 						"declared; a key present with an empty value is an explicit clear. id is the " +
 						"row's identity to upsert on - the value an orchestrator should also put in " +
@@ -472,20 +472,20 @@ var Magus = Module{
 						{Name: "id", Type: TypeString},
 						{Name: "opts", Type: TypeAnyMap, Optional: true},
 					},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "Delegation"}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "Lease"}},
 					Raises:  true,
 					Extern:  true,
 				},
 				{
 					Name: "register",
 					Doc: "Report the base a worker actually landed on, and learn how it compares " +
-						"with the checkpoint the delegation was handed. reported_base is a checkpoint token " +
+						"with the checkpoint the lease was handed. reported_base is a checkpoint token " +
 						"in the form `magus vcs checkpoint -o name` prints: `<rev>`, or `<rev>+<digest>` " +
-						"when the tree is dirty. Returns {delegation, advice}: the stored row, and a " +
+						"when the tree is dirty. Returns {lease, advice}: the stored row, and a " +
 						"sentence naming both revisions and what to do next. The row carries " +
 						"reported_base, registered, and base_verdict - one of match (same token), " +
 						"revision-match (same revision, different uncommitted patch), diverged " +
-						"(different revision), or unknown (the delegation was declared without a " +
+						"(different revision), or unknown (the lease was declared without a " +
 						"checkpoint, so there is nothing to compare against). The verdict is a FACT " +
 						"returned and recorded, NEVER a refusal: a diverged registration succeeds " +
 						"like any other, and what to do about it is the caller's and the " +
@@ -901,14 +901,14 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 }
 
 // ledgerCacheDir is the structural seam for the one capability types.WorkspaceRepository
-// does not carry that opening a delegation-ledger Store needs: the workspace's cache
+// does not carry that opening a lease-ledger Store needs: the workspace's cache
 // directory. Satisfied by the real *magus.Magus the same way std.Analyzer is - recovered
 // by assertion so std and root magus name neither each other.
 type ledgerCacheDir interface {
 	CacheDir() string
 }
 
-// ledgerStoreFromContext opens the delegation ledger for the workspace already on ctx. A
+// ledgerStoreFromContext opens the lease ledger for the workspace already on ctx. A
 // fresh Store per call is deliberate and matches ledger.Store's own documented contract:
 // it holds no state beyond its path and lock, and a cross-process race over the file is
 // already accepted for v1 (see internal/ledger/store.go) - a magusfile target is just
@@ -935,53 +935,53 @@ func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, 
 // MagusListLedger backs magus\ledger.list (hand-bound in
 // internal/interp/bindings/ledger_ns.go, since a Namespace method has no Impl for
 // codegen to reflect a trampoline from - see std.Namespace). It answers with one typed
-// report; types.NewDelegationReport is the same constructor the magus_ledger MCP tool's
+// report; types.NewLeaseReport is the same constructor the magus_ledger MCP tool's
 // "list" op and the console's /api/v1/ledger route call, so the three doors cannot
 // disagree about the rows or the overlaps derived from them.
-func MagusListLedger(ctx context.Context) (types.DelegationReport, error) {
+func MagusListLedger(ctx context.Context) (types.LeaseReport, error) {
 	store, err := ledgerStoreFromContext(ctx, "ledger.list")
 	if err != nil {
-		return types.DelegationReport{}, err
+		return types.LeaseReport{}, err
 	}
-	delegations, err := store.List()
+	leases, err := store.List()
 	if err != nil {
-		return types.DelegationReport{}, err
+		return types.LeaseReport{}, err
 	}
-	return types.NewDelegationReport(delegations), nil
+	return types.NewLeaseReport(leases), nil
 }
 
 // MagusPutLedger backs magus\ledger.put. The field merge is decoded by
 // internal/ledger.Merge, the same decoder the magus_ledger MCP tool's "put" op calls, so
 // a client typing either surface accepts the same fields and rejects the same mistakes.
-func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.Delegation, error) {
+func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.Lease, error) {
 	store, err := ledgerStoreFromContext(ctx, "ledger.put")
 	if err != nil {
-		return types.Delegation{}, err
+		return types.Lease{}, err
 	}
 	merge, err := ledger.Merge(opts)
 	if err != nil {
-		return types.Delegation{}, err
+		return types.Lease{}, err
 	}
 	return store.Update(ctx, strings.TrimSpace(id), merge)
 }
 
 // MagusRegisterLedger backs magus\ledger.register: a worker reports the base it actually
-// landed on, and learns how that compares with the checkpoint its delegation was handed. It
+// landed on, and learns how that compares with the checkpoint its lease was handed. It
 // returns the stored row and internal/ledger.RegistrationAdvice's reading of the verdict, the
 // same pair the magus_ledger tool's "register" op answers with.
 //
 // The verdict is a FACT, never a refusal - a diverged registration is recorded and
-// reported like any other. See types.Delegation.
-func MagusRegisterLedger(ctx context.Context, id, base string) (types.Delegation, string, error) {
+// reported like any other. See types.Lease.
+func MagusRegisterLedger(ctx context.Context, id, base string) (types.Lease, string, error) {
 	store, err := ledgerStoreFromContext(ctx, "ledger.register")
 	if err != nil {
-		return types.Delegation{}, "", err
+		return types.Lease{}, "", err
 	}
-	delegation, err := store.Register(ctx, strings.TrimSpace(id), base)
+	lease, err := store.Register(ctx, strings.TrimSpace(id), base)
 	if err != nil {
-		return types.Delegation{}, "", err
+		return types.Lease{}, "", err
 	}
-	return delegation, ledger.RegistrationAdvice(delegation), nil
+	return lease, ledger.RegistrationAdvice(lease), nil
 }
 
 // MagusClearLedger backs magus\ledger.clear, matching the magus_ledger MCP tool's

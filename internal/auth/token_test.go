@@ -44,9 +44,6 @@ func (s *TokenSuite) TestRoundTrip() {
 
 	_, err := Load()
 	require.ErrorIs(t, err, ErrNoToken, "Load on empty")
-	ok, err := Exists()
-	require.NoError(t, err)
-	assert.False(t, ok, "Exists on empty")
 
 	tok, err := Generate()
 	require.NoError(t, err)
@@ -62,10 +59,6 @@ func (s *TokenSuite) TestRoundTrip() {
 	got, err := Load()
 	require.NoError(t, err)
 	assert.Equal(t, tok, got)
-
-	ok, err = Exists()
-	require.NoError(t, err)
-	assert.True(t, ok, "Exists after Save")
 }
 
 func (s *TokenSuite) TestLoadRejectsInsecurePerms() {

@@ -170,10 +170,10 @@ func TestGraphHasSymbols(t *testing.T) {
 }
 
 func TestSymbolsShardNaming(t *testing.T) {
-	assert.Equal(t, "pkg/foo@symbols", SymbolsShardName("pkg/foo"))
-	assert.True(t, IsSymbolsShard("pkg/foo@symbols"))
-	assert.False(t, IsSymbolsShard("pkg/foo"))
-	assert.False(t, IsSymbolsShard(RuntimeShardName))
+	assert.Equal(t, "pkg/foo@symbols", symbolsShardName("pkg/foo"))
+	assert.True(t, isSymbolsShard("pkg/foo@symbols"))
+	assert.False(t, isSymbolsShard("pkg/foo"))
+	assert.False(t, isSymbolsShard(runtimeShardName))
 }
 
 // TestAssembleSymbolsRefOnly: a symbol seen only as a reference (its definition is in
@@ -222,7 +222,7 @@ func TestSymbolsDoNotChangeTheDefaultGraph(t *testing.T) {
 	defaultGraph := func(in Inputs) types.KnowledgeGraphOutput {
 		g := NewGraph()
 		for _, sh := range AssembleShards(in) {
-			if IsSymbolsShard(sh.Name) || IsCoverageShard(sh.Name) {
+			if isSymbolsShard(sh.Name) || isCoverageShard(sh.Name) {
 				continue
 			}
 			g.Merge(sh.Nodes, sh.Edges)

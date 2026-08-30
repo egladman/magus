@@ -81,9 +81,9 @@ type CQE struct {
 	Result   int32  // bytes read on success, negated errno on failure
 }
 
-// ReadErr returns nil if the read completed exactly wantLen bytes,
+// readErr returns nil if the read completed exactly wantLen bytes,
 // a syscall.Errno for a kernel error, or an error for a short read.
-func (c CQE) ReadErr(wantLen int) error {
+func (c CQE) readErr(wantLen int) error {
 	if c.Result < 0 {
 		return syscall.Errno(-c.Result)
 	}
@@ -129,9 +129,9 @@ func checkKernelVersion(major, minor int) error {
 	return nil
 }
 
-// NewRing creates a new io_uring with at least entries SQEs and the
+// newRing creates a new io_uring with at least entries SQEs and the
 // matching number of CQEs (chosen by the kernel; usually 2× entries).
-func NewRing(entries uint32) (*Ring, error) {
+func newRing(entries uint32) (*Ring, error) {
 	if err := checkKernelVersion(5, 6); err != nil {
 		return nil, err
 	}
@@ -184,9 +184,9 @@ func NewRing(entries uint32) (*Ring, error) {
 	return r, nil
 }
 
-// Close unmaps the ring and closes its fd. Subsequent operations on r
+// close unmaps the ring and closes its fd. Subsequent operations on r
 // are undefined.
-func (r *Ring) Close() error {
+func (r *Ring) close() error {
 	_ = syscall.Munmap(r.sqesMem)
 	if !r.single {
 		_ = syscall.Munmap(r.cqMem)
@@ -231,9 +231,9 @@ func (r *Ring) cqeAt(slot uint32) *cqe {
 	return (*cqe)(unsafe.Pointer(&r.cqMem[r.params.cqOff.cqes+slot*uint32(unsafe.Sizeof(cqe{}))]))
 }
 
-// SubmitRead queues an IORING_OP_READ for fd into buf tagged with userData.
+// submitRead queues an IORING_OP_READ for fd into buf tagged with userData.
 // buf must remain alive until the matching CQE is drained.
-func (r *Ring) SubmitRead(fd int, buf []byte, userData uint64) error {
+func (r *Ring) submitRead(fd int, buf []byte, userData uint64) error {
 	if len(buf) == 0 {
 		return errors.New("iouring: SubmitRead: empty buffer")
 	}
@@ -257,9 +257,9 @@ func (r *Ring) SubmitRead(fd int, buf []byte, userData uint64) error {
 	return nil
 }
 
-// SubmitAndWait submits pending SQEs and blocks until minComplete CQEs are available.
+// submitAndWait submits pending SQEs and blocks until minComplete CQEs are available.
 // io_uring_enter(GETEVENTS) is the release/acquire fence for CQ reads.
-func (r *Ring) SubmitAndWait(minComplete uint32) (int, error) {
+func (r *Ring) submitAndWait(minComplete uint32) (int, error) {
 	toSubmit := atomic.LoadUint32(r.sqTailPtr()) - atomic.LoadUint32(r.sqHeadPtr())
 	var n uintptr
 	var errno syscall.Errno
@@ -280,9 +280,9 @@ func (r *Ring) SubmitAndWait(minComplete uint32) (int, error) {
 	return int(n), nil
 }
 
-// DrainCompletions visits every available CQE and advances the CQ head.
-// Call only after a successful SubmitAndWait.
-func (r *Ring) DrainCompletions(visit func(CQE)) {
+// drainCompletions visits every available CQE and advances the CQ head.
+// Call only after a successful submitAndWait.
+func (r *Ring) drainCompletions(visit func(CQE)) {
 	head := atomic.LoadUint32(r.cqHeadPtr())
 	tail := atomic.LoadUint32(r.cqTailPtr())
 	for head != tail {

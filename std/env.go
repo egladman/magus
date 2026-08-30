@@ -45,7 +45,7 @@ var Env = Module{
 		},
 		{
 			Name:    "list",
-			Doc:     "Return all environment variables as a name→value map.",
+			Doc:     "Return all environment variables as a name->value map.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeStringMap}},
 			Impl:    EnvList,

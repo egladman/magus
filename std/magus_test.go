@@ -280,7 +280,7 @@ func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	require.Error(t, err)
 }
 
-// fakeLedgerWorkspace is a workspace that can back a delegation-ledger Store: it
+// fakeLedgerWorkspace is a workspace that can back a lease-ledger Store: it
 // carries the cache directory ledgerStoreFromContext needs beyond
 // types.WorkspaceRepository's own Root.
 type fakeLedgerWorkspace struct {
@@ -302,9 +302,9 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	report, err := MagusListLedger(ctx)
 	require.NoError(t, err, "a workspace with a cache directory answers here, with no subprocess")
-	require.Len(t, report.Delegations, 1)
-	assert.Equal(t, "u1", report.Delegations[0].ID)
-	assert.Equal(t, types.StateRunning, report.Delegations[0].State)
+	require.Len(t, report.Leases, 1)
+	assert.Equal(t, "u1", report.Leases[0].ID)
+	assert.Equal(t, types.StateRunning, report.Leases[0].State)
 }
 
 // TestLedgerNeedsAWorkspace mirrors TestInsightNeedsAWorkspace: there is no `magus
@@ -377,12 +377,12 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 
 	report, err := MagusListLedger(ctx)
 	require.NoError(t, err)
-	assert.Empty(t, report.Delegations)
+	assert.Empty(t, report.Leases)
 }
 
 // TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_ledger MCP
 // tool are two doors onto the same file: a row put through one is visible through the
-// other, and internal/ledger.Store's own path derivation (CacheDir/ledger/units.json)
+// other, and internal/ledger.Store's own path derivation (CacheDir/ledger/leases.json)
 // is what makes that true without either side naming the other.
 func TestLedgerAndTheMCPToolAgree(t *testing.T) {
 	t.Parallel()
@@ -394,8 +394,8 @@ func TestLedgerAndTheMCPToolAgree(t *testing.T) {
 	require.NoError(t, err)
 
 	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir})
-	delegations, err := store.List()
+	leases, err := store.List()
 	require.NoError(t, err)
-	require.Len(t, delegations, 1)
-	assert.Equal(t, "shared row", delegations[0].Goal)
+	require.Len(t, leases, 1)
+	assert.Equal(t, "shared row", leases[0].Goal)
 }

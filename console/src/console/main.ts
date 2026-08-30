@@ -2235,7 +2235,7 @@ export function startConsole(
     mount(tab);
   }
 
-  // Dashboard owns the live delegation plan. The ephemeral intent reaches a lazily loaded Dashboard
+  // Dashboard owns the live lease plan. The ephemeral intent reaches a lazily loaded Dashboard
   // bundle even on its first mount; the event switches an already-mounted Dashboard immediately.
   function openDashboardPlan(): void {
     (window as Window & { __magusConsoleDashboardView?: "plan" }).__magusConsoleDashboardView =

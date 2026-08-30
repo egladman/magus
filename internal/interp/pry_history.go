@@ -12,19 +12,19 @@ import (
 	"github.com/egladman/magus/internal/file"
 )
 
-// DefaultHistoryCap is the maximum number of lines kept in memory and on disk.
-const DefaultHistoryCap = 1000
+// defaultHistoryCap is the maximum number of lines kept in memory and on disk.
+const defaultHistoryCap = 1000
 
-// History is an append-only ring of REPL input lines, persisted to disk.
-type History struct {
+// history is an append-only ring of REPL input lines, persisted to disk.
+type history struct {
 	mu    sync.Mutex
 	path  string
 	cap   int
 	lines []string
 }
 
-// DefaultHistoryPath returns $XDG_STATE_HOME/magus/pry_history, falling back to ~/.local/state.
-func DefaultHistoryPath() string {
+// defaultHistoryPath returns $XDG_STATE_HOME/magus/pry_history, falling back to ~/.local/state.
+func defaultHistoryPath() string {
 	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
 		return filepath.Join(dir, "magus", "pry_history")
 	}
@@ -35,12 +35,12 @@ func DefaultHistoryPath() string {
 	return ".magus_pry_history"
 }
 
-// OpenHistory loads up to maxCap lines from path (0 = DefaultHistoryCap); a missing file is not an error.
-func OpenHistory(path string, maxCap int) (*History, error) {
+// openHistory loads up to maxCap lines from path (0 = defaultHistoryCap); a missing file is not an error.
+func openHistory(path string, maxCap int) (*history, error) {
 	if maxCap <= 0 {
-		maxCap = DefaultHistoryCap
+		maxCap = defaultHistoryCap
 	}
-	h := &History{path: path, cap: maxCap}
+	h := &history{path: path, cap: maxCap}
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -64,8 +64,8 @@ func OpenHistory(path string, maxCap int) (*History, error) {
 	return h, scanner.Err()
 }
 
-// Append records line (skips empty and consecutive duplicates) and writes through to disk.
-func (h *History) Append(line string) {
+// append records line (skips empty and consecutive duplicates) and writes through to disk.
+func (h *history) append(line string) {
 	line = strings.TrimRight(line, "\n")
 	if line == "" {
 		return
@@ -85,7 +85,7 @@ func (h *History) Append(line string) {
 }
 
 // Lines returns a copy of the in-memory ring (oldest first).
-func (h *History) Lines() []string {
+func (h *history) Lines() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	out := make([]string, len(h.lines))
@@ -93,9 +93,9 @@ func (h *History) Lines() []string {
 	return out
 }
 
-// Recall returns the n-th most-recent line (1-based; n=1 is the latest).
+// recall returns the n-th most-recent line (1-based; n=1 is the latest).
 // Returns "" if n is out of range.
-func (h *History) Recall(n int) string {
+func (h *history) recall(n int) string {
 	if n <= 0 {
 		return ""
 	}
@@ -108,7 +108,7 @@ func (h *History) Recall(n int) string {
 }
 
 // appendLocked appends one line. Caller holds h.mu.
-func (h *History) appendLocked(line string) {
+func (h *history) appendLocked(line string) {
 	if err := os.MkdirAll(filepath.Dir(h.path), 0o755); err != nil {
 		return
 	}
@@ -121,7 +121,7 @@ func (h *History) appendLocked(line string) {
 }
 
 // rewriteLocked truncates and rewrites the history file. Caller holds h.mu.
-func (h *History) rewriteLocked() {
+func (h *history) rewriteLocked() {
 	var buf bytes.Buffer
 	for _, l := range h.lines {
 		buf.WriteString(l)

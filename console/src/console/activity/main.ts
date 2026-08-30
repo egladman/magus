@@ -3,22 +3,35 @@
 // model), so a run's output and the trail read as one design. Unlike logs/graph/dashboard it has NO
 // standalone page - it is built fresh into a console host. It lists a page of events via
 // ActivityService.ListActivityEvents when a daemon is reachable (a #port link, the daemon-origin/shared
-// console, or the last daemon the dashboard connected to), and shows a synthesized demo trail on the
+// console, or the last daemon the dashboard connected to), resolves an event's payload refs on demand
+// through ActivityService.GetPayload, and shows a synthesized demo trail on the
 // shared #demo fragment so the
-// design is inspectable offline. activate(host) builds the scaffold, kicks the initial load, and
+// design is inspectable offline. On a live trail it also mounts the maintenance-jobs control
+// (jobs.ts, JobService) above the stream - the jobs whose results this trail records.
+// activate(host) builds the scaffold, kicks the initial load, and
 // returns a teardown the console calls on close (it just marks in-flight loads stale - there is no
 // long-lived stream yet).
 
-import { createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient, type Client } from "@connectrpc/connect";
 import {
   ActivityService,
   Kind,
   Outcome,
   type ActivityEvent,
 } from "@wire/activity/v1alpha1/activity_pb";
-import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
+import {
+  PAYLOAD_MAX_BYTES,
+  activityToModel,
+  groupEventsByKind,
+  humanBytes,
+  payloadLabel,
+  payloadLines,
+  payloadRefs,
+  tsMillis,
+  type PayloadRef,
+} from "./adapter";
 import { notify } from "../../lib/notifications";
-import { buildSection } from "../render/sections";
+import { buildSection, renderLine } from "../render/sections";
 import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "../logs/runtree";
 import {
   parseHash,
@@ -29,6 +42,8 @@ import {
   consumeLiveToken,
   createDaemonTransport,
 } from "../../lib/daemon";
+import { errMessage } from "../../lib/guards";
+import { mountJobs, type JobsControl } from "./jobs";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 import type { SurfaceInstance } from "../standalone";
@@ -257,6 +272,18 @@ function renderIndexTree(
   container.append(tree);
 }
 
+// PayloadControl is one "show request/response" control: the body line it sits on, its button and
+// that button's label span (PF keeps a button's text in its own element, so the label is swapped
+// there rather than over the button's children), the note a failure reason lands in, and the ref
+// being resolved.
+interface PayloadControl {
+  row: HTMLElement;
+  btn: HTMLButtonElement;
+  text: HTMLElement;
+  note: HTMLElement;
+  ref: PayloadRef;
+}
+
 // activate builds the surface into host, loads once, and returns a teardown. Every async load checks
 // `stale` before touching the DOM, so a load that resolves after the tab closed is dropped.
 // Returns the console's surface shape (page.ts): a teardown plus setVisible, so the shell can tell
@@ -270,6 +297,26 @@ export function activate(host: HTMLElement): SurfaceInstance {
   let nextPageToken = "";
   let loadMore: (() => void) | null = null;
   let loading = false;
+  // The client the live load built, kept past that load so expanding a payload reaches the same
+  // daemon the events came from. Null on the demo trail, and that is what gates the expand control:
+  // a synthesized event's refs name blobs no store holds, so the offer could only fail.
+  let payloadClient: Client<typeof ActivityService> | null = null;
+  // The maintenance-jobs control, mounted only once a live trail has loaded. It sits in the scroll
+  // box above the stream rather than in the body, which render() replaces wholesale.
+  let jobs: JobsControl | null = null;
+
+  function dropJobs(): void {
+    jobs?.destroy();
+    jobs = null;
+  }
+
+  // showJobs mounts the control for daemonHost, replacing one left over from a previous host.
+  function showJobs(daemonHost: string): void {
+    dropJobs();
+    jobs = mountJobs(daemonHost);
+    refs.scroll.prepend(jobs.el);
+    void jobs.load();
+  }
 
   // The event index: the collapsible left panel shared with the log viewer's run browser. Its refresh
   // icon re-runs load(); the "N events" count rides in its header. It starts collapsed on a phone and
@@ -301,14 +348,89 @@ export function activate(host: HTMLElement): SurfaceInstance {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  // attachPayloadExpand adds one control per stored body to a section's lines, each resolving the
+  // full bytes by ref on click.
+  //
+  // WHY: the event line NAMES a body it does not carry - a response arrives as its first 240
+  // characters, a request as nothing but a size and a ref - so the trail described payloads and
+  // left the reader no way to read one. GetPayload is the documented resolver for a ref
+  // (activity.proto), and until now the console was the one client that never called it. There is
+  // no CLI that reads a payload either, so pointing at one instead was not an option.
+  //
+  // The control goes in the BODY rather than the head's action slot: head actions are hidden until
+  // hover (logs.css), which is fine for a copy button and wrong for the only door onto the content.
+  function attachPayloadExpand(secEl: HTMLElement, ev: ActivityEvent): void {
+    const client = payloadClient;
+    if (!client) return;
+    const lines = secEl.querySelector(".console-render-section__lines");
+    if (!lines) return;
+    for (const ref of payloadRefs(ev)) {
+      const row = h("div", "console-render-line");
+      const content = h("span", "console-render-line__content");
+      const btn = h("button", "pf-v6-c-button pf-m-link pf-m-inline");
+      btn.type = "button";
+      const text = h("span", "pf-v6-c-button__text", payloadLabel(ref));
+      btn.append(text);
+      const note = h("span");
+      btn.addEventListener("click", () => {
+        void expandPayload(client, { row, btn, text, note, ref });
+      });
+      content.append(btn, note);
+      row.append(content);
+      lines.append(row);
+    }
+  }
+
+  // expandPayload resolves one ref and replaces its control with the body it names. A NotFound is a
+  // normal end state rather than a fault - the trail rotates blobs out from under events that still
+  // name them - so it reads as a fact on the line, with no retry offered for something that will
+  // never come back. Any other failure keeps the control, so a daemon blip is retryable.
+  async function expandPayload(
+    client: Client<typeof ActivityService>,
+    ctl: PayloadControl,
+  ): Promise<void> {
+    if (ctl.btn.disabled) return;
+    const label = ctl.text.textContent ?? "";
+    ctl.btn.disabled = true;
+    ctl.note.textContent = "";
+    ctl.text.textContent = "loading " + ctl.ref.label + "...";
+    try {
+      const payload = await client.getPayload({ ref: ctl.ref.ref });
+      if (stale) return;
+      const { lines, clipped } = payloadLines(payload.body);
+      // The ref leads the block: a section can expand both bodies, and two runs of text with no
+      // header between them would read as one.
+      const body = [renderLine(ctl.ref.label + " " + ctl.ref.ref, null)];
+      for (const line of lines) body.push(renderLine(line, null));
+      if (clipped) {
+        const cut = humanBytes(PAYLOAD_MAX_BYTES) + " of " + humanBytes(Number(payload.sizeBytes));
+        body.push(renderLine("showing the first " + cut, null));
+      }
+      ctl.row.replaceWith(...body);
+    } catch (e) {
+      if (stale) return;
+      if (e instanceof ConnectError && e.code === Code.NotFound) {
+        const gone = ctl.ref.label + " " + ctl.ref.ref + " is no longer stored";
+        ctl.row.replaceWith(renderLine(gone, null));
+        return;
+      }
+      ctl.text.textContent = label;
+      ctl.btn.disabled = false;
+      ctl.note.textContent = "  could not read the " + ctl.ref.label + ": " + errMessage(e);
+    }
+  }
+
   function render(events: ActivityEvent[]): void {
     refs.body.replaceChildren();
     const model = activityToModel(events);
     // The adapter puts the ok/error accent in meta.status; buildSection defaults its accent from a
     // "[status]" title token (which the trail deliberately omits), so pass it through explicitly.
-    const sectionEls: HTMLElement[] = model.sections.map((sec) =>
-      buildSection(sec, { status: sec.meta?.status }),
-    );
+    // Sections map 1:1 onto events in order, so events[i] is the event section i was built from.
+    const sectionEls: HTMLElement[] = model.sections.map((sec, i) => {
+      const el = buildSection(sec, { status: sec.meta?.status });
+      attachPayloadExpand(el, events[i]);
+      return el;
+    });
     for (const el of sectionEls) refs.body.append(el);
     const has = events.length > 0;
     refs.empty.hidden = has;
@@ -394,11 +516,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
     try {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
+      payloadClient = client;
       const resp = await client.listActivityEvents({ pageSize: PAGE_SIZE, pageToken });
       if (stale) return;
       loadedEvents = loadedEvents.concat(resp.events);
       nextPageToken = resp.nextPageToken;
       loadMore = nextPageToken ? () => void loadLive(daemonHost, nextPageToken) : null;
+      // After the trail answered, and only on a cold load: the daemon is proven reachable, so a
+      // JobService failure from here is that service refusing rather than a dead daemon, and paging
+      // does not re-mount a control the reader may have just pressed.
+      if (!pageToken) showJobs(daemonHost);
       render(loadedEvents);
       notifyDenials(resp.events);
       if (loadedEvents.length === 0) {
@@ -447,6 +574,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
     adoptDaemonOrigin();
     if (wantsDemo(params)) {
+      payloadClient = null;
+      // Same gate the payload control is under: the demo has no daemon behind it, so a Run action
+      // could only fail.
+      dropJobs();
       render(demoEvents(Date.now()));
       return;
     }
@@ -457,6 +588,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       void loadLive(daemonHost);
       return;
     }
+    dropJobs();
     showEmpty(
       "No daemon connected",
       "Activity records what the daemon did: MCP calls, jobs, config changes.",
@@ -472,6 +604,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     setVisible(): void {},
     deactivate(): void {
       stale = true;
+      dropJobs();
     },
   };
 }

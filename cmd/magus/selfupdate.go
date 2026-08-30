@@ -157,7 +157,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	} else if !uf.Force {
 		switch selfupdate.Compare(rel.Version, version) {
 		case 0:
-			return fmt.Errorf("already running %s (use --uf.Force to reinstall)", version)
+			return fmt.Errorf("magus self update: already running %s (use --uf.Force to reinstall)", version)
 		case -1:
 			if uf.Version == "" {
 				// Auto-latest is below running: refuse unconditionally unless forced.

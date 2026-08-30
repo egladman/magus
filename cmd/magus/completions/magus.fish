@@ -6,7 +6,7 @@ function __magus_subcommands
     printf '%s\t%s\n' \
 # magus-utils:subcommands:begin
         ls         'list all discovered projects' \
-        describe   'define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)' \
+        describe   'define a magus concept and list all entities (spell|charm|target|graph|project|workspace|module|mcp-tool|file|tool)' \
         where      'print the absolute path of a project (fuzzy match)' \
         run        'run a target for selected projects' \
         affected   'run a target for VCS-diff affected projects' \
@@ -21,17 +21,18 @@ function __magus_subcommands
         vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)' \
         session    'what sessions did and what they are blocked on: humans read (ls, attention) and dispose; hosts write (hook, notify)' \
         memory     'durable cross-session project memory (ls, get, put, delete, verify)' \
-        notes      'human-authored notes committed to the repo (ls, get, edit, verify)' \
+        notes      'human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)' \
         watch      'emit changed file paths (pipe into affected --stdin)' \
         events     'stream workspace events as JSONL for an editor plugin or other integration' \
         server     'manage the persistent daemon (start / stop / status; MCP starts with it)' \
+        mcp        'print how to reach the MCP server (served by the daemon, not a standalone command)' \
         status     'inspect the concurrency pool of a running parent magus' \
         buzz       'run a Buzz script (Buzz stdlib + every magus host module)' \
         agent      'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
         init       'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
         doctor     'validate the workspace' \
         config     'view or update magus configuration' \
-        completion 'print a shell completion script (bash, zsh, fish)' \
+        completion 'print a shell completion script (bash, zsh, fish, powershell)' \
         man        'install the man pages embedded in this binary' \
         self       'manage the magus binary (self update / install)' \
         version    'print version, commit, and build date' \
@@ -69,20 +70,22 @@ function __magus_describe_nouns
         spell     'list every spell' \
         charm     'list every charm' \
         target    'list every target' \
+        graph     'emit the target catalog and dependency graph' \
         project   'list every project' \
         workspace 'describe the workspace' \
         module    'list every module' \
-        mcp-tool  'list every MCP tool'
+        mcp-tool  'list every MCP tool' \
+        file      'classify a path (generated, source, maintained)' \
+        tool      'list external tools spells require'
 end
 
-function __magus_insight_lenses
+function __magus_session_subs
     printf '%s\t%s\n' \
-        hotspots  'edit frequency x complexity, prime refactoring targets' \
-        affinity  'projects that change together (temporal coupling)' \
-        ownership 'author concentration and bus factor' \
-        trend     'rising vs cooling activity' \
-        unreferenced 'code symbols nothing in the workspace names' \
-        report    'every lens plus graph stats as one document'
+        ls        'list past sessions' \
+        attention 'list the open requests' \
+        dispose   'close one request with a reason' \
+        hook      'evaluate one shell command or file path' \
+        notify    'normalize an attention event'
 end
 
 function __magus_graph_subs
@@ -118,7 +121,7 @@ function __magus_projects
 end
 
 set -l verb_set ls build test lint format clean generate ci
-set -l describe_noun_set spell charm target project workspace module mcp-tool
+set -l describe_noun_set spell charm target graph project workspace module mcp-tool file tool
 set -l graph_sub_set deps export stats
 
 for _cmd in magus mgs
@@ -158,11 +161,7 @@ for _cmd in magus mgs
     complete -c $_cmd -n '__fish_seen_subcommand_from x' -a '(__magus_projects)'
     complete -c $_cmd -n '__fish_seen_subcommand_from x' -l step -d 'pause before each subprocess'
 
-    complete -c $_cmd -n "__fish_seen_subcommand_from insight; and not __fish_seen_subcommand_from hotspots affinity ownership trend unreferenced report" -a '(__magus_insight_lenses)'
-    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l commits -d 'cap on how many recent commits to scan'
-    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l since -d 'only commits within this window'
-    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l workspace -d 'analyze the whole workspace'
-    complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l files -d 'hotspots: rank individual files instead of projects'
+    complete -c $_cmd -n "__fish_seen_subcommand_from session; and not __fish_seen_subcommand_from ls attention dispose hook notify" -a '(__magus_session_subs)'
 
     complete -c $_cmd -n "__fish_seen_subcommand_from graph; and not __fish_seen_subcommand_from $graph_sub_set" -a '(__magus_graph_subs)'
     complete -c $_cmd -n '__fish_seen_subcommand_from graph deps' -l upstream -d 'show dependents instead of dependencies'

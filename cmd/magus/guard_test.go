@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/trail"
@@ -125,6 +128,42 @@ func TestHookCmd(t *testing.T) {
 	var positionalOut strings.Builder
 	err := hookCmd(context.Background(), strings.NewReader(""), &positionalOut, []string{"git", "stash"})
 	require.ErrorContains(t, err, "no positional arguments")
+}
+
+// TestHookCmd_UnreadableStdinFailsClosed pins the one input case that does NOT
+// fail open. An empty stdin is a host that sent nothing; a stdin that ERRORS is a
+// payload that was lost in flight, and answering pass there reports a command the
+// guard never saw as cleared. The manpage's exit table promises the same: deny and
+// unreadable input share code 2 so a host that blocks on 2 fails closed in both.
+func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+
+	// A truncated payload, which is the shape that actually occurs: some bytes
+	// arrive and the rest never does.
+	truncated := func() io.Reader {
+		return io.MultiReader(strings.NewReader("git sta"), iotest.ErrReader(errors.New("read |0: file already closed")))
+	}
+
+	var out bytes.Buffer
+	err := hookCmd(ctx, truncated(), &out, []string{"-o", "name"})
+	var silent errSilent
+	require.ErrorAs(t, err, &silent)
+	assert.Equal(t, guardDenyExitCode, silent.exitCode)
+	assert.Equal(t, "deny\n", out.String())
+
+	// The reason names what happened and what to do about it, so a blocked agent is
+	// not left guessing at a guard it cannot see.
+	out.Reset()
+	require.Error(t, hookCmd(ctx, truncated(), &out, []string{"-o", "json"}))
+	assert.Contains(t, out.String(), "could not read its input from stdin")
+	assert.Contains(t, out.String(), "file already closed")
+
+	// --observe carries no verdict, so it keeps the documented "always exits 0".
+	out.Reset()
+	require.NoError(t, hookCmd(ctx, truncated(), &out, []string{"--observe", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
@@ -367,20 +406,20 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 	assert.Empty(t, events)
 }
 
-// TestHookCmd_RecordsSpawnFromEnvelope covers the delegation surface end to end: a host payload
+// TestHookCmd_RecordsSpawnFromEnvelope covers the spawn surface end to end: a host payload
 // carrying a prompt rather than a command is recorded as a spawn, with the handed context in the
-// blob and the cooperative delegation marker stamped onto the event.
+// blob and the cooperative lease marker stamped onto the event.
 //
 // It also pins the thing that must NOT happen. The prompt below quotes `git stash`, which the
 // command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
-// delegation is recorded rather than blocked for describing a denied command.
+// spawn is recorded rather than blocked for describing a denied command.
 func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"abc123","tool_name":"Task",` +
 		`"tool_input":{"description":"audit the store","subagent_type":"Explore",` +
-		`"prompt":"delegation: notes-store-6b\nDo not run git stash anywhere."}}`
+		`"prompt":"lease: notes-store-6b\nDo not run git stash anywhere."}}`
 
 	var out bytes.Buffer
 	require.NoError(t, hookCmd(ctx, strings.NewReader(envelope), &out,
@@ -395,21 +434,21 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	requestRef := got.RequestRef
 	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
 	assert.Equal(t, trail.Event{
-		Kind:       trail.KindAgentSpawn,
-		Actor:      "agent",
-		Host:       "claude-code",
-		Session:    "abc123",
-		Workspace:  "/repo/magus",
-		Action:     "Explore",
-		Delegation: "notes-store-6b",
-		Outcome:    trail.OutcomeOK,
+		Kind:      trail.KindAgentSpawn,
+		Actor:     "agent",
+		Host:      "claude-code",
+		Session:   "abc123",
+		Workspace: "/repo/magus",
+		Action:    "Explore",
+		Lease:     "notes-store-6b",
+		Outcome:   trail.OutcomeOK,
 	}, got)
 
 	body, err := trail.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse",`+
-		`"tool":"Task","child":"Explore","delegation":"notes-store-6b",`+
-		`"context":"delegation: notes-store-6b\nDo not run git stash anywhere."}`, string(body))
+		`"tool":"Task","child":"Explore","lease":"notes-store-6b",`+
+		`"context":"lease: notes-store-6b\nDo not run git stash anywhere."}`, string(body))
 }
 
 // TestHookCmd_SpawnWithoutMarkerOrLabel holds the two halves of the cooperative contract: an
@@ -430,7 +469,7 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, trail.KindAgentSpawn, events[0].Kind)
 	assert.Equal(t, "agent.spawn", events[0].Action)
-	assert.Empty(t, events[0].Delegation)
+	assert.Empty(t, events[0].Lease)
 }
 
 // TestDecodeHookEnvelope_CommandStillWinsOverPrompt guards the ordering that makes the spawn

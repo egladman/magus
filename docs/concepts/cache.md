@@ -145,12 +145,12 @@ the `Step`. magus writes these lines, in this order, into one hash:
   fields changes) forces a global rebuild.
 - **`os`** and **`arch`** - the host platform, each independently switchable with
   [`cache.include.os.enabled`](../reference/config.md) and
-  `cache.include.arch.enabled`. Both default to on, so a macOS laptop and a Linux runner
-  mint different keys for identical sources. That is the safe direction - the alternative
-  is sharing an artifact between platforms that may not agree - but it does mean an
-  output ref is **not** comparable across machines by default. Turning one off is a claim
-  that the artifact does not vary along that axis, and being wrong that way replays a
-  foreign artifact out of a shared cache, where being wrong the other way only costs hits.
+  `cache.include.arch.enabled`. Both default to **off**, so a macOS laptop and a Linux
+  runner mint the same key for identical sources, and an output ref names the same run
+  on both. Neither switch carries correctness: every entry records the platform it was
+  built on, and a replay onto a different one is refused as a miss whatever these say.
+  Turn them on for a cache shared across platforms, where one key per platform beats
+  every platform colliding on one key and taking that miss.
 - **`projectPath`** and **`target`** - so the same sources under different targets
   key separately.
 - **`spell`** - the explicit `spell::op` filter, written only on such runs. An
@@ -209,6 +209,30 @@ inputs anywhere yield the identical key. A `src` file's content hash uses an
 mtime + size fast path (a per-file memo persisted under the cache dir), so an
 unchanged tree re-keys without re-reading every byte; the memo is a performance
 cache for the hash, never a substitute for it.
+
+The whole fold at a glance - every row is an input, each merged cell consumes
+everything beside it, and the read ends at one verdict. If a change is not on
+this list, it cannot move the key:
+
+<figure class="table-scroll">
+<table class="fold-table">
+<tr><td><code>keyVersion</code> - the schema of this very list</td>
+    <td rowspan="12">serialize<br>one line each,<br>stable order</td>
+    <td rowspan="12">SHA-256<br>= the key</td>
+    <td rowspan="12">look up<br>manifest stored: <strong>hit</strong>, replay outputs<br>none: <strong>miss</strong>, run and store</td></tr>
+<tr><td><code>os</code>, <code>arch</code> - opt-in, for caches shared across platforms</td></tr>
+<tr><td><code>projectPath</code>, <code>target</code></td></tr>
+<tr><td><code>spell</code> - op-direct (<code>spell::op</code>) runs only</td></tr>
+<tr><td><code>charm:</code> - active charms, sorted</td></tr>
+<tr><td><code>arg:</code> - arguments after <code>--</code>, in the order given</td></tr>
+<tr><td><code>src:</code> - every <code>needs</code> file: path, content hash, exec bit; the magusfiles always included</td></tr>
+<tr><td><code>env:</code> - allow-listed variables, sorted</td></tr>
+<tr><td><code>obs:</code> - <code>ctx.observes</code> facts, sorted</td></tr>
+<tr><td><code>exec:</code> - <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
+<tr><td><code>dep:</code> - each upstream target's resolved key, this same fold applied one level up</td></tr>
+<tr><td><code>spellDefVersion</code>, <code>tool:</code> - the spell definition and toolchain versions</td></tr>
+</table>
+</figure>
 
 ## Invalidation: what busts a key
 

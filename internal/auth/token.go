@@ -164,21 +164,6 @@ func Load() (string, error) {
 	return tok, nil
 }
 
-// Exists reports whether a token file is present.
-func Exists() (bool, error) {
-	path, err := Path()
-	if err != nil {
-		return false, err
-	}
-	if _, err := os.Stat(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, fmt.Errorf("auth: stat token: %w", err)
-	}
-	return true, nil
-}
-
 // Revoke deletes the token file. It is not an error if no token exists.
 func Revoke() error {
 	path, err := Path()

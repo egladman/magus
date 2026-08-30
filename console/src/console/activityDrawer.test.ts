@@ -228,7 +228,7 @@ test("recentRows caps the list so the panel is read rather than scrolled", () =>
   );
 });
 
-test("every row carries the phase-2 unit slot, unset until a delegation ledger fills it", () => {
+test("every row carries the phase-2 unit slot, unset until a lease ledger fills it", () => {
   const rows = [
     ...runningRows(
       status({

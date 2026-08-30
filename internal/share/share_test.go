@@ -21,12 +21,12 @@ func addr(s string) netip.Addr { return netip.MustParseAddr(s) }
 func TestPickLANIPv4(t *testing.T) {
 	tests := []struct {
 		name   string
-		ifaces []Iface
+		ifaces []iface
 		want   string // "" means expect no pick
 	}{
 		{
 			name: "first private ipv4 on an up non-loopback interface",
-			ifaces: []Iface{
+			ifaces: []iface{
 				{Up: true, Loopback: true, Addrs: []netip.Addr{addr("127.0.0.1")}},
 				{Up: true, Loopback: false, Addrs: []netip.Addr{addr("192.168.1.20")}},
 			},
@@ -34,7 +34,7 @@ func TestPickLANIPv4(t *testing.T) {
 		},
 		{
 			name: "down interface is skipped even with a private addr",
-			ifaces: []Iface{
+			ifaces: []iface{
 				{Up: false, Loopback: false, Addrs: []netip.Addr{addr("10.0.0.5")}},
 				{Up: true, Loopback: false, Addrs: []netip.Addr{addr("172.16.3.4")}},
 			},
@@ -42,7 +42,7 @@ func TestPickLANIPv4(t *testing.T) {
 		},
 		{
 			name: "public and link-local and ipv6 addresses are skipped",
-			ifaces: []Iface{
+			ifaces: []iface{
 				{Up: true, Loopback: false, Addrs: []netip.Addr{
 					addr("8.8.8.8"),       // public
 					addr("169.254.10.10"), // link-local
@@ -55,7 +55,7 @@ func TestPickLANIPv4(t *testing.T) {
 		},
 		{
 			name: "loopback interface never chosen",
-			ifaces: []Iface{
+			ifaces: []iface{
 				{Up: true, Loopback: true, Addrs: []netip.Addr{addr("127.0.0.1")}},
 			},
 			want: "",
@@ -116,7 +116,7 @@ func TestResolveTTL(t *testing.T) {
 // newTestManager returns a Manager that binds its share listener on loopback,
 // so the token/listener lifecycle can be exercised without a real LAN. Extra
 // options (e.g. WithTrailDir) pass straight through to NewManager.
-func newTestManager(t *testing.T, parent context.Context, ttl time.Duration, opts ...Option) *Manager {
+func newTestManager(t *testing.T, parent context.Context, ttl time.Duration, opts ...option) *Manager {
 	t.Helper()
 	m := NewManager(parent, ttl, nil, opts...)
 	m.selectAddr = func() (netip.Addr, error) { return netip.MustParseAddr("127.0.0.1"), nil }

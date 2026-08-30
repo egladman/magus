@@ -206,7 +206,9 @@ func FindRoot(dir string) (string, error) {
 	if contiguous != "" {
 		return contiguous, nil
 	}
-	return "", errors.New("magus: could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found)")
+	return "", types.DiagnosticErrorf(types.NoWorkspaceRoot,
+		"magus: could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found); "+
+			"run `magus init` to bootstrap one")
 }
 
 // Inspect discovers the workspace without opening the cache (for introspection commands).
@@ -319,6 +321,11 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if err != nil {
 		return nil, err
 	}
+	// vcs.Resolve falls back to MAGUS_VCS_* env vars on a zero VCSOptions, so this
+	// wiring was the only thing standing between magus.yaml's vcs.* keys and every
+	// caller of vcs.Resolve(..., m.ws.VCSOptions) - without it the keys parsed and
+	// validated but never reached a resolution.
+	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version}
 	var o workspace.Load
 	for _, fn := range opts {

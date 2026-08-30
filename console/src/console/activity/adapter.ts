@@ -113,6 +113,52 @@ export function activityToModel(events: ActivityEvent[]): RenderModel {
   return { sections, titled: sections.length };
 }
 
+// PayloadRef names one body an event kept OUT of its line: the word for it, the content-addressed
+// ref ActivityService.GetPayload resolves, and the size the event recorded (0 when it recorded no
+// size).
+export interface PayloadRef {
+  label: string;
+  ref: string;
+  bytes: number;
+}
+
+// payloadRefs lists the stored bodies an event points at. The event line carries the response only
+// as its opening characters (preview, capped at 240) and the request not at all, so a ref is the
+// ONLY route to what was actually sent or returned. Every ref is listed, including one whose body a
+// preview happens to cover in full: the preview is not always a prefix - an agent-command event
+// previews the guard verdict, not the response - so "the preview is short" does not mean "you have
+// already read it".
+export function payloadRefs(ev: ActivityEvent): PayloadRef[] {
+  const refs: PayloadRef[] = [];
+  if (ev.requestRef)
+    refs.push({ label: "request", ref: ev.requestRef, bytes: Number(ev.requestBytes) });
+  if (ev.responseRef)
+    refs.push({ label: "response", ref: ev.responseRef, bytes: Number(ev.responseBytes) });
+  return refs;
+}
+
+// payloadLabel is the expand control's text: what would open, and how big it is when the event
+// recorded a size. A "(0 B)" would read as an empty body rather than as an unrecorded one.
+export function payloadLabel(ref: PayloadRef): string {
+  return "show " + ref.label + (ref.bytes > 0 ? " (" + humanBytes(ref.bytes) + ")" : "");
+}
+
+// PAYLOAD_MAX_BYTES bounds what one expanded body paints. A blob is whatever its producer wrote -
+// routinely a single line of JSON, sometimes megabytes of it - and the section renderer paints a
+// line as one unbreakable row. The cut is reported to the reader, never silent.
+export const PAYLOAD_MAX_BYTES = 64 * 1024;
+
+// payloadLines decodes a stored body (GetPayload's bytes) into the lines a section renders, bounded
+// by PAYLOAD_MAX_BYTES; clipped says the body ran past that bound.
+export function payloadLines(body: Uint8Array): { lines: string[]; clipped: boolean } {
+  const clipped = body.length > PAYLOAD_MAX_BYTES;
+  const text = new TextDecoder().decode(clipped ? body.subarray(0, PAYLOAD_MAX_BYTES) : body);
+  const lines = text.split("\n");
+  // A trailing newline terminates the last line; it does not add an empty one.
+  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+  return { lines, clipped };
+}
+
 // KindGroup is one bucket of the activity index tree: a kind, its human heading, and the events of
 // that kind (newest first, the order the service returns them). index is the event's position in the
 // original page, so the view can correlate a tree leaf with its rendered section.

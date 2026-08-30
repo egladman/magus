@@ -167,7 +167,9 @@ generic, quantitative `detail` such as `1 loaded` or `0 of 4 up to date` - count
 phrases only, never workspace roots, project or service names, filesystem paths, or the
 daemon PID. For the identifying per-subsystem view (workspace roots, per-project
 symbol-index freshness, named service state), read the bearer-authenticated
-`GET /api/v1/status` instead.
+`magus.status.v1alpha1.StatusService/GetStatus` Connect route instead (the
+typed replacement for the retired `GET /api/v1/status`; `magus status` reads
+it the same way).
 
 The endpoints bind to `127.0.0.1` by default, which the kubelet cannot reach; set
 `MAGUS_MCP_ADDRESS=0.0.0.0:7391` (or `mcp.address`) so probes can hit the pod IP.

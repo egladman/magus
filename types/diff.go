@@ -258,8 +258,9 @@ type Diff struct {
 	// Base is the ref the diff was taken against, or "working" for the uncommitted tree.
 	Base string `json:"base" yaml:"base"`
 	// Files carries one entry per changed path, in the order magus recommends READING them:
-	// consequence first. See SortForReading.
-	Files []DiffFile `json:"files,omitempty" yaml:"files,omitempty"`
+	// consequence first. See SortForReading. It is the changeset's primary collection, so
+	// it is what -o jsonl streams.
+	Files []DiffFile `json:"files,omitempty" yaml:"files,omitempty" jsonl:"primary"`
 	// SeedProjects are the projects a changed file lands in directly - the ones the author
 	// actually edited, as opposed to the ones that merely rebuild.
 	SeedProjects []string `json:"seed_projects,omitempty" yaml:"seed_projects,omitempty"`

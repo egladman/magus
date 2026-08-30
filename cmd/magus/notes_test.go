@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/memory"
 	store "github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -160,6 +165,117 @@ func TestCaptureWithNoThreadsIsStillATranscript(t *testing.T) {
 	n, err := captureFromSession(sess, nil, "review", nil).Note("cap")
 	require.NoError(t, err)
 	assert.Contains(t, n.Body, "mine")
+}
+
+// The daemon accelerates and never gates. A person who wrote remarks in `magus diff` with no
+// daemon running has them on disk, and capture refusing because no daemon is up would lose the
+// one artifact nothing can recreate.
+func TestCaptureReadsTheStoreWhenNoDaemonIsRunning(t *testing.T) {
+	cache := t.TempDir()
+	root := filepath.Join(cache, "ws")
+	written := changeset.NewStore(cache)
+	written.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	written.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorHuman)
+
+	sess := storedDiffSession(cache, "diff --git a/a.go b/a.go\n")
+	require.Len(t, sess.Comments, 1, "the drafts the store persisted are the transcript")
+	assert.Equal(t, "mine", sess.Comments[0].Body)
+	// Digested from the patch exactly as attachDiffSession digests it, so a capture taken with
+	// no daemon names the note a daemon-attached one would have named.
+	assert.Equal(t, changeset.PatchDigest("diff --git a/a.go b/a.go\n"), sess.AsOf)
+	assert.Equal(t, "review-"+sess.AsOf[:12], captureName(sess))
+}
+
+// An unreadable patch must not name every such capture the same note: the second one would
+// collide with the first and be refused, which is the transcript lost.
+func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
+	sess := storedDiffSession(t.TempDir(), "")
+	assert.Empty(t, sess.AsOf)
+	assert.Equal(t, "review-thread", captureName(sess))
+}
+
+// A colleague's remark is a fact about the review, not about whether a background process is
+// up. Without a daemon the forge is asked directly rather than the reader being shown a review
+// with nobody else in it.
+func TestReviewThreadsReachTheForgeWithNoDaemon(t *testing.T) {
+	withFakeReviewProvider(t, []any{
+		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
+	})
+	cache := t.TempDir()
+
+	threads, reason := localReviewThreads(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
+	require.Len(t, threads, 1)
+	assert.Equal(t, "theirs", threads[0].Body)
+	assert.Empty(t, reason)
+	// Nothing has been on screen here, so the whole conversation is new - the mark the daemon
+	// would have applied, taken from the watermark the store persists rather than from a session.
+	assert.True(t, threads[0].New)
+}
+
+// The watermark outlives the daemon that normally reads it, so a thread already seen does not
+// come back marked new the moment the daemon is stopped.
+func TestASeenThreadIsNotNewWithoutADaemon(t *testing.T) {
+	withFakeReviewProvider(t, []any{
+		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
+	})
+	cache := t.TempDir()
+	root := filepath.Join(cache, "ws")
+	sessions := changeset.NewStore(cache)
+	sessions.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	sessions.MarkThreadsSeen(root, []string{"t1"})
+
+	threads, _ := localReviewThreads(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
+	require.Len(t, threads, 1)
+	assert.False(t, threads[0].New)
+}
+
+// Both read paths compute the mark, so a capture can say which half of the conversation the
+// reader had not weighed yet. It is told to the person TAKING the capture and never written
+// into the note: New belongs to this reader's history with the review, and in a transcript a
+// colleague reads next year it would describe somebody else's morning.
+func TestCaptureSaysWhatWasNewToThisReader(t *testing.T) {
+	threads := []types.ReviewThread{
+		{ID: "t1", Author: "priya", Body: "you weighed this already"},
+		{ID: "t2", Author: "marcus", Body: "arrived since you looked", New: true},
+	}
+
+	assert.Contains(t, newRemarkLine(threads), "1 remark on the review had not been in front of you before")
+	assert.Empty(t, newRemarkLine(threads[:1]), "a conversation the reader has already had says nothing")
+	assert.Contains(t, newRemarkLine(append(threads, types.ReviewThread{ID: "t3", New: true})), "2 remarks")
+}
+
+// A malformed remark is reported rather than dropped: the threads that decoded still travel,
+// and the caller says what it could not read.
+func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
+	withFakeReviewProvider(t, []any{
+		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
+		"not a thread at all",
+	})
+
+	threads, reason := localReviewThreads(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, t.TempDir())
+	assert.Len(t, threads, 1)
+	assert.NotEmpty(t, reason, "a transcript silently missing a remark is worse than no transcript")
+}
+
+// withFakeReviewProvider wires a review provider for this test, so the daemon-free read path
+// can be exercised against threads instead of only against an unwired workspace.
+func withFakeReviewProvider(t *testing.T, threads []any) {
+	t.Helper()
+	name := "fake-notes-review-" + t.Name()
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.FindReviewContract:
+				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
+			case spells.ReviewThreadsContract:
+				return threads, nil
+			default:
+				return map[string]any{}, nil
+			}
+		})))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 }
 
 func TestFirstNonEmptyTreatsBlankAsEmpty(t *testing.T) {

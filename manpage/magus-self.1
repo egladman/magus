@@ -1,6 +1,6 @@
 .TH MAGUS-SELF 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-self \- Manage the magus binary (update, install\-shorthand)
+magus\-self \- Manage the magus binary (update, refresh, registry, install\-shorthand)
 .SH SYNOPSIS
 .B magus
 .RI "self <subcommand> [flags]"
@@ -9,7 +9,7 @@ Targets for managing the magus binary.
 .PP
 update is compiled in by default. Package maintainers who own the system
 binary can build with \-tags noselfupdate to disable the self\-update mechanism.
-install\-shorthand is available in every build.
+refresh, registry, and install\-shorthand are available in every build.
 .PP
 To bootstrap a workspace, use: magus init
 .SS self update options
@@ -51,6 +51,12 @@ Replace an existing file at the shorthand path
 \fBupdate\fR
 Update magus to the latest release
 .TP
+\fBrefresh\fR
+Fetch, verify, and cache the registry (a data file; does not upgrade magus)
+.TP
+\fBregistry\fR
+What is cached, how old, and from where
+.TP
 \fBinstall\-shorthand\fR
 Symlink mgs, the magus shorthand, to the running binary
 .RE
@@ -59,6 +65,18 @@ Symlink mgs, the magus shorthand, to the running binary
 .PP
 .EX
 magus self update
+.EE
+.PP
+\fIRefresh the registry data\fR
+.PP
+.EX
+magus self refresh
+.EE
+.PP
+\fIShow cached registry state\fR
+.PP
+.EX
+magus self registry
 .EE
 .PP
 \fIInstall the mgs shorthand\fR
@@ -92,6 +110,7 @@ magus self install-shorthand
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
 \fBmagus\-man\fR(1),

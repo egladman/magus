@@ -170,7 +170,7 @@ func warnIfConcurrencyHigh(concurrency, numCPU int) {
 			"config.concurrency_high",
 			slog.Int("concurrency", concurrency),
 			slog.Int("num_cpu", numCPU),
-			slog.String("msg", fmt.Sprintf("concurrency=%d exceeds 2×NumCPU=%d; expect contention", concurrency, 2*numCPU)),
+			slog.String("msg", fmt.Sprintf("concurrency=%d exceeds 2xNumCPU=%d; expect contention", concurrency, 2*numCPU)),
 		)
 	}
 }
@@ -203,7 +203,7 @@ func loadDirInto(cfg Config, dir string) (Config, error) {
 	dottedExists := dottedErr == nil
 
 	if plainExists && dottedExists {
-		return Config{}, fmt.Errorf("config: %s contains both magus.yaml and .magus.yaml — pick one", dir)
+		return Config{}, fmt.Errorf("config: %s contains both magus.yaml and .magus.yaml - pick one", dir)
 	}
 	if !plainExists && !dottedExists {
 		return cfg, nil

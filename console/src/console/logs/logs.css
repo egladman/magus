@@ -31,7 +31,11 @@
  * .console-render-ansi*); its own chrome is a PF Toolbar. The old Pico .file-bar / .log-actions /
  * .btn-group frame is gone. */
 
-:root { --log-pad: clamp(0.75rem, 2vw, 1.1rem); }
+/* The surface gutter, and it is the SHELL's rather than one of this sheet's own: a reader
+   switching from Runs to the log viewer should not see the content step in or out by 1.6px.
+   Kept as a local name because it is also the re-scaling seam - the dashboard's activity tile
+   and Big Picture both narrow it for a preview that is not a whole page (dashboard.css). */
+:root { --log-pad: var(--console-pad); }
 
 /* --- Panel frame (shared: the activity trail builds a `.console-render-panel` too) -----------------------------
    A bordered card that fills its console pane: a toolbar/header on top, a scrolling body beneath.
@@ -66,6 +70,11 @@
   font-size: 0.8rem;
 }
 #log-bar .pf-v6-c-toolbar__content { padding-inline: var(--log-pad); }
+/* PF's Toolbar pads its own block-END by a spacer-md and its start by nothing, so the tinted strip
+   ran 16px lower than the row inside it: the filter field was centred in its content section and
+   visibly high in the box a reader actually sees. The rows below carry the console's bar height,
+   which is the whole height this strip should have. */
+#log-bar { padding-block: 0; }
 #log-bar-id .pf-v6-c-toolbar__content-section { padding-block: 0.45rem 0; align-items: center; min-height: 1.7rem; }
 /* The ref strip stays out of the layout until a log loads (setRefIdentity fills #log-ref); an empty
    bordered pill would otherwise render as a stray hairline "-" in the cold empty state. */
@@ -73,7 +82,12 @@
 /* The controls row is one dense, wrapping toolbar section: clusters keep together and the gaps are
    uniform, so a narrow pane wraps cluster-by-cluster instead of exploding into ragged rows. */
 #log-bar-controls .pf-v6-c-toolbar__content-section {
-  padding-block: 0.4rem 0.5rem; align-items: center;
+  /* The console's one bar height, so this row measures the same as the Runs filter row and the
+     Notes filter row. A floor rather than a fixed size: the row wraps cluster-by-cluster in a
+     narrow pane and has to be free to grow. Its own padding-block goes to zero, or the two stack
+     and the row comes out taller than every other bar again. */
+  min-block-size: var(--console-surface-bar-h);
+  padding-block: 0; align-items: center;
   column-gap: 0.85rem; row-gap: 0.4rem;
 }
 #log-bar-controls .pf-v6-c-toolbar__group.pf-m-action-group-inline { column-gap: 0.35rem; align-items: center; }
@@ -312,8 +326,9 @@
 .console-log-help { margin: 0.3rem 0 var(--log-pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
 .console-log-help > summary:not([role]) {
   width: fit-content; cursor: pointer;
-  color: var(--pf-t--global--text--color--subtle); font-size: 0.8rem; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
+  text-transform: uppercase; letter-spacing: var(--console-label-tracking);
 }
 main .console-log-help > summary:not([role]), main .console-log-help[open] > summary:not([role]) { color: var(--pf-t--global--text--color--subtle); }
 .console-log-help[open] > summary { margin-bottom: 0.5rem; }
@@ -405,6 +420,36 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle);
 }
 
+/* The maintenance-jobs control (activity/jobs.ts): a PF Card above the trail carrying one row per
+   registered job. PF owns the frame and the Run button; these rules only lay the row out and subdue
+   the meta. Running state is a data-* attribute, not a --modifier (README.md's convention), because
+   it is transient - it flips between two loads of the same list. */
+.console-activity-jobs {
+  margin-block-end: 0.5rem;
+}
+.console-activity-jobs__head {
+  display: flex; align-items: baseline; gap: 0.5rem;
+}
+.console-activity-jobs__row {
+  display: flex; align-items: center; gap: 0.5rem; padding-block: 0.15rem;
+}
+.console-activity-jobs__name {
+  font-weight: 600; min-width: 11ch;
+}
+/* The description is the flexible column: it is the least load-bearing text on the row, so it is
+   what gives way when the pane is narrow. */
+.console-activity-jobs__desc {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.console-activity-jobs__meta,
+.console-activity-jobs__state,
+.console-activity-jobs__note {
+  font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle);
+}
+.console-activity-jobs__row[data-state="running"] .console-activity-jobs__state {
+  color: var(--console-status-running);
+}
+
 /* --- Run browser (the log viewer's left master-detail tree; runtree.ts) --------------------------
    A collapsible aside down the left of the viewer, below the shared toolbar: a PF TreeView of prior
    runs (project -> target -> run) read from the daemon's /api/v1/outputs. Selecting a run loads its
@@ -446,37 +491,34 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   background: var(--console-chrome);
 }
 .console-log-runs[hidden] { display: none; }
-/* ONE height for both column headers, and it is a floor rather than a fixed size so injected chrome
-   (activity puts its connection chip in the index header) can still grow the row. The two differ in
-   content - the index header carries icon buttons, the body header only a word - so left to their
-   intrinsic heights they came out 37.8 and 32.5, and their rules landed 5.3px apart. The number is
-   the taller of the two, rounded up to a whole pixel at the default scale. If a caller ever injects
-   something taller than this into either header, they part again and this has to become a real
-   shared measurement rather than a floor. */
-.console-log-split { --console-log-head-h: 2.375rem; }
+/* The two column headers as ONE rule. They were two rules carrying identical metrics and a comment
+   telling the next editor to change both, which is a convention where a shared declaration belongs -
+   and they had already drifted apart once, landing 5.3px out. The height is the shell's head token so
+   they also match the heads on Activity and the diff, and it stays a FLOOR so injected chrome
+   (activity puts its connection chip in the index header) can still grow the row.
+
+   The inline gutter is --log-pad, the same one the output lines below take, so a header label and the
+   content it heads start on the same x. */
 .console-log-runs__head,
 .console-log-body__head {
   box-sizing: border-box;
-  min-block-size: var(--console-log-head-h);
-}
-.console-log-runs__head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
-  padding: 0.4rem 0.35rem 0.4rem 0.7rem;
+  min-block-size: var(--console-surface-head-h);
+  padding-inline: var(--log-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 /* The BODY column: the header row and the scroller under it, stacked. The scroller has to stay the
    flexing child so it still scrolls internally rather than growing the split. */
 .console-log-body { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-/* The index header's opposite number, and the reason it exists is the RULE. Every metric here is
-   copied from .console-log-runs__head rather than chosen: same padding, same border, so the two
-   hairlines resolve to the same y and read as one line across the surface. Change one, change both. */
-.console-log-body__head {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
-  padding: 0.4rem 0.35rem 0.4rem 0.7rem;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+.console-log-body__title,
+.console-log-runs__title {
+  margin-right: auto;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
 }
-.console-log-body__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
-.console-log-runs__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 .console-log-runs__tree { flex: 1 1 auto; overflow: auto; padding: 0.35rem 0.2rem 0.6rem; }
 /* The browser's two controls, STACKED under the header rather than sharing its row. The aside is
    10-15rem wide, and the size-modifier note at the top of this section applies here for the same
@@ -493,8 +535,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-runs__modes .pf-v6-c-toggle-group__item { flex: 1 1 0; }
 .console-log-runs__modes .pf-v6-c-toggle-group__button {
   width: 100%; justify-content: center;
-  padding-block: 0.2rem; padding-inline: 0.35rem;
-  font-size: 0.72rem;
+  padding-inline: 0.35rem;
 }
 /* Cluster rules in the toolbar. The row holds three jobs - change the view, scope the time,
    act on the run - and without a rule between them they read as one long undifferentiated strip.
@@ -523,13 +564,13 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-toolbar__labelrow { display: flex; align-items: center; gap: 0.35rem; }
 .pf-v6-c-toolbar__item.console-log-toolbar__labelrow > * { flex: 0 0 auto; }
 .console-log-toolbar__label {
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
   text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-log-runs__filter {
-  font-size: 0.75rem;
   block-size: var(--console-control-block-size);
   padding-block: 0;
 }

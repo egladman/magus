@@ -46,8 +46,12 @@ func eventToProto(e journal.Event) *viewerv1.Event {
 // the wire message.
 func invocationToProto(inv journal.Invocation) *viewerv1.Invocation {
 	return &viewerv1.Invocation{
-		Id:           inv.ID,
-		Command:      commandToProto(inv.Command),
+		Id:      inv.ID,
+		Command: commandToProto(inv.Command),
+		// Status was omitted here while ListInvocations set it from the same field, so GetInvocation
+		// and the shared Journal envelope reported every run as STATUS_UNSPECIFIED - a reader could
+		// not tell a passing run from one whose outcome was never recorded.
+		Status:       statusToProto(inv.Status),
 		StartTime:    tsFromMs(inv.StartedMs),
 		EndTime:      tsFromMs(inv.FinishedMs),
 		MagusVersion: inv.MagusVersion,

@@ -32,9 +32,9 @@ func WithLogger(ctx context.Context, l *slog.Logger) context.Context {
 	return context.WithValue(ctx, loggerKey{}, l)
 }
 
-// LoggerFromContext returns the capture logger attached with [WithLogger], or a logger that
+// loggerFromContext returns the capture logger attached with [WithLogger], or a logger that
 // discards (never nil), so [Emit] can be called unconditionally.
-func LoggerFromContext(ctx context.Context) *slog.Logger {
+func loggerFromContext(ctx context.Context) *slog.Logger {
 	if l, ok := ctx.Value(loggerKey{}).(*slog.Logger); ok && l != nil {
 		return l
 	}
@@ -90,7 +90,7 @@ func Emit(ctx context.Context, e Event) {
 	// structured fields beside it - Status, Ref, Stream - are magus's own enumerations,
 	// and a credential reaching one would be a different bug than this guards against.
 	e.Text = secret.RedactString(ctx, e.Text)
-	LoggerFromContext(ctx).LogAttrs(ctx, slog.LevelInfo, e.Text, slog.Any(eventAttr, e))
+	loggerFromContext(ctx).LogAttrs(ctx, slog.LevelInfo, e.Text, slog.Any(eventAttr, e))
 }
 
 // EventFromRecord extracts the [Event] a capture record carries, and whether it was present.

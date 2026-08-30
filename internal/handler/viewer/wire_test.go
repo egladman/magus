@@ -143,14 +143,15 @@ func TestEnumMappingsExhaustive(t *testing.T) {
 	}
 }
 
-// TestInvocationToProtoMapsHeader pins the invocation-header mapping (id/command/timing/version)
-// used by the static Journal envelope.
+// TestInvocationToProtoMapsHeader pins the invocation-header mapping
+// (id/command/status/timing/version) used by the static Journal envelope.
 func TestInvocationToProtoMapsHeader(t *testing.T) {
 	p := invocationToProto(journal.Invocation{
-		ID: "inv42", StartedMs: 1000, FinishedMs: 2000, MagusVersion: "v3",
+		ID: "inv42", StartedMs: 1000, FinishedMs: 2000, MagusVersion: "v3", Status: journal.StatusFail,
 		Command: journal.Command{Arguments: []string{"run", "build"}, Cwd: "/w", Trigger: journal.TriggerWatch},
 	})
 	assert.Equal(t, "inv42", p.GetId())
+	assert.Equal(t, viewerv1.Status_STATUS_FAIL, p.GetStatus())
 	assert.Equal(t, "v3", p.GetMagusVersion())
 	assert.Equal(t, int64(1000), p.GetStartTime().AsTime().UnixMilli())
 	assert.Equal(t, int64(2000), p.GetEndTime().AsTime().UnixMilli())

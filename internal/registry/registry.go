@@ -13,8 +13,8 @@ import (
 	json "github.com/egladman/magus/internal/json"
 )
 
-// SchemaVersion is the registry format this magus understands. Additive only.
-const SchemaVersion = 1
+// schemaVersion is the registry format this magus understands. Additive only.
+const schemaVersion = 1
 
 // Registry is the signed document: one flat file carrying both categories of fact.
 //
@@ -88,8 +88,8 @@ type Cycle struct {
 	Maintained bool   `json:"maintained,omitzero"`
 }
 
-// CacheDir is <UserCacheDir>/magus/registry.
-func CacheDir() (string, error) {
+// cacheDir is <UserCacheDir>/magus/registry.
+func cacheDir() (string, error) {
 	dir, err := config.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("registry: locate cache dir: %w", err)
@@ -149,7 +149,7 @@ func Load() ([]Cached, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir, err := CacheDir()
+	dir, err := cacheDir()
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func loadOne(dir string, src Source) Cached {
 	if err := json.Unmarshal(raw, &reg); err != nil {
 		return Cached{Source: src, State: StateNeverSynced}
 	}
-	if reg.SchemaVersion != SchemaVersion || reg.GeneratedAt.IsZero() {
+	if reg.SchemaVersion != schemaVersion || reg.GeneratedAt.IsZero() {
 		return Cached{Source: src, State: StateNeverSynced}
 	}
 	age := time.Since(reg.GeneratedAt)
@@ -189,8 +189,8 @@ func loadOne(dir string, src Source) Cached {
 // can tell it worked.
 var ErrOffline = errors.New("registry: MAGUS_OFFLINE is set, so no request was sent")
 
-// Offline reports whether outbound requests are forbidden.
-func Offline() bool {
+// offline reports whether outbound requests are forbidden.
+func offline() bool {
 	v := os.Getenv("MAGUS_OFFLINE")
 	return v != "" && v != "0" && v != "false"
 }
@@ -225,8 +225,8 @@ func verify(src Source, data, sig []byte) (*Registry, error) {
 	if err := json.Unmarshal(data, &reg); err != nil {
 		return nil, fmt.Errorf("registry: %s: parse: %w", src.Name, err)
 	}
-	if reg.SchemaVersion != SchemaVersion {
-		return nil, fmt.Errorf("registry: %s: schema_version %d, want %d; upgrade magus", src.Name, reg.SchemaVersion, SchemaVersion)
+	if reg.SchemaVersion != schemaVersion {
+		return nil, fmt.Errorf("registry: %s: schema_version %d, want %d; upgrade magus", src.Name, reg.SchemaVersion, schemaVersion)
 	}
 	if reg.GeneratedAt.IsZero() {
 		return nil, fmt.Errorf("registry: %s: no generated_at, so its age could never be judged", src.Name)

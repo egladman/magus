@@ -2703,6 +2703,25 @@ a code {
   margin: 0;
 }
 
+/* Fold tables: staged-reduction notation, hand-authored as raw HTML in a page's markdown.
+   Inputs are rows; a merged cell to the right is the step that consumes everything beside
+   and above it; reading left to right ends at one result. Full cell borders are required -
+   the merge IS the information, and Pico rules rows only, which erases the columns the
+   whole notation hangs on. A full-width row (colspan) is a prerequisite step. */
+.fold-table {
+  border-collapse: collapse;
+}
+.fold-table td {
+  border: 1px solid var(--pico-muted-border-color);
+  vertical-align: middle;
+}
+/* The merged cells are operations; centered, they read as labels on a region rather than
+   as another row of data. Single input cells keep the usual left edge. */
+.fold-table td[rowspan],
+.fold-table td[colspan] {
+  text-align: center;
+}
+
 /* Keyboard-shortcut help overlay - a native <dialog> so the browser handles
    focus trap + backdrop + Esc-to-close. Pico gives <dialog> a card look; we
    just scope the inner width. */

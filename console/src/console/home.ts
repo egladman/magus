@@ -213,7 +213,7 @@ const SURFACE_ICONS: Record<string, string> = {
   // Diff: a split view - a center rule with shorter lines either side. The left column grows
   // on hover, the one motion that reads as text arriving.
   diff: '<path d="M12 4v16"/><path data-motion="bars" d="M4 8h5M4 12h6M4 16h4"/><path d="M15 8h5M15 12h4M15 16h5"/>',
-  // Plan: one unit branching into two, the shape of the delegation tree. The root pulses,
+  // Plan: one lease branching into two, the shape of the lease tree. The root pulses,
   // matching the graph's lead node - both say "this is where it starts".
   plan: '<circle data-motion="pulse" cx="12" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="19" r="2.2"/><path d="M12 7.2v3.8M6 17v-6h12v6"/>',
   // Settings: a proper cog (not the sun-like spoked glyph); the whole icon turns on hover.

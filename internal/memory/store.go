@@ -386,18 +386,6 @@ func ReadCursor(root string) (string, error) {
 	return string(b), nil
 }
 
-// WriteCursor overwrites the cursor snapshot.
-func WriteCursor(root, content string) error {
-	dir, err := Dir(root)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("memory: write cursor: %w", err)
-	}
-	return writeAtomic(filepath.Join(dir, cursorFile), []byte(content))
-}
-
 // frontmatterRE splits a record file into its YAML frontmatter and markdown body. The
 // body (a decision/plan caption) is everything after the closing delimiter.
 var frontmatterRE = regexp.MustCompile(`(?s)\A---\n(.*?)\n---\n?(.*)\z`)

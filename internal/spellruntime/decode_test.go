@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mapObj is a test-only implementation of spellruntime.Obj backed by map[string]any.
+// mapObj is a test-only implementation of obj backed by map[string]any.
 type mapObj map[string]any
 
 func (m mapObj) Str(key string) (string, bool) {
@@ -56,7 +56,7 @@ func (m mapObj) StrMap(key string) (map[string]string, error) {
 	return sm, nil
 }
 
-func (m mapObj) Obj(key string) (Obj, bool) {
+func (m mapObj) Obj(key string) (obj, bool) {
 	v, ok := m[key]
 	if !ok {
 		return nil, false
@@ -68,7 +68,7 @@ func (m mapObj) Obj(key string) (Obj, bool) {
 	return mapObj(sub), true
 }
 
-func (m mapObj) Objs(key string) []Obj {
+func (m mapObj) Objs(key string) []obj {
 	v, ok := m[key]
 	if !ok {
 		return nil
@@ -77,7 +77,7 @@ func (m mapObj) Objs(key string) []Obj {
 	if !ok {
 		return nil
 	}
-	var out []Obj
+	var out []obj
 	for _, it := range list {
 		if sub, ok := it.(map[string]any); ok {
 			out = append(out, mapObj(sub))

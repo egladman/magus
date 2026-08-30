@@ -46,15 +46,15 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	// The ancestry travels with the request because the daemon, not this process, is what
 	// takes the project locks for an adopted run: without it the daemon cannot tell a
 	// lock held for THIS client's parent from one held for an unrelated client.
-	// The delegation travels for the same reason in the other direction: the daemon runs the
+	// The lease travels for the same reason in the other direction: the daemon runs the
 	// work, so it would otherwise attribute it to the daemon's environment - which is
-	// nobody's delegation - and the session journal would show adopted runs unattributed.
-	// Read through trail.DelegationFromEnv rather than the raw variable so a malformed
+	// nobody's lease - and the session journal would show adopted runs unattributed.
+	// Read through trail.LeaseFromEnv rather than the raw variable so a malformed
 	// value is dropped here, once, by the same rule every other channel applies.
-	req := RunRequest{
-		Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root, Protocol: ProtocolV2,
-		Ancestors:  types.InvocationAncestorsFromContext(ctx),
-		Delegation: trail.DelegationFromEnv(),
+	req := runRequest{
+		Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root, Protocol: protocolV2,
+		Ancestors: types.InvocationAncestorsFromContext(ctx),
+		Lease:     trail.LeaseFromEnv(),
 	}
 	if err := writeFrame(conn, typeRun, req); err != nil {
 		return 0, fmt.Errorf("proc: forward: write: %w", err)
@@ -65,7 +65,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 		return 0, fmt.Errorf("proc: forward: read: %w", err)
 	}
 	if typ == typeError {
-		var er ErrorReply
+		var er errorReply
 		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return 0, decodeWireError(er.Message)
 		}
@@ -75,7 +75,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 		return 0, fmt.Errorf("proc: forward: unexpected reply type %q", typ)
 	}
 
-	var reply RunReply
+	var reply runReply
 	if err := json.Unmarshal(line, &reply); err != nil {
 		return 0, fmt.Errorf("proc: forward: decode reply: %w", err)
 	}
@@ -110,7 +110,7 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 	}
 	_ = conn.SetDeadline(deadline) // always succeeds on unix sockets
 
-	req := StatusRequest{Magic: StatusMagic, Protocol: ProtocolV2}
+	req := statusRequest{Magic: statusMagic, Protocol: protocolV2}
 	if err := writeFrame(conn, typeStatus, req); err != nil {
 		return nil, fmt.Errorf("proc: query: write: %w", err)
 	}
@@ -120,7 +120,7 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 		return nil, fmt.Errorf("proc: query: read: %w", err)
 	}
 	if typ == typeError {
-		var er ErrorReply
+		var er errorReply
 		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return nil, fmt.Errorf("proc: query: server error: %s", er.Message)
 		}
@@ -167,7 +167,7 @@ func SubmitJob(ctx context.Context, addr string, args []string, version string) 
 	}
 	_ = conn.SetDeadline(deadline)
 
-	req := JobRequest{Magic: JobMagic, Args: args, Version: adoptionIdentity(version), Protocol: ProtocolV2, Cwd: cwd}
+	req := jobRequest{Magic: jobMagic, Args: args, Version: adoptionIdentity(version), Protocol: protocolV2, Cwd: cwd}
 	if err := writeFrame(conn, typeJob, req); err != nil {
 		return "", fmt.Errorf("proc: job: write: %w", err)
 	}
@@ -177,7 +177,7 @@ func SubmitJob(ctx context.Context, addr string, args []string, version string) 
 		return "", fmt.Errorf("proc: job: read: %w", err)
 	}
 	if typ == typeError {
-		var er ErrorReply
+		var er errorReply
 		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return "", fmt.Errorf("proc: job: server error: %s", er.Message)
 		}
@@ -186,7 +186,7 @@ func SubmitJob(ctx context.Context, addr string, args []string, version string) 
 	if typ != typeJobReply {
 		return "", fmt.Errorf("proc: job: unexpected reply type %q", typ)
 	}
-	var reply JobReply
+	var reply jobReply
 	if err := json.Unmarshal(line, &reply); err != nil {
 		return "", fmt.Errorf("proc: job: decode reply: %w", err)
 	}
@@ -209,7 +209,7 @@ func Shutdown(ctx context.Context, addr string) error {
 	}
 	defer func() { _ = conn.Close() }()
 
-	req := ShutdownRequest{Magic: ShutdownMagic, Protocol: ProtocolV2}
+	req := shutdownRequest{Magic: shutdownMagic, Protocol: protocolV2}
 	if err := writeFrame(conn, typeShutdown, req); err != nil {
 		return fmt.Errorf("proc: shutdown: write: %w", err)
 	}
@@ -219,7 +219,7 @@ func Shutdown(ctx context.Context, addr string) error {
 		return fmt.Errorf("proc: shutdown: read: %w", err)
 	}
 	if typ == typeError {
-		var er ErrorReply
+		var er errorReply
 		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return fmt.Errorf("proc: shutdown: server error: %s", er.Message)
 		}
@@ -245,7 +245,7 @@ func AcquireService(ctx context.Context, addr, key string, svc spells.Service) e
 	}
 	defer func() { _ = conn.Close() }()
 
-	req := ServiceAcquireRequest{Protocol: ProtocolV2, Key: key, Service: svc}
+	req := serviceAcquireRequest{Protocol: protocolV2, Key: key, Service: svc}
 	if err := writeFrame(conn, typeServiceAcquire, req); err != nil {
 		return fmt.Errorf("proc: service.acquire: write: %w", err)
 	}
@@ -254,7 +254,7 @@ func AcquireService(ctx context.Context, addr, key string, svc spells.Service) e
 		return fmt.Errorf("proc: service.acquire: read: %w", err)
 	}
 	if typ == typeError {
-		var er ErrorReply
+		var er errorReply
 		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return fmt.Errorf("proc: service.acquire: server error: %s", er.Message)
 		}
@@ -263,7 +263,7 @@ func AcquireService(ctx context.Context, addr, key string, svc spells.Service) e
 	if typ != typeServiceAcquireReply {
 		return fmt.Errorf("proc: service.acquire: unexpected reply type %q", typ)
 	}
-	var reply ServiceAcquireReply
+	var reply serviceAcquireReply
 	if err := json.Unmarshal(line, &reply); err != nil {
 		return fmt.Errorf("proc: service.acquire: decode reply: %w", err)
 	}
@@ -295,7 +295,7 @@ func ReleaseService(ctx context.Context, addr, key string) error {
 	}
 	_ = conn.SetDeadline(deadline)
 
-	req := ServiceReleaseRequest{Protocol: ProtocolV2, Key: key}
+	req := serviceReleaseRequest{Protocol: protocolV2, Key: key}
 	if err := writeFrame(conn, typeServiceRelease, req); err != nil {
 		return fmt.Errorf("proc: service.release: write: %w", err)
 	}
@@ -304,7 +304,7 @@ func ReleaseService(ctx context.Context, addr, key string) error {
 		return fmt.Errorf("proc: service.release: read: %w", err)
 	}
 	if typ == typeError {
-		var er ErrorReply
+		var er errorReply
 		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return fmt.Errorf("proc: service.release: server error: %s", er.Message)
 		}
@@ -330,7 +330,7 @@ func StopAllServices(ctx context.Context, addr string) (int, error) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	if err := writeFrame(conn, typeServiceStopAll, ServiceStopAllRequest{Protocol: ProtocolV2}); err != nil {
+	if err := writeFrame(conn, typeServiceStopAll, serviceStopAllRequest{Protocol: protocolV2}); err != nil {
 		return 0, fmt.Errorf("proc: service.stopall: write: %w", err)
 	}
 	typ, line, err := readFrameCtx(ctx, conn)
@@ -338,7 +338,7 @@ func StopAllServices(ctx context.Context, addr string) (int, error) {
 		return 0, fmt.Errorf("proc: service.stopall: read: %w", err)
 	}
 	if typ == typeError {
-		var er ErrorReply
+		var er errorReply
 		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return 0, fmt.Errorf("proc: service.stopall: server error: %s", er.Message)
 		}
@@ -347,7 +347,7 @@ func StopAllServices(ctx context.Context, addr string) (int, error) {
 	if typ != typeServiceStopAllReply {
 		return 0, fmt.Errorf("proc: service.stopall: unexpected reply type %q", typ)
 	}
-	var reply ServiceStopAllReply
+	var reply serviceStopAllReply
 	if err := json.Unmarshal(line, &reply); err != nil {
 		return 0, fmt.Errorf("proc: service.stopall: decode reply: %w", err)
 	}
@@ -381,7 +381,7 @@ func ReloadConfig(ctx context.Context, addr string) (dropped, busy int, err erro
 	}
 	defer func() { _ = conn.Close() }()
 
-	if err := writeFrame(conn, typeConfigReload, ConfigReloadRequest{Protocol: ProtocolV2}); err != nil {
+	if err := writeFrame(conn, typeConfigReload, configReloadRequest{Protocol: protocolV2}); err != nil {
 		return 0, 0, fmt.Errorf("proc: config.reload: write: %w", err)
 	}
 	typ, line, err := readFrameCtx(ctx, conn)
@@ -389,7 +389,7 @@ func ReloadConfig(ctx context.Context, addr string) (dropped, busy int, err erro
 		return 0, 0, fmt.Errorf("proc: config.reload: read: %w", err)
 	}
 	if typ == typeError {
-		var er ErrorReply
+		var er errorReply
 		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return 0, 0, fmt.Errorf("proc: config.reload: server error: %s", er.Message)
 		}
@@ -398,7 +398,7 @@ func ReloadConfig(ctx context.Context, addr string) (dropped, busy int, err erro
 	if typ != typeConfigReloadReply {
 		return 0, 0, fmt.Errorf("proc: config.reload: unexpected reply type %q", typ)
 	}
-	var reply ConfigReloadReply
+	var reply configReloadReply
 	if err := json.Unmarshal(line, &reply); err != nil {
 		return 0, 0, fmt.Errorf("proc: config.reload: decode reply: %w", err)
 	}

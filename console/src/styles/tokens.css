@@ -141,12 +141,17 @@
     var(--pf-t--global--font--size--body--default) * var(--pf-t--global--font--line-height--body) +
       2 * var(--pf-t--global--spacer--control--vertical--default)
   );
+  /* The tier's TYPE, paired with its height. Controls that agree on height and disagree on font
+     size still read as two different controls, and the console had five sizes on them: 14, 12.48,
+     12, 11.52 and 11.2px. Two, one per tier. */
+  --console-control-font-size: var(--pf-t--global--font--size--body--default);
 }
 [data-control-size="compact"] {
   --console-control-block-size: calc(
     var(--pf-t--global--font--size--body--default) * var(--pf-t--global--font--line-height--body) +
       2 * var(--pf-t--global--spacer--control--vertical--compact)
   );
+  --console-control-font-size: var(--pf-t--global--font--size--body--sm);
 }
 
 /* Touch floor. Apple's HIG: "a button needs a hit region of at least 44x44 pt ... whether they use a
@@ -187,6 +192,95 @@
 [data-control-size] .pf-v6-c-tabs__link,
 [data-control-size].pf-v6-c-button {
   align-items: center;
+}
+
+/* The tier APPLIES the height, rather than only publishing the number for each adopter to consume.
+   Publishing it was not enough: the token reached five containers and every control inside them
+   still had to opt in by hand, so the log viewer's filter row came out with a 37px input beside
+   29px buttons - the row's own controls disagreeing with each other, which is the thing the tier
+   exists to prevent. A container declares its tier once and the row is uniform.
+
+   Text inputs are in the set for that reason, and they are the half PF does not derive the same
+   way: an input's height comes from its own line box, so it ignores a button's spacer entirely.
+
+   FORM CONTROL, not textarea - a multi-line box is sized by its rows and pinning it to one line
+   box would clip it. Icon-only buttons are in: a square control on a row of text buttons has to
+   match their height or it reads as a different control. */
+[data-control-size] .pf-v6-c-button:not(.pf-m-inline),
+[data-control-size] .pf-v6-c-toggle-group__button,
+[data-control-size] .pf-v6-c-tabs__link,
+[data-control-size] .pf-v6-c-form-control:not(:has(textarea)),
+[data-control-size] .pf-v6-c-text-input-group__text-input,
+[data-control-size].pf-v6-c-button:not(.pf-m-inline) {
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
+  font-size: var(--console-control-font-size);
+}
+/* PF's FormControl is a GRID WRAPPER around a real input, and sizing only the wrapper leaves the
+   input at its own intrinsic height - measured on the diff's file filter, a 34px input inside a
+   29px box, overflowing the wrapper it is supposed to fill. The inner control has to be told to
+   fill its wrapper and give up its own vertical padding, and it carries the type as well. */
+[data-control-size] .pf-v6-c-form-control > input,
+[data-control-size] .pf-v6-c-form-control > select {
+  block-size: 100%;
+  padding-block: 0;
+  font-size: var(--console-control-font-size);
+}
+[data-control-size] .pf-v6-c-form-control__text {
+  font-size: var(--console-control-font-size);
+}
+
+/* --- 1b. Surface chrome ------------------------------------------------------------------
+   Every surface opens with a strip: a BAR carrying controls (the Runs filter row, the log
+   viewer's toolbar, the Notes filter, the plan toolbar) or a HEAD carrying a label over a
+   column (Activity's Events/Details, the diff's file index, the log viewer's Recent runs).
+   Each surface sized its own, so they came out 38, 40, 46, 52, 54, 57 and 68px tall - a
+   difference nobody can name and everybody sees when they switch tabs. Two numbers, read by
+   every surface, is what keeps that from coming back.
+
+   The bar is DERIVED, not picked: it holds a default-size control, so it is that control plus
+   a symmetric pair of the small spacer. Hand-picking a height instead is how a bar ends up
+   with 3px above its input and 11px below it.
+
+   The head holds a label rather than a control, so it does not need the control's height - but
+   several heads do carry a collapse toggle, and the control token grows to 44px on a coarse
+   pointer (see the touch floor above). max() lets the head stay compact on a mouse and still
+   contain the button on a touchscreen. */
+:root {
+  --console-surface-bar-h: calc(
+    var(--console-control-block-size) + 2 * var(--pf-t--global--spacer--sm)
+  );
+  --console-surface-head-h: max(2.5rem, var(--console-control-block-size));
+}
+
+/* --- 1c. The uppercase micro-label -------------------------------------------------------
+   The console's one label voice: the small uppercase run that titles a column, a facet group,
+   a stat, or a panel section. It was written out 35 times across seven sheets, and every copy
+   picked its own numbers - six font sizes between 0.62 and 0.72rem, six tracking values between
+   0.04 and 0.09em, and three weights. Adjacent labels on the same surface disagreed.
+
+   Tokens rather than one shared class because the label is applied by whichever sheet owns the
+   surface (see README.md's naming formula); the values are what has to be shared, not the
+   selector. A sheet still writes `text-transform: uppercase` itself - it is the label's
+   defining property, and the stylelint rule keys on it to require the three tokens below. */
+:root {
+  --console-label-size: 0.68rem;
+  --console-label-tracking: 0.05em;
+  --console-label-weight: 600;
+}
+
+/* The label's sibling: the uppercase run set INSIDE a chip - a status badge on a log line, a
+   scope pill, a run's verdict. It is a size of its own rather than the label's because it is
+   shorter, denser, and sits on a filled or outlined ground that already separates it from its
+   surroundings; the label has only its case and its colour to do that job. Heavier for the same
+   reason - 600 goes soft once a run is this small and this tight.
+
+   Two recipes is the whole vocabulary. Anything uppercase is one or the other, which is what
+   makes the stylelint rule that pins them satisfiable without a per-site exception. */
+:root {
+  --console-chip-size: 0.65rem;
+  --console-chip-tracking: 0.05em;
+  --console-chip-weight: 700;
 }
 
 :root {

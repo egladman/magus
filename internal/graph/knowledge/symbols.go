@@ -18,12 +18,12 @@ import (
 // keeps it out of the plain-project namespace and marks it as lazily loaded.
 const symbolsShardSuffix = "@symbols"
 
-// SymbolsShardName returns the shard name for a project's ingested symbols.
-func SymbolsShardName(project string) string { return project + symbolsShardSuffix }
+// symbolsShardName returns the shard name for a project's ingested symbols.
+func symbolsShardName(project string) string { return project + symbolsShardSuffix }
 
-// IsSymbolsShard reports whether a shard name is a per-project symbol shard - the
+// isSymbolsShard reports whether a shard name is a per-project symbol shard - the
 // shards excluded from the default (non-symbol-seeded) load path.
-func IsSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsShardSuffix) }
+func isSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsShardSuffix) }
 
 // assembleSymbols builds one project's symbol shard from the ingested records: a
 // symbol node per record, a `defines` edge from each defining file, a
@@ -42,7 +42,7 @@ func IsSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsSh
 // with neither a def nor a ref in the workspace still yields its node so an explain
 // has something to land on.
 func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []types.TargetGraphProject) Shard {
-	s := Shard{Name: SymbolsShardName(project)}
+	s := Shard{Name: symbolsShardName(project)}
 	seenFiles := map[string]bool{}
 	noteFile := func(path, language string) {
 		if path == "" || seenFiles[path] {
@@ -51,7 +51,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		seenFiles[path] = true
 		var attrs map[string]string
 		if language != "" {
-			attrs = map[string]string{AttrLanguage: language}
+			attrs = map[string]string{attrLanguage: language}
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Label: path, Source: path, Attrs: attrs})
 		if owner, ok := owningProjectPath(path, projects); ok {
@@ -64,10 +64,10 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		sID := symbolID(sym.Key)
 		attrs := map[string]string{}
 		if sym.Language != "" {
-			attrs[AttrLanguage] = sym.Language
+			attrs[attrLanguage] = sym.Language
 		}
 		if sym.SymbolKind != "" {
-			attrs[AttrSymbolKind] = sym.SymbolKind
+			attrs[attrSymbolKind] = sym.SymbolKind
 		}
 		if sym.Moniker != "" {
 			attrs["moniker"] = sym.Moniker
@@ -77,10 +77,10 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		// than the observed coverage overlay. Absent (0) means no test directly names the
 		// symbol - a coverage-independent hint that a symbol may be under-tested.
 		if n := testRefCount(sym.Refs); n > 0 {
-			attrs[AttrTestRefs] = strconv.Itoa(n)
+			attrs[attrTestRefs] = strconv.Itoa(n)
 		}
 		if sym.DefEndLine > 0 {
-			attrs[AttrDefEndLine] = strconv.Itoa(sym.DefEndLine)
+			attrs[attrDefEndLine] = strconv.Itoa(sym.DefEndLine)
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     sID,

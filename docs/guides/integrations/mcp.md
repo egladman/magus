@@ -110,12 +110,18 @@ Knowledge graph:
 | `magus_refs`    | Where a code symbol is defined and every file that references it (SCIP)  |
 | `magus_stats`   | Graph shape: god nodes, orphans, doc coverage                            |
 
+Review:
+
+| Tool         | Purpose                                                                                                                                                                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `magus_diff` | Join the review session a person has open and pair with them on it: `op=state` (default) returns the annotated changeset, `comment`, `suggest`, and `resolve` write to it, addressed by workspace-relative path and 0-based hunk digest |
+
 Memory and scratch:
 
-| Tool           | Purpose                                                                                                                  |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `magus_memory` | User-owned per-repo handoff journal: list/get/put/delete/verify named entries shared across worktrees                    |
-| `magus_ledger` | The orchestrating agent's declared delegation plan (put/list/clear), recorded for humans to see; magus never enforces it |
+| Tool           | Purpose                                                                                                                      |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `magus_memory` | User-owned per-repo handoff journal: list/get/put/delete/verify named entries shared across worktrees                        |
+| `magus_ledger` | The orchestrating agent's declared lease plan (list/put/register/clear), recorded for humans to see; magus never enforces it |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 
@@ -147,15 +153,15 @@ Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
 The endpoint requires a **bearer token**, and accepts two kinds:
 
-- **The cli token** - a single, retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token` (`~/.local/state/magus/mcp_token`). magus's own commands reuse it (for example `graph export --open --follow`). The secret never reaches the daemon log, so retrieve it with `magus config mcp token print`.
+- **The cli token** - a single, retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token` (`~/.local/state/magus/mcp_token`). magus's own commands reuse it (for example `graph export --open --follow`). The secret never reaches the daemon log, so retrieve it with `magus config token print`.
 - **Connector tokens** - named, hashed-at-rest, expiring secrets you mint per external client (a Claude connector, an IDE). Only their SHA-256 is stored, so a connector token is shown once at creation and can never be re-displayed; rotate by minting a new one.
 
 Every `/mcp` request must carry `Authorization: Bearer <token>` with either kind; requests without a valid token get `401 Unauthorized`. Manage them with:
 
 ```text
-magus config mcp token print                     # show the cli token
-magus config mcp token generate                  # mint a new cli token (--force to rotate)
-magus config mcp token revoke                     # delete it (daemon mints a fresh one on next start)
+magus config token print                        # show the cli token
+magus config token generate                      # mint a new cli token (--force to rotate)
+magus config token revoke                        # delete it (daemon mints a fresh one on next start)
 
 magus config mcp connector create --name claude   # mint a connector token (prints the secret once)
 magus config mcp connector create --expires 30d    # override the default 90-day expiry (or "never")
@@ -199,7 +205,7 @@ logs and history). How you connect depends on the client:
 
   ```sh
   magus server start
-  export MAGUS_MCP_TOKEN="$(magus config mcp token print)"
+  export MAGUS_MCP_TOKEN="$(magus config token print)"
   codex mcp list
   magus status --probe=liveness,mcp
   ```

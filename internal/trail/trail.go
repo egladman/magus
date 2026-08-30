@@ -24,11 +24,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"log/slog"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
@@ -72,25 +71,25 @@ const (
 	KindJob            Kind = "job"             // a daemon background job (SCIP reindex, graph build, VCS refresh)
 	KindConfigChange   Kind = "config_change"   // magus.yaml changed on reload, or a config-set mutation
 	KindTokenLifecycle Kind = "token_lifecycle" // a connector token minted or revoked
-	KindSandboxDenial  Kind = "sandbox_denial"  // a target attempted a disallowed filesystem write
+	KindSandboxDenial  Kind = "sandbox_denial"  // magus's own read/write/exec policy check refused an access (see sandbox.Policy); a kernel-landlock denial reports nothing back and cannot appear here
 	// KindAgentCommand records an agent-host tool invocation observed by a configured hook. It is
 	// an observation, not a process result: a PreToolUse hook runs before the host executes the
 	// command, so its payload records the requested command or path and the guard's decision, never
 	// an invented exit status. MCP calls remain KindMCPToolCall because their wrapper sees completion.
 	KindAgentCommand Kind = "agent_command"
 	// KindAgentSpawn records that an orchestrating agent handed work to a sub-agent, and WHAT
-	// CONTEXT it handed over. It is the delegation sibling of KindAgentCommand: same producer (a
+	// CONTEXT it handed over. It is the lease sibling of KindAgentCommand: same producer (a
 	// pre-tool hook), same "observed, not executed" contract, but the thing observed is a context
 	// transfer rather than a command, so there is no verdict to record and the guard never judges
 	// one. The handed context lands in the request blob and only its REF rides the event, because
-	// a delegation prompt is routinely kilobytes.
+	// a lease prompt is routinely kilobytes.
 	//
-	// Correlation to a delegation is COOPERATIVE, not enforced. Nothing in the host event
-	// names a magus delegation, and magus cannot infer one from prose, so the event's Delegation is stamped
-	// only when the handed context carries the documented marker (see delegationFromContext): its
-	// FIRST non-blank line reading "delegation: <id>". An orchestrator that wants the join writes the
-	// marker; one that does not gets an event with an empty Delegation, which is a missing join rather
-	// than a wrong one - and a "delegation:" line quoted deeper in a prompt stamps nothing, because a
+	// Correlation to a lease is COOPERATIVE, not enforced. Nothing in the host event
+	// names a magus lease, and magus cannot infer one from prose, so the event's Lease is stamped
+	// only when the handed context carries the documented marker (see leaseFromContext): its
+	// FIRST non-blank line reading "lease: <id>". An orchestrator that wants the join writes the
+	// marker; one that does not gets an event with an empty Lease, which is a missing join rather
+	// than a wrong one - and a "lease:" line quoted deeper in a prompt stamps nothing, because a
 	// wrong join is worse than none.
 	KindAgentSpawn Kind = "agent_spawn"
 	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
@@ -143,16 +142,10 @@ type Event struct {
 	Session   string `json:"session,omitempty"`    // the host's own session id, when its event carried one
 	Workspace string `json:"workspace,omitempty"`  // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
 	Action    string `json:"action"`               // the specific action: a tool name, a job command, "connector.create"
-	// Delegation is the delegation this action belongs to, when the producer could
-	// correlate one (a marker line, or the MAGUS_DELEGATION channel); "" when
-	// uncorrelated.
-	//
-	// The wire key was renamed along with the field rather than pinned, unlike the
-	// ledger's: a row written before the rename carries "unit" and decodes with an
-	// empty Delegation, so it shows blank in the column instead of wrong. This store
-	// is machine-local and capped at maxEvents, so that gap ages out with rotation
-	// rather than needing a reader that understands both spellings.
-	Delegation    string `json:"delegation,omitempty"`
+	// Lease is the lease this action belongs to, when the producer could
+	// correlate one (a marker line, or the BAGGAGE channel); ""
+	// when uncorrelated.
+	Lease         string `json:"lease,omitempty"`
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
 	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
 	DurMs         int64  `json:"dur_ms,omitempty"`        // wall-clock, on call-shaped actions
@@ -178,8 +171,8 @@ type Event struct {
 // the path is what a reader follows to see the rest. A host that exposes no transcript sends
 // none, exactly as with the other identity fields.
 //
-// Delegation is the delegation a producer already knew this observation belongs to, and is
-// usually empty: a hook observes a command, not a delegation, so nothing in the host event names
+// Lease is the lease a producer already knew this observation belongs to, and is
+// usually empty: a hook observes a command, not a lease, so nothing in the host event names
 // one and [AppendAgentCommand] falls back to the environment channel.
 type AgentCommand struct {
 	Actor      string
@@ -194,7 +187,7 @@ type AgentCommand struct {
 	Decision   string
 	Reason     string
 	Context    string
-	Delegation string
+	Lease      string
 }
 
 const agentCommandSchemaVersion = 1
@@ -256,17 +249,17 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
-	// A supplied delegation is what the producer could correlate at the observation itself and wins;
-	// MAGUS_DELEGATION is this process's own claim about itself and fills the gap. A supplied one that
-	// fails types.ValidDelegationID falls through to the environment rather than being stamped, on the same
+	// A supplied lease is what the producer could correlate at the observation itself and wins;
+	// the BAGGAGE channel is this process's own claim about itself and fills the gap. A supplied one that
+	// fails types.ValidLeaseID falls through to the environment rather than being stamped, on the same
 	// reasoning as everywhere else: no join beats a wrong one.
 	//
 	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
-	// line and a guard's reason, not a delegation prompt, and a "delegation:" line inside either is
+	// line and a guard's reason, not a lease prompt, and a "lease:" line inside either is
 	// quoted prose rather than an orchestrator's assertion.
-	delegation := command.Delegation
-	if !types.ValidDelegationID(delegation) {
-		delegation = DelegationFromEnv()
+	lease := command.Lease
+	if !types.ValidLeaseID(lease) {
+		lease = LeaseFromEnv()
 	}
 
 	action := command.Tool
@@ -289,7 +282,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Session:       command.Session,
 		Workspace:     command.Workspace,
 		Action:        action,
-		Delegation:    delegation,
+		Lease:         lease,
 		Outcome:       OutcomeOK,
 		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
@@ -305,7 +298,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // handed over, which is the whole point of the record and the reason it goes to a blob.
 //
 // There is no Decision field, unlike AgentCommand: a spawn is not a guard surface. The handed
-// context is prose, not a command line, and judging it as one would deny a delegation for quoting
+// context is prose, not a command line, and judging it as one would deny a lease for quoting
 // a denied command in its instructions.
 type AgentSpawn struct {
 	Actor     string
@@ -327,30 +320,30 @@ type agentSpawnRequest struct {
 	Event         string `json:"event,omitempty"`
 	Tool          string `json:"tool,omitempty"`
 	Child         string `json:"child,omitempty"`
-	Delegation    string `json:"delegation,omitempty"`
+	Lease         string `json:"lease,omitempty"`
 	Context       string `json:"context"`
 }
 
-// AppendAgentSpawn records one delegation handoff and stores the handed context as a blob.
+// AppendAgentSpawn records one lease handoff and stores the handed context as a blob.
 //
 // Best-effort and error-free, like every other producer here: an audit write must never be able
-// to fail the delegation it observes.
+// to fail the lease it observes.
 //
 // NOTE ON GROWTH: this producer runs in the short-lived hook process, which has no append counter
 // to drive RotateOnCount, so nothing it writes triggers a rotate - only the daemon's boot-time
 // Rotate bounds the trail. That was already true of AppendAgentCommand; it bites harder here
-// because a spawn blob is a whole delegation prompt rather than one command line.
+// because a spawn blob is a whole lease prompt rather than one command line.
 func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	if base == "" || spawn.Context == "" {
 		return
 	}
-	// A delegation prompt is free text an agent composed, and an orchestrator that pastes a
-	// connector token into a sub-agent's instructions is exactly the delegation worth auditing
+	// A lease prompt is free text an agent composed, and an orchestrator that pastes a
+	// connector token into a sub-agent's instructions is exactly the lease worth auditing
 	// WITHOUT persisting the token. Redacted before the marker scan so a redaction can never
-	// invent or destroy a delegation id after the fact.
+	// invent or destroy a lease id after the fact.
 	spawn.Context = secret.RedactString(ctx, spawn.Context)
 	spawn.Child = secret.RedactString(ctx, spawn.Child)
-	delegation := delegationFromContext(spawn.Context)
+	lease := leaseFromContext(spawn.Context)
 	request, _ := json.Marshal(agentSpawnRequest{
 		SchemaVersion: agentSpawnSchemaVersion,
 		Host:          spawn.Host,
@@ -358,13 +351,13 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Event:         spawn.Event,
 		Tool:          spawn.Tool,
 		Child:         spawn.Child,
-		Delegation:    delegation,
+		Lease:         lease,
 		Context:       spawn.Context,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
 
 	// The CHILD is the action, the way an MCP call's action is its tool name: it is the field a
-	// reader groups a page of delegations by. A host that supplied no label leaves the generic
+	// reader groups a page of leases by. A host that supplied no label leaves the generic
 	// verb, so the row still says what happened.
 	action := spawn.Child
 	if action == "" {
@@ -382,109 +375,70 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Session:      spawn.Session,
 		Workspace:    spawn.Workspace,
 		Action:       action,
-		Delegation:   delegation,
+		Lease:        lease,
 		Outcome:      OutcomeOK,
 		RequestRef:   reqRef,
 		RequestBytes: reqBytes,
 	})
 }
 
-// EnvDelegation names the environment variable a worker process carries its delegation in. It is
-// exported so a spawner and a worker cannot disagree about the spelling of the channel.
-const EnvDelegation = "MAGUS_DELEGATION"
-
-// delegationEnvNoteOnce holds the malformed-delegation note to one per process. The environment does not
-// change under a running worker, so the same bad value would otherwise be reported once per
-// event and drown the run in one repeated fact.
-var delegationEnvNoteOnce sync.Once
-
-// DelegationFromEnv returns the delegation this process was launched under, or "" when it was
-// launched under none.
+// LeaseFromEnv returns the lease this process is ACTING as, or "" when it claims
+// none: the magus.lease member of the W3C BAGGAGE channel. See [SpawnFromEnv], which
+// reads the rest of what that environment claimed.
 //
-// This is the second of the two delegation channels, and the two say different things. The delegation
-// marker (see delegationFromContext) is the ORCHESTRATOR's assertion about a handoff it is making;
-// MAGUS_DELEGATION is the WORKER's own claim about itself. Where both are available the marker wins:
-// the party doing the partitioning is the one that knows the partition.
-//
-// A value failing [types.ValidDelegationID] yields "" plus a one-time note. Dropping it rather than stamping
-// it is what keeps the redaction exemption honest; the note is what keeps a typo'd delegation from
-// looking like a fleet that simply never attributed anything.
-func DelegationFromEnv() string {
-	id := strings.TrimSpace(os.Getenv(EnvDelegation))
-	if id == "" {
-		return ""
-	}
-	if !types.ValidDelegationID(id) {
-		delegationEnvNoteOnce.Do(func() {
-			// The value itself is deliberately not logged: it failed the charset check that
-			// makes a delegation safe to carry unredacted, so it is the one string here that could
-			// be anything at all.
-			slog.WarnContext(context.Background(),
-				"magus: ignoring MAGUS_DELEGATION and recording no delegation for this process: a delegation id is letters, digits and -_./: only, and never empty",
-				slog.Int("length", len(id)),
-				slog.Int("max_length", types.MaxDelegationIDLen))
-		})
-		return ""
-	}
-	return id
-}
+// This is the second of the two lease channels, and the two say different things. The
+// lease marker (see leaseFromContext) is the ORCHESTRATOR's assertion about a handoff
+// it is making; the environment is the WORKER's own claim about itself. Where both are
+// available the marker wins: the party doing the partitioning is the one that knows the
+// partition.
+func LeaseFromEnv() string { return SpawnFromEnv().Lease }
 
-// delegationScanBytes bounds the head of the handed context the marker may appear in. The marker
+// leaseScanBytes bounds the head of the handed context the marker may appear in. The marker
 // leads the prompt, so this is a cap on one pathological first line rather than a window to
 // search: it keeps a multi-megabyte single-line payload from being scanned at all.
-const delegationScanBytes = 4096
+const leaseScanBytes = 4096
 
-// delegationMarkers are the prefixes the marker line may carry, in preference order.
-// "delegation:" is the spelling to write.
-//
-// compat(until: no orchestrator prompt still leads with "unit:"): "unit:" is the
-// spelling this contract shipped under, and is still honored so a prompt template
-// written before the rename keeps joining its spawns to a ledger row. Dropping it
-// looks like a spawn event with an empty Delegation next to a declared row nobody
-// joined, so observe it by grepping the prompts a host actually sends for "unit:".
-var delegationMarkers = []string{"delegation:", "unit:"}
+// leaseMarker is the prefix the marker line carries.
+const leaseMarker = "lease:"
 
-// delegationFromContext returns the delegation a prompt declares, or "" when it declares
+// leaseFromContext returns the lease a prompt declares, or "" when it declares
 // none. THE MARKER CONTRACT, documented once here and in the host glue pages:
 //
 //	the FIRST non-blank line of the handed context, trimmed, reading exactly
-//	"delegation: <id>" (or the older "unit: <id>")
+//	"lease: <id>"
 //
-// First line, not anywhere in the head: a delegation prompt routinely quotes things - a
+// First line, not anywhere in the head: a lease prompt routinely quotes things - a
 // ledger listing, a file, another agent's transcript - and a marker line lifted from any
-// of them would stamp the event with a delegation that has nothing to do with this
+// of them would stamp the event with a lease that has nothing to do with this
 // handoff. A marker an orchestrator wrote is at the top, and a marker in quoted prose is
 // not; the position is the only thing that separates them. Leading blank lines are
 // formatting and are skipped.
 //
-// The id itself has to satisfy [types.ValidDelegationID], which is where the charset and
+// The id itself has to satisfy [types.ValidLeaseID], which is where the charset and
 // its reasoning live.
 //
 // Anything else - no marker, an empty id, an id carrying spaces or punctuation outside
 // the set, a marker below the first line - yields "". Correlation is cooperative: a
 // missing join is the designed outcome, never an error.
-func delegationFromContext(handed string) string {
+func leaseFromContext(handed string) string {
 	head := handed
-	if len(head) > delegationScanBytes {
-		head = head[:delegationScanBytes]
+	if len(head) > leaseScanBytes {
+		head = head[:leaseScanBytes]
 	}
 	for _, line := range strings.Split(head, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		for _, marker := range delegationMarkers {
-			rest, found := strings.CutPrefix(line, marker)
-			if !found {
-				continue
-			}
-			id := strings.TrimSpace(rest)
-			if !types.ValidDelegationID(id) {
-				return ""
-			}
-			return id
+		rest, found := strings.CutPrefix(line, leaseMarker)
+		if !found {
+			return "" // the prompt leads with something else, so it declares no lease
 		}
-		return "" // the prompt leads with something else, so it declares no delegation
+		id := strings.TrimSpace(rest)
+		if !types.ValidLeaseID(id) {
+			return ""
+		}
+		return id
 	}
 	return ""
 }
@@ -568,7 +522,7 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 // creates nothing.
 func ReadBlob(base, ref string) ([]byte, error) {
 	if !validRef(ref) {
-		return nil, errors.New("trail: invalid ref")
+		return nil, fmt.Errorf("trail: invalid ref %q: expected a 2-8 letter provenance prefix (e.g. %q) followed by %d hex chars", ref, "mcp", refHexLen)
 	}
 	return os.ReadFile(filepath.Join(blobsPath(base), ref))
 }
@@ -911,12 +865,12 @@ func validRef(ref string) bool {
 // redactEvent masks every free-text field on an event.
 //
 // The structural fields are deliberately left alone: Kind, Outcome, Actor, Host, Session,
-// Workspace, Delegation and the blob refs are enumerated values, identities and content addresses, none
+// Workspace, Lease and the blob refs are enumerated values, identities and content addresses, none
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing - the same reasoning that leaves slog
-// attribute KEYS alone in internal/secret. Delegation is the one of those derived from free text - a
-// delegation prompt, or the MAGUS_DELEGATION environment channel - rather than supplied by a caller,
-// which is why every channel that can stamp one runs it through [types.ValidDelegationID]'s bare-identifier
+// attribute KEYS alone in internal/secret. Lease is the one of those derived from free text - a
+// lease prompt, or the BAGGAGE environment channel - rather than supplied by a caller,
+// which is why every channel that can stamp one runs it through [types.ValidLeaseID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
 	e.Action = secret.RedactString(ctx, e.Action)

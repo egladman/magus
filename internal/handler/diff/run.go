@@ -180,7 +180,7 @@ func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diff
 func (h *RunHandler) submit(ctx context.Context, argv []string) error {
 	addr := h.socket()
 	if addr == "" {
-		return errors.New("no daemon socket to submit to")
+		return errors.New("no daemon socket to submit to; run `magus server start`")
 	}
 	_, err := h.submitFn(ctx, addr, argv, h.version)
 	return err

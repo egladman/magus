@@ -1,6 +1,8 @@
 # magus benchmarks
 
-Head-to-head comparison: magus vs turbo, nx, lage, moon, bazel, and make.
+Measured results hold magus against make on one fixture today. turbo, nx,
+lage, moon, and bazel are pinned for the future matrix but have no results
+yet.
 
 Results are in [`BENCHMARKS.md`](./BENCHMARKS.md), stamped with date,
 hardware, and exact tool versions.

@@ -21,6 +21,22 @@ type ExitError struct {
 // recover ExitError via errors.As and use Code, not the string.
 func (e ExitError) Error() string { return fmt.Sprintf("exit %d", e.Code) }
 
+// NormalizeExitCode maps a requested code onto the range a process exit status can
+// actually carry. A wait status holds 8 bits and os.Exit truncates silently, so
+// os.exit(256) reported SUCCESS and `magus run deploy && ship` shipped. A nonzero
+// request that truncates to zero becomes 1 instead: the intent was to fail, and the
+// only thing worse than the wrong nonzero code is a zero. Negatives fold the same way
+// a shell folds them, so exit(-1) is 255.
+func NormalizeExitCode(code int) int {
+	if code == 0 {
+		return 0
+	}
+	if n := code & 0xff; n != 0 {
+		return n
+	}
+	return 1
+}
+
 // exitCapture captures an exit code requested during a run.
 type exitCapture struct {
 	code int

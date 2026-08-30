@@ -182,8 +182,8 @@ func (v *InlineView) Finish() {
 
 // size reports the terminal's dimensions, and whether there is one to measure.
 func (v *InlineView) size() (width, height int, ok bool) {
-	fd, ok := Fd(v.w)
-	if !ok || !v.probe.IsTerminal(fd) {
+	fd, present := Fd(v.w)
+	if !present || !CanRender(v.w, v.probe) {
 		return 0, 0, false
 	}
 	w, h, err := v.probe.Size(fd)

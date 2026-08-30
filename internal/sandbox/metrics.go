@@ -2,8 +2,10 @@ package sandbox
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/types"
 )
 
 // MetricsRecorder is the narrow slice of the observability provider that the
@@ -57,12 +59,17 @@ func RecordCheck(ctx context.Context, access string, err error) {
 
 // RecordEnvDropped reports the number of environment variables policy withheld from its
 // frozen BaseEnv, attributed to the current step's project (a no-op when no recorder is
-// on ctx or nothing was dropped). This counts variables magus itself dropped from
-// subprocess environments per the env allowlist, not anything the kernel enforces.
-func RecordEnvDropped(ctx context.Context, policy *Policy) {
+// on ctx or nothing was dropped), and logs MGS2003 once for this exec so a behavior
+// change from a missing variable is traceable (docs/reference/codes/sandbox/MGS2003.md).
+// This counts variables magus itself dropped from subprocess environments per the env
+// allowlist, not anything the kernel enforces.
+func RecordEnvDropped(ctx context.Context, cmd string, policy *Policy) {
 	if policy == nil || len(policy.EnvDropped) == 0 {
 		return
 	}
+	slog.InfoContext(ctx, types.FormatDiagnostic(types.EnvStripped,
+		"env vars stripped from child process by sandbox"),
+		"cmd", cmd, "stripped_count", len(policy.EnvDropped))
 	rec := MetricsFromContext(ctx)
 	if rec == nil {
 		return

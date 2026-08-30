@@ -37,8 +37,8 @@ func TestPromptAsksForFindingsNotProse(t *testing.T) {
 func TestPromptNamesSkillsRatherThanRestatingThem(t *testing.T) {
 	out := promptFor(t, types.Diff{Base: "main"}, nil)
 
-	assert.Contains(t, out, SkillQuery.String())
-	assert.Contains(t, out, SkillArchitecture.String())
+	assert.Contains(t, out, skillQuery.String())
+	assert.Contains(t, out, skillArchitecture.String())
 	// For an empty changeset the whole prompt is fixed scaffolding. A skill body inlined here
 	// would be several thousand bytes on its own, so this bound is what a regression trips.
 	assert.Less(t, len(out), 1500,
@@ -104,7 +104,7 @@ func TestPromptCarriesWhatCouldNotBeMeasured(t *testing.T) {
 // believes they have seen every file is worse off than one who knows they have not.
 func TestPromptSaysHowMuchItLeftOut(t *testing.T) {
 	rev := types.Diff{Base: "main"}
-	for range PromptFileLimit + 7 {
+	for range promptFileLimit + 7 {
 		rev.Files = append(rev.Files, types.DiffFile{Path: "f", Role: "source"})
 	}
 
@@ -141,7 +141,7 @@ func TestLongPromptAddsRationaleAndNothingElse(t *testing.T) {
 	for _, instruction := range []string{
 		"Do not draft review prose",
 		"Read in this order",
-		SkillQuery.String(),
+		skillQuery.String(),
 		"look for the test that PINS",
 	} {
 		assert.Contains(t, short, instruction, "the short form dropped an instruction, not a rationale")
@@ -153,7 +153,7 @@ func TestLongPromptAddsRationaleAndNothingElse(t *testing.T) {
 // branch sharing seventy files with a large changeset filled most of the prompt on its own.
 func TestPromptPathsCountsWhatItDidNotName(t *testing.T) {
 	var many []string
-	for i := range PromptOverlapPathLimit + 4 {
+	for i := range promptOverlapPathLimit + 4 {
 		many = append(many, fmt.Sprintf("pkg/file%d.go", i))
 	}
 
@@ -161,7 +161,7 @@ func TestPromptPathsCountsWhatItDidNotName(t *testing.T) {
 
 	assert.Contains(t, got, "pkg/file0.go")
 	assert.Contains(t, got, "and 4 more", "a truncated list that does not admit it reads as complete")
-	assert.NotContains(t, got, fmt.Sprintf("pkg/file%d.go", PromptOverlapPathLimit))
+	assert.NotContains(t, got, fmt.Sprintf("pkg/file%d.go", promptOverlapPathLimit))
 
 	// A list that fits is printed whole, with no remainder clause to read past.
 	short := []string{"a.go", "b.go"}

@@ -17,7 +17,7 @@ import "site/diagrams/dogfood" as _;
 import "site/diagrams/project-reference" as _;
 import "site/diagrams/volatility" as _;
 import "site/diagrams/commit-generated" as _;
-import "site/diagrams/delegation-loop" as _;
+import "site/diagrams/lease-loop" as _;
 
 export fun allDiagrams() > [Diagram] {
     return [
@@ -32,7 +32,7 @@ export fun allDiagrams() > [Diagram] {
         projectReferenceDiagram(),
         volatilityDiagram(),
         commitGeneratedDiagram(),
-        delegationLoopDiagram(),
+        leaseLoopDiagram(),
     ];
 }
 

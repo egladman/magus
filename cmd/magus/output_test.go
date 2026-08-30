@@ -310,8 +310,10 @@ func TestOutputDstTeeBadPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "--tee", "error should mention --tee")
 }
 
-func TestWriteJSONLMultiSliceFallback(t *testing.T) {
-	// Struct with multiple slice fields — should emit whole object as one line.
+// Several collections and no declared primary is an ERROR naming the candidates. It used
+// to emit the whole object as one line, which turned -o jsonl into -o json at exit 0 the
+// day a type grew a second list.
+func TestWriteJSONLAmbiguousIsAnError(t *testing.T) {
 	v := struct {
 		Roots []string `json:"roots"`
 		Nodes []string `json:"nodes"`
@@ -321,17 +323,66 @@ func TestWriteJSONLMultiSliceFallback(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
+	err := writeJSONL(&buf, v)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "roots", "the error names the candidate fields")
+	assert.Contains(t, err.Error(), "nodes")
+	assert.Contains(t, err.Error(), `jsonl:"primary"`)
+	assert.Empty(t, buf.String(), "nothing is emitted when the stream is ambiguous")
+}
+
+// A declared primary settles the ambiguity: that field streams, the rest are dropped.
+func TestWriteJSONLDeclaredPrimary(t *testing.T) {
+	v := struct {
+		Roots []string `json:"roots"`
+		Nodes []string `json:"nodes" jsonl:"primary"`
+	}{
+		Roots: []string{"a"},
+		Nodes: []string{"b", "c"},
+	}
+
+	var buf bytes.Buffer
 	require.NoError(t, writeJSONL(&buf, v))
+	assert.Equal(t, "\"b\"\n\"c\"\n", buf.String())
+}
+
+// A value that IS the collection streams its elements rather than emitting the whole
+// array as one line.
+func TestWriteJSONLTopLevelSlice(t *testing.T) {
+	type proj struct {
+		Path string `json:"path"`
+	}
+	var buf bytes.Buffer
+	require.NoError(t, writeJSONL(&buf, []proj{{Path: "api"}, {Path: "web"}}))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	require.Len(t, lines, 1, "expected 1 line (fallback)")
-	var got struct {
-		Roots []string `json:"roots"`
-		Nodes []string `json:"nodes"`
+	require.Len(t, lines, 2)
+	var p0 proj
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &p0))
+	assert.Equal(t, proj{Path: "api"}, p0)
+}
+
+// A record with no collection at all is one line: there is nothing to stream, and that
+// is not an ambiguity.
+func TestWriteJSONLSingleRecord(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeJSONL(&buf, struct {
+		Name string `json:"name"`
+	}{Name: "api"}))
+	assert.Equal(t, 1, strings.Count(buf.String(), "\n"))
+}
+
+// Bare -o template on a command whose whole output is a LIST lists the element's fields;
+// refusing there left nothing to read the template field names off.
+func TestWriteTemplateFieldsSliceElement(t *testing.T) {
+	type entry struct {
+		Path string `json:"path"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &got))
-	assert.Len(t, got.Roots, 1)
-	assert.Len(t, got.Nodes, 2)
+	var buf bytes.Buffer
+	require.NoError(t, writeTemplateFields(&buf, []entry{{Path: "api"}}))
+	out := buf.String()
+	assert.Contains(t, out, "entry:")
+	assert.Contains(t, out, "path")
 }
 
 func TestFlagWasSet(t *testing.T) {

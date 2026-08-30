@@ -3,7 +3,7 @@
 // The markdown render tags a fence with data-magus-run="true" (via a <!-- magus-run -->
 // author marker); this module finds those blocks and adds two action bars plus an
 // output panel. Top bar: "Open in Playground ↗" (left, opens in a new tab, deep-linking
-// the snippet into /playground/#source=<base64url>) and a copy-to-clipboard button
+// the snippet into /playground/#source=<payload>) and a copy-to-clipboard button
 // (right) - runnable blocks skip code-copy.js's floating corner button (see there) and
 // get this inline one instead. Bottom bar: the Run button (right-aligned), directly
 // above where its output panel will land on click, which LAZY-LOADS the playground WASM
@@ -30,12 +30,18 @@ export function initRunExample(): void {
     '<rect x="9" y="9" width="13" height="13" rx="2"></rect>' +
     '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 
-  function base64url(text: string): string {
+  // The playground's fragment payload is a version byte plus url-safe unpadded
+  // base64 (internal/playground/share.go). "0" is the uncompressed variant, which
+  // is what a producer with no DEFLATE implementation emits; the playground's own
+  // Share button emits the compressed "1". One decoder in the wasm reads both, so
+  // the tag is not optional even though nothing here compresses.
+  function shareFragment(text: string): string {
     // UTF-8 -> latin1 (unescape(encodeURIComponent)) -> btoa -> URL-safe alphabet.
-    return btoa(unescape(encodeURIComponent(text)))
+    const b64 = btoa(unescape(encodeURIComponent(text)))
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
+    return "0" + b64;
   }
 
   // formatTrace renders an evalBuzzWithRecorder result to match magus's OWN dry-run
@@ -114,7 +120,7 @@ export function initRunExample(): void {
 
     const openLink = document.createElement("a");
     openLink.className = "open-in-playground";
-    openLink.href = ROOT + "playground/#source=" + base64url(code.textContent ?? "");
+    openLink.href = ROOT + "playground/#source=" + shareFragment(code.textContent ?? "");
     openLink.target = "_blank";
     openLink.rel = "noopener";
     openLink.setAttribute("title", "Open this snippet in the playground (new tab)");

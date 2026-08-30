@@ -12,13 +12,12 @@
 // Anything that fails one of those is PULL, and belongs on the dashboard or the activity trail, not
 // here. Do NOT add notifications that merely report progress or restate what a surface already shows.
 //
-// TWO TIERS. The BELL tier lights the unseen-dot; it is reserved for the six things that are genuinely
-// "stop and look":
+// TWO TIERS. The BELL tier lights the unseen-dot; it is reserved for the four things that are genuinely
+// "stop and look" (the `important` opt-in below carries the rest: a share connect, a storage threshold,
+// an author-declared marker):
 //   - an unwatched run/target failure   -> deep-link: the log viewer at the failing ref
 //   - a sandbox denial                  -> deep-link: the activity trail
 //   - daemon health degraded/down       -> deep-link: the dashboard
-//   - a drift / CheckClean violation    -> deep-link: the run output
-//   - a target turning newly volatile   -> deep-link: the insight lens
 //   - a new remark on your review       -> deep-link: the diff surface
 //
 // That last one is a DELIBERATE WIDENING of the rule above it, made 2026-08-26, and it is worth being

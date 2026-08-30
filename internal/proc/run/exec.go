@@ -154,7 +154,8 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	}
 	env, withheldDaemon := childEnv(ctx, policy, opts.Env)
 	c.Env = env
-	sandbox.RecordEnvDropped(ctx, policy)
+	sandbox.RecordEnvDropped(ctx, name, policy)
+	sandbox.EmitShimHint(name, policy)
 	if len(withheldDaemon) > 0 {
 		slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
 			"withheld magus daemon pointer(s) from op subprocess (done regardless of sandbox.enabled)"),

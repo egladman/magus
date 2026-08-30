@@ -77,7 +77,7 @@ Stream workspace events as JSONL for an integration to consume. See \fBmagus\-ev
 Inspect concurrency pool and configuration. See \fBmagus\-status\fR(1).
 .TP
 \fBclean\fR
-Remove declared Outputs (regenerable build artifacts). See \fBmagus\-clean\fR(1).
+Remove declared outputs (regenerable, never sources). See \fBmagus\-clean\fR(1).
 .TP
 \fBvcs\fR
 Staging and conflict resolution that knows what is generated. See \fBmagus\-vcs\fR(1).
@@ -103,6 +103,9 @@ Read the working tree's changes in the order they deserve attention. See \fBmagu
 \fBserver\fR
 Manage the persistent magus daemon. See \fBmagus\-server\fR(1).
 .TP
+\fBmcp\fR
+Print how to reach the MCP server. See \fBmagus\-mcp\fR(1).
+.TP
 \fBbuzz\fR
 Run a Buzz script. See \fBmagus\-buzz\fR(1).
 .TP
@@ -116,10 +119,10 @@ Install the man pages embedded in this binary. See \fBmagus\-man\fR(1).
 Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See \fBmagus\-init\fR(1).
 .TP
 \fBagent\fR
-Install the knowledge\-graph agent skills into a repo. See \fBmagus\-agent\fR(1).
+Install the knowledge\-graph agent skills into a repository. See \fBmagus\-agent\fR(1).
 .TP
 \fBself\fR
-Manage the magus binary (update, install\-shorthand). See \fBmagus\-self\fR(1).
+Manage the magus binary (update, refresh, registry, install\-shorthand). See \fBmagus\-self\fR(1).
 .TP
 \fBversion\fR
 Print the client and daemon versions. See \fBmagus\-version\fR(1).
@@ -137,7 +140,7 @@ When false (or 0), replay cache hits but never write new entries, locally or to 
 When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross\-platform replay (default: false). Equivalent magus.yaml key: \fBcache.include.os.enabled\fR.
 .TP
 \fBMAGUS_CACHE_INCLUDE_ARCH_ENABLED\fR
-When false (or 0), the host architecture is left out of every cache key (default: true). Equivalent magus.yaml key: \fBcache.include.arch.enabled\fR.
+When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross\-platform replay (default: false). Equivalent magus.yaml key: \fBcache.include.arch.enabled\fR.
 .TP
 \fBMAGUS_CACHE_SIZE_MB\fR
 Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBcache.size_mb\fR.
@@ -176,7 +179,7 @@ Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalen
 Per\-VCS base\-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 .TP
 \fBMAGUS_DAEMON_SOCKET\fR
-Runtime proc\-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: \fBdaemon.socket\fR.
+Env\-only, no magus.yaml equivalent: runtime proc\-server socket set by the daemon for forwarded child processes; unix:// URL or bare path, read directly by the process that adopts it
 .TP
 \fBMAGUS_CI_MAX_SHARDS\fR
 Maximum number of parallel CI shards; \-1 means unlimited (default: 8). Equivalent magus.yaml key: \fBci.max_shards\fR.
@@ -189,18 +192,6 @@ CI matrix shard ID (e.g. "0"); equivalent to magus run \-\-shard; set by .github
 .TP
 \fBMAGUS_N_SHARDS\fR
 Total shard count for this matrix run; equivalent to magus run \-\-n\-shards; set by .github/actions/magus
-.TP
-\fBMAGUS_GRAPH_DIRECTION\fR
-Default graph direction: downstream or upstream (default: downstream). Equivalent magus.yaml key: \fBgraph.direction\fR.
-.TP
-\fBMAGUS_GRAPH_SPELL\fR
-Filter graph output to a single spell. Equivalent magus.yaml key: \fBgraph.spell\fR.
-.TP
-\fBMAGUS_GRAPH_DEPTH\fR
-Cap displayed graph depth (0 = unlimited) (default: 0). Equivalent magus.yaml key: \fBgraph.depth\fR.
-.TP
-\fBMAGUS_GRAPH_ROOTS\fR
-Comma\-separated starting nodes for graph traversal. Equivalent magus.yaml key: \fBgraph.roots\fR.
 .TP
 \fBMAGUS_TELEMETRY_ENABLED\fR
 Turn OTLP export on; magus connects to telemetry.endpoint when true (default: false). Equivalent magus.yaml key: \fBtelemetry.enabled\fR.
@@ -296,6 +287,7 @@ MAGUS_CACHE_DIR.
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
 \fBmagus\-man\fR(1),

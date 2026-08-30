@@ -133,8 +133,10 @@ service ViewerService {
   // ListEvents returns a page of an invocation's events; page through with page_token
   // until next_page_token is empty. filter narrows them server-side (large logs).
   rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
-  // StreamEvents streams a running invocation's events as they are produced. Reconnect
-  // with start_time set to the last seen time to resume.
+  // StreamEvents replays an invocation's stored events, then streams what the run appends
+  // as it is produced, ending when the run finishes. Reconnect with filter.time.since set
+  // to the last event seen to resume; that boundary is inclusive, so the event resumed from
+  // arrives again rather than being lost.
   rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse);
   // ListOutputs returns the stored runs' descriptors, newest first, so a viewer can browse
   // recent runs grouped project -> target -> run.

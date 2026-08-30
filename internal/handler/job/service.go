@@ -100,7 +100,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	}
 	addr := s.socket()
 	if addr == "" {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("job: no daemon socket to submit to"))
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("job: no daemon socket to submit to; run `magus server start`"))
 	}
 	// Snapshot the running set BEFORE submitting: on a coalesced submit the already-running job
 	// predates our call, so it is reliably in this snapshot; a query taken AFTER the submit could

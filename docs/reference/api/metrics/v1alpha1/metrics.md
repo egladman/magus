@@ -156,7 +156,7 @@ Source: [metrics.proto:176](https://github.com/egladman/magus/blob/main/proto/ma
 | `sample_time` | Timestamp | 1 |  |
 | `running` | int32 | 2 | _optional_ pool slots running at this tick; unset = pool unreadable |
 | `capacity` | int32 | 3 | _optional_ pool capacity (0 = unlimited); unset = pool unreadable |
-| `queued` | int32 | 4 | _optional_ tasks queued for a slot; unset = pool unreadable |
+| `queued` | int32 | 4 | _optional_ targets queued for a slot; unset = pool unreadable |
 | `cache_hits` | int64 | 5 | _optional_ cumulative; diff adjacent samples for a hit rate |
 | `cache_misses` | int64 | 6 | _optional_ cumulative |
 | `target_runs` | int64 | 7 | _optional_ cumulative target executions |

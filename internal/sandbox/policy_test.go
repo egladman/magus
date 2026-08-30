@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -156,4 +157,58 @@ func BenchmarkCheckReadCtx(b *testing.B) {
 			_ = p.CheckReadCtx(ctx, paths[i%len(paths)])
 		}
 	})
+}
+
+// TestDenialLandsOnTheTrail covers the producer half of the sandbox-denial bell. The kind, the
+// wire encoder, and the console notification all shipped and all worked; nothing ever appended
+// one, so the notification could not fire on any workspace.
+func TestDenialLandsOnTheTrail(t *testing.T) {
+	base := t.TempDir()
+	allowed := filesystem.ResolveRulePath(t.TempDir())
+	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}}}
+	ctx := trail.ContextWithBase(t.Context(), base)
+
+	if err := policy.CheckWriteCtx(ctx, "/definitely/not/allowed/f"); err == nil {
+		t.Fatal("CheckWriteCtx: expected the write to be denied")
+	}
+
+	events, err := trail.ReadRecent(base, 10)
+	if err != nil {
+		t.Fatalf("reading the trail: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("recorded %d events, want 1: %+v", len(events), events)
+	}
+	if events[0].Kind != trail.KindSandboxDenial {
+		t.Errorf("kind = %q, want %q", events[0].Kind, trail.KindSandboxDenial)
+	}
+	// The console renders this as "Sandbox denied <action>." - it has to name what was
+	// refused, or the notification says only that something somewhere was blocked.
+	if want := "write of /definitely/not/allowed/f"; events[0].Action != want {
+		t.Errorf("action = %q, want %q", events[0].Action, want)
+	}
+	if events[0].Outcome != trail.OutcomeError || events[0].Error == "" {
+		t.Errorf("a denial must record as an error carrying its cause: %+v", events[0])
+	}
+}
+
+// TestAllowedAccessLeavesNoTrailEvent keeps the producer off the happy path: a read check runs
+// once per glob match, and the trail is a durable append-only file.
+func TestAllowedAccessLeavesNoTrailEvent(t *testing.T) {
+	base := t.TempDir()
+	allowed := filesystem.ResolveRulePath(t.TempDir())
+	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}}}
+	ctx := trail.ContextWithBase(t.Context(), base)
+
+	if err := policy.CheckReadCtx(ctx, filepath.Join(allowed, "f")); err != nil {
+		t.Fatalf("CheckReadCtx allow: unexpected error: %v", err)
+	}
+
+	events, err := trail.ReadRecent(base, 10)
+	if err != nil {
+		t.Fatalf("reading the trail: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("an allowed access wrote %d trail events: %+v", len(events), events)
+	}
 }

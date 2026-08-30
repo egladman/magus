@@ -73,7 +73,7 @@ func (s *Service) QueryNodes(
 ) (*connect.Response[graphv1.QueryNodesResponse], error) {
 	query := req.Msg.GetQuery()
 	if query == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("query is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(`graph: query is required (e.g. "kind:target project:api")`))
 	}
 	g, seeded, err := s.graphFor(ctx, query)
 	if err != nil {
@@ -100,7 +100,7 @@ func (s *Service) ResolveNodes(
 ) (*connect.Response[graphv1.ResolveNodesResponse], error) {
 	ref := req.Msg.GetReference()
 	if ref == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("reference is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: reference is required"))
 	}
 	g, _, err := s.graphFor(ctx, ref)
 	if err != nil {
@@ -115,7 +115,7 @@ func (s *Service) ExplainNode(
 ) (*connect.Response[graphv1.NodeContext], error) {
 	name := req.Msg.GetName()
 	if name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: name is required"))
 	}
 	g, _, err := s.graphFor(ctx, name)
 	if err != nil {
@@ -123,7 +123,7 @@ func (s *Service) ExplainNode(
 	}
 	out, ok := g.Explain(name)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("no node matches "+name))
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+"; try `magus query "+name+"` for a wider search"))
 	}
 	resp := &graphv1.NodeContext{
 		Node:        nodeToProto(out.Node),
@@ -139,7 +139,7 @@ func (s *Service) FindPath(
 ) (*connect.Response[graphv1.Path], error) {
 	from, to := req.Msg.GetFrom(), req.Msg.GetTo()
 	if from == "" || to == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("from and to are both required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: from and to are both required"))
 	}
 	g, _, err := s.graphFor(ctx, from+" "+to)
 	if err != nil {
@@ -171,7 +171,7 @@ func (s *Service) FindDependents(
 ) (*connect.Response[graphv1.Dependents], error) {
 	name := req.Msg.GetName()
 	if name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: name is required"))
 	}
 	// The warm graph, always. depends_on edges never touch the @symbols shards, so loading them
 	// would cost the shard read and change nothing about the answer.
@@ -183,7 +183,7 @@ func (s *Service) FindDependents(
 	// unknown id returns nil - which would report "nothing rebuilds" for a typo.
 	matches := g.Resolve(name, 1)
 	if len(matches) == 0 {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("no node matches "+name))
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+"; try `magus query "+name+"` for a wider search"))
 	}
 	id := matches[0].ID
 	return connect.NewResponse(&graphv1.Dependents{Node: id, Ids: g.Dependents(id)}), nil

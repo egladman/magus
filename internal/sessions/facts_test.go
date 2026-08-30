@@ -174,14 +174,14 @@ func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 	assert.Contains(t, logged, dir, "the warning names the store a person has to go look at")
 }
 
-// The delegation is stamped from the SessionStart the caller supplied, never re-read per fact:
+// The lease is stamped from the SessionStart the caller supplied, never re-read per fact:
 // a mid-run environment change would otherwise split one session's facts across two
-// delegations, which is a history no producer could have meant.
-func TestFactHandlerStampsTheSuppliedDelegationOnEveryFact(t *testing.T) {
+// leases, which is a history no producer could have meant.
+func TestFactHandlerStampsTheSuppliedLeaseOnEveryFact(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
-	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run ci", Delegation: "fleet/f3"})
+	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run ci", Lease: "fleet/f3"})
 	require.NotNil(t, h)
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Status: journal.StatusPass})
@@ -193,10 +193,10 @@ func TestFactHandlerStampsTheSuppliedDelegationOnEveryFact(t *testing.T) {
 
 	summaries := Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, "fleet/f3", summaries[0].Delegation)
+	assert.Equal(t, "fleet/f3", summaries[0].Lease)
 	require.Len(t, summaries[0].Targets, 2)
 	for _, target := range summaries[0].Targets {
-		assert.Equal(t, "fleet/f3", target.Delegation, "a fact read on its own still says whose work it was")
+		assert.Equal(t, "fleet/f3", target.Lease, "a fact read on its own still says whose work it was")
 	}
 }
 

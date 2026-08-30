@@ -1,5 +1,5 @@
 {
-  "definition": "The target dependency graph is the ctx.needs DAG of a project's magusfile: each node is a target (an exported function), each edge a dependency it composes. It is extracted statically from the magusfile source, so it shows every edge — including both arms of a runtime branch — and flags any dependency cycle (which the run path rejects during dispatch).",
+  "definition": "The target dependency graph is the ctx.needs DAG of a project's magusfile: each node is a target (an exported function), each edge a dependency it composes. It is extracted statically from the magusfile source, so it shows every edge - including both arms of a runtime branch - and flags any dependency cycle (which the run path rejects during dispatch).",
   "projects": [
     {
       "path": ".",
@@ -357,13 +357,13 @@
               "glob": ".claude/skills/magus-context-audit*/**"
             },
             {
-              "glob": ".claude/skills/magus-delegate-multi-agent*/**"
-            },
-            {
               "glob": ".claude/skills/magus-docs-lookup*/**"
             },
             {
               "glob": ".claude/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-multi-agent*/**"
             },
             {
               "glob": ".claude/skills/magus-query*/**"
@@ -399,13 +399,13 @@
               "glob": ".agents/skills/magus-context-audit*/**"
             },
             {
-              "glob": ".agents/skills/magus-delegate-multi-agent*/**"
-            },
-            {
               "glob": ".agents/skills/magus-docs-lookup*/**"
             },
             {
               "glob": ".agents/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-multi-agent*/**"
             },
             {
               "glob": ".agents/skills/magus-query*/**"
@@ -441,13 +441,13 @@
               "glob": ".opencode/skills/magus-context-audit*/**"
             },
             {
-              "glob": ".opencode/skills/magus-delegate-multi-agent*/**"
-            },
-            {
               "glob": ".opencode/skills/magus-docs-lookup*/**"
             },
             {
               "glob": ".opencode/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-multi-agent*/**"
             },
             {
               "glob": ".opencode/skills/magus-query*/**"
@@ -1020,7 +1020,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck.",
+          "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint.",
           "dependencies": [
             "format",
             "lint-build"
@@ -1121,6 +1121,10 @@
             {
               "project": ".",
               "glob": ".shellcheckrc"
+            },
+            {
+              "project": ".",
+              "glob": ".github/workflows/*.yaml"
             },
             {
               "project": ".",
@@ -1468,6 +1472,9 @@
             },
             {
               "glob": "stylelint-control-sizing.mjs"
+            },
+            {
+              "glob": "stylelint-label-token.mjs"
             }
           ]
         },
@@ -2490,6 +2497,7 @@
         },
         {
           "name": "test",
+          "doc": "README.md's \"Contributing gotchas\" claims value changes are checked against all three build tags (default + buzz_safe in CI, buzz_unsafe by hand) - the second exec is what makes that true; before it, nothing here ever built or ran a single test under -tags buzz_safe.",
           "dependencies": [
             "format"
           ],

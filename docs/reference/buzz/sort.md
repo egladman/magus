@@ -18,7 +18,7 @@ Ordering for string lists: lexicographic, natural (digit-aware), and semver.
 
 Return a new list ordered lexicographically by byte. The plain alphabetical sort, and the one to reach for when the goal is a stable order rather than a meaningful one - a listing that must not change between runs.
 
-**Signature:** `sort\strings(items) → []string` · [source](https://github.com/egladman/magus/blob/main/std/sort.go#L58)
+**Signature:** `sort\strings(items) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/sort.go#L58)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -30,7 +30,7 @@ Return a new list ordered lexicographically by byte. The plain alphabetical sort
 
 Return a new list ordered so embedded numbers compare as numbers: file2 before file10, where a lexicographic sort puts file10 first. Use it for anything a human will read - filenames, shard names, versioned directories - and note it is NOT a version sort; semver is.
 
-**Signature:** `sort\natural(items) → []string` · [source](https://github.com/egladman/magus/blob/main/std/sort.go#L65)
+**Signature:** `sort\natural(items) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/sort.go#L65)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -42,7 +42,7 @@ Return a new list ordered so embedded numbers compare as numbers: file2 before f
 
 Return a new list ordered by semantic version, oldest first, so v1.9.0 precedes v1.10.0 and a prerelease precedes its release. Accepts tags with or without a leading v. Anything that is not a valid version sorts AFTER every valid one, in lexicographic order among themselves - so a stray tag is visible at the end rather than silently reordering the releases.
 
-**Signature:** `sort\semver(items) → []string` · [source](https://github.com/egladman/magus/blob/main/std/sort.go#L124)
+**Signature:** `sort\semver(items) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/sort.go#L124)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

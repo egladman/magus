@@ -1,8 +1,8 @@
 ---
 title: magus describe
 generated_from: internal/cli/registry.go
-description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.
-tags: [cli, magus describe, spell, charm, target, project, workspace, introspection]
+description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph) and list every entity of that kind, or detail one when a name is given.
+tags: [cli, magus describe, spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph, introspection]
 ---
 
 # magus-describe
@@ -16,10 +16,10 @@ Define a magus concept and list its entities
 ## Description
 
 Define a magus concept and list every entity of that kind. The noun is
-one of spell, charm, target, project, workspace, module, or mcp-tool; singular
-and plural are interchangeable. Pass a name after the noun to detail a single
-entity instead of listing them all. (The knowledge graph lives under magus
-graph: export for the merged graph, stats for its shape.)
+one of spell, charm, target, project, workspace, module, mcp-tool, tool, file,
+or graph; singular and plural are interchangeable. Pass a name after the noun
+to detail a single entity instead of listing them all. (The knowledge graph
+lives under magus graph: export for the merged graph, stats for its shape.)
 
 The charm noun is the inverse of a target ref: "describe charm rw" lists every
 target that declares the rw charm and the argv edit each one makes, the transpose
@@ -137,5 +137,5 @@ magus describe target --explain lint:rw,debug
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

@@ -813,6 +813,45 @@ export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os.exit(3); }
 	assert.Equal(t, 3, ex.Code)
 }
 
+// TestExitCaptureDoesNotSwallowALaterFailure pins the ordering in interp.runBuzz. The
+// out-of-band exit capture is a fallback for an engine that stringifies ExitError away;
+// read before the returned error was looked at at all, a swallowed os.exit(0) turned
+// every failure raised afterwards into a clean success.
+func TestExitCaptureDoesNotSwallowALaterFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "os";
+import "proc";
+
+export fun bail(ctx: magus\Context, _a: [str]) > void !> any {
+    try { os.exit(0); } catch (e) { }
+    proc.which("definitely-no-such-cmd-zzz");
+}
+`)
+	err := runTargetIn(t, dir, "bail")
+	require.Error(t, err, "the failure after the exit is still a failure")
+
+	var ex types.ExitError
+	assert.NotErrorAs(t, err, &ex, "a captured 0 must not stand in for a genuine error")
+}
+
+// TestOsExitClampsToAProcessStatus pairs with TestOsExitRaisesExitError: a code that
+// os.Exit would truncate to 0 must not report success. See types.NormalizeExitCode.
+func TestOsExitClampsToAProcessStatus(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "os";
+
+export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os.exit(256); }
+`)
+	err := runTargetIn(t, dir, "bail")
+	var ex types.ExitError
+	require.ErrorAs(t, err, &ex)
+	assert.Equal(t, 1, ex.Code)
+}
+
 // TestOsSleep exercises os.sleep (milliseconds, matching Buzz) from a Buzz
 // magusfile, confirming the TypeFloat binding path works for fractional and int
 // literals and returns.

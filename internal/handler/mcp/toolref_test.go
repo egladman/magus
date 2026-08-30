@@ -55,7 +55,7 @@ func TestMCPToolHintsResolve(t *testing.T) {
 		values = append(values, v)
 	}
 	refResult := mcplib.NewToolResultText(`{"ref":"out1a2b3c4d"}`)
-	decorateResult(refResult, ToolRunTarget.String())
+	decorateResult(refResult, toolRunTarget.String())
 	values = append(values, resultText(refResult))
 
 	for _, v := range values {

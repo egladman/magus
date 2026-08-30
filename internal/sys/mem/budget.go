@@ -13,17 +13,6 @@ import "context"
 // figures that drifted apart would be two different answers to it.
 const UsableFraction = 0.75
 
-// BudgetMB returns the megabytes of totalBytes that build work may plan against, or
-// 0 when the host could not be measured. A zero budget means UNKNOWN and must be
-// branched on: gating against it would refuse everything on a machine magus simply
-// failed to read.
-func BudgetMB(totalBytes int64) int {
-	if totalBytes <= 0 {
-		return 0
-	}
-	return int(float64(totalBytes) * UsableFraction / (1 << 20))
-}
-
 // UsableBytes is the memory THIS PROCESS may actually commit: the machine's total,
 // narrowed by any ceiling the process runs under.
 //

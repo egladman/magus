@@ -84,4 +84,4 @@ to INSIGHT.md or into a CI step summary.
 ## See also
 
 - [targets.md](../targets.md) - the dependency graph insight heat-colors.
-- [affected.md](../affected.md) - the other VCS-driven command, for building rather than analyzing.
+- [affected.md](../workspace/affected.md) - the other VCS-driven command, for building rather than analyzing.

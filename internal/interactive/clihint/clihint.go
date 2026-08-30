@@ -4,9 +4,14 @@
 //
 // Hardcoding these strings let them drift from the real command surface: a
 // failing target once printed "magus query <ref>" long after the command had
-// become "magus query output <ref>". Every emitter now renders from a Command
-// value here, so a subcommand rename is a single edit, and cmd/magus's drift
-// test asserts every referenced head token still resolves to a real subcommand.
+// become "magus query output <ref>". An emitter that renders from a Command value
+// here survives a subcommand rename as a single edit, and cmd/magus's drift test
+// asserts every registered head token still resolves to a real subcommand.
+//
+// Not every emitter does yet: usage blocks and doc tables still carry the path as a
+// literal, and those are the ones that can silently go stale. A Command declared for
+// a path nothing renders buys nothing though - it drifts just as quietly, with no
+// output depending on it - so declare one when an emitter starts using it.
 //
 // It is nested under internal/interactive - the hints home (interactive.Emit and
 // the "did you mean" suggester) - since these command references exist to be shown
@@ -75,19 +80,18 @@ var (
 	DescribeProject  = cmd("describe", "project")
 	Ls               = cmd("ls")
 	LsTargets        = cmd("ls", "targets")
-	Where            = cmd("where")
 	Refs             = cmd("refs")
 	MCPTokenGenerate = cmd("config", "token", "generate")
 	SelfUpdate       = cmd("self", "update")
-	SelfRefresh      = cmd("self", "refresh")
-	SelfRegistry     = cmd("self", "registry")
 )
 
 // All is every canonical command referenced in output, for the drift test to
-// walk. Keep new Command values registered here.
+// walk. Keep new Command values registered here - TestAllDeclaredAreRegistered
+// reads this file and fails if a declaration is missing, which is how ServerReload
+// sat outside the guard while serverCmd routed on it.
 var All = []Command{
 	Run, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
-	ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
-	DescribeTargets, DescribeProject, Ls, LsTargets, Where, Refs, MCPTokenGenerate,
-	SelfUpdate, SelfRefresh, SelfRegistry,
+	ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
+	DescribeTargets, DescribeProject, Ls, LsTargets, Refs, MCPTokenGenerate,
+	SelfUpdate,
 }

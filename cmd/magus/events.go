@@ -63,6 +63,18 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 		return usagef("magus events: unexpected argument %q (this command takes flags only)", rest[0])
 	}
 
+	// The stream IS the format: one event per line, forever, so there is no document to
+	// close and nothing json or yaml could wrap. -o was accepted and ignored here, which
+	// left `magus events -o json` looking like it had asked for something. --tee still
+	// works, because what it mirrors is already JSONL.
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format != outputText && opts.Format != outputJSONL {
+		return usagef("magus events: -o %s is not supported; the event stream is JSONL only (one event per line) and never closes, so there is no document to render", opts.Format)
+	}
+
 	filter, err := parseStreamFilter(ef.Type)
 	if err != nil {
 		return err

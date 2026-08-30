@@ -55,7 +55,7 @@
     </details>
 
     <section class="console-graph-app">
-      <aside class="console-graph-sidebar">
+      <aside class="console-graph-sidebar" data-control-size="compact">
         <!-- Query bar: a labeled PF input-group. The "magus query" prompt is a LABEL above the field,
              not an inline addon - as an addon it ate a third of the 18rem sidebar and truncated the
              field to "kind:...". Keeps #node-search and #search-copy-btn (main.ts wires them by id). -->
@@ -121,7 +121,7 @@
              toggle stays always-visible (Decision 3, discoverability phase): it is the manual
              override for the arrangement axis, and main.ts drives selection and each button's
              disabled/title from syncLayoutToggle. -->
-        <div class="console-graph-sidebar__modes" data-control-size="compact">
+        <div class="console-graph-sidebar__modes">
           <div class="console-graph-display__sublabelrow">
           <p class="console-graph-sidebar__modeslabel" id="arrangement-label">Arrangement</p>
           <!-- Each button already carries its own title, but a reader has to hover four of them one

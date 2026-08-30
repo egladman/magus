@@ -12,12 +12,12 @@ $__magus_scriptblock = {
     $subcommands = 'ls', 'describe', 'where', 'run', 'affected', 'x',
                    'clean', 'query', 'refs', 'explain', 'path', 'graph',
                    'diff', 'vcs', 'session', 'memory', 'notes', 'watch',
-                   'events', 'server', 'status', 'buzz', 'agent', 'init',
-                   'doctor', 'config', 'completion', 'man', 'self', 'version',
-                   'help'
+                   'events', 'server', 'mcp', 'status', 'buzz', 'agent',
+                   'init', 'doctor', 'config', 'completion', 'man', 'self',
+                   'version', 'help'
     # magus-utils:subcommands:end
-    $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
-    $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'unreferenced', 'report'
+    $describeNouns = 'spell', 'charm', 'target', 'graph', 'project', 'workspace', 'module', 'mcp-tool', 'file', 'tool'
+    $sessionSubs   = 'ls', 'attention', 'dispose', 'hook', 'notify'
     $graphSubs     = 'deps', 'export', 'stats'
     $configSubs    = 'view', 'set', 'history', 'cache', 'mcp'
     $serverSubs    = 'start', 'stop'
@@ -33,7 +33,6 @@ $__magus_scriptblock = {
     $graphDepsFlags   = '--upstream', '--depth', '--spell', '--target'
     $graphExportFlags = '--refresh'
     $graphStatsFlags  = '--kind', '--refresh'
-    $insightFlags     = '--commits', '--since', '--workspace', '--files'
     $watchFlags       = '--debounce', '--initial', '--null', '--backend', '--ignore'
     $statusFlags      = '--watch', '--compact', '--socket', '--probe', '--workspace'
     $initFlags        = '--global', '--local', '--force', '--vcs'
@@ -101,11 +100,10 @@ $__magus_scriptblock = {
             }
             return Complete-From (Get-MagusProjects)
         }
-        'insight' {
+        'session' {
             if ($atArg2) {
-                return Complete-From $lenses
+                return Complete-From $sessionSubs
             }
-            return Complete-From $insightFlags 'ParameterName'
         }
         'graph' {
             if ($atArg2) {

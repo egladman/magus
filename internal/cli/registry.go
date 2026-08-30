@@ -28,6 +28,7 @@ var All = []Command{
 	notesCommand,
 	diffCommand,
 	serverCommand,
+	mcpCommand,
 	buzzCommand,
 	completionCommand,
 	manCommand,
@@ -37,15 +38,15 @@ var All = []Command{
 	versionCommand,
 }
 
-// CommonTargets is the canonical set of project-scoped targets shared by
+// commonTargets is the canonical set of project-scoped targets shared by
 // the "run" and "affected" commands.
-var CommonTargets = []Target{
+var commonTargets = []Target{
 	{Name: "ls", Short: "Print selected projects without executing anything"},
 	{Name: "build", Short: "Build selected projects"},
 	{Name: "test", Short: "Test selected projects"},
 	{Name: "lint", Short: "Lint selected projects (read-only)"},
 	{Name: "format", Short: "Format source files in selected projects"},
-	{Name: "clean", Short: "Remove build artifacts from selected projects"},
+	{Name: "clean", Short: "Remove declared outputs from selected projects"},
 	{Name: "generate", Short: "Run code generation for selected projects"},
 	{Name: "ci", Short: "Run the magusfile's ci target read-only (affected-set anchor)"},
 }
@@ -74,13 +75,13 @@ against the value -o json emits, so its field names are the json keys.`,
 var describeCommand = Command{
 	Name:        "describe",
 	Short:       "Define a magus concept and list its entities",
-	Description: "Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.",
-	Tags:        []string{"cli", "magus describe", "spell", "charm", "target", "project", "workspace", "introspection"},
+	Description: "Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool, tool, file, graph) and list every entity of that kind, or detail one when a name is given.",
+	Tags:        []string{"cli", "magus describe", "spell", "charm", "target", "project", "workspace", "module", "mcp-tool", "tool", "file", "graph", "introspection"},
 	Long: `Define a magus concept and list every entity of that kind. The noun is
-one of spell, charm, target, project, workspace, module, or mcp-tool; singular
-and plural are interchangeable. Pass a name after the noun to detail a single
-entity instead of listing them all. (The knowledge graph lives under magus
-graph: export for the merged graph, stats for its shape.)
+one of spell, charm, target, project, workspace, module, mcp-tool, tool, file,
+or graph; singular and plural are interchangeable. Pass a name after the noun
+to detail a single entity instead of listing them all. (The knowledge graph
+lives under magus graph: export for the merged graph, stats for its shape.)
 
 The charm noun is the inverse of a target ref: "describe charm rw" lists every
 target that declares the rw charm and the argv edit each one makes, the transpose
@@ -190,7 +191,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "n-shards", Kind: FlagInt, Doc: "Total shard count for this CI matrix run; paired with --shard"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
 	},
-	Targets: CommonTargets,
+	Targets: commonTargets,
 	Examples: []Example{
 		{"Build everything", "magus run build"},
 		{"Test one project", "magus run test api/gateway"},
@@ -226,7 +227,15 @@ Filters are AND-combined substrings. On a unique top score the path is
 printed and the command exits 0. On ambiguity, candidates are listed on
 stderr and the command exits 2. No interactive picker - use magus x for
 that.`,
-	Usage: "magus where [filter...]",
+	Usage: "magus where [flags] [filter...]",
+	Flags: []Flag{
+		{Name: "all", Kind: FlagBool, Doc: "Print all matching paths to stdout; do not error on ambiguity"},
+		{Name: "A", Kind: FlagBool, AliasOf: "all", Doc: "Short for --all"},
+		{Name: "filter", Kind: FlagString, Doc: "Restrict file search by pattern. Form: type=<glob|regex|literal>,pattern=<value>"},
+		{Name: "glob", Kind: FlagString, Doc: "Restrict file search to paths matching a doublestar glob (shorthand for --filter type=glob,...)"},
+		{Name: "regex", Kind: FlagString, Doc: "Restrict file search to paths matching a Go regexp (shorthand for --filter type=regex,...)"},
+		{Name: "literal", Kind: FlagString, Doc: "Restrict file search to paths containing this exact segment (shorthand for --filter type=literal,...)"},
+	},
 	Examples: []Example{
 		{"Navigate to a project", `cd "$(magus where api)"`},
 		{"Open in editor", `code "$(magus where dash)"`},
@@ -329,7 +338,7 @@ history to find the commit that introduced a regression.`,
 		{Name: "good", Kind: FlagString, Modes: []string{"bisect"}, Doc: "With --bisect: known-good commit SHA (auto-detected from history when empty)"},
 		{Name: "target", Kind: FlagString, Default: "test", Modes: []string{"bisect"}, Doc: "With --bisect: magus target to bisect"},
 	},
-	Targets: CommonTargets,
+	Targets: commonTargets,
 	Examples: []Example{
 		{"Build projects changed since the default base ref", "magus affected build"},
 		{"Use a different base ref", "magus affected build --base main"},
@@ -366,18 +375,18 @@ query is also the retrieval verb for the two ids magus prints, each an EXPLICIT
 subcommand rather than a shape-routed positional, so a search term can never collide
 with an id:
 
-  output <ref>       One target execution's captured output, by the reference id
+  output <ref>       One target run's captured output, by the output ref
                      shown when the target ran (out1a2b3c). The default prints the
-                     exact bytes, so it pipes anywhere. --meta shows the run's
+                     exact bytes, so it pipes anywhere. --identity shows the run's
                      identity instead - descriptor, lineage, cache key, and the
                      digests of the key's component classes, which is the
                      machine-comparable half of a works-on-my-machine report.
-                     --attempts lists the ref's stored executions, --publish uploads
+                     --attempts lists the ref's stored attempts, --publish uploads
                      the output to the remote cache as a signed bundle, and --open
                      hands the bytes to the browser log viewer in a URL fragment
                      (delivered privately; never uploaded).
   invocation <id>    One run's journal, by the invocation id shown as inv: in
-                     query output <ref> --meta. --secrets narrows it to the
+                     query output <ref> --identity. --secrets narrows it to the
                      credential reads - which references the run reached for and
                      through which provider, never the value - which is how an audit
                      answers "what did this run touch". Run logs are trimmed to a cap
@@ -392,8 +401,8 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "kind", Kind: FlagString, Doc: "Restrict matches to these node kinds (comma-separated)"},
 		{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild before querying"},
 		{Name: "global", Kind: FlagBool, Doc: "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace"},
-		{Name: "meta", Kind: FlagBool, Doc: "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests"},
-		{Name: "attempts", Kind: FlagBool, Doc: "output <ref>: list the ref's stored executions (newest first)"},
+		{Name: "identity", Kind: FlagBool, Doc: "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests"},
+		{Name: "attempts", Kind: FlagBool, Doc: "output <ref>: list the ref's stored attempts (newest first)"},
 		{Name: "publish", Kind: FlagBool, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
 		{Name: "open", Kind: FlagBool, Doc: "output <ref>: open the captured output in the browser log viewer (delivered privately)"},
 		{Name: "print", Kind: FlagBool, Doc: "With --open, print the viewer URL instead of launching a browser"},
@@ -401,7 +410,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "secrets", Kind: FlagBool, Doc: "invocation <id>: list only the credential reads (reference and provider, never the value)"},
 	},
 	Children: []Command{
-		{Name: "output", Short: "Retrieve one target execution's captured output by reference id"},
+		{Name: "output", Short: "Retrieve one target run's captured output by output ref"},
 		{Name: "invocation", Short: "Read one run's journal by invocation id (--secrets for the credential reads)"},
 	},
 	Examples: []Example{
@@ -409,7 +418,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{"What uses this target", "magus query relation:uses id:build"},
 		{"Everything but ops", "magus query docker -kind:op"},
 		{"Print a run's captured output", "magus query output out1a2b3c"},
-		{"Compare a run's cache key", "magus query output out1a2b3c --meta"},
+		{"Compare a run's cache key", "magus query output out1a2b3c --identity"},
 		{"Audit a run's credential reads", "magus query invocation invmsm3vcou1 --secrets"},
 	},
 }
@@ -493,6 +502,10 @@ home of the graph itself.
 
 Subcommands (the first argument):
 
+  build    Rebuild the knowledge graph now, reindexing code symbols first (runs
+           each symbol-capable project's scip op) unless --no-symbols. The
+           daemon does this automatically in the background; this is the manual
+           trigger, after a branch switch or when the daemon is not running.
   deps     The project dependency DAG. A trailing list of project paths roots
            the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
            same view scoped to a run is available as magus run <target> --graph
@@ -506,18 +519,32 @@ Subcommands (the first argument):
            and -o mermaid render only with --select, since the full graph has too
            many nodes to lay out. The graph is cache-backed under
            <cache>/knowledge; only shards whose sources changed are rebuilt.
+           --open sends it to the hosted, interactive Graph Explorer instead of
+           stdout (there is no separate "open" subcommand): by default the graph
+           rides in the URL fragment (#data=...), which browsers never send to a
+           server; --serve instead hands it from an ephemeral 127.0.0.1 loopback
+           server (no size limit), and --targets opens the target dependency
+           graph instead of the knowledge graph.
   stats    The graph's shape: god nodes (the most connected spells, modules,
            targets - where structural risk concentrates), orphans (docs that
            document nothing, spells no target uses), and doc coverage (the
            share of diagnostics, spells, and modules with a doc). --kind scopes
-           every section to one node kind. insight report embeds this section.
-  open     Open the workspace's knowledge graph (or target dependency graph with
-           --targets) in the hosted, interactive Graph Explorer. The graph is
-           delivered privately: by default it rides in the URL fragment
-           (#data=...), which browsers never send to a server; --serve instead
-           hands it from an ephemeral 127.0.0.1 loopback server (no size limit).`,
-	Usage: "magus graph <deps|export|stats|open> [flags]",
+           every section to one node kind. The VCS-history lenses (hotspots,
+           affinity, ownership, trend, unreferenced) are a separate view, served
+           by the magus_insight MCP tool and the console's Insight page - not by
+           this command.
+  diff     Nodes and edges added, removed, or changed relative to a baseline
+           export or a git revision (--rev): the PR-review blast-radius
+           artifact, emit as json or markdown for a CI comment.`,
+	Usage: "magus graph <build|deps|export|stats|diff> [flags]",
 	Children: []Command{
+		{
+			Name:  "build",
+			Short: "Rebuild the knowledge graph now, reindexing code symbols first",
+			Flags: []Flag{
+				{Name: "no-symbols", Kind: FlagBool, Doc: "Rebuild the domain graph only; do not reindex code symbols"},
+			},
+		},
 		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)", Flags: []Flag{
 			{Name: "upstream", Kind: FlagBool, Doc: "Show dependents instead of dependencies"},
 			{Name: "depth", Kind: FlagInt, Doc: "Cap displayed depth (0 = unlimited)"},
@@ -544,6 +571,15 @@ Subcommands (the first argument):
 			{Name: "global", Kind: FlagBool, Doc: "Union the workspaces registered in config (knowledge.workspaces) before computing stats"},
 			{Name: "symbols", Kind: FlagBool, Doc: "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph"},
 		}},
+		{
+			Name:  "diff",
+			Short: "Nodes/edges added, removed, or changed vs a baseline export or --rev; PR blast-radius",
+			Flags: []Flag{
+				{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild of the current graph before diffing"},
+				{Name: "global", Kind: FlagBool, Doc: "Diff the global (all-workspaces) graph; match this to how the baseline was exported"},
+				{Name: "rev", Kind: FlagString, Doc: "Diff against a git revision (e.g. HEAD~1, main) instead of an export file"},
+			},
+		},
 	},
 	Examples: []Example{
 		{"Project DAG as Mermaid", "magus graph deps -o mermaid"},
@@ -563,7 +599,7 @@ Subcommands (the first argument):
 var eventsCommand = Command{
 	Name:        "events",
 	Short:       "Stream workspace events as JSONL for an integration to consume",
-	Description: "Stream magus events as JSONL - one event per line - so an editor plugin, a status bar, or any other integration can react to runs, results, and diagnostics.",
+	Description: "Stream magus events as JSONL - one event per line - so an editor plugin, a status bar, or any other integration can react to runs and results.",
 	Tags:        []string{"cli", "magus events", "events", "integration", "editor", "plugin", "jsonl", "subscribe"},
 	Long: `Stream workspace events as JSONL, one event per line. This is the surface
 third-party integrations build against: an Emacs or Vim plugin, a status bar,
@@ -593,7 +629,7 @@ schema.`,
 	},
 	Examples: []Example{
 		{"Watch a workspace live", "magus events --follow"},
-		{"Only what an editor needs for diagnostics", "magus events --follow --type target.result,diagnostic.emitted"},
+		{"Only what an editor needs for progress", "magus events --follow --type run.started,target.result"},
 		{"What did the last run do", "magus events --limit 1"},
 	},
 }
@@ -618,7 +654,7 @@ trigger a full initial build in the downstream magus affected --stdin.`,
 		{Name: "debounce", Kind: FlagDuration, Default: 200 * time.Millisecond, Doc: "Quiet window before emitting a batch"},
 		{Name: "initial", Kind: FlagBool, Default: true, Doc: "Emit an --all batch on startup before watching"},
 		{Name: "null", Kind: FlagBool, Doc: "NUL-separate paths; double-NUL between batches"},
-		{Name: "backend", Kind: FlagString, Default: "fsnotify", Doc: "Notification backend: fsnotify or poll"},
+		{Name: "backend", Kind: FlagString, Default: "fsnotify", Doc: "Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)"},
 		{Name: "ignore", Kind: FlagCustom, Doc: "Ignore pattern; repeatable. Form: type=<glob|regex|literal>,pattern=<value>"},
 	},
 	Examples: []Example{
@@ -797,6 +833,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
 							},
 						},
+						{Name: "ls", Short: "List connector tokens: names, fingerprints, and expiry (never the secret)"},
 						{Name: "revoke", Short: "Revoke a connector token"},
 					},
 				},
@@ -813,6 +850,9 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 						{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
 					},
 				},
+				{Name: "print", Short: "Print the current operator token to stdout"},
+				{Name: "revoke", Short: "Delete the operator token (the daemon mints a fresh one on next start)"},
+				{Name: "status", Short: "Show whether an operator token exists and its fingerprint"},
 			},
 		},
 		{
@@ -867,7 +907,7 @@ The socket address is resolved in priority order:
 The socket file acts as the lock: present means a daemon is running, absent
 means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
 check for the file with [ -S "$socket" ] before starting one.`,
-	Usage: "magus server <start|stop> [flags]",
+	Usage: "magus server <start|stop|reload|job> [flags]",
 	// Each subcommand carries its own flags. --foreground sat on the parent with
 	// "(server start)" in its doc, and stop's --socket and --services were not
 	// declared at all - bound by the command, absent from every man page.
@@ -887,13 +927,56 @@ check for the file with [ -S "$socket" ] before starting one.`,
 				{Name: "services", Kind: FlagBool, Doc: "Stop the daemon's hosted services, leaving the daemon running"},
 			},
 		},
+		{
+			Name:  "reload",
+			Short: "Re-read configuration without restarting: drop the daemon's open workspaces",
+			Flags: []Flag{
+				{Name: "socket", Kind: FlagString, Doc: "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)"},
+			},
+		},
+		{
+			Name:  "job",
+			Short: "Submit a background maintenance job to a running daemon (no-op with no daemon)",
+			Long: `Submit a named background maintenance job to a running daemon, then
+return immediately. The job shows in the Dashboard. A no-op when no daemon is
+running, so a VCS hook can call it unconditionally.
+
+The job name is a positional argument, not a further subcommand:
+"magus server job rotate-logs". Run with no argument to list the jobs a
+running binary carries.`,
+		},
 	},
 	Examples: []Example{
 		{"Start the daemon (auto-backgrounds)", "magus server start"},
 		{"Run the daemon in the foreground (supervisor or debugging)", "magus server start --foreground"},
 		{"Stop the running daemon", "magus server stop"},
+		{"Reload configuration without restarting", "magus server reload"},
+		{"Submit a background job", "magus server job rotate-logs"},
 		{"Inspect daemon pool state", "magus status"},
 		{"Use a custom socket path", "magus --daemon-address unix:///tmp/m.sock server start"},
+	},
+}
+
+var mcpCommand = Command{
+	Name:        "mcp",
+	Short:       "Print how to reach the MCP server",
+	Description: "Print the MCP endpoint, its auth token command, and how to point a client at it. MCP is served by the daemon (magus server start), not run as its own process.",
+	Tags:        []string{"cli", "magus mcp", "mcp", "agent", "daemon"},
+	Long: `MCP is not a standalone process: it is served by the daemon, alongside
+everything else magus server start hosts. This command prints what a client
+needs to reach it - the endpoint, the auth token command, and a liveness
+probe - and exits non-zero, since it starts nothing itself.
+
+  magus server start                    start the daemon (MCP comes up with it)
+  magus config token print              print the bearer token
+  magus status --probe=liveness,mcp     confirm the endpoint is serving
+
+Per-client configuration lives in docs/guides/integrations/mcp.md, not in
+this binary: naming a client here would make a change to its config format a
+magus release.`,
+	Usage: "magus mcp",
+	ExitStatus: []ExitCode{
+		{2, "Always: mcp prints reach-it instructions and starts nothing, so the invocation is treated like any other command that named a retired verb."},
 	},
 }
 
@@ -906,10 +989,10 @@ var completionCommand = Command{
 magus and the mgs shorthand.
 
 Completes subcommands, the targets accepted by run and affected, the nouns
-accepted by describe, the lenses accepted by insight, and each subcommand's
-flags. Project paths are completed live by shelling out to magus ls -o name,
-so they track the workspace instead of a baked-in list; outside a workspace
-they are simply empty.
+accepted by describe, and each subcommand's flags. Project paths are
+completed live by shelling out to magus ls -o name, so they track the
+workspace instead of a baked-in list; outside a workspace they are simply
+empty.
 
 Install differs per shell, and zsh is the one that bites:
 
@@ -922,7 +1005,8 @@ Install differs per shell, and zsh is the one that bites:
               nothing. Regenerate the file after magus self update.
   fish        write it to ~/.config/fish/completions/magus.fish, loaded on
               demand.
-  powershell  append it to $PROFILE.`,
+  powershell  append it to $PROFILE. pwsh is accepted as an alias, for the
+              cross-platform PowerShell binary's own name.`,
 	Usage: "magus completion <bash|zsh|fish|powershell>",
 	Examples: []Example{
 		{"Bash: source from the rc, never goes stale", `echo 'source <(magus completion bash)' >> ~/.bashrc`},
@@ -940,7 +1024,14 @@ var manCommand = Command{
 	Long:        `Write the complete magus manpage set carried by this binary. The installer uses this command to place the pages under the selected installation prefix.`,
 	Usage:       "magus man install [--dir <path>]",
 	Children: []Command{
-		{Name: "install", Short: "Write the embedded section 1 man pages"},
+		{
+			Name:  "install",
+			Short: "Write the embedded section 1 man pages",
+			Flags: []Flag{
+				{Name: "dir", Kind: FlagString, Doc: "Directory for section 1 man pages (default: the user manpath)"},
+				{Name: "dry-run", Kind: FlagBool, Doc: "Print what would be written without touching the filesystem"},
+			},
+		},
 	},
 	Examples: []Example{
 		{"Install to the default user manpath", "magus man install"},
@@ -1050,7 +1141,7 @@ one for the other is how a wrong answer looks right.`,
 
 var cleanCommand = Command{
 	Name:        "clean",
-	Short:       "Remove declared Outputs (regenerable build artifacts)",
+	Short:       "Remove declared outputs (regenerable, never sources)",
 	Description: "Delete the files each selected project declares as Outputs, optionally dropping the matching cache entries so the next run rebuilds from scratch.",
 	Tags:        []string{"cli", "magus clean", "outputs", "cache", "artifacts", "rebuild"},
 	Long: `Remove the declared Outputs of the selected projects. With no project
@@ -1135,7 +1226,7 @@ base in yourself on the others, then run resolve.`,
 		},
 		{
 			Name:  "checkpoint",
-			Short: "Print the working state's identity, for recording what a delegation was handed; writes nothing",
+			Short: "Print the working state's identity, for recording what a lease was handed; writes nothing",
 		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
@@ -1144,7 +1235,7 @@ base in yourself on the others, then run resolve.`,
 		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
 		{"Settle a conflicted merge", "magus vcs resolve"},
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
-		{"Record what a delegation was handed", "magus vcs checkpoint"},
+		{"Record what a lease was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
 	},
 }
@@ -1247,22 +1338,22 @@ which is an opaque label the caller chooses rather than a set magus knows: a
 magus that enumerated hosts would need a release per host, and a wrapper that
 cannot extract a session id must still be able to get a verdict.
 
---delegation is the exception: it IS policy. It names the delegation the caller is
-acting as, and a write is then graded against that delegation's declared write boundary
-in this workspace's delegation ledger. Inside its owned paths passes; inside its
-forbidden paths, or inside another live delegation's owned paths, is denied and the
-reason names the owning delegation. It defaults to $MAGUS_DELEGATION, and the flag wins when
-both are set.
+--lease is the exception: it IS policy. It names the lease the caller is
+acting as, and a write is then graded against that lease's declared write boundary
+in this workspace's lease ledger. Inside its owned paths passes; inside its
+forbidden paths, or inside another live lease's owned paths, is denied and the
+reason names the owning lease. It defaults to the magus.lease member of $BAGGAGE -
+the W3C baggage list a spawning tool exports - and the flag wins when both are set.
 
-A call that names no valid delegation while a fleet is running is ADVISED and never
-blocked: a person editing their own repository has no delegation id, and the guard is a
+A call that names no valid lease while a fleet is running is ADVISED and never
+blocked: a person editing their own repository has no lease id, and the guard is a
 seatbelt for harnesses that opt in rather than a sandbox. With no ledger, or with
-no delegation in it declared or running, nothing is graded and nothing is read.`,
+no lease in it declared or running, nothing is graded and nothing is read.`,
 			Usage: "magus session hook [--path] [flags]",
 			Flags: []Flag{
 				{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
 				{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-				{Name: "delegation", Kind: FlagString, Doc: "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)"},
+				{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)"},
 				{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
 				{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
 				{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
@@ -1303,7 +1394,7 @@ none. This is the only command that opens one.`,
 		{"Close one request, saying why", `magus session dispose att-3f9c -reason "approved and pushed by hand"`},
 		{"Judge a shell command (host-wired)", "printf '%s' 'go build ./...' | magus session hook"},
 		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus session hook --observe"},
-		{"Grade a write as a delegation", "printf '%s' 'internal/ledger/store.go' | magus session hook --path --delegation f2-guard"},
+		{"Grade a write as a lease", "printf '%s' 'internal/ledger/store.go' | magus session hook --path --lease f2-guard"},
 		{"Raise a permission prompt on the desktop (host-wired)", "printf '%s\\n' 'needs approval' | magus session notify --outcome permission --desktop"},
 	},
 	// The status IS the enforcement for hook: a host that reads only the exit code
@@ -1514,18 +1605,38 @@ There is no put. Notes are written by a person in their own editor and
 committed under their own name, which is what makes git attribution meaningful
 and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
 to declare where they live; with nothing declared the feature is inert.`,
-	Usage: "magus notes <ls|get|edit|verify> [flags]",
+	Usage: "magus notes <ls|get|edit|verify|capture|promote> [flags]",
 	Children: []Command{
 		{Name: "ls", Short: "Show notes and any repair warnings"},
 		{Name: "get", Short: "Show one note"},
 		{Name: "edit", Short: "Open one note in $VISUAL or $EDITOR"},
 		{Name: "verify", Short: "Check malformed notes and anchors that no longer resolve"},
+		{
+			Name:  "capture",
+			Short: "Capture the review under way as a note: your own remarks plus any colleagues' comments",
+			Flags: []Flag{
+				{Name: "title", Kind: FlagString, Doc: "Title for the note (defaults to naming the reviewed base)"},
+				{Name: "name", Kind: FlagString, Doc: "Note name (defaults to review-<patch digest>)"},
+				{Name: "tag", Kind: FlagCustom, Doc: "Tag to set on the note; repeatable"},
+				{Name: "shared", Kind: FlagBool, Doc: "Only notes committed to this repository (your team has these)"},
+				{Name: "private", Kind: FlagBool, Doc: "Only your own notes (default for capture)"},
+			},
+		},
+		{
+			Name:  "promote",
+			Short: "Open an agent-drafted memory record for editing and write it to the shared notes store under your own name",
+			Flags: []Flag{
+				{Name: "name", Kind: FlagString, Doc: "Note name (defaults to the record's name)"},
+			},
+		},
 	},
 	Examples: []Example{
 		{"List every note", "magus notes ls"},
 		{"Read one note", "magus notes get cache-invalidation-pairing"},
 		{"Write or revise one", "magus notes edit cache-invalidation-pairing"},
 		{"Check every anchor still resolves", "magus notes verify"},
+		{"Capture the review under way", "magus notes capture"},
+		{"Promote a memory record into a shared note", "magus notes promote release-checklist"},
 	},
 }
 
@@ -1576,7 +1687,7 @@ Server Protocol over stdio for an editor integration.`,
 
 var agentCommand = Command{
 	Name:        "agent",
-	Short:       "Install the knowledge-graph agent skills into a repo",
+	Short:       "Install the knowledge-graph agent skills into a repository",
 	Description: "Render the embedded agent skills into a repository's skill directories, or print a starter AGENTS.md; it never writes the AGENTS.md you own.",
 	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install"},
 	Long: `Render the agent skills embedded in this binary and write or stream them

@@ -146,7 +146,7 @@ dev-server runs the project's package.json "dev" script via the package manager 
 <!-- magus-run-recorder -->
 ```buzz
 // dev-server runs the project's package.json dev script (pnpm run dev) as a
-// supervised background process when reached via magus.needs, or foreground
+// supervised background process when reached via ctx.needs, or foreground
 // when run directly.
 import "magus";
 import "magus/spell/typescript";

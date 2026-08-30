@@ -284,4 +284,4 @@ Targets can call `magus` recursively. Child invocations forward work to the pare
 magus\cmd("run", args: ["build", "api"]);
 ```
 
-`magus\cmd` is the in-magusfile entry point for invoking magus recursively. When a [daemon](daemon.md) is running, the call rides the existing socket connection instead of spawning a new process.
+`magus\cmd` is the in-magusfile entry point for invoking magus recursively. When a [daemon](integrations/daemon.md) is running, the call rides the existing socket connection instead of spawning a new process.

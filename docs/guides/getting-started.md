@@ -44,14 +44,32 @@ Other flags: `--force` overwrites an existing config file, and `--global` writes
 
 ## 3. Read your first magusfile
 
-Open the `magusfile.buzz` that `magus init` created. It looks roughly like this: every exported function is a runnable target, and the current directory is already registered as a project on defaults.
+Open the `magusfile.buzz` that `magus init` created. It looks like this: every exported function is a runnable target, and the current directory is already registered as a project on defaults.
 
 ```buzz
 import "magus";
+
+// The magus host utilities are imported under bare names — os, fs, vcs, http, … —
+// the same convention as Buzz's stdlib. magus layers its methods onto Buzz's
+// stdlib, so `import "os"` carries both surfaces (os.env from Buzz, proc.exec from
+// magus). Methods are camelCase (Buzz's convention). Import each module you use.
 import "os";
 
-// Each exported function is a runnable target. Leave a stage as a no-op
-// until you wire it.
+import "proc";
+// This directory is already a project — its magusfile registers it, and it runs
+// on defaults with no further ceremony. Customize only when you need to: call
+// magus\project with an options map to bind spells, declare outputs, or
+// add cross-project deps. Reach a built-in spell by importing it; it binds under
+// its basename. Pass an explicit path — configure("sub", {...}) — to configure a
+// different project (one magusfile declaring several):
+//
+//   import "magus/spell/go";
+//   magus\project({ "spells": [go], "outputs": ["bin/*"], "depends_on": ["../api"] });
+
+// Each exported function is a runnable target. Compose a stage by calling a bound
+// spell's tool-native op from its body, or run a command with proc.exec
+// (build below). Leave a stage as a no-op until you wire it.
+
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
 export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); }
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
@@ -59,7 +77,11 @@ export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
 export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); proc\exec("echo", ["Hello from magus"]); }
 export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
 
-// 'ci' is the conventional anchor that `magus affected ci` keys off.
+// 'ci' is the conventional anchor that `magus affected ci` keys off. magus does
+// not hardcode its steps — compose them here with ctx.needs. magus runs
+// ci read-only. Each stage declares its own prerequisites so the DAG is expressed
+// as edges: ci fans out lint/build/test in parallel; they each wait for format,
+// which waits for generate, which waits for preflight. Shared deps run once.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, build, test);
 }
@@ -68,8 +90,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 Three ideas carry the whole model:
 
 - **Targets are exported functions.** There is no registration call for a target: export a `fun`, and its name becomes a runnable target. See [targets.md](../concepts/targets.md) for the full model and the CLI grammar.
-- **`magus\needs` declares prerequisites.** `ctx.needs(format)` says "run `format` first" - you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.
-- **`ci` is the anchor.** It is an ordinary target you compose with `magus\needs`. magus does not hardcode its steps, but it is the target `magus affected` keys off, and it always runs read-only.
+- **`ctx.needs` declares prerequisites.** `ctx.needs(format)` says "run `format` first" - you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.
+- **`ci` is the anchor.** It is an ordinary target you compose with `ctx.needs`. magus does not hardcode its steps, but it is the target `magus affected` keys off, and it always runs read-only.
 
 List what magus discovered, then run the starter `build`:
 
@@ -134,7 +156,7 @@ Charms are shared, composable execution modifiers attached after `:`; see [charm
 
 ## 5. Compose a `ci` target and run only what changed
 
-`ci` is where the pieces come together. Compose it from your other targets with `magus\needs`; magus fans them out in parallel where the DAG allows and runs shared prerequisites once:
+`ci` is where the pieces come together. Compose it from your other targets with `ctx.needs`; magus fans them out in parallel where the DAG allows and runs shared prerequisites once:
 
 ```buzz
 export fun ci(ctx: magus\Context, args: [str]) > void {
@@ -171,7 +193,7 @@ You now have the full loop:
 2. Exported functions in `magusfile.buzz` became your targets.
 3. `magus ls` and `magus run build` listed and ran them.
 4. Binding the `go` spell let your targets compose real ops (`go-build`, `go-test`, `go-fmt`, ...).
-5. A `ci` target composed with `magus\needs` runs the pipeline, and `magus affected ci` runs it only for what changed.
+5. A `ci` target composed with `ctx.needs` runs the pipeline, and `magus affected ci` runs it only for what changed.
 
 ## Next steps
 

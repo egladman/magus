@@ -23,7 +23,6 @@ package annotate
 
 import (
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -219,18 +218,6 @@ func QuoteWith(text string, prefixes []string) string {
 	}
 	return strings.Join(lines, "\n")
 }
-
-// OnCI reports whether magus is running in an automated environment,
-// independent of which one.
-//
-// It reads CI, the de-facto convention every major provider sets - a
-// cross-vendor signal rather than a vendor name, so it does not put
-// provider knowledge back into the binary.
-//
-// Different from [Detect]: a workspace wiring no provider spell still runs
-// on CI, and a caller that only needs "is a human at this terminal" should
-// not require one.
-func OnCI() bool { return os.Getenv("CI") != "" }
 
 // Limits on what crosses into a provider. A provider is third-party code
 // and the values it receives are attacker-influenced (see [Annotation]),

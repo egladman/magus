@@ -18,6 +18,8 @@ magus ships as a single self-contained binary. Download it with `curl`, extract 
 ## Quick install
 
 ```sh
+# The hosted docs substitute the latest release tag below; on GitHub it reads
+# literally - get the real value from https://github.com/egladman/magus/releases
 VERSION=__MAGUS_VERSION__
 ASSET=magus_${VERSION}_darwin_arm64_static.tar.gz       # Apple Silicon
 # Intel Macs:
@@ -48,6 +50,16 @@ curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256
 ```
 
 Then verify the Ed25519 signature _first_, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands (macOS uses `shasum -a 256`) are in [Verify a release](verify.md).
+
+## OpenSSL 3
+
+Both [the install script](../setup.md#install) and the manual `openssl pkeyutl` steps above need OpenSSL 3 with Ed25519 support. Stock macOS ships LibreSSL as `/usr/bin/openssl`, which does not have it, so signature verification fails with `OpenSSL 3 with Ed25519 support is required to verify releases` until a real OpenSSL 3 is ahead of it on `PATH`:
+
+```sh
+brew install openssl@3
+```
+
+Homebrew does not link `openssl@3` onto `PATH` by default (it would shadow the system one); either add its `bin` directory ahead of `/usr/bin` in your shell rc, or invoke it explicitly as `$(brew --prefix openssl@3)/bin/openssl` for the verification commands in [Verify a release](verify.md).
 
 ## Clear the quarantine flag
 

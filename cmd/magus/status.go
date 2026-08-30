@@ -73,8 +73,12 @@ func status(ctx context.Context, args []string) error {
 	}
 	f.Watch = clampStatusWatch(f.Watch)
 
-	isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
-	useGrid := gridEnabled(opts, isTTY) && !f.Compact
+	// One probe for both decisions. They are the same question - may this loop move the
+	// cursor - and asking it twice with different answers is how a repaint gets set up on a
+	// terminal that cannot repaint: InlineView measures with CanRender, so a weaker gate here
+	// only ever produced a view that fell back to appending, one full frame per tick.
+	canRender := tty.CanRender(os.Stdout, tty.SystemProbe)
+	useGrid := gridEnabled(opts, canRender) && !f.Compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
 	// while retaining the last snapshot until the next real poll. Every other
@@ -92,7 +96,7 @@ func status(ctx context.Context, args []string) error {
 	report := buildStatusReport(ctx, f.Socket, f.Symbols)
 	repaint := tty.NewInlineView(os.Stdout, tty.SystemProbe)
 	defer repaint.Finish()
-	inline := opts.Format == outputText && isTTY
+	inline := opts.Format == outputText && canRender
 	for {
 		if err := paintStatusFrame(repaint, inline, report, opts, animFrame, f.Compact); err != nil {
 			return err
@@ -145,15 +149,17 @@ func writeStatus(w io.Writer, r types.StatusReport, opts OutputOptions, animFram
 			printStatusCompact(w, r, time.Now())
 			return nil
 		}
-		isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
-		printStatusText(w, r, gridEnabled(opts, isTTY), animFrame)
+		printStatusText(w, r, gridEnabled(opts, tty.CanRender(os.Stdout, tty.SystemProbe)), animFrame)
 	}
 	return nil
 }
 
-// gridEnabled returns true when the pool graphic should be rendered.
-func gridEnabled(opts OutputOptions, isTTY bool) bool {
-	return opts.Format == outputText && isTTY && os.Getenv("NO_COLOR") == ""
+// gridEnabled returns true when the pool graphic should be rendered. canRender
+// must already account for TERM=dumb (see [tty.CanRender]) - the grid draws
+// SGR colors and a braille spinner unconditionally, so a dumb terminal that
+// merely passed a bare TTY check would render them as garbage.
+func gridEnabled(opts OutputOptions, canRender bool) bool {
+	return opts.Format == outputText && canRender && os.Getenv("NO_COLOR") == ""
 }
 
 // buildStatusBase constructs the static portions of a StatusReport that depend

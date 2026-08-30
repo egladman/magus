@@ -140,7 +140,7 @@ func (g *Graph) orphanNodes(kind string) (sample []types.KnowledgeOrphan, isolat
 			continue
 		}
 		// A declared, op-providing spell that nothing runs is genuinely dead even though it has edges.
-		if n.Kind == types.KindSpell && n.Attrs[AttrDeclared] == "true" && g.spellProvidesOps(id) && !g.spellUsed(id) {
+		if n.Kind == types.KindSpell && n.Attrs[attrDeclared] == "true" && g.spellProvidesOps(id) && !g.spellUsed(id) {
 			spellOrphans = append(spellOrphans, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "declared but no target uses it"})
 		}
 	}

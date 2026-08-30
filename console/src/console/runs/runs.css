@@ -21,9 +21,24 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 0.9rem;
+  /* The console's one bar height and one surface gutter, so this row measures the same as the log
+     viewer's controls row and the Notes filter, and its input starts on the same x as the facet
+     chips, the list rows and the detail pane below. A floor, because the row wraps on a narrow pane. */
+  min-block-size: var(--console-surface-bar-h);
+  padding-block: 0;
+  padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
+}
+/* The bar's leading label. Same slot and same voice as the Dashboard bar's OPERATIONS, so a
+   reader switching tabs meets a titled row on every surface instead of a bare filter field. */
+.console-runs__label {
+  flex: 0 0 auto;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
 }
 .console-runs__search { flex: 0 1 26rem; min-inline-size: 8rem; }
 .console-runs__help { flex: 0 0 auto; }
@@ -55,7 +70,8 @@
   gap: 0.15rem 0.9rem;
   max-block-size: 6.5rem;
   overflow-y: auto;
-  padding: 0.45rem 0.9rem 0.5rem;
+  padding-block: 0.45rem 0.5rem;
+  padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
@@ -70,9 +86,9 @@
 }
 .console-runs__facet-head {
   margin: 0 0.1rem 0 0;
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
   text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
@@ -129,7 +145,8 @@
   flex: 1 1 30rem;
   min-inline-size: 0;
   overflow: auto;
-  padding: 1rem 1.1rem 2rem;
+  padding-block: 1rem 2rem;
+  padding-inline: var(--console-pad);
 }
 
 /* --- Status dot ---------------------------------------------------------------
@@ -157,7 +174,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  padding: 0.8rem 1rem;
+  padding-block: 0.8rem;
+  padding-inline: var(--console-pad);
   border: 0;
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
   background: transparent;
@@ -219,9 +237,9 @@
   flex: 0 0 auto;
   padding: 0.05rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: var(--console-chip-size);
+  font-weight: var(--console-chip-weight);
+  letter-spacing: var(--console-chip-tracking);
   text-transform: uppercase;
   color: var(--pf-t--global--text--color--regular);
   background: var(--pf-t--global--background--color--control--default);
@@ -250,9 +268,9 @@
 }
 .console-runs__fact-label {
   margin: 0;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
   text-transform: uppercase;
   line-height: 1.6;
   color: var(--pf-t--global--text--color--subtle);
@@ -272,9 +290,9 @@
 
 .console-runs__section-head {
   margin: 0 0 0.4rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
   text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }

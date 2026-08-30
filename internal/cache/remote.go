@@ -81,7 +81,7 @@ func (c *Cache) PruneRemote(ctx context.Context, policy RetentionPolicy) error {
 	}
 	pruner, ok := c.remote.(RemotePruner)
 	if !ok {
-		return errors.New("cache: remote backend does not support prune")
+		return fmt.Errorf("cache: remote backend %q does not support prune", c.remote.Name())
 	}
 	if !c.remote.Active(ctx) {
 		return errors.New("cache: remote backend is not active in this environment")
@@ -110,7 +110,7 @@ func RegisterRemoteBackendOpener(fn func(ctx context.Context, selector string) (
 // opener has been registered (no backend was linked into this binary).
 func OpenRemoteBackend(ctx context.Context, selector string) (RemoteBackend, error) {
 	if remoteBackendOpener == nil {
-		return nil, errors.New("cache: no remote backend registered in this binary")
+		return nil, errors.New("cache: no remote backend registered in this binary; the spell-backed opener is wired by internal/interp/bindings (blank-imported by cmd/magus), so a program that uses this package as a library without that import never registers one")
 	}
 	return remoteBackendOpener(ctx, selector)
 }

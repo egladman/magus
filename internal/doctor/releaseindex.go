@@ -29,6 +29,11 @@ const releaseIndexWarnWindow = 45 * 24 * time.Hour
 // does on demand - so without something watching the clock the first sign of trouble
 // would be `magus self update` refusing to run for everyone at once. That is the
 // outage this whole area exists to have fixed, arriving by a different door.
+//
+// It carries NO Fix, for the reason checkRegistryFreshness states below: re-signing is a
+// human running a workflow, not a repair `doctor --fix` may perform on someone's behalf.
+// The Fix arms it used to carry named `run release-index`, a target no workspace declares,
+// so the first finding would have failed `doctor --fix` outright.
 func (r *runner) checkReleaseIndexExpiry() types.DoctorCheck {
 	const name = "release-index"
 
@@ -53,7 +58,7 @@ func (r *runner) checkReleaseIndexExpiry() types.DoctorCheck {
 		return types.DoctorCheck{
 			Name: name, Status: types.DoctorFail,
 			Message: "the served index declares no expires_at, so a stale copy can be replayed indefinitely",
-			Fix:     []string{"run", "release-index"},
+			Details: []string{"re-sign it with the Release index workflow, then merge the pull request it opens"},
 		}
 	}
 	deadline, err := time.Parse(time.RFC3339, idx.ExpiresAt)
@@ -71,14 +76,12 @@ func (r *runner) checkReleaseIndexExpiry() types.DoctorCheck {
 			Name: name, Status: types.DoctorFail,
 			Message: fmt.Sprintf("the served release index expired %s ago; every `magus self update` is refusing it", roughly(-left)),
 			Details: []string{"re-sign it with the Release index workflow, then merge the pull request it opens"},
-			Fix:     []string{"run", "release-index"},
 		}
 	case left <= releaseIndexWarnWindow:
 		return types.DoctorCheck{
 			Name: name, Status: types.DoctorAdvice,
 			Message: fmt.Sprintf("the served release index expires in %s (%s)", roughly(left), idx.ExpiresAt),
 			Details: []string{"a release re-signs it; the Release index workflow does too, if none is due"},
-			Fix:     []string{"run", "release-index"},
 		}
 	default:
 		return types.DoctorCheck{

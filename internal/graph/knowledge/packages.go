@@ -7,7 +7,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// PackagesShardName is the singleton shard holding third-party package nodes and the
+// packagesShardName is the singleton shard holding third-party package nodes and the
 // depends_on edges from the projects that declare them.
 //
 // A singleton rather than one shard per project, which is the opposite of the choice
@@ -22,16 +22,16 @@ import (
 // It is DETERMINISTIC - the same manifests always yield the same shard - so it is
 // remote-shareable like the other extracted shards, not isolated the way @runtime and
 // @coverage are.
-const PackagesShardName = "@packages"
+const packagesShardName = "@packages"
 
-// AttrPackageManager, AttrPackageVersion, AttrPackageIndirect and AttrPackageReplaced
+// attrPackageManager, AttrPackageVersion, attrPackageIndirect and attrPackageReplaced
 // are the attrs a package node carries. Named rather than spelled inline because a
 // mistyped literal would silently match nothing on query instead of failing.
 const (
-	AttrPackageManager  = "manager"
+	attrPackageManager  = "manager"
 	AttrPackageVersion  = "version"
-	AttrPackageIndirect = "indirect"
-	AttrPackageReplaced = "replaced"
+	attrPackageIndirect = "indirect"
+	attrPackageReplaced = "replaced"
 )
 
 // packageID keys a package node by MANAGER and name, never name alone: the npm package
@@ -49,11 +49,14 @@ func packageID(manager, name string) string {
 	return types.KindPackage + ":" + manager + " " + name
 }
 
-// AttrPackageVersionConflict marks a package two projects in one workspace pin to
+// attrPackageVersionConflict marks a package two projects in one workspace pin to
 // different versions. The value is the full sorted set, comma-separated, because the
 // interesting thing about a conflict is every version involved - the version attr can
 // only hold one, and picking it is not this layer's judgment to make.
-const AttrPackageVersionConflict = "version_conflict"
+//
+// Write-only: nothing reads it back yet (no query filter, no console column). It rides
+// on the node for when a consumer wants it.
+const attrPackageVersionConflict = "version_conflict"
 
 // assemblePackages builds the singleton package shard from each project's declared
 // dependencies: one node per (manager, name) plus a depends_on edge from every project
@@ -65,7 +68,7 @@ const AttrPackageVersionConflict = "version_conflict"
 //
 // Empty input yields an empty shard, which the caller drops.
 func assemblePackages(packages map[string][]types.KnowledgePackage) Shard {
-	s := Shard{Name: PackagesShardName}
+	s := Shard{Name: packagesShardName}
 	if len(packages) == 0 {
 		return s
 	}
@@ -98,7 +101,7 @@ func assemblePackages(packages map[string][]types.KnowledgePackage) Shard {
 					ID:    id,
 					Kind:  types.KindPackage,
 					Label: pkg.Name,
-					Attrs: map[string]string{AttrPackageManager: pkg.Manager},
+					Attrs: map[string]string{attrPackageManager: pkg.Manager},
 				})
 				n = &node{index: len(s.Nodes) - 1, versions: map[string]bool{}}
 				seen[id] = n
@@ -123,16 +126,16 @@ func assemblePackages(packages map[string][]types.KnowledgePackage) Shard {
 		sort.Strings(versions)
 		attrs[AttrPackageVersion] = versions[0]
 		if len(versions) > 1 {
-			attrs[AttrPackageVersionConflict] = strings.Join(versions, ",")
+			attrs[attrPackageVersionConflict] = strings.Join(versions, ",")
 		}
 		// Only the interesting half of each flag is recorded. A direct, unreplaced
 		// dependency is the overwhelming default, and writing `indirect=false` on every
 		// node would cost more to read than it explains.
 		if !n.anyDirect {
-			attrs[AttrPackageIndirect] = "true"
+			attrs[attrPackageIndirect] = "true"
 		}
 		if n.replaced {
-			attrs[AttrPackageReplaced] = "true"
+			attrs[attrPackageReplaced] = "true"
 		}
 	}
 	return s

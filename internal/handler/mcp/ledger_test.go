@@ -28,51 +28,51 @@ func TestLedgerTool(t *testing.T) {
 		require.NoError(t, err)
 		return resp
 	}
-	report := func(t *testing.T, resp spells.InvokeResponse) types.DelegationReport {
+	report := func(t *testing.T, resp spells.InvokeResponse) types.LeaseReport {
 		t.Helper()
-		got, ok := resp.Data.(types.DelegationReport)
+		got, ok := resp.Data.(types.LeaseReport)
 		require.True(t, ok)
 		return got
 	}
-	delegations := func(t *testing.T, resp spells.InvokeResponse) []types.Delegation {
+	leases := func(t *testing.T, resp spells.InvokeResponse) []types.Lease {
 		t.Helper()
-		return report(t, resp).Delegations
+		return report(t, resp).Leases
 	}
 
 	t.Run("an unwritten ledger lists empty", func(t *testing.T) {
-		assert.Empty(t, delegations(t, invoke(t, nil)), "op defaults to list")
+		assert.Empty(t, leases(t, invoke(t, nil)), "op defaults to list")
 	})
 
 	t.Run("put records the declared row", func(t *testing.T) {
 		resp := invoke(t, map[string]any{
-			"op": "put", "id": "delegation-a", "goal": "ship the store; TestStoreRoundTrip passes",
-			"checkpoint": "60dc9151", "owned_paths": "internal/ledger types/delegation.go",
+			"op": "put", "id": "lease-a", "goal": "ship the store; TestStoreRoundTrip passes",
+			"checkpoint": "60dc9151", "owned_paths": "internal/ledger types/lease.go",
 			"forbidden_paths": "MAGUS.md", "tier": "standard", "validation": "magus run test",
 			"state": "running",
 		})
-		got, ok := resp.Data.(types.Delegation)
+		got, ok := resp.Data.(types.Lease)
 		require.True(t, ok, "Data is the record itself, so the console and the tool cannot disagree")
-		assert.Equal(t, "delegation-a", got.ID)
-		assert.Equal(t, []string{"internal/ledger", "types/delegation.go"}, got.OwnedPaths)
+		assert.Equal(t, "lease-a", got.ID)
+		assert.Equal(t, []string{"internal/ledger", "types/lease.go"}, got.OwnedPaths)
 		assert.Equal(t, []string{"MAGUS.md"}, got.ForbiddenPaths)
 		assert.Equal(t, types.StateRunning, got.State)
 		assert.NotZero(t, got.Created)
 	})
 
 	t.Run("put upserts by id", func(t *testing.T) {
-		invoke(t, map[string]any{"op": "put", "id": "delegation-b", "state": "declared", "depends_on": "delegation-a"})
-		invoke(t, map[string]any{"op": "put", "id": "delegation-a", "state": "pass"})
+		invoke(t, map[string]any{"op": "put", "id": "lease-b", "state": "declared", "depends_on": "lease-a"})
+		invoke(t, map[string]any{"op": "put", "id": "lease-a", "state": "pass"})
 
-		got := delegations(t, invoke(t, map[string]any{"op": "list"}))
-		require.Len(t, got, 2, "the second put on delegation-a replaced its row rather than adding one")
-		assert.Equal(t, "delegation-a", got[0].ID)
+		got := leases(t, invoke(t, map[string]any{"op": "list"}))
+		require.Len(t, got, 2, "the second put on lease-a replaced its row rather than adding one")
+		assert.Equal(t, "lease-a", got[0].ID)
 		assert.Equal(t, types.StatePass, got[0].State)
-		assert.Equal(t, []string{"delegation-a"}, got[1].DependsOn)
+		assert.Equal(t, []string{"lease-a"}, got[1].DependsOn)
 	})
 
-	t.Run("a read-only delegation carries no paths", func(t *testing.T) {
+	t.Run("a read-only lease carries no paths", func(t *testing.T) {
 		resp := invoke(t, map[string]any{"op": "put", "id": "scout", "read_only": true, "state": "no_return"})
-		got := resp.Data.(types.Delegation)
+		got := resp.Data.(types.Lease)
 		assert.True(t, got.ReadOnly)
 		assert.Empty(t, got.OwnedPaths)
 		assert.Equal(t, types.StateNoReturn, got.State, "no_return is its own terminal state, not fail")
@@ -82,16 +82,16 @@ func TestLedgerTool(t *testing.T) {
 		resp := invoke(t, map[string]any{"op": "clear"})
 		data := resp.Data.(map[string]any)
 		assert.Equal(t, 3, data["cleared"], "a destructive op says what it destroyed")
-		assert.Empty(t, delegations(t, invoke(t, map[string]any{"op": "list"})))
+		assert.Empty(t, leases(t, invoke(t, map[string]any{"op": "list"})))
 	})
 
 	t.Run("a lifecycle put touches only the fields it names", func(t *testing.T) {
 		invoke(t, map[string]any{
-			"op": "put", "id": "delegation-life", "goal": "the declared goal",
+			"op": "put", "id": "lease-life", "goal": "the declared goal",
 			"checkpoint": "abc123", "owned_paths": "internal/ledger", "tier": "opus",
 		})
-		resp := invoke(t, map[string]any{"op": "put", "id": "delegation-life", "state": "pass"})
-		got, ok := resp.Data.(types.Delegation)
+		resp := invoke(t, map[string]any{"op": "put", "id": "lease-life", "state": "pass"})
+		got, ok := resp.Data.(types.Lease)
 		require.True(t, ok)
 		assert.Equal(t, types.StatePass, got.State)
 		assert.Equal(t, "the declared goal", got.Goal, "state advance must not erase the row")
@@ -102,16 +102,16 @@ func TestLedgerTool(t *testing.T) {
 
 	t.Run("a json array of paths records paths, not nothing", func(t *testing.T) {
 		resp := invoke(t, map[string]any{
-			"op": "put", "id": "delegation-arr", "owned_paths": []any{"a/b", "c d"},
+			"op": "put", "id": "lease-arr", "owned_paths": []any{"a/b", "c d"},
 		})
-		got, ok := resp.Data.(types.Delegation)
+		got, ok := resp.Data.(types.Lease)
 		require.True(t, ok)
 		assert.Equal(t, []string{"a/b", "c d"}, got.OwnedPaths, "array elements are paths verbatim; only the string form splits on spaces")
 	})
 
 	t.Run("an unrecognized state is rejected, not stored", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
-			"op": "put", "id": "delegation-bad", "state": "passed",
+			"op": "put", "id": "lease-bad", "state": "passed",
 		}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no_return")
@@ -129,26 +129,26 @@ func TestLedgerTool(t *testing.T) {
 	})
 
 	// register is the worker's door: it reports the base it actually landed on and is
-	// told how that compares with the checkpoint the delegation was handed. The comparison
+	// told how that compares with the checkpoint the lease was handed. The comparison
 	// itself is covered in internal/ledger; what this asserts is that the tool answers
 	// with BOTH halves - the row for a reader, and Text for the worker, which is the only
 	// op here that sets it.
 	t.Run("register records the reported base and returns the verdict", func(t *testing.T) {
-		invoke(t, map[string]any{"op": "put", "id": "delegation-reg", "checkpoint": "aaaa1111", "state": "declared"})
+		invoke(t, map[string]any{"op": "put", "id": "lease-reg", "checkpoint": "aaaa1111", "state": "declared"})
 
-		resp := invoke(t, map[string]any{"op": "register", "id": "delegation-reg", "reported_base": "bbbb2222"})
-		got, ok := resp.Data.(types.Delegation)
+		resp := invoke(t, map[string]any{"op": "register", "id": "lease-reg", "reported_base": "bbbb2222"})
+		got, ok := resp.Data.(types.Lease)
 		require.True(t, ok)
 		assert.Equal(t, types.BaseDiverged, got.BaseVerdict)
 		assert.Equal(t, "bbbb2222", got.ReportedBase)
 		assert.NotZero(t, got.Registered)
-		assert.Contains(t, resp.Text, "aaaa1111", "the reading names the checkpoint the delegation was handed")
+		assert.Contains(t, resp.Text, "aaaa1111", "the reading names the checkpoint the lease was handed")
 		assert.Contains(t, resp.Text, "bbbb2222", "and the base the worker reported")
 		assert.Contains(t, resp.Text, "Respawn from", "and what to do about it")
 
 		var found bool
-		for _, u := range delegations(t, invoke(t, map[string]any{"op": "list"})) {
-			if u.ID == "delegation-reg" {
+		for _, u := range leases(t, invoke(t, map[string]any{"op": "list"})) {
+			if u.ID == "lease-reg" {
 				found = true
 				assert.Equal(t, types.BaseDiverged, u.BaseVerdict, "the verdict is stored, not only returned")
 			}
@@ -160,7 +160,7 @@ func TestLedgerTool(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
 			"op": "register", "id": "never-declared", "reported_base": "aaaa1111",
 		}})
-		require.ErrorIs(t, err, ledger.ErrUnknownDelegation)
+		require.ErrorIs(t, err, ledger.ErrUnknownLease)
 		assert.Contains(t, err.Error(), "magus_ledger list")
 	})
 
@@ -168,28 +168,28 @@ func TestLedgerTool(t *testing.T) {
 	// read_only error would tell a client sending goal=3 that its put succeeded and hand
 	// back a row without the field it thought it wrote.
 	for name, params := range map[string]map[string]any{
-		"a non-string goal":            {"op": "put", "id": "delegation-typed", "goal": 3},
-		"a non-string tier":            {"op": "put", "id": "delegation-typed", "tier": true},
-		"a non-list owned_paths":       {"op": "put", "id": "delegation-typed", "owned_paths": 7},
-		"a list with a non-string":     {"op": "put", "id": "delegation-typed", "depends_on": []any{"a", 2}},
-		"a non-string state":           {"op": "put", "id": "delegation-typed", "state": 1},
-		"a non-boolean read_only":      {"op": "put", "id": "delegation-typed", "read_only": "yes"},
-		"a non-string forbidden_paths": {"op": "put", "id": "delegation-typed", "forbidden_paths": map[string]any{}},
+		"a non-string goal":            {"op": "put", "id": "lease-typed", "goal": 3},
+		"a non-string tier":            {"op": "put", "id": "lease-typed", "tier": true},
+		"a non-list owned_paths":       {"op": "put", "id": "lease-typed", "owned_paths": 7},
+		"a list with a non-string":     {"op": "put", "id": "lease-typed", "depends_on": []any{"a", 2}},
+		"a non-string state":           {"op": "put", "id": "lease-typed", "state": 1},
+		"a non-boolean read_only":      {"op": "put", "id": "lease-typed", "read_only": "yes"},
+		"a non-string forbidden_paths": {"op": "put", "id": "lease-typed", "forbidden_paths": map[string]any{}},
 	} {
 		t.Run(name+" is rejected, not dropped", func(t *testing.T) {
 			_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 			require.Error(t, err)
 
-			got := delegations(t, invoke(t, map[string]any{"op": "list"}))
+			got := leases(t, invoke(t, map[string]any{"op": "list"}))
 			for _, u := range got {
-				assert.NotEqual(t, "delegation-typed", u.ID, "a rejected put writes no row")
+				assert.NotEqual(t, "lease-typed", u.ID, "a rejected put writes no row")
 			}
 		})
 	}
 
 	t.Run("every mistyped param is reported at once", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
-			"op": "put", "id": "delegation-typed", "goal": 3, "read_only": "yes",
+			"op": "put", "id": "lease-typed", "goal": 3, "read_only": "yes",
 		}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "goal")
@@ -198,7 +198,7 @@ func TestLedgerTool(t *testing.T) {
 }
 
 // TestLedgerToolListAnswersOverlapsAndReleases covers what a list is FOR beyond the
-// rows: two delegations claiming one tree, and the version of a path a finished editor left
+// rows: two leases claiming one tree, and the version of a path a finished editor left
 // behind. Both are answers an orchestrator would otherwise have to derive by hand from
 // a table it wrote itself.
 func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
@@ -216,28 +216,28 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 	invoke(map[string]any{"op": "put", "id": "u1", "owned_paths": "shared.go docs", "state": "running"})
 	invoke(map[string]any{"op": "put", "id": "u2", "owned_paths": "shared.go", "state": "declared"})
 
-	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.DelegationReport)
+	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.LeaseReport)
 	require.True(t, ok)
 	require.Len(t, got.Overlaps, 1)
-	assert.Equal(t, "u1", got.Overlaps[0].DelegationA)
-	assert.Equal(t, "u2", got.Overlaps[0].DelegationB)
+	assert.Equal(t, "u1", got.Overlaps[0].LeaseA)
+	assert.Equal(t, "u2", got.Overlaps[0].LeaseB)
 	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].PathsA)
 	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].PathsB)
 
 	// u1 finishes editing the contested file and announces it by shrinking the row. The
 	// digest is what tells u2 which version it is starting from.
 	invoke(map[string]any{"op": "put", "id": "u1", "owned_paths": "docs"})
-	got, ok = invoke(map[string]any{"op": "list"}).Data.(types.DelegationReport)
+	got, ok = invoke(map[string]any{"op": "list"}).Data.(types.LeaseReport)
 	require.True(t, ok)
 	assert.Empty(t, got.Overlaps, "the released path is no longer claimed twice")
-	require.Len(t, got.Delegations[0].Releases, 1)
-	assert.Equal(t, "shared.go", got.Delegations[0].Releases[0].Path)
-	assert.Contains(t, got.Delegations[0].Releases[0].Digest, "sha256:")
-	assert.NotZero(t, got.Delegations[0].Updated, "every put re-stamps the row a reader watches for staleness")
+	require.Len(t, got.Leases[0].Releases, 1)
+	assert.Equal(t, "shared.go", got.Leases[0].Releases[0].Path)
+	assert.Contains(t, got.Leases[0].Releases[0].Digest, "sha256:")
+	assert.NotZero(t, got.Leases[0].Updated, "every put re-stamps the row a reader watches for staleness")
 }
 
 // TestLedgerToolPutMergesConcurrently is why a put goes through Store.Update. Two
-// writers advance different fields of one delegation - an orchestrator moving the state, a
+// writers advance different fields of one lease - an orchestrator moving the state, a
 // worker recording its checkpoint - and both have to survive. Reading the row with List
 // and writing it back with Put releases the store's lock in between, so each writer
 // merges onto a row it read before the other wrote, and the second write reverts the
@@ -285,7 +285,7 @@ func TestLedgerToolPutMergesConcurrently(t *testing.T) {
 
 // TestLedgerDoorsAgreeOnAnEmptyLedger is the parity the constructor exists to guarantee.
 // The ledger has two read doors - this tool and the console's GET /api/v1/ledger - and an
-// unwritten ledger is the case they used to answer differently, one serving "units":[]
+// unwritten ledger is the case they used to answer differently, one serving "leases":[]
 // because the route normalized it by hand and the other serving null.
 func TestLedgerDoorsAgreeOnAnEmptyLedger(t *testing.T) {
 	t.Parallel()
@@ -305,5 +305,5 @@ func TestLedgerDoorsAgreeOnAnEmptyLedger(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &route))
 	require.NoError(t, json.Unmarshal(fromTool, &toolBody))
 	assert.Equal(t, route, toolBody)
-	assert.Contains(t, string(fromTool), `"units":[]`)
+	assert.Contains(t, string(fromTool), `"leases":[]`)
 }

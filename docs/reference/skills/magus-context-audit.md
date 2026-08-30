@@ -3,8 +3,8 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5573
-skill_simple_bytes: 4065
+skill_full_bytes: 5846
+skill_simple_bytes: 4187
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `43` |
+| `agent-skill-version` | `47` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `c4d3f426ec35` |
+| `skill-content` | `883a29c81e8d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -82,7 +82,7 @@ not the exception - they were usually written in the same sitting by the same
 person. So resolve every claim against something that executes.
 
 ```sh
-magus session hook -o name "<the exact command a document recommends>"
+printf '%s' "<the exact command a document recommends>" | magus session hook
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```
@@ -99,6 +99,11 @@ grep -rn "<the command or rule>" <every surface you enumerated>
 ```
 
 ## Rank what you find
+
+Every finding carries the command that REPRODUCES it - the exact line a reader
+runs to see the contradiction for themselves, not a description of where you saw
+it. A finding nobody can re-run is an opinion about a document, and it gets
+argued with instead of fixed.
 
 Report findings in this order. Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".
@@ -194,7 +199,7 @@ the one nobody remembers is loaded.
  So resolve every claim against something that executes.
 
 ```sh
-magus session hook -o name "<the exact command a document recommends>"
+printf '%s' "<the exact command a document recommends>" | magus session hook
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```
@@ -209,6 +214,9 @@ grep -rn "<the command or rule>" <every surface you enumerated>
 ```
 
 ## Rank what you find
+
+Every finding carries the command that REPRODUCES it - a finding nobody can re-run is an opinion about a
+document.
 
 Report findings in this order.
 

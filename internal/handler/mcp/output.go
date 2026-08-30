@@ -63,7 +63,7 @@ func (t *outputTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		return spells.InvokeResponse{}, errors.New("mcp: ref is required")
 	}
 	if !cache.LooksLikeRef(ref) {
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: %q is not a target-output reference (expected out<hex>, e.g. out1a2b3c)", ref)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: %q is not an output ref (expected out<hex>, e.g. out1a2b3c)", ref)
 	}
 	data, desc, err := t.reader.OutputByRef(ref)
 	if err != nil {

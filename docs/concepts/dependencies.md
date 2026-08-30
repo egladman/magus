@@ -10,7 +10,7 @@ tags: [dependencies, needs, depends_on, cache, affected, cycles, magusfile]
 magus has two dependency mechanisms that answer two different questions, and
 the story of how they interact is scattered today across getting-started
 (`needs`), [workspace.md](workspace.md) (`depends_on`), and
-[affected.md](../guides/affected.md) (the edges the affected closure walks). This page
+[affected.md](workspace/affected.md) (the edges the affected closure walks). This page
 owns that story end to end.
 
 ## The two mechanisms and the decision rule
@@ -307,7 +307,7 @@ blocking on the service process itself. See
   `magus\project` options map it lives in.
 - [cache.md](cache.md): the cache key `dep:` lines and the granularity note
   this page's caching section builds on.
-- [affected.md](../guides/affected.md): the transitive closure these edges feed.
+- [affected.md](workspace/affected.md): the transitive closure these edges feed.
 - [The guided tour, step 7](../tour/index.html#step-7): the pattern forms above, runnable and
   editable in the browser - including the negation that keeps one member of a family
   out of its umbrella.

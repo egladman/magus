@@ -728,12 +728,13 @@ type KnowledgePathOutput struct {
 // insight's git-history lenses (insight report embeds it), derived purely from
 // the graph (degree and reachability), so it is deterministic and LLM-free.
 type KnowledgeStats struct {
-	Definition string                 `json:"definition"          yaml:"definition"`
-	NodeCount  int                    `json:"node_count"          yaml:"node_count"`
-	EdgeCount  int                    `json:"edge_count"          yaml:"edge_count"`
-	Gods       []KnowledgeGodNode     `json:"gods"                yaml:"gods"`
-	Orphans    []KnowledgeOrphan      `json:"orphans,omitempty"   yaml:"orphans,omitempty"`
-	Coverage   []KnowledgeDocCoverage `json:"coverage,omitempty"  yaml:"coverage,omitempty"`
+	Definition string `json:"definition"          yaml:"definition"`
+	NodeCount  int    `json:"node_count"          yaml:"node_count"`
+	EdgeCount  int    `json:"edge_count"          yaml:"edge_count"`
+	// Gods is the headline finding and so the primary collection -o jsonl streams.
+	Gods     []KnowledgeGodNode     `json:"gods"                yaml:"gods" jsonl:"primary"`
+	Orphans  []KnowledgeOrphan      `json:"orphans,omitempty"   yaml:"orphans,omitempty"`
+	Coverage []KnowledgeDocCoverage `json:"coverage,omitempty"  yaml:"coverage,omitempty"`
 	// Connectivity is the data-quality lens: how fragmented the graph is. A high isolated count or many
 	// weakly-connected components means the builder has not linked everything it could, which hurts
 	// discoverability. IsolatedCount is every node with no edge at all (Orphans lists a capped sample by
@@ -841,7 +842,8 @@ type KnowledgeGraphOutput struct {
 	// depends on the binary's catalogs as well as the tree, but only the tree shows in a
 	// diff, so regenerating with a foreign build reads as ordinary drift (MGS4005).
 	// Additive and omitted when empty, so it never bumps the schema version.
-	CatalogFingerprint string          `json:"catalog_fingerprint,omitempty" yaml:"catalog_fingerprint,omitempty"`
-	Nodes              []KnowledgeNode `json:"nodes"         yaml:"nodes"`
-	Links              []KnowledgeEdge `json:"links"         yaml:"links"`
+	CatalogFingerprint string `json:"catalog_fingerprint,omitempty" yaml:"catalog_fingerprint,omitempty"`
+	// Nodes is the export's primary collection: what -o jsonl streams, one node per line.
+	Nodes []KnowledgeNode `json:"nodes"         yaml:"nodes" jsonl:"primary"`
+	Links []KnowledgeEdge `json:"links"         yaml:"links"`
 }

@@ -136,13 +136,16 @@ func TestDeleteAllowMissing(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
-func TestCursorRoundTrip(t *testing.T) {
+func TestReadCursor(t *testing.T) {
 	root := testRoot(t)
 	got, err := ReadCursor(root)
 	require.NoError(t, err)
 	assert.Empty(t, got, "an unwritten cursor reads empty, not an error")
 
-	require.NoError(t, WriteCursor(root, "left off wiring the @memory shard"))
+	dir, err := Dir(root)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, cursorFile), []byte("left off wiring the @memory shard"), 0o644))
 	got, err = ReadCursor(root)
 	require.NoError(t, err)
 	assert.Equal(t, "left off wiring the @memory shard", got)

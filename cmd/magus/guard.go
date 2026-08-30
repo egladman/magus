@@ -68,8 +68,10 @@ type guardVerdict struct {
 // from stdin and emit a verdict. The caller owns extraction from its
 // host-specific event shape; magus owns only the host-neutral policy.
 //
-// A guard must FAIL OPEN: an empty or unreadable input is a pass, never an error
-// that would block every tool call.
+// An EMPTY stdin fails OPEN: a wrapper that hands the hook nothing must not have
+// every tool call blocked. A stdin that fails to READ is the opposite case and
+// fails CLOSED, because bytes were on their way and were lost, so the guard has
+// judged nothing and the command it never saw must not be reported as cleared.
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
@@ -86,13 +88,13 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// host. A wrapper that cannot extract a session id must still get a verdict;
 	// erroring here would block a tool call over metadata.
 	hf := gen.BindSessionHook(fset)
-	// The environment supplies the DEFAULT, so an explicit --delegation still wins: a shell
+	// The environment supplies the DEFAULT, so an explicit --lease still wins: a shell
 	// that exported the variable for a whole session must not outrank a per-call
 	// override. Same shape `magus run` uses for MAGUS_SHARD.
-	// trail.DelegationFromEnv, never a raw Getenv: the journal producers read the variable
+	// trail.LeaseFromEnv, never a raw Getenv: the journal producers read the variable
 	// through the same helper, and two readers with different trimming rules split one
-	// exported delegation into a journal identity and an unguarded write.
-	envDefault(fset, flagHookDelegation, trail.DelegationFromEnv())
+	// exported lease into a journal identity and an unguarded write.
+	envDefault(fset, flagHookLease, trail.LeaseFromEnv())
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -111,9 +113,29 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 	// Read through Lookup rather than off a bound variable so the value is the same
 	// whichever registration above owns the flag. Goes with the TODO there.
-	actingDelegation := hf.Delegation
+	actingLease := hf.Lease
 
-	input, hasInput := readGuardInput(in)
+	input, hasInput, readErr := readGuardInput(in)
+	// A failed read is not an empty stdin, and collapsing the two cleared every
+	// command whose payload arrived truncated. Answered as a deny so the exit is 2,
+	// which is what the manpage promises: deny and unreadable input share the code,
+	// so a host that blocks on 2 fails closed in both cases. --observe is exempt
+	// because it carries no verdict - there is nothing to fail closed about, and the
+	// documented contract is that it always exits 0.
+	if readErr != nil && !hf.Observe {
+		verdict := guardVerdict{
+			SchemaVersion: agent.GuardSchemaVersion,
+			Decision:      "deny",
+			Reason: "magus session hook could not read its input from stdin: " + readErr.Error() + "\n\n" +
+				"Nothing was judged, so this call is blocked rather than cleared. Retry it; if it keeps " +
+				"failing, run the hook by hand with the same input to see the error, and check the hook " +
+				"wiring in your agent host.",
+		}
+		if err := writeGuardVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		return enforceVerdict(opts, verdict)
+	}
 	who := hookAttribution{Host: hf.AgentName, Session: hf.Session, Transcript: hf.Transcript, Event: hf.Event}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
@@ -133,16 +155,21 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			who.Event = req.Who.Event
 		}
 		if req.IsSpawn {
-			// A delegation carries no verdict, so it returns the pass every other
+			// A spawn carries no verdict, so it returns the pass every other
 			// non-finding does and never reaches the guard. Handled here rather than
 			// beside the two guard arms because the whole point is that nothing judges
 			// it: the handed context is prose, and a prompt that merely MENTIONS a
-			// denied command would otherwise block the delegation that describes it.
+			// denied command would otherwise block the spawn that describes it.
 			appendHookSpawn(ctx, req, who)
 			return writeGuardVerdict(out, opts,
 				guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"})
 		}
 	}
+	// One gate for the whole invocation, holding each enrolled advisory to one firing per
+	// session. Built AFTER the envelope is decoded: a host that reports its session id only
+	// inside the payload would otherwise be graded as having reported none, and every
+	// session on that host would share the anonymous bucket.
+	gate := newAdvisoryGate(hookActivityTrail(ctx).base, who.Session)
 	tool := hookToolCommand
 	switch {
 	case hf.Observe:
@@ -159,41 +186,68 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// contribution. Running the write rules here would only ever manufacture a false
 		// advisory about editing a file the agent opened read-only.
 	case hf.Path:
-		// The delegation ledger speaks first. It is the only path rule whose verdict is
+		// The lease ledger speaks first. It is the only path rule whose verdict is
 		// about a CONCURRENT AGENT rather than about the file itself, so nothing else can
 		// outrank it: the regeneration advice below is still true after a collision, and
-		// saying that instead would let two delegations edit one path in silence.
+		// saying that instead would let two leases edit one path in silence.
 		context := ""
-		switch g := gradeDelegatedWrite(ctx, actingDelegation, input.Value); g.Decision {
+		// spoken reports that a rule MATCHED, which is not the same as a rule that
+		// produced text. A once-per-session advisory that already fired this session
+		// matched and stayed quiet, and the rules below it must not step into the silence
+		// it left: without this the second write to a skill source would draw the
+		// new-directory advisory instead of nothing.
+		spoken := false
+		switch g := gradeLeasedWrite(ctx, actingLease, input.Value); g.Decision {
 		case "deny":
 			verdict.Decision = "deny"
 			verdict.Reason = g.Reason
 		case "advise":
-			context = g.Context
+			context, spoken = gate.once(g.Kind, g.Context), true
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
 		// outranks the heuristics below; the memory nudge is a heuristic on the
 		// filename and only fills the silence it leaves.
-		if verdict.Decision == "pass" && context == "" {
-			context = adviseGeneratedWrite(ctx, input.Value)
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseGeneratedWrite(ctx, input.Value); text != "" {
+				context, spoken = text, true
+			}
 		}
 		// The notes rule DENIES, so it is checked before the advisories: a verdict
 		// that blocks is not something to fall through to. It sits after the
 		// generated-output rule only because a path cannot honestly be both, and if
 		// it somehow were, the regeneration answer is the more actionable one.
-		if verdict.Decision == "pass" && context == "" {
+		if verdict.Decision == "pass" && !spoken {
 			if reason := denyNotesWrite(input.Value); reason != "" {
 				verdict.Decision = "deny"
 				verdict.Reason = reason
 			}
 		}
-		if verdict.Decision == "pass" && context == "" {
-			context = adviseInstalledSkillWrite(input.Value)
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseInstalledSkillWrite(input.Value); text != "" {
+				context, spoken = text, true
+			}
 		}
-		if verdict.Decision == "pass" && context == "" {
-			context = adviseMemoryWrite(input.Value)
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseMemoryWrite(input.Value); text != "" {
+				context, spoken = text, true
+			}
 		}
-		if verdict.Decision == "pass" && context == "" {
+		// Both of these name paths and a target belonging to magus's own checkout, and
+		// both are inert anywhere else - see magusOwnSourceTree. They sit above the
+		// new-directory rule because a new skill directory is both, and which method to
+		// load is the more useful of the two answers.
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseAgentSurfaceWrite(input.Value); text != "" {
+				context, spoken = gate.once(advisorySkillSource, text), true
+			}
+		}
+		if verdict.Decision == "pass" && !spoken {
+			if text := adviseDescriptorWrite(input.Value); text != "" {
+				context, spoken = gate.once(advisoryRegenSource, text), true
+			}
+		}
+		// Last rung, so it sets no flag: there is nothing below it to hold back.
+		if verdict.Decision == "pass" && !spoken {
 			context = adviseNewSourceDir(input.Value)
 		}
 		if verdict.Decision == "pass" && context != "" {
@@ -209,8 +263,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
 		case v.Context != "":
-			verdict.Decision = "advise"
-			verdict.Context = v.Context
+			if held := gate.once(v.Kind, v.Context); held != "" {
+				verdict.Decision = "advise"
+				verdict.Context = held
+			}
 		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
 		// advisory's own answer is to run a narrower target, and firing on that
@@ -224,6 +280,16 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				verdict.Context = notice
 			}
 		}
+		// The guard's half of the index-staleness fact; the load-bearing half rides the
+		// command's own output (staleindex.go). gate.seen is asked BEFORE the rule, not
+		// after: producing this text costs a directory walk, and once the session has been
+		// told, paying for it again only to discard the answer is the cost nobody sees.
+		if verdict.Decision == "pass" && !gate.seen(advisoryGraphStale) && commandReadsGraph(input.Value) {
+			if notice := gate.once(advisoryGraphStale, staleGraphAdvice(ctx)); notice != "" {
+				verdict.Decision = "advise"
+				verdict.Context = notice
+			}
+		}
 	}
 	// Said last and on EVERY surface: a stale binary's verdicts are all suspect, not
 	// just the ones that matched a rule.
@@ -232,14 +298,20 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// from rules they have already changed is the case this rule exists for - and the
 	// first version of it skipped exactly that arm. The reason comes first, because
 	// the block has to be explained before it can be doubted.
+	//
+	// It is the loudest of the repeated advisories and so the one held to once per
+	// session - EXCEPT on a deny, where it is appended every time and spends no firing.
+	// A denial explains itself in full whenever it refuses, and this is the sentence that
+	// says the refusal may be coming from rules the caller has already changed.
 	if notice := staleGuardNotice(); notice != "" && !hf.Observe {
-		switch verdict.Decision {
-		case "deny":
+		if verdict.Decision == "deny" {
 			verdict.Reason += "\n\n" + notice
-		case "advise":
-			verdict.Context += "\n\n" + notice
-		default:
-			verdict.Decision, verdict.Context = "advise", notice
+		} else if held := gate.once(advisoryStaleBinary, notice); held != "" {
+			if verdict.Decision == "advise" {
+				verdict.Context += "\n\n" + held
+			} else {
+				verdict.Decision, verdict.Context = "advise", held
+			}
 		}
 	}
 	// An observation is not a judgment, and the trail already knows the difference: an
@@ -312,13 +384,21 @@ type guardInput struct {
 	Value string
 }
 
-func readGuardInput(in io.Reader) (guardInput, bool) {
+// readGuardInput reports the payload, whether one arrived, and the read failure
+// separately. The failure is its own return rather than folded into the boolean:
+// "no input" is a host that sent nothing and "the read broke" is a payload magus
+// was supposed to receive, and only the second one means the command about to run
+// is not the command the guard was shown.
+func readGuardInput(in io.Reader) (guardInput, bool, error) {
 	b, err := io.ReadAll(in)
-	value := strings.TrimSpace(string(b))
-	if err != nil || value == "" {
-		return guardInput{}, false
+	if err != nil {
+		return guardInput{}, false, err
 	}
-	return guardInput{Value: value}, true
+	value := strings.TrimSpace(string(b))
+	if value == "" {
+		return guardInput{}, false, nil
+	}
+	return guardInput{Value: value}, true, nil
 }
 
 // hookEnvelope is the JSON an agent host writes to a hook's stdin: which tool is about to
@@ -334,7 +414,7 @@ type hookEnvelope struct {
 	ToolInput      struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
-		// A delegation: the context an orchestrator is about to hand a sub-agent, plus
+		// A spawn: the context an orchestrator is about to hand a sub-agent, plus
 		// whatever the host calls the callee. Field PATHS, not a host name - the same line
 		// the two fields above already draw. magus does not know which tool produces them
 		// and never switches on ToolName; a payload carrying a prompt IS a spawn.
@@ -352,9 +432,11 @@ type hookEnvelope struct {
 // next change to any host would mean a magus release. The matcher in a host's own config is
 // where the host's vocabulary lives.
 //
-// Nothing MECHANICALLY enforces this particular case, which is why it is written down here.
 // TestNoHostSpecificBehaviorInCode matches host NAMES, so a switch over "Read"/"Bash" - a
 // per-host branch in everything but spelling - passes it untouched.
+// TestGuardDoesNotBranchOnHostToolVocabulary is the layer that catches that one: a host's
+// word for a tool may not appear as a string literal in guard code at all, so a lookup
+// table is no cheaper than a switch. These three constants are what it leaves room for.
 const (
 	hookToolCommand = "shell.command"
 	hookToolWrite   = "file.write"
@@ -377,7 +459,7 @@ const (
 // file_path - so it does not try. --observe is what separates them, and only the wrapper
 // can set it, because only the wrapper knows which of its host's tools merely look.
 //
-// A payload carrying a PROMPT rather than either is a delegation handoff: it is RECORDED and
+// A payload carrying a PROMPT rather than either is a spawn handoff: it is RECORDED and
 // EXEMPT from judgment. No rule is evaluated against a prompt, so the guard never denies one -
 // there is no command and no path to judge, only a context transfer to note. It is tested last on
 // purpose, so that adding this branch cannot change the verdict on any payload the guard already
@@ -407,7 +489,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value, req.IsSpawn = env.ToolInput.Prompt, true
 		req.Tool = env.ToolName
 		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
-		// across spawns, so it groups a delegation feed; a description is per-spawn prose; the
+		// across spawns, so it groups a spawn feed; a description is per-spawn prose; the
 		// tool name is the last resort that at least says a spawn happened.
 		for _, label := range []string{env.ToolInput.SubagentType, env.ToolInput.Description, env.ToolName} {
 			if label != "" {
@@ -483,7 +565,7 @@ func appendHookActivity(ctx context.Context, input guardInput, who hookAttributi
 	trail.AppendAgentCommand(ctx, location.base, command)
 }
 
-// appendHookSpawn records a delegation handoff into the same trail, so a person auditing the
+// appendHookSpawn records a spawn handoff into the same trail, so a person auditing the
 // activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
 // spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
 // there is no verdict to record, because a spawn is not a guard surface.

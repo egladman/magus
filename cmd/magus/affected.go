@@ -358,6 +358,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
 		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target))
+	case outputName:
+		return emitProjectNames(m, targets)
 	}
 	return nil
 }

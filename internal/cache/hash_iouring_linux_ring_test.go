@@ -12,12 +12,12 @@ import (
 
 func TestCQEReadErr_success(t *testing.T) {
 	c := CQE{UserData: 1, Result: 100}
-	assert.NoError(t, c.ReadErr(100))
+	assert.NoError(t, c.readErr(100))
 }
 
 func TestCQEReadErr_shortRead(t *testing.T) {
 	c := CQE{UserData: 1, Result: 50}
-	err := c.ReadErr(100)
+	err := c.readErr(100)
 	require.Error(t, err, "expected error for short read")
 	assert.Contains(t, err.Error(), "short read")
 	assert.Contains(t, err.Error(), "got 50 want 100", "expected counts in error message")
@@ -26,7 +26,7 @@ func TestCQEReadErr_shortRead(t *testing.T) {
 func TestCQEReadErr_kernelError(t *testing.T) {
 	// Result < 0 means a negated errno from the kernel.
 	c := CQE{UserData: 1, Result: -int32(syscall.EIO)}
-	err := c.ReadErr(100)
+	err := c.readErr(100)
 	require.Error(t, err, "expected error for negative result")
 	assert.ErrorIs(t, err, syscall.EIO)
 }
@@ -34,7 +34,7 @@ func TestCQEReadErr_kernelError(t *testing.T) {
 func TestCQEReadErr_zeroResult(t *testing.T) {
 	// Result == 0 with wantLen > 0 is a short read (EOF before full buffer).
 	c := CQE{UserData: 1, Result: 0}
-	err := c.ReadErr(100)
+	err := c.readErr(100)
 	require.Error(t, err, "expected error for zero-byte result")
 	assert.Contains(t, err.Error(), "short read")
 }
@@ -42,7 +42,7 @@ func TestCQEReadErr_zeroResult(t *testing.T) {
 func TestCQEReadErr_exactZero(t *testing.T) {
 	// wantLen == 0 and Result == 0 should be fine (degenerate, but correct).
 	c := CQE{UserData: 1, Result: 0}
-	assert.NoError(t, c.ReadErr(0), "expected nil for zero-byte read")
+	assert.NoError(t, c.readErr(0), "expected nil for zero-byte read")
 }
 
 func TestCheckKernelVersion_pass(t *testing.T) {
@@ -63,14 +63,14 @@ func TestSubmitRead_emptyBuf(t *testing.T) {
 	// Construct a minimal Ring with zeroed fields — the guard at the top of
 	// SubmitRead must return an error before touching any mmap pointers.
 	r := &Ring{}
-	err := r.SubmitRead(0, nil, 0)
+	err := r.submitRead(0, nil, 0)
 	require.Error(t, err, "expected error for empty buffer")
 	assert.Contains(t, err.Error(), "empty buffer")
 }
 
 func TestSubmitRead_emptySlice(t *testing.T) {
 	r := &Ring{}
-	err := r.SubmitRead(0, []byte{}, 0)
+	err := r.submitRead(0, []byte{}, 0)
 	require.Error(t, err, "expected error for empty slice")
 	assert.Contains(t, err.Error(), "empty buffer")
 }

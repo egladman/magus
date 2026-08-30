@@ -64,7 +64,10 @@ If your host writes its payload as JSON with `tool_input.command` or
 itself, infers a write from a file path, and picks up `session_id` and
 `hook_event_name` for attribution. Otherwise select the field yourself - `jq -r
 '.<path>'` is what the shipped templates use - and pass `--path` when the input
-is a file.
+is a file. A lease id is not a field you select out of the event: the guard
+inherits it from the worker's environment, which the orchestrator that spawned
+the worker has to export - see
+[wiring a lease into a worker](leases.md#wiring-the-lease-into-a-worker).
 
 The fastest start is to copy [`magus-guard-command.sh`](guard-templates.md) and
 set its override variables: `HOST_EVENT_PATH`, `HOST_RESPONSE`,
@@ -91,7 +94,7 @@ what your glue carries per surface and decision. A parity gate reads those lines
 and fails the build when a host was never asked about a decision the contract
 grew.
 
-## Delegation capture
+## Lease capture
 
 Separate from the guard, and the same shape: pipe the host's pre-tool event to
 `magus session hook` when the tool being called is the one that hands work to a
@@ -101,7 +104,7 @@ sub-agent.
 printf '%s' "$event" | magus session hook --agent-name <your host> >/dev/null 2>&1; exit 0
 ```
 
-magus recognizes a delegation by the FIELD it carries, never by a tool name it
+magus recognizes a lease by the FIELD it carries, never by a tool name it
 would have to enumerate per host: a `tool_input` with a `prompt` is a spawn. It
 reads the prompt as the handed context, takes the callee's label from
 `subagent_type`, then `description`, then `tool_name`, and takes the parent's
@@ -112,13 +115,13 @@ The ordering is deliberate: a payload carrying `command` or `file_path` is judge
 as a command or a write exactly as before, and only one carrying neither is read
 as a spawn. Adding this wiring cannot change a verdict you already had.
 
-Nothing judges a delegation. A prompt is prose, not a command line, so the
+Nothing judges a lease. A prompt is prose, not a command line, so the
 verdict is always a pass and a prompt that mentions a denied command is recorded
 rather than blocked. Discard the output and exit 0.
 
 ### The event
 
-One `agent_spawn` event per delegation, in the same activity trail and the same
+One `agent_spawn` event per lease, in the same activity trail and the same
 listing as every other kind - no new endpoint, and the console's activity filters
 already select it.
 
@@ -128,25 +131,25 @@ already select it.
 | `host`, `session` | the PARENT: the host you named, and its own session id              |
 | `actor`           | `agent`                                                             |
 | `action`          | the child's label, or `agent.spawn` when the payload named none     |
-| `unit`            | the work-ledger unit, when the context declared one (see below)     |
+| `lease`           | the ledger lease, when the context declared one (see below)         |
 | `request_ref`     | the handed context, fetched with `GetPayload`                       |
 | `request_bytes`   | how much context was handed over                                    |
 | `outcome`         | `ok` means the handoff was OBSERVED, never that the child succeeded |
 
-The context is a blob, not a field. A delegation prompt runs to kilobytes and can
+The context is a blob, not a field. A lease prompt runs to kilobytes and can
 carry anything the orchestrator pasted into it, so the event line holds a
 reference and the body is fetched deliberately, one row at a time. It is redacted
 through the same resolver as every other trail write, but it is still durable
 prose on disk: treat the activity trail as readable by anyone who can read the
 workspace cache.
 
-### Correlating a spawn to a unit
+### Correlating a spawn to a lease
 
-Correlation is COOPERATIVE. No host event names a magus unit and magus will not
+Correlation is COOPERATIVE. No host event names a magus lease and magus will not
 guess one from prose, so an orchestrator that wants the join writes ONE marker:
 
 ```text
-unit: <id>
+lease: <id>
 ```
 
 It must be the FIRST non-blank line of the handed context, and its trimmed text
@@ -155,13 +158,13 @@ separators `-` `_` `.` `/` `:`, at most 128 characters, with nothing after it on
 the line. Leading blank lines are skipped; the head of the context is capped at
 4096 bytes, so a marker cannot hide behind a pathological first line.
 
-Leading the prompt is the contract, not a convention. A delegation prompt
+Leading the prompt is the contract, not a convention. A lease prompt
 routinely quotes a ledger listing, a file, or another agent's transcript, and a
-`unit:` line lifted from any of them would stamp the event with a unit this
+`lease:` line lifted from any of them would stamp the event with a lease this
 handoff has nothing to do with. Position is what separates a marker you wrote
 from one you pasted.
 
-Anything else leaves `unit` empty: no marker, an id with prose after it, an id
+Anything else leaves `lease` empty: no marker, an id with prose after it, an id
 carrying other punctuation, a marker below the first line. That is a missing
 join, not an error, and it is the designed outcome for an orchestrator that
 never opted in.

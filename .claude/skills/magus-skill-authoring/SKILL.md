@@ -1,6 +1,6 @@
 ---
 name: magus-skill-authoring
-description: The working method for building and maintaining magus's agent surface in THIS repo - the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under cmd/magus/skills/, the MCP registry, agent install, or when evaluating what agents can and cannot learn from magus. This skill is hand-authored and committed; it is NOT part of the installed set and never ships in the binary.
+description: The working method for building and maintaining magus's agent surface in THIS repo - the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, agent install, or when evaluating what agents can and cannot learn from magus. This skill is hand-authored and committed; it is NOT part of the installed set and never ships in the binary.
 ---
 
 # Authoring the agent surface
@@ -13,7 +13,7 @@ either.
 ## 1. Empiricism before documentation
 
 Never teach behavior you have not executed against a freshly built binary in
-this session. Build HEAD (`magus run build .`), start the
+this session. Build HEAD (`magus run go-build .`), start the
 daemon, call the actual tool (over MCP HTTP as well as the CLI), and paste the
 observed output into your analysis before writing a word of skill text.
 
@@ -35,9 +35,10 @@ the gap where it will be found (the plans doc, a task, magus_memory).
 ## 3. One source of truth, drift-gated
 
 - The installed skills are generated: embedded in the binary, stamped with
-  agentSkillVersion + knowledge schema version, verified by `magus graph
-  verify`. Never hand-edit an installed copy; edit cmd/magus/skills/ and
-  re-run `magus agent install <dest-dir> --force` (here: .claude/skills).
+  agentSkillVersion + knowledge schema version, graded by `magus doctor`'s
+  agent-skills check. Never hand-edit an installed copy; edit
+  internal/agent/skills/ and re-run `magus agent install <dest-dir> --force`
+  (here: .claude/skills).
 - Every destination receives identical bytes (a test asserts it). magus is
   agent-host agnostic: no host name appears in code. Host-specific glue (hook
   event shapes, config dialects) is documentation over the neutral surfaces -
@@ -183,12 +184,53 @@ over prose. Defer to `-h` and live tools for anything versionable. Plain
 ASCII, no emojis (tests enforce it). Spell every rule out; a rule the reader
 has to infer will be inferred differently by every model that reads it.
 
+## 5b. Phrase verification as proof, not as care
+
+An instruction phrased as care is satisfiable by prose: an agent asserts it was
+careful and the sentence is met. The same instruction phrased as a proof
+obligation can only be met by evidence, because it names the artifact that
+settles it. Whenever the evidence is cheap to produce, write the obligation.
+
+Worked example, from magus-vcs-hygiene:
+
+```markdown
+WRONG: Distinguish real drift from environmental noise before you act.
+CORRECT: Prove drift by regenerating a SECOND time, never by reading the diff
+and judging it.
+```
+
+Both point at the same procedure, but only the second one fails visibly when
+nobody runs it: there is either a second regeneration in the transcript or there
+is not. Apply it to gates ("show a gate you added FAILING before you trust its
+green"), to collision claims ("the check REPORTS the write sets disjoint" rather
+than "the leases are genuinely independent"), and to reported findings ("carries
+the command that reproduces it").
+
+The limit is cost, and it is a real limit: a judgment rule with no cheap proof
+keeps its judgment framing. `never a whole-tree git op to verify a build` has
+nothing to run, and rewriting it into a fake obligation would trade a rule the
+reader can generalize for a ritual.
+
 ## 6. Record the why, then verify the whole
 
 - Decisions with a why go to magus_memory (file=decisions) so the next
   session - possibly a lesser model - inherits them instead of re-deriving.
   Read status and decisions before re-litigating anything.
-- After editing skills: `go test ./cmd/magus/` (frontmatter, ASCII,
-  byte-identity, install/verify testscripts), reinstall the dogfooded copy,
-  confirm `magus doctor` says up to date, and run `magus affected ci`
-  before calling the work done.
+- After editing skills, in this order:
+  1. `magus run go-build .` - the embedded bodies are go:embed'd, so nothing
+     below reads your edit until the binary carries it.
+  2. `magus run go::go-test . --silent -- -run 'TestAgent|TestSkill' ./cmd/magus/`
+     (frontmatter, ASCII, byte-identity, install/verify testscripts). The raw
+     `go test ./cmd/magus/` this line used to carry is guard-denied; magus flags
+     go BEFORE the `--`, and everything after it forwards to the test binary.
+  3. `./magus agent install .claude/skills --force` - reinstall the dogfooded
+     copies, which are stamped and will otherwise read as drift.
+  4. Refresh the AGENTS.md managed block: `./magus agent sample` prints the
+     current block (so does `agent install`), and you replace everything
+     between the `magus:skills:begin` and `magus:skills:end` markers with it,
+     leaving the rest of the file alone. magus never writes AGENTS.md, so
+     nothing does this for you - `magus doctor`'s agent-skills advice is what
+     names the stale block.
+  5. `./magus doctor` says up to date. `magus doctor --fix` runs the remedy
+     each finding names, where one exists.
+  6. `magus affected ci --no-default-charms` before calling the work done.

@@ -6,12 +6,13 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
-// ledgerTool (magus_ledger) records the delegation ledger an orchestrating agent
-// declares: one row per delegation, in the vocabulary the magus-delegate-multi-agent
+// ledgerTool (magus_ledger) records the lease ledger an orchestrating agent
+// declares: one row per lease, in the vocabulary the magus-multi-agent
 // skill defines. It is one write door onto internal/ledger - magus\ledger's put, register
 // and clear (internal/interp/bindings/ledger_ns.go) are the other - and the console's
 // /api/v1/ledger endpoint is the read door onto the same file.
@@ -19,24 +20,24 @@ import (
 // It records and refuses nothing. This tool does not check that a worker stayed inside its
 // owned paths and does not block a write outside them; the AGENT GUARD is what reads these
 // rows to grade a write, and it is elsewhere. The one verdict here - register's, on whether
-// a worker's reported base is the checkpoint its delegation was handed - is returned and stored
+// a worker's reported base is the checkpoint its lease was handed - is returned and stored
 // as a fact, and the registration succeeds whatever it says, because a ledger that started
-// refusing is a ledger agents route around. See types.Delegation.
+// refusing is a ledger agents route around. See types.Lease.
 type ledgerTool struct{ store *ledger.Store }
 
-func (t *ledgerTool) Name() string { return ToolLedger.String() }
+func (t *ledgerTool) Name() string { return toolLedger.String() }
 
 func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	switch op := paramString(req.Params, "op", "list"); op {
 	case "list":
-		delegations, err := t.store.List()
+		leases, err := t.store.List()
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
 		// The report, not the bare rows: the overlaps ride along, derived on this read
 		// by the same constructor the console's route uses, so the two doors cannot
-		// disagree about whether two delegations claim the same path.
-		return spells.InvokeResponse{Data: types.NewDelegationReport(delegations)}, nil
+		// disagree about whether two leases claim the same path.
+		return spells.InvokeResponse{Data: types.NewLeaseReport(leases)}, nil
 
 	case "put":
 		merge, err := ledger.Merge(req.Params)
@@ -62,6 +63,13 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 			paramString(req.Params, "reported_base", ""))
 		if err != nil {
 			return spells.InvokeResponse{}, err
+		}
+		// The verdict is a fact this tool records and never acts on, and counting it is the
+		// same read one step further out: how often a fleet's workers land on the base they
+		// were handed. types.LeaseBaseVerdict is a closed set of four, so it is safe as
+		// an attribute; the lease id beside it is not, and stays off.
+		if p := observability.FromContext(ctx); p != nil && stored.BaseVerdict != "" {
+			p.RecordLeaseRegistration(ctx, string(stored.BaseVerdict))
 		}
 		return spells.InvokeResponse{Text: ledger.RegistrationAdvice(stored), Data: stored}, nil
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -104,6 +105,37 @@ func TestIsUsageOnlyInvocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := isUsageOnlyInvocation(tc.subArgs); got != tc.want {
 				t.Fatalf("isUsageOnlyInvocation(%v) = %v, want %v", tc.subArgs, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPeekSubRecognizesVersion pins `magus --version`: peekSub used to treat
+// --version like any other dash-prefixed token (skip it, keep scanning for a
+// subcommand), so `magus --version` alone found no subcommand, fell through to
+// the main flag parse, and died on an unregistered flag ("flag parse failed")
+// instead of printing the version - `magus version` worked, `magus --version`
+// did not. -v is deliberately excluded: it is the verbosity flag (-v, -vv,
+// -vvv), not a version request, so it must keep being skipped as an ordinary
+// boolean flag here.
+func TestPeekSubRecognizesVersion(t *testing.T) {
+	cases := []struct {
+		name        string
+		args        []string
+		wantSub     string
+		wantSubArgs []string
+	}{
+		{"--version alone", []string{"--version"}, "version", nil},
+		{"-version alone", []string{"-version"}, "version", nil},
+		{"version the real subcommand still works", []string{"version"}, "version", nil},
+		{"-v is verbosity, not version", []string{"-v"}, "", nil},
+		{"--version after a real subcommand is that command's own flag", []string{"run", "build", "--version"}, "run", []string{"build", "--version"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sub, subArgs := peekSub(tc.args)
+			if sub != tc.wantSub || !slices.Equal(subArgs, tc.wantSubArgs) {
+				t.Fatalf("peekSub(%v) = (%q, %v), want (%q, %v)", tc.args, sub, subArgs, tc.wantSub, tc.wantSubArgs)
 			}
 		})
 	}

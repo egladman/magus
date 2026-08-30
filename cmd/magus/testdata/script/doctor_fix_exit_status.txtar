@@ -1,0 +1,25 @@
+# `magus doctor --fix` exits on what is true AFTER the remedies ran.
+#
+# It used to return nil unconditionally, so a finding no remedy can repair - here a
+# workspace with no ci target - reported success. Anything gating on `doctor --fix`
+# (a bootstrap script, a CI step) then walked straight past a broken workspace.
+#
+# The pre-fix count is still not the one to gate on, which is why this re-runs the
+# checks rather than reusing the summary the report above printed.
+env MAGUS_VCS_ENABLED=false
+
+# No remedy exists for the missing ci target, so --fix changes nothing and says so.
+! exec magus doctor --fix
+stdout 'nothing to fix'
+stderr 'still failing after --fix'
+
+# A DRY run is the exception: it applied nothing, so it has nothing new to judge and
+# stays a report. doctor_agent_skills.txtar leans on that against a fixture that is
+# deliberately not otherwise healthy.
+exec magus doctor --fix --dry-run
+
+-- magus.yaml --
+{}
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "acme-root"});
