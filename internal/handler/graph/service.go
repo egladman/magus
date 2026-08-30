@@ -73,7 +73,7 @@ func (s *Service) QueryNodes(
 ) (*connect.Response[graphv1.QueryNodesResponse], error) {
 	query := req.Msg.GetQuery()
 	if query == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(`graph: query is required (e.g. "kind:target project:api")`))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(`graph: query is required (e.g. "kind=target project=api")`))
 	}
 	g, seeded, err := s.graphFor(ctx, query)
 	if err != nil {

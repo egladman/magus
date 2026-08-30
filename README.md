@@ -187,7 +187,7 @@ The graph is that same knowledge handed back: a byproduct of being the source
 of truth, never an inference about it. No LLM pass, no fuzzy linking; every
 edge traces to a declaration you can open.
 
-`magus query "kind:target lint"` finds
+`magus query "kind=target lint"` finds
 nodes, `magus explain <node>` shows a node's edges and what reaches it, and
 `magus refs <symbol>` lists where a symbol is defined and used from a SCIP
 index.[^scip] The same graph answers "is this file generated," "what does my diff
@@ -292,7 +292,7 @@ Point magus at that repo and each command returns an answer and stops:
 magus ls                                  # which projects exist
 magus run test                            # run a target, cache the result
 magus affected ci                         # the pipeline, over only what your diff reaches
-magus query "kind:spell"                  # what the graph knows
+magus query "kind=spell"                  # what the graph knows
 magus describe file docs/gen/index.html   # is this file generated, and by what
 ```
 

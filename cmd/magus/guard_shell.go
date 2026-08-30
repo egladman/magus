@@ -517,12 +517,12 @@ const (
 
 	searchGuardReason = "this workspace has a knowledge graph, and a text match misses the generated, indirect, and cross-language references it knows about. Pick by what you are asking:\n" +
 		"  CODE SYMBOL (defined / used where):  magus refs <symbol>\n" +
-		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind:<k> project:<p> relation:<r> filters and -negation\n" +
+		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind=<k> project=<p> relation=<r> matchers, kind!=<k> to exclude, id=~<re> for a regex\n" +
 		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
 		"  HOW two things connect:  magus path <a> <b>\n" +
-		"`magus query <symbol>` returns 0 for a code symbol, which is refs's job. If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `magus graph build` and ask again rather than falling back to a text match. Searching raw text in CODE (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Markdown PROSE does now: `magus query kind:docsection \"<terms>\"` returns the section that covers it. Load the magus-query skill for the full grammar."
+		"`magus query <symbol>` returns 0 for a code symbol, which is refs's job. If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `magus graph build` and ask again rather than falling back to a text match. Searching raw text in CODE (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Markdown PROSE does now: `magus query kind=docsection \"<terms>\"` returns the section that covers it. Load the magus-query skill for the full grammar."
 
-	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `magus query kind:docsection \"<terms>\"` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project:<p>` to scope it and `magus explain <section>` to see what it links to.\n" +
+	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `magus query kind=docsection \"<terms>\"` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project=<p>` to scope it and `magus explain <section>` to see what it links to.\n" +
 		"Reading one specific file you already know the path of? Read it. This is for when you are LOOKING for where something is explained: the section query lands you on the passage instead of the page. Load the magus-query skill for the grammar."
 
 	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is

@@ -78,7 +78,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 		// Every doc carries a role - what the markdown IS (readme/agent/changelog/...),
 		// from a universal filename convention - plus its frontmatter title/tags where
 		// present, so a query result reads as the doc's human name and an agent can ask
-		// `kind:doc role:agent` in any repo. A page with no frontmatter (a README, a stub)
+		// `kind=doc role=agent` in any repo. A page with no frontmatter (a README, a stub)
 		// simply carries no title/tags.
 		docAttrs := map[string]string{attrRole: roleFromRel(rel)}
 		if sec := sectionFromRel(rel); sec != "" {

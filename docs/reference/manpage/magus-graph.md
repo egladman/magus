@@ -184,7 +184,7 @@ magus graph export -o graphml > graph.graphml
 *A query's neighborhood as Mermaid*
 
 ```sh
-magus graph export --select 'kind:spell go' -o mermaid
+magus graph export --select 'kind=spell go' -o mermaid
 ```
 
 *Where structural risk concentrates*

@@ -87,9 +87,10 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Terms are free text plus field filters: kind:spell, project:pkg/foo,")
-			fmt.Fprintln(os.Stderr, "relation:uses, id:build, and negation (-kind:op). Example:")
-			fmt.Fprintln(os.Stderr, "  magus query kind:spell go")
+			fmt.Fprintln(os.Stderr, "Terms are free text plus field matchers: kind=spell, project=pkg/foo,")
+			fmt.Fprintln(os.Stderr, "relation=uses, id=build. Negate with != (kind!=op) and match a regex")
+			fmt.Fprintln(os.Stderr, "with =~ (id=~build$). The : grammar (kind:spell, -kind:op) still works.")
+			fmt.Fprintln(os.Stderr, "  magus query kind=spell go")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target run's captured output by its\n", clihint.QueryOutput.Leaf())
 			fmt.Fprintln(os.Stderr, "output ref (out1a2b3c), shown when the target ran:")
@@ -193,7 +194,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 
 	input := strings.Join(pos, " ")
 	for _, k := range splitCSV(qf.Kind) {
-		input += " kind:" + k
+		input += " kind=" + k
 	}
 
 	seedsSymbols := knowledge.SeedsSymbols(input)

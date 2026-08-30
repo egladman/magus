@@ -10,9 +10,10 @@ knowledge graph and returns the ranked matches plus the induced subgraph around
 them, collected up to a node budget. Its siblings explain and path read the same
 graph: explain shows one node's context, path connects two nodes.
 .PP
-Terms are free text plus field filters, and they compose: kind:spell, project:pkg/foo,
-relation:uses, id:build, and negation with a leading dash (\-kind:op). A bare word
-matches names and documentation.
+Terms are free text plus field matchers, and they compose: kind=spell, project=pkg/foo,
+relation=uses, id=build, exclusion with kind!=op, and a regex with id=~build$. A bare word
+matches names and documentation. The : grammar (kind:spell, \-kind:op) still parses as a
+compat alias.
 .PP
 query is also the retrieval verb for the two ids magus prints, each an EXPLICIT
 subcommand rather than a shape\-routed positional, so a search term can never collide
@@ -87,19 +88,19 @@ Read one run's journal by invocation id (\-\-secrets for the credential reads)
 \fIFind a spell by name\fR
 .PP
 .EX
-magus query kind:spell go
+magus query kind=spell go
 .EE
 .PP
 \fIWhat uses this target\fR
 .PP
 .EX
-magus query relation:uses id:build
+magus query relation=uses id=build
 .EE
 .PP
 \fIEverything but ops\fR
 .PP
 .EX
-magus query docker -kind:op
+magus query docker kind!=op
 .EE
 .PP
 \fIPrint a run's captured output\fR

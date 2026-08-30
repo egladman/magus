@@ -152,9 +152,9 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 	for _, want := range []string{
 		"## Query first",
 		"magus explain <node>",
-		"magus query kind:spell",
+		"magus query kind=spell",
 		"`go`, `buf`", // anchors as inline code
-		"magus query project:pkg/foo",
+		"magus query project=pkg/foo",
 	} {
 		assert.Contains(t, got, want, "routing section missing %q", want)
 	}
@@ -330,7 +330,7 @@ func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
 	var plain bytes.Buffer
 	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, routing, "", nil))
 	plainStr := plain.String()
-	assert.Contains(t, plainStr, "`magus query kind:spell`", "query cell should be inline code without explorerURL")
+	assert.Contains(t, plainStr, "`magus query kind=spell`", "query cell should be inline code without explorerURL")
 	assert.NotContains(t, plainStr, "#q=", "no #q= link without explorerURL")
 
 	// With explorerURL: query cells are links wrapping inline code.
@@ -341,25 +341,26 @@ func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
 	var withLink bytes.Buffer
 	require.NoError(t, WriteTargetGraphMarkdown(&withLink, out, routing, explorerURL, nil))
 	linkedStr := withLink.String()
-	// url.PathEscape encodes spaces as %20 and slashes as %2F but leaves colons
-	// unescaped (colons are valid in a URI path component). decodeURIComponent in
-	// the browser handles all three correctly, so the query round-trips cleanly.
-	assert.Contains(t, linkedStr, "#q=magus%20query%20kind:spell", "kind query cell should have #q= link with %20 spaces")
-	assert.Contains(t, linkedStr, "#q=magus%20query%20project:pkg%2Ffoo", "project query cell should have #q= link with %20 spaces")
+	// url.PathEscape encodes spaces as %20 and slashes as %2F but leaves the query
+	// operators (= and :) unescaped (both are valid in a URI path component).
+	// decodeURIComponent in the browser handles all three correctly, so the query
+	// round-trips cleanly.
+	assert.Contains(t, linkedStr, "#q=magus%20query%20kind=spell", "kind query cell should have #q= link with %20 spaces")
+	assert.Contains(t, linkedStr, "#q=magus%20query%20project=pkg%2Ffoo", "project query cell should have #q= link with %20 spaces")
 	assert.NotContains(t, linkedStr, "#q=magus+query", "query link must not use + encoding (breaks decodeURIComponent in the browser)")
 	// The link text is still the inline-code form.
-	assert.Contains(t, linkedStr, "[`magus query kind:spell`]", "query link text should be inline code")
+	assert.Contains(t, linkedStr, "[`magus query kind=spell`]", "query link text should be inline code")
 }
 
 // TestQueryCellEncodingRoundTrip confirms that queryCell encodes spaces as %20
 // so that url.PathUnescape (equivalent to the browser's decodeURIComponent) recovers
 // the original query string exactly. The old url.QueryEscape encoded spaces as '+'
 // which decodeURIComponent would NOT decode back to a space, corrupting multi-word
-// queries like "magus query kind:spell" into "magus+query+kind:spell".
+// queries like "magus query kind=spell" into "magus+query+kind=spell".
 func TestQueryCellEncodingRoundTrip(t *testing.T) {
 	queries := []string{
-		"magus query kind:spell",
-		"magus query project:pkg/foo",
+		"magus query kind=spell",
+		"magus query project=pkg/foo",
 		"magus explain internal/cache",
 		"single",
 	}

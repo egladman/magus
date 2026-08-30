@@ -215,7 +215,7 @@ affected sets agree, not before.
 
 ```sh
 magus ls                                   # the Nx project set, as magus projects
-magus query kind:project                   # ... in the knowledge graph
+magus query kind=project                   # ... in the knowledge graph
 magus explain project:libs/foo             # its edges and blast radius
 magus affected --plan --base=main          # compare against nx show projects --affected
 magus_insight lens=hotspots                # churn x complexity, which Nx does not answer

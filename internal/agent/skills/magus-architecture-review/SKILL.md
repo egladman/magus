@@ -72,14 +72,14 @@ and nothing it exports would need to be exported once merged.
    verdict; `unknown` means an index is missing, not that nothing uses it.{{end}}
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain{{if .Full}} -
    use it to test whether a proposed boundary actually separates them{{end}}.
-4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
+4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
 
 ## Match the existing conventions
 
 Derive the pattern from the graph rather than imposing one: where similar code
-already lives (`magus query kind:<kind> <term>`), which modules import which
-(`relation:imports`), how existing projects segment (`magus graph deps`).{{if .Full}} A
+already lives (`magus query kind=<kind> <term>`), which modules import which
+(`relation=imports`), how existing projects segment (`magus graph deps`).{{if .Full}} A
 suggestion that follows the workspace's own conventions costs less than an
 imported ideal.{{end}} State the observed convention in the proposal, with the query
 that shows it.
@@ -94,7 +94,7 @@ stats for smells (see the magus-query skill for the query syntax):{{else}}Census
 magus graph stats                    # god nodes, orphans, doc coverage
 for k in project target spell op tool charm module method diagnostic doc file \
          function symbol import owner; do
-  printf "%-11s %s\n" "$k" "$(magus query "kind:$k" -o json | jq length)"
+  printf "%-11s %s\n" "$k" "$(magus query "kind=$k" -o json | jq length)"
 done                                  # population per abstraction
 magus explain "<node>"               # compare a kind's edges against a neighbor's
 ```

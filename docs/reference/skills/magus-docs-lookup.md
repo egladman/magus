@@ -30,9 +30,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `48` |
+| `agent-skill-version` | `49` |
 | `knowledge-schema-version` | `10` |
-| `skill-content` | `55a97e50d91e` |
+| `skill-content` | `0fb7b622ba6e` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -112,7 +112,7 @@ The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
 (never edit it - change the source and regenerate). MAGUS.md is a routing index
 generated for HUMAN readers, so do not answer from it: it is true only as of the
 last regeneration, and every fact in it has a live command. The knowledge graph
-carries every page as a `doc` node, so `magus query "kind:doc"` (see the
+carries every page as a `doc` node, so `magus query "kind=doc"` (see the
 magus-query skill) lists them from the graph.
 ```
 
@@ -187,7 +187,7 @@ Land via `llms.txt`, then sweep siblings via "In this section".
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
 (never edit it - change the source and regenerate). MAGUS.md is a routing index
 generated for HUMAN readers, so do not answer from it: true only as of its last
-regeneration. `magus query "kind:doc"` lists every
+regeneration. `magus query "kind=doc"` lists every
 page from the graph.
 ```
 

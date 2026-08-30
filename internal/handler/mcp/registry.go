@@ -115,7 +115,7 @@ var Registry = []ToolDescriptor{
 			{Name: "op", Type: "string", Description: "One of: list (default; records plus issues), get, put (create or replace by name), delete, verify. cursor is legacy read-only."},
 			{Name: "name", Type: "string", Description: "The record's kebab-slug identity. Required for get, put, delete."},
 			{Name: "type", Type: "string", Description: "put only: one of pointer, decision, plan."},
-			{Name: "refs", Type: "string", Description: "put only, REQUIRED: the payload, one ref per line as 'kind: target' (e.g. 'query: kind:op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc."},
+			{Name: "refs", Type: "string", Description: "put only, REQUIRED: the payload, one ref per line as 'kind: target' (e.g. 'query: kind=op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc."},
 			{Name: "body", Type: "string", Description: "put only: the one-line caption for a decision/plan (the why). Omit for a pointer - a pointer carries no prose."},
 			{Name: "status", Type: "string", Description: "put only, optional: the lifecycle field (e.g. accepted, superseded, active, done, stale)."},
 			{Name: "references", Type: "string", Description: "put only, optional: comma-separated names of other memory records this one links to."},
@@ -124,9 +124,9 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(toolQuery),
-		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind:symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (out1a2b3c), use magus_output.",
+		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind=symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (out1a2b3c), use magus_output.",
 		Params: []ParamDescriptor{
-			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field filters like kind:spell, project:pkg/foo, relation:uses, id:build, and negation -kind:op."},
+			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field matchers like kind=spell, project=pkg/foo, relation=uses, id=build, exclusion kind!=op, and a regex id=~build$."},
 			{Name: "budget", Type: "number", Description: "Max nodes in the returned neighborhood (default 50)."},
 			{Name: "limit", Type: "number", Description: "Page size: max matches to return. Omit or 0 for all matches (no paging)."},
 			{Name: "cursor", Type: "string", Description: "Opaque cursor from a prior response's next_cursor, to fetch the next page. Only valid for the same query and an unchanged graph."},

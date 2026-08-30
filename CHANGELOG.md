@@ -26,6 +26,13 @@ https://github.com/egladman/magus/compare/v0.3.0...main
 
 ### Changed
 
+- **`magus query` gains operators: `kind=spell` (match), `kind!=op` (exclude),
+  `id=~build$` (regex).** `=` reads as a match over a structured graph the way
+  kubectl selectors and PromQL matchers do, and `!=` carries negation without the
+  flag collision the dash spelling had. `kind=~"spell|op"` ORs alternatives, and
+  the filters read the same in every verb they appear in. The `:` grammar
+  (`kind:spell`, `-kind:op`) still parses as a compat alias, so existing
+  invocations keep working; new queries should use `=`/`!=`/`=~`.
 - The drift gate runs for **every** target that declares outputs, and no
   declaration turns it on. Declaring an output is already the claim that those
   bytes follow from the target's inputs, so magus checks the claim rather than

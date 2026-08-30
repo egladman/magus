@@ -192,11 +192,11 @@ const (
 	// attrRole classifies a doc node by what the markdown file IS, from a universal
 	// filename convention (readme, agent, changelog, contributing, license), or "doc"
 	// for anything else. It is workspace-agnostic - no magus-specific filenames - so
-	// `query "kind:doc role:agent"` finds the agent-instruction files in any repo.
+	// `query "kind=doc role=agent"` finds the agent-instruction files in any repo.
 	attrRole = "role"
 	// attrSection is a doc page's top-level section under docs/ (guides, concepts,
 	// reference, ...), derived from its path so a page is queryable by where it lives
-	// (`query "kind:doc section:guides"`) without hand-tagging every page. Absent for docs
+	// (`query "kind=doc section=guides"`) without hand-tagging every page. Absent for docs
 	// outside a docs/ tree and for top-level docs (docs/glossary.md) that name no section.
 	attrSection = "section"
 	// attrAnchor is a doc-section node's goldmark auto-heading-id: the fragment a link into

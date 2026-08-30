@@ -43,11 +43,11 @@ func TestTableAlignmentAndCells(t *testing.T) {
 	b.Table(
 		[]string{"Kind", "Count", "List them"},
 		[]Align{Left, Right},
-		[][]string{{"spell", "12", "`magus query kind:spell`"}},
+		[][]string{{"spell", "12", "`magus query kind=spell`"}},
 	)
 	want := "| Kind | Count | List them |\n" +
 		"|---|--:|---|\n" +
-		"| spell | 12 | `magus query kind:spell` |\n\n"
+		"| spell | 12 | `magus query kind=spell` |\n\n"
 	if got := string(b.Bytes()); got != want {
 		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
 	}

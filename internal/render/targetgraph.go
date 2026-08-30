@@ -224,7 +224,7 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	b.Paragraphf("This workspace has a knowledge graph (schema v%d). Query it instead "+
 		"of grepping:", r.SchemaVersion)
 	b.AlignedCodeBlock("sh", []md.CodeLine{
-		{Code: `magus query "<terms>"`, Note: "kind:spell, project:pkg/foo, relation:uses, free text, -negation"},
+		{Code: `magus query "<terms>"`, Note: "kind=spell, project=pkg/foo, relation=uses, free text, kind!=op"},
 		{Code: "magus explain <node>", Note: "one node: its edges, provenance, blast radius"},
 		{Code: "magus path <a> <b>", Note: "how two nodes connect"},
 		{Code: "magus graph stats", Note: "god nodes, orphans, doc coverage (MCP: magus_stats)"},
@@ -241,7 +241,7 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	kindRows := make([][]string, 0, len(r.Kinds))
 	for _, k := range r.Kinds {
 		kindRows = append(kindRows, []string{
-			k.Kind, magnitude(k.Count), queryCell("magus query kind:"+k.Kind, explorerURL), md.Codes(k.Anchors),
+			k.Kind, magnitude(k.Count), queryCell("magus query kind="+k.Kind, explorerURL), md.Codes(k.Anchors),
 		})
 	}
 	b.Table([]string{"Kind", "Size", "List them", "Anchors (most connected)"},
@@ -250,7 +250,7 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	projectRows := make([][]string, 0, len(r.Projects))
 	for _, p := range r.Projects {
 		projectRows = append(projectRows, []string{
-			p.Path, strconv.Itoa(p.TargetCount), queryCell("magus query project:"+p.Path, explorerURL), md.Codes(p.KeyTargets),
+			p.Path, strconv.Itoa(p.TargetCount), queryCell("magus query project="+p.Path, explorerURL), md.Codes(p.KeyTargets),
 		})
 	}
 	b.Table([]string{"Project", "Targets", "Scope a query", "Key targets"},

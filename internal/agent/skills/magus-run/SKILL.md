@@ -160,7 +160,7 @@ composition. A pipe whose right-hand side is a text filter is a missing `-o`.
 {{if .Full}}
 
 WRONG: `magus run test | head -50` (drops the failing tail that matters).
-WRONG: `magus query "kind:target" -o name | grep -c .` (use the JSON count).
+WRONG: `magus query "kind=target" -o name | grep -c .` (use the JSON count).
 CORRECT: `magus run test -s`, then fetch the printed ref for full detail.
 
 The silent run plus ref-fetch IS the low-token failure loop: never re-run a

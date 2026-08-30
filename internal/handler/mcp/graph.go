@@ -254,7 +254,7 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 		// as a fact about the workspace; the channel is text because that is this tool's
 		// channel for everything.
 		// explain runs against the symbol-free warm graph, so a code symbol was never in
-		// scope - but only say so when the query could have named one. `kind:author` with
+		// scope - but only say so when the query could have named one. `kind=author` with
 		// a typo has nothing to do with the symbol layer, and an absent verdict there is a
 		// fact worth asserting, which is why this is not hardcoded.
 		var reason types.KnowledgeUnknownReason
