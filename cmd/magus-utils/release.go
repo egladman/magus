@@ -9,12 +9,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
+	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
 
@@ -99,7 +100,8 @@ type IndexRelease struct {
 // buildIndex projects manifests (newest-first, as loadManifests returns them) onto the
 // served schema. keyID and expiresAt are passed in rather than read from the ring and
 // the clock here, so the transform stays a pure function of its inputs: the same
-// arguments must give byte-identical output, or nothing downstream can be compared.
+// arguments give byte-identical output, or nothing downstream can be compared. The
+// order it preserves is loadManifests's, which is a total order over the manifest set.
 func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []string) ReleaseIndex {
 	idx := ReleaseIndex{
 		SchemaVersion: 1,
@@ -122,14 +124,12 @@ func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []
 	return idx
 }
 
-// loadManifests reads all releases/*.yaml files from dir, sorted newest-first
-// by semver (descending by version string, which works for vX.Y.Z lexicographic
-// order within each numeric segment). Returns a fatal error on parse failure.
+// loadManifests reads all releases/*.yaml files from dir, sorted newest-first by
+// semver. A parse failure, an unparsable version, and an empty result are all fatal:
+// these bytes end up under a signature, and every caller publishes something a client
+// reads, so "no releases" is a path mistake rather than a valid hollow answer.
 func loadManifests(dir string) ([]ReleaseManifest, error) {
 	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", dir, err)
 	}
@@ -148,48 +148,28 @@ func loadManifests(dir string) ([]ReleaseManifest, error) {
 		if err := yaml.Unmarshal(data, &m); err != nil {
 			return nil, fmt.Errorf("parse %s: %w", path, err)
 		}
+		if !semver.IsValid(m.Version) {
+			return nil, fmt.Errorf("%s: version %q is not semver", path, m.Version)
+		}
 		manifests = append(manifests, m)
 	}
+	if len(manifests) == 0 {
+		return nil, fmt.Errorf("no release manifests in %s (expected v<semver>.yaml files)", dir)
+	}
 
-	// Sort newest-first. Version strings are "v<major>.<minor>.<patch>"; sort by
-	// splitting numerically via semver ordering (fall back to lexicographic for unusual tags).
-	sort.Slice(manifests, func(i, j int) bool {
-		return compareSemver(manifests[i].Version, manifests[j].Version) > 0
+	// Newest first, stable, with the version string as tiebreak: two versions
+	// semver.Compare calls equal ("v1.0" and "v1.0.0") would otherwise order by
+	// whichever one the sort happened to move, and these bytes are signed.
+	//
+	// semver.Compare rather than a hand-rolled parse: the one this replaced stopped at
+	// the first non-digit, so v0.4.0-rc.1 and v0.4.0 compared equal.
+	slices.SortStableFunc(manifests, func(a, b ReleaseManifest) int {
+		if c := semver.Compare(b.Version, a.Version); c != 0 {
+			return c
+		}
+		return strings.Compare(b.Version, a.Version)
 	})
 	return manifests, nil
-}
-
-// compareSemver compares two "vX.Y.Z" strings numerically.
-// Returns >0 if a > b, <0 if a < b, 0 if equal.
-func compareSemver(a, b string) int {
-	pa := parseSemver(a)
-	pb := parseSemver(b)
-	for i := 0; i < 3; i++ {
-		if pa[i] != pb[i] {
-			return pa[i] - pb[i]
-		}
-	}
-	return 0
-}
-
-func parseSemver(v string) [3]int {
-	v = strings.TrimPrefix(v, "v")
-	parts := strings.SplitN(v, ".", 3)
-	var out [3]int
-	for i, p := range parts {
-		if i >= 3 {
-			break
-		}
-		n := 0
-		for _, c := range p {
-			if c < '0' || c > '9' {
-				break
-			}
-			n = n*10 + int(c-'0')
-		}
-		out[i] = n //nolint:gosec // G602: parts is SplitN(v, ".", 3) and i is guarded < 3, so out[i] on [3]int is in range
-	}
-	return out
 }
 
 // runCut moves the Unreleased section of CHANGELOG.md into a
@@ -292,17 +272,27 @@ func runCut(args []string) error {
 	if _, err := os.Stat(outPath); err == nil {
 		return fmt.Errorf("%s already exists; release manifests are immutable once committed", outPath)
 	}
-	if err := os.WriteFile(outPath, out, 0o644); err != nil {
+
+	// The manifest is staged and only renamed into place once the changelog has been
+	// cleared, so no failure leaves a state a rerun cannot recover from. Writing it
+	// first wedged every retry on "manifests are immutable" the moment clearUnreleased
+	// failed; clearing first would instead destroy the notes the manifest never got.
+	tmpPath := outPath + ".tmp"
+	if err := os.WriteFile(tmpPath, out, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", tmpPath, err)
+	}
+
+	// The manifest OWNS this text once it lands, and CHANGELOG.md is generated back out
+	// of the manifests, so leaving [Unreleased] populated would print the same entries
+	// twice: once under Unreleased and once under the version that just shipped them.
+	if err := clearUnreleased(changelogPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("clear unreleased: %w", err)
+	}
+	if err := os.Rename(tmpPath, outPath); err != nil {
 		return fmt.Errorf("write %s: %w", outPath, err)
 	}
 	fmt.Printf("wrote %s\n", outPath)
-
-	// The manifest now OWNS this text, and CHANGELOG.md is generated back out of the
-	// manifests, so leaving [Unreleased] populated would print the same entries twice:
-	// once under Unreleased and once under the version that just shipped them.
-	if err := clearUnreleased(changelogPath); err != nil {
-		return fmt.Errorf("clear unreleased: %w", err)
-	}
 	return nil
 }
 
@@ -428,9 +418,6 @@ func runReleaseIndex(args []string) error {
 	manifests, err := loadManifests(releasesDir)
 	if err != nil {
 		return err
-	}
-	if len(manifests) == 0 {
-		return fmt.Errorf("no release manifests in %s; an empty index would strand every client", releasesDir)
 	}
 	// The index names the key that will sign it, and lists the keys no client may
 	// accept. Both come from the ring this binary embeds, so they cannot disagree with
