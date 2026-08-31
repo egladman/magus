@@ -20,6 +20,7 @@ type runConf struct {
 func TestSuggestGolden(t *testing.T) {
 	scoped := NewGraph(WithProjects([]string{"internal/cache", "docs"}))
 	rootScoped := NewGraph(WithProjects([]string{".", "docs"}))
+	nested := NewGraph(WithProjects([]string{"docs", "docs/guides/integrations/agents", "libs/gopherbuzz"}))
 	cases := []struct {
 		name  string
 		graph *Graph
@@ -171,7 +172,30 @@ func TestSuggestGolden(t *testing.T) {
 			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "internal/cache/"}},
 			want: []runConf{
 				{"magus refs Foo", Medium},
-				{"magus query Foo project=internal/cache", Low},
+				{`magus query Foo 'project=~^internal/cache(/|$)'`, Low},
+			}},
+		// The anchored regex is what keeps the suggestion from being narrower than
+		// the grep: project=docs would exclude the nested project's nodes outright.
+		{name: "scoping a project with a nested one still covers the nest",
+			graph: nested,
+			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
+			want: []runConf{
+				{"magus refs Foo", Medium},
+				{`magus query Foo 'project=~^docs(/|$)'`, Low},
+			}},
+		{name: "operands in two projects abstain from scoping",
+			graph: nested,
+			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs", "libs/gopherbuzz"}},
+			want: []runConf{
+				{"magus refs Foo", Medium},
+				{"magus query Foo", Low},
+			}},
+		{name: "two operands in one project still scope",
+			graph: nested,
+			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/site", "docs/tour"}},
+			want: []runConf{
+				{"magus refs Foo", Medium},
+				{`magus query Foo 'project=~^docs(/|$)'`, Low},
 			}},
 		{name: "root project never scopes: project=. says nothing",
 			graph: rootScoped,
@@ -185,7 +209,7 @@ func TestSuggestGolden(t *testing.T) {
 			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
 			want: []runConf{
 				{"magus refs Foo", Medium},
-				{"magus query Foo project=docs", Low},
+				{`magus query Foo 'project=~^docs(/|$)'`, Low},
 			}},
 		{name: "no WithProjects means no project= anywhere",
 			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "internal/cache/"}},

@@ -376,7 +376,9 @@ func (s *Store) shardExists(name string) bool {
 // ws.ListProjects at graph-build time, so one small ReadFile answers the
 // question in a hook where a workspace eval is not allowed.
 func ProjectPaths(cacheDir string) []string {
-	man := (&Store{dir: StoreDir(cacheDir)}).readManifestOrNil()
+	// Through the constructor, not a bare &Store: a hand-built one leaves log nil, so
+	// the first logging line added to readManifestOrNil would panic inside a hook.
+	man := NewStore(cacheDir, false, 0, nil, nil).readManifestOrNil()
 	if man == nil {
 		return nil
 	}

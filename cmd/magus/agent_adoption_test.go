@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,11 @@ func TestClassifyCommandLine(t *testing.T) {
 		{"sed -n '1,20p' foo.go", "read", ""},
 		{"magus run test .", "magus", ""},
 		{"ls -la", "other", ""},
+		// The report's columns are frozen, so these classes are credited to no
+		// category on purpose and land in "other".
+		{"find . -name '*.go'", "other", ""},
+		{"awk '{print $1}' foo.txt", "other", ""},
+		{"bat internal/foo.go", "other", ""},
 	} {
 		cat, sym := classifyCommandLine(c.line)
 		assert.Equal(t, c.cat, cat, "category of %q", c.line)
@@ -71,6 +77,19 @@ func TestTopSymbolGrepRunsRouteByShape(t *testing.T) {
 		"MGS2011":   "magus query MGS2011",
 		"HandleFoo": "magus refs HandleFoo",
 	}, runs)
+}
+
+// TestAdoptionTableWithoutARun pins the renderer against a pattern the
+// translator abstained on: the row keeps its count and loses the arrow, rather
+// than pointing at nothing.
+func TestAdoptionTableWithoutARun(t *testing.T) {
+	var b strings.Builder
+	writeAdoptionTable(&b, adoptionReport{
+		Total:          1,
+		TopSymbolGreps: []patternCount{{Pattern: "HandleFoo", Count: 2}},
+	})
+	assert.Contains(t, b.String(), "HandleFoo")
+	assert.NotContains(t, b.String(), "->")
 }
 
 func TestRatioString(t *testing.T) {

@@ -84,14 +84,14 @@ func analyzeAdoption(lines []string) adoptionReport {
 
 // adoptionRun renders the graph command for one top pattern through the same
 // translator the live guard suggests with: an MGS code or a mgs_* op routes to
-// `magus query`, which refs (compiled-language symbols only) would miss. The
-// refs fallback covers a translator abstention, which looksLikeSymbol should
-// have ruled out already.
+// `magus query`, which refs (compiled-language symbols only) would miss. Empty
+// when the translator abstains, which every pattern reaching here has already
+// ruled out by passing looksLikeSymbol.
 func adoptionRun(pattern string) string {
 	if s := adoptionHints.Suggest(hint.Invocation{Name: "rg", Args: []string{pattern}}); len(s) > 0 {
 		return s[0].Run
 	}
-	return "magus refs " + pattern
+	return ""
 }
 
 // adoptionHints classifies commands through the same translator the live
@@ -149,7 +149,16 @@ func classifyCommandLine(line string) (category, symbol string) {
 				sawSearch = true
 			case adoptionReadTools[c.Name]:
 				sawRead = true
+			default:
+				// A reader outside the frozen file_reads set (bat) is credited to no
+				// category: the report's column names are fixed and cannot grow one.
 			}
+		case hint.ClassFileFind, hint.ClassTransform, hint.ClassNone:
+			// find/fd, awk/sed -i, and unrecognized tools have no column of their own,
+			// so they fall to "other" by setting no flag.
+		default:
+			// A Class the report has never seen joins "other" the same way. Named so a
+			// new one is a visible decision here rather than a silent reclassification.
 		}
 	}
 	switch {
@@ -259,6 +268,12 @@ func writeAdoptionTable(w io.Writer, r adoptionReport) {
 	if len(r.TopSymbolGreps) > 0 {
 		fmt.Fprintf(w, "\ntop repo-wide patterns that look like symbols, with the graph query to try:\n")
 		for _, p := range r.TopSymbolGreps {
+			// A pattern the translator abstained on still ranks; it just has no
+			// command to point at, so the arrow is dropped rather than left dangling.
+			if p.Run == "" {
+				fmt.Fprintf(w, "  %6s  %s\n", humanCount(p.Count), p.Pattern)
+				continue
+			}
 			fmt.Fprintf(w, "  %6s  %s  ->  %s\n", humanCount(p.Count), p.Pattern, p.Run)
 		}
 	}

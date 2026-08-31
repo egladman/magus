@@ -24,6 +24,7 @@ package hint
 import (
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -709,23 +710,37 @@ func globToRe(glob string, basenameOnly, foldCase bool) (string, bool) {
 // renders the query filter. File operands are skipped: a file names one
 // document, not a project's worth of them. Longest prefix wins. Applied to
 // query suggestions only - refs takes no filters.
+//
+// The filter is an anchored regex rather than project=<path>, because query
+// matches a project EXACTLY and a node resolves to the LONGEST project owning
+// it: with docs and docs/guides/integrations/agents both configured,
+// project=docs drops every node under the nested project that the grep it
+// replaces WOULD have matched, so the suggestion would be strictly narrower
+// than the search it claims to answer.
+//
+// Operands landing in different projects abstain: one filter cannot carry both,
+// and emitting the longest silently drops the rest of the search.
 func (g *Graph) scope(paths []string) string {
-	best := ""
+	var matched []string
 	for _, p := range paths {
 		if p == "" || fileLooking(p) {
 			continue
 		}
 		c := path.Clean(p)
+		best := ""
 		for _, proj := range g.projects {
 			if (c == proj || strings.HasPrefix(c, proj+"/")) && len(proj) > len(best) {
 				best = proj
 			}
 		}
+		if best != "" && !slices.Contains(matched, best) {
+			matched = append(matched, best)
+		}
 	}
-	if best == "" {
+	if len(matched) != 1 {
 		return ""
 	}
-	return " project=" + best
+	return " " + matcherArg("project=~^"+regexp.QuoteMeta(matched[0])+"(/|$)")
 }
 
 // fileLooking reports an operand that names a single file rather than a

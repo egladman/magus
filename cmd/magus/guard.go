@@ -340,7 +340,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if hf.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, input, who, tool, record)
+	appendHookActivity(ctx, location, input, who, tool, record)
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
@@ -567,12 +567,8 @@ type hookActivityLocationKey struct{}
 // trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
 // the host may choose not to execute a denied command, and a pre-hook never learns the eventual
 // exit status. An audit failure must therefore be invisible to both the verdict and the command.
-func appendHookActivity(ctx context.Context, input guardInput, who hookAttribution, tool string, verdict guardVerdict) {
-	if input.Value == "" {
-		return
-	}
-	location := hookActivityTrail(ctx)
-	if location.base == "" {
+func appendHookActivity(ctx context.Context, location hookActivityLocation, input guardInput, who hookAttribution, tool string, verdict guardVerdict) {
+	if input.Value == "" || location.base == "" {
 		return
 	}
 	command := trail.AgentCommand{

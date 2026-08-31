@@ -135,7 +135,7 @@ func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
 
 		got := run(t, base, "grep -rn Foo docs/")
 		require.True(t, strings.HasPrefix(got, "advise: "))
-		assert.Contains(t, got, "magus query Foo project=docs")
+		assert.Contains(t, got, `magus query Foo 'project=~^docs(/|$)'`)
 	})
 
 	t.Run("no manifest stays unscoped", func(t *testing.T) {

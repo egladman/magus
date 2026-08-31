@@ -419,7 +419,8 @@ The point of the grep-to-query nudge is to move a number: how often agents reach
 for the knowledge graph versus a raw text search. `magus agent adoption` reports
 it from a corpus of shell commands - the graph-to-grep ratio, the file reads a
 targeted read would beat, and the top repo-wide greps whose pattern is a real
-identifier, the ones that should have been `magus refs`.
+identifier, each with the graph command its shape routes to (`magus refs` for a
+symbol, `magus query` for a diagnostic code or a Buzz op).
 
 magus analyzes commands; it never reads a host's session logs, so extraction is
 yours. For Claude Code, whose sessions are JSONL under `~/.claude/projects/`:
@@ -433,4 +434,4 @@ cat ~/.claude/projects/*/*.jsonl \
 
 A 1:20 ratio means the graph is barely used. The levers that move it are an
 easier query grammar to reach for (`kind=x`, `id=~re`) and the advisory that
-translates a caught grep into the `magus refs` that would answer it.
+translates a caught grep into the graph command its pattern shape routes to.
