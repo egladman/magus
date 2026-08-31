@@ -277,6 +277,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "rg symbolName", context: "magus refs symbolName"},
 		// A multi-word pattern is not a symbol, so it routes to a free-text query, quoted verbatim.
 		{command: `grep -rn "go test" docs/`, context: `magus query "go test"`},
+		// refs is compiled-language symbols only, so shapes it cannot answer route to query: a
+		// diagnostic code and a Buzz op both have graph answers refs would miss.
+		{command: "grep -rn MGS2011 docs/", context: "magus query MGS2011"},
+		{command: "grep -rn mgs_listManifests spells/", context: "magus query mgs_listManifests"},
 		{command: `find . -name "*.go"`, context: "magus refs"},
 		// magus is CWD-relative, so cd-then-magus is how the right command lands
 		// on the wrong project. The project is an argument; only a different

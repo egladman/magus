@@ -458,6 +458,13 @@ var (
 	// bareIdentRe recognizes a search pattern that is a single identifier, so the advisory can
 	// route it to `magus refs` (the occurrence-precise symbol answer) rather than a free-text query.
 	bareIdentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{2,}$`)
+	// diagnosticCodeRe and buzzOpRe route a pattern to `magus query` instead of `magus refs`,
+	// because refs resolves only compiled-language symbols. Measured against real session history:
+	// a grep for MGS2011 (a diagnostic) or mgs_listManifests (a Buzz spell op) has a graph answer,
+	// but it is a diagnostic/function node that query finds and refs misses. See the guard doc's
+	// adoption section for the measurement.
+	diagnosticCodeRe = regexp.MustCompile(`^MGS[0-9]{4}$`)
+	buzzOpRe         = regexp.MustCompile(`^mgs_[A-Za-z0-9_]+$`)
 	// guardDocSearchRe fires when a read or search command names a markdown file - an agent
 	// looking for something IN prose. Markdown headings are indexed as doc-section nodes, so
 	// the answer is a section query, not a whole-file scan. Matches on ".md" so it fires in
@@ -692,12 +699,17 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 // advisory hands back something to TRY rather than a principle to weigh - a generic "use the
 // graph" loses to muscle memory; `magus refs HandleFoo` does not.
 //
-// It is deliberately a suggestion, not a promise. grep is TEXTUAL and refs/query are SEMANTIC:
-// they agree only when the pattern is a real symbol or entity, and a bare word like "error"
-// matches the identifier shape without being one. So the wording hedges - an empty result
-// means the pattern was text, not a symbol, and grep was the right tool. A grep-accurate
-// translator is not worth building; an honest "try this" is. Empty when the pattern cannot be
-// isolated, in which case the generic reason still ships.
+// It ROUTES by the pattern's shape, because the right verb differs: a diagnostic code and a
+// Buzz op have graph answers that `magus query` finds but `magus refs` (compiled-language
+// symbols only) misses - measured against real session history, where routing every identifier
+// to refs sent MGS2011 and mgs_* greps to a dead end.
+//
+// It is deliberately a suggestion, not a promise. grep is TEXTUAL and the graph is SEMANTIC:
+// they agree only when the pattern names something the graph models, and a bare word like
+// "error" matches the identifier shape without being one. So the wording hedges - an empty
+// result means the pattern was text, and grep was the right tool. A grep-accurate translator is
+// not worth building; an honest "try this" is. Empty when the pattern cannot be isolated, in
+// which case the generic reason still ships.
 func translateSearch(cmds []guardCommand) string {
 	var pat string
 	for _, c := range cmds {
@@ -712,10 +724,16 @@ func translateSearch(cmds []guardCommand) string {
 	if pat == "" {
 		return ""
 	}
-	if bareIdentRe.MatchString(pat) {
+	switch {
+	case diagnosticCodeRe.MatchString(pat):
+		return "`" + pat + "` is a diagnostic code - `magus query " + pat + "` finds it and its docs.\n\n"
+	case buzzOpRe.MatchString(pat):
+		return "`" + pat + "` reads like a Buzz op - `magus query " + pat + "` finds the spell functions that define it (refs covers compiled-language symbols only).\n\n"
+	case bareIdentRe.MatchString(pat):
 		return "`" + pat + "` reads like a symbol - try `magus refs " + pat + "` (exact when it is one) or `magus query " + pat + "` for a domain entity. An empty result means it was text, not a symbol, and grep is right.\n\n"
+	default:
+		return "Try `magus query \"" + pat + "\"` over node ids, labels, and docs. If it misses, the text is not in the graph and grep is the right tool.\n\n"
 	}
-	return "Try `magus query \"" + pat + "\"` over node ids, labels, and docs. If it misses, the text is not in the graph and grep is the right tool.\n\n"
 }
 
 // firstSearchPattern returns a grep/rg pattern: the first operand that is neither a flag nor a
