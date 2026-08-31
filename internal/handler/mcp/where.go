@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -26,7 +27,7 @@ type whereTool struct {
 	ws types.WorkspaceReader
 }
 
-func (t *whereTool) Name() string { return "magus_where" }
+func (t *whereTool) Name() string { return hint.ToolWhere.String() }
 
 func (t *whereTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	filter := paramString(req.Params, "filter", "")

@@ -18,7 +18,7 @@ type describeKindTool struct {
 	cfg types.WorkspaceConfig
 }
 
-func (t *describeKindTool) Name() string { return "magus_describe" }
+func (t *describeKindTool) Name() string { return hint.ToolDescribe.String() }
 
 func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	kind := paramString(req.Params, "kind", "")

@@ -1,8 +1,8 @@
 package mcp
 
 // hints.go is the mcp-go side of the follow-up hints: internal/hint owns which
-// line a tool+outcome earns (hint.FollowUp and its doctrine), this file owns
-// scanning a result for a minted ref and appending the line to the
+// line a tool+outcome earns (the FollowUp functions and their doctrine), this
+// file owns scanning a result for a minted ref and appending the line to the
 // CallToolResult without corrupting the JSON payload.
 
 import (
@@ -20,19 +20,24 @@ import (
 // plain success gets nothing. The line is added as its own trailing text block
 // so the JSON payload the agent parses is never corrupted. A nil result (the
 // marshal-failure path) is a no-op.
+//
+// This is where the request's tool name, a bare string off the wire, becomes a
+// hint.ToolName; everything past it is typed, so a rename cannot silently miss a
+// hint entry.
 func decorateResult(result *mcplib.CallToolResult, toolName string) {
 	if result == nil {
 		return
 	}
+	tool := hint.ToolName(toolName)
 	if result.IsError {
-		appendHint(result, hint.FollowUp(toolName, true, ""))
+		appendHint(result, hint.FollowUpError(tool))
 		return
 	}
 	var ref string
-	if hint.MintsRef(toolName) {
+	if hint.MintsRef(tool) {
 		ref = firstRef(result)
 	}
-	appendHint(result, hint.FollowUp(toolName, false, ref))
+	appendHint(result, hint.FollowUpSuccess(tool, ref))
 }
 
 // appendHint adds s to result as its own text block. A blank hint is a no-op, so

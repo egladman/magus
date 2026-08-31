@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -16,7 +17,7 @@ type runAffectedTool struct {
 	opts Options
 }
 
-func (t *runAffectedTool) Name() string { return "magus_run_affected" }
+func (t *runAffectedTool) Name() string { return hint.ToolRunAffected.String() }
 
 func (t *runAffectedTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	rawTarget := paramString(req.Params, "target", "")

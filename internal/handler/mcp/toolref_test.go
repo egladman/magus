@@ -33,14 +33,14 @@ func TestMCPToolHintsResolve(t *testing.T) {
 		assert.Truef(t, valid[tn.String()], "tool constant %q is not a Registry[].Name", tn)
 	}
 
-	// Every magus_* token embedded in a line FollowUp can emit resolves to a
+	// Every magus_* token embedded in a line the hints can emit resolves to a
 	// real tool. Walking every constant through every outcome covers the whole
 	// hint surface, ref-chain line included.
 	for _, tn := range hint.AllToolNames {
 		for _, v := range []string{
-			hint.FollowUp(tn.String(), true, ""),
-			hint.FollowUp(tn.String(), false, ""),
-			hint.FollowUp(tn.String(), false, "out1a2b3c4d"),
+			hint.FollowUpError(tn),
+			hint.FollowUpSuccess(tn, ""),
+			hint.FollowUpSuccess(tn, "out1a2b3c4d"),
 		} {
 			for _, tok := range toolTokenRe.FindAllString(v, -1) {
 				assert.Truef(t, valid[tok], "hint value references tool %q, not a Registry[].Name: %q", tok, v)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -30,7 +31,7 @@ type affectedExplainTool struct {
 	ws types.WorkspaceRepository
 }
 
-func (t *affectedExplainTool) Name() string { return "magus_affected_explain" }
+func (t *affectedExplainTool) Name() string { return hint.ToolAffectedExplain.String() }
 
 func (t *affectedExplainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	project := paramString(req.Params, "project", "")

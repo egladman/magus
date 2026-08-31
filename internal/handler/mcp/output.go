@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -38,7 +39,7 @@ type outputTool struct {
 	reader outputReader
 }
 
-func (t *outputTool) Name() string { return "magus_output" }
+func (t *outputTool) Name() string { return hint.ToolOutput.String() }
 
 // outputRefResult is the wire shape for magus_output: the captured output plus the
 // run's identity, so an agent that saw a ref in a run fetches the exact bytes
@@ -159,7 +160,7 @@ type tailLogTool struct {
 	opts Options
 }
 
-func (t *tailLogTool) Name() string { return "magus_tail_log" }
+func (t *tailLogTool) Name() string { return hint.ToolTailLog.String() }
 
 func (t *tailLogTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	projectPath := paramString(req.Params, "project", "")

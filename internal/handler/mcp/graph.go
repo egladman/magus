@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -60,7 +61,7 @@ func knowledgeGraph(ctx context.Context, g graphResolver) (*knowledge.Graph, err
 
 type queryTool struct{ graph graphResolver }
 
-func (t *queryTool) Name() string { return "magus_query" }
+func (t *queryTool) Name() string { return hint.ToolQuery.String() }
 
 // paginatedQuery is the query result with the opaque cursor for the next page. It
 // embeds KnowledgeQueryOutput so the wire shape is the plain result plus one
@@ -107,7 +108,7 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 
 type refsTool struct{ graph graphResolver }
 
-func (t *refsTool) Name() string { return "magus_refs" }
+func (t *refsTool) Name() string { return hint.ToolRefs.String() }
 
 // paginatedRefs is the refs result with the opaque cursor for the next page of
 // referencing files. It embeds KnowledgeRefsOutput so the wire shape is the plain
@@ -236,7 +237,7 @@ func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor stri
 
 type explainTool struct{ graph graphResolver }
 
-func (t *explainTool) Name() string { return "magus_explain" }
+func (t *explainTool) Name() string { return hint.ToolExplain.String() }
 
 func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	node := paramString(req.Params, "node", "")
@@ -275,7 +276,7 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 
 type pathTool struct{ graph graphResolver }
 
-func (t *pathTool) Name() string { return "magus_path" }
+func (t *pathTool) Name() string { return hint.ToolPath.String() }
 
 func (t *pathTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	from := paramString(req.Params, "from", "")
@@ -296,7 +297,7 @@ func (t *pathTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 
 type statsTool struct{ graph graphResolver }
 
-func (t *statsTool) Name() string { return "magus_stats" }
+func (t *statsTool) Name() string { return hint.ToolStats.String() }
 
 func (t *statsTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	g, err := knowledgeGraph(ctx, t.graph)
