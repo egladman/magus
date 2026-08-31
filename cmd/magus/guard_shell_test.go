@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
@@ -368,6 +369,85 @@ func TestSearchAdvisoryLeadPrefersTheContentQuestion(t *testing.T) {
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus refs HandleFoo", "the content question leads")
 	assert.NotContains(t, v.Context, "kind=file", "the file listing must not outrank it")
+}
+
+// TestRenderAdvisoryLead pins the Confidence -> verb mapping, which nothing else
+// asserted: rendering every lead as "Maybe try" passed the whole suite. The
+// suggestions are literal rather than translated, so a change in hint's routing
+// cannot make this test agree with the renderer by accident.
+func TestRenderAdvisoryLead(t *testing.T) {
+	one := func(c hint.Confidence) []hint.Suggestion {
+		return []hint.Suggestion{{Run: "magus refs HandleFoo", Why: "refs answers with verified occurrences", Confidence: c, Hedge: "An empty result means it was text."}}
+	}
+	for _, tt := range []struct {
+		name        string
+		suggestions []hint.Suggestion
+		want        string
+	}{
+		{
+			name:        "high confidence",
+			suggestions: one(hint.ConfidenceHigh),
+			want:        "Run `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
+		},
+		{
+			name:        "medium confidence",
+			suggestions: one(hint.ConfidenceMedium),
+			want:        "Try `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
+		},
+		{
+			name:        "low confidence",
+			suggestions: one(hint.ConfidenceLow),
+			want:        "Maybe try `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
+		},
+		{
+			// The verb and the hedge both come from the FIRST suggestion; the rest
+			// contribute a run and a why and nothing else.
+			name: "two suggestions",
+			suggestions: []hint.Suggestion{
+				{Run: "magus refs A", Why: "why A", Confidence: hint.ConfidenceHigh, Hedge: "hedge A"},
+				{Run: "magus query B", Why: "why B", Confidence: hint.ConfidenceLow, Hedge: "hedge B"},
+			},
+			want: "Run `magus refs A` - why A. Or `magus query B` - why B. hedge A\n\n",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, renderAdvisoryLead(tt.suggestions))
+		})
+	}
+}
+
+// TestSearchAdvisoryLeadAbstains: with nothing hint recognizes on the line there is
+// no lead, and the generic reason ships alone rather than with an empty paragraph.
+func TestSearchAdvisoryLeadAbstains(t *testing.T) {
+	cmds := []guardCommand{{Name: "ls", Args: []string{"-la"}}, {Name: "echo", Args: []string{"hi"}}}
+	require.Empty(t, searchAdvisoryLead(cmds, searchHints))
+}
+
+// TestSearchAdvisoryLeadRanksSearchOverFileFind is the unit-level half of the
+// ranking rule. Both commands here suggest something on their own argv, so unlike
+// the piped end-to-end case nothing rests on the recursive re-ask: the find leads
+// the slice and must still lose to the content question.
+func TestSearchAdvisoryLeadRanksSearchOverFileFind(t *testing.T) {
+	search := hint.Invocation{Name: "rg", Args: []string{"HandleFoo"}}
+	want := renderAdvisoryLead(searchHints.Suggest(search))
+	require.Contains(t, want, "magus refs HandleFoo", "the expectation is only meaningful while the search still routes to refs")
+
+	cmds := []guardCommand{
+		{Name: "find", Args: []string{".", "-name", "*.go"}},
+		{Name: "rg", Args: search.Args},
+	}
+	require.Equal(t, want, searchAdvisoryLead(cmds, searchHints), "the lead is what the search alone renders: the find contributed nothing")
+}
+
+// TestEvaluateBashGuardWithScopedTranslator exercises the injected-translator seam
+// directly. The point of the parameter is that the verdict is a pure function of
+// what it is handed, so this proves the scoping path with no hook, manifest, or
+// cache directory in the way.
+func TestEvaluateBashGuardWithScopedTranslator(t *testing.T) {
+	v := evaluateBashGuardWith("grep -rn Foo docs/", hint.NewTranslator(hint.WithProjects([]string{"docs"})))
+	require.Empty(t, v.Deny)
+	require.Equal(t, advisoryCodeSearch, v.Kind)
+	require.Contains(t, v.Context, `magus query Foo 'project=~^docs(/|$)'`)
 }
 
 // TestParseGuardCommands pins the resolution itself, separately from the

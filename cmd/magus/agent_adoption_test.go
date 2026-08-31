@@ -5,7 +5,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// classification pairs the two return values of classifyCommandLine so a wrong
+// row reports once, with both halves visible.
+type classification struct {
+	Category string
+	Symbol   string
+}
 
 func TestClassifyCommandLine(t *testing.T) {
 	for _, c := range []struct {
@@ -33,9 +41,10 @@ func TestClassifyCommandLine(t *testing.T) {
 		{"awk '{print $1}' foo.txt", "other", ""},
 		{"bat internal/foo.go", "other", ""},
 	} {
-		cat, sym := classifyCommandLine(c.line)
-		assert.Equal(t, c.cat, cat, "category of %q", c.line)
-		assert.Equal(t, c.sym, sym, "symbol of %q", c.line)
+		t.Run(c.line, func(t *testing.T) {
+			cat, sym := classifyCommandLine(c.line)
+			require.Equal(t, classification{c.cat, c.sym}, classification{cat, sym})
+		})
 	}
 }
 
@@ -49,47 +58,115 @@ func TestAnalyzeAdoptionRatioAndTotals(t *testing.T) {
 		"", // blank lines are skipped
 		"magus run test .",
 	})
-	assert.Equal(t, 6, r.Total, "blank line not counted")
-	assert.Equal(t, 1, r.GraphVerbs)
-	assert.Equal(t, 3, r.TextSearches)
-	assert.Equal(t, 3, r.SearchOfSource)
-	assert.Equal(t, 1, r.FileReads)
-	assert.Equal(t, 1, r.MagusRuns)
+	// The WHOLE report, so a line mis-filed into a column nobody names - Other and
+	// SearchOfProse were the unwatched ones - shows up as a diff rather than passing.
 	// HandleFoo grepped twice ranks above parseQuery grepped once.
-	if assert.Len(t, r.TopSymbolGreps, 2) {
-		assert.Equal(t, patternCount{Pattern: "HandleFoo", Count: 2, Run: "magus refs HandleFoo"}, r.TopSymbolGreps[0])
-	}
+	require.Equal(t, adoptionReport{
+		Total:          6, // the blank line is not counted
+		GraphVerbs:     1,
+		TextSearches:   3,
+		SearchOfSource: 3,
+		SearchOfProse:  0,
+		FileReads:      1,
+		MagusRuns:      1,
+		Other:          0,
+		TopSymbolGreps: []patternCount{
+			{Pattern: "HandleFoo", Count: 2, Run: "magus refs HandleFoo"},
+			{Pattern: "parseQuery", Count: 1, Run: "magus refs parseQuery"},
+		},
+	}, r)
 }
 
 // TestTopSymbolGrepRunsRouteByShape pins that the report's rendered command
 // comes from the hint translator, not a hardcoded refs template: a diagnostic
-// code routes to query, an identifier to refs.
+// code routes to query, an identifier to refs. The slice is compared whole, so
+// the count and topPatterns' alphabetical tie-break between two equal counts are
+// pinned along with the routing.
 func TestTopSymbolGrepRunsRouteByShape(t *testing.T) {
 	r := analyzeAdoption([]string{
 		"grep -rn MGS2011 docs/",
 		"grep -rn HandleFoo .",
 	})
-	runs := map[string]string{}
-	for _, p := range r.TopSymbolGreps {
-		runs[p.Pattern] = p.Run
-	}
-	assert.Equal(t, map[string]string{
-		"MGS2011":   "magus query MGS2011",
-		"HandleFoo": "magus refs HandleFoo",
-	}, runs)
+	require.Equal(t, []patternCount{
+		{Pattern: "HandleFoo", Count: 1, Run: "magus refs HandleFoo"},
+		{Pattern: "MGS2011", Count: 1, Run: "magus query MGS2011"},
+	}, r.TopSymbolGreps)
 }
 
-// TestAdoptionTableWithoutARun pins the renderer against a pattern the
-// translator abstained on: the row keeps its count and loses the arrow, rather
-// than pointing at nothing.
-func TestAdoptionTableWithoutARun(t *testing.T) {
-	var b strings.Builder
-	writeAdoptionTable(&b, adoptionReport{
-		Total:          1,
-		TopSymbolGreps: []patternCount{{Pattern: "HandleFoo", Count: 2}},
-	})
-	assert.Contains(t, b.String(), "HandleFoo")
-	assert.NotContains(t, b.String(), "->")
+// TestAdoptionTable compares the whole rendering: the layout is fixed-width and
+// deterministic, so a column that shifts or a section that stops being emitted is
+// a diff rather than a substring that happens to survive.
+func TestAdoptionTable(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		report adoptionReport
+		want   string
+	}{
+		{
+			name: "populated report",
+			report: adoptionReport{
+				Total: 6, GraphVerbs: 1, TextSearches: 3, SearchOfSource: 3, FileReads: 1, MagusRuns: 1,
+				TopSymbolGreps: []patternCount{
+					{Pattern: "HandleFoo", Count: 2, Run: "magus refs HandleFoo"},
+					{Pattern: "parseQuery", Count: 1, Run: "magus refs parseQuery"},
+				},
+			},
+			want: `agent adoption over 6 commands:
+
+  graph verbs (query/refs/explain/path/graph)          1
+  text searches (grep/rg/ag)                           3
+  graph : search ratio                             1 : 3
+
+  repo-wide search over source (refs/query)            3
+  search over prose .md (docsection)                   0
+  file reads via shell (cat/head/tail/sed)             1
+
+top repo-wide patterns that look like symbols, with the graph query to try:
+       2  HandleFoo  ->  magus refs HandleFoo
+       1  parseQuery  ->  magus refs parseQuery
+`,
+		},
+		{
+			// A pattern the translator abstained on keeps its count and loses the
+			// arrow, rather than pointing at nothing.
+			name:   "pattern with no run",
+			report: adoptionReport{Total: 1, TopSymbolGreps: []patternCount{{Pattern: "HandleFoo", Count: 2}}},
+			want: `agent adoption over 1 commands:
+
+  graph verbs (query/refs/explain/path/graph)          0
+  text searches (grep/rg/ag)                           0
+  graph : search ratio                               n/a
+
+  repo-wide search over source (refs/query)            0
+  search over prose .md (docsection)                   0
+  file reads via shell (cat/head/tail/sed)             0
+
+top repo-wide patterns that look like symbols, with the graph query to try:
+       2  HandleFoo
+`,
+		},
+		{
+			// No symbol patterns means no second section at all, heading included.
+			name:   "no symbol patterns",
+			report: adoptionReport{Total: 2, MagusRuns: 2},
+			want: `agent adoption over 2 commands:
+
+  graph verbs (query/refs/explain/path/graph)          0
+  text searches (grep/rg/ag)                           0
+  graph : search ratio                               n/a
+
+  repo-wide search over source (refs/query)            0
+  search over prose .md (docsection)                   0
+  file reads via shell (cat/head/tail/sed)             0
+`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var b strings.Builder
+			writeAdoptionTable(&b, tt.report)
+			require.Equal(t, tt.want, b.String())
+		})
+	}
 }
 
 func TestRatioString(t *testing.T) {

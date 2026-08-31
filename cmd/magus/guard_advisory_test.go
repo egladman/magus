@@ -141,8 +141,12 @@ func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
 	t.Run("no manifest stays unscoped", func(t *testing.T) {
 		got := run(t, t.TempDir(), "grep -rn Foo docs/")
 		require.True(t, strings.HasPrefix(got, "advise: "))
-		assert.Contains(t, got, "magus query Foo")
-		assert.NotContains(t, got, "project=docs")
+		// The closing backtick is what carries the assertion: it proves no matcher
+		// follows the pattern. The generic reason below the lead documents the
+		// `project=<p>` grammar in prose, so a bare `project=` is present either way
+		// and asserting its absence could never fail.
+		assert.Contains(t, got, "`magus query Foo` - ")
+		assert.NotContains(t, got, "project=~", "only the scoped path emits a regex project matcher")
 	})
 }
 
