@@ -93,7 +93,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) to stdout. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
 | `termcast-record` | Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh. |
-| `termcast-showcase` | Renders tapes/core-loop.capture into the README's animated SVG. |
+| `termcast-showcase` | Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real keystrokes, showing the surfaces a transcript cannot - the pinned band, the failure tree beside its captured output, the picker searching the graph. |
 | `release-build` | Builds one release binary for one platform. |
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
 | `release` |  |
@@ -116,7 +116,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in internal/agent/skills. |
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
-| `termcast-generate` |  |
+| `termcast-generate` | Renders tapes/core-loop.capture into the README's animated SVG. |
 | `termshots-generate` | Renders the still SVGs of magus's interactive terminal surfaces for the docs. |
 | `advice-test` | Runs the PR advisors' `test "..." {}` blocks. |
 | `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |

@@ -199,10 +199,8 @@ What still gates on drift is the generated Markdown that _is_ tracked:
 left un-regenerated, so CI still catches a forgotten regen for everything a
 reader can find in the repository.
 
-Two things under `docs/` stay tracked on purpose:
+One thing under `docs/` stays tracked on purpose:
 
-- `docs/vendor/casts/` holds the recorded terminal sessions the guides embed:
-  captured bytes a rebuild cannot reproduce.
 - `docs/active.urls.lock` is the ledger proving a previously published URL never
   starts 404-ing. That gate only works if the ledger outlives a single build.
 

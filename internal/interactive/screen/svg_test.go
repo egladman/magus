@@ -146,3 +146,10 @@ func TestAnimateFrameWindowsDoNotOverlap(t *testing.T) {
 		assert.Equal(t, ends[i], starts[i+1], "one frame ends exactly where the next begins")
 	}
 }
+
+// TestVariantPath pins the naming contract the README and docs links depend on:
+// the dark variant keeps the unsuffixed name every existing reference points at.
+func TestVariantPath(t *testing.T) {
+	assert.Equal(t, "assets/gen/core-loop.svg", VariantPath("assets/gen/core-loop.svg", ""))
+	assert.Equal(t, "assets/gen/core-loop-light.svg", VariantPath("assets/gen/core-loop.svg", "-light"))
+}

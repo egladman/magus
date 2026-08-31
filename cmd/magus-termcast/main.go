@@ -93,40 +93,24 @@ func main() {
 	}
 
 	if b, err := os.ReadFile(showCapture); err == nil {
-		for _, v := range themeVariants {
-			svg, rerr := renderShowcase(string(b), v.theme)
+		for _, v := range screen.ThemeVariants {
+			svg, rerr := renderShowcase(string(b), v.Theme)
 			if rerr != nil {
 				fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", rerr)
 				os.Exit(1)
 			}
-			write(variantPath(showSVG, v.suffix), svg)
+			write(screen.VariantPath(showSVG, v.Suffix), svg)
 		}
 	}
 
-	for _, v := range themeVariants {
-		svg, err := renderFile(capturePath, v.theme)
+	for _, v := range screen.ThemeVariants {
+		svg, err := renderFile(capturePath, v.Theme)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", err)
 			os.Exit(1)
 		}
-		write(variantPath(*out, v.suffix), svg)
+		write(screen.VariantPath(*out, v.Suffix), svg)
 	}
-}
-
-// Every recording ships in both palettes: an SVG referenced by <img> is its own
-// document and cannot read the page's theme, so the page picks the file rather
-// than the picture adapting itself. The unsuffixed name stays the dark one,
-// which is what every existing reference already points at.
-var themeVariants = []struct {
-	suffix string
-	theme  screen.Theme
-}{
-	{"", screen.DarkTheme},
-	{"-light", screen.LightTheme},
-}
-
-func variantPath(path, suffix string) string {
-	return strings.TrimSuffix(path, ".svg") + suffix + ".svg"
 }
 
 func write(path, svg string) {

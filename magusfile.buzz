@@ -1171,12 +1171,6 @@ export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-termcast", "-record"]);
 }
 
-// Renders tapes/core-loop.capture into the README's animated SVG.
-//
-// Deterministic - it replays committed bytes through the terminal emulator and
-// emits text - so it can be drift-gated, and is. That gate is the point: a
-// recording nothing checks goes stale in silence, until the README's alt text is
-// describing a project count magus no longer reports.
 // Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real
 // keystrokes, showing the surfaces a transcript cannot - the pinned band, the
 // failure tree beside its captured output, the picker searching the graph.
@@ -1191,10 +1185,19 @@ export fun termcast_showcase(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-termcast", "-showcase"]);
 }
 
+// Renders tapes/core-loop.capture into the README's animated SVG.
+//
+// Deterministic - it replays committed bytes through the terminal emulator and
+// emits text - so it can be drift-gated, and is. That gate is the point: a
+// recording nothing checks goes stale in silence, until the README's alt text is
+// describing a project count magus no longer reports.
 export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("tapes/*.capture", "cmd/magus-termcast/*.go",
         "internal/interactive/screen/*.go");
-    ctx.writesFiles("assets/gen/core-loop.svg", "assets/gen/showcase.svg");
+    // Globbed, the way termshots_generate declares its shots: each picture ships
+    // in both palettes, and naming only the dark half let a cache hit restore a
+    // half-written assets/gen.
+    ctx.writesFiles("assets/gen/core-loop*.svg", "assets/gen/showcase*.svg");
     proc\exec("go", ["run", "./cmd/magus-termcast"]);
 }
 
