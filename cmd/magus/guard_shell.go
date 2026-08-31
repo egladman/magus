@@ -455,6 +455,9 @@ var (
 	// (effectively always repo-wide), or a find-by-name. A plain `grep pattern
 	// file` is reading one file and is left alone.
 	guardCodeSearchRe = regexp.MustCompile(`\bgrep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s|\bfind\s+[^|&;]*-name\b`)
+	// bareIdentRe recognizes a search pattern that is a single identifier, so the advisory can
+	// route it to `magus refs` (the occurrence-precise symbol answer) rather than a free-text query.
+	bareIdentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{2,}$`)
 	// guardDocSearchRe fires when a read or search command names a markdown file - an agent
 	// looking for something IN prose. Markdown headings are indexed as doc-section nodes, so
 	// the answer is a section query, not a whole-file scan. Matches on ".md" so it fires in
@@ -685,6 +688,56 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 // A deny is only legitimate once the replacement it names actually works - the
 // reverted grep deny removed a capability magus had nothing to route to. Do not
 // add one without checking that path end to end.
+// translateSearch suggests the magus command most likely to answer the caught search, so the
+// advisory hands back something to TRY rather than a principle to weigh - a generic "use the
+// graph" loses to muscle memory; `magus refs HandleFoo` does not.
+//
+// It is deliberately a suggestion, not a promise. grep is TEXTUAL and refs/query are SEMANTIC:
+// they agree only when the pattern is a real symbol or entity, and a bare word like "error"
+// matches the identifier shape without being one. So the wording hedges - an empty result
+// means the pattern was text, not a symbol, and grep was the right tool. A grep-accurate
+// translator is not worth building; an honest "try this" is. Empty when the pattern cannot be
+// isolated, in which case the generic reason still ships.
+func translateSearch(cmds []guardCommand) string {
+	var pat string
+	for _, c := range cmds {
+		switch c.Name {
+		case "grep", "egrep", "fgrep", "rg", "ag":
+			pat = firstSearchPattern(c.Args)
+		}
+		if pat != "" {
+			break
+		}
+	}
+	if pat == "" {
+		return ""
+	}
+	if bareIdentRe.MatchString(pat) {
+		return "`" + pat + "` reads like a symbol - try `magus refs " + pat + "` (exact when it is one) or `magus query " + pat + "` for a domain entity. An empty result means it was text, not a symbol, and grep is right.\n\n"
+	}
+	return "Try `magus query \"" + pat + "\"` over node ids, labels, and docs. If it misses, the text is not in the graph and grep is the right tool.\n\n"
+}
+
+// firstSearchPattern returns a grep/rg pattern: the first operand that is neither a flag nor a
+// flag's value. -e/-f (and their long forms) take the next word as the pattern, so that word is
+// returned directly rather than skipped as a flag value.
+func firstSearchPattern(args []string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "-e" || a == "-f" || a == "--regexp" || a == "--file" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+			return ""
+		}
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		return a
+	}
+	return ""
+}
+
 func evaluateBashGuard(command string) bashGuardVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE - a pipe, a redirect, a cd before a magus
@@ -761,7 +814,7 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	case guardDocSearchRe.MatchString(command):
 		return bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch}
 	case guardCodeSearchRe.MatchString(command):
-		return bashGuardVerdict{Context: searchGuardReason, Kind: advisoryCodeSearch}
+		return bashGuardVerdict{Context: translateSearch(cmds) + searchGuardReason, Kind: advisoryCodeSearch}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):

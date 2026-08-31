@@ -271,8 +271,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// graph unused, and an advisory is scrolled past. The reason must ROUTE -
 		// refs for code symbols, query for domain entities - because an agent that
 		// tries `magus query someFunc`, gets 0, and gives up is the failure mode.
-		{command: `grep -rn "funcName" .`, context: "magus refs"},
-		{command: "rg symbolName", context: "magus refs"},
+		// The advisory TRANSLATES: it echoes the searched identifier back as the exact command,
+		// so the reader gets `magus refs funcName` to run, not just "consider refs".
+		{command: `grep -rn "funcName" .`, context: "magus refs funcName"},
+		{command: "rg symbolName", context: "magus refs symbolName"},
+		// A multi-word pattern is not a symbol, so it routes to a free-text query, quoted verbatim.
+		{command: `grep -rn "go test" docs/`, context: `magus query "go test"`},
 		{command: `find . -name "*.go"`, context: "magus refs"},
 		// magus is CWD-relative, so cd-then-magus is how the right command lands
 		// on the wrong project. The project is an argument; only a different
@@ -331,6 +335,16 @@ func TestEvaluateBashGuard(t *testing.T) {
 			assert.Contains(t, v.Context, tt.context, "%q context names the skill", tt.command)
 		}
 	}
+}
+
+// TestSearchAdviceIsTentativeNotAPromise pins the honest framing: the translation is a
+// suggestion, not a drop-in replacement. grep is textual and refs/query are semantic, so they
+// agree only when the pattern is a real symbol. The advisory hands back the exact command AND
+// hedges - an empty semantic result means the pattern was text, and grep was the right tool.
+func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
+	v := evaluateBashGuard(`grep -rn "funcName" .`)
+	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
+	assert.Contains(t, v.Context, "grep is right", "and hedges rather than promising equivalence")
 }
 
 // TestParseGuardCommands pins the resolution itself, separately from the
