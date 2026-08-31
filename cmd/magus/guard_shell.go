@@ -16,9 +16,10 @@ import (
 // minus the two large pieces that earned their own files. Tokenizing is in
 // guard_shellparse.go and the git rules are in guard_git.go.
 //
-// evaluateBashGuard is a pure function of the command line and is tested as one, so
-// a rule that has to read live workspace state lives beside its own reader instead
-// (guard_gate.go). The path surface is guard_write.go.
+// evaluateBashGuard is a pure function of its inputs - the command line, plus the
+// hint graph the caller built - and is tested as one, so a rule that has to read
+// live workspace state lives beside its own reader instead (guard_gate.go). The
+// path surface is guard_write.go.
 
 // bashGuardVerdict classifies one Bash command line. Deny blocks the call with a
 // reason the model sees; Context lets it proceed and injects a reminder.
@@ -669,9 +670,10 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 	return fallback.MatchString(command)
 }
 
-// searchHints translates caught searches into suggestions. Constructed bare:
-// the guard runs in a fast pre-tool hook and injects no project list, so
-// suggestions stay unscoped.
+// searchHints is the unscoped default translator, used when no project list is
+// available (and by the pure guard tests). hookCmd builds a manifest-scoped
+// graph per invocation and hands it to evaluateBashGuardWith, so live
+// suggestions can carry project= scoping.
 var searchHints = hint.NewGraph()
 
 // searchFamilyTools are the content-search commands whose suggestion outranks
@@ -688,18 +690,18 @@ var searchFamilyTools = map[string]bool{
 // memory; `magus refs HandleFoo` does not. Empty when hint abstains for every
 // command, in which case the generic reason still ships. Routing and hedging
 // rationale live in internal/hint.
-func searchAdvisoryLead(cmds []guardCommand) string {
+func searchAdvisoryLead(cmds []guardCommand, hints *hint.Graph) string {
 	hasFileFind := slices.ContainsFunc(cmds, func(c guardCommand) bool {
 		return c.Name == "find" || c.Name == "fd"
 	})
 	var fallback []hint.Suggestion
 	for _, c := range cmds {
-		suggestions := searchHints.Suggest(hint.Invocation{Name: c.Name, Args: c.Args})
+		suggestions := hints.Suggest(hint.Invocation{Name: c.Name, Args: c.Args})
 		if len(suggestions) == 0 && hasFileFind && searchFamilyTools[c.Name] {
 			// A find on the same line is feeding the grep its files, so the
 			// grep is repo-wide even though its own argv is not: ask again as
 			// recursive rather than losing the content question to the find.
-			suggestions = searchHints.Suggest(hint.Invocation{Name: c.Name, Args: append([]string{"-r"}, c.Args...)})
+			suggestions = hints.Suggest(hint.Invocation{Name: c.Name, Args: append([]string{"-r"}, c.Args...)})
 		}
 		if len(suggestions) == 0 {
 			continue
@@ -753,6 +755,13 @@ func renderAdvisoryLead(suggestions []hint.Suggestion) string {
 // reverted grep deny removed a capability magus had nothing to route to. Do not
 // add one without checking that path end to end.
 func evaluateBashGuard(command string) bashGuardVerdict {
+	return evaluateBashGuardWith(command, searchHints)
+}
+
+// evaluateBashGuardWith is evaluateBashGuard with the caller's hint graph, so
+// hookCmd can pass one scoped from the knowledge manifest while the verdict
+// stays a pure function of what was handed in.
+func evaluateBashGuardWith(command string, hints *hint.Graph) bashGuardVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE - a pipe, a redirect, a cd before a magus
 	// call - rather than which program runs.
@@ -828,7 +837,7 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	case guardDocSearchRe.MatchString(command):
 		return bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch}
 	case guardCodeSearchRe.MatchString(command):
-		return bashGuardVerdict{Context: searchAdvisoryLead(cmds) + searchGuardReason, Kind: advisoryCodeSearch}
+		return bashGuardVerdict{Context: searchAdvisoryLead(cmds, hints) + searchGuardReason, Kind: advisoryCodeSearch}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):

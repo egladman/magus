@@ -82,7 +82,11 @@ type Option func(*Graph)
 func WithProjects(paths []string) Option {
 	return func(g *Graph) {
 		for _, p := range paths {
-			g.projects = append(g.projects, path.Clean(p))
+			// The root project is dropped: `project=.` scopes a query to everything,
+			// which says nothing.
+			if c := path.Clean(p); c != "." {
+				g.projects = append(g.projects, c)
+			}
 		}
 	}
 }

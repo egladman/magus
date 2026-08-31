@@ -12,6 +12,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 )
@@ -180,7 +182,8 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// session. Built AFTER the envelope is decoded: a host that reports its session id only
 	// inside the payload would otherwise be graded as having reported none, and every
 	// session on that host would share the anonymous bucket.
-	gate := newAdvisoryGate(hookActivityTrail(ctx).base, who.Session)
+	location := hookActivityTrail(ctx)
+	gate := newAdvisoryGate(location.base, who.Session)
 	tool := hookToolCommand
 	switch {
 	case hf.Observe:
@@ -269,7 +272,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// The sibling-checkout rule ranks with the throwaway-copy deny it generalizes,
 		// but reads the filesystem, so it cannot live inside evaluateBashGuard's pure
 		// rule set. Ranking the two is pure, and is where the ordering is tested.
-		switch v := rankSiblingCheckout(evaluateBashGuard(input.Value), denySiblingCheckout(input.Value)); {
+		//
+		// The hint graph is built here unconditionally: the manifest read behind it is
+		// one small file, and laziness would buy nothing on a hook this short-lived.
+		switch v := rankSiblingCheckout(evaluateBashGuardWith(input.Value, hookSearchHints(location.base)), denySiblingCheckout(input.Value)); {
 		case v.Deny != "":
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
@@ -611,6 +617,21 @@ func appendHookSpawn(ctx context.Context, req hookRequest, who hookAttribution) 
 		Child:     req.Child,
 		Context:   req.Value,
 	})
+}
+
+// hookSearchHints builds the search translator scoped to the projects the
+// knowledge manifest records, so a caught search can be answered with a
+// project=-scoped query. An absent or unreadable manifest yields the unscoped
+// default, identical to a workspace that never built a graph.
+func hookSearchHints(cacheDir string) *hint.Graph {
+	if cacheDir == "" {
+		return searchHints
+	}
+	paths := knowledge.ProjectPaths(cacheDir)
+	if len(paths) == 0 {
+		return searchHints
+	}
+	return hint.NewGraph(hint.WithProjects(paths))
 }
 
 // hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived

@@ -444,6 +444,27 @@ func BenchmarkStoreLoad(b *testing.B) {
 	}
 }
 
+func TestProjectPaths(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), ".magus")
+	man := manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{
+		"pkg/b":         {},
+		"pkg/a":         {},
+		".":             {},
+		"@runtime":      {},
+		"@registry":     {},
+		"pkg/a@symbols": {},
+	}}
+	b, err := json.Marshal(man)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(StoreDir(cacheDir), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(StoreDir(cacheDir), "manifest.json"), b, 0o644))
+
+	assert.Equal(t, []string{".", "pkg/a", "pkg/b"}, ProjectPaths(cacheDir),
+		"project shards only, sorted; singletons and symbol shards filtered")
+
+	assert.Nil(t, ProjectPaths(filepath.Join(t.TempDir(), "empty")), "no manifest reads as no projects")
+}
+
 // BenchmarkStoreSync measures the write side: fingerprint, compare, and persist the
 // shards that changed. This is the path every magus command actually pays, unlike
 // Load, so it is the one to watch when judging a format or fingerprint change.

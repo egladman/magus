@@ -19,6 +19,7 @@ type runConf struct {
 
 func TestSuggestGolden(t *testing.T) {
 	scoped := NewGraph(WithProjects([]string{"internal/cache", "docs"}))
+	rootScoped := NewGraph(WithProjects([]string{".", "docs"}))
 	cases := []struct {
 		name  string
 		graph *Graph
@@ -171,6 +172,20 @@ func TestSuggestGolden(t *testing.T) {
 			want: []runConf{
 				{"magus refs Foo", Medium},
 				{"magus query Foo project=internal/cache", Low},
+			}},
+		{name: "root project never scopes: project=. says nothing",
+			graph: rootScoped,
+			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "."}},
+			want: []runConf{
+				{"magus refs Foo", Medium},
+				{"magus query Foo", Low},
+			}},
+		{name: "root project in the list still lets a sibling scope",
+			graph: rootScoped,
+			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
+			want: []runConf{
+				{"magus refs Foo", Medium},
+				{"magus query Foo project=docs", Low},
 			}},
 		{name: "no WithProjects means no project= anywhere",
 			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "internal/cache/"}},
