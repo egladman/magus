@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -455,16 +456,6 @@ var (
 	// (effectively always repo-wide), or a find-by-name. A plain `grep pattern
 	// file` is reading one file and is left alone.
 	guardCodeSearchRe = regexp.MustCompile(`\bgrep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s|\bfind\s+[^|&;]*-name\b`)
-	// bareIdentRe recognizes a search pattern that is a single identifier, so the advisory can
-	// route it to `magus refs` (the occurrence-precise symbol answer) rather than a free-text query.
-	bareIdentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{2,}$`)
-	// diagnosticCodeRe and buzzOpRe route a pattern to `magus query` instead of `magus refs`,
-	// because refs resolves only compiled-language symbols. Measured against real session history:
-	// a grep for MGS2011 (a diagnostic) or mgs_listManifests (a Buzz spell op) has a graph answer,
-	// but it is a diagnostic/function node that query finds and refs misses. See the guard doc's
-	// adoption section for the measurement.
-	diagnosticCodeRe = regexp.MustCompile(`^MGS[0-9]{4}$`)
-	buzzOpRe         = regexp.MustCompile(`^mgs_[A-Za-z0-9_]+$`)
 	// guardDocSearchRe fires when a read or search command names a markdown file - an agent
 	// looking for something IN prose. Markdown headings are indexed as doc-section nodes, so
 	// the answer is a section query, not a whole-file scan. Matches on ".md" so it fires in
@@ -678,6 +669,72 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 	return fallback.MatchString(command)
 }
 
+// searchHints translates caught searches into suggestions. Constructed bare:
+// the guard runs in a fast pre-tool hook and injects no project list, so
+// suggestions stay unscoped.
+var searchHints = hint.NewGraph()
+
+// searchFamilyTools are the content-search commands whose suggestion outranks
+// a file-find's in the advisory lead: on a line carrying both (`find | xargs
+// grep`), the search answers the content question, the find only the name one.
+var searchFamilyTools = map[string]bool{
+	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
+}
+
+// searchAdvisoryLead renders hint's suggestions for one command on the line,
+// preferring a search-family command's over a file-find's, as the paragraph
+// prepended to searchGuardReason. The lead hands back something to TRY rather
+// than a principle to weigh - a generic "use the graph" loses to muscle
+// memory; `magus refs HandleFoo` does not. Empty when hint abstains for every
+// command, in which case the generic reason still ships. Routing and hedging
+// rationale live in internal/hint.
+func searchAdvisoryLead(cmds []guardCommand) string {
+	hasFileFind := slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		return c.Name == "find" || c.Name == "fd"
+	})
+	var fallback []hint.Suggestion
+	for _, c := range cmds {
+		suggestions := searchHints.Suggest(hint.Invocation{Name: c.Name, Args: c.Args})
+		if len(suggestions) == 0 && hasFileFind && searchFamilyTools[c.Name] {
+			// A find on the same line is feeding the grep its files, so the
+			// grep is repo-wide even though its own argv is not: ask again as
+			// recursive rather than losing the content question to the find.
+			suggestions = searchHints.Suggest(hint.Invocation{Name: c.Name, Args: append([]string{"-r"}, c.Args...)})
+		}
+		if len(suggestions) == 0 {
+			continue
+		}
+		if searchFamilyTools[c.Name] {
+			return renderAdvisoryLead(suggestions)
+		}
+		if fallback == nil {
+			fallback = suggestions
+		}
+	}
+	if fallback == nil {
+		return ""
+	}
+	return renderAdvisoryLead(fallback)
+}
+
+func renderAdvisoryLead(suggestions []hint.Suggestion) string {
+	var b strings.Builder
+	switch suggestions[0].Confidence {
+	case hint.High:
+		b.WriteString("Run")
+	case hint.Medium:
+		b.WriteString("Try")
+	default:
+		b.WriteString("Maybe try")
+	}
+	b.WriteString(" `" + suggestions[0].Run + "` - " + suggestions[0].Why + ".")
+	for _, s := range suggestions[1:] {
+		b.WriteString(" Or `" + s.Run + "` - " + s.Why + ".")
+	}
+	b.WriteString(" " + suggestions[0].Hedge + "\n\n")
+	return b.String()
+}
+
 // evaluateBashGuard applies the guard rules in severity order.
 //
 // magus denies on three independent triggers and explains everything else:
@@ -695,67 +752,6 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 // A deny is only legitimate once the replacement it names actually works - the
 // reverted grep deny removed a capability magus had nothing to route to. Do not
 // add one without checking that path end to end.
-// translateSearch suggests the magus command most likely to answer the caught search, so the
-// advisory hands back something to TRY rather than a principle to weigh - a generic "use the
-// graph" loses to muscle memory; `magus refs HandleFoo` does not.
-//
-// It ROUTES by the pattern's shape, because the right verb differs: a diagnostic code and a
-// Buzz op have graph answers that `magus query` finds but `magus refs` (compiled-language
-// symbols only) misses - measured against real session history, where routing every identifier
-// to refs sent MGS2011 and mgs_* greps to a dead end.
-//
-// It is deliberately a suggestion, not a promise. grep is TEXTUAL and the graph is SEMANTIC:
-// they agree only when the pattern names something the graph models, and a bare word like
-// "error" matches the identifier shape without being one. So the wording hedges - an empty
-// result means the pattern was text, and grep was the right tool. A grep-accurate translator is
-// not worth building; an honest "try this" is. Empty when the pattern cannot be isolated, in
-// which case the generic reason still ships.
-func translateSearch(cmds []guardCommand) string {
-	var pat string
-	for _, c := range cmds {
-		switch c.Name {
-		case "grep", "egrep", "fgrep", "rg", "ag":
-			pat = firstSearchPattern(c.Args)
-		}
-		if pat != "" {
-			break
-		}
-	}
-	if pat == "" {
-		return ""
-	}
-	switch {
-	case diagnosticCodeRe.MatchString(pat):
-		return "`" + pat + "` is a diagnostic code - `magus query " + pat + "` finds it and its docs.\n\n"
-	case buzzOpRe.MatchString(pat):
-		return "`" + pat + "` reads like a Buzz op - `magus query " + pat + "` finds the spell functions that define it (refs covers compiled-language symbols only).\n\n"
-	case bareIdentRe.MatchString(pat):
-		return "`" + pat + "` reads like a symbol - try `magus refs " + pat + "` (exact when it is one) or `magus query " + pat + "` for a domain entity. An empty result means it was text, not a symbol, and grep is right.\n\n"
-	default:
-		return "Try `magus query \"" + pat + "\"` over node ids, labels, and docs. If it misses, the text is not in the graph and grep is the right tool.\n\n"
-	}
-}
-
-// firstSearchPattern returns a grep/rg pattern: the first operand that is neither a flag nor a
-// flag's value. -e/-f (and their long forms) take the next word as the pattern, so that word is
-// returned directly rather than skipped as a flag value.
-func firstSearchPattern(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if a == "-e" || a == "-f" || a == "--regexp" || a == "--file" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-			return ""
-		}
-		if strings.HasPrefix(a, "-") {
-			continue
-		}
-		return a
-	}
-	return ""
-}
-
 func evaluateBashGuard(command string) bashGuardVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE - a pipe, a redirect, a cd before a magus
@@ -832,7 +828,7 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	case guardDocSearchRe.MatchString(command):
 		return bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch}
 	case guardCodeSearchRe.MatchString(command):
-		return bashGuardVerdict{Context: translateSearch(cmds) + searchGuardReason, Kind: advisoryCodeSearch}
+		return bashGuardVerdict{Context: searchAdvisoryLead(cmds) + searchGuardReason, Kind: advisoryCodeSearch}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):

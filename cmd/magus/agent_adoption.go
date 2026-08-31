@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
 )
 
@@ -75,6 +76,24 @@ func analyzeAdoption(lines []string) adoptionReport {
 	return r
 }
 
+// adoptionHints classifies commands through the same translator the live
+// guard suggests with, so the report and the guard agree on what a search is.
+// Bare on purpose: adoption reads any host's history, with no workspace to
+// scope by.
+var adoptionHints = hint.NewGraph()
+
+// The report's category NAMES are frozen, and hint's taxonomy is richer than
+// they are: hint calls a non-recursive grep and bat reads. These sets pin the
+// mapping back onto them - the grep family stays a search however it was
+// pointed, and only the read tools the report has always counted land in
+// file_reads. Counts are not bit-comparable across versions: routing through
+// hint re-baselines a few edge shapes (a search narrowed by a flag glob, an
+// in-place sed).
+var (
+	adoptionGrepFamily = map[string]bool{"grep": true, "egrep": true, "fgrep": true}
+	adoptionReadTools  = map[string]bool{"cat": true, "head": true, "tail": true, "less": true, "more": true, "sed": true}
+)
+
 // classifyCommandLine reuses the guard's own command parser, so the report agrees with what the
 // live guard sees. It returns the dominant category and, for a repo-wide source search, the bare
 // identifier that would route to `magus refs`.
@@ -84,34 +103,33 @@ func classifyCommandLine(line string) (category, symbol string) {
 	var srcSearch, proseSearch bool
 	var symbolPat string
 	for _, c := range cmds {
-		switch c.Name {
-		case "magus", "./magus":
+		// magus-verb detection stays local: hint models the tools magus
+		// replaces, never magus itself.
+		if c.Name == "magus" || c.Name == "./magus" {
 			if len(c.Args) > 0 && slices.Contains([]string{"query", "refs", "explain", "path", "graph"}, c.Args[0]) {
 				sawGraph = true
 			} else {
 				sawMagus = true
 			}
-		case "grep", "egrep", "fgrep", "rg", "ag":
-			sawSearch = true
-		case "cat", "head", "tail", "less", "more":
-			sawRead = true
-		case "sed":
-			if slices.Contains(c.Args, "-n") {
-				sawRead = true
-			}
+			continue
 		}
-	}
-	if sawSearch {
-		proseSearch = guardDocSearchRe.MatchString(line)
-		srcSearch = !proseSearch && guardCodeSearchRe.MatchString(line)
-		if srcSearch {
-			for _, c := range cmds {
-				if slices.Contains([]string{"grep", "egrep", "fgrep", "rg", "ag"}, c.Name) {
-					if p := firstSearchPattern(c.Args); looksLikeSymbol(p) {
-						symbolPat = p
-						break
-					}
+		inv := hint.Invocation{Name: c.Name, Args: c.Args}
+		switch adoptionHints.Classify(inv) {
+		case hint.ClassSearchProse:
+			sawSearch, proseSearch = true, true
+		case hint.ClassSearchSource:
+			sawSearch, srcSearch = true, true
+			if symbolPat == "" {
+				if pats := adoptionHints.Patterns(inv); len(pats) > 0 && looksLikeSymbol(pats[0]) {
+					symbolPat = pats[0]
 				}
+			}
+		case hint.ClassRead:
+			switch {
+			case adoptionGrepFamily[c.Name]:
+				sawSearch = true
+			case adoptionReadTools[c.Name]:
+				sawRead = true
 			}
 		}
 	}
@@ -133,13 +151,13 @@ func classifyCommandLine(line string) (category, symbol string) {
 	}
 }
 
-// looksLikeSymbol is stricter than the guard's bareIdentRe: for the report's "try refs" list it
+// looksLikeSymbol is stricter than hint's identifier shape: for the report's "try refs" list it
 // requires an uppercase letter, because a code identifier almost always carries one
 // (parseQuery, HandleFoo) while the false positives are all-lowercase words and path fragments
 // (test, node_modules, gen) that refs would never resolve. The guard's live nudge stays broad
 // because it hedges; a report that names a pattern a symbol should be more sure.
 func looksLikeSymbol(p string) bool {
-	return bareIdentRe.MatchString(p) && strings.ContainsAny(p, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	return hint.IsIdentifier(p) && strings.ContainsAny(p, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 }
 
 func topPatterns(counts map[string]int, n int) []patternCount {

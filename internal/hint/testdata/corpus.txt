@@ -1,0 +1,59 @@
+# Realistic agent shell commands, one per line. Controlled vocabulary: no
+# spaces inside a single argument, so a whitespace split plus quote-stripping
+# reconstructs each Command without a shell parser.
+grep -rn parseGuardCommands .
+grep -rn evaluateBashGuard internal/
+grep -rnw Suggestion .
+grep -rn MGS1002 .
+grep -rn MGS4007 docs/
+grep -rn mgs_listManifests spells/
+grep -rn mgs_readFile .
+grep -rni todo internal/
+grep -rn -e alpha -e beta .
+grep -rn 'func(x)' .
+rg parseQuery
+rg -w NewGraph internal/hint
+rg -t go suggestSearch
+rg -F 'TODO(eli)'
+rg -g '*.go' bareIdentRe
+ag translateSearch
+ag -G '.go$' someHelperName
+rg cache_key
+grep -R KindDocSection types
+grep -rn magus.query.output .
+grep -f patterns.txt -r .
+grep -r -e alpha -F -e beta .
+grep -n install README.md
+grep -rn checkpoint docs/guides/vcs.md
+rg docsection MAGUS.md
+ag adoption docs/recommendations.md
+grep pattern go.mod
+grep -n version magus.yaml
+grep -c func main.go
+find . -name '*.go'
+find internal -name '*_test.go'
+find . -name '*.buzz' -exec wc -l {} ;
+find docs -type f -name '*.md'
+find . -type d
+fd -e go
+fd -e buzz spells
+fd guard_ cmd/magus
+fd -g '*.yaml'
+find . -name '[ab]*.go'
+cat MAGUS.md
+cat internal/hint/hint.go
+head -50 cmd/magus/guard_shell.go
+tail -20 .magus/logs/run.log
+less docs/index.md
+more go.sum
+bat internal/agent/doc.go
+sed -n 10,20p magusfile.buzz
+awk '{print$1}' go.sum
+sed s/foo/bar/ notes.txt
+sed -i s/a/b/g config.yaml
+sd foo bar internal/
+awk -F: '{print$2}' /etc/passwd
+ls -la internal/hint
+wc -l internal/hint/hint.go
+tree -L 2
+du -sh .magus

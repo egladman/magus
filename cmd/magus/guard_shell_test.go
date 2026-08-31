@@ -282,6 +282,13 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "grep -rn MGS2011 docs/", context: "magus query MGS2011"},
 		{command: "grep -rn mgs_listManifests spells/", context: "magus query mgs_listManifests"},
 		{command: `find . -name "*.go"`, context: "magus refs"},
+		// A find/fd gets a translated lead too: the -name glob converts to a
+		// file-node query, on top of the generic reason above. The regex is
+		// single-quoted so its backslash survives the paste.
+		{command: `find . -name "*.go"`, context: `magus query kind=file 'id=~\.go$'`},
+		// A find feeding a grep is a CONTENT question, so the search-family
+		// suggestion leads, not the file listing.
+		{command: `find . -name '*.go' | xargs grep -l HandleFoo`, context: "magus refs HandleFoo"},
 		// magus is CWD-relative, so cd-then-magus is how the right command lands
 		// on the wrong project. The project is an argument; only a different
 		// WORKSPACE needs --root.
@@ -349,6 +356,18 @@ func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
 	v := evaluateBashGuard(`grep -rn "funcName" .`)
 	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
 	assert.Contains(t, v.Context, "grep is right", "and hedges rather than promising equivalence")
+}
+
+// TestSearchAdvisoryLeadPrefersTheContentQuestion pins the lead's ordering on a
+// line carrying both a find and a search: the search answers the content
+// question, so its suggestion must outrank the file listing even though the
+// find comes first on the line - and the piped grep counts as repo-wide, since
+// the find is what feeds it the tree.
+func TestSearchAdvisoryLeadPrefersTheContentQuestion(t *testing.T) {
+	v := evaluateBashGuard(`find . -name '*.go' | xargs grep -l HandleFoo`)
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, "magus refs HandleFoo", "the content question leads")
+	assert.NotContains(t, v.Context, "kind=file", "the file listing must not outrank it")
 }
 
 // TestParseGuardCommands pins the resolution itself, separately from the
