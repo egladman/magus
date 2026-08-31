@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5165,
-  "edge_count": 9144,
+  "node_count": 5166,
+  "edge_count": 9145,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -15518,6 +15518,16 @@
       "source": "docs/guides/integrations/agents/guard.md#deny-only-what-cannot-be-undone",
       "attrs": {
         "anchor": "deny-only-what-cannot-be-undone",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard.md#measuring-adoption",
+      "kind": "docsection",
+      "label": "Measuring adoption",
+      "source": "docs/guides/integrations/agents/guard.md#measuring-adoption",
+      "attrs": {
+        "anchor": "measuring-adoption",
         "level": "2"
       }
     },
@@ -84862,6 +84872,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/guard.md#the-guard",
       "target": "docsection:docs/guides/integrations/agents/guard.md#deny-only-what-cannot-be-undone",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard.md#the-guard",
+      "target": "docsection:docs/guides/integrations/agents/guard.md#measuring-adoption",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

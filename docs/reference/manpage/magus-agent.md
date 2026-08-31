@@ -11,7 +11,7 @@ Install the knowledge-graph agent skills into a repository
 
 ## Synopsis
 
-**magus** agent \<install|sample\> [flags]
+**magus** agent \<install|sample|adoption\> [flags]
 
 ## Description
 
@@ -58,6 +58,9 @@ paths-relative-to-\<dir\> case. Absolute destinations are refused unless
 
 **sample**
 : Print a starter AGENTS.md to stdout; never writes a file
+
+**adoption**
+: Report how often agents used the knowledge graph versus a raw text search
 
 ## Examples
 

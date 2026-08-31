@@ -84,6 +84,13 @@ https://github.com/egladman/magus/compare/v0.3.0...main
 
 ### Added
 
+- **`magus agent adoption` measures whether agents actually use the knowledge graph.** It
+  reads a corpus of shell commands (stdin or `--commands`) and reports how often the graph
+  (`query`/`refs`/`explain`/`path`) was reached versus a raw text search, the graph-to-grep
+  ratio, and the top repo-wide greps whose pattern is a real identifier - the ones that should
+  have been `magus refs`. magus stays host-agnostic: it analyzes commands, never a host's
+  session logs, and the help prints the recipe to extract them. It turns "query before
+  grepping" from doctrine into a number you can watch move.
 - **The knowledge graph now indexes markdown by heading, so prose is retrievable a section
   at a time.** Every heading in a tracked markdown file becomes a `docsection` node whose
   id and source are `<path>#<anchor>` - the same fragment a link into the rendered page

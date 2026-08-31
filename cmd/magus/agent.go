@@ -35,16 +35,18 @@ func agentCmd(ctx context.Context, args []string) error {
 		return agentInstallCmd(ctx, args[1:])
 	case "sample":
 		return agentSampleCmd()
+	case "adoption":
+		return agentAdoptionCmd(args[1:])
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install or sample)", args[0])
+		return usagef("magus agent: unknown subcommand %q (want install, sample, or adoption)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent <install|sample> [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|sample|adoption> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  install            render the embedded skills and write or stream them")
@@ -52,6 +54,8 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "                     .opencode/skills, ...)")
 	fmt.Fprintln(w, "  sample             print a starter AGENTS.md to stdout to own and tweak;")
 	fmt.Fprintln(w, "                     never writes a file")
+	fmt.Fprintln(w, "  adoption           report how often agents used the graph versus grep,")
+	fmt.Fprintln(w, "                     over shell commands piped in (stdin or --commands)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "magus never writes your AGENTS.md. That file is yours, and an installer")
 	fmt.Fprintln(w, "that edits a file you own leaves bytes you did not write and cannot audit.")

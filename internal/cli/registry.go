@@ -1706,10 +1706,11 @@ answer: it streams a tar archive to stdout, so skills can be installed
 anywhere a shell can reach. The write-to-disk form exists for the in-repo,
 paths-relative-to-<dir> case. Absolute destinations are refused unless
 --global is set, so magus cannot silently write outside the working tree.`,
-	Usage: "magus agent <install|sample> [flags]",
+	Usage: "magus agent <install|sample|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
 		{Name: "sample", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
+		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search"},
 	},
 	Flags: []Flag{
 		{Name: "dir", Kind: FlagString, Default: ".", Doc: "Repo directory to install into (agent install)"},

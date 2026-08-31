@@ -412,3 +412,25 @@ rather than a command or a file path is a lease handoff: it appends an
 is no command and no path to judge, and a prompt that merely mentions a denied
 command would otherwise block the lease that describes it. See
 [Leases](leases.md).
+
+## Measuring adoption
+
+The point of the grep-to-query nudge is to move a number: how often agents reach
+for the knowledge graph versus a raw text search. `magus agent adoption` reports
+it from a corpus of shell commands - the graph-to-grep ratio, the file reads a
+targeted read would beat, and the top repo-wide greps whose pattern is a real
+identifier, the ones that should have been `magus refs`.
+
+magus analyzes commands; it never reads a host's session logs, so extraction is
+yours. For Claude Code, whose sessions are JSONL under `~/.claude/projects/`:
+
+```sh
+cat ~/.claude/projects/*/*.jsonl \
+  | jq -r '.message.content[]? | select(.type=="tool_use" and .name=="Bash")
+           | (.input.command | split("\n")[0])' \
+  | magus agent adoption
+```
+
+A 1:20 ratio means the graph is barely used. The levers that move it are an
+easier query grammar to reach for (`kind=x`, `id=~re`) and the advisory that
+translates a caught grep into the `magus refs` that would answer it.

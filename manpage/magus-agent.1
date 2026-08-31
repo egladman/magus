@@ -3,7 +3,7 @@
 magus\-agent \- Install the knowledge\-graph agent skills into a repository
 .SH SYNOPSIS
 .B magus
-.RI "agent <install|sample> [flags]"
+.RI "agent <install|sample|adoption> [flags]"
 .SH DESCRIPTION
 Render the agent skills embedded in this binary and write or stream them
 into named destinations (.claude/skills, .agents/skills, .opencode/skills,
@@ -49,6 +49,9 @@ Render the embedded skills and write or stream them into named destinations
 .TP
 \fBsample\fR
 Print a starter AGENTS.md to stdout; never writes a file
+.TP
+\fBadoption\fR
+Report how often agents used the knowledge graph versus a raw text search
 .RE
 .SH EXAMPLES
 \fIInstall into a repo's agent skills directory\fR
