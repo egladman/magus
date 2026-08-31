@@ -450,13 +450,26 @@ var (
 	// while the false negative silently rewrote a dependency's identifier.
 	guardScriptedRewriteRe = regexp.MustCompile(`\b(python3?|perl|ruby|node)\b[\s\S]*\b(re\.subn?|str\.replace|\.replace\()[\s\S]*\.write\(|\b(perl|ruby)\s+-[a-zA-Z]*i[a-zA-Z]*\b`)
 
-	// A repo-wide code search. This does NOT claim the agent asked the wrong
+	// A repo-wide CONTENT search. This does NOT claim the agent asked the wrong
 	// question - a hook cannot know that - only that a whole-tree text search has
 	// a better tool here, because the graph answers from DECLARED sources while a
-	// grep hit is a guess. Deliberately narrow: a recursive grep, a bare ripgrep
-	// (effectively always repo-wide), or a find-by-name. A plain `grep pattern
-	// file` is reading one file and is left alone.
-	guardCodeSearchRe = regexp.MustCompile(`\bgrep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s|\bfind\s+[^|&;]*-name\b`)
+	// grep hit is a guess. Deliberately narrow: a recursive grep (egrep and fgrep
+	// included, which internal/hint models as the same family), or a bare ripgrep
+	// or ag, both effectively always repo-wide. A plain `grep pattern file` is
+	// reading one file and is left alone.
+	guardCodeSearchRe = regexp.MustCompile(`\b[ef]?grep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s`)
+
+	// The same advisory reached by a repo-wide search for a file by NAME. Split
+	// from the content arm because the narrowness rule differs: a content search
+	// is admitted on being RECURSIVE, a file-find on asking a NAME question -
+	// `find . -type d` and `fd -t d` list a tree rather than look a name up, and
+	// stay silent. fd is recursive by default, so its admitting shapes are the
+	// name query itself: an extension flag, a glob flag, or a pattern in the
+	// first operand. A pattern behind a value-consuming flag (`fd -t f parse`)
+	// is missed, because telling that operand from the flag's own argument
+	// needs an argv parse this line-shaped rule does not do; erring toward
+	// silence keeps the gate honest. The leading class rejects `git clean -fd`.
+	guardFileFindRe = regexp.MustCompile(`\bfind\s+[^|&;]*-name\b|(^|[^-\w])fd\s+([^|&;]*(-[eg]|--(extension|glob))\b|[^-|&;\s])`)
 	// guardDocSearchRe fires when a read or search command names a markdown file - an agent
 	// looking for something IN prose. Markdown headings are indexed as doc-section nodes, so
 	// the answer is a section query, not a whole-file scan. Matches on ".md" so it fires in
@@ -832,7 +845,7 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case guardDocSearchRe.MatchString(command):
 		return bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch}
-	case guardCodeSearchRe.MatchString(command):
+	case guardCodeSearchRe.MatchString(command), guardFileFindRe.MatchString(command):
 		return bashGuardVerdict{Context: searchAdvisoryLead(cmds, hints) + searchGuardReason, Kind: advisoryCodeSearch}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}

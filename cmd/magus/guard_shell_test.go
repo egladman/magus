@@ -287,6 +287,19 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// file-node query, on top of the generic reason above. The regex is
 		// single-quoted so its backslash survives the paste.
 		{command: `find . -name "*.go"`, context: `magus query kind=file 'id=~\.go$'`},
+		// fd's translation shipped unreachable: hint modelled it while the gate
+		// admitted no fd line, so every fd test passed through hint.Suggest and
+		// none through the guard. These go end to end on purpose.
+		{command: "fd -e go", context: `magus query kind=file 'id=~\.go$'`},
+		{command: "fd -g '*.yaml'", context: `magus query kind=file 'id=~\.yaml$'`},
+		{command: "fd guard_ cmd/magus", context: `magus query kind=file id=~guard_`},
+		// A type filter is a tree listing, not a name question - the same reason
+		// `find . -type d` carries no -name and stays silent.
+		{command: "fd -t d"},
+		// egrep and fgrep are the grep family hint already models; the word
+		// boundary in `\bgrep` had been excluding both.
+		{command: "egrep -rn Foo .", context: "magus refs Foo"},
+		{command: `fgrep -rn 'a.b' .`, context: `magus query "a.b"`},
 		// A find feeding a grep is a CONTENT question, so the search-family
 		// suggestion leads, not the file listing.
 		{command: `find . -name '*.go' | xargs grep -l HandleFoo`, context: "magus refs HandleFoo"},
