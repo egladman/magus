@@ -12,7 +12,7 @@ import (
 	"time"
 
 	magus "github.com/egladman/magus"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
 )
@@ -61,9 +61,9 @@ func staleIndexNotice(stale []string) string {
 		return ""
 	}
 	return fmt.Sprintf("\nstale index: %s changed since %s last indexed %s, so this answer may be missing sites in %s.\n",
-		plural(len(stale), "a project", "projects"), clihint.GraphBuild,
+		plural(len(stale), "a project", "projects"), hint.GraphBuild,
 		plural(len(stale), "it", "them"), strings.Join(stale, ", ")) +
-		fmt.Sprintf("  refresh and ask again: %s\n", clihint.GraphBuild)
+		fmt.Sprintf("  refresh and ask again: %s\n", hint.GraphBuild)
 }
 
 // plural picks a word by count. Two call sites in one sentence, so the alternative is an
@@ -201,8 +201,8 @@ func staleGraphAdvice(ctx context.Context) string {
 	if len(stale) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: run `%s` first, then ask again. The answer you are about to get is drawn from an index built before the current sources.\n", clihint.GraphBuild) +
+	return fmt.Sprintf("magus workspace: run `%s` first, then ask again. The answer you are about to get is drawn from an index built before the current sources.\n", hint.GraphBuild) +
 		fmt.Sprintf("%s changed since %s last indexed %s: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
-			plural(len(stale), "One project", "Several projects"), clihint.GraphBuild, plural(len(stale), "it", "them"), strings.Join(stale, ", ")) +
+			plural(len(stale), "One project", "Several projects"), hint.GraphBuild, plural(len(stale), "it", "them"), strings.Join(stale, ", ")) +
 		"This is an advisory: a stale index still holds true facts, so the read is worth running either way."
 }

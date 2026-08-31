@@ -1,6 +1,8 @@
-// Package clihint is the single source of truth for magus command paths that
-// appear inside user-facing OUTPUT - hints, error messages, and examples that
-// point the reader at another command to run.
+package hint
+
+// This file is the single source of truth for magus command paths that appear
+// inside user-facing OUTPUT - hints, error messages, and examples that point
+// the reader at another command to run.
 //
 // Hardcoding these strings let them drift from the real command surface: a
 // failing target once printed "magus query <ref>" long after the command had
@@ -12,16 +14,6 @@
 // literal, and those are the ones that can silently go stale. A Command declared for
 // a path nothing renders buys nothing though - it drifts just as quietly, with no
 // output depending on it - so declare one when an emitter starts using it.
-//
-// It is nested under internal/interactive - the hints home (interactive.Emit and
-// the "did you mean" suggester) - since these command references exist to be shown
-// in hints; keeping it here rather than a top-level package co-locates the two.
-// It stays a stdlib-only leaf: it does NOT import its parent interactive, which pulls in
-// project, vcs and internal/graph/dependency. That is about WEIGHT, not cycles - there is
-// no cycle to avoid here, and `go list -deps ./internal/cache` already reaches
-// internal/interactive through internal/proc/run. The point is that a package needing
-// nothing but command strings should not acquire that dependency set to get them.
-package clihint
 
 import "strings"
 
@@ -61,7 +53,7 @@ func (c Command) Head() string { return c.tokens[0] }
 func (c Command) Leaf() string { return c.tokens[len(c.tokens)-1] }
 
 // Canonical commands referenced from user-facing output. Register every new one
-// in All so the drift test walks it.
+// in AllCommands so the drift test walks it.
 var (
 	Run              = cmd("run")
 	QueryOutput      = cmd("query", "output")
@@ -85,11 +77,12 @@ var (
 	SelfUpdate       = cmd("self", "update")
 )
 
-// All is every canonical command referenced in output, for the drift test to
-// walk. Keep new Command values registered here - TestAllDeclaredAreRegistered
-// reads this file and fails if a declaration is missing, which is how ServerReload
-// sat outside the guard while serverCmd routed on it.
-var All = []Command{
+// AllCommands is every canonical command referenced in output, for the drift
+// test to walk. Keep new Command values registered here -
+// TestAllDeclaredAreRegistered reads this file and fails if a declaration is
+// missing, which is how ServerReload sat outside the guard while serverCmd
+// routed on it.
+var AllCommands = []Command{
 	Run, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 	ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
 	DescribeTargets, DescribeProject, Ls, LsTargets, Refs, MCPTokenGenerate,

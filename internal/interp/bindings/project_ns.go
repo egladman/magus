@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/workspace"
@@ -107,7 +107,7 @@ func rejectUnknownSchemaKeys(m vm.Value, known []string, context string) error {
 		}
 		return fmt.Errorf("%s\nhint: nothing here is close to %q, so this magus may predate it."+
 			" Upgrade with `%s`, or delete the key if the workspace does not need it",
-			err.Error(), k, clihint.SelfUpdate)
+			err.Error(), k, hint.SelfUpdate)
 	}
 	return err
 }

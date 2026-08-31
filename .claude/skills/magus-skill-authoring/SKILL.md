@@ -169,7 +169,8 @@ Rules:
 ## 4. Breadcrumbs are load-bearing
 
 magus's cross-link discipline: every surface mints a stable, resolvable ID -
-tool names (toolref.go constants), CLI paths (clihint), output refs
+tool names (internal/hint ToolName constants), CLI paths (internal/hint
+Command values), output refs
 (out1a2b3c), diagnostics (MGSxxxx), graph node IDs (kind:name). Prose that
 points at another surface goes through one of those IDs so a rename breaks
 the build or a test, never an agent at 2am. Hints stay terse and earned: one

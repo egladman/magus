@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/secret"
 )
@@ -944,7 +944,7 @@ func (h *PrettyHandler) printRepro(project, target string) {
 	// Unindented: nothing else on screen uses depth, so the indent bought grouping
 	// that adjacency already gives while costing copy fidelity - a reader selecting
 	// the line got leading whitespace they had to strip.
-	h.printf("%s\n", clihint.Run.With(target, project))
+	h.printf("%s\n", hint.Run.With(target, project))
 }
 
 // failureReport is one failure as printFailure needs it.
@@ -1031,7 +1031,7 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		// (Magus.IdentifyRef behind MGS8001) or a `--publish` route to the
 		// exact bytes. The command is actionable off the runner, which was
 		// the only bar it ever had to clear.
-		full := clihint.QueryOutput.With(ref)
+		full := hint.QueryOutput.With(ref)
 		if colorize {
 			// The command is a hyperlink to the captured log on disk, so the ref
 			// can be REACHED from the transcript as well as retyped. This is the
@@ -1049,7 +1049,7 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 	if project == "" || target == "" {
 		return
 	}
-	repro := clihint.Run.With(target, project)
+	repro := hint.Run.With(target, project)
 	if colorize {
 		h.printf("  %s\n", tty.Colorize("reproduce: "+repro, colDim))
 	} else {
@@ -1156,7 +1156,7 @@ func (h *PrettyHandler) printRefLegend(colorize bool) {
 	if !h.mintedRef {
 		return
 	}
-	line := "  outputs: " + clihint.QueryOutput.With("<ref>")
+	line := "  outputs: " + hint.QueryOutput.With("<ref>")
 	if colorize {
 		line = tty.Colorize(line, colDim)
 	}

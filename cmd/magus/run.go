@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
@@ -154,7 +154,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// worth reading afterwards.
 		interactive.Emit(os.Stderr, fmt.Sprintf(
 			"running quietly; output refs print as targets finish, and `%s` reads any of them",
-			clihint.QueryOutput.With("<ref>")))
+			hint.QueryOutput.With("<ref>")))
 	}
 
 	if rf.Step && !isInteractiveTTY() {
@@ -877,13 +877,13 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil || addr == "" {
 		return types.WrapDiagnostic(types.DaemonRequired, nil,
-			"--detach hands the work to the daemon, and none is running; start one with `%s`", clihint.ServerStart)
+			"--detach hands the work to the daemon, and none is running; start one with `%s`", hint.ServerStart)
 	}
 	st, serr := proc.QueryStatus(ctx, addr)
 	if serr != nil || st == nil || st.Mode != "daemon" {
 		return types.WrapDiagnostic(types.DaemonRequired, nil,
 			"--detach needs the persistent daemon, and %s is not one: a per-process server exits with this command, so the work would be queued and silently dropped. Start it with `%s`",
-			addr, clihint.ServerStart)
+			addr, hint.ServerStart)
 	}
 	inv, err := proc.SubmitJob(ctx, addr, argv, version)
 	if err != nil {
@@ -901,7 +901,7 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 	// whenever the reader actually wants it.
 	if !wait {
 		fmt.Fprintf(os.Stderr, "magus: detached as %s\n  read it with: %s\n",
-			inv, clihint.QueryInvocation.With(inv))
+			inv, hint.QueryInvocation.With(inv))
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "magus: running as %s on the daemon\n", inv)
@@ -934,7 +934,7 @@ func awaitInvocation(ctx context.Context, root, inv string) error {
 			// keeps going, so say how to pick it up again rather than implying
 			// it was cancelled.
 			fmt.Fprintf(os.Stderr, "\nmagus: stopped waiting; %s is still running on the daemon\n  read it with: %s\n",
-				inv, clihint.QueryInvocation.With(inv))
+				inv, hint.QueryInvocation.With(inv))
 			return ctx.Err()
 		case <-time.After(delay):
 		}
@@ -958,10 +958,10 @@ func reportInvocation(header magus.Invocation, inv string) error {
 	took := time.Duration(header.FinishedMs-header.StartedMs) * time.Millisecond
 	if header.Status != "pass" {
 		fmt.Fprintf(os.Stderr, "magus: %s failed (%s)\n  read it with: %s\n",
-			inv, formatDur(took), clihint.QueryInvocation.With(inv))
+			inv, formatDur(took), hint.QueryInvocation.With(inv))
 		return errSilent{exitCode: 1}
 	}
 	fmt.Fprintf(os.Stderr, "magus: %s passed (%s)\n  read it with: %s\n",
-		inv, formatDur(took), clihint.QueryInvocation.With(inv))
+		inv, formatDur(took), hint.QueryInvocation.With(inv))
 	return nil
 }

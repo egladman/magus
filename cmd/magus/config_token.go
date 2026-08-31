@@ -24,7 +24,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -128,7 +128,7 @@ func configTokenPrint(args []string) error {
 	}
 	tok, err := auth.Load()
 	if errors.Is(err, auth.ErrNoToken) {
-		return types.DiagnosticErrorf(types.NoAuthToken, "magus config token print: no token configured; run `%s`", clihint.MCPTokenGenerate)
+		return types.DiagnosticErrorf(types.NoAuthToken, "magus config token print: no token configured; run `%s`", hint.MCPTokenGenerate)
 	}
 	if err != nil {
 		return err

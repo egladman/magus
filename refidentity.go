@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -152,7 +152,7 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 // Shared by cmd/magus/query.go's ref-lookup suggestion and internal/handler/mcp's
 // magus_output not-found fallback, so the CLI and the MCP surface render the exact
 // same reproduce command instead of two copies that can drift. It renders the
-// "magus run" prefix via clihint.Run so the command path itself stays
+// "magus run" prefix via hint.Run so the command path itself stays
 // single-sourced with every other canonical command reference.
 func (m *Magus) RefMatchCommand(mt types.RefMatch) string {
 	target := mt.Target
@@ -166,5 +166,5 @@ func (m *Magus) RefMatchCommand(mt types.RefMatch) string {
 	if len(mt.Charms) == 0 && len(m.cfg.DefaultCharms) > 0 {
 		args = append(args, "--no-default-charms")
 	}
-	return clihint.Run.With(args...)
+	return hint.Run.With(args...)
 }

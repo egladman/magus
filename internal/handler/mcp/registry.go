@@ -1,6 +1,8 @@
 package mcp
 
-import "github.com/egladman/magus/internal/interactive/clihint"
+import (
+	"github.com/egladman/magus/internal/hint"
+)
 
 // ParamDescriptor describes a single parameter on an MCP tool.
 type ParamDescriptor struct {
@@ -24,7 +26,7 @@ type ToolDescriptor struct {
 // Order matches the registration order in mcp.go's registerTools.
 var Registry = []ToolDescriptor{
 	{
-		Name:        string(toolDescribe),
+		Name:        string(hint.ToolDescribe),
 		Description: "Describe a magus concept and list every entity of that kind in the workspace: spells (language/runtime adapters), targets (targets), projects, workspaces, or mcp_tools. Pass name to narrow the list to one entity's detail: for targets it returns the fully-evaluated dispatch plan (sources, outputs, spells, rendered command, charms, policy).",
 		Params: []ParamDescriptor{
 			{Name: "kind", Type: "string", Required: true, Description: "One of: spells, charms, targets, graph, projects, workspaces, modules, mcp_tools."},
@@ -32,21 +34,21 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolDescribeFile),
+		Name:        string(hint.ToolDescribeFile),
 		Description: "Classify paths against the workspace's declared globs: the owning project, whether each path is a declared output (generated: regenerate it, never hand-edit) or a declared source (feeds cache keys and the affected set), and which projects claim it. Answers \"can I disregard this changed file\" from the workspace's own declarations - run it over a whole dirty tree before reading diffs or committing.",
 		Params: []ParamDescriptor{
 			{Name: "paths", Type: "string", Required: true, Description: "One or more workspace-relative paths, space-separated (e.g. \"MAGUS.md web/gen/index.html cmd/api/main.go\")."},
 		},
 	},
 	{
-		Name:        string(toolWhere),
+		Name:        string(hint.ToolWhere),
 		Description: "Resolve a fuzzy project name to its absolute directory path. Useful for navigating to a project or passing a path to another tool.",
 		Params: []ParamDescriptor{
 			{Name: "filter", Type: "string", Description: "One or more space-separated tokens to AND-filter project names (case-insensitive leaf match). Omit to list all."},
 		},
 	},
 	{
-		Name:        string(toolAffectedExplain),
+		Name:        string(hint.ToolAffectedExplain),
 		Description: "Explain why a project is in the VCS-diff affected set: shows the changed files and dependency chains that caused it to be selected.",
 		Params: []ParamDescriptor{
 			{Name: "project", Type: "string", Required: true, Description: "Project path (e.g. \"api\" or \"web/studio\")."},
@@ -54,7 +56,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolInsight),
+		Name:        string(hint.ToolInsight),
 		Description: "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn x complexity, with authors/recency/blast-radius), files (per-file churn x complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). One lens reads the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names). Read its answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
 		Params: []ParamDescriptor{
 			{Name: "lens", Type: "string", Description: "One of: hotspots (default), files, affinity, ownership, trend, unreferenced."},
@@ -63,7 +65,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolRunTarget),
+		Name:        string(hint.ToolRunTarget),
 		Description: "Run a build target on an EXPLICIT set of projects (or the cwd project when omitted). Use this INSTEAD of raw language tools (go test, eslint, pytest, tsc): the raw tool bypasses the cache, the sandbox, and affected tracking. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Use this when you know which projects to run; to instead run only the projects a VCS change touched, use magus_run_affected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run, e.g. \"build\", \"test\", \"lint\", \"format\", \"ci\", or an op-direct spell-qualified form like \"go::go-test\"."},
@@ -72,8 +74,8 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolRunAffected),
-		Description: "Run a build target on ONLY the projects a VCS change touched - magus computes the affected set from the diff and its dependency graph; you do not name projects. Equivalent to `" + clihint.Affected.With("<target>") + "`. This is the CI/pre-commit tool; to instead run named projects explicitly, use magus_run_target. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
+		Name:        string(hint.ToolRunAffected),
+		Description: "Run a build target on ONLY the projects a VCS change touched - magus computes the affected set from the diff and its dependency graph; you do not name projects. Equivalent to `" + hint.Affected.With("<target>") + "`. This is the CI/pre-commit tool; to instead run named projects explicitly, use magus_run_target. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run on affected projects (e.g. \"test\", \"lint\", \"ci\")."},
 			{Name: "base", Type: "string", Description: "Override VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
@@ -81,15 +83,15 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolDoctor),
+		Name:        string(hint.ToolDoctor),
 		Description: "Validate the workspace: config schema, cache writability, project discovery, language coverage, dependency cycles, tool availability, and VCS reachability.",
 	},
 	{
-		Name:        string(toolStatus),
+		Name:        string(hint.ToolStatus),
 		Description: "Report the workspace's configured telemetry, cache settings, and live proc-server pool state (when a parent magus is running).",
 	},
 	{
-		Name:        string(toolAffectedPlan),
+		Name:        string(hint.ToolAffectedPlan),
 		Description: "Emit a provider-neutral JSON shard plan for a target's VCS-affected project set. Use for CI fan-out or graph-guided work partitioning: map the matrix entries to parallel jobs, then inspect dependencies and outputs before assigning edits.",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Description: "Target to plan (default: ci; any affected target is accepted)."},
@@ -98,18 +100,18 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolConfigGet),
+		Name:        string(hint.ToolConfigGet),
 		Description: "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
 	},
 	{
-		Name:        string(toolTailLog),
+		Name:        string(hint.ToolTailLog),
 		Description: "Return the captured build log of the most recent cache entry for a project. Useful after a failed magus_run_target to inspect tool output.",
 		Params: []ParamDescriptor{
 			{Name: "project", Type: "string", Required: true, Description: "Project path."},
 		},
 	},
 	{
-		Name:        string(toolMemory),
+		Name:        string(hint.ToolMemory),
 		Description: "A user-owned per-repository handoff journal, shared across worktrees and kept outside the checkout. It is not automatic agent memory: create a named entry only for a decision, plan, or saved pointer a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision and plan entries may carry a short why. Use verify to surface malformed, stale, and broken-linked entries. The CLI (`magus memory`) and console read the same store. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's handoff.",
 		Params: []ParamDescriptor{
 			{Name: "op", Type: "string", Description: "One of: list (default; records plus issues), get, put (create or replace by name), delete, verify. cursor is legacy read-only."},
@@ -123,7 +125,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolQuery),
+		Name:        string(hint.ToolQuery),
 		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind=symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (out1a2b3c), use magus_output.",
 		Params: []ParamDescriptor{
 			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field matchers like kind=spell, project=pkg/foo, relation=uses, id=build, exclusion kind!=op, and a regex id=~build$."},
@@ -133,21 +135,21 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolOutput),
+		Name:        string(hint.ToolOutput),
 		Description: "Return one target run's exact captured output by its output ref (out1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
 		Params: []ParamDescriptor{
 			{Name: "ref", Type: "string", Required: true, Description: "An output ref (out1a2b3c) or a unique prefix of one, as printed on each target's result line."},
 		},
 	},
 	{
-		Name:        string(toolExplain),
+		Name:        string(hint.ToolExplain),
 		Description: "Show one knowledge-graph node's context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it. The argument is a node ID (target:pkg/foo:build) or a name that resolves to one.",
 		Params: []ParamDescriptor{
 			{Name: "node", Type: "string", Required: true, Description: "A node ID or a name that resolves to one."},
 		},
 	},
 	{
-		Name:        string(toolRefs),
+		Name:        string(hint.ToolRefs),
 		Description: "List where an ingested code symbol is defined and every file that references it, as file:line rows drawn from a SCIP index. The occurrence-shaped answer for a symbol's fan-in (magus_query renders that poorly). Symbols come from a declared knowledge.symbols index. For a large fan-in, pass limit and echo the returned next_cursor.",
 		Params: []ParamDescriptor{
 			{Name: "symbol", Type: "string", Required: true, Description: "A symbol node ID (symbol:...) or a name that resolves to one."},
@@ -156,7 +158,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolPath),
+		Name:        string(hint.ToolPath),
 		Description: "Show the shortest path between two knowledge-graph nodes: the chain of edges connecting them, with each hop's relation. Answers how two entities relate.",
 		Params: []ParamDescriptor{
 			{Name: "from", Type: "string", Required: true, Description: "Start node ID or a name that resolves to one."},
@@ -164,14 +166,14 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolStats),
+		Name:        string(hint.ToolStats),
 		Description: "Report the knowledge graph's shape - where the workspace concentrates and neglects. Returns god nodes (the most connected spells, targets, modules, where structural risk concentrates), orphans (docs that document nothing, spells no target uses), and doc coverage. Answers \"where is risk concentrated\" without shelling out.",
 		Params: []ParamDescriptor{
 			{Name: "kind", Type: "string", Description: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
 		},
 	},
 	{
-		Name: string(toolDiff),
+		Name: string(hint.ToolDiff),
 		Description: "Join the review session a person already has open and pair with them on it. " +
 			"op=state returns the whole session: every changed file annotated with its role (generated output vs source), " +
 			"how widely its changed symbols are referenced, whether it is public API surface, observed coverage, " +
@@ -195,11 +197,11 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(toolVCSCheckpoint),
+		Name:        string(hint.ToolVCSCheckpoint),
 		Description: "Return the identity of the workspace's working state right now: head revision, branch, whether the tree is dirty, and a digest of the uncommitted patch. Record one when handing a piece of work out, so a later reader knows what that work was looking at. It resolves and records and never mints - no tag, no stash, no ref, no file, nothing changed anywhere - so calling it is free and a checkpoint nobody keeps costs nothing. Feed the revision to anything that takes a revision; compare two patch digests to learn whether two workers saw the same uncommitted tree, which the revision alone cannot say because everyone on the branch shares it. Takes no parameters.",
 	},
 	{
-		Name:        string(toolLedger),
+		Name:        string(hint.ToolLedger),
 		Description: "Record the orchestrating agent's declared lease plan so humans can see it; the ledger itself refuses nothing. One row per lease, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the lease was handed, owned and forbidden paths, dependencies, tier, validation, and state. Owned/forbidden paths are a DECLARATION this store never acts on - the agent guard is what reads these facts to grade an agent's file writes, loudly and with the owning lease named, which is a separate surface on purpose: a store that quietly enforced would teach agents to route around the ledger. Every row should end in pass, fail, or no_return; a read-only lease carries an abbreviated row with no paths. One plan per workspace: clear starts a fresh one and keeps no history. Re-put your row on every state change: each put re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the lease as possibly dead - which is the READER's judgment, since nothing here transitions a row on its own.",
 		Params: []ParamDescriptor{
 			{Name: "op", Type: "string", Description: "One of: list (default; every row, plus overlaps - the pairs of live leases whose owned_paths intersect, reported as lease_a/lease_b with each side's own declarations in paths_a/paths_b, derived on the read and stored nowhere, and a fact to look at rather than a verdict), put (create or replace one row by id), register (record reported_base, the base a worker actually landed on, and get the divergence verdict back), clear (drop every row to start a fresh plan)."},

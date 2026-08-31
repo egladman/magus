@@ -15,8 +15,8 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/url"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
@@ -92,18 +92,18 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "with =~ (id=~build$). The : grammar (kind:spell, -kind:op) still works.")
 			fmt.Fprintln(os.Stderr, "  magus query kind=spell go")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target run's captured output by its\n", clihint.QueryOutput.Leaf())
+			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target run's captured output by its\n", hint.QueryOutput.Leaf())
 			fmt.Fprintln(os.Stderr, "output ref (out1a2b3c), shown when the target ran:")
-			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", clihint.QueryOutput.With("out1a2b3c"))
-			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("out1a2b3c", "-o json"))
-			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("out1a2b3c", "--open"))
-			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored attempts\n", clihint.QueryOutput.With("out1a2b3c", "--attempts"))
-			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", clihint.QueryOutput.With("out1a2b3c", "--identity"))
+			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", hint.QueryOutput.With("out1a2b3c"))
+			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", hint.QueryOutput.With("out1a2b3c", "-o json"))
+			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", hint.QueryOutput.With("out1a2b3c", "--open"))
+			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored attempts\n", hint.QueryOutput.With("out1a2b3c", "--attempts"))
+			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", hint.QueryOutput.With("out1a2b3c", "--identity"))
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintf(os.Stderr, "`%s <id>` reads one run's journal back by the id shown as\n", clihint.QueryInvocation.Leaf())
-			fmt.Fprintf(os.Stderr, "`inv:` in %s:\n", clihint.QueryOutput.With("<ref>", "--identity"))
-			fmt.Fprintf(os.Stderr, "  %-38s the run's events, newest last\n", clihint.QueryInvocation.With("invmsm3vcou1"))
-			fmt.Fprintf(os.Stderr, "  %-38s only the credential reads (audit)\n", clihint.QueryInvocation.With("invmsm3vcou1", "--secrets"))
+			fmt.Fprintf(os.Stderr, "`%s <id>` reads one run's journal back by the id shown as\n", hint.QueryInvocation.Leaf())
+			fmt.Fprintf(os.Stderr, "`inv:` in %s:\n", hint.QueryOutput.With("<ref>", "--identity"))
+			fmt.Fprintf(os.Stderr, "  %-38s the run's events, newest last\n", hint.QueryInvocation.With("invmsm3vcou1"))
+			fmt.Fprintf(os.Stderr, "  %-38s only the credential reads (audit)\n", hint.QueryInvocation.With("invmsm3vcou1", "--secrets"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
 			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
@@ -121,9 +121,9 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 
 	// Output-reference retrieval is an EXPLICIT subcommand - `magus query output <ref>` - not a
 	// shape-routed positional, so a search term can never collide with a ref id.
-	if len(pos) >= 1 && pos[0] == clihint.QueryOutput.Leaf() {
+	if len(pos) >= 1 && pos[0] == hint.QueryOutput.Leaf() {
 		if len(pos) != 2 {
-			fmt.Fprintf(os.Stderr, "%s: expected exactly one ref (e.g. %s)\n", clihint.QueryOutput, clihint.QueryOutput.With("out1a2b3c"))
+			fmt.Fprintf(os.Stderr, "%s: expected exactly one ref (e.g. %s)\n", hint.QueryOutput, hint.QueryOutput.With("out1a2b3c"))
 			return errSilent{exitCode: 2}
 		}
 		ref := pos[1]
@@ -150,16 +150,16 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	}
 	// `magus query invocation <id>` - the sibling of `query output <ref>`, and explicit for
 	// the same reason: an id is shape-routed nowhere, so a search term cannot collide with one.
-	if len(pos) >= 1 && pos[0] == clihint.QueryInvocation.Leaf() {
+	if len(pos) >= 1 && pos[0] == hint.QueryInvocation.Leaf() {
 		if len(pos) != 2 {
 			fmt.Fprintf(os.Stderr, "%s: expected exactly one invocation id (e.g. %s)\n",
-				clihint.QueryInvocation, clihint.QueryInvocation.With("invmsm3vcou1"))
+				hint.QueryInvocation, hint.QueryInvocation.With("invmsm3vcou1"))
 			return errSilent{exitCode: 2}
 		}
 		inv := pos[1]
 		if !cache.LooksLikeInvocationID(inv) {
 			fmt.Fprintf(os.Stderr, "magus query invocation: %q is not an invocation id (expected inv<id>, e.g. invmsm3vcou1); a run prints one as `inv:` in %s\n",
-				inv, clihint.QueryOutput.With("<ref> --identity"))
+				inv, hint.QueryOutput.With("<ref> --identity"))
 			return errSilent{exitCode: 2}
 		}
 		outOpts, oerr := outputOptionsOrDefault()
@@ -173,13 +173,13 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	// id, so it can recognize it coming back.
 	if len(pos) == 1 && cache.LooksLikeInvocationID(pos[0]) {
 		fmt.Fprintf(os.Stderr, "magus query: %q is an invocation id, not a graph term. Read it with: %s\n",
-			pos[0], clihint.QueryInvocation.With(pos[0]))
+			pos[0], hint.QueryInvocation.With(pos[0]))
 		return errSilent{exitCode: 2}
 	}
 	if qf.Open || qf.Print || qf.Attempts || qf.Identity || qf.Publish {
 		// --open/--print/--attempts/--identity only apply to `query output <ref>`. Set on a graph
 		// search, they were a mistake; stop rather than silently ignore them.
-		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--identity/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphExport.With("--open"))
+		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--identity/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", hint.QueryOutput, hint.GraphExport.With("--open"))
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && qf.Kind == "" {
@@ -222,7 +222,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		// query's exit status stays 0 whatever the verdict: an empty result set is a
 		// legitimate answer to a search, and every script that runs `magus query` would
 		// break if it became a failure. The verdict rides the output instead.
-		printVerdict(os.Stdout, out.Answer, clihint.Refs.With("<name>"))
+		printVerdict(os.Stdout, out.Answer, hint.Refs.With("<name>"))
 		printIndexStaleness(ctx, os.Stdout, root)
 		return nil
 	}
@@ -300,7 +300,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 			return fmt.Errorf("magus query output: publish %s: %w", ref, perr)
 		}
 		fmt.Printf("published %s to the remote cache\n", published)
-		fmt.Printf("a teammate with the same trust set can now run: %s\n", clihint.QueryOutput.With(published))
+		fmt.Printf("a teammate with the same trust set can now run: %s\n", hint.QueryOutput.With(published))
 		return nil
 	}
 	if o.open {
@@ -386,7 +386,7 @@ func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out Out
 	// The bare ref already answers with the newest attempt; the hint earns its keep
 	// for reaching an OLDER one.
 	if len(list) > 1 {
-		fmt.Printf("\nRetrieve one attempt's exact output: %s\n", clihint.QueryOutput.With(list[len(list)-1].Attempt))
+		fmt.Printf("\nRetrieve one attempt's exact output: %s\n", hint.QueryOutput.With(list[len(list)-1].Attempt))
 	}
 	return nil
 }
@@ -655,7 +655,7 @@ func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string)
 		// Informative, not a failure to try: nothing here keys to the ref because the
 		// run that printed it had different inputs, not because this lookup is broken.
 		fmt.Fprintln(os.Stderr, "No target in this workspace keys to that ref at the current tree, which means the run that printed it had different inputs (a different commit, uncommitted change, or environment).")
-		fmt.Fprintf(os.Stderr, "Once you know which target it should be: %s\n", clihint.DescribeTargets.With("<target>", "--cache", "--against", ref))
+		fmt.Fprintf(os.Stderr, "Once you know which target it should be: %s\n", hint.DescribeTargets.With("<target>", "--cache", "--against", ref))
 	case 1:
 		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for:")
 		fmt.Fprintf(os.Stderr, "  %s\n", m.RefMatchCommand(matches[0]))
@@ -668,7 +668,7 @@ func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string)
 	// Reachable from every branch, not just the zero-match one: even a matched target
 	// may be nondeterministic or expensive enough that the exact bytes from whoever
 	// already has them beat a local re-run.
-	fmt.Fprintf(os.Stderr, "If someone else has it, they can share it with: %s\n", clihint.QueryOutput.With(ref, "--publish"))
+	fmt.Fprintf(os.Stderr, "If someone else has it, they can share it with: %s\n", hint.QueryOutput.With(ref, "--publish"))
 }
 
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
@@ -744,7 +744,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		reason, gaps := symbolCoverage(ctx, root, pos[0], seedsSymbols)
 		ans := types.ClassifyAnswer(false, reason, gaps)
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
-		printVerdict(os.Stderr, ans, clihint.Refs.With(pos[0]))
+		printVerdict(os.Stderr, ans, hint.Refs.With(pos[0]))
 		return exitForVerdict(ans.Verdict)
 	}
 

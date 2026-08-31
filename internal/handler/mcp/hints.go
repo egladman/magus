@@ -1,14 +1,9 @@
 package mcp
 
-// hints.go cross-links the MCP tool surface WITHOUT bloating responses. The
-// static per-session map (serverInstructions in transport.go) teaches the flow
-// once for free; this file adds the paid, context-sensitive part: at most one
-// terse follow-up line, appended only where the tool name plus the call outcome
-// make a next step obvious. Two response kinds earn a line - an error/empty
-// result (recover with the naming tool) and a response that mints an ID the
-// agent will chain. A plain SUCCESS gets nothing: a blanket "related tools"
-// footer on every call is pure context tax, and output bytes are the agent's
-// measured context cost (see magus.mcp.tool.output.size).
+// hints.go is the mcp-go side of the follow-up hints: internal/hint owns which
+// line a tool+outcome earns (hint.FollowUp and its doctrine), this file owns
+// scanning a result for a minted ref and appending the line to the
+// CallToolResult without corrupting the JSON payload.
 
 import (
 	"strings"
@@ -16,39 +11,8 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/hint"
 )
-
-// errorHints maps a tool to the one-line recovery step appended ONLY when that
-// tool returns an error/empty result. Values name tools, never argument values,
-// and stay a single lean line so the failure path costs the agent almost nothing.
-// Keys and the tool names embedded in each value are built from the ToolName
-// constants (toolref.go), so a tool rename is a compile error rather than a hint
-// that silently points at a tool that no longer exists.
-var errorHints = map[string]string{
-	toolRunTarget.String():   "next: list valid targets with " + toolDescribe.String() + " (kind=targets)",
-	toolRunAffected.String(): "next: list valid targets with " + toolDescribe.String() + " (kind=targets)",
-	toolWhere.String():       "next: list projects with " + toolDescribe.String() + " (kind=projects)",
-	toolOutput.String():      "next: output refs come from " + toolRunTarget.String() + " or " + toolTailLog.String(),
-	toolExplain.String():     "next: locate a node with " + toolQuery.String() + ", then explain it",
-	toolPath.String():        "next: locate the endpoints with " + toolQuery.String(),
-	toolRefs.String():        "next: locate a symbol with " + toolQuery.String(),
-}
-
-// staticChainHints maps a tool to a chain hint appended on a SUCCESS that always
-// leads somewhere fixed. Only tools whose whole purpose is to feed a follow-up
-// tool belong here - never general read tools, which get no footer.
-var staticChainHints = map[string]string{
-	toolAffectedPlan.String(): "next: run the affected set with " + toolRunAffected.String(),
-}
-
-// refChainTools mint an output reference the agent chains into magus_output. On
-// success their result text is scanned for a ref token; when one is present the
-// fetch hint names that exact ref so the agent can pull the captured output
-// without re-reading the run's event wall.
-var refChainTools = map[string]bool{
-	toolRunTarget.String():   true,
-	toolRunAffected.String(): true,
-}
 
 // decorateResult appends at most one cross-link line to a tool result, chosen by
 // the tool name and outcome: an error/empty result gets the recovery hint; a
@@ -61,22 +25,18 @@ func decorateResult(result *mcplib.CallToolResult, toolName string) {
 		return
 	}
 	if result.IsError {
-		appendHint(result, errorHints[toolName])
+		appendHint(result, hint.FollowUp(toolName, true, ""))
 		return
 	}
-	if h := staticChainHints[toolName]; h != "" {
-		appendHint(result, h)
-		return
+	var ref string
+	if hint.MintsRef(toolName) {
+		ref = firstRef(result)
 	}
-	if refChainTools[toolName] {
-		if ref := firstRef(result); ref != "" {
-			appendHint(result, "next: fetch the captured output with "+toolOutput.String()+" (ref="+ref+")")
-		}
-	}
+	appendHint(result, hint.FollowUp(toolName, false, ref))
 }
 
 // appendHint adds s to result as its own text block. A blank hint is a no-op, so
-// a tool with no map entry adds nothing.
+// a tool whose outcome earns no line adds nothing.
 func appendHint(result *mcplib.CallToolResult, s string) {
 	if s == "" {
 		return

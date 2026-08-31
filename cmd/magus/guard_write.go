@@ -635,11 +635,13 @@ func magusOwnSourceTree() bool {
 }
 
 // agentSurfaceSources are the files an edit to what agents are TAUGHT lands in: the
-// shipped skill bodies, and the MCP registry that names what an agent may call.
+// shipped skill bodies, the MCP registry that names what an agent may call, and the
+// hint sources that name the tools and commands hints steer agents toward.
 var agentSurfaceSources = []string{
 	"internal/agent/skills/",
 	"internal/handler/mcp/registry.go",
-	"internal/handler/mcp/toolref.go",
+	"internal/hint/mcptool.go",
+	"internal/hint/clicommand.go",
 }
 
 // adviseAgentSurfaceWrite routes an edit to the agent surface through the method that

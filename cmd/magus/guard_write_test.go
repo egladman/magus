@@ -743,7 +743,8 @@ func TestAdviseAgentSurfaceWrite(t *testing.T) {
 	for _, rel := range []string{
 		"internal/agent/skills/magus-run/SKILL.md",
 		"internal/handler/mcp/registry.go",
-		"internal/handler/mcp/toolref.go",
+		"internal/hint/mcptool.go",
+		"internal/hint/clicommand.go",
 	} {
 		got := adviseAgentSurfaceWrite(rel)
 		assert.Contains(t, got, "magus-skill-authoring", rel)

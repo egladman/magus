@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cli"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 )
 
 // helpAliases are case labels every hand-rolled dispatcher below repeats to
@@ -190,19 +190,19 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 }
 
 // TestServerDispatcherChildrenAreDeclared covers `magus server` separately:
-// serverCmd's switch compares against clihint.ServerStart.Leaf() and friends
+// serverCmd's switch compares against hint.ServerStart.Leaf() and friends
 // rather than string literals (see server.go), so dispatcherCases's literal
-// extraction finds nothing there. clihint.All already carries the same four
+// extraction finds nothing there. hint.AllCommands already carries the same four
 // leaves for the hint-drift test in surface_test.go; this asserts they also
 // match the registry's declared server Children, which is the check that
 // would have caught server missing reload and job (item 1 of the 2026-08
 // doctrine audit).
 func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 	got := []string{
-		clihint.ServerStart.Leaf(),
-		clihint.ServerStop.Leaf(),
-		clihint.ServerJob.Leaf(),
-		clihint.ServerReload.Leaf(),
+		hint.ServerStart.Leaf(),
+		hint.ServerStop.Leaf(),
+		hint.ServerJob.Leaf(),
+		hint.ServerReload.Leaf(),
 	}
 	slices.Sort(got)
 
@@ -210,6 +210,6 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
-		t.Errorf("serverCmd routes %v (via clihint)\nregistry Children for \"server\" = %v", got, want)
+		t.Errorf("serverCmd routes %v (via hint)\nregistry Children for \"server\" = %v", got, want)
 	}
 }

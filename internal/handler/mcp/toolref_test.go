@@ -4,8 +4,9 @@ import (
 	"regexp"
 	"testing"
 
-	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/egladman/magus/internal/hint"
 )
 
 // toolTokenRe matches a magus_* tool token embedded in hint prose. Registry
@@ -13,13 +14,12 @@ import (
 // stops at the surrounding punctuation/space.
 var toolTokenRe = regexp.MustCompile(`magus_[a-z_]+`)
 
-// TestMCPToolHintsResolve is the MCP analog of cmd/magus's clihint drift test:
-// every tool name that a cross-link hint references - both the map KEYS (the tool
-// a hint fires for) and every magus_* token embedded in the assembled hint VALUE
-// strings - must resolve to a real Registry[].Name. Building those references
-// from the ToolName constants closes the drift at compile time; this test
-// re-checks the constants and the assembled strings against Registry, so a tool
-// rename that misses either a key or an in-prose reference fails here.
+// TestMCPToolHintsResolve is the MCP analog of cmd/magus's CLI-command drift test:
+// every tool name the follow-up hints reference must resolve to a real
+// Registry[].Name. hint builds its map keys and in-prose references from the
+// hint.ToolName constants, which closes the drift at compile time; this test
+// re-checks the constants and every line FollowUp can emit against Registry,
+// so a tool rename that misses either side fails here.
 func TestMCPToolHintsResolve(t *testing.T) {
 	t.Parallel()
 
@@ -29,38 +29,22 @@ func TestMCPToolHintsResolve(t *testing.T) {
 	}
 
 	// Every declared tool-name constant names a real Registry tool.
-	for _, tn := range allToolNames {
+	for _, tn := range hint.AllToolNames {
 		assert.Truef(t, valid[tn.String()], "tool constant %q is not a Registry[].Name", tn)
 	}
 
-	// Every hint map key - the tool a hint fires for - is a real tool.
-	for key := range errorHints {
-		assert.Truef(t, valid[key], "errorHints key %q is not a Registry[].Name", key)
-	}
-	for key := range staticChainHints {
-		assert.Truef(t, valid[key], "staticChainHints key %q is not a Registry[].Name", key)
-	}
-	for key := range refChainTools {
-		assert.Truef(t, valid[key], "refChainTools key %q is not a Registry[].Name", key)
-	}
-
-	// Every magus_* token embedded in an assembled hint value resolves to a real
-	// tool. Gather the static value strings, plus the ref-chain hint that
-	// decorateResult assembles inline, and scan each for tool references.
-	values := make([]string, 0, len(errorHints)+len(staticChainHints)+1)
-	for _, v := range errorHints {
-		values = append(values, v)
-	}
-	for _, v := range staticChainHints {
-		values = append(values, v)
-	}
-	refResult := mcplib.NewToolResultText(`{"ref":"out1a2b3c4d"}`)
-	decorateResult(refResult, toolRunTarget.String())
-	values = append(values, resultText(refResult))
-
-	for _, v := range values {
-		for _, tok := range toolTokenRe.FindAllString(v, -1) {
-			assert.Truef(t, valid[tok], "hint value references tool %q, not a Registry[].Name: %q", tok, v)
+	// Every magus_* token embedded in a line FollowUp can emit resolves to a
+	// real tool. Walking every constant through every outcome covers the whole
+	// hint surface, ref-chain line included.
+	for _, tn := range hint.AllToolNames {
+		for _, v := range []string{
+			hint.FollowUp(tn.String(), true, ""),
+			hint.FollowUp(tn.String(), false, ""),
+			hint.FollowUp(tn.String(), false, "out1a2b3c4d"),
+		} {
+			for _, tok := range toolTokenRe.FindAllString(v, -1) {
+				assert.Truef(t, valid[tok], "hint value references tool %q, not a Registry[].Name: %q", tok, v)
+			}
 		}
 	}
 }

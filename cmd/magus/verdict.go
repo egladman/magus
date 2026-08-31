@@ -8,7 +8,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -80,7 +80,7 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 		}
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(w, "  outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
-			fmt.Fprintf(w, "  build the missing index with: %s\n", clihint.GraphBuild)
+			fmt.Fprintf(w, "  build the missing index with: %s\n", hint.GraphBuild)
 		}
 	}
 }

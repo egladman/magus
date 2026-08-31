@@ -24,33 +24,27 @@ func resultText(r *mcplib.CallToolResult) string {
 	return b.String()
 }
 
+// Which line a tool+outcome earns is pinned byte-for-byte in internal/hint's
+// TestFollowUp; these tests pin the decoration mechanics only.
 func TestDecorateResultErrorHint(t *testing.T) {
 	t.Parallel()
 
-	t.Run("error result gets the tool's terse recovery hint", func(t *testing.T) {
+	t.Run("error result gets the tool's recovery hint as its own block", func(t *testing.T) {
 		r := mcplib.NewToolResultError("mcp: no node matches foo")
 		decorateResult(r, "magus_explain")
 		require.Len(t, r.Content, 2, "hint is appended as its own block")
+		assert.Equal(t, "mcp: no node matches foo", r.Content[0].(mcplib.TextContent).Text, "the payload block is untouched")
 		assert.Contains(t, resultText(r), "magus_query")
-	})
-
-	t.Run("run error points at magus_describe", func(t *testing.T) {
-		r := mcplib.NewToolResultError("mcp: no targets resolved for bogus")
-		decorateResult(r, "magus_run_target")
-		assert.Contains(t, resultText(r), "magus_describe (kind=targets)")
-	})
-
-	t.Run("output error explains where refs come from", func(t *testing.T) {
-		r := mcplib.NewToolResultError("mcp: no stored output for ref")
-		decorateResult(r, "magus_output")
-		assert.Contains(t, resultText(r), "magus_run_target")
-		assert.Contains(t, resultText(r), "magus_tail_log")
 	})
 
 	t.Run("unmapped tool error gets no hint", func(t *testing.T) {
 		r := mcplib.NewToolResultError("mcp: boom")
 		decorateResult(r, "magus_stats")
 		assert.Len(t, r.Content, 1, "no footer for a tool without an error hint")
+	})
+
+	t.Run("nil result is a no-op", func(t *testing.T) {
+		decorateResult(nil, "magus_explain")
 	})
 }
 
@@ -73,6 +67,7 @@ func TestDecorateResultChainHints(t *testing.T) {
 		r := mcplib.NewToolResultText(`{"count":3,"matrix":[]}`)
 		decorateResult(r, "magus_affected_plan")
 		require.Len(t, r.Content, 2)
+		assert.Equal(t, `{"count":3,"matrix":[]}`, r.Content[0].(mcplib.TextContent).Text, "the JSON payload is untouched")
 		assert.Contains(t, resultText(r), "magus_run_affected")
 	})
 
@@ -80,7 +75,7 @@ func TestDecorateResultChainHints(t *testing.T) {
 		r := mcplib.NewToolResultText(`{"ok":true,"ref":"out1a2b3c4d"}`)
 		decorateResult(r, "magus_run_target")
 		require.Len(t, r.Content, 2)
-		assert.Contains(t, resultText(r), "magus_output (ref=out1a2b3c4d)")
+		assert.Contains(t, resultText(r), "magus_output (ref=out1a2b3c4d)", "the scanned ref reaches the hint")
 	})
 
 	t.Run("run result with no ref gets no chain hint", func(t *testing.T) {

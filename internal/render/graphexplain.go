@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -93,7 +93,7 @@ func MissText(query string, ans types.KnowledgeAnswer) string {
 	}
 	if len(ans.Gaps) > 0 {
 		fmt.Fprintf(&b, "outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
-		fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", clihint.GraphBuild)
+		fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", hint.GraphBuild)
 	}
 	return b.String()
 }

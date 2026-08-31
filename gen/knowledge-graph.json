@@ -6632,12 +6632,12 @@
       }
     },
     {
-      "id": "docsection:CONTRIBUTING.md#hints-belong-in-clihint",
+      "id": "docsection:CONTRIBUTING.md#hints-belong-in-hint",
       "kind": "docsection",
-      "label": "Hints belong in clihint",
-      "source": "CONTRIBUTING.md#hints-belong-in-clihint",
+      "label": "Hints belong in hint",
+      "source": "CONTRIBUTING.md#hints-belong-in-hint",
       "attrs": {
-        "anchor": "hints-belong-in-clihint",
+        "anchor": "hints-belong-in-hint",
         "level": "3"
       }
     },
@@ -78359,7 +78359,7 @@
     },
     {
       "source": "docsection:CONTRIBUTING.md#naming",
-      "target": "docsection:CONTRIBUTING.md#hints-belong-in-clihint",
+      "target": "docsection:CONTRIBUTING.md#hints-belong-in-hint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

@@ -21,9 +21,9 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
@@ -201,7 +201,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "fragment (#data=...), which browsers never transmit; --serve hands it over an")
 			fmt.Fprintln(os.Stderr, "ephemeral 127.0.0.1 loopback server instead (no size limit). --targets opens")
 			fmt.Fprintln(os.Stderr, "the target dependency graph, and takes an optional project path to scope it.")
-			fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running daemon (%s);\n", clihint.ServerStart)
+			fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running daemon (%s);\n", hint.ServerStart)
 			fmt.Fprintln(os.Stderr, "with no mode flag and a reachable daemon it is chosen automatically.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
@@ -971,19 +971,19 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		defer cancel()
 		if err := probeLiveBridge(pctx, hostPort); err != nil {
 			fmt.Fprintln(os.Stderr, "magus graph export --open --follow --print: the console is not reachable.")
-			fmt.Fprintf(os.Stderr, "start it: %s\n", clihint.ServerStart)
+			fmt.Fprintf(os.Stderr, "start it: %s\n", hint.ServerStart)
 			return errSilent{exitCode: 1}
 		}
 	} else if err := ensureConsoleDaemon(ctx, hostPort, root); err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: %v\n", err)
-		fmt.Fprintf(os.Stderr, "start it yourself to see the daemon's own output: %s\n", clihint.ServerStart)
+		fmt.Fprintf(os.Stderr, "start it yourself to see the daemon's own output: %s\n", hint.ServerStart)
 		return errSilent{exitCode: 1}
 	}
 
 	token, err := auth.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: could not load the MCP token: %v\n", err)
-		fmt.Fprintf(os.Stderr, "If no token exists yet, run: %s\n", clihint.MCPTokenGenerate)
+		fmt.Fprintf(os.Stderr, "If no token exists yet, run: %s\n", hint.MCPTokenGenerate)
 		return errSilent{exitCode: 1}
 	}
 

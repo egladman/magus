@@ -1,4 +1,4 @@
-package clihint
+package hint
 
 import (
 	"go/ast"
@@ -31,36 +31,38 @@ func TestCommandRender(t *testing.T) {
 	}
 }
 
-// TestAllDeclaredAreRegistered fails if a Command is declared but left out of All, so the
-// drift test in cmd/magus keeps walking the full set.
+// TestAllDeclaredAreRegistered fails if a Command is declared but left out of AllCommands,
+// so the drift test in cmd/magus keeps walking the full set.
 //
-// It reads the declarations out of the source rather than comparing All against a second
-// hand-written list. That is not pedantry: the hand-written version compared LENGTHS against a
-// copy of All itself, so forgetting a command in both places - which is exactly what forgetting
-// looks like - kept the counts equal and the test green. ServerReload was declared, routed on
-// by serverCmd, and absent from All for as long as it existed.
+// It reads the declarations out of the source rather than comparing AllCommands against a
+// second hand-written list. That is not pedantry: the hand-written version compared LENGTHS
+// against a copy of AllCommands itself, so forgetting a command in both places - which is
+// exactly what forgetting looks like - kept the counts equal and the test green.
+// ServerReload was declared, routed on by serverCmd, and absent from the registry for as
+// long as it existed.
 //
 // Go cannot enumerate its own package-level vars at runtime, so the source is the only place
 // the full set exists.
 func TestAllDeclaredAreRegistered(t *testing.T) {
 	registered := map[string]bool{}
-	for _, c := range All {
+	for _, c := range AllCommands {
 		registered[c.String()] = true
 	}
 	for _, name := range declaredCommands(t) {
 		if !registered[name] {
-			t.Errorf("%q is declared but missing from All, so no drift test walks it", name)
+			t.Errorf("%q is declared but missing from AllCommands, so no drift test walks it", name)
 		}
 	}
 }
 
-// declaredCommands returns every "magus ..." path declared with cmd() in clihint.go, read from
-// the file so a new declaration is picked up without anyone remembering to list it.
+// declaredCommands returns every "magus ..." path declared with cmd() in clicommand.go,
+// read from the file so a new declaration is picked up without anyone remembering to
+// list it.
 func declaredCommands(t *testing.T) []string {
 	t.Helper()
-	f, err := parser.ParseFile(token.NewFileSet(), "clihint.go", nil, 0)
+	f, err := parser.ParseFile(token.NewFileSet(), "clicommand.go", nil, 0)
 	if err != nil {
-		t.Fatalf("parsing clihint.go: %v", err)
+		t.Fatalf("parsing clicommand.go: %v", err)
 	}
 	var out []string
 	ast.Inspect(f, func(n ast.Node) bool {

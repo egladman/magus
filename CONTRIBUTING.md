@@ -364,10 +364,10 @@ proto-backed and so are not part of the mapping: `mcp` is a protocol adapter and
 carries the full table plus what does and does not belong in the layer; keep the
 rule there rather than restating it per package.
 
-### Hints belong in `clihint`
+### Hints belong in `hint`
 
 A command path printed inside output goes through
-`internal/interactive/clihint`, never a string literal. A drift test walks every
+`internal/hint`, never a string literal. A drift test walks every
 registered command and asserts it still resolves, so a rename cannot leave a
 hint pointing at a command that no longer exists. That has already happened once:
 a failing target printed `magus query <ref>` long after the command became
