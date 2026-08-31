@@ -42,9 +42,9 @@ type Invocation struct {
 type Confidence int
 
 const (
-	Low Confidence = iota
-	Medium
-	High
+	ConfidenceLow Confidence = iota
+	ConfidenceMedium
+	ConfidenceHigh
 )
 
 // Suggestion is one magus command worth trying in place of the caught search.
@@ -70,41 +70,73 @@ const (
 	ClassTransform                 // awk/sed/sd: text transformation
 )
 
-// Graph holds the workspace facts the translator may use. All of them are
-// optional: a zero-option Graph still translates, it just cannot scope.
-type Graph struct {
+// Translator holds the workspace facts the syntactic translation may use. All
+// of them are optional: a zero-option Translator still translates, it just
+// cannot scope. It is not a graph - it never queries one - and the name would
+// collide with knowledge.Graph in the callers that hold both.
+type Translator struct {
 	projects []string
 }
 
-type Option func(*Graph)
+type Option func(*Translator)
 
 // WithProjects supplies workspace-relative project directories, enabling
 // project= scoping of query suggestions from a search's path operands.
 func WithProjects(paths []string) Option {
-	return func(g *Graph) {
+	return func(t *Translator) {
 		for _, p := range paths {
 			// The root project is dropped: `project=.` scopes a query to everything,
 			// which says nothing.
 			if c := path.Clean(p); c != "." {
-				g.projects = append(g.projects, c)
+				t.projects = append(t.projects, c)
 			}
 		}
 	}
 }
 
-func NewGraph(opts ...Option) *Graph {
-	g := &Graph{}
+func NewTranslator(opts ...Option) *Translator {
+	t := &Translator{}
 	for _, opt := range opts {
-		opt(g)
+		opt(t)
 	}
-	return g
+	return t
 }
 
-var (
-	searchTools = map[string]bool{"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true}
-	grepFamily  = map[string]bool{"grep": true, "egrep": true, "fgrep": true}
-	readTools   = map[string]bool{"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true}
-)
+// toolSpec is everything the translator knows about one search tool, so a
+// reviewer checks a row against one manpage instead of hunting the same fact
+// through several sets.
+type toolSpec struct {
+	valueShorts        string // short flags that consume the NEXT word, for THIS tool
+	recursiveByDefault bool   // rg and ag walk the tree with no -r
+	fixedByDefault     bool   // fgrep is grep -F by definition
+}
+
+// commonValueShorts take a value in every search tool, so a row carries only
+// the letters where the tools disagree. Merging the disagreements would eat the
+// pattern of every `grep -E <pat>` (rg's -E is an encoding, grep's is boolean),
+// and the same conflict recurs for grep's boolean -G/-T (ag's -G and rg's -T
+// take values) and ag's boolean -t/-D (rg's -t and grep's -D take values).
+const commonValueShorts = "ABCm"
+
+// searchTools is both the membership set - a name absent from it is not a
+// search - and the per-tool facts the parse depends on.
+var searchTools = map[string]toolSpec{
+	"grep":  {valueShorts: "dD"},
+	"egrep": {valueShorts: "dD"},
+	"fgrep": {valueShorts: "dD", fixedByDefault: true},
+	"rg":    {valueShorts: "ETtjg", recursiveByDefault: true},
+	"ag":    {valueShorts: "gG", recursiveByDefault: true},
+}
+
+var readTools = map[string]bool{"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true}
+
+// IsSearchTool reports whether name is a content-search tool the translator
+// models, so a caller ranking or filtering commands shares one definition of
+// the family instead of keeping its own copy.
+func IsSearchTool(name string) bool {
+	_, ok := searchTools[name]
+	return ok
+}
 
 var (
 	// bareIdentRe recognizes a search pattern that is a single identifier, so the
@@ -131,31 +163,35 @@ const (
 
 // Suggest returns the magus commands most likely to answer cmd, most-confident
 // first, or nil when the command has no honest graph equivalent.
-func (g *Graph) Suggest(cmd Invocation) []Suggestion {
-	switch {
-	case searchTools[cmd.Name]:
-		return g.suggestSearch(parseSearch(cmd.Name, cmd.Args))
-	case cmd.Name == "find":
-		return g.suggestFind(cmd.Args)
-	case cmd.Name == "fd":
-		return g.suggestFd(cmd.Args)
+func (t *Translator) Suggest(cmd Invocation) []Suggestion {
+	if spec, ok := searchTools[cmd.Name]; ok {
+		return t.suggestSearch(parseSearch(spec, cmd.Args))
+	}
+	switch cmd.Name {
+	case "find":
+		return t.suggestFind(cmd.Args)
+	case "fd":
+		return t.suggestFd(cmd.Args)
 	}
 	return nil
 }
 
 // Classify reports the tool taxonomy without composing suggestions.
-func (g *Graph) Classify(cmd Invocation) Class {
-	switch {
-	case searchTools[cmd.Name]:
-		sa := parseSearch(cmd.Name, cmd.Args)
+func Classify(cmd Invocation) Class {
+	if spec, ok := searchTools[cmd.Name]; ok {
+		sa := parseSearch(spec, cmd.Args)
 		switch {
 		case anyMarkdown(sa.paths()):
 			return ClassSearchProse
-		case grepFamily[cmd.Name] && !sa.recursive:
+		case !sa.recursive:
+			// Only the grep family can land here: a recursive-by-default tool
+			// carries recursive from the seed and nothing clears it.
 			return ClassRead
 		default:
 			return ClassSearchSource
 		}
+	}
+	switch {
 	case cmd.Name == "find" || cmd.Name == "fd":
 		return ClassFileFind
 	case readTools[cmd.Name]:
@@ -176,11 +212,12 @@ func (g *Graph) Classify(cmd Invocation) Class {
 // Patterns returns the search patterns a search command would look for
 // (all -e/--regexp values, else the first non-flag operand), nil for
 // non-search commands.
-func (g *Graph) Patterns(cmd Invocation) []string {
-	if !searchTools[cmd.Name] {
+func Patterns(cmd Invocation) []string {
+	spec, ok := searchTools[cmd.Name]
+	if !ok {
 		return nil
 	}
-	sa := parseSearch(cmd.Name, cmd.Args)
+	sa := parseSearch(spec, cmd.Args)
 	pats := sa.pats()
 	if len(pats) == 0 || pats[0] == "" {
 		return nil
@@ -213,7 +250,7 @@ func sedPrints(args []string) bool {
 // reads. Flag parsing is deliberately lenient: an unknown flag is skipped as
 // a boolean and must never break pattern extraction.
 type searchArgs struct {
-	tool       string
+	spec       toolSpec
 	patterns   []string // every -e/--regexp value
 	operands   []string // non-flag words in order
 	recursive  bool
@@ -260,9 +297,11 @@ var searchLongValueFlags = map[string]bool{
 	"--color": true, "--sort": true, "--binary-files": true, "--label": true,
 }
 
-func parseSearch(tool string, args []string) searchArgs {
-	// rg and ag search the tree by default; fgrep is grep -F by definition.
-	sa := searchArgs{tool: tool, recursive: tool == "rg" || tool == "ag", fixed: tool == "fgrep"}
+// parseSearch takes the resolved spec rather than a tool name so a caller
+// cannot reach it without the table lookup that decides the command is a
+// search at all: a zero spec would read as a tool with no value flags.
+func parseSearch(spec toolSpec, args []string) searchArgs {
+	sa := searchArgs{spec: spec, recursive: spec.recursiveByDefault, fixed: spec.fixedByDefault}
 	operandsOnly := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -356,25 +395,8 @@ func (sa *searchArgs) shortFlags(bundle string, args []string, i int) bool {
 	return false
 }
 
-// valueShort is the union of grep/rg/ag short flags that take a value, split
-// by tool where the same letter disagrees: merging them eats the pattern of
-// every `grep -E <pat>` (rg's -E is an encoding, grep's is boolean), and the
-// same conflict recurs for grep's boolean -G/-T (ag's -G and rg's -T take
-// values) and ag's boolean -t/-D (rg's -t and grep's -D take values).
 func (sa *searchArgs) valueShort(c byte) bool {
-	switch c {
-	case 'A', 'B', 'C', 'm':
-		return true
-	case 'E', 'T', 't', 'j':
-		return sa.tool == "rg"
-	case 'g':
-		return sa.tool == "rg" || sa.tool == "ag"
-	case 'G':
-		return sa.tool == "ag"
-	case 'd', 'D':
-		return grepFamily[sa.tool]
-	}
-	return false
+	return strings.IndexByte(commonValueShorts, c) >= 0 || strings.IndexByte(sa.spec.valueShorts, c) >= 0
 }
 
 // suggestSearch decides whether a search has an honest graph translation and
@@ -390,7 +412,7 @@ func (sa *searchArgs) valueShort(c byte) bool {
 // without being one. So the wording hedges - an empty result means the
 // pattern was text, and grep was the right tool. A grep-accurate translator
 // is not worth building; an honest "try this" is.
-func (g *Graph) suggestSearch(sa searchArgs) []Suggestion {
+func (t *Translator) suggestSearch(sa searchArgs) []Suggestion {
 	if sa.fromFile {
 		// The pattern lives in a file the translator will not read: unknowable
 		// syntactically, so abstain.
@@ -402,15 +424,17 @@ func (g *Graph) suggestSearch(sa searchArgs) []Suggestion {
 	}
 	paths := sa.paths()
 	prose := anyMarkdown(paths)
-	scope := g.scope(paths)
-	if grepFamily[sa.tool] && !prose {
+	scope := t.scope(paths)
+	if !prose {
 		// A non-recursive grep, or one pointed only at files, reads those files
 		// rather than asking a repo-wide question - no graph equivalent. The
 		// prose case stays: a docsection query replaces scanning the .md itself.
 		if !sa.recursive {
 			return nil
 		}
-		if len(paths) > 0 && allFiles(paths) {
+		// A recursive-by-default tool keeps asking a repo-wide question when a
+		// file operand narrows it, so only the grep family abstains here.
+		if !sa.spec.recursiveByDefault && len(paths) > 0 && allFiles(paths) {
 			return nil
 		}
 	}
@@ -418,7 +442,7 @@ func (g *Graph) suggestSearch(sa searchArgs) []Suggestion {
 		return []Suggestion{{
 			Run:        "magus query kind=" + types.KindDocSection + " " + quoted(pats[0]) + scope,
 			Why:        "markdown headings are indexed as doc sections, so the query lands on the passage instead of the whole file",
-			Confidence: Medium,
+			Confidence: ConfidenceMedium,
 			Hedge:      hedge(hedgeProse, sa),
 		}}
 	}
@@ -433,37 +457,37 @@ func (g *Graph) suggestSearch(sa searchArgs) []Suggestion {
 			// grammar has no + join.
 			Run:        "magus query " + matcherArg("id=~"+strings.Join(pats, "|")) + scope,
 			Why:        "one query covers every -e pattern as an id regex alternation",
-			Confidence: Low,
+			Confidence: ConfidenceLow,
 			Hedge:      hedge(hedgeQuery, sa),
 		}}
 	}
-	return g.routePattern(pats[0], sa, scope)
+	return t.routePattern(pats[0], sa, scope)
 }
 
 // routePattern picks the verb by the pattern's shape. See suggestSearch for
 // why the routing exists and why every branch hedges.
-func (g *Graph) routePattern(pat string, sa searchArgs, scope string) []Suggestion {
+func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Suggestion {
 	switch {
 	case diagnosticCodeRe.MatchString(pat):
 		return []Suggestion{{
 			Run:        "magus query " + pat + scope,
 			Why:        "a diagnostic code has a graph node with its docs",
-			Confidence: High,
+			Confidence: ConfidenceHigh,
 			Hedge:      hedge("If it misses, the code is not one this workspace defines.", sa),
 		}}
 	case buzzOpRe.MatchString(pat):
 		return []Suggestion{{
 			Run:        "magus query " + pat + scope,
 			Why:        "a Buzz op resolves to the spell functions defining it; refs covers compiled-language symbols only",
-			Confidence: High,
+			Confidence: ConfidenceHigh,
 			Hedge:      hedge(hedgeQuery, sa),
 		}}
 	case bareIdentRe.MatchString(pat):
-		refsConf := Medium
+		refsConf := ConfidenceMedium
 		if sa.word {
 			// -w asked for word boundaries: the caller already believes the
 			// pattern is a whole symbol, not a substring.
-			refsConf = High
+			refsConf = ConfidenceHigh
 		}
 		return []Suggestion{
 			{
@@ -475,7 +499,7 @@ func (g *Graph) routePattern(pat string, sa searchArgs, scope string) []Suggesti
 			{
 				Run:        "magus query " + pat + scope,
 				Why:        "a domain entity (project, target, spell, op, diagnostic, doc) is query's side of the graph",
-				Confidence: Low,
+				Confidence: ConfidenceLow,
 				Hedge:      hedge(hedgeQuery, sa),
 			},
 		}
@@ -483,14 +507,14 @@ func (g *Graph) routePattern(pat string, sa searchArgs, scope string) []Suggesti
 		return []Suggestion{{
 			Run:        "magus query " + matcherArg("id=~"+pat) + scope,
 			Why:        "the pattern is a regex, and id=~ runs it over node ids",
-			Confidence: Low,
+			Confidence: ConfidenceLow,
 			Hedge:      hedge(hedgeQuery, sa),
 		}}
 	default:
 		return []Suggestion{{
 			Run:        "magus query " + quoted(pat) + scope,
 			Why:        "query matches node ids, labels, and docs",
-			Confidence: Low,
+			Confidence: ConfidenceLow,
 			Hedge:      hedge(hedgeQuery, sa),
 		}}
 	}
@@ -499,7 +523,7 @@ func (g *Graph) routePattern(pat string, sa searchArgs, scope string) []Suggesti
 // suggestFind translates `find <paths> -name <glob>` (also -iname, -path)
 // into a file-node query. Everything from -exec on is a payload the caller's
 // parser judges separately, never find's own filter.
-func (g *Graph) suggestFind(args []string) []Suggestion {
+func (t *Translator) suggestFind(args []string) []Suggestion {
 	for i, a := range args {
 		if a == "-exec" || a == "-execdir" || a == "-ok" || a == "-okdir" {
 			args = args[:i]
@@ -534,12 +558,12 @@ func (g *Graph) suggestFind(args []string) []Suggestion {
 	if glob == "" {
 		return nil
 	}
-	scope := g.scope(paths)
+	scope := t.scope(paths)
 	if re, ok := globToRe(glob, !pathGlob, foldCase); ok {
 		return []Suggestion{{
 			Run:        "magus query kind=" + types.KindFile + " " + matcherArg("id=~"+re) + scope,
 			Why:        "file nodes are indexed by path, and the glob converts to an id regex",
-			Confidence: High,
+			Confidence: ConfidenceHigh,
 			Hedge:      hedgeFile,
 		}}
 	}
@@ -548,7 +572,7 @@ func (g *Graph) suggestFind(args []string) []Suggestion {
 	return []Suggestion{{
 		Run:        "magus query kind=" + types.KindFile + scope,
 		Why:        "the glob has no clean regex form, so list file nodes and narrow from there",
-		Confidence: Low,
+		Confidence: ConfidenceLow,
 		Hedge:      hedgeFile,
 	}}
 }
@@ -562,7 +586,7 @@ var fdValueFlags = map[string]bool{
 
 // suggestFd translates an fd invocation. -x/-X payloads are a command fd
 // runs, not fd's pattern, so scanning stops there.
-func (g *Graph) suggestFd(args []string) []Suggestion {
+func (t *Translator) suggestFd(args []string) []Suggestion {
 	var exts, operands []string
 	globMode := false
 scan:
@@ -603,7 +627,7 @@ scan:
 		}
 		matchers := matcherArg("id=~" + re)
 		why := "file nodes are indexed by path, and -e is exactly an extension match"
-		conf := High
+		conf := ConfidenceHigh
 		paths := operands
 		if len(operands) > 0 && operands[0] != "" {
 			// fd's first operand is the PATTERN, not a path: `fd -e go parse`
@@ -620,11 +644,11 @@ scan:
 			}
 			matchers = matcherArg("id=~"+pat) + " " + matchers
 			why = "matchers AND: fd's pattern and its -e extension each become an id regex"
-			conf = Medium
+			conf = ConfidenceMedium
 			paths = operands[1:]
 		}
 		return []Suggestion{{
-			Run:        "magus query kind=" + types.KindFile + " " + matchers + g.scope(paths),
+			Run:        "magus query kind=" + types.KindFile + " " + matchers + t.scope(paths),
 			Why:        why,
 			Confidence: conf,
 			Hedge:      hedgeFile,
@@ -634,21 +658,21 @@ scan:
 		return nil
 	}
 	pat, paths := operands[0], operands[1:]
-	scope := g.scope(paths)
+	scope := t.scope(paths)
 	if globMode {
 		re, ok := globToRe(pat, false, false)
 		if !ok {
 			return []Suggestion{{
 				Run:        "magus query kind=" + types.KindFile + scope,
 				Why:        "the glob has no clean regex form, so list file nodes and narrow from there",
-				Confidence: Low,
+				Confidence: ConfidenceLow,
 				Hedge:      hedgeFile,
 			}}
 		}
 		return []Suggestion{{
 			Run:        "magus query kind=" + types.KindFile + " " + matcherArg("id=~"+re) + scope,
 			Why:        "file nodes are indexed by path, and the glob converts to an id regex",
-			Confidence: High,
+			Confidence: ConfidenceHigh,
 			Hedge:      hedgeFile,
 		}}
 	}
@@ -656,7 +680,7 @@ scan:
 	return []Suggestion{{
 		Run:        "magus query kind=" + types.KindFile + " " + matcherArg("id=~"+pat) + scope,
 		Why:        "file nodes are indexed by path, and fd's pattern is already a regex over names",
-		Confidence: Medium,
+		Confidence: ConfidenceMedium,
 		Hedge:      hedgeFile,
 	}}
 }
@@ -720,7 +744,7 @@ func globToRe(glob string, basenameOnly, foldCase bool) (string, bool) {
 //
 // Operands landing in different projects abstain: one filter cannot carry both,
 // and emitting the longest silently drops the rest of the search.
-func (g *Graph) scope(paths []string) string {
+func (t *Translator) scope(paths []string) string {
 	var matched []string
 	for _, p := range paths {
 		if p == "" || fileLooking(p) {
@@ -728,7 +752,7 @@ func (g *Graph) scope(paths []string) string {
 		}
 		c := path.Clean(p)
 		best := ""
-		for _, proj := range g.projects {
+		for _, proj := range t.projects {
 			if (c == proj || strings.HasPrefix(c, proj+"/")) && len(proj) > len(best) {
 				best = proj
 			}

@@ -619,7 +619,7 @@ func appendHookSpawn(ctx context.Context, req hookRequest, who hookAttribution) 
 // knowledge manifest records, so a caught search can be answered with a
 // project=-scoped query. An absent or unreadable manifest yields the unscoped
 // default, identical to a workspace that never built a graph.
-func hookSearchHints(cacheDir string) *hint.Graph {
+func hookSearchHints(cacheDir string) *hint.Translator {
 	if cacheDir == "" {
 		return searchHints
 	}
@@ -627,7 +627,7 @@ func hookSearchHints(cacheDir string) *hint.Graph {
 	if len(paths) == 0 {
 		return searchHints
 	}
-	return hint.NewGraph(hint.WithProjects(paths))
+	return hint.NewTranslator(hint.WithProjects(paths))
 }
 
 // hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived

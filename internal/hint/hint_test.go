@@ -18,14 +18,14 @@ type runConf struct {
 }
 
 func TestSuggestGolden(t *testing.T) {
-	scoped := NewGraph(WithProjects([]string{"internal/cache", "docs"}))
-	rootScoped := NewGraph(WithProjects([]string{".", "docs"}))
-	nested := NewGraph(WithProjects([]string{"docs", "docs/guides/integrations/agents", "libs/gopherbuzz"}))
+	scoped := NewTranslator(WithProjects([]string{"internal/cache", "docs"}))
+	rootScoped := NewTranslator(WithProjects([]string{".", "docs"}))
+	nested := NewTranslator(WithProjects([]string{"docs", "docs/guides/integrations/agents", "libs/gopherbuzz"}))
 	cases := []struct {
-		name  string
-		graph *Graph
-		cmd   Invocation
-		want  []runConf
+		name string
+		tr   *Translator
+		cmd  Invocation
+		want []runConf
 	}{
 		// Abstention is the correctness property most likely to regress: a
 		// translator that starts guessing shows up here first.
@@ -53,91 +53,91 @@ func TestSuggestGolden(t *testing.T) {
 		// executable and never altered.
 		{name: "double quote in pattern emits single-quoted",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", `say "hi"`, "."}},
-			want: []runConf{{`magus query 'say "hi"'`, Low}}},
+			want: []runConf{{`magus query 'say "hi"'`, ConfidenceLow}}},
 		{name: "backtick in pattern cannot execute on paste",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "foo`whoami`", "."}},
-			want: []runConf{{"magus query 'foo`whoami`'", Low}}},
+			want: []runConf{{"magus query 'foo`whoami`'", ConfidenceLow}}},
 		{name: "command substitution in pattern is inert",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "$(cmd)", "."}},
-			want: []runConf{{`magus query 'id=~$(cmd)'`, Low}}},
+			want: []runConf{{`magus query 'id=~$(cmd)'`, ConfidenceLow}}},
 		{name: "backslash regex reaches magus intact",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", `out\d+`, "."}},
-			want: []runConf{{`magus query 'id=~out\d+'`, Low}}},
+			want: []runConf{{`magus query 'id=~out\d+'`, ConfidenceLow}}},
 
 		{name: "bare identifier routes refs then query",
 			cmd: Invocation{Name: "grep", Args: []string{"-rn", "funcName", "."}},
 			want: []runConf{
-				{"magus refs funcName", Medium},
-				{"magus query funcName", Low},
+				{"magus refs funcName", ConfidenceMedium},
+				{"magus query funcName", ConfidenceLow},
 			}},
 		{name: "word boundary raises refs to High",
 			cmd: Invocation{Name: "grep", Args: []string{"-rnw", "Identifier", "."}},
 			want: []runConf{
-				{"magus refs Identifier", High},
-				{"magus query Identifier", Low},
+				{"magus refs Identifier", ConfidenceHigh},
+				{"magus query Identifier", ConfidenceLow},
 			}},
 		{name: "phrase routes to quoted query",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "go test", "docs/"}},
-			want: []runConf{{`magus query "go test"`, Low}}},
+			want: []runConf{{`magus query "go test"`, ConfidenceLow}}},
 		{name: "diagnostic code routes to query",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "MGS2011", "docs/"}},
-			want: []runConf{{"magus query MGS2011", High}}},
+			want: []runConf{{"magus query MGS2011", ConfidenceHigh}}},
 		{name: "buzz op routes to query",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "mgs_listManifests", "spells/"}},
-			want: []runConf{{"magus query mgs_listManifests", High}}},
+			want: []runConf{{"magus query mgs_listManifests", ConfidenceHigh}}},
 		{name: "regex pattern routes to id matcher",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", `guard.*Re`, "."}},
-			want: []runConf{{`magus query "id=~guard.*Re"`, Low}}},
+			want: []runConf{{`magus query "id=~guard.*Re"`, ConfidenceLow}}},
 		{name: "fixed-strings never emits id matcher",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rnF", "a.b", "."}},
-			want: []runConf{{`magus query "a.b"`, Low}}},
+			want: []runConf{{`magus query "a.b"`, ConfidenceLow}}},
 		{name: "rg is repo-wide by default",
 			cmd: Invocation{Name: "rg", Args: []string{"symbolName"}},
 			want: []runConf{
-				{"magus refs symbolName", Medium},
-				{"magus query symbolName", Low},
+				{"magus refs symbolName", ConfidenceMedium},
+				{"magus query symbolName", ConfidenceLow},
 			}},
 		{name: "rg with file operand keeps suggestion unscoped",
-			graph: scoped,
-			cmd:   Invocation{Name: "rg", Args: []string{"symbolName", "internal/cache/keys.go"}},
+			tr:  scoped,
+			cmd: Invocation{Name: "rg", Args: []string{"symbolName", "internal/cache/keys.go"}},
 			want: []runConf{
-				{"magus refs symbolName", Medium},
-				{"magus query symbolName", Low},
+				{"magus refs symbolName", ConfidenceMedium},
+				{"magus query symbolName", ConfidenceLow},
 			}},
 		{name: "multiple -e joins into one alternation query",
 			cmd:  Invocation{Name: "rg", Args: []string{"-e", "alpha", "-e", "beta"}},
-			want: []runConf{{`magus query "id=~alpha|beta"`, Low}}},
+			want: []runConf{{`magus query "id=~alpha|beta"`, ConfidenceLow}}},
 		{name: "grep -G is boolean and does not eat the pattern",
 			cmd: Invocation{Name: "grep", Args: []string{"-rG", "MyFunc", "src/"}},
 			want: []runConf{
-				{"magus refs MyFunc", Medium},
-				{"magus query MyFunc", Low},
+				{"magus refs MyFunc", ConfidenceMedium},
+				{"magus query MyFunc", ConfidenceLow},
 			}},
 		{name: "ag -t is boolean and does not eat the pattern",
 			cmd: Invocation{Name: "ag", Args: []string{"-t", "someSymbol"}},
 			want: []runConf{
-				{"magus refs someSymbol", Medium},
-				{"magus query someSymbol", Low},
+				{"magus refs someSymbol", ConfidenceMedium},
+				{"magus query someSymbol", ConfidenceLow},
 			}},
 		{name: "--color takes a value and is not the pattern",
 			cmd: Invocation{Name: "rg", Args: []string{"--color", "never", "someSymbol"}},
 			want: []runConf{
-				{"magus refs someSymbol", Medium},
-				{"magus query someSymbol", Low},
+				{"magus refs someSymbol", ConfidenceMedium},
+				{"magus query someSymbol", ConfidenceLow},
 			}},
 		{name: "markdown operand routes to docsection",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "checkpoint", "docs/guide.md"}},
-			want: []runConf{{`magus query kind=docsection "checkpoint"`, Medium}}},
+			want: []runConf{{`magus query kind=docsection "checkpoint"`, ConfidenceMedium}}},
 
 		{name: "find -name glob converts to anchored regex",
 			cmd:  Invocation{Name: "find", Args: []string{".", "-name", "*.go"}},
-			want: []runConf{{`magus query kind=file 'id=~\.go$'`, High}}},
+			want: []runConf{{`magus query kind=file 'id=~\.go$'`, ConfidenceHigh}}},
 		{name: "find with -exec still suggests from -name",
 			cmd:  Invocation{Name: "find", Args: []string{".", "-name", "*.buzz", "-exec", "wc", "-l", "{}", ";"}},
-			want: []runConf{{`magus query kind=file 'id=~\.buzz$'`, High}}},
+			want: []runConf{{`magus query kind=file 'id=~\.buzz$'`, ConfidenceHigh}}},
 		{name: "find unconvertible glob falls back to bare file query",
 			cmd:  Invocation{Name: "find", Args: []string{".", "-name", "[ab]*.go"}},
-			want: []runConf{{"magus query kind=file", Low}}},
+			want: []runConf{{"magus query kind=file", ConfidenceLow}}},
 		// A negated or branched filter has no honest single translation: the
 		// -name in it says the opposite of the ask, or only half of it.
 		{name: "find ! abstains",
@@ -150,86 +150,86 @@ func TestSuggestGolden(t *testing.T) {
 			cmd: Invocation{Name: "find", Args: []string{".", "-path", "./vendor", "-prune"}}},
 		{name: "-iname folds case",
 			cmd:  Invocation{Name: "find", Args: []string{".", "-iname", "*.md"}},
-			want: []runConf{{`magus query kind=file 'id=~(?i)\.md$'`, High}}},
+			want: []runConf{{`magus query kind=file 'id=~(?i)\.md$'`, ConfidenceHigh}}},
 		{name: "? does not cross a separator",
 			cmd:  Invocation{Name: "find", Args: []string{".", "-name", "cmd?.go"}},
-			want: []runConf{{`magus query kind=file 'id=~cmd[^/]\.go$'`, High}}},
+			want: []runConf{{`magus query kind=file 'id=~cmd[^/]\.go$'`, ConfidenceHigh}}},
 		{name: "-name ? is too open to translate",
 			cmd:  Invocation{Name: "find", Args: []string{".", "-name", "?"}},
-			want: []runConf{{"magus query kind=file", Low}}},
+			want: []runConf{{"magus query kind=file", ConfidenceLow}}},
 		{name: "fd extension converts like a glob",
 			cmd:  Invocation{Name: "fd", Args: []string{"-e", "go"}},
-			want: []runConf{{`magus query kind=file 'id=~\.go$'`, High}}},
+			want: []runConf{{`magus query kind=file 'id=~\.go$'`, ConfidenceHigh}}},
 		{name: "fd -e keeps the pattern operand",
 			cmd:  Invocation{Name: "fd", Args: []string{"-e", "go", "parse"}},
-			want: []runConf{{`magus query kind=file id=~parse 'id=~\.go$'`, Medium}}},
+			want: []runConf{{`magus query kind=file id=~parse 'id=~\.go$'`, ConfidenceMedium}}},
 		{name: "fd pattern passes through as a regex",
 			cmd:  Invocation{Name: "fd", Args: []string{"guard_", "cmd/magus"}},
-			want: []runConf{{"magus query kind=file id=~guard_", Medium}}},
+			want: []runConf{{"magus query kind=file id=~guard_", ConfidenceMedium}}},
 
 		{name: "project scoping lands on query suggestions only",
-			graph: scoped,
-			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "internal/cache/"}},
+			tr:  scoped,
+			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "internal/cache/"}},
 			want: []runConf{
-				{"magus refs Foo", Medium},
-				{`magus query Foo 'project=~^internal/cache(/|$)'`, Low},
+				{"magus refs Foo", ConfidenceMedium},
+				{`magus query Foo 'project=~^internal/cache(/|$)'`, ConfidenceLow},
 			}},
 		// The anchored regex is what keeps the suggestion from being narrower than
 		// the grep: project=docs would exclude the nested project's nodes outright.
 		{name: "scoping a project with a nested one still covers the nest",
-			graph: nested,
-			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
+			tr:  nested,
+			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
 			want: []runConf{
-				{"magus refs Foo", Medium},
-				{`magus query Foo 'project=~^docs(/|$)'`, Low},
+				{"magus refs Foo", ConfidenceMedium},
+				{`magus query Foo 'project=~^docs(/|$)'`, ConfidenceLow},
 			}},
 		{name: "operands in two projects abstain from scoping",
-			graph: nested,
-			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs", "libs/gopherbuzz"}},
+			tr:  nested,
+			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs", "libs/gopherbuzz"}},
 			want: []runConf{
-				{"magus refs Foo", Medium},
-				{"magus query Foo", Low},
+				{"magus refs Foo", ConfidenceMedium},
+				{"magus query Foo", ConfidenceLow},
 			}},
 		{name: "two operands in one project still scope",
-			graph: nested,
-			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/site", "docs/tour"}},
+			tr:  nested,
+			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/site", "docs/tour"}},
 			want: []runConf{
-				{"magus refs Foo", Medium},
-				{`magus query Foo 'project=~^docs(/|$)'`, Low},
+				{"magus refs Foo", ConfidenceMedium},
+				{`magus query Foo 'project=~^docs(/|$)'`, ConfidenceLow},
 			}},
 		{name: "root project never scopes: project=. says nothing",
-			graph: rootScoped,
-			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "."}},
+			tr:  rootScoped,
+			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "."}},
 			want: []runConf{
-				{"magus refs Foo", Medium},
-				{"magus query Foo", Low},
+				{"magus refs Foo", ConfidenceMedium},
+				{"magus query Foo", ConfidenceLow},
 			}},
 		{name: "root project in the list still lets a sibling scope",
-			graph: rootScoped,
-			cmd:   Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
+			tr:  rootScoped,
+			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
 			want: []runConf{
-				{"magus refs Foo", Medium},
-				{`magus query Foo 'project=~^docs(/|$)'`, Low},
+				{"magus refs Foo", ConfidenceMedium},
+				{`magus query Foo 'project=~^docs(/|$)'`, ConfidenceLow},
 			}},
 		{name: "no WithProjects means no project= anywhere",
 			cmd: Invocation{Name: "grep", Args: []string{"-rn", "Foo", "internal/cache/"}},
 			want: []runConf{
-				{"magus refs Foo", Medium},
-				{"magus query Foo", Low},
+				{"magus refs Foo", ConfidenceMedium},
+				{"magus query Foo", ConfidenceLow},
 			}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			g := tc.graph
-			if g == nil {
-				g = NewGraph()
+			tr := tc.tr
+			if tr == nil {
+				tr = NewTranslator()
 			}
 			var got []runConf
-			for _, s := range g.Suggest(tc.cmd) {
+			for _, s := range tr.Suggest(tc.cmd) {
 				got = append(got, runConf{s.Run, s.Confidence})
 			}
 			assert.Equal(t, tc.want, got)
-			for _, s := range g.Suggest(tc.cmd) {
+			for _, s := range tr.Suggest(tc.cmd) {
 				assert.NotEmpty(t, s.Why)
 				assert.NotEmpty(t, s.Hedge)
 			}
@@ -238,8 +238,8 @@ func TestSuggestGolden(t *testing.T) {
 }
 
 func TestSuggestCaseInsensitiveHedge(t *testing.T) {
-	g := NewGraph()
-	got := g.Suggest(Invocation{Name: "grep", Args: []string{"-rni", "todo", "."}})
+	tr := NewTranslator()
+	got := tr.Suggest(Invocation{Name: "grep", Args: []string{"-rni", "todo", "."}})
 	require.NotEmpty(t, got)
 	for _, s := range got {
 		assert.Contains(t, s.Hedge, "case")
@@ -272,16 +272,14 @@ func TestClassify(t *testing.T) {
 		{"ls", Invocation{Name: "ls", Args: []string{"-la"}}, ClassNone},
 		{"unrecognized", Invocation{Name: "frobnicate"}, ClassNone},
 	}
-	g := NewGraph()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, g.Classify(tc.cmd))
+			assert.Equal(t, tc.want, Classify(tc.cmd))
 		})
 	}
 }
 
 func TestPatterns(t *testing.T) {
-	g := NewGraph()
 	cases := []struct {
 		name string
 		cmd  Invocation
@@ -297,7 +295,7 @@ func TestPatterns(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, g.Patterns(tc.cmd))
+			assert.Equal(t, tc.want, Patterns(tc.cmd))
 		})
 	}
 }
@@ -311,7 +309,7 @@ func TestCorpusDistribution(t *testing.T) {
 	require.NoError(t, err)
 	defer f.Close()
 
-	g := NewGraph()
+	tr := NewTranslator()
 	counts := map[Class]int{}
 	suggesting, abstaining := 0, 0
 	sc := bufio.NewScanner(f)
@@ -328,8 +326,8 @@ func TestCorpusDistribution(t *testing.T) {
 			fields[i] = strings.Trim(w, `"'`)
 		}
 		cmd := Invocation{Name: fields[0], Args: fields[1:]}
-		counts[g.Classify(cmd)]++
-		if len(g.Suggest(cmd)) > 0 {
+		counts[Classify(cmd)]++
+		if len(tr.Suggest(cmd)) > 0 {
 			suggesting++
 		} else {
 			abstaining++

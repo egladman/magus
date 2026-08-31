@@ -94,24 +94,20 @@ func adoptionRun(pattern string) string {
 	return ""
 }
 
-// adoptionHints classifies commands through the same translator the live
-// guard suggests with, so the report and the guard agree on what a search is.
-// Bare on purpose: adoption reads any host's history, and the corpus may come
-// from a different repo than the cwd, so scoping suggestions to the local
-// workspace's projects would be dishonest.
-var adoptionHints = hint.NewGraph()
+// adoptionHints renders suggestions through the same translator the live guard
+// suggests with, so the report and the guard agree on what to try. Bare on
+// purpose: adoption reads any host's history, and the corpus may come from a
+// different repo than the cwd, so scoping suggestions to the local workspace's
+// projects would be dishonest.
+var adoptionHints = hint.NewTranslator()
 
 // The report's category NAMES are frozen, and hint's taxonomy is richer than
-// they are: hint calls a non-recursive grep and bat reads. These sets pin the
-// mapping back onto them - the grep family stays a search however it was
-// pointed, and only the read tools the report has always counted land in
-// file_reads. Counts are not bit-comparable across versions: routing through
-// hint re-baselines a few edge shapes (a search narrowed by a flag glob, an
-// in-place sed).
-var (
-	adoptionGrepFamily = map[string]bool{"grep": true, "egrep": true, "fgrep": true}
-	adoptionReadTools  = map[string]bool{"cat": true, "head": true, "tail": true, "less": true, "more": true, "sed": true}
-)
+// they are: hint calls a non-recursive grep and bat reads. This set pins the
+// mapping back onto them - only the read tools the report has always counted
+// land in file_reads. Counts are not bit-comparable across versions: routing
+// through hint re-baselines a few edge shapes (a search narrowed by a flag
+// glob, an in-place sed).
+var adoptionReadTools = map[string]bool{"cat": true, "head": true, "tail": true, "less": true, "more": true, "sed": true}
 
 // classifyCommandLine reuses the guard's own command parser, so the report agrees with what the
 // live guard sees. It returns the dominant category and, for a repo-wide source search, the bare
@@ -133,19 +129,22 @@ func classifyCommandLine(line string) (category, symbol string) {
 			continue
 		}
 		inv := hint.Invocation{Name: c.Name, Args: c.Args}
-		switch adoptionHints.Classify(inv) {
+		switch hint.Classify(inv) {
 		case hint.ClassSearchProse:
 			sawSearch, proseSearch = true, true
 		case hint.ClassSearchSource:
 			sawSearch, srcSearch = true, true
 			if symbolPat == "" {
-				if pats := adoptionHints.Patterns(inv); len(pats) > 0 && looksLikeSymbol(pats[0]) {
+				if pats := hint.Patterns(inv); len(pats) > 0 && looksLikeSymbol(pats[0]) {
 					symbolPat = pats[0]
 				}
 			}
 		case hint.ClassRead:
 			switch {
-			case adoptionGrepFamily[c.Name]:
+			// The grep family stays a search however it was pointed, and it is
+			// the only search tool that can read as one file: rg and ag walk the
+			// tree whatever their operands.
+			case hint.IsSearchTool(c.Name):
 				sawSearch = true
 			case adoptionReadTools[c.Name]:
 				sawRead = true

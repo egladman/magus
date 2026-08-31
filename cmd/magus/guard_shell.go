@@ -17,7 +17,7 @@ import (
 // guard_shellparse.go and the git rules are in guard_git.go.
 //
 // evaluateBashGuard is a pure function of its inputs - the command line, plus the
-// hint graph the caller built - and is tested as one, so a rule that has to read
+// hint translator the caller built - and is tested as one, so a rule that has to read
 // live workspace state lives beside its own reader instead (guard_gate.go). The
 // path surface is guard_write.go.
 
@@ -672,16 +672,9 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 
 // searchHints is the unscoped default translator, used when no project list is
 // available (and by the pure guard tests). hookCmd builds a manifest-scoped
-// graph per invocation and hands it to evaluateBashGuardWith, so live
+// translator per invocation and hands it to evaluateBashGuardWith, so live
 // suggestions can carry project= scoping.
-var searchHints = hint.NewGraph()
-
-// searchFamilyTools are the content-search commands whose suggestion outranks
-// a file-find's in the advisory lead: on a line carrying both (`find | xargs
-// grep`), the search answers the content question, the find only the name one.
-var searchFamilyTools = map[string]bool{
-	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
-}
+var searchHints = hint.NewTranslator()
 
 // searchAdvisoryLead renders hint's suggestions for one command on the line,
 // preferring a search-family command's over a file-find's, as the paragraph
@@ -690,14 +683,17 @@ var searchFamilyTools = map[string]bool{
 // memory; `magus refs HandleFoo` does not. Empty when hint abstains for every
 // command, in which case the generic reason still ships. Routing and hedging
 // rationale live in internal/hint.
-func searchAdvisoryLead(cmds []guardCommand, hints *hint.Graph) string {
+//
+// A content search outranks a file-find: on a line carrying both (`find | xargs
+// grep`), the search answers the content question, the find only the name one.
+func searchAdvisoryLead(cmds []guardCommand, hints *hint.Translator) string {
 	hasFileFind := slices.ContainsFunc(cmds, func(c guardCommand) bool {
 		return c.Name == "find" || c.Name == "fd"
 	})
 	var fallback []hint.Suggestion
 	for _, c := range cmds {
 		suggestions := hints.Suggest(hint.Invocation{Name: c.Name, Args: c.Args})
-		if len(suggestions) == 0 && hasFileFind && searchFamilyTools[c.Name] {
+		if len(suggestions) == 0 && hasFileFind && hint.IsSearchTool(c.Name) {
 			// A find on the same line is feeding the grep its files, so the
 			// grep is repo-wide even though its own argv is not: ask again as
 			// recursive rather than losing the content question to the find.
@@ -706,7 +702,7 @@ func searchAdvisoryLead(cmds []guardCommand, hints *hint.Graph) string {
 		if len(suggestions) == 0 {
 			continue
 		}
-		if searchFamilyTools[c.Name] {
+		if hint.IsSearchTool(c.Name) {
 			return renderAdvisoryLead(suggestions)
 		}
 		if fallback == nil {
@@ -722,9 +718,9 @@ func searchAdvisoryLead(cmds []guardCommand, hints *hint.Graph) string {
 func renderAdvisoryLead(suggestions []hint.Suggestion) string {
 	var b strings.Builder
 	switch suggestions[0].Confidence {
-	case hint.High:
+	case hint.ConfidenceHigh:
 		b.WriteString("Run")
-	case hint.Medium:
+	case hint.ConfidenceMedium:
 		b.WriteString("Try")
 	default:
 		b.WriteString("Maybe try")
@@ -758,10 +754,10 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	return evaluateBashGuardWith(command, searchHints)
 }
 
-// evaluateBashGuardWith is evaluateBashGuard with the caller's hint graph, so
-// hookCmd can pass one scoped from the knowledge manifest while the verdict
+// evaluateBashGuardWith is evaluateBashGuard with the caller's hint translator,
+// so hookCmd can pass one scoped from the knowledge manifest while the verdict
 // stays a pure function of what was handed in.
-func evaluateBashGuardWith(command string, hints *hint.Graph) bashGuardVerdict {
+func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE - a pipe, a redirect, a cd before a magus
 	// call - rather than which program runs.
