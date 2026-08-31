@@ -51,8 +51,26 @@ func TestAnalyzeAdoptionRatioAndTotals(t *testing.T) {
 	assert.Equal(t, 1, r.MagusRuns)
 	// HandleFoo grepped twice ranks above parseQuery grepped once.
 	if assert.Len(t, r.TopSymbolGreps, 2) {
-		assert.Equal(t, patternCount{Pattern: "HandleFoo", Count: 2}, r.TopSymbolGreps[0])
+		assert.Equal(t, patternCount{Pattern: "HandleFoo", Count: 2, Run: "magus refs HandleFoo"}, r.TopSymbolGreps[0])
 	}
+}
+
+// TestTopSymbolGrepRunsRouteByShape pins that the report's rendered command
+// comes from the hint translator, not a hardcoded refs template: a diagnostic
+// code routes to query, an identifier to refs.
+func TestTopSymbolGrepRunsRouteByShape(t *testing.T) {
+	r := analyzeAdoption([]string{
+		"grep -rn MGS2011 docs/",
+		"grep -rn HandleFoo .",
+	})
+	runs := map[string]string{}
+	for _, p := range r.TopSymbolGreps {
+		runs[p.Pattern] = p.Run
+	}
+	assert.Equal(t, map[string]string{
+		"MGS2011":   "magus query MGS2011",
+		"HandleFoo": "magus refs HandleFoo",
+	}, runs)
 }
 
 func TestRatioString(t *testing.T) {

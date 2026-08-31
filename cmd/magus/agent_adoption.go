@@ -33,9 +33,12 @@ type adoptionReport struct {
 	TopSymbolGreps []patternCount `json:"top_symbol_greps"` // repo-wide greps whose pattern is a bare identifier
 }
 
+// patternCount's JSON fields are additive-only: pattern and count keep their
+// names and meanings for existing consumers.
 type patternCount struct {
 	Pattern string `json:"pattern"`
 	Count   int    `json:"count"`
+	Run     string `json:"run"` // the graph command to try for this pattern
 }
 
 // analyzeAdoption classifies each command line by its dominant intent and tallies the report.
@@ -73,13 +76,29 @@ func analyzeAdoption(lines []string) adoptionReport {
 		}
 	}
 	r.TopSymbolGreps = topPatterns(symbols, 15)
+	for i, p := range r.TopSymbolGreps {
+		r.TopSymbolGreps[i].Run = adoptionRun(p.Pattern)
+	}
 	return r
+}
+
+// adoptionRun renders the graph command for one top pattern through the same
+// translator the live guard suggests with: an MGS code or a mgs_* op routes to
+// `magus query`, which refs (compiled-language symbols only) would miss. The
+// refs fallback covers a translator abstention, which looksLikeSymbol should
+// have ruled out already.
+func adoptionRun(pattern string) string {
+	if s := adoptionHints.Suggest(hint.Invocation{Name: "rg", Args: []string{pattern}}); len(s) > 0 {
+		return s[0].Run
+	}
+	return "magus refs " + pattern
 }
 
 // adoptionHints classifies commands through the same translator the live
 // guard suggests with, so the report and the guard agree on what a search is.
-// Bare on purpose: adoption reads any host's history, with no workspace to
-// scope by.
+// Bare on purpose: adoption reads any host's history, and the corpus may come
+// from a different repo than the cwd, so scoping suggestions to the local
+// workspace's projects would be dishonest.
 var adoptionHints = hint.NewGraph()
 
 // The report's category NAMES are frozen, and hint's taxonomy is richer than
@@ -238,9 +257,9 @@ func writeAdoptionTable(w io.Writer, r adoptionReport) {
 	fmt.Fprintf(w, "  search over prose .md (docsection)            %8s\n", humanCount(r.SearchOfProse))
 	fmt.Fprintf(w, "  file reads via shell (cat/head/tail/sed)      %8s\n", humanCount(r.FileReads))
 	if len(r.TopSymbolGreps) > 0 {
-		fmt.Fprintf(w, "\ntop repo-wide patterns that look like symbols (try `magus refs <X>`):\n")
+		fmt.Fprintf(w, "\ntop repo-wide patterns that look like symbols, with the graph query to try:\n")
 		for _, p := range r.TopSymbolGreps {
-			fmt.Fprintf(w, "  %6s  %s\n", humanCount(p.Count), p.Pattern)
+			fmt.Fprintf(w, "  %6s  %s  ->  %s\n", humanCount(p.Count), p.Pattern, p.Run)
 		}
 	}
 }
