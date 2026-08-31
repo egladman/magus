@@ -811,12 +811,14 @@ func hedge(base string, sa searchArgs) string {
 // Suggestions are paste-ready shell, and patterns reach the formatter with
 // quoting already resolved, so embedding is a safety property: a $( ), a
 // backtick, or a " re-embedded in double quotes would EXECUTE (or break) on
-// paste, and a bare backslash is eaten, handing magus a different regex.
-// Anything the shell still interprets inside double quotes is emitted
-// single-quoted instead, with an embedded single quote spliced through the
-// close-escape-reopen sequence singleQuoted writes.
+// paste, a bare backslash is eaten, handing magus a different regex, and a !
+// still fires history expansion inside double quotes in the INTERACTIVE shell
+// a suggestion is pasted into ("event not found", or a silently substituted
+// command). Anything the shell still interprets inside double quotes is
+// emitted single-quoted instead, with an embedded single quote spliced through
+// the close-escape-reopen sequence singleQuoted writes.
 func shellUnsafeInDoubles(s string) bool {
-	return strings.ContainsAny(s, "$\\\"`")
+	return strings.ContainsAny(s, "$\\\"`!")
 }
 
 func singleQuoted(s string) string {

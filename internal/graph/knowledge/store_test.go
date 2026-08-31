@@ -444,25 +444,70 @@ func BenchmarkStoreLoad(b *testing.B) {
 	}
 }
 
-func TestProjectPaths(t *testing.T) {
+// writeManifestBytes plants a raw manifest on disk, so a case can express a
+// schema bump or a truncated file that json.Marshal would never produce.
+func writeManifestBytes(t *testing.T, b []byte) string {
+	t.Helper()
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
-	man := manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{
-		"pkg/b":         {},
-		"pkg/a":         {},
-		".":             {},
-		"@runtime":      {},
-		"@registry":     {},
-		"pkg/a@symbols": {},
-	}}
-	b, err := json.Marshal(man)
-	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(StoreDir(cacheDir), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(StoreDir(cacheDir), "manifest.json"), b, 0o644))
+	return cacheDir
+}
 
-	assert.Equal(t, []string{".", "pkg/a", "pkg/b"}, ProjectPaths(cacheDir),
-		"project shards only, sorted; singletons and symbol shards filtered")
+func marshalManifest(t *testing.T, m manifest) []byte {
+	t.Helper()
+	b, err := json.Marshal(m)
+	require.NoError(t, err)
+	return b
+}
 
-	assert.Nil(t, ProjectPaths(filepath.Join(t.TempDir(), "empty")), "no manifest reads as no projects")
+func TestProjectPaths(t *testing.T) {
+	cases := []struct {
+		name string
+		man  []byte // nil plants no manifest at all
+		want []string
+	}{
+		{
+			name: "project shards only, sorted; singletons and symbol shards filtered",
+			man: marshalManifest(t, manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{
+				"pkg/b":         {},
+				"pkg/a":         {},
+				".":             {},
+				"@runtime":      {},
+				"@registry":     {},
+				"pkg/a@symbols": {},
+			}}),
+			want: []string{".", "pkg/a", "pkg/b"},
+		},
+		{name: "no manifest reads as no projects"},
+		{
+			// A schema bump invalidates the whole store, so the paths are
+			// unknown rather than empty: a caller must not scope on them.
+			name: "schema mismatch reads as no projects",
+			man: marshalManifest(t, manifest{SchemaVersion: types.KnowledgeSchemaVersion + 1, Shards: map[string]shardMeta{
+				"pkg/a": {},
+			}}),
+		},
+		{name: "truncated json reads as no projects", man: []byte(`{"schema_version":10,"shards":{"pkg/a":`)},
+		{name: "non-json reads as no projects", man: []byte("not json at all")},
+		{
+			name: "a manifest of nothing but filtered shards",
+			man: marshalManifest(t, manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{
+				"@runtime":      {},
+				"@registry":     {},
+				"pkg/a@symbols": {},
+			}}),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cacheDir := filepath.Join(t.TempDir(), "absent")
+			if tc.man != nil {
+				cacheDir = writeManifestBytes(t, tc.man)
+			}
+			assert.Equal(t, tc.want, ProjectPaths(cacheDir))
+		})
+	}
 }
 
 // BenchmarkStoreSync measures the write side: fingerprint, compare, and persist the
