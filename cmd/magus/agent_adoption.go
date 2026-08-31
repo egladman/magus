@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
 )
@@ -209,8 +210,7 @@ func topPatterns(counts map[string]int, n int) []patternCount {
 func agentAdoptionCmd(args []string) error {
 	fset := flag.NewFlagSet("agent adoption", flag.ContinueOnError)
 	bindDisplayFlags(fset)
-	var commandsFile string
-	fset.StringVar(&commandsFile, "commands", "", "file of shell commands, one per line (default: stdin)")
+	af := gen.BindAgentAdoption(fset)
 	fset.Usage = func() { agentAdoptionUsage(os.Stderr) }
 	if err := fset.Parse(args); err != nil {
 		return err
@@ -221,8 +221,8 @@ func agentAdoptionCmd(args []string) error {
 	}
 
 	var src io.Reader = os.Stdin
-	if commandsFile != "" {
-		f, err := os.Open(commandsFile)
+	if af.Commands != "" {
+		f, err := os.Open(af.Commands)
 		if err != nil {
 			return fmt.Errorf("agent adoption: %w", err)
 		}

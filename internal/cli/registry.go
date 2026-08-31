@@ -1705,12 +1705,25 @@ agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
 anywhere a shell can reach. The write-to-disk form exists for the in-repo,
 paths-relative-to-<dir> case. Absolute destinations are refused unless
---global is set, so magus cannot silently write outside the working tree.`,
+--global is set, so magus cannot silently write outside the working tree.
+
+adoption reads a corpus of shell commands, one per line, from stdin or from
+--commands <file>, and reports how often the graph was reached versus a raw
+text search. -o json emits the report as one object keyed total, graph_verbs,
+text_searches, search_of_source, search_of_prose, file_reads, magus_runs,
+other, and top_symbol_greps. Each top_symbol_greps entry carries pattern,
+count, and run - the graph command to try for that pattern, routed by its
+shape: magus query for a diagnostic code or a Buzz op, which magus refs
+(compiled-language symbols only) would miss, and magus refs otherwise. The
+text report prints the same command after each pattern, and run is empty for
+a pattern no graph verb fits.`,
 	Usage: "magus agent <install|sample|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
 		{Name: "sample", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
-		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search"},
+		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []Flag{
+			{Name: "commands", Kind: FlagString, Doc: "File of shell commands, one per line; without it the corpus is read from stdin"},
+		}},
 	},
 	Flags: []Flag{
 		{Name: "dir", Kind: FlagString, Default: ".", Doc: "Repo directory to install into (agent install)"},
@@ -1727,5 +1740,8 @@ paths-relative-to-<dir> case. Absolute destinations are refused unless
 		{"See what a prune would remove first", "magus agent install .claude/skills --prune --dry-run"},
 		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},
 		{"Print a starter AGENTS.md", "magus agent sample"},
+		{"Measure graph adoption over a corpus of shell commands", "magus agent adoption --commands commands.txt"},
+		{"Read the corpus from stdin instead", "magus agent adoption < commands.txt"},
+		{"The report as JSON, for a dashboard", "magus agent adoption --commands commands.txt -o json"},
 	},
 }

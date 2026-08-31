@@ -97,9 +97,8 @@ jobs:
       # build docs renders the site: derived Markdown and the catalog through generate, then
       # the esbuild bundles, the render, and the integrity/orphan/abandoned-URL gates.
       # generate alone stops at the committed files and no longer produces gen/. TinyGo is
-      # NOT needed: the playground wasm and its glue are committed under
-      # docs/vendor/playground/ and copied in by the render, because they are the only
-      # published bytes CI cannot reproduce.
+      # NOT needed: build-playground compiles the playground wasm from ./cmd/buzz-playground
+      # with the stock Go toolchain this job already provisions, straight into gen/.
       - name: Render the docs site
         run: magus run build docs
 

@@ -31,6 +31,17 @@ anywhere a shell can reach. The write-to-disk form exists for the in-repo,
 paths-relative-to-\<dir\> case. Absolute destinations are refused unless
 --global is set, so magus cannot silently write outside the working tree.
 
+adoption reads a corpus of shell commands, one per line, from stdin or from
+--commands \<file\>, and reports how often the graph was reached versus a raw
+text search. -o json emits the report as one object keyed total, graph_verbs,
+text_searches, search_of_source, search_of_prose, file_reads, magus_runs,
+other, and top_symbol_greps. Each top_symbol_greps entry carries pattern,
+count, and run - the graph command to try for that pattern, routed by its
+shape: magus query for a diagnostic code or a Buzz op, which magus refs
+(compiled-language symbols only) would miss, and magus refs otherwise. The
+text report prints the same command after each pattern, and run is empty for
+a pattern no graph verb fits.
+
 ## Options
 
 **--dir** *string* (default: .)
@@ -50,6 +61,11 @@ paths-relative-to-\<dir\> case. Absolute destinations are refused unless
 
 **--tar**
 : Stream a tar archive to stdout instead of writing files (agent install)
+
+### agent adoption options
+
+**--commands** *string*
+: File of shell commands, one per line; without it the corpus is read from stdin
 
 ## Subcommands
 
@@ -98,6 +114,24 @@ magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
 
 ```sh
 magus agent sample
+```
+
+*Measure graph adoption over a corpus of shell commands*
+
+```sh
+magus agent adoption --commands commands.txt
+```
+
+*Read the corpus from stdin instead*
+
+```sh
+magus agent adoption < commands.txt
+```
+
+*The report as JSON, for a dashboard*
+
+```sh
+magus agent adoption --commands commands.txt -o json
 ```
 
 ## See Also

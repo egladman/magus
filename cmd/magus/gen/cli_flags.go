@@ -59,6 +59,8 @@ const (
 	FlagAffectedUpstream = "upstream"
 	// affected: --wait
 	FlagAffectedWait = "wait"
+	// agent adoption: --commands
+	FlagAgentAdoptionCommands = "commands"
 	// agent: --dir
 	FlagAgentDir = "dir"
 	// agent: --dry-run
@@ -1299,6 +1301,18 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")
+	return &f
+}
+
+// AgentAdoptionFlags are the flags declared for `magus agent adoption`.
+type AgentAdoptionFlags struct {
+	Commands string // --commands
+}
+
+// BindAgentAdoption registers `magus agent adoption`'s flags on fs and returns the destination.
+func BindAgentAdoption(fs *flag.FlagSet) *AgentAdoptionFlags {
+	var f AgentAdoptionFlags
+	fs.StringVar(&f.Commands, FlagAgentAdoptionCommands, "", "File of shell commands, one per line; without it the corpus is read from stdin")
 	return &f
 }
 

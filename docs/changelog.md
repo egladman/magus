@@ -94,10 +94,27 @@ https://github.com/egladman/magus/compare/v0.3.0...main
 - **`magus agent adoption` measures whether agents actually use the knowledge graph.** It
   reads a corpus of shell commands (stdin or `--commands`) and reports how often the graph
   (`query`/`refs`/`explain`/`path`) was reached versus a raw text search, the graph-to-grep
-  ratio, and the top repo-wide greps whose pattern is a real identifier - the ones that should
-  have been `magus refs`. magus stays host-agnostic: it analyzes commands, never a host's
-  session logs, and the help prints the recipe to extract them. It turns "query before
-  grepping" from doctrine into a number you can watch move.
+  ratio, and the top repo-wide greps whose pattern is a real identifier - each with the graph
+  command to try for it. That command is routed by the pattern's shape through the same
+  translator the live guard suggests with, so a diagnostic code and a Buzz op read
+  `magus query` rather than `magus refs`, which covers compiled-language symbols only and
+  would miss them both. `-o json` carries it as `run` on every top-pattern entry. magus stays
+  host-agnostic: it analyzes commands, never a host's session logs, and the help prints the
+  recipe to extract them. It turns "query before grepping" from doctrine into a number you
+  can watch move.
+- **The guard's search advisory hands back a command to run, scoped to the project you
+  searched.** A repo-wide content search (`grep -r`, `egrep -r`, `fgrep -r`, `rg`, `ag`) or a
+  file-find (`find -name`, `fd`) now carries a concrete suggestion rather than a principle to
+  weigh: content routes by the pattern's shape to `magus query` or `magus refs`, and a
+  file-find becomes `magus query kind=file id=~<re>` built from the name or extension it asked
+  for. When the search named a directory the knowledge manifest knows as a project, the
+  suggestion carries `project=~^<proj>(/|$)`. That is an anchored regex rather than
+  `project=<proj>` because a node resolves to the LONGEST project owning it, so the exact form
+  would drop every node under a nested project that the grep it replaces would have matched. A
+  search spanning two projects abstains from scoping instead of emitting a filter that
+  silently answers half of it. Suggestions are paste-ready shell: a pattern carrying `$`, a
+  backtick, a backslash, a double quote, or a `!` is single-quoted, so pasting one cannot run
+  a command substitution or trip history expansion in an interactive shell.
 - **The knowledge graph now indexes markdown by heading, so prose is retrievable a section
   at a time.** Every heading in a tracked markdown file becomes a `docsection` node whose
   id and source are `<path>#<anchor>` - the same fragment a link into the rendered page

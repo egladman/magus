@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5166,
-  "edge_count": 9145,
+  "node_count": 5167,
+  "edge_count": 9146,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -936,7 +936,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1513",
+        "dir_files": "1514",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1306,8 +1306,8 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "262",
-        "dir_languages": "markdown,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-options,md#config-history-import-options,md#config-history-passed-options,md#config-mcp-connector-create-options,md#config-set-options,md#config-token-gene"
+        "dir_files": "263",
+        "dir_languages": "markdown,md#agent-adoption-options,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-options,md#config-history-import-options,md#config-history-passed-options,md#config-mcp-connector-create-options,md#config-set-op"
       }
     },
     {
@@ -27909,6 +27909,16 @@
       "attrs": {
         "anchor": "targets",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/manpage/magus-agent.md#agent-adoption-options",
+      "kind": "docsection",
+      "label": "agent adoption options",
+      "source": "docs/reference/manpage/magus-agent.md#agent-adoption-options",
+      "attrs": {
+        "anchor": "agent-adoption-options",
+        "level": "3"
       }
     },
     {
@@ -93522,6 +93532,14 @@
     {
       "source": "docsection:docs/reference/manpage/magus-agent.md#magus-agent",
       "target": "docsection:docs/reference/manpage/magus-agent.md#synopsis",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-agent.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-agent.md#options",
+      "target": "docsection:docs/reference/manpage/magus-agent.md#agent-adoption-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

@@ -15,7 +15,6 @@
 # docs/active.urls.lock stays TRACKED on purpose: it lives outside gen/ and is the ledger
 # abandonedLinkCheck reads to prove a previously published URL never starts 404-ing. That
 # gate only works if the ledger survives across builds.
-# docs/vendor/playground/ stays tracked too: TinyGo builds the wasm and CI has none.
 #
 # `docs/gen/*` rather than `docs/gen/`, because git cannot re-include a file whose parent
 # DIRECTORY is excluded - the trailing-slash form would make the negation below silently
