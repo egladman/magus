@@ -154,7 +154,7 @@ prints every target failure as it happens, anywhere in the workspace:
 
 It is a TEMPLATE you own, not a package magus releases - the same arrangement as
 the [agent guard templates](../agents/guard-templates.md), and for the same
-reason ("The host wiring is yours" in [doctrine](../../../doctrine.md)).
+reason ("The host wiring is yours" in [design.md](../../../design.md)).
 
 POSIX sh and jq, nothing else. Reduced to its core it is one pipeline:
 

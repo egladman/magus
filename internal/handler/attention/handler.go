@@ -20,7 +20,7 @@ import (
 //
 // The value is not an agent host ("claude", "cursor", ...) and is not meant to be mistaken
 // for one. It says a person acted through their own surface, which is the whole distinction
-// docs/doctrine.md's "Manual on purpose" row turns on.
+// docs/design.md's "Manual on purpose" row turns on.
 const consoleSessionHost = "console"
 
 // Handler serves /api/v1/attention: the blocks agents have raised in this repository
@@ -33,7 +33,7 @@ const consoleSessionHost = "console"
 //
 // POST {"id":"<id or prefix>","reason":"<text>"} disposes one, and is a HUMAN act. Nothing
 // magus does closes a request: an event whose whole meaning is "blocked on a person" stops
-// meaning that the moment the tool answers it (docs/doctrine.md, "Manual on purpose"). This
+// meaning that the moment the tool answers it (docs/design.md, "Manual on purpose"). This
 // route exists because the console IS the person's surface, alongside the CLI - not as an
 // automation door. There is deliberately no dispose-all, no expiry and no filter that could
 // clear the queue without reading it.

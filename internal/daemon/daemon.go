@@ -356,7 +356,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// the tool - and magus enforces none of it.
 			bridgeMux.Handle("/api/v1/ledger", cors(ledgerH))
 			// Attention queue: GET lists the open requests, POST disposes one. The write is a
-			// PERSON closing a block through their own surface (docs/doctrine.md, "Manual on
+			// PERSON closing a block through their own surface (docs/design.md, "Manual on
 			// purpose"), which is why it sits here on the loopback bridge and NOT in the LAN
 			// share subset below - a share link is handed to a phone, and disposing a request
 			// is exactly the judgment a link cannot be trusted with.

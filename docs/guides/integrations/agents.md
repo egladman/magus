@@ -63,7 +63,7 @@ What you wire is yours. magus ships the rules and the verdict; the host-shaped
 few lines that carry an event in and a reply back are a template you copy and
 own, so a host magus has never heard of works the same way and a host that
 changes next month is your edit rather than a magus release.
-[Doctrine](../../doctrine.md#the-host-wiring-is-yours) records that trade and
+[Design](../../design.md#the-host-wiring-is-yours) records that trade and
 what it costs you.
 
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the

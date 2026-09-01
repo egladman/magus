@@ -160,7 +160,7 @@ document went wrong.
    so this is a latency optimization rather than a requirement.
 5. A reference client living beside `docs/guides/integrations/` the way the
    OpenCode plugin does - a template the reader owns and edits, per the "the
-   host wiring is yours" entry in `docs/doctrine.md`. Shipped as POSIX sh; see
+   host wiring is yours" entry in `docs/design.md`. Shipped as POSIX sh; see
    [Reference clients](#reference-clients-shell-first) for why, and for what is
    still held back.
 

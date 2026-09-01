@@ -261,7 +261,7 @@ errors.
 
 The vocabulary of magus watching work happen: who ran what, what an agent is
 blocked on, and which agent owns which paths. The policy behind these terms
-lives in [doctrine.md](doctrine.md).
+lives in [design.md](design.md).
 
 ### Session
 
@@ -274,7 +274,7 @@ and the delegation it acted as - kept in a repo-scoped store every worktree shar
 A durable "an agent is blocked" record, opened when a `magus session notify`
 event carries the waiting or permission outcome and held until a person disposes
 it. `magus session attention` lists what is open. Nothing closes one on its own - see
-[doctrine.md](doctrine.md).
+[design.md](design.md).
 
 ### Dispose
 
@@ -287,7 +287,7 @@ a disposition answers a request; it does not merge anything.
 One row of the delegation ledger: a piece of work an orchestrating agent handed
 out, with its goal, the checkpoint it was cut against, and the paths it owns or
 must not touch. The ledger records; the agent guard is what reads those facts
-back when grading a write. See [doctrine.md](doctrine.md).
+back when grading a write. See [design.md](design.md).
 
 ### Delegation id
 

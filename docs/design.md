@@ -1,10 +1,11 @@
 ---
-title: Doctrine
+title: Design
 description: "The standing design decisions: the principles magus is built by, the standard it is measured against, and the line between what it automates and what it leaves to your judgment."
 tags: [doctrine, design, judgment, agents, philosophy, unix]
+aliases: [doctrine]
 ---
 
-# Doctrine
+# Design
 
 [Scope](scope.md) records what belongs in the tool. This page records how the
 tool is allowed to behave: the principles it is built by, the standard any
@@ -284,7 +285,7 @@ turn the act that needs confirming into a series of small ones nobody confirms.
 
 Friction placed wrong is bureaucracy. A refusal that teaches and one that nags
 differ in nothing but their message text, and message text rots like any other
-prose; the doctrine holds while error messages get the same care as code.
+prose; the design holds while error messages get the same care as code.
 
 The explain lenses cover verdicts magus computes. magus captures and replays
 the output of the tools a target drives, but it cannot make a third-party

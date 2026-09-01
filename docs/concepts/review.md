@@ -234,7 +234,7 @@ preserving, and a prompt that fires on every merge is one you learn to dismiss w
 which spends the attention it was saving for the merge that mattered.
 
 It names the command rather than running it. Notes are human-authored by construction, which is
-a [standing decision](../doctrine.md#manual-on-purpose) rather than an omission here.
+a [standing decision](../design.md#manual-on-purpose) rather than an omission here.
 
 magus asks the provider whether a review merged rather than working it out from git, and that is
 not a preference. A squash merge rewrites a branch into one new commit, so the branch tip is

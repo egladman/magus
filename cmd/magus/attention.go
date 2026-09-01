@@ -20,7 +20,7 @@ import (
 // command that closes one. Both subverbs live under sessionCmd.
 //
 // Discovery is automated and disposition is not, which is the whole shape of the
-// feature (docs/doctrine.md, "Manual on purpose"). There is no expiry, no
+// feature (docs/design.md, "Manual on purpose"). There is no expiry, no
 // auto-dispose flag and no severity inference to add later: a request that magus
 // could close by itself would not have needed a person, and the queue exists
 // precisely for the ones that do.

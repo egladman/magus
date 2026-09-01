@@ -17,7 +17,7 @@ magus does not try to define what "build", "test", or "lint" mean for your tools
 
 That machinery stays transparent. The cache, the daemon socket, and the run log are all files on disk; inspect them with `ls` and `cat`.
 
-[Doctrine](doctrine.md) records what magus automates and what it leaves to your judgment; [Scope](scope.md) records what belongs in the tool at all.
+[Design](design.md) records what magus automates and what it leaves to your judgment; [Scope](scope.md) records what belongs in the tool at all.
 
 ## Getting started
 

@@ -460,7 +460,7 @@ magus treats an AI agent and a new teammate as the same kind of user: someone wh
 - **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. For Codex, run `magus agent install .agents/skills` and paste the always-on `AGENTS.md` block it prints. Claude Code uses `.claude/skills`; there is a setup page per host behind [Agents](docs/guides/integrations/agents.md).
 - **The committed `MAGUS.md`** is a routing index, regenerated from the graph, that points an agent at the exact query for a given question.
 - **The MCP server** the daemon exposes lets an agent call magus tools directly over the protocol rather than shelling out.[^mcp]
-- **The guard hook** judges a command or a write before an agent runs it, from rules that live in the binary rather than in per-host integration code. The host-shaped wiring is a template you copy and own, so a host magus has never heard of gets the same rules, and one that changes its hook surface next month is your few-line edit instead of a magus release. [Doctrine](docs/doctrine.md#the-host-wiring-is-yours) records why it works that way.
+- **The guard hook** judges a command or a write before an agent runs it, from rules that live in the binary rather than in per-host integration code. The host-shaped wiring is a template you copy and own, so a host magus has never heard of gets the same rules, and one that changes its hook surface next month is your few-line edit instead of a magus release. [Design](docs/design.md#the-host-wiring-is-yours) records why it works that way.
 
 Full detail, including which tools exist and how to connect, is on the [Agents](docs/guides/integrations/agents.md) page.
 
