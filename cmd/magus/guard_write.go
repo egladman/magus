@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
@@ -55,7 +56,7 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 	}
 	return fmt.Sprintf("magus workspace: edit the SOURCE instead, then %s and commit the regenerated file with your source change.\n"+
 		"%s is a DECLARED OUTPUT of project %s. magus read the target's declared globs, so the next run overwrites whatever you write there.\n"+
-		"`magus describe file <path>` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", regenerateAdvice(f, owner), f.Path, owner)
+		"`"+hint.DescribeFile.With("<path>")+"` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", regenerateAdvice(f, owner), f.Path, owner)
 }
 
 // regenerateAdvice names the target that rewrites the path, resolved from the
@@ -84,7 +85,7 @@ func regenerateAdvice(f types.FileEntry, owner string) string {
 		}
 	}
 	if len(producers) == 0 {
-		return "run the target that produces it: `magus describe targets` lists what this workspace defines"
+		return "run the target that produces it: `" + hint.DescribeTargets.String() + "` lists what this workspace defines"
 	}
 	slices.SortFunc(producers, func(a, b types.FileClaim) int {
 		if n := strings.Compare(a.Project, b.Project); n != 0 {
@@ -96,7 +97,7 @@ func regenerateAdvice(f types.FileEntry, owner string) string {
 	if producer == "" {
 		producer = owner
 	}
-	return fmt.Sprintf("run `magus run %s %s`", producers[0].Target, producer)
+	return "run `" + hint.Run.With(producers[0].Target, producer) + "`"
 }
 
 // denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""
@@ -176,7 +177,7 @@ func denyNotesWrite(path string) string {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: recording a DECISION ABOUT THIS WORKSPACE? Use `magus memory put <name>`, the agent-writable store. If it genuinely belongs in the notes, say so and let the person run `magus notes edit %s`.\n"+
+	return fmt.Sprintf("magus workspace: recording a DECISION ABOUT THIS WORKSPACE? Use `"+hint.MemoryPut.With("<name>")+"`, the agent-writable store. If it genuinely belongs in the notes, say so and let the person run `"+hint.NotesEdit.String()+" %s`.\n"+
 		"%s is in this workspace's NOTES store, which only a person may write: a note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
 		"Read the store with `magus notes ls` and `magus notes get <name>`.", strings.TrimSuffix(filepath.Base(path), ".md"), path)
 }
@@ -263,7 +264,7 @@ func gradeLeasedWrite(ctx context.Context, actingLease, writePath string) writeG
 		// lease whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
 		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-			"magus workspace: no lease boundary was checked for this write. Re-declare the plan with the magus_ledger tool if leased work is meant to be running.\n"+
+			"magus workspace: no lease boundary was checked for this write. Re-declare the plan with the "+hint.ToolLedger.String()+" tool if leased work is meant to be running.\n"+
 				"This workspace's lease ledger could not be read: %v. The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff.", err)}
 	}
 	live := liveLeases(leases)
@@ -341,7 +342,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: "advise", Kind: advisoryUnleasedWrite, Context: fmt.Sprintf(
-		"magus workspace: declare the plan with the magus_ledger tool and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
+		"magus workspace: declare the plan with the "+hint.ToolLedger.String()+" tool and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
 			"This process reports a spawner but names no lease, and this workspace's ledger holds no live one. Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n"+
 			"This is an advisory and never a block: the spawn chain is a claim the environment makes, so it may teach and may not judge. Load the magus-multi-agent skill for how a plan is partitioned.", envHookLease)}
 }
@@ -364,7 +365,7 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	// lease, so they never reach this function at all.
 	if me.Registered == 0 {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: run `magus vcs checkpoint -o name` in this tree and register what it prints with the magus_ledger tool (op register, lease %s), then retry this write.\n"+
+			"magus workspace: run `magus vcs checkpoint -o name` in this tree and register what it prints with the "+hint.ToolLedger.String()+" tool (op register, lease %s), then retry this write.\n"+
 				"Lease %s (%s) has not registered the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
 			me.ID, me.ID, goalLine(me))}
 	}
@@ -400,7 +401,7 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	}
 	if owned {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If lease %s has finished with this file, have it release the path by shrinking its owned_paths with the magus_ledger tool, then retry.\n"+
+			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If lease %s has finished with this file, have it release the path by shrinking its owned_paths with the "+hint.ToolLedger.String()+" tool, then retry.\n"+
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the lease ledger exists to make visible; this guard is where the declaration gets read.",
 			owner.ID, rel, owner.ID, goalLine(owner), owner.State, me.ID)}
 	}
@@ -514,7 +515,7 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 // nothing about whether this write is legitimate, only that nothing graded it.
 func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-		"magus workspace: fix the path pattern with the magus_ledger tool, then retry this write.\n"+
+		"magus workspace: fix the path pattern with the "+hint.ToolLedger.String()+" tool, then retry this write.\n"+
 			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means an owned or forbidden path spelled this way is not being enforced at all.", err)}
 }
 
@@ -572,7 +573,7 @@ func adviseMemoryWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the handoff journal too: `magus memory put <name>`.\n" +
+	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the handoff journal too: `" + hint.MemoryPut.With("<name>") + "`.\n" +
 		"This file is per-host and per-checkout, so a second worktree or a different agent host never sees it. Host instructions belong right where you are writing them; workspace decisions outlive the file. Load the magus-handoff-journal skill if not already loaded."
 }
 
@@ -689,9 +690,9 @@ func adviseDescriptorWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: regenerate in the SAME commit as this edit. Run `magus run generate .` once the source change is settled, and commit the source and the regenerated files together.\n" +
+	return "magus workspace: regenerate in the SAME commit as this edit. Run `" + hint.Run.With("generate", ".") + "` once the source change is settled, and commit the source and the regenerated files together.\n" +
 		rel + " is a GENERATOR INPUT, so an edit here moves files nobody types into. Measured: a one-word rename in a std/ descriptor left four generated files stale and three tests red across three commits. CI runs generate as a drift gate, so splitting them is also a red build you did not have to have.\n" +
-		"`magus describe file <path>` says whether a path is generated and by what. Load the magus-vcs-hygiene skill for the commit checklist."
+		"`" + hint.DescribeFile.With("<path>") + "` says whether a path is generated and by what. Load the magus-vcs-hygiene skill for the commit checklist."
 }
 
 // workspaceRelativeFile returns path relative to the working directory, slash-separated,

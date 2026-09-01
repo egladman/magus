@@ -23,6 +23,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
@@ -208,7 +209,7 @@ func FindRoot(dir string) (string, error) {
 	}
 	return "", types.DiagnosticErrorf(types.NoWorkspaceRoot,
 		"magus: could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found); "+
-			"run `magus init` to bootstrap one")
+			"run `%s` to bootstrap one", hint.Init)
 }
 
 // Inspect discovers the workspace without opening the cache (for introspection commands).

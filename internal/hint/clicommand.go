@@ -56,6 +56,7 @@ func (c Command) Leaf() string { return c.tokens[len(c.tokens)-1] }
 // in AllCommands so the drift test walks it.
 var (
 	Run              = cmd("run")
+	Query            = cmd("query")
 	QueryOutput      = cmd("query", "output")
 	QueryInvocation  = cmd("query", "invocation")
 	GraphExport      = cmd("graph", "export")
@@ -69,10 +70,24 @@ var (
 	Watch            = cmd("watch")
 	Affected         = cmd("affected")
 	DescribeTargets  = cmd("describe", "targets")
+	DescribeTarget   = cmd("describe", "target")
 	DescribeProject  = cmd("describe", "project")
+	DescribeFile     = cmd("describe", "file")
+	DescribeGraph    = cmd("describe", "graph")
+	DescribeMCPTools = cmd("describe", "mcp-tools")
+	Explain          = cmd("explain")
+	Path             = cmd("path")
+	Diff             = cmd("diff")
+	Init             = cmd("init")
+	X                = cmd("x")
 	Ls               = cmd("ls")
 	LsTargets        = cmd("ls", "targets")
 	Refs             = cmd("refs")
+	MemoryPut        = cmd("memory", "put")
+	NotesEdit        = cmd("notes", "edit")
+	SessionAttention = cmd("session", "attention")
+	SessionDispose   = cmd("session", "dispose")
+	SessionNotify    = cmd("session", "notify")
 	MCPTokenGenerate = cmd("config", "token", "generate")
 	SelfUpdate       = cmd("self", "update")
 )
@@ -83,8 +98,10 @@ var (
 // missing, which is how ServerReload sat outside the guard while serverCmd
 // routed on it.
 var AllCommands = []Command{
-	Run, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
+	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 	ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
-	DescribeTargets, DescribeProject, Ls, LsTargets, Refs, MCPTokenGenerate,
-	SelfUpdate,
+	DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
+	DescribeMCPTools, Explain, Path, Diff, Init, X, Ls, LsTargets, Refs,
+	MemoryPut, NotesEdit, SessionAttention, SessionDispose, SessionNotify,
+	MCPTokenGenerate, SelfUpdate,
 }

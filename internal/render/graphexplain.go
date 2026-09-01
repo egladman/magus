@@ -86,7 +86,7 @@ func MissText(query string, ans types.KnowledgeAnswer) string {
 	b.WriteString("verdict: unknown, not absent\n")
 	if ans.Reason == types.ReasonSymbolsNotLoaded {
 		b.WriteString("this lookup searched domain entities only, not code symbols; a code symbol by that name may exist.\n")
-		b.WriteString("search code symbols with the magus_refs tool.\n")
+		b.WriteString("search code symbols with the " + hint.ToolRefs.String() + " tool.\n")
 	}
 	if ans.Reason == types.ReasonCoverageUnknown {
 		b.WriteString("magus could not determine which projects it searched, so this is not a verified absence.\n")

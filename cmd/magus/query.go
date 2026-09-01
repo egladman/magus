@@ -345,7 +345,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	// looked at what a run PRODUCED is one step from wanting to run it. Only worth
 	// saying when the descriptor records a target to reproduce.
 	if desc.Target != "" {
-		interactive.Emit(os.Stderr, fmt.Sprintf("reproduce this invocation here with `magus x %s`", ref))
+		interactive.Emit(os.Stderr, "reproduce this invocation here with `"+hint.X.With(ref)+"`")
 	}
 	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
 	return err

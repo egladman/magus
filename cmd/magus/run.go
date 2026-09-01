@@ -686,7 +686,7 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "  ls       print selected projects (no execution)")
 	fmt.Fprintln(os.Stderr, "  ci       the magusfile's ci target, run read-only (affected/pipeline anchor)")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "To see what a project can run: `magus ls targets [project]`")
+	fmt.Fprintln(os.Stderr, "To see what a project can run: `"+hint.LsTargets.With("[project]")+"`")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Conventional lifecycle names (each is an exported magusfile function, e.g.")
 	fmt.Fprintln(os.Stderr, "export fun build(ctx: magus\\Context, args: [str]) > void { ... }):")

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/hint"
 	store "github.com/egladman/magus/internal/memory"
 )
 
@@ -53,7 +54,7 @@ func memoryUsage() {
 	fmt.Fprintln(os.Stderr, "  verify   check malformed, stale, and broken-linked entries")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Use `magus memory <subcommand> -h` for flags. The same entries are available")
-	fmt.Fprintln(os.Stderr, "through the magus_memory MCP tool and the console.")
+	fmt.Fprintln(os.Stderr, "through the "+hint.ToolMemory.String()+" MCP tool and the console.")
 }
 
 type memoryListOutput struct {
@@ -101,7 +102,7 @@ func memoryList(root string, args []string) error {
 		return memoryIssuesError(issues)
 	}
 	if len(recs) == 0 {
-		fmt.Println("No handoff entries. Add an explicit decision or plan with `magus memory put`.")
+		fmt.Println("No handoff entries. Add an explicit decision or plan with `" + hint.MemoryPut.String() + "`.")
 	} else {
 		for _, rec := range recs {
 			status := rec.Status

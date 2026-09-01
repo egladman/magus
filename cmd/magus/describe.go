@@ -693,8 +693,8 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		return errSilent{exitCode: 2}
 	}
 	if against != "" && len(evaluated) > 1 {
-		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step; name the project (e.g. `magus describe target %s %s --cache --against %s`)\n",
-			pos[0], len(evaluated), pos[0], evaluated[0].Project, against)
+		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step; name the project (e.g. `%s`)\n",
+			pos[0], len(evaluated), hint.DescribeTarget.With(pos[0], evaluated[0].Project, "--cache", "--against", against))
 		return errSilent{exitCode: 2}
 	}
 
@@ -865,8 +865,8 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 	switch {
 	case errors.Is(lookupErr, fs.ErrNotExist):
 		return targetCacheLastRun{Explanation: fmt.Sprintf(
-			"nothing recorded for this target here, so there is nothing to compare against: run `magus run %s %s` once and this section will name what moved.",
-			target, project)}
+			"nothing recorded for this target here, so there is nothing to compare against: run `%s` once and this section will name what moved.",
+			hint.Run.With(target, project))}
 	case lookupErr != nil:
 		return targetCacheLastRun{Explanation: fmt.Sprintf(
 			"the last recorded entry could not be read, so there is nothing to compare against: %v", lookupErr)}
@@ -888,14 +888,14 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 	}
 	if lr.WouldReplay {
 		lr.Explanation = fmt.Sprintf(
-			"a run now HITS: an OLDER entry here is already stored under the live key, so a run replays %s and never reaches %s. An edit and a revert leave the cache exactly this way. Next: `magus query output %s` reads the entry that would replay.",
-			lr.ReplaysRef, lr.Ref, lr.ReplaysRef)
+			"a run now HITS: an OLDER entry here is already stored under the live key, so a run replays %s and never reaches %s. An edit and a revert leave the cache exactly this way. Next: `%s` reads the entry that would replay.",
+			lr.ReplaysRef, lr.Ref, hint.QueryOutput.With(lr.ReplaysRef))
 		return lr
 	}
 	if rec.KeyInputs == nil {
 		lr.Explanation = fmt.Sprintf(
-			"a run now MISSES, but that entry predates key-input persistence, so no input can be named: run `magus run %s %s` once to record them, then ask again.",
-			target, project)
+			"a run now MISSES, but that entry predates key-input persistence, so no input can be named: run `%s` once to record them, then ask again.",
+			hint.Run.With(target, project))
 		return lr
 	}
 	changes := cache.FirstKeyInputChange(rec.KeyInputs, liveLines)
@@ -908,8 +908,8 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 	// claiming nothing changed while the ref plainly moved.
 	if lr.Differences == 0 {
 		lr.Explanation = fmt.Sprintf(
-			"a run now MISSES, but no single input differs: the keys disagree on the ORDER or repetition of inputs, which this comparison collapses. Next: `magus describe target %s %s --cache --inputs` to read the key line by line.",
-			target, project)
+			"a run now MISSES, but no single input differs: the keys disagree on the ORDER or repetition of inputs, which this comparison collapses. Next: `%s` to read the key line by line.",
+			hint.DescribeTarget.With(target, project, "--cache", "--inputs"))
 		return lr
 	}
 	noun := "inputs"
@@ -917,8 +917,8 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 		noun = "input"
 	}
 	lr.Explanation = fmt.Sprintf(
-		"a run now MISSES: the cache key is a hash of these inputs and %d %s moved since. Next: `magus describe target %s %s --cache --inputs` to see every line.",
-		lr.Differences, noun, target, project)
+		"a run now MISSES: the cache key is a hash of these inputs and %d %s moved since. Next: `%s` to see every line.",
+		lr.Differences, noun, hint.DescribeTarget.With(target, project, "--cache", "--inputs"))
 	return lr
 }
 

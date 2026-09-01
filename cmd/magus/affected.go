@@ -53,7 +53,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `magus affected ci`)")
+		fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `"+hint.Affected.With("ci")+"`)")
 		fmt.Fprintln(os.Stderr, "")
 		affectedUsage()
 		return errSilent{exitCode: 2}
@@ -860,7 +860,7 @@ func printImpactText(out *types.ImpactResult) error {
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
 
-	fmt.Printf("\nRun the full pipeline over this set with: magus affected ci\n")
+	fmt.Printf("\nRun the full pipeline over this set with: %s\n", hint.Affected.With("ci"))
 	return nil
 }
 
@@ -1108,7 +1108,7 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 
 	out := make(map[string]shardDetail, len(shards))
 	for _, s := range shards {
-		b := shardDetail{Command: "magus run " + target + " " + strings.Join(s.ProjectPaths, " ")}
+		b := shardDetail{Command: hint.Run.With(target, strings.Join(s.ProjectPaths, " "))}
 		for _, path := range s.ProjectPaths {
 			p, ok := byPath[path]
 			if !ok {

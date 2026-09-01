@@ -11,9 +11,11 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +23,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus/internal/handler/mcp/origin"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -58,44 +61,63 @@ const DefaultAddress = "127.0.0.1:7391"
 // defaultAddrPort is the parsed form of DefaultAddress, used by httpAddr().
 var defaultAddrPort = netip.MustParseAddrPort(DefaultAddress)
 
+// toolColumn is the width the tool-name column occupies in the instruction
+// listing, so every "- description" starts at the same offset whatever the name.
+const toolColumn = 24
+
+// toolLine renders one listing row: two spaces, the tool name padded to
+// toolColumn, then the dash and its description.
+func toolLine(t hint.ToolName, desc string) string {
+	return fmt.Sprintf("  %-*s- %s", toolColumn, t, desc)
+}
+
 // serverInstructions is the system-level hint sent to the client during
-// the initialize handshake.
-const serverInstructions = `You are connected to a magus workspace.
-magus is a build orchestrator for multi-language monorepos.
-
-Discover:
-  magus_describe          - list spells, targets, projects, workspaces, or mcp_tools
-  magus_where             - resolve a fuzzy project name to its absolute path
-  magus_config_get        - view the resolved workspace config (read-only)
-
-Run:
-  magus_run_target        - run build/test/lint/format/generate/ci
-  magus_run_affected      - run a target on only VCS-changed projects
-  magus_affected_plan     - emit a CI shard plan for the affected set
-  magus_affected_explain  - explain why a project is affected by VCS changes
-
-Inspect:
-  magus_doctor            - validate the workspace health
-  magus_status            - inspect the live concurrency pool
-  magus_tail_log          - retrieve the captured build log for a project
-  magus_output            - fetch a target-output blob by its reference id
-  magus_insight           - VCS history lenses (hotspots, ownership, trend)
-
-Knowledge graph:
-  magus_query             - search the target/spell/symbol graph
-  magus_explain           - explain a single node and its relationships
-  magus_path              - find a path between two graph nodes
-  magus_refs              - list files that reference a symbol
-  magus_stats             - summarize graph composition
-
-Typical flow:
-  Discover first: magus_describe (list spells/targets/projects/workspaces), magus_where (resolve a fuzzy project name to a path).
-  Then act: magus_run_target / magus_run_affected; magus_affected_plan (CI shard plan), magus_affected_explain (why a project is affected).
-  After a run: magus_output (fetch a target's captured output by its ref), magus_tail_log (latest cache log for a project).
-  Understand the graph: magus_query (search) -> magus_explain (a node's edges and provenance) -> magus_path (shortest path); magus_refs (symbol defs and refs); magus_stats (graph shape).
-  Health and meta: magus_status, magus_doctor, magus_config_get.
-
-Config mutation is intentionally not exposed. Use the magus CLI for that.`
+// the initialize handshake. Every tool name is rendered from a hint.ToolName
+// constant rather than spelled out, so a rename is a compile error here instead
+// of a block of prose that quietly names tools the server no longer registers.
+var serverInstructions = strings.Join([]string{
+	"You are connected to a magus workspace.",
+	"magus is a build orchestrator for multi-language monorepos.",
+	"",
+	"Discover:",
+	toolLine(hint.ToolDescribe, "list spells, targets, projects, workspaces, or mcp_tools"),
+	toolLine(hint.ToolWhere, "resolve a fuzzy project name to its absolute path"),
+	toolLine(hint.ToolConfigGet, "view the resolved workspace config (read-only)"),
+	"",
+	"Run:",
+	toolLine(hint.ToolRunTarget, "run build/test/lint/format/generate/ci"),
+	toolLine(hint.ToolRunAffected, "run a target on only VCS-changed projects"),
+	toolLine(hint.ToolAffectedPlan, "emit a CI shard plan for the affected set"),
+	toolLine(hint.ToolAffectedExplain, "explain why a project is affected by VCS changes"),
+	"",
+	"Inspect:",
+	toolLine(hint.ToolDoctor, "validate the workspace health"),
+	toolLine(hint.ToolStatus, "inspect the live concurrency pool"),
+	toolLine(hint.ToolTailLog, "retrieve the captured build log for a project"),
+	toolLine(hint.ToolOutput, "fetch a target-output blob by its reference id"),
+	toolLine(hint.ToolInsight, "VCS history lenses (hotspots, ownership, trend)"),
+	"",
+	"Knowledge graph:",
+	toolLine(hint.ToolQuery, "search the target/spell/symbol graph"),
+	toolLine(hint.ToolExplain, "explain a single node and its relationships"),
+	toolLine(hint.ToolPath, "find a path between two graph nodes"),
+	toolLine(hint.ToolRefs, "list files that reference a symbol"),
+	toolLine(hint.ToolStats, "summarize graph composition"),
+	"",
+	"Typical flow:",
+	"  Discover first: " + hint.ToolDescribe.String() + " (list spells/targets/projects/workspaces), " +
+		hint.ToolWhere.String() + " (resolve a fuzzy project name to a path).",
+	"  Then act: " + hint.ToolRunTarget.String() + " / " + hint.ToolRunAffected.String() + "; " +
+		hint.ToolAffectedPlan.String() + " (CI shard plan), " + hint.ToolAffectedExplain.String() + " (why a project is affected).",
+	"  After a run: " + hint.ToolOutput.String() + " (fetch a target's captured output by its ref), " +
+		hint.ToolTailLog.String() + " (latest cache log for a project).",
+	"  Understand the graph: " + hint.ToolQuery.String() + " (search) -> " + hint.ToolExplain.String() +
+		" (a node's edges and provenance) -> " + hint.ToolPath.String() + " (shortest path); " +
+		hint.ToolRefs.String() + " (symbol defs and refs); " + hint.ToolStats.String() + " (graph shape).",
+	"  Health and meta: " + hint.ToolStatus.String() + ", " + hint.ToolDoctor.String() + ", " + hint.ToolConfigGet.String() + ".",
+	"",
+	"Config mutation is intentionally not exposed. Use the magus CLI for that.",
+}, "\n")
 
 // agentFromRequest extracts the client name/version from an initialize request.
 func agentFromRequest(req *mcp.InitializeRequest) string {
