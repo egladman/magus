@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 )
 
@@ -204,7 +205,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 
 	if scaffolded {
 		interactive.Emit(os.Stderr, "magusfile scaffolded: magusfile.buzz")
-		interactive.Emit(os.Stderr, "run your first target:  magus run build")
+		interactive.Emit(os.Stderr, "run your first target:  "+hint.Run.With("build"))
 	}
 
 	if isLocal {
@@ -218,19 +219,19 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "  # start magus daemon on login (magus works fine without it)")
 	fmt.Fprintln(os.Stderr, "  if command -v magus >/dev/null 2>&1 && \\")
-	fmt.Fprintln(os.Stderr, "     ! magus status --probe=liveness >/dev/null 2>&1; then")
-	fmt.Fprintln(os.Stderr, "    magus server start &")
+	fmt.Fprintln(os.Stderr, "     ! "+hint.Status.With("--probe=liveness")+" >/dev/null 2>&1; then")
+	fmt.Fprintln(os.Stderr, "    "+hint.ServerStart.String()+" &")
 	fmt.Fprintln(os.Stderr, "  fi")
 	fmt.Fprintln(os.Stderr, "")
-	interactive.Emit(os.Stderr, "stop with:  magus server stop")
+	interactive.Emit(os.Stderr, "stop with:  "+hint.ServerStop.String())
 
 	// Point users at the agent surface. A hint, not a step: connecting a client
 	// is per-user and per-machine (it writes the client's config, not the repo),
 	// so it does not belong in repo bootstrap - init just says where to look.
 	interactive.Emit(os.Stderr, "")
 	interactive.Emit(os.Stderr, "let an agent use this workspace over the daemon (graph-aware skills + MCP tools):")
-	interactive.Emit(os.Stderr, "  magus agent install .agents/skills  # Agent Skills; it also prints the AGENTS.md block to paste")
-	interactive.Emit(os.Stderr, "  magus config mcp connector create --name <client>  # mint a token, then configure the client")
+	interactive.Emit(os.Stderr, "  "+hint.AgentInstall.With(".agents/skills")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
+	interactive.Emit(os.Stderr, "  "+hint.ConfigMCPConnectorCreate.With("--name", "<client>")+"  # mint a token, then configure the client")
 }
 
 // writeMagusfileStub writes a starter magusfile.buzz in dir when the directory has

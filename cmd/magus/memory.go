@@ -33,7 +33,7 @@ func memoryCmd(_ context.Context, root string, args []string) error {
 		// Renamed to ls in v0.4.0, for one spelling of "enumerate" across the whole
 		// surface (`magus ls`, `magus run ls`). Named rather than left to the generic
 		// unknown-subcommand error so the message says what to type instead.
-		return usagef("magus memory: `list` is now `ls` (run `magus memory ls`)")
+		return usagef("magus memory: `list` is now `ls` (run `%s`)", hint.MemoryLs)
 	default:
 		return usagef("magus memory: unknown subcommand %q (want ls, get, put, delete, or verify)", args[0])
 	}
@@ -205,7 +205,7 @@ func memoryPut(root string, args []string) error {
 	if opts.Format != outputText {
 		return emitFormatted(opts, rec)
 	}
-	fmt.Printf("Saved handoff entry %q. Verify it with `magus memory verify`.\n", rec.Name)
+	fmt.Printf("Saved handoff entry %q. Verify it with `%s`.\n", rec.Name, hint.MemoryVerify)
 	return nil
 }
 

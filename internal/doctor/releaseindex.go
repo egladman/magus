@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/registry"
 	"github.com/egladman/magus/types"
@@ -74,7 +75,7 @@ func (r *runner) checkReleaseIndexExpiry() types.DoctorCheck {
 	case left <= 0:
 		return types.DoctorCheck{
 			Name: name, Status: types.DoctorFail,
-			Message: fmt.Sprintf("the served release index expired %s ago; every `magus self update` is refusing it", roughly(-left)),
+			Message: fmt.Sprintf("the served release index expired %s ago; every `%s` is refusing it", roughly(-left), hint.SelfUpdate),
 			Details: []string{"re-sign it with the Release index workflow, then merge the pull request it opens"},
 		}
 	case left <= releaseIndexWarnWindow:
@@ -151,14 +152,14 @@ func (r *runner) checkRegistryFreshness() types.DoctorCheck {
 		return types.DoctorCheck{
 			Name: name, Status: types.DoctorAdvice,
 			Message: fmt.Sprintf("never synced: %s", strings.Join(never, ", ")),
-			Details: []string{"run `magus self refresh` to fill it in; that fetches a data file and does not upgrade magus"},
+			Details: []string{"run `" + hint.SelfRefresh.String() + "` to fill it in; that fetches a data file and does not upgrade magus"},
 		}
 	case len(stale) > 0:
 		return types.DoctorCheck{
 			Name: name, Status: types.DoctorAdvice,
 			Message: fmt.Sprintf("data is older than its window: %s", strings.Join(stale, ", ")),
 			Details: []string{
-				"run `magus self refresh` to update it",
+				"run `" + hint.SelfRefresh.String() + "` to update it",
 				"age is measured from the publisher's generated_at, so this may instead mean the publisher stopped",
 			},
 		}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -185,6 +186,6 @@ func gateRepeatAdvice(runs int, spent time.Duration) string {
 	return fmt.Sprintf(
 		"magus workspace: the `%s` gate has already run %d times in this workspace in the last %s, about %s of wall clock. It is the most expensive target by construction, because it runs everything the diff reaches.\n",
 		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second)) +
-		"During iteration a narrower target answers the same question faster. `magus ls targets <project>` lists what this workspace calls them, and `magus affected --plan` shows what the gate would actually run.\n" +
+		"During iteration a narrower target answers the same question faster. `" + hint.LsTargets.With("<project>") + "` lists what this workspace calls them, and `" + hint.Affected.With("--plan") + "` shows what the gate would actually run.\n" +
 		"Save the full gate for the end, before you commit. That is the moment it is for."
 }

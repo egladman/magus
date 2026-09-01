@@ -62,6 +62,7 @@ var (
 	GraphExport      = cmd("graph", "export")
 	GraphStats       = cmd("graph", "stats")
 	GraphBuild       = cmd("graph", "build")
+	GraphDiff        = cmd("graph", "diff")
 	ServerStart      = cmd("server", "start")
 	ServerStop       = cmd("server", "stop")
 	ServerJob        = cmd("server", "job")
@@ -69,6 +70,7 @@ var (
 	Status           = cmd("status")
 	Watch            = cmd("watch")
 	Affected         = cmd("affected")
+	Describe         = cmd("describe")
 	DescribeTargets  = cmd("describe", "targets")
 	DescribeTarget   = cmd("describe", "target")
 	DescribeProject  = cmd("describe", "project")
@@ -79,17 +81,39 @@ var (
 	Path             = cmd("path")
 	Diff             = cmd("diff")
 	Init             = cmd("init")
+	Doctor           = cmd("doctor")
+	Where            = cmd("where")
 	X                = cmd("x")
 	Ls               = cmd("ls")
 	LsTargets        = cmd("ls", "targets")
 	Refs             = cmd("refs")
+	MemoryLs         = cmd("memory", "ls")
 	MemoryPut        = cmd("memory", "put")
+	MemoryVerify     = cmd("memory", "verify")
+	NotesLs          = cmd("notes", "ls")
+	NotesGet         = cmd("notes", "get")
 	NotesEdit        = cmd("notes", "edit")
 	SessionAttention = cmd("session", "attention")
 	SessionDispose   = cmd("session", "dispose")
 	SessionNotify    = cmd("session", "notify")
+	VCSAdd           = cmd("vcs", "add")
+	VCSResolve       = cmd("vcs", "resolve")
+	VCSCheckpoint    = cmd("vcs", "checkpoint")
+	AgentInstall     = cmd("agent", "install")
+	AgentSample      = cmd("agent", "sample")
+	ConfigView       = cmd("config", "view")
+	ConfigToken      = cmd("config", "token")
 	MCPTokenGenerate = cmd("config", "token", "generate")
-	SelfUpdate       = cmd("self", "update")
+
+	ConfigConsoleToken       = cmd("config", "console", "token")
+	ConfigConsoleTokenCreate = cmd("config", "console", "token", "create")
+	ConfigConsoleTokenRevoke = cmd("config", "console", "token", "revoke")
+	ConfigMCPConnectorCreate = cmd("config", "mcp", "connector", "create")
+	ConfigMCPConnectorLs     = cmd("config", "mcp", "connector", "ls")
+	ConfigMCPConnectorRevoke = cmd("config", "mcp", "connector", "revoke")
+
+	SelfUpdate  = cmd("self", "update")
+	SelfRefresh = cmd("self", "refresh")
 )
 
 // AllCommands is every canonical command referenced in output, for the drift
@@ -99,9 +123,14 @@ var (
 // routed on it.
 var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
-	ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
-	DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
-	DescribeMCPTools, Explain, Path, Diff, Init, X, Ls, LsTargets, Refs,
-	MemoryPut, NotesEdit, SessionAttention, SessionDispose, SessionNotify,
-	MCPTokenGenerate, SelfUpdate,
+	GraphDiff, ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
+	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
+	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
+	MemoryLs, MemoryPut, MemoryVerify, NotesLs, NotesGet, NotesEdit,
+	SessionAttention, SessionDispose, SessionNotify,
+	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
+	ConfigView, ConfigToken, MCPTokenGenerate,
+	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
+	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,
+	SelfUpdate, SelfRefresh,
 }

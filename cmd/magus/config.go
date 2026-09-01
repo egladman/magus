@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 )
 
 func configCmd(ctx context.Context, root string, cfg config.Config, args []string) error {
@@ -146,7 +147,7 @@ func runConfigSet(args []string) error {
 		fmt.Fprintln(os.Stderr, "  magus config set key=telemetry.headers,value={X-Tenant: acme}")
 		fmt.Fprintln(os.Stderr, "  magus config set key=sandbox.allow.homebin.path,value=~/.local/bin")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Run `magus config view -o name` to list all valid keys.")
+		fmt.Fprintln(os.Stderr, "Run `"+hint.ConfigView.With("-o", "name")+"` to list all valid keys.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()

@@ -597,7 +597,7 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-activities")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Trim the activity trail to its cap and drop orphaned payload blobs. This is")
-			fmt.Fprintln(os.Stderr, "the worker for `magus server job rotate-activities`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "the worker for `"+hint.ServerJob.With("rotate-activities")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err
@@ -620,7 +620,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-logs")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Trim the invocation run-log journals to their cap, keeping the most recent.")
-			fmt.Fprintln(os.Stderr, "This is the worker for `magus server job rotate-logs`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "This is the worker for `"+hint.ServerJob.With("rotate-logs")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err
@@ -656,7 +656,7 @@ func installRefreshHooks(ctx context.Context) {
 	if err != nil {
 		root = cwd
 	}
-	installed, err := installer.InstallRefreshHook(ctx, root, "magus server job sync-graph")
+	installed, err := installer.InstallRefreshHook(ctx, root, hint.ServerJob.With("sync-graph"))
 	if err != nil {
 		slog.WarnContext(ctx, "server start: could not install VCS refresh hook", slog.String("error", err.Error()))
 		return
@@ -746,7 +746,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server check-review")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Note when a review this tree took part in has merged. This is the worker")
-			fmt.Fprintln(os.Stderr, "for `magus server job check-review`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "for `"+hint.ServerJob.With("check-review")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err

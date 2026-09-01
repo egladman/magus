@@ -179,7 +179,7 @@ func denyNotesWrite(path string) string {
 	}
 	return fmt.Sprintf("magus workspace: recording a DECISION ABOUT THIS WORKSPACE? Use `"+hint.MemoryPut.With("<name>")+"`, the agent-writable store. If it genuinely belongs in the notes, say so and let the person run `"+hint.NotesEdit.String()+" %s`.\n"+
 		"%s is in this workspace's NOTES store, which only a person may write: a note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
-		"Read the store with `magus notes ls` and `magus notes get <name>`.", strings.TrimSuffix(filepath.Base(path), ".md"), path)
+		"Read the store with `"+hint.NotesLs.String()+"` and `"+hint.NotesGet.With("<name>")+"`.", strings.TrimSuffix(filepath.Base(path), ".md"), path)
 }
 
 // resolveSymlinks canonicalizes as much of path as exists, returning it unchanged when
@@ -365,7 +365,7 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	// lease, so they never reach this function at all.
 	if me.Registered == 0 {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: run `magus vcs checkpoint -o name` in this tree and register what it prints with the "+hint.ToolLedger.String()+" tool (op register, lease %s), then retry this write.\n"+
+			"magus workspace: run `"+hint.VCSCheckpoint.With("-o", "name")+"` in this tree and register what it prints with the "+hint.ToolLedger.String()+" tool (op register, lease %s), then retry this write.\n"+
 				"Lease %s (%s) has not registered the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
 			me.ID, me.ID, goalLine(me))}
 	}
@@ -609,7 +609,7 @@ func adviseInstalledSkillWrite(path string) string {
 		return ""
 	}
 	return "magus workspace: put rules that belong to THIS workspace in a local skill beside the installed ones, in a directory magus does not ship (conventionally magus-local-development), which install and verify both leave alone.\n" +
-		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `magus doctor` reports your edit as stale rather than reading it, and the next `magus agent install <dir> --force` overwrites it.\n" +
+		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `" + hint.Doctor.String() + "` reports your edit as stale rather than reading it, and the next `" + hint.AgentInstall.With("<dir>", "--force") + "` overwrites it.\n" +
 		"Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format."
 }
 

@@ -95,7 +95,7 @@ func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root 
 	// which workspaces are loaded. A per-process proc server never does, so
 	// report that honestly instead of a misleading "no workspaces loaded".
 	if status.Mode == "proc" {
-		return false, "daemon is in per-process mode; readiness requires `magus server start`"
+		return false, "daemon is in per-process mode; readiness requires `" + hint.ServerStart.String() + "`"
 	}
 	if root != "" {
 		clean := filepath.Clean(root)

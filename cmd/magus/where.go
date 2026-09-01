@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
@@ -111,7 +112,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 	}
 	all := ws.All()
 	if len(all) == 0 {
-		return fmt.Errorf("magus where: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project); run `magus init` to bootstrap one")
+		return fmt.Errorf("magus where: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project); run `%s` to bootstrap one", hint.Init)
 	}
 
 	var matchFn func(string) bool

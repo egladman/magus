@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -266,7 +267,7 @@ func gitExternalDiffRefusal(rest []string) error {
 	return usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
 		"magus reports on a whole changeset, so it cannot answer per file. "+
 		"Use git's pager instead, which hands over the entire diff at once: "+
-		"`git config pager.diff 'magus diff --patch -'` - then plain `git diff` renders through magus, "+
+		"`git config pager.diff '"+hint.Diff.With("--patch", "-")+"'` - then plain `git diff` renders through magus, "+
 		"and `git --no-pager diff` still gets you the raw patch", rest[0])
 }
 
@@ -494,7 +495,7 @@ func hintSinceLastReview(w io.Writer, rev types.Diff, src diffInput) {
 		return
 	}
 	interactive.Emit(w, fmt.Sprintf(
-		"you last reviewed %d of these %d files at %s: `magus diff --rev %s...%s` shows only what changed since",
+		"you last reviewed %d of these %d files at %s: `"+hint.Diff.With("--rev", "%s...%s")+"` shows only what changed since",
 		covered, len(rev.Files), short(at.Revision), at.Revision, src.head))
 }
 
@@ -525,7 +526,7 @@ func hintReviewPrompt(w io.Writer, rev types.Diff, rf *gen.DiffFlags) {
 		return
 	}
 	interactive.Emit(w, fmt.Sprintf(
-		"%d changed files: `magus diff --prompt` prints a review prompt to paste into your own model - the reading order, what rebuilds, and what could not be measured. It calls no model and sends nothing",
+		"%d changed files: `"+hint.Diff.With("--prompt")+"` prints a review prompt to paste into your own model - the reading order, what rebuilds, and what could not be measured. It calls no model and sends nothing",
 		len(rev.Files)))
 }
 
@@ -712,7 +713,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 		Summary: func(unfolded bool) string {
 			line := diffCountsLine(rev, unfolded)
 			if n := earned.pending(); n > 0 {
-				line += fmt.Sprintf("; %d file(s) now carry a read receipt (magus diff --impact)", n)
+				line += fmt.Sprintf("; %d file(s) now carry a read receipt (%s)", n, hint.Diff.With("--impact"))
 			}
 			return line
 		},
@@ -1139,7 +1140,7 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "files reference the most-referenced symbol the file changed. Reach needs a")
 	fmt.Fprintln(w, "symbol index; without one there is no ranking key at all, and diff says so")
 	fmt.Fprintln(w, "at the top and falls back to path order rather than implying a ranking.")
-	fmt.Fprintln(w, "Build the index with `magus graph build`.")
+	fmt.Fprintln(w, "Build the index with `"+hint.GraphBuild.String()+"`.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Public surface, coverage, churn, and the agent trail are CONTEXT printed")
 	fmt.Fprintln(w, "beside each file. None of them is a sort key.")
@@ -1258,7 +1259,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 	if !rev.Ranked() && len(primary) > 1 {
 		fmt.Println("UNRANKED: no symbol index, so there is no consequence to rank by.")
 		fmt.Println("What follows is path order, not a ranking. Build the index with")
-		fmt.Println("`magus graph build` to order these by what they can break.")
+		fmt.Println("`" + hint.GraphBuild.String() + "` to order these by what they can break.")
 		fmt.Println()
 	}
 
@@ -1277,11 +1278,11 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 			for _, f := range generated {
 				printDiffFile(f, link)
 			}
-			fmt.Println("      why is one of these folded? `magus describe file <path>` names the project that declares it")
+			fmt.Println("      why is one of these folded? `" + hint.DescribeFile.With("<path>") + "` names the project that declares it")
 		} else {
 			fmt.Printf("%d generated files folded. They are declared target outputs: reading one is\n", len(generated))
 			fmt.Println("reading a machine's restatement of a change made elsewhere. Show them with --generated,")
-			fmt.Println("or ask why one is folded with `magus describe file <path>`.")
+			fmt.Println("or ask why one is folded with `" + hint.DescribeFile.With("<path>") + "`.")
 		}
 	}
 
@@ -1329,8 +1330,8 @@ func diffNextStepLines(readable int) []string {
 	// of it: this report, and the impact question the viewer has nowhere to put.
 	return []string{
 		"",
-		"the blast radius:  magus diff --impact",
-		"just the report:   magus diff --no-tui",
+		"the blast radius:  " + hint.Diff.With("--impact"),
+		"just the report:   " + hint.Diff.With("--no-tui"),
 	}
 }
 
@@ -1780,7 +1781,7 @@ func impactCostLines(c *impactCost) []string {
 	if c == nil {
 		return []string{
 			"COST: no run history yet, so there is nothing to estimate from",
-			"      Run `magus affected ci` once and the next impact can price this.",
+			"      Run `" + hint.Affected.With("ci") + "` once and the next impact can price this.",
 		}
 	}
 	out := []string{fmt.Sprintf(
@@ -2728,7 +2729,7 @@ func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
 	for _, p := range paths {
 		clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(p)), "./")
 		if !inChange[clean] {
-			return types.Diff{}, usagef("magus diff --ack: %q is not a changed file in this changeset; `magus diff -o name` lists them", p)
+			return types.Diff{}, usagef("magus diff --ack: %q is not a changed file in this changeset; `"+hint.Diff.With("-o", "name")+"` lists them", p)
 		}
 		want[clean] = true
 	}
@@ -2832,7 +2833,7 @@ func ackChangeset(content reviewedContent, cacheDir string, rev types.Diff, reas
 // under them. That is additive - it is not a reason to drop the only telling of it here.
 func impactReviewLines(r *impactReview) []string {
 	if r == nil {
-		return []string{"REVIEW: read receipts unavailable; step a file through in `magus diff` to earn one"}
+		return []string{"REVIEW: read receipts unavailable; step a file through in `" + hint.Diff.String() + "` to earn one"}
 	}
 	// Silence, not a reassurance. "Everything here has been read" would be a claim the
 	// reader can produce by stamping rather than by reading, which is the sentence this
@@ -2893,8 +2894,8 @@ func impactReviewLines(r *impactReview) []string {
 	// viewer told anyone who reviews in vim or magit that their only option was the
 	// blanket ack.
 	return append(out,
-		"      record what you read, wherever you read it: magus diff --ack <path>...",
-		"      or step through them here: magus diff")
+		"      record what you read, wherever you read it: "+hint.Diff.With("--ack", "<path>..."),
+		"      or step through them here: "+hint.Diff.String())
 }
 
 // unreadRest is the never-opened files the section has not already named under

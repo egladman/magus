@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
@@ -245,10 +246,10 @@ func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Var
 	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
 	// verbs instead, because a generated index is only true as of its last run.
-	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  magus describe graph -o markdown  (the skills send agents to the live verbs: magus describe targets, magus ls)")
+	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  "+hint.DescribeGraph.With("-o", "markdown")+"  (the skills send agents to the live verbs: "+hint.DescribeTargets.String()+", "+hint.Ls.String()+")")
 	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
-	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  magus agent sample")
+	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentSample.String())
 	printAgentsBlockToPaste(dir)
 }
 

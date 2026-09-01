@@ -496,8 +496,11 @@ var (
 	// rather than fighting it.
 )
 
-const (
-	vcsGuardContext = "magus workspace: classify the dirty tree first with `magus describe file $(git diff --name-only)`, then stage the reviewed paths explicitly: `git add -- <paths>`.\n" +
+// Rendered through hint rather than spelled out, so a subcommand rename is a compile
+// error here instead of a verdict that names a command nobody can run. That makes these
+// vars rather than consts: a Command renders through a method call.
+var (
+	vcsGuardContext = "magus workspace: classify the dirty tree first with `" + hint.DescribeFile.With("$(git diff --name-only)") + "`, then stage the reviewed paths explicitly: `git add -- <paths>`.\n" +
 		"role=output paths are generated: never hand-edit them, and commit them with the source change that moved them. Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
 	// The tail of runGuardContextFor, which supplies the replacements. This half
 	// carries only the WHY and the anti-retry line.
@@ -514,7 +517,7 @@ const (
 	// and those outputs belong in the same commit as the source that moved them.
 	// The honest test is whether the SOURCE changed, not whether the agent typed
 	// into the output.
-	revertGuardContext = "magus workspace: classify before reverting with `magus describe file <paths>`, and do not revert a file just because you did not hand-edit it.\n" +
+	revertGuardContext = "magus workspace: classify before reverting with `" + hint.DescribeFile.With("<paths>") + "`, and do not revert a file just because you did not hand-edit it.\n" +
 		"A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
 	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
 	// search to fall back on, so "where does this string appear" has no magus
@@ -527,42 +530,42 @@ const (
 	// useless is the failure this text exists to prevent.
 	// Names the mechanism, because the fix is not "remember where you are" - it is
 	// that the project is an argument and never needs to be implied by the CWD.
-	cwdGuardContext = "magus workspace: pass the project instead of cd-ing to it (`magus run <target> <project>`, `magus describe project <path>`) so the command means the same thing from anywhere. `magus where <name>` resolves a name to its path.\n" +
+	cwdGuardContext = "magus workspace: pass the project instead of cd-ing to it (`" + hint.Run.With("<target>", "<project>") + "`, `" + hint.DescribeProject.With("<path>") + "`) so the command means the same thing from anywhere. `" + hint.Where.With("<name>") + "` resolves a name to its path.\n" +
 		"magus is CWD-relative, so a `cd` first is how the right command lands on the wrong project; project paths are workspace-relative and written bare (`libs/foo`). Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
 
 	searchGuardReason = "this workspace has a knowledge graph, and a text match misses the generated, indirect, and cross-language references it knows about. Pick by what you are asking:\n" +
-		"  CODE SYMBOL (defined / used where):  magus refs <symbol>\n" +
-		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind=<k> project=<p> relation=<r> matchers, kind!=<k> to exclude, id=~<re> for a regex\n" +
-		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
-		"  HOW two things connect:  magus path <a> <b>\n" +
-		"`magus query <symbol>` returns 0 for a code symbol, which is refs's job. If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `magus graph build` and ask again rather than falling back to a text match. Searching raw text in CODE (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Markdown PROSE does now: `magus query kind=docsection \"<terms>\"` returns the section that covers it. Load the magus-query skill for the full grammar."
+		"  CODE SYMBOL (defined / used where):  " + hint.Refs.With("<symbol>") + "\n" +
+		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  " + hint.Query.With("\"<terms>\"") + "  with kind=<k> project=<p> relation=<r> matchers, kind!=<k> to exclude, id=~<re> for a regex\n" +
+		"  ONE node's edges, provenance, blast radius:  " + hint.Explain.With("<node>") + "\n" +
+		"  HOW two things connect:  " + hint.Path.With("<a>", "<b>") + "\n" +
+		"`" + hint.Query.With("<symbol>") + "` returns 0 for a code symbol, which is refs's job. If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `" + hint.GraphBuild.String() + "` and ask again rather than falling back to a text match. Searching raw text in CODE (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Markdown PROSE does now: `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the section that covers it. Load the magus-query skill for the full grammar."
 
-	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `magus query kind=docsection \"<terms>\"` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project=<p>` to scope it and `magus explain <section>` to see what it links to.\n" +
+	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project=<p>` to scope it and `" + hint.Explain.With("<section>") + "` to see what it links to.\n" +
 		"Reading one specific file you already know the path of? Read it. This is for when you are LOOKING for where something is explained: the section query lands you on the passage instead of the page. Load the magus-query skill for the grammar."
 
 	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is
 	// the one literal a shipped verdict may carry; every other target name is
 	// workspace vocabulary and routes through discovery.
-	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `magus affected ci` runs it over every project the diff reaches, including ones you never edited.\n" +
+	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
 	denyReadAck = "A read receipt records that a PERSON read a change, so only a person can record one.\n" +
 		"This is not a permission you are missing - there is no spelling of it an agent may use, and an agent stamping the changeset would make the measure mean nothing for everybody, including the human relying on it.\n" +
-		"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on.\n" +
+		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt, and `" + hint.Diff.With("-o", "json") + "` puts read_state on each file for a caller to branch on.\n" +
 		"If you were asked to mark the change reviewed, say that you cannot and hand back the unread list."
 
-	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
+	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `" + hint.MemoryPut.With("<name>") + "` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is denied however the write is spelled.\n" +
 		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
 
 	denyScriptedRewrite = "A scripted substitute-and-write is the same edit `sed -i` is denied for, by another route. Use your editor tool for a few sites; for a whole-tree rename use the graph:\n" +
-		"  1. `magus graph build` FIRST if `magus refs` says a project is not-indexed: a cold index answers \"unknown, not absent\", and taking that for \"no matches\" is how a rename misses half its sites.\n" +
-		"  2. `magus refs <symbol> --occurrences` gives column-precise, verified sites, per file.\n" +
+		"  1. `" + hint.GraphBuild.String() + "` FIRST if `" + hint.Refs.String() + "` says a project is not-indexed: a cold index answers \"unknown, not absent\", and taking that for \"no matches\" is how a rename misses half its sites.\n" +
+		"  2. `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise, verified sites, per file.\n" +
 		"  3. Edit those sites. Let the compiler enumerate what moved; do not widen the pattern until it goes quiet.\n" +
 		"A regex cannot tell YOUR symbol from a dependency's symbol of the same name: a `\\.Sum\\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. The graph knows which is which; a pattern never can.\n\n" +
 		"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent: say so and use your editor tool."
 
-	denySedInPlace = "Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. For a whole-tree mechanical edit, `magus refs <symbol> --occurrences` gives column-precise sites rather than a pattern that also matches the comment about it.\n" +
+	denySedInPlace = "Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. For a whole-tree mechanical edit, `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites rather than a pattern that also matches the comment about it.\n" +
 		"`sed -i` is not portable and the two spellings destroy each other's work: GNU reads `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the BACKUP SUFFIX, and `sed -i '' ...` makes GNU edit nothing. So it mangles the file on the next machine, by WRITING, before anyone reads a diff. Reading with sed is untouched."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
@@ -572,16 +575,16 @@ const (
 	// a commit about something else. Measured: one such call put 69 files - a whole
 	// regenerated docs site plus five untouched source files - into a commit about
 	// four collection methods.
-	denyStageAll = "Classify the dirty tree first: `magus describe file $(git diff --name-only)`. Then stage only the reviewed paths with `git add -- <paths>`, and confirm the selection with `git diff --cached --stat` before committing.\n" +
+	denyStageAll = "Classify the dirty tree first: `" + hint.DescribeFile.With("$(git diff --name-only)") + "`. Then stage only the reviewed paths with `git add -- <paths>`, and confirm the selection with `git diff --cached --stat` before committing.\n" +
 		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. There is deliberately no `magus vcs` wrapper; load the magus-vcs-hygiene skill if not already loaded."
 
 	// An ADVISORY, not a deny: two genuinely independent targets in one line is real work
 	// (`magus run build api ; magus run test docs`), and only the dependency graph knows
 	// which case this is. What the guard can see is that the chain is worth questioning.
-	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `magus run lint .` alone runs all three in order.\n" +
-		"Check what a target already pulls in before chaining: `magus run <target> <project> --dry-run` prints the plan without executing it.\n" +
-		"`magus affected ci` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice - and the second run can trip MGS4007 on an output the first one left behind.\n" +
-		"Each extra invocation reloads the workspace and re-evaluates every magusfile. And `magus run` takes one TARGET and many PROJECTS (`magus run build api web`), so two targets never belong in one call either."
+	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `" + hint.Run.With("lint", ".") + "` alone runs all three in order.\n" +
+		"Check what a target already pulls in before chaining: `" + hint.Run.With("<target>", "<project>", "--dry-run") + "` prints the plan without executing it.\n" +
+		"`" + hint.Affected.With("ci") + "` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice - and the second run can trip MGS4007 on an output the first one left behind.\n" +
+		"Each extra invocation reloads the workspace and re-evaluates every magusfile. And `" + hint.Run.String() + "` takes one TARGET and many PROJECTS (`" + hint.Run.With("build", "api", "web") + "`), so two targets never belong in one call either."
 
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
@@ -593,19 +596,19 @@ const (
 		"A pipe also replaces the exit status with the last stage's, so a failing gate reads as exit 0.\n" +
 		outputGuardTail
 	outputRedirectDeny = "magus already wrote the log; you do not need to capture it:\n" +
-		"  magus query output <ref>     the failing target's full captured log (this one may be redirected)\n" +
+		"  " + hint.QueryOutput.With("<ref>") + "     the failing target's full captured log (this one may be redirected)\n" +
 		"  .magus/logs/<hash>.log       the path, printed by the failure itself\n" +
 		"  -o json --tee <file>         mirror structured output to a file (never console text)\n" +
 		"--silent prints the diagnostics and the log path on failure, and a redirect throws exactly that away.\n" +
 		outputGuardTail
-	throwawayCopyDeny = "Run from the workspace and name the project: `magus run <target> <project>`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
+	throwawayCopyDeny = "Run from the workspace and name the project: `" + hint.Run.With("<target>", "<project>") + "`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
 		"A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits."
-	outputGuardTail = "The one exception is `magus query output <ref>`: a raw captured log has no schema to project."
+	outputGuardTail = "The one exception is `" + hint.QueryOutput.With("<ref>") + "`: a raw captured log has no schema to project."
 
 	// ADVISE, never deny: reading the revision is legitimate, and checkpoint is a
 	// strict SUPERSET rather than a substitute, so there is nothing to block. That
 	// also rules out the third deny trigger, which needs an exact equivalent.
-	checkpointGuardContext = "magus workspace: `magus vcs checkpoint` identifies the working state (`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty) and records it on the activity trail, so a later reader knows what the work was looking at.\n" +
+	checkpointGuardContext = "magus workspace: `" + hint.VCSCheckpoint.String() + "` identifies the working state (`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty) and records it on the activity trail, so a later reader knows what the work was looking at.\n" +
 		"A revision alone cannot identify a DIRTY tree: two workers on the same commit with different uncommitted work read as identical, and the patch digest is what separates them. checkpoint RESOLVES AND RECORDS with no tag, no stash, no ref, and no file, so one nobody keeps has cost nothing."
 
 	// ADVISE, never deny: re-resolving dependencies is legitimate work with no
@@ -620,7 +623,7 @@ const (
 	// Shared with the raw-tool deny, which appends it when the denied command is
 	// also a re-resolution (`go mod tidy` is both), so the charm is named whichever
 	// rule answers first.
-	relockAdvice = "Run the covering target with the relock charm (`magus run <target>:relock <project>`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `magus describe targets` lists what this workspace defines.\n" +
+	relockAdvice = "Run the covering target with the relock charm (`" + hint.Run.With("<target>:relock", "<project>") + "`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `" + hint.DescribeTargets.String() + "` lists what this workspace defines.\n" +
 		"relock is the reserved charm for rewriting DEPENDENCY state, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry serves today is relock. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
 	relockGuardContext = "magus workspace: " + relockAdvice
 
@@ -634,7 +637,7 @@ const (
 	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies -
 	// nothing is unrecoverable, nothing is written, and the equivalent is close but
 	// not exact.
-	timeoutMagusAdvice = "magus has its own: `magus run <target> <project> --timeout 5m` (and the same flag on `magus affected`). It cancels the run rather than signaling the process, so the error names the target (`run ci: timed out after 5m`) and it logs elapsed/remaining heartbeats while the run is still going.\n" +
+	timeoutMagusAdvice = "magus has its own: `" + hint.Run.With("<target>", "<project>", "--timeout", "5m") + "` (and the same flag on `" + hint.Affected.String() + "`). It cancels the run rather than signaling the process, so the error names the target (`run ci: timed out after 5m`) and it logs elapsed/remaining heartbeats while the run is still going.\n" +
 		"An external `timeout` sees one opaque process: it cannot say which target was still running, and the SIGTERM lands wherever the run happened to be."
 )
 
@@ -645,7 +648,7 @@ func denySharedStash(verb string) string {
 }
 
 func denyWholeTree(op string) string {
-	return "Verify in place. No magus run needs a clean tree: `magus run <target> <project>`, or `magus affected ci` for everything the diff reaches. If you truly need a pristine tree, use a throwaway git worktree.\n" +
+	return "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use a throwaway git worktree.\n" +
 		"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill."
 }
 
@@ -866,6 +869,6 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 // would be this repository's vocabulary asserted over someone else's. The op IS
 // named, since it resolved from the spell catalog rather than from a convention.
 func runGuardContextFor(match guardToolMatch) string {
-	return fmt.Sprintf("Run it through magus instead: `magus run <target> <project>`. `magus describe targets` lists what this workspace calls its targets (`-o name` for just the names); add `--dry-run` to print the exact command without running it.\n"+
-		"Only to pass flags to the tool itself, the one-op form forwards everything after `--`: `magus run %s::%s [<project>] -- <tool-args>`.\n\n%s", match.spell, match.operation, runGuardContext)
+	return fmt.Sprintf("Run it through magus instead: `"+hint.Run.With("<target>", "<project>")+"`. `"+hint.DescribeTargets.String()+"` lists what this workspace calls its targets (`-o name` for just the names); add `--dry-run` to print the exact command without running it.\n"+
+		"Only to pass flags to the tool itself, the one-op form forwards everything after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n\n%s", match.spell, match.operation, runGuardContext)
 }
