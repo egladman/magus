@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 See the unreleased changes at
-https://github.com/egladman/magus/compare/v0.3.0...main
+https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Breaking
 
@@ -997,7 +997,7 @@ file` explains any one of them in full. `magus doctor` reports the standing set.
   had ever been published: the failure only fires on a `v*` tag, so every release attempt
   died at the same step. The manifests are now copied before the download, which keeps that
   layer cacheable on the manifests alone.
-- The `-static` release archives and the `latest` container image are now actually static.
+- The `_static` release archives and the `latest` container image are now actually static.
   Buzz's FFI provider reaches `dlopen` through purego's `//go:cgo_import_dynamic`, which
   gives the binary a `PT_INTERP` and a `libc`/`libdl`/`libpthread` dependency even under
   `CGO_ENABLED=0`. The archive advertised as static therefore needed a dynamic loader and
@@ -1096,29 +1096,30 @@ file` explains any one of them in full. `magus doctor` reports the standing set.
   run - `--no-cache` on the command line is a session-level judgment and stays where it is.
   `docs/concepts/cache.md` covers the distinction and the mapping from Nx's `cache: false`.
 
-- Breaking: the release archives now name the static build WITHOUT a suffix, and the cgo
-  build with `-cgo`. `magus_<version>_<os>_<arch>.tar.gz` used to be the cgo build, and the
-  static build carried `-static`; the container tags said the opposite (`latest` static,
-  `latest-cgo` cgo), so one release described the same default two opposite ways. Both now
-  follow the image convention.
+- Breaking: the release archives now name the static build with a `_static` suffix and the
+  dynamic build with the bare name, and the dynamic archives are no longer published by
+  default - a release carries them only when the workflow is dispatched with
+  `include_dynamic_builds`. v0.3.0 shipped `magus_<version>_<os>_<arch>-static.tar.gz`
+  beside a bare-named dynamic build; the hyphen made `<arch>-static` parse as an
+  architecture, so the suffix is now an underscore field, and it marks the exception the
+  way `busybox-static` does.
 
-  This renames what people already download rather than changing which build they get: the
-  install script has always defaulted to `VARIANT=static` and the download guides have
-  always linked the static asset. It does break a pinned URL. A pin to
-  `..._<os>_<arch>-static.tar.gz` no longer resolves - drop the suffix - and a pin to the
-  bare name now yields the static build instead of the cgo one. `VARIANT=cgo` selects the
-  glibc build from the install script.
+  This breaks a pinned URL twice over. A pin to `..._<os>_<arch>-static.tar.gz` no longer
+  resolves - use `..._<os>_<arch>_static.tar.gz` - and a pin to the bare name, which used
+  to fetch the dynamic build, now fetches nothing on a default release. Everything that
+  fetches an archive by name asks for `_static` explicitly: the install script, the
+  download guides, and `magus self update`.
 
-- Breaking: Buzz FFI (`zdef()`) is unavailable in the `-static` release archives and in the
+- Breaking: Buzz FFI (`zdef()`) is unavailable in the `_static` release archives and in the
   `ghcr.io/egladman/magus:latest` container image. FFI opens a shared library at runtime,
   and that capability is what made those builds non-static (see Fixed); a build carrying it
   cannot also be loader-free. In those two artifacts `zdef()` now reports FFI as
   unsupported, the same graceful degradation an unsupported OS/arch already got, rather
   than failing at the call.
 
-  Nothing else changes. Default builds, `go build`, `go install`, the cgo release archives,
-  and the `latest-cgo` image all keep FFI. If a magusfile calls `zdef()`, use the cgo image
-  or a non-`-static` archive. In the static image the capability was unusable regardless:
+  Nothing else changes. Default builds, `go build`, `go install`, the dynamic release
+  archives, and the `-dynamic` images all keep FFI. If a magusfile calls `zdef()`, use a
+  `-dynamic` image or a dynamic archive. In the static image the capability was unusable regardless:
   it ships no shared libraries for `dlopen` to open.
 
 ### Removed
