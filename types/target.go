@@ -369,13 +369,12 @@ func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project)
 // composes with ctx.needs, transitively, as workspace-rooted globs. target's own
 // outputs are excluded.
 //
-// A composed target gets no cache step of its own - ctx.needs runs it inside the
-// parent's body - so a parent cache HIT skips it and skip_cache goes unenforced.
-// The engine cannot key such a target's real inputs (not being keyable is why it
-// opted out), but it can key the artifact it maintains: fold these globs into the
-// parent's sources and the parent misses whenever that artifact is not what the
-// last run left behind. One extra miss after the artifact changes, never a stale
-// replay.
+// ctx.needs runs a composed target inside the parent's body, so it gets no cache
+// step of its own: a cache HIT on the parent skips it, skip_cache included. The
+// engine cannot key such a target's real inputs (not being keyable is why it
+// opted out). It can key the artifact the target maintains: with these globs in
+// the parent's sources, a stale artifact turns the parent's HIT into a miss and
+// the chain re-runs. The cost is one extra miss after the artifact changes.
 //
 // lookup resolves a cross-project step and may return nil, in which case that step
 // contributes nothing.
@@ -390,7 +389,7 @@ func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *
 		}
 		key := proj.Path + "\x00" + name
 		if seen[key] {
-			return // a cycle is rejected elsewhere; here it must simply terminate
+			return // load rejects cycles; the walk only has to terminate
 		}
 		seen[key] = true
 

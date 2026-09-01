@@ -266,8 +266,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 		"a target composing nothing must not inherit another target's artifact")
 }
 
-// The cross-project seam and the loop guard, which the same-project fixture above
-// cannot reach. A cycle is rejected at load; here the walk only has to terminate.
+// Cross-project rooting and cycle termination, which the same-project fixture
+// above cannot reach.
 func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
 	lib := &types.Project{
 		Path:           "libs/gb",
