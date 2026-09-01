@@ -27,7 +27,7 @@ func rankSiblingCheckout(v bashGuardVerdict, reason string) bashGuardVerdict {
 	if reason == "" || v.Deny != "" {
 		return v
 	}
-	return bashGuardVerdict{Deny: reason}
+	return bashGuardVerdict{Deny: reason, Rule: denyRule{Name: denyRuleSiblingCheckout}}
 }
 
 // denySiblingCheckout returns the deny reason for a magus command relocated into

@@ -101,29 +101,32 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 				continue
 			}
 			if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
-				return bashGuardVerdict{Deny: denySharedStash(rest[0])}, true
+				return denySharedStash(rest[0]), true
 			}
-			return bashGuardVerdict{Deny: denyWholeTree("git stash")}, true
+			return denyWholeTree("git stash"), true
 		case "worktree":
 			if len(rest) > 0 && rest[0] == "remove" {
-				return bashGuardVerdict{Deny: "Check it is clean first with `git -C <path> status`, then remove the worktree from a session that owns it.\n" +
-					"git worktree remove deletes that worktree's uncommitted and untracked work, which in a repo running several worktrees is routinely another session's and is in no commit to recover from."}, true
+				return bashGuardVerdict{
+					Deny: "Check it is clean first with `git -C <path> status`, then remove the worktree from a session that owns it.\n" +
+						"git worktree remove deletes that worktree's uncommitted and untracked work, which in a repo running several worktrees is routinely another session's and is in no commit to recover from.",
+					Rule: denyRule{Name: denyRuleWorktreeRemove},
+				}, true
 			}
 		case "reset":
 			if slices.Contains(rest, "--hard") {
-				return bashGuardVerdict{Deny: denyWholeTree("git reset --hard")}, true
+				return denyWholeTree("git reset --hard"), true
 			}
 		case "checkout":
 			if isWholeTreePathspec(rest) {
-				return bashGuardVerdict{Deny: denyWholeTree("git checkout .")}, true
+				return denyWholeTree("git checkout ."), true
 			}
 		case "restore":
 			if isWholeTreePathspec(rest) {
-				return bashGuardVerdict{Deny: denyWholeTree("git restore .")}, true
+				return denyWholeTree("git restore ."), true
 			}
 		case "clean":
 			if isDeletingClean(rest) {
-				return bashGuardVerdict{Deny: denyWholeTree("git clean")}, true
+				return denyWholeTree("git clean"), true
 			}
 		case "add":
 			// In the DENY pass, not beside the advisory below it: a stage-everything
@@ -131,7 +134,7 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			// whichever advisory the first command earned, which is the ordering the
 			// two-pass split exists to prevent.
 			if slices.ContainsFunc(rest, isStageAllOperand) {
-				return bashGuardVerdict{Deny: denyStageAll}, true
+				return bashGuardVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
 			}
 		}
 	}
@@ -218,20 +221,20 @@ func isTreeIdentityQuery(args []string) bool {
 func gitGuardFallback(command string) (bashGuardVerdict, bool) {
 	switch {
 	case guardStashRe.MatchString(command) && !guardStashSafeRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git stash")}, true
+		return denyWholeTree("git stash"), true
 	case guardResetRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git reset --hard")}, true
+		return denyWholeTree("git reset --hard"), true
 	case guardCheckoutRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git checkout .")}, true
+		return denyWholeTree("git checkout ."), true
 	case guardRestoreRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git restore .")}, true
+		return denyWholeTree("git restore ."), true
 	case guardCleanRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git clean")}, true
+		return denyWholeTree("git clean"), true
 	// Above the push ADVISORY, which used to answer first: `git add -A && git push` on an
 	// unparsable line got a reminder instead of the deny, in the one place the file's own
 	// invariant says an over-eager deny is the safe direction.
 	case guardStageAllRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyStageAll}, true
+		return bashGuardVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
 	case guardPushRe.MatchString(command):
 		return bashGuardVerdict{Context: pushGuardContext}, true
 	case guardStageRe.MatchString(command):

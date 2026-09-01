@@ -28,10 +28,41 @@ import (
 // It is empty for the advisories that correct the command in front of the reader, where
 // a second firing reports a second mistake rather than repeating a standing fact, and it
 // is always empty on a deny: a refusal explains itself every time it refuses.
+//
+// Rule is Kind's counterpart on the deny arm: set on every deny, empty otherwise.
 type bashGuardVerdict struct {
 	Deny    string
 	Context string
 	Kind    advisoryKind
+	Rule    denyRule
+}
+
+// denyRuleName identifies WHICH guard rule refused a command - the deny arm's
+// counterpart to advisoryKind. Deny prose is for the reader; the rule is what a
+// test compares, so rewording a reason never churns a test.
+type denyRuleName string
+
+const (
+	denyRuleNotesAuthor     denyRuleName = "notes-author"
+	denyRuleReadAck         denyRuleName = "read-ack"
+	denyRuleSedInPlace      denyRuleName = "sed-in-place"
+	denyRuleScriptedRewrite denyRuleName = "scripted-rewrite"
+	denyRuleRawTool         denyRuleName = "raw-tool"
+	denyRuleThrowawayCopy   denyRuleName = "throwaway-copy"
+	denyRuleSiblingCheckout denyRuleName = "sibling-checkout"
+	denyRuleOutputPipe      denyRuleName = "output-pipe"
+	denyRuleOutputRedirect  denyRuleName = "output-redirect"
+	denyRuleWholeTree       denyRuleName = "whole-tree"
+	denyRuleSharedStash     denyRuleName = "shared-stash"
+	denyRuleWorktreeRemove  denyRuleName = "worktree-remove"
+	denyRuleStageAll        denyRuleName = "stage-all"
+)
+
+// denyRule is the rule plus what it fired on, so a rule that renders a verb or a
+// resolved argv is still compared exactly rather than by substring.
+type denyRule struct {
+	Name denyRuleName
+	Arg  string // the op, verb, or resolved argv; empty when the rule takes none
 }
 
 // cmdPos anchors a pattern to a COMMAND position - line start or just after a
@@ -271,6 +302,14 @@ func firstRawToolDenied(command string) (guardCommand, bool) {
 	return guardCommand{}, false
 }
 
+// resolvedCommand renders a parsed command back as argv text - what the shell
+// would actually run, wrappers and quoting stripped. It is both what explainDeny
+// shows the reader and what the raw-tool rule carries as its Arg, so the two can
+// never disagree about which command was judged.
+func resolvedCommand(c guardCommand) string {
+	return strings.TrimSpace(c.Name + " " + strings.Join(c.Args, " "))
+}
+
 // explainDeny prefixes a rule's reason with the resolved command that tripped
 // it, and says so explicitly when that differs from what was typed - which is
 // the whole point of peeling wrappers, made visible instead of implied.
@@ -279,7 +318,7 @@ func firstRawToolDenied(command string) (guardCommand, bool) {
 // already says the guard reads the command being RUN, and this prefix is
 // prepended to it.
 func explainDeny(typed string, c guardCommand, reason string) string {
-	resolved := strings.TrimSpace(c.Name + " " + strings.Join(c.Args, " "))
+	resolved := resolvedCommand(c)
 	var b strings.Builder
 	b.WriteString("magus guard denied `" + resolved + "`")
 	if strings.TrimSpace(typed) != resolved {
@@ -642,15 +681,24 @@ var (
 		"An external `timeout` sees one opaque process: it cannot say which target was still running, and the SIGTERM lands wherever the run happened to be."
 )
 
-// denySharedStash explains why an unqualified stash restore is refused.
-func denySharedStash(verb string) string {
-	return "Name the entry you meant: read `git stash list`, then `git stash " + verb + " stash@{N}`.\n" +
-		"Bare `git stash " + verb + "` acts on stash@{0}, and the stash stack belongs to the REPOSITORY rather than your worktree: the top entry is often another checkout's work, and " + verb + " applies or destroys it."
+// denySharedStash refuses an unqualified stash restore. The verb it names in the
+// reason is also the rule's Arg, so the two cannot describe different commands.
+func denySharedStash(verb string) bashGuardVerdict {
+	return bashGuardVerdict{
+		Deny: "Name the entry you meant: read `git stash list`, then `git stash " + verb + " stash@{N}`.\n" +
+			"Bare `git stash " + verb + "` acts on stash@{0}, and the stash stack belongs to the REPOSITORY rather than your worktree: the top entry is often another checkout's work, and " + verb + " applies or destroys it.",
+		Rule: denyRule{Name: denyRuleSharedStash, Arg: verb},
+	}
 }
 
-func denyWholeTree(op string) string {
-	return "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use a throwaway git worktree.\n" +
-		"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill."
+// denyWholeTree refuses an operation that discards the whole tree, op naming which
+// one - in the reason and, for the same reason as above, in the rule.
+func denyWholeTree(op string) bashGuardVerdict {
+	return bashGuardVerdict{
+		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use a throwaway git worktree.\n" +
+			"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill.",
+		Rule: denyRule{Name: denyRuleWholeTree, Arg: op},
+	}
 }
 
 // magusInvokes reports whether any resolved command runs magus carrying all of the given
@@ -787,18 +835,18 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	// whole point is that it holds on EVERY surface: the path rule sees file writes, and a
 	// note authored from piped prose is a command, so only this catches it.
 	if magusRuleFires(cmds, parsed, command, guardNotesWriteRe, "notes", "edit") {
-		return bashGuardVerdict{Deny: denyNotesAuthor}
+		return bashGuardVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
 	if magusRuleFires(cmds, parsed, command, guardReadAckRe, "diff", "--ack") {
-		return bashGuardVerdict{Deny: denyReadAck}
+		return bashGuardVerdict{Deny: denyReadAck, Rule: denyRule{Name: denyRuleReadAck}}
 	}
 	if guardSedInPlaceRe.MatchString(command) {
-		return bashGuardVerdict{Deny: denySedInPlace}
+		return bashGuardVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	}
 	if guardScriptedRewriteRe.MatchString(command) {
-		return bashGuardVerdict{Deny: denyScriptedRewrite}
+		return bashGuardVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
 	var advisory bashGuardVerdict
 	// Held rather than returned, like the git advisories below: a deny found later on the
@@ -836,13 +884,16 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(cmds, isDependencyMutation) {
 			reason += "\n" + relockAdvice
 		}
-		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, reason)}
+		return bashGuardVerdict{
+			Deny: explainDeny(command, rawToolCmd, reason),
+			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
+		}
 	case magusInThrowawayCopy(command):
-		return bashGuardVerdict{Deny: throwawayCopyDeny}
+		return bashGuardVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}
 	case magusPipedToFilter(command):
-		return bashGuardVerdict{Deny: outputPipeDeny}
+		return bashGuardVerdict{Deny: outputPipeDeny, Rule: denyRule{Name: denyRuleOutputPipe}}
 	case magusRedirected(command):
-		return bashGuardVerdict{Deny: outputRedirectDeny}
+		return bashGuardVerdict{Deny: outputRedirectDeny, Rule: denyRule{Name: denyRuleOutputRedirect}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
 		return bashGuardVerdict{Context: relockGuardContext}
 	case guardCdMagusRe.MatchString(command):
