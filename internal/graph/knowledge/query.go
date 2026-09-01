@@ -19,11 +19,23 @@ import (
 // full boolean grammar (OR/parens/wildcards) and the search.js conformance
 // fixture are a later increment.
 
-// SeedsSymbols reports whether an input targets symbol nodes, so a caller knows to
-// lazily load the symbol shards the default graph omits: a symbol: ID, the symbol kind
+// lazyLayerKinds are the node kinds the lazily-loaded @symbols shards can hold. The shards
+// are named for symbols but carry more: assembleSymbols mints a file node per definition
+// and reference path, and hangs it off the dir chain containsChain builds. So a Go source
+// file is reachable ONLY through this layer, while a .buzz file of the same kind sits in
+// the default graph.
+//
+// That is why the set is enumerated rather than assumed to be {symbol}. A query naming only
+// kinds outside it cannot be answered by the layer, so skipping the load is honest; a query
+// naming a kind INSIDE it that skips the load reports a node that exists as absent, which is
+// the one failure the verdict machinery exists to prevent.
+var lazyLayerKinds = []string{types.KindSymbol, types.KindFile, types.KindDir}
+
+// SeedsSymbols reports whether an input targets the lazily-loaded @symbols shards, so a
+// caller knows to merge them into the default graph: a symbol: ID, any kind the layer holds
 // (incl. wildcard), a defines/references/calls relation, or any language filter. It must
-// agree with scoreNode - a match that reaches symbols without seeding here returns empty.
-// Over-eager is safe: it only loads shards a later filter may discard.
+// agree with scoreNode - a match that reaches those shards without seeding here returns
+// empty. Over-eager is safe: it only loads shards a later filter may discard.
 func SeedsSymbols(input string) bool {
 	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
 		return true
@@ -33,13 +45,16 @@ func SeedsSymbols(input string) bool {
 		return true
 	}
 	for _, k := range q.fields["kind"] {
-		if k == types.KindSymbol || (hasWildcard(k) && globMatch(k, types.KindSymbol)) {
+		if slices.Contains(lazyLayerKinds, k) {
+			return true
+		}
+		if hasWildcard(k) && slices.ContainsFunc(lazyLayerKinds, func(lk string) bool { return globMatch(k, lk) }) {
 			return true
 		}
 	}
-	// A kind or id regex that could reach the symbol layer seeds it too - over-seeding is safe
+	// A kind or id regex that could reach the lazy layer seeds it too - over-seeding is safe
 	// (a later filter discards), an unseeded symbol shard silently omits every code symbol.
-	if matchesAnyRe(types.KindSymbol, q.reFields["kind"]) || len(q.reFields["id"]) > 0 {
+	if slices.ContainsFunc(lazyLayerKinds, func(lk string) bool { return matchesAnyRe(lk, q.reFields["kind"]) }) || len(q.reFields["id"]) > 0 {
 		return true
 	}
 	for _, id := range q.fields["id"] {
@@ -56,25 +71,31 @@ func SeedsSymbols(input string) bool {
 	})
 }
 
-// CouldMatchSymbol reports whether a query could ever match a symbol node, which is a
-// weaker question than SeedsSymbols: it asks whether the symbol layer is RELEVANT, not
-// whether it was loaded.
+// CouldMatchSymbol reports whether a query could ever match a node in the lazily-loaded
+// layer, which is a weaker question than SeedsSymbols: it asks whether that layer is
+// RELEVANT, not whether it was loaded.
 //
-// The two differ for exactly the queries where an unloaded-symbols caveat would mislead.
+// It is DERIVED from SeedsSymbols rather than deciding the same thing a second way, and
+// that is the whole safety property: relevance is a strict superset of seeding by
+// construction, so widening SeedsSymbols can never leave a query that now loads the layer
+// outside the set of queries allowed to caveat it. Two parallel implementations is exactly
+// how `kind=file <name>` came to skip the shards AND assert a verified absence about them.
+//
+// The two differ for exactly the queries where an unloaded-layer caveat would mislead.
 // `kind:author` returning nothing has nothing to do with code symbols, so telling the
 // reader that symbols were not searched points them at a layer that could not have held
-// the answer. A query that names a non-symbol kind and no wildcard has ruled the layer
-// out itself; everything else leaves it open.
+// the answer. A query naming only kinds outside lazyLayerKinds has ruled the layer out
+// itself; everything else leaves it open.
 func CouldMatchSymbol(input string) bool {
 	if SeedsSymbols(input) {
 		return true
 	}
 	kinds := parseQuery(input).fields["kind"]
 	if len(kinds) == 0 {
-		return true // no kind filter, so a symbol was in scope and simply was not loaded
+		return true // no kind filter, so the layer was in scope and simply was not loaded
 	}
-	// Any explicit kind that is not symbol (and no wildcard reaching it - SeedsSymbols
-	// already returned false, so none does) excludes the layer outright.
+	// Every explicit kind is outside the lazy layer (and no wildcard reaches it -
+	// SeedsSymbols already returned false, so none does), which excludes it outright.
 	return false
 }
 

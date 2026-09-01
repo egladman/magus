@@ -47,25 +47,18 @@ func (s *Service) graphFor(ctx context.Context, input string) (*knowledge.Graph,
 	return g, false, err
 }
 
-// answer classifies a result against what was actually searched.
+// answer reports what was actually searched and lets knowledge.Answer judge it, so this
+// surface cannot reach a different verdict than the CLI or the MCP tools about one graph.
 //
 // The probe is skipped when the symbol layer could not have held the answer: `kind:author`
 // returning nothing has no bearing on a missing symbol index, and caveating it would point
-// the reader at a layer that was never in scope. A failed probe maps to its own reason
-// rather than to an empty gap list, which would read as verified coverage.
+// the reader at a layer that was never in scope.
 func (s *Service) answer(ctx context.Context, input string, matched, seededSymbols bool) types.KnowledgeAnswer {
-	if !knowledge.CouldMatchSymbol(input) {
-		return types.ClassifyAnswer(matched, "", nil)
+	cov := knowledge.Coverage{Seeded: seededSymbols}
+	if knowledge.CouldMatchSymbol(input) {
+		cov.Gaps, cov.Probed = s.ws.SymbolGaps(ctx)
 	}
-	gaps, probed := s.ws.SymbolGaps(ctx)
-	if !probed {
-		return types.ClassifyAnswer(matched, types.ReasonCoverageUnknown, nil)
-	}
-	var reason types.KnowledgeUnknownReason
-	if !seededSymbols {
-		reason = types.ReasonSymbolsNotLoaded
-	}
-	return types.ClassifyAnswer(matched, reason, gaps)
+	return knowledge.Answer(input, matched, cov)
 }
 
 func (s *Service) QueryNodes(

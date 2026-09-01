@@ -330,6 +330,7 @@ export object KnowledgeAnswer {
     verdict: str = "",
     reason: str = "",
     gaps: [KnowledgeSymbolGap] = [],
+    staleIndexes: [str] = [],
 }
 
 export object Unreferenced {

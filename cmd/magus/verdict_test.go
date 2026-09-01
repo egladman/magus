@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 )
 
@@ -62,6 +63,7 @@ func TestPrintVerdictIsPlainASCII(t *testing.T) {
 		types.ClassifyAnswer(false, "", nil),
 		types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil),
 		types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")}),
+		knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, IndexOnly: true, Stale: []string{"libs/api"}}),
 	} {
 		got := renderVerdict(ans, "magus refs Foo")
 		for _, r := range got {
@@ -109,6 +111,34 @@ func TestPrintVerdictCoverageUnknownDoesNotAssertAbsence(t *testing.T) {
 	assert.Contains(t, got, "verdict: unknown, not absent")
 	assert.Contains(t, got, "could not determine which projects it searched")
 	assert.NotContains(t, got, "absent (magus searched everything")
+}
+
+// The caveat where it is the whole explanation. `magus refs <real name>` on an index built
+// before that definition existed printed a verdict byte-identical to `magus refs <typo>`,
+// while the stale-index line showed up only under answers that FOUND something - the one
+// case where it did not change what to do.
+func TestPrintVerdictIndexStaleNamesTheProjectsAndTheRefresh(t *testing.T) {
+	got := renderVerdict(knowledge.Answer("adoptionRun", false, knowledge.Coverage{
+		Seeded: true, Probed: true, IndexOnly: true, Stale: []string{"libs/api", "."},
+	}), "")
+	assert.Contains(t, got, "verdict: unknown, not absent")
+	assert.Contains(t, got, "libs/api, .")
+	assert.Contains(t, got, "magus graph build")
+	assert.NotContains(t, got, "absent (magus searched everything")
+}
+
+// The CLI and the MCP tools must reach the same verdict about one graph. Both surfaces
+// build a knowledge.Coverage of what they observed and hand it to knowledge.Answer; neither
+// derives a reason. The mirror of this assertion lives in internal/handler/mcp.
+func TestVerdictDerivationIsSharedWithMCP(t *testing.T) {
+	const q = "kind=target nothingmatchesthis"
+	// The gate that used to be CLI-only: a kind outside the lazy layer rules it out, so the
+	// absence is verified whether or not symbols were loaded.
+	assert.Equal(t, types.VerdictAbsent, knowledge.Answer(q, false, knowledge.Coverage{}).Verdict)
+	// And the case the CLI used to get wrong on its own: kind=file names a kind those shards
+	// hold, so an unseeded lookup may not assert anything.
+	assert.Equal(t, types.VerdictUnknown,
+		knowledge.Answer("kind=file nothingmatchesthis", false, knowledge.Coverage{Probed: true}).Verdict)
 }
 
 // A found result still carries a coverage caveat when one applies, and prints nothing

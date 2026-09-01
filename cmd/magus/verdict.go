@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -21,25 +22,24 @@ import (
 // The verbs here inform; none of them decides. An unknown verdict still prints what was
 // found, still exits, and names the command that would close the gap.
 
-// symbolCoverage classifies what a lookup was able to search, for a lookup that is about
-// to report nothing. input is the query text, used to decide whether the symbol layer was
-// even relevant; seedsSymbols reports whether this lookup merged the symbol shards.
+// symbolCoverage reports what a lookup was able to search. input is the query text,
+// seeded reports whether this lookup merged the lazy @symbols shards, and indexOnly marks
+// a verb whose whole evidence base is the index (see knowledge.Coverage).
 //
-// The probe is skipped entirely when the symbol layer could not have held the answer -
-// `kind:author` returning nothing has no bearing on a missing symbol index - so an
+// It observes; knowledge.Answer judges. That split is what keeps this surface and the MCP
+// tools from reaching different verdicts about the same graph.
+//
+// Both probes are skipped entirely when the symbol layer could not have held the answer -
+// `kind:author` returning nothing has no bearing on a missing or stale symbol index - so an
 // ordinary domain query pays nothing for the verdict.
-func symbolCoverage(ctx context.Context, root, input string, seedsSymbols bool) (types.KnowledgeUnknownReason, []types.KnowledgeSymbolGap) {
+func symbolCoverage(ctx context.Context, root, input string, seeded, indexOnly bool) knowledge.Coverage {
+	cov := knowledge.Coverage{Seeded: seeded, IndexOnly: indexOnly}
 	if !knowledge.CouldMatchSymbol(input) {
-		return "", nil
+		return cov
 	}
-	gaps, probed := symbolGapsFor(ctx, root)
-	switch {
-	case !probed:
-		return types.ReasonCoverageUnknown, nil
-	case !seedsSymbols:
-		return types.ReasonSymbolsNotLoaded, gaps
-	}
-	return "", gaps
+	cov.Gaps, cov.Probed = symbolGapsFor(ctx, root)
+	cov.Stale = staleIndexProjects(ctx, root)
+	return cov
 }
 
 // symbolGapsFor lists the projects whose declared symbol index magus could not read, and
@@ -77,6 +77,12 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 			}
 		case types.ReasonCoverageUnknown:
 			fmt.Fprintln(w, "  magus could not determine which projects it searched, so this is not a verified absence")
+		case types.ReasonIndexStale:
+			// The caveat where it is the whole explanation. It used to print only under an
+			// answer that found something, and vanish on the miss it actually accounted for.
+			fmt.Fprintf(w, "  the symbol index predates the sources it covers, so a definition added since it was built is not in it: %s\n",
+				strings.Join(ans.StaleIndexes, ", "))
+			fmt.Fprintf(w, "  refresh and ask again: %s\n", hint.GraphBuild)
 		}
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(w, "  outside coverage: %s\n", types.DescribeGaps(ans.Gaps))

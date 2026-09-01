@@ -355,6 +355,11 @@ const (
 	// searched. Reporting this as `absent` would assert exactly the fact it failed to
 	// establish, which is the one outcome this whole verdict exists to prevent.
 	ReasonCoverageUnknown KnowledgeUnknownReason = "coverage-unknown"
+	// ReasonIndexStale: the symbol index was read, but it predates the sources it covers,
+	// so a definition added or moved since the build is not in it. Fix: rebuild the index.
+	// Only a lookup whose whole evidence base IS the index reports this - a miss there is
+	// unverifiable, while a general query reads layers the index has no bearing on.
+	ReasonIndexStale KnowledgeUnknownReason = "index-stale"
 )
 
 // KnowledgeSymbolGap is one project whose declared symbol index magus could not read.
@@ -390,10 +395,17 @@ func DescribeGaps(gaps []KnowledgeSymbolGap) string {
 // on the verdict instead of inferring it from an empty list. Verdict has no omitempty:
 // `absent` must be positively asserted, or a reader cannot tell a verified absence from
 // an older magus that had no verdict at all.
+//
+// StaleIndexes is the caveat the text arm has always printed under an answer and the
+// structured arms silently dropped: workspace-relative paths of the projects whose built
+// symbol index predates the sources it covers. It rides the answer rather than the console
+// so `-o json` and MCP cannot lose it - a machine consumer reading only stdout got an
+// unqualified `absent` where a human reading the same lookup was told the index was behind.
 type KnowledgeAnswer struct {
-	Verdict KnowledgeVerdict       `json:"verdict"             yaml:"verdict"`
-	Reason  KnowledgeUnknownReason `json:"reason,omitempty"    yaml:"reason,omitempty"`
-	Gaps    []KnowledgeSymbolGap   `json:"gaps,omitempty"      yaml:"gaps,omitempty"`
+	Verdict      KnowledgeVerdict       `json:"verdict"                 yaml:"verdict"`
+	Reason       KnowledgeUnknownReason `json:"reason,omitempty"        yaml:"reason,omitempty"`
+	Gaps         []KnowledgeSymbolGap   `json:"gaps,omitempty"          yaml:"gaps,omitempty"`
+	StaleIndexes []string               `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 }
 
 // ClassifyAnswer classifies a lookup's result against what magus was actually able to search.

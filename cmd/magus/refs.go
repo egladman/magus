@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -57,16 +58,17 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		// what magus could see is the whole question, so answer it rather than printing
 		// one message for both.
 		// refs ALWAYS merges the symbol shards, so "not loaded" is never its problem;
-		// what it can be missing is an index that was never built. Passing HasSymbols()
-		// here would also be wrong for a different reason: an exact symbol ID routes to a
-		// subset of shards, so it answers about the subset, not the workspace. The
-		// declared-index probe is the authority.
-		gaps, probed := symbolGapsFor(ctx, root)
-		var reason types.KnowledgeUnknownReason
-		if !probed {
-			reason = types.ReasonCoverageUnknown
-		}
-		ans := types.ClassifyAnswer(false, reason, gaps)
+		// what it can be missing is an index that was never built, or one built before the
+		// definition being asked about existed. Passing HasSymbols() here would also be
+		// wrong for a different reason: an exact symbol ID routes to a subset of shards, so
+		// it answers about the subset, not the workspace. The declared-index probe is the
+		// authority.
+		//
+		// indexOnly: this is the miss where a stale index IS the explanation. A name refs
+		// cannot resolve is exactly what a build older than the tree would hide, and until
+		// now this path reported it byte-identically to a typo for something that never
+		// existed.
+		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], true, true))
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, "")
 		if len(ans.Gaps) > 0 {
@@ -76,12 +78,11 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	// A resolved symbol still carries the coverage verdict: an uncovered project could
 	// hold references this list does not show, whether or not it showed any.
-	gaps, probed := symbolGapsFor(ctx, root)
-	var reason types.KnowledgeUnknownReason
-	if !probed {
-		reason = types.ReasonCoverageUnknown
-	}
-	out.Answer = types.ClassifyAnswer(len(out.Refs) > 0, reason, gaps)
+	//
+	// NOT indexOnly, unlike the unresolved branch above: the symbol resolved, so the index
+	// answered, and its age is a caveat on the rows rather than the reason there are none.
+	// It rides the answer as StaleIndexes either way, which is what -o json was missing.
+	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, symbolCoverage(ctx, root, pos[0], true, false))
 
 	if rf.Occurrences {
 		return emitOccurrences(ctx, root, opts, out)

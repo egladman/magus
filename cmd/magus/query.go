@@ -203,8 +203,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	out := g.Query(input, qf.Budget)
-	reason, gaps := symbolCoverage(ctx, root, input, seedsSymbols)
-	out.Answer = types.ClassifyAnswer(out.MatchCount > 0, reason, gaps)
+	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsSymbols, false))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -741,8 +740,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		// provably held no code symbols. Reporting that as "no node matches" is how a
 		// real symbol comes to look nonexistent - but only when the input could have
 		// named one, so a typo'd `kind:target` still gets the absent verdict it deserves.
-		reason, gaps := symbolCoverage(ctx, root, pos[0], seedsSymbols)
-		ans := types.ClassifyAnswer(false, reason, gaps)
+		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], seedsSymbols, false))
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, hint.Refs.With(pos[0]))
 		return exitForVerdict(ans.Verdict)

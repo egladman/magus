@@ -654,6 +654,11 @@ func buzzValueMagusKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
 		itemsGaps[indexGaps] = buzzValueMagusKnowledgeSymbolGap(v.Gaps[indexGaps])
 	}
 	out.MapSet("gaps", vm.ListValue(itemsGaps))
+	itemsStaleIndexes := make([]vm.Value, len(v.StaleIndexes))
+	for indexStaleIndexes := range v.StaleIndexes {
+		itemsStaleIndexes[indexStaleIndexes] = vm.StrValue(v.StaleIndexes[indexStaleIndexes])
+	}
+	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
 	return out
 }
 
