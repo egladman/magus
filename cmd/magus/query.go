@@ -197,13 +197,13 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		input += " kind=" + k
 	}
 
-	seedsSymbols := knowledge.SeedsSymbols(input)
-	g, err := loadKnowledgeGraph(ctx, root, qf.Refresh, qf.Global, seedsSymbols)
+	seedsLazyLayer := knowledge.SeedsLazyLayer(input)
+	g, err := loadKnowledgeGraph(ctx, root, qf.Refresh, qf.Global, seedsLazyLayer)
 	if err != nil {
 		return err
 	}
 	out := g.Query(input, qf.Budget)
-	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsSymbols, false))
+	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsLazyLayer, false))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -730,8 +730,8 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	seedsSymbols := knowledge.SeedsSymbols(pos[0])
-	g, err := loadKnowledgeGraph(ctx, root, xf.Refresh, xf.Global, seedsSymbols)
+	seedsLazyLayer := knowledge.SeedsLazyLayer(pos[0])
+	g, err := loadKnowledgeGraph(ctx, root, xf.Refresh, xf.Global, seedsLazyLayer)
 	if err != nil {
 		return err
 	}
@@ -741,7 +741,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		// provably held no code symbols. Reporting that as "no node matches" is how a
 		// real symbol comes to look nonexistent - but only when the input could have
 		// named one, so a typo'd `kind:target` still gets the absent verdict it deserves.
-		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], seedsSymbols, false))
+		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], seedsLazyLayer, false))
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, hint.Refs.With(pos[0]))
 		emitNearest(os.Stderr, g.NearestNode(pos[0]))
@@ -800,7 +800,7 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, pf.Refresh, pf.Global, knowledge.SeedsSymbols(pos[0]) || knowledge.SeedsSymbols(pos[1]))
+	g, err := loadKnowledgeGraph(ctx, root, pf.Refresh, pf.Global, knowledge.SeedsLazyLayer(pos[0]) || knowledge.SeedsLazyLayer(pos[1]))
 	if err != nil {
 		return err
 	}

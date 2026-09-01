@@ -72,9 +72,9 @@ func noGaps() ([]types.KnowledgeSymbolGap, bool) { return nil, true }
 // verdictFor builds the classifier pagedQuery takes, exactly as queryTool.Invoke does. It
 // routes through knowledge.Answer rather than restating the rules, or the test would pin a
 // second implementation instead of the shipped one.
-func verdictFor(input string, seedsSymbols bool, probe gapProbe) answerFn {
+func verdictFor(input string, seedsLazyLayer bool, probe gapProbe) answerFn {
 	return func(matched bool) types.KnowledgeAnswer {
-		return knowledge.Answer(input, matched, coverageFor(input, seedsSymbols, probe))
+		return knowledge.Answer(input, matched, coverageFor(input, seedsLazyLayer, probe))
 	}
 }
 

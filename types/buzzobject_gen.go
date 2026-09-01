@@ -401,6 +401,7 @@ func (v FileEntry) BuzzObject() BuzzObject {
 		"claims":    itemsClaims,
 		"dependsOn": v.DependsOn,
 		"hint":      v.Hint,
+		"exists":    v.Exists,
 	}
 }
 

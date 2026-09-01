@@ -243,7 +243,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 
 	// The whole-graph export stays domain-only; a --select neighborhood pulls in the
 	// symbol shards only when the selection actually targets symbols.
-	g, err := loadKnowledgeGraph(ctx, root, ef.Refresh, ef.Global, ef.Select != "" && knowledge.SeedsSymbols(ef.Select))
+	g, err := loadKnowledgeGraph(ctx, root, ef.Refresh, ef.Global, ef.Select != "" && knowledge.SeedsLazyLayer(ef.Select))
 	if err != nil {
 		return err
 	}

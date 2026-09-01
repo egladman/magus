@@ -815,6 +815,7 @@ func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
 	}
 	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
 	out.MapSet("hint", vm.StrValue(v.Hint))
+	out.MapSet("exists", vm.BoolValue(v.Exists))
 	return out
 }
 

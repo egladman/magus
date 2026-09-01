@@ -4,12 +4,12 @@ import "github.com/egladman/magus/types"
 
 // The one place a knowledge verdict is derived.
 //
-// It lives here, beside SeedsSymbols and CouldMatchSymbol, because the verdict is a claim
+// It lives here, beside SeedsLazyLayer and CouldMatchLazyLayer, because the verdict is a claim
 // ABOUT them: `absent` asserts that everything which could have matched was consulted, and
 // only those predicates know what could have. The CLI, the MCP tools and the Connect
 // GraphService each used to assemble a reason themselves, and they drifted - for the same
 // query against the same graph the CLI reported `absent` while MCP reported
-// `unknown / symbols-not-loaded`, because one gated on CouldMatchSymbol and the other did
+// `unknown / symbols-not-loaded`, because one gated on CouldMatchLazyLayer and the other did
 // not. None of them derives a verdict now; each reports what it observed and calls Answer.
 
 // Coverage is what a lookup was actually able to consult. Every field is an OBSERVATION,
@@ -37,7 +37,7 @@ type Coverage struct {
 // Answer classifies a lookup's result against its coverage. input is the query text, used
 // only to ask whether the lazy layer was relevant at all.
 func Answer(input string, matched bool, cov Coverage) types.KnowledgeAnswer {
-	if !CouldMatchSymbol(input) {
+	if !CouldMatchLazyLayer(input) {
 		// The layer could not have held the answer, so neither its gaps nor its staleness
 		// bears on this verdict. Caveating here would point the reader at a layer that was
 		// never in scope.

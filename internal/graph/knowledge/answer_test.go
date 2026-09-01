@@ -24,10 +24,10 @@ var verdictCorpus = []string{
 // If it ever inverts, a query loads the lazy layer while being classified as one the layer
 // could not have held - which is the state that lets a skipped shard set report a verified
 // absence.
-func TestSeedsSymbolsImpliesCouldMatchSymbol(t *testing.T) {
+func TestSeedsLazyLayerImpliesCouldMatchLazyLayer(t *testing.T) {
 	for _, in := range verdictCorpus {
-		if SeedsSymbols(in) {
-			assert.Truef(t, CouldMatchSymbol(in), "%q seeds the lazy layer, so it must be allowed to caveat it", in)
+		if SeedsLazyLayer(in) {
+			assert.Truef(t, CouldMatchLazyLayer(in), "%q seeds the lazy layer, so it must be allowed to caveat it", in)
 		}
 	}
 }
@@ -36,10 +36,10 @@ func TestSeedsSymbolsImpliesCouldMatchSymbol(t *testing.T) {
 // did not load a layer it could have matched must never claim it searched everywhere.
 func TestAnswerNeverAbsentWhenARelevantLayerWasSkipped(t *testing.T) {
 	for _, in := range verdictCorpus {
-		// Gated on EITHER predicate, deliberately: keyed on CouldMatchSymbol alone, a
-		// regression that shrank it below SeedsSymbols would silently drop the offending
+		// Gated on EITHER predicate, deliberately: keyed on CouldMatchLazyLayer alone, a
+		// regression that shrank it below SeedsLazyLayer would silently drop the offending
 		// query out of the loop and leave this test green while shipping the bug.
-		if !SeedsSymbols(in) && !CouldMatchSymbol(in) {
+		if !SeedsLazyLayer(in) && !CouldMatchLazyLayer(in) {
 			continue
 		}
 		ans := Answer(in, false, Coverage{Seeded: false, Probed: true})
@@ -51,15 +51,15 @@ func TestAnswerNeverAbsentWhenARelevantLayerWasSkipped(t *testing.T) {
 // `kind=file <name>` is the exact query that reported a verified absence about a node three
 // other spellings retrieved. The kind names a layer the @symbols shards hold, so it must
 // load them.
-func TestSeedsSymbolsForKindsTheLazyLayerHolds(t *testing.T) {
+func TestSeedsLazyLayerForKindsItHolds(t *testing.T) {
 	for _, in := range []string{
 		"kind=file guard_shell.go", "kind:file", "kind=dir cmd/magus", "kind=fil*", "kind=~^fi",
 		"kind=file kind=target x",
 	} {
-		assert.Truef(t, SeedsSymbols(in), "%q names a kind the @symbols shards hold", in)
+		assert.Truef(t, SeedsLazyLayer(in), "%q names a kind the @symbols shards hold", in)
 	}
 	for _, in := range []string{"kind=target build", "kind=author eli", "kind=spell go", "kind=tar*"} {
-		assert.Falsef(t, SeedsSymbols(in), "%q names no kind the @symbols shards hold", in)
+		assert.Falsef(t, SeedsLazyLayer(in), "%q names no kind the @symbols shards hold", in)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestGoFileNodeLivesOnlyInTheLazyShard(t *testing.T) {
 	assert.Empty(t, matchIDs(def.Resolve(q, 0)), "the default graph cannot answer this")
 	def.Merge(lazyNodes(lazy), nil)
 	assert.Equal(t, []string{"file:pkg/a/a.go"}, matchIDs(def.Resolve(q, 0)), "the lazy shard is where the node is")
-	assert.True(t, SeedsSymbols(q), "so the query has to load it")
+	assert.True(t, SeedsLazyLayer(q), "so the query has to load it")
 }
 
 // lazyNodes flattens a merged graph back to its nodes, for a test that loads one graph's

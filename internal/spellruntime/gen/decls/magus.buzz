@@ -79,6 +79,7 @@ export object FileEntry {
     claims: [FileClaim] = [],
     dependsOn: [str] = [],
     hint: str = "",
+    exists: bool = false,
 }
 
 export object FileReport {

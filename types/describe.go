@@ -743,6 +743,16 @@ type FileEntry struct {
 	// Hint is the one-line handling rule for the role, ready to surface to a
 	// human or an agent.
 	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
+	// Exists reports whether the path is present on disk.
+	//
+	// Classification is pure glob matching, which is what makes "where would a new
+	// file land" answerable - so it cannot be an error for a path that is not there
+	// yet. Without this field it is also not DISTINGUISHABLE: a mistyped or invented
+	// path came back byte-identical to the real one beside it, declared and owned.
+	//
+	// Never omitempty: false is the whole signal, and a field that vanishes when it
+	// is the interesting value is the one shape this cannot take.
+	Exists bool `json:"exists" yaml:"exists"`
 }
 
 // FileClaim is one declaration that names a path: the project whose magusfile

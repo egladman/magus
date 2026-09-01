@@ -56,6 +56,20 @@ https://github.com/egladman/magus/compare/v0.3.0...main
 
 ### Fixed
 
+- `magus describe file` no longer classifies a path that is not in the workspace.
+  It is pure glob matching, and `**/*.go` matches an absolute path from another
+  checkout as happily as a relative one - so a fabricated or mistyped path came
+  back `project: .`, `role: source`, `declared: source . **/*.go`, byte-identical
+  to a real file beside it. A path that resolves outside the root is now
+  `unclaimed` with a hint naming the workspace it is not in, and every entry
+  carries `exists`, printed as `exists: false` in the text form and always
+  present in `-o json`. Classification is deliberately still answered for a file
+  that is not there yet - "where would this land" is a question worth asking -
+  so this reports existence rather than turning a missing path into an error.
+- `magus describe file` reads a path shape the way `magus query` and `magus where`
+  do, through the shared `file.NormalizeWorkspacePath`. Its own partial normalizer
+  handled neither backslashes nor an absolute path rooted somewhere else, so
+  `cmd\magus\guard_shell.go` was taken as a literal filename.
 - `magus vcs resolve` no longer gives up when the merge left conflict markers in
   a magusfile. It reads the committed magusfile through the new
   `types.RevisionFileReader` capability, settles the generated conflicts with

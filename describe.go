@@ -1129,9 +1129,12 @@ func appendUniq(s []string, v string) []string {
 // declared source and output globs (the same workspace-rooted globs baseStep
 // feeds the cache), plus directory containment for ownership, and reports each
 // matching declaration individually (FileEntry.Claims) with the target that made
-// it. It is pure declaration lookup - no target evaluation, no VCS - so it is
-// cheap enough to run over a whole dirty tree. An absolute path is re-rooted onto
-// the workspace; a path outside it (or matching nothing) reports as unclaimed.
+// it. The classification is pure declaration lookup - no target evaluation, no
+// VCS - so it is cheap enough to run over a whole dirty tree; the one filesystem
+// call per path is the Lstat behind FileEntry.Exists, which is what separates a
+// declared-but-absent path from a declared-and-present one. An absolute path is
+// re-rooted onto the workspace; a path that resolves outside it is classified
+// against nothing, because every glob here is rooted at this workspace.
 // ctx bounds the walk so classifying a large path list stays cancellable.
 func (m *Magus) ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error) {
 	all := m.ws.All()
@@ -1155,15 +1158,28 @@ func (m *Magus) ClassifyFiles(ctx context.Context, paths []string) ([]types.File
 }
 
 func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.FileEntry {
-	path := filepath.ToSlash(raw)
-	if filepath.IsAbs(raw) {
-		if rel, err := filepath.Rel(m.ws.Root, raw); err == nil && !strings.HasPrefix(rel, "..") {
-			path = filepath.ToSlash(rel)
+	path, _ := file.NormalizeWorkspacePath(raw, m.ws.Root)
+	path = filepath.ToSlash(path)
+	// NormalizeWorkspacePath hands its input back unchanged when it cannot place the
+	// path inside root, so a still-absolute or still-escaping result names a file in
+	// some other tree. It gets no classification: every glob here is rooted at this
+	// workspace, and "**/*.go" happily matches another checkout's path - which is how
+	// a fabricated absolute path came back owned by "." and declared a Go source.
+	if filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
+		return types.FileEntry{
+			Path:   path,
+			Role:   "unclaimed",
+			Exists: fileExists(filepath.FromSlash(path)),
+			Hint: "resolves outside this workspace (" + m.ws.Root + "): no project here can declare it, " +
+				"so none of magus's answers about this workspace apply to it",
 		}
 	}
-	path = strings.TrimPrefix(path, "./")
 
-	entry := types.FileEntry{Path: path, Role: "unclaimed"}
+	entry := types.FileEntry{
+		Path:   path,
+		Role:   "unclaimed",
+		Exists: fileExists(filepath.Join(m.ws.Root, filepath.FromSlash(path))),
+	}
 	for _, p := range owners {
 		if p.Path == "." || path == p.Path || strings.HasPrefix(path, p.Path+"/") {
 			entry.Project = p.Path
@@ -1237,6 +1253,14 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		entry.Hint = "no project declares this path: it invalidates no cache key, but directory containment still seeds its owning project into the affected set, so touching it reruns work; declare it, or ignore it deliberately"
 	}
 	return entry
+}
+
+// fileExists reports whether p names an entry on disk. Lstat, not Stat: a broken
+// symlink is a file the tree has, and reporting it absent would send the caller
+// looking for a typo instead of at the link.
+func fileExists(p string) bool {
+	_, err := os.Lstat(p)
+	return err == nil
 }
 
 // matchedClaims returns every declaration of p that names path: the project-wide

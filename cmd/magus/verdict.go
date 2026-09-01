@@ -35,7 +35,7 @@ import (
 // ordinary domain query pays nothing for the verdict.
 func symbolCoverage(ctx context.Context, root, input string, seeded, indexOnly bool) knowledge.Coverage {
 	cov := knowledge.Coverage{Seeded: seeded, IndexOnly: indexOnly}
-	if !knowledge.CouldMatchSymbol(input) {
+	if !knowledge.CouldMatchLazyLayer(input) {
 		return cov
 	}
 	cov.Gaps, cov.Probed = symbolGapsFor(ctx, root)

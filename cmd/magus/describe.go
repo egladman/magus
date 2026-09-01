@@ -1544,6 +1544,11 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 			fmt.Printf("  project: %s\n", f.Project)
 		}
 		fmt.Printf("  role: %s\n", f.Role)
+		// Only when absent. Present is the overwhelmingly common case, and a line on
+		// every entry would bury the one reading that changes what the rest means.
+		if !f.Exists {
+			fmt.Printf("  exists: false\n")
+		}
 		if len(f.OutputOf) > 0 {
 			fmt.Printf("  output_of: %v\n", f.OutputOf)
 		}

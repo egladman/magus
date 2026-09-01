@@ -50,7 +50,7 @@ type gapProbe func() ([]types.KnowledgeSymbolGap, bool)
 // layer was relevant. Neither derives one now - both observe and call knowledge.Answer.
 func coverageFor(input string, seeded bool, probe gapProbe) knowledge.Coverage {
 	cov := knowledge.Coverage{Seeded: seeded}
-	if knowledge.CouldMatchSymbol(input) {
+	if knowledge.CouldMatchLazyLayer(input) {
 		cov.Gaps, cov.Probed = probe()
 	}
 	return cov
@@ -88,8 +88,8 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 	// answers from the symbol-free warm graph.
 	var g *knowledge.Graph
 	var err error
-	seedsSymbols := knowledge.SeedsSymbols(terms)
-	if seedsSymbols {
+	seedsLazyLayer := knowledge.SeedsLazyLayer(terms)
+	if seedsLazyLayer {
 		g, err = t.graph.KnowledgeGraphWithSymbols(ctx)
 	} else {
 		g, err = knowledgeGraph(ctx, t.graph)
@@ -99,7 +99,7 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 	}
 	probe := func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) }
 	resp, err := pagedQuery(g, terms, budget, limit, cursor, func(matched bool) types.KnowledgeAnswer {
-		return knowledge.Answer(terms, matched, coverageFor(terms, seedsSymbols, probe))
+		return knowledge.Answer(terms, matched, coverageFor(terms, seedsLazyLayer, probe))
 	})
 	if err != nil {
 		return spells.InvokeResponse{}, err

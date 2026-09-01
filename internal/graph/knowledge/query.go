@@ -31,12 +31,12 @@ import (
 // the one failure the verdict machinery exists to prevent.
 var lazyLayerKinds = []string{types.KindSymbol, types.KindFile, types.KindDir}
 
-// SeedsSymbols reports whether an input targets the lazily-loaded @symbols shards, so a
+// SeedsLazyLayer reports whether an input targets the lazily-loaded @symbols shards, so a
 // caller knows to merge them into the default graph: a symbol: ID, any kind the layer holds
 // (incl. wildcard), a defines/references/calls relation, or any language filter. It must
 // agree with scoreNode - a match that reaches those shards without seeding here returns
 // empty. Over-eager is safe: it only loads shards a later filter may discard.
-func SeedsSymbols(input string) bool {
+func SeedsLazyLayer(input string) bool {
 	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
 		return true
 	}
@@ -71,13 +71,13 @@ func SeedsSymbols(input string) bool {
 	})
 }
 
-// CouldMatchSymbol reports whether a query could ever match a node in the lazily-loaded
-// layer, which is a weaker question than SeedsSymbols: it asks whether that layer is
+// CouldMatchLazyLayer reports whether a query could ever match a node in the lazily-loaded
+// layer, which is a weaker question than SeedsLazyLayer: it asks whether that layer is
 // RELEVANT, not whether it was loaded.
 //
-// It is DERIVED from SeedsSymbols rather than deciding the same thing a second way, and
+// It is DERIVED from SeedsLazyLayer rather than deciding the same thing a second way, and
 // that is the whole safety property: relevance is a strict superset of seeding by
-// construction, so widening SeedsSymbols can never leave a query that now loads the layer
+// construction, so widening SeedsLazyLayer can never leave a query that now loads the layer
 // outside the set of queries allowed to caveat it. Two parallel implementations is exactly
 // how `kind=file <name>` came to skip the shards AND assert a verified absence about them.
 //
@@ -86,8 +86,8 @@ func SeedsSymbols(input string) bool {
 // reader that symbols were not searched points them at a layer that could not have held
 // the answer. A query naming only kinds outside lazyLayerKinds has ruled the layer out
 // itself; everything else leaves it open.
-func CouldMatchSymbol(input string) bool {
-	if SeedsSymbols(input) {
+func CouldMatchLazyLayer(input string) bool {
+	if SeedsLazyLayer(input) {
 		return true
 	}
 	kinds := parseQuery(input).fields["kind"]
@@ -95,7 +95,7 @@ func CouldMatchSymbol(input string) bool {
 		return true // no kind filter, so the layer was in scope and simply was not loaded
 	}
 	// Every explicit kind is outside the lazy layer (and no wildcard reaches it -
-	// SeedsSymbols already returned false, so none does), which excludes it outright.
+	// SeedsLazyLayer already returned false, so none does), which excludes it outright.
 	return false
 }
 

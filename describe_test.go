@@ -708,6 +708,99 @@ func TestClassifyFiles_Classification(t *testing.T) {
 	assert.Equal(t, "source", byPath["web/magusfile.buzz"].Role)
 }
 
+// classifyExistsWorkspace builds a one-project workspace declaring **/*.go, with
+// present.go on disk and absent.go deliberately not. The three tests below all need
+// the same fixture and each asks a different question of it.
+func classifyExistsWorkspace(t *testing.T) (types.WorkspaceRepository, string) {
+	t.Helper()
+	// Not parallel: mutates the global spell registry.
+	const spellName = "zzz-df-exists"
+	project.DefaultSpellRegistry().RegisterSpell(
+		spells.NewSpell(spellName, spells.WithSources("**/*.go")))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "present.go"), []byte("package cmd\n"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+	// ws.Root(), not root: on macOS t.TempDir() hands back a /var path that Inspect
+	// resolves to /private/var, and an absolute spelling has to be built from the root
+	// the classifier compares against or it names a different tree.
+	return ws, ws.Root()
+}
+
+// TestClassifyFiles_Exists pins the one fact that separates a real path from an
+// invented one. Classification is glob matching, so a path that does not exist is
+// still legitimately classified - "where would this file land" is the question -
+// and every other field is IDENTICAL between the two entries below. Exists is the
+// only thing that can tell them apart, which is why it is reported rather than
+// turned into an error.
+func TestClassifyFiles_Exists(t *testing.T) {
+	ws, _ := classifyExistsWorkspace(t)
+
+	out, err := ws.ClassifyFiles(context.Background(), []string{"cmd/present.go", "cmd/absent.go"})
+	require.NoError(t, err, "ClassifyFiles")
+
+	const hint = "declared source: edits invalidate the owning project's cache keys and pull it into the affected set"
+	claims := []types.FileClaim{{Project: ".", Role: "source", Glob: "**/*.go"}}
+	assert.Equal(t, []types.FileEntry{
+		{Path: "cmd/present.go", Project: ".", Role: "source", SourceOf: []string{"."}, Claims: claims, Hint: hint, Exists: true},
+		{Path: "cmd/absent.go", Project: ".", Role: "source", SourceOf: []string{"."}, Claims: claims, Hint: hint, Exists: false},
+	}, out)
+}
+
+// TestClassifyFiles_OutsideWorkspace pins that a path resolving into some OTHER tree
+// gets no classification at all. Every glob here is rooted at this workspace and
+// "**/*.go" matches an absolute path just as happily as a relative one, so the
+// classification loop had reported a fabricated path as owned by "." and declared a
+// Go source - confidently, and byte-identically to a real file beside it.
+func TestClassifyFiles_OutsideWorkspace(t *testing.T) {
+	ws, root := classifyExistsWorkspace(t)
+
+	elsewhere := filepath.Join(t.TempDir(), "elsewhere.go")
+	require.NoError(t, os.WriteFile(elsewhere, []byte("package elsewhere\n"), 0o644))
+	invented := filepath.Join(string(filepath.Separator), "no", "such", "tree", "invented.go")
+
+	out, err := ws.ClassifyFiles(context.Background(), []string{elsewhere, invented})
+	require.NoError(t, err, "ClassifyFiles")
+
+	hint := "resolves outside this workspace (" + root + "): no project here can declare it, " +
+		"so none of magus's answers about this workspace apply to it"
+	assert.Equal(t, []types.FileEntry{
+		// Exists still answered: a real file from another checkout is a different
+		// mistake from a path that is nowhere, and the caller can tell which.
+		{Path: filepath.ToSlash(elsewhere), Role: "unclaimed", Hint: hint, Exists: true},
+		{Path: filepath.ToSlash(invented), Role: "unclaimed", Hint: hint, Exists: false},
+	}, out)
+}
+
+// TestClassifyFiles_PathShapesAgree pins that describe reads a path shape the way
+// `query` and `where` do, by going through the same file.NormalizeWorkspacePath.
+// describe had its own partial normalizer, so a Windows-side agent's backslashes and
+// an absolute path copied out of a DIFFERENT checkout were read as literal filenames.
+func TestClassifyFiles_PathShapesAgree(t *testing.T) {
+	ws, root := classifyExistsWorkspace(t)
+
+	spellings := []string{
+		"cmd/present.go",
+		"./cmd/present.go",
+		`cmd\present.go`,
+		filepath.Join(root, "cmd", "present.go"),
+	}
+	out, err := ws.ClassifyFiles(context.Background(), spellings)
+	require.NoError(t, err, "ClassifyFiles")
+	require.Len(t, out, len(spellings))
+
+	for i, spelling := range spellings[1:] {
+		assert.Equalf(t, out[0], out[i+1], "%q must classify as %q does", spelling, spellings[0])
+	}
+}
+
 // TestClassifyFiles_DeclaredBeatsMaintained pins the precedence. maintained refines
 // the UNCLAIMED default; it must never mask a project's declaration, or a workspace
 // that legitimately declares one of these paths would stop being told it is keyed.

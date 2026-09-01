@@ -39,7 +39,7 @@ var _ graphv1alpha1connect.GraphServiceHandler = (*Service)(nil)
 // @symbols shards; everything else answers from the warm, symbol-free graph, which is what
 // keeps the default export lazy.
 func (s *Service) graphFor(ctx context.Context, input string) (*knowledge.Graph, bool, error) {
-	if knowledge.SeedsSymbols(input) {
+	if knowledge.SeedsLazyLayer(input) {
 		g, err := s.ws.KnowledgeGraphWithSymbols(ctx)
 		return g, true, err
 	}
@@ -55,7 +55,7 @@ func (s *Service) graphFor(ctx context.Context, input string) (*knowledge.Graph,
 // the reader at a layer that was never in scope.
 func (s *Service) answer(ctx context.Context, input string, matched, seededSymbols bool) types.KnowledgeAnswer {
 	cov := knowledge.Coverage{Seeded: seededSymbols}
-	if knowledge.CouldMatchSymbol(input) {
+	if knowledge.CouldMatchLazyLayer(input) {
 		cov.Gaps, cov.Probed = s.ws.SymbolGaps(ctx)
 	}
 	return knowledge.Answer(input, matched, cov)
