@@ -128,7 +128,7 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) types.DoctorChec
 }
 
 // checkCITarget fails when no project in the workspace declares a `ci` target.
-// ci is the anchor `magus ci` / `magus affected ci` / `magus affected --plan`
+// ci is the anchor `magus run ci` / `magus affected ci` / `magus affected --plan`
 // key off; a workspace defining none would run that gate as a silent no-op (exit
 // 0 having gated nothing). The runtime path enforces the same rule (MGS1001);
 // this surfaces it as a health check so the gap is visible before CI runs.
@@ -152,9 +152,10 @@ func (*runner) checkCITarget(projects []*types.Project) types.DoctorCheck {
 		}
 	}
 	return types.DoctorCheck{
-		Name:    name,
-		Status:  types.DoctorFail,
-		Message: "no ci target defined in any project; `magus ci` / `magus affected ci` would gate nothing (silent no-op)",
+		Name:   name,
+		Status: types.DoctorFail,
+		Message: fmt.Sprintf("no ci target defined in any project; `%s` / `%s` would gate nothing (silent no-op)",
+			hint.Run.With("ci"), hint.Affected.With("ci")),
 		Details: []string{
 			`define one in your magusfile, e.g.  export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build, test, lint); }`,
 			"run '" + hint.DescribeTargets.String() + "' to see the available stages to compose",

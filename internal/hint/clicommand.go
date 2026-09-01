@@ -103,6 +103,7 @@ var (
 	AgentSample      = cmd("agent", "sample")
 	ConfigView       = cmd("config", "view")
 	ConfigToken      = cmd("config", "token")
+	ConfigTokenPrint = cmd("config", "token", "print")
 	MCPTokenGenerate = cmd("config", "token", "generate")
 
 	ConfigConsoleToken       = cmd("config", "console", "token")
@@ -129,7 +130,7 @@ var AllCommands = []Command{
 	MemoryLs, MemoryPut, MemoryVerify, NotesLs, NotesGet, NotesEdit,
 	SessionAttention, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
-	ConfigView, ConfigToken, MCPTokenGenerate,
+	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
 	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,
 	SelfUpdate, SelfRefresh,

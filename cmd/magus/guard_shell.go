@@ -575,8 +575,9 @@ var (
 	// a commit about something else. Measured: one such call put 69 files - a whole
 	// regenerated docs site plus five untouched source files - into a commit about
 	// four collection methods.
-	denyStageAll = "Classify the dirty tree first: `" + hint.DescribeFile.With("$(git diff --name-only)") + "`. Then stage only the reviewed paths with `git add -- <paths>`, and confirm the selection with `git diff --cached --stat` before committing.\n" +
-		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. There is deliberately no `magus vcs` wrapper; load the magus-vcs-hygiene skill if not already loaded."
+	denyStageAll = "Stage through the workspace instead: `" + hint.VCSAdd.String() + "` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and REPORTS anything undeclared rather than sweeping it in. `" + hint.VCSAdd.With("--dry-run") + "` classifies and stages nothing.\n" +
+		"For a hand-picked subset, `git add -- <paths>` is still fine; confirm it with `git diff --cached --stat` before committing.\n" +
+		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. Load the magus-vcs-hygiene skill if not already loaded."
 
 	// An ADVISORY, not a deny: two genuinely independent targets in one line is real work
 	// (`magus run build api ; magus run test docs`), and only the dependency graph knows

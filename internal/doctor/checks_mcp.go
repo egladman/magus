@@ -132,7 +132,7 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 			Details: []string{
 				err.Error(),
 				"start the daemon: " + hint.ServerStart.String(),
-				"retrieve the bearer token: magus config mcp token print",
+				"retrieve the bearer token: " + hint.ConfigTokenPrint.String(),
 			},
 		}
 	}
@@ -145,7 +145,7 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 			Name:    name,
 			Status:  types.DoctorOK,
 			Message: fmt.Sprintf("reachable at %s", url),
-			Details: []string{"bearer token: magus config mcp token print"},
+			Details: []string{"bearer token: " + hint.ConfigTokenPrint.String()},
 		}
 	case http.StatusForbidden:
 		// 403 can come from the DNS-rebind guard; the server is up.
@@ -153,7 +153,7 @@ func probeBridgeReachability(ctx context.Context, d *DaemonInfo) types.DoctorChe
 			Name:    name,
 			Status:  types.DoctorOK,
 			Message: fmt.Sprintf("reachable at %s (dns-rebind guard active)", url),
-			Details: []string{"bearer token: magus config mcp token print"},
+			Details: []string{"bearer token: " + hint.ConfigTokenPrint.String()},
 		}
 	default:
 		return types.DoctorCheck{

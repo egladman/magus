@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/cli"
@@ -20,6 +22,58 @@ func TestCLICommandHeadsAreRealSubcommands(t *testing.T) {
 				c, c.Head(), knownSubcommands)
 		}
 	}
+}
+
+// TestCLICommandPathsResolve checks the whole path, not just the head token the test
+// above walks. That gap shipped three remedies naming command chains the dispatcher
+// rejects: `magus config mcp token print` (the operator token moved to `config token`),
+// `magus notes new <name>`, and a bare `magus ci`. Each had a real head, so nothing failed.
+//
+// Resolution walks internal/cli's tree, the same hand-maintained mirror
+// TestManpageCoversEverySubcommand pins to knownSubcommands at the top level. A mirror is
+// the strongest target available: outside graphSubs and describeAlias, every family
+// dispatches on a bare switch with no accept-list to read, so an assertion against the
+// router itself needs those switches restructured first. Where the two exceptions accept a
+// spelling the registry does not carry, resolveCommandPath reads the dispatcher's data
+// instead of the mirror's.
+func TestCLICommandPathsResolve(t *testing.T) {
+	for _, c := range hint.AllCommands {
+		tokens := strings.Fields(strings.TrimPrefix(c.String(), "magus "))
+		if err := resolveCommandPath(tokens); err != nil {
+			t.Errorf("hint command %q: %v", c, err)
+		}
+	}
+}
+
+// resolveCommandPath reports whether tokens name a routable subcommand chain.
+func resolveCommandPath(tokens []string) error {
+	// describe and ls route their second token themselves against data internal/cli does
+	// not mirror: describeAlias takes singular or plural where the registry documents one
+	// spelling, and lsCmd matches "target"/"targets" while listCommand carries no children.
+	if len(tokens) == 2 {
+		switch tokens[0] {
+		case "describe":
+			if describeAlias[tokens[1]] == "" {
+				return fmt.Errorf("describe noun %q is not one describeAlias accepts", tokens[1])
+			}
+			return nil
+		case "ls":
+			if tokens[1] == "target" || tokens[1] == "targets" {
+				return nil
+			}
+		}
+	}
+	children := cli.All
+	for i, tok := range tokens {
+		idx := slices.IndexFunc(children, func(c cli.Command) bool { return c.Name == tok })
+		if idx < 0 {
+			parent := "magus " + strings.Join(tokens[:i], " ")
+			return fmt.Errorf("%q is not a subcommand of %q - fix the hint, or add the entry to internal/cli/registry.go",
+				tok, strings.TrimSpace(parent))
+		}
+		children = children[idx].Children
+	}
+	return nil
 }
 
 // TestCLICommandGraphLeavesAreRealSubcommands ties the graph-family hints to

@@ -892,12 +892,18 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	assert.NotEqual(t, piped, redirected, "the two shapes need different corrections")
 }
 
+// TestStageEverythingDenialNamesDirectStaging pins the replacement `git add -A` is
+// denied in favour of. This assertion was inverted while the message argued there was
+// deliberately no `magus vcs` wrapper - by then `vcs add` had shipped as exactly that
+// wrapper, so the deny was talking an agent out of the command built to replace it.
+// `git add -- <paths>` stays named: a hand-picked subset is still fine.
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 	verdict := evaluateBashGuard("git add -A")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "magus describe file $(git diff --name-only)")
+	assert.Contains(t, verdict.Deny, hint.VCSAdd.String())
+	assert.Contains(t, verdict.Deny, hint.VCSAdd.With("--dry-run"))
 	assert.Contains(t, verdict.Deny, "git add -- <paths>")
-	assert.NotContains(t, verdict.Deny, "magus vcs add")
+	assert.NotContains(t, verdict.Deny, "no `magus vcs` wrapper")
 }
 
 // TestGuardAdvisesCheckpointOnTreeIdentity pins the scoping, which is the whole
