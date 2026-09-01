@@ -59,13 +59,26 @@ var listCommand = Command{
 	Long: `Print every discovered project in the workspace along with its language
 pack, source files, outputs, dependencies, and tool requirements.
 
+An optional noun narrows the listing, singular or plural: "magus ls targets"
+lists what the selected projects can run, with the doc or spell ops behind each,
+and takes project paths after the noun. The noun defaults to projects, so a bare
+"magus ls" keeps its meaning.
+
 Output defaults to a human-readable text format. Use the global -o flag with
 json or yaml for structured output suitable for scripting. -o name prints one
 project path per line. -o template accepts a Go text/template evaluated
 against the value -o json emits, so its field names are the json keys.`,
-	Usage: "magus ls [flags]",
+	Usage: "magus ls [<noun>] [project...] [flags]",
+	// The noun is routed positionally by lsCmd (cmd/magus/list.go), whose lsNouns
+	// accept-list these mirror.
+	Children: []Command{
+		{Name: "targets", Short: "List what the selected projects can run, with the doc or spell ops behind each"},
+		{Name: "target", Short: "The same listing; the noun takes either spelling"},
+	},
 	Examples: []Example{
 		{"List all projects", "magus ls"},
+		{"What the cwd project can run", "magus ls targets"},
+		{"What one project can run", "magus ls targets libs/foo"},
 		{"Pipe-friendly: one path per line", "magus ls -o name"},
 		{"JSON output", "magus ls -o json"},
 		{"Custom Go template", `magus ls -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'`},
@@ -124,6 +137,11 @@ step at a time.`,
 				{Name: "e", Kind: FlagBool, AliasOf: "evaluated", Doc: "Short for --evaluated"},
 			},
 		},
+		// The singular, as with target/targets above: a trailing name switches the
+		// listing into one project's record, which is the form other commands point at.
+		// One noun, one flag set, so the flags stay declared on the plural rather than
+		// generating a second binder and a second identical options section.
+		{Name: "project", Short: "Detail one named project; takes the same flags as projects"},
 		{
 			Name:  "spells",
 			Short: "List the spells the workspace resolves",

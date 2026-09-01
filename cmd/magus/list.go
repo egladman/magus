@@ -39,6 +39,12 @@ type listOutput struct {
 	Projects  []listProject `json:"projects"  yaml:"projects"`
 }
 
+// lsNouns is the noun ls actually routes on, in both spellings - the dispatcher's
+// own accept-list, the way graphSubs is graphCmd's, so a drift test can read the
+// router's data instead of the registry's mirror of it. The project noun is absent
+// because it names the DEFAULT view: anything ls does not route here lists projects.
+var lsNouns = []string{"target", "targets"}
+
 // ls enumerates what exists, optionally narrowed by a noun. It is the counterpart
 // to describe, not a duplicate of it: describe leads with a definition and teaches
 // a concept, ls answers "what is actually here". Keeping enumeration on one verb is
@@ -70,10 +76,8 @@ func ls(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if len(pos) > 0 {
-		if pos[0] == "target" || pos[0] == "targets" {
-			return lsTargets(ctx, root, pos[1:])
-		}
+	if len(pos) > 0 && slices.Contains(lsNouns, pos[0]) {
+		return lsTargets(ctx, root, pos[1:])
 	}
 	return lsProjects(ctx, root)
 }

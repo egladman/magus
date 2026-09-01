@@ -31,11 +31,10 @@ func TestCLICommandHeadsAreRealSubcommands(t *testing.T) {
 //
 // Resolution walks internal/cli's tree, the same hand-maintained mirror
 // TestManpageCoversEverySubcommand pins to knownSubcommands at the top level. A mirror is
-// the strongest target available: outside graphSubs and describeAlias, every family
-// dispatches on a bare switch with no accept-list to read, so an assertion against the
-// router itself needs those switches restructured first. Where the two exceptions accept a
-// spelling the registry does not carry, resolveCommandPath reads the dispatcher's data
-// instead of the mirror's.
+// the strongest target available: most families dispatch on a bare switch with no
+// accept-list to read, so an assertion against the router itself needs those switches
+// restructured first. It is only worth as much as the mirror is complete, which is what
+// the two accept-list tests below enforce for the families that have one.
 func TestCLICommandPathsResolve(t *testing.T) {
 	for _, c := range hint.AllCommands {
 		tokens := strings.Fields(strings.TrimPrefix(c.String(), "magus "))
@@ -47,22 +46,6 @@ func TestCLICommandPathsResolve(t *testing.T) {
 
 // resolveCommandPath reports whether tokens name a routable subcommand chain.
 func resolveCommandPath(tokens []string) error {
-	// describe and ls route their second token themselves against data internal/cli does
-	// not mirror: describeAlias takes singular or plural where the registry documents one
-	// spelling, and lsCmd matches "target"/"targets" while listCommand carries no children.
-	if len(tokens) == 2 {
-		switch tokens[0] {
-		case "describe":
-			if describeAlias[tokens[1]] == "" {
-				return fmt.Errorf("describe noun %q is not one describeAlias accepts", tokens[1])
-			}
-			return nil
-		case "ls":
-			if tokens[1] == "target" || tokens[1] == "targets" {
-				return nil
-			}
-		}
-	}
 	children := cli.All
 	for i, tok := range tokens {
 		idx := slices.IndexFunc(children, func(c cli.Command) bool { return c.Name == tok })
@@ -93,6 +76,44 @@ func TestCLICommandGraphLeavesAreRealSubcommands(t *testing.T) {
 				c, c.Leaf(), graphSubs)
 		}
 	}
+}
+
+// TestCLICommandLsNounsAreDocumented ties the registry's ls children to lsNouns,
+// lsCmd's own accept-list. `magus ls targets` shipped routable but undocumented, so
+// TestCLICommandPathsResolve had to carry a carve-out for it; comparing the two lists
+// is what keeps the mirror from falling behind the router again.
+func TestCLICommandLsNounsAreDocumented(t *testing.T) {
+	documented := slices.Sorted(slices.Values(childNames(t, "ls")))
+	routed := slices.Sorted(slices.Values(lsNouns))
+	if !slices.Equal(documented, routed) {
+		t.Errorf("internal/cli documents ls nouns %v, lsCmd routes %v", documented, routed)
+	}
+}
+
+// TestCLIDescribeNounsAreAccepted holds the same line for describe, in the direction
+// that can mislead a reader: a documented noun describeAlias does not accept is a man
+// page for a command that exits 2. The reverse is deliberately not asserted - the alias
+// map carries both spellings of every noun, and documenting each twice would say the
+// same thing on two rows.
+func TestCLIDescribeNounsAreAccepted(t *testing.T) {
+	for _, name := range childNames(t, "describe") {
+		if describeAlias[name] == "" {
+			t.Errorf("internal/cli documents `magus describe %s`, which describeAlias does not accept", name)
+		}
+	}
+}
+
+func childNames(t *testing.T, command string) []string {
+	t.Helper()
+	idx := slices.IndexFunc(cli.All, func(c cli.Command) bool { return c.Name == command })
+	if idx < 0 {
+		t.Fatalf("no cli.All entry for %q", command)
+	}
+	names := make([]string, 0, len(cli.All[idx].Children))
+	for _, child := range cli.All[idx].Children {
+		names = append(names, child.Name)
+	}
+	return names
 }
 
 // TestCLICommandServerLeavesAreRealSubcommands ties the server-family hints to the
