@@ -230,11 +230,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 		"a sibling target must not inherit build's per-target outputs")
 }
 
-// A skip_cache target reached through ctx.needs gets no cache step of its own, so a
-// HIT on the target that composes it skips it and its "never replay this" goes
-// unenforced. Measured before the fold: `magus run lint libs/gopherbuzz` replayed
-// over a MAGUS.md truncated to one word and reported success. Keying the composer on
-// the artifact is what makes the stale one a miss.
+// A composer's key must move when the artifact of a composed skip_cache target
+// does; see types.ChainSkipCacheOutputs for why.
 func TestComposerKeysOnAComposedSkipCacheTargetsOutput(t *testing.T) {
 	root := t.TempDir()
 	const mf = `export fun index_generate(ctx: magus\Context, args: [str]) > void {

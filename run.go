@@ -450,9 +450,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Sources = append(step.Sources, g)
 		}
 	}
-	// A replay of this step skips every target it composes, including one the author
-	// declared must never replay. Keying on that target's artifact is the only handle
-	// the engine has on it; see types.ChainSkipCacheOutputs.
+	// A replay of this step would skip every composed skip_cache target, so key on
+	// their artifacts instead; see types.ChainSkipCacheOutputs.
 	for _, g := range types.ChainSkipCacheOutputs(p, target, m.Get) {
 		if !slices.Contains(step.Sources, g) {
 			step.Sources = append(step.Sources, g)

@@ -367,23 +367,15 @@ func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project)
 
 // ChainSkipCacheOutputs is the declared output of every skip_cache target a target
 // composes with ctx.needs, transitively, as workspace-rooted globs. target's own
-// outputs are excluded: it is the caller's own step, not something a replay of it
-// would skip.
+// outputs are excluded.
 //
 // A composed target gets no cache step of its own - ctx.needs runs it inside the
-// parent's body - so a parent cache HIT skips it entirely and "never replay this"
-// goes unenforced. Measured: `magus run lint libs/gopherbuzz` replayed over a
-// corrupted MAGUS.md and reported success, because the index-generate that
-// maintains it is reached only through lint's chain. The engine cannot key that
-// target's real inputs (not being keyable is why it opted out), but it can key the
-// artifact it maintains: if that artifact is not what the last run left behind, the
-// parent must not replay. Folding it into the parent's SOURCES is what
-// ctx.modifiesExistingFiles already does for the same reason.
-//
-// An output that cannot reproduce itself costs the composer its cache entry. That is
-// the conservative direction (an extra run, never a stale replay), and it is already
-// the bar a generator has to clear: the drift gate fails a tracked output whose bytes
-// move on a re-run over an unchanged tree.
+// parent's body - so a parent cache HIT skips it and skip_cache goes unenforced.
+// The engine cannot key such a target's real inputs (not being keyable is why it
+// opted out), but it can key the artifact it maintains: fold these globs into the
+// parent's sources and the parent misses whenever that artifact is not what the
+// last run left behind. One extra miss after the artifact changes, never a stale
+// replay.
 //
 // lookup resolves a cross-project step and may return nil, in which case that step
 // contributes nothing.
