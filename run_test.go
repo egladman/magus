@@ -230,6 +230,75 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 		"a sibling target must not inherit build's per-target outputs")
 }
 
+// A skip_cache target reached through ctx.needs gets no cache step of its own, so a
+// HIT on the target that composes it skips it and its "never replay this" goes
+// unenforced. Measured before the fold: `magus run lint libs/gopherbuzz` replayed
+// over a MAGUS.md truncated to one word and reported success. Keying the composer on
+// the artifact is what makes the stale one a miss.
+func TestComposerKeysOnAComposedSkipCacheTargetsOutput(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun index_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("MAGUS.md");
+}
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(index_generate);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+}
+export fun test(ctx: magus\Context, args: [str]) > void {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+	// This package's tests do not link the Buzz interpreter, so a magus.project()
+	// policy table in the fixture would never evaluate (see interp.Available in Open).
+	// The chain and the writesFiles footprint are static, and come from the magusfile.
+	p.TargetPolicies = map[string]types.Target{"index-generate": {SkipCache: true}}
+
+	assert.Contains(t, m.buildStep(p, "lint").Sources, "MAGUS.md",
+		"lint composes index-generate two hops down; a stale MAGUS.md must move its key")
+	assert.NotContains(t, m.buildStep(p, "index-generate").Sources, "MAGUS.md",
+		"the skip_cache target's own step never replays, so keying it on its own output says nothing")
+	assert.NotContains(t, m.buildStep(p, "test").Sources, "MAGUS.md",
+		"a target composing nothing must not inherit another target's artifact")
+}
+
+// The cross-project seam and the loop guard, which the same-project fixture above
+// cannot reach. A cycle is rejected at load; here the walk only has to terminate.
+func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
+	lib := &types.Project{
+		Path:           "libs/gb",
+		TargetPolicies: map[string]types.Target{"index-generate": {SkipCache: true}},
+		TargetOutputs:  map[string][]types.OutputRef{"index-generate": {{Glob: "MAGUS.md"}}},
+	}
+	root := &types.Project{
+		Path:         ".",
+		TargetChains: map[string][]types.ChainStep{"ci": {{Project: "libs/gb", Target: "index-generate"}}},
+	}
+	lookup := func(path string) *types.Project {
+		if path == lib.Path {
+			return lib
+		}
+		return nil
+	}
+	assert.Equal(t, []string{"libs/gb/MAGUS.md"}, types.ChainSkipCacheOutputs(root, "ci", lookup),
+		"a cross-project step's output is rooted at the project that declares it")
+
+	looped := &types.Project{
+		Path:           ".",
+		TargetPolicies: map[string]types.Target{"b": {SkipCache: true}},
+		TargetOutputs:  map[string][]types.OutputRef{"b": {{Glob: "out.txt"}}},
+		TargetChains:   map[string][]types.ChainStep{"a": {{Target: "b"}}, "b": {{Target: "a"}}},
+	}
+	assert.Equal(t, []string{"out.txt"}, types.ChainSkipCacheOutputs(looped, "a", nil))
+}
+
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a
 // magus.inputs/outputs call with a non-literal (computed) argument is a hard load
 // error, because a computed footprint is invisible to the static cache read.
