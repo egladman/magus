@@ -60,6 +60,45 @@ func TestDecorateResultNoBlanketFooterOnSuccess(t *testing.T) {
 	}
 }
 
+func TestDecorateResultEmptyQueryHint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a zero-match query success gets the recovery line", func(t *testing.T) {
+		r := mcplib.NewToolResultText(`{"query":"guard_shel.go","match_count":0,"matches":[]}`)
+		decorateResult(r, "magus_query")
+		require.Len(t, r.Content, 2, "hint is appended as its own block")
+		assert.Equal(t, `{"query":"guard_shel.go","match_count":0,"matches":[]}`, r.Content[0].(mcplib.TextContent).Text,
+			"the JSON payload is untouched")
+		assert.Contains(t, resultText(r), "magus_refs")
+	})
+
+	t.Run("a query that matched gets nothing", func(t *testing.T) {
+		r := mcplib.NewToolResultText(`{"match_count":3,"matches":[]}`)
+		decorateResult(r, "magus_query")
+		assert.Len(t, r.Content, 1, "a found answer earns no footer")
+	})
+
+	t.Run("another tool's empty payload is not decorated", func(t *testing.T) {
+		// Only magus_query declares an empty-result line, and the emptiness read is
+		// gated on that - so a match_count in someone else's payload changes nothing.
+		r := mcplib.NewToolResultText(`{"match_count":0}`)
+		decorateResult(r, "magus_stats")
+		assert.Len(t, r.Content, 1)
+	})
+}
+
+func TestMatchedNothing(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, matchedNothing(mcplib.NewToolResultText(`{"match_count":0}`)))
+	// Whitespace after the colon is the same answer; a substring scan would miss it.
+	assert.True(t, matchedNothing(mcplib.NewToolResultText(`{"match_count": 0}`)))
+	assert.False(t, matchedNothing(mcplib.NewToolResultText(`{"match_count":10}`)))
+	// A payload with no count is a different shape, not an empty one.
+	assert.False(t, matchedNothing(mcplib.NewToolResultText(`{"ok":true}`)))
+	assert.False(t, matchedNothing(mcplib.NewToolResultText(`not json at all`)))
+}
+
 func TestDecorateResultChainHints(t *testing.T) {
 	t.Parallel()
 

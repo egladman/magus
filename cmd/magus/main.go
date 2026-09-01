@@ -49,6 +49,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/observability"
@@ -857,7 +858,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return buzzCmd(ctx, root, subArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "magus: unknown subcommand %q\n", sub)
-		if suggestion := interactive.SuggestNearest(sub, knownSubcommands); suggestion != "" {
+		if suggestion := hint.Nearest(sub, knownSubcommands); suggestion != "" {
 			interactive.Emit(os.Stderr, fmt.Sprintf("did you mean %q?", suggestion))
 		}
 		fmt.Fprintln(os.Stderr, "")

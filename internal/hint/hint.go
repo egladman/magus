@@ -1,8 +1,9 @@
 // Package hint is the hints home: everything magus renders to point a reader
 // at a better next command. It holds shell-to-graph suggestion translation
 // (this file), the canonical MCP tool names and follow-up lines (mcptool.go),
-// and the canonical CLI command paths shown in user-facing output
-// (clicommand.go). It stays a near-leaf - stdlib plus types - so an emitter
+// the canonical CLI command paths shown in user-facing output (clicommand.go),
+// and the did-you-mean edit distance every "unknown X" site measures with
+// (nearest.go). It stays a near-leaf - stdlib plus types - so an emitter
 // anywhere in the tree can render a hint without acquiring a dependency set
 // to get command strings.
 //

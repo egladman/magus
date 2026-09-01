@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
@@ -1326,15 +1325,15 @@ func (r *runner) checkHasCharmTypos(projects []*types.Project) types.DoctorCheck
 				if _, ok := known[n]; ok {
 					continue // a live read of a real charm
 				}
-				hint := interactive.SuggestNearest(n, knownNames)
-				if hint == "" {
+				sug := hint.Nearest(n, knownNames)
+				if sug == "" {
 					continue // a novel undeclared name: a legitimate runtime toggle
 				}
 				if _, dup := seen[raw]; dup {
 					continue
 				}
 				seen[raw] = struct{}{}
-				details = append(details, fmt.Sprintf("has_charm(%q) matches no charm; did you mean %q?", raw, hint))
+				details = append(details, fmt.Sprintf("has_charm(%q) matches no charm; did you mean %q?", raw, sug))
 			}
 		}
 	}

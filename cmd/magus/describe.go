@@ -81,7 +81,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 			spellings = append(spellings, k)
 		}
 		slices.Sort(spellings)
-		if sug := interactive.SuggestNearest(noun, spellings); sug != "" {
+		if sug := hint.Nearest(noun, spellings); sug != "" {
 			interactive.Emit(os.Stderr, fmt.Sprintf("did you mean %q?", sug))
 		}
 		fmt.Fprintln(os.Stderr, "")
@@ -243,7 +243,7 @@ func namesOf[T any](items []T, nameOf func(T) string) []string {
 // returns the already-printed sentinel.
 func unknownEntity(kind, name string, all []string) error {
 	msg := fmt.Sprintf("magus describe %s: unknown %s %q", kind, kind, name)
-	if sug := interactive.SuggestNearest(name, all); sug != "" {
+	if sug := hint.Nearest(name, all); sug != "" {
 		msg += fmt.Sprintf("; did you mean %q?", sug)
 	}
 	fmt.Fprintln(os.Stderr, msg)

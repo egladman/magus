@@ -64,7 +64,7 @@ func resolveCommandPath(tokens []string) error {
 // hint like `magus graph export` is only valid while graphSubs still lists
 // "export". This is the strongest guard the hand-rolled dispatch allows: graphSubs
 // is the introspectable accept-list, not the switch itself, so it only catches
-// drift if graphSubs stays in sync with graphCmd's switch (which SuggestNearest
+// drift if graphSubs stays in sync with graphCmd's switch (which hint.Nearest
 // already depends on).
 func TestCLICommandGraphLeavesAreRealSubcommands(t *testing.T) {
 	for _, c := range []hint.Command{hint.GraphExport, hint.GraphStats} {

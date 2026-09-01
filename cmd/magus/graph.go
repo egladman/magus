@@ -65,7 +65,7 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus graph verify has moved: run `magus doctor` and read its `agent skills` check, which grades the same installs and adds a --fix that reinstalls them")
 	default:
 		fmt.Fprintf(os.Stderr, "magus graph: unknown subcommand %q\n", sub)
-		if sug := interactive.SuggestNearest(sub, graphSubs); sug != "" {
+		if sug := hint.Nearest(sub, graphSubs); sug != "" {
 			interactive.Emit(os.Stderr, fmt.Sprintf("did you mean %q?", sug))
 		}
 		fmt.Fprintln(os.Stderr, "")

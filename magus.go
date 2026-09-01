@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
@@ -447,8 +446,8 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 				continue
 			}
 			msg := fmt.Sprintf("magus: project %q: per-target policy names unknown target %q", p.Path, name)
-			if hint := interactive.SuggestNearest(name, declared); hint != "" {
-				msg += fmt.Sprintf("; did you mean %q?", hint)
+			if sug := hint.Nearest(name, declared); sug != "" {
+				msg += fmt.Sprintf("; did you mean %q?", sug)
 			}
 			if len(declared) > 0 {
 				msg += fmt.Sprintf(" (declared targets: %s)", strings.Join(declared, ", "))
@@ -1442,7 +1441,7 @@ func (m *Magus) suggestProjectPath(path string) string {
 	for _, p := range all {
 		candidates = append(candidates, p.Path)
 	}
-	return interactive.SuggestNearest(path, candidates)
+	return hint.Nearest(path, candidates)
 }
 
 // ExpandCwd resolves t for the project containing cwd; found=false when cwd is not inside any project.

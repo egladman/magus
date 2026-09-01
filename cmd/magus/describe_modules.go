@@ -6,8 +6,8 @@ import (
 	"os"
 	"slices"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
 
@@ -50,7 +50,7 @@ func describeModules(args []string) error {
 		}
 		slices.Sort(names)
 		msg := fmt.Sprintf("magus describe module: unknown module %q", name)
-		if sug := interactive.SuggestNearest(name, names); sug != "" {
+		if sug := hint.Nearest(name, names); sug != "" {
 			msg += fmt.Sprintf("; did you mean %q?", sug)
 		}
 		fmt.Fprintln(os.Stderr, msg)

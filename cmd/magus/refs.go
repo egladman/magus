@@ -74,6 +74,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(os.Stderr, "  the daemon's auto-indexer also keeps indexes current while `%s` runs\n", hint.ServerStart)
 		}
+		emitNearest(os.Stderr, g.NearestSymbol(pos[0]))
 		return exitForVerdict(ans.Verdict)
 	}
 	// A resolved symbol still carries the coverage verdict: an uncovered project could

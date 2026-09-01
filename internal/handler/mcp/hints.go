@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 )
 
 // decorateResult appends at most one cross-link line to a tool result, chosen by
@@ -33,6 +34,10 @@ func decorateResult(result *mcplib.CallToolResult, toolName string) {
 		appendHint(result, hint.FollowUpError(tool))
 		return
 	}
+	if hint.WantsEmptyCheck(tool) && matchedNothing(result) {
+		appendHint(result, hint.FollowUpEmpty(tool))
+		return
+	}
 	var ref string
 	if hint.MintsRef(tool) {
 		ref = firstRef(result)
@@ -47,6 +52,33 @@ func appendHint(result *mcplib.CallToolResult, s string) {
 		return
 	}
 	result.Content = append(result.Content, mcplib.NewTextContent(s))
+}
+
+// matchedNothing reports whether a successful result is a knowledge-graph answer
+// that found nothing: its payload carries match_count and it is zero. A payload
+// without the field is not empty, it is a different shape - so a result this
+// cannot read stays undecorated rather than gaining a footer it did not earn.
+//
+// Decoding the field rather than scanning for a substring: `"match_count":0` and
+// `"match_count": 0` are the same answer, and a count of 0 has to be
+// distinguishable from one of 10 without a delimiter argument.
+func matchedNothing(result *mcplib.CallToolResult) bool {
+	var payload struct {
+		MatchCount *int `json:"match_count"`
+	}
+	for _, c := range result.Content {
+		tc, ok := c.(mcplib.TextContent)
+		if !ok {
+			continue
+		}
+		if err := json.Unmarshal([]byte(tc.Text), &payload); err != nil {
+			continue
+		}
+		if payload.MatchCount != nil {
+			return *payload.MatchCount == 0
+		}
+	}
+	return false
 }
 
 // firstRef returns the first output-reference token in the result's text blocks,

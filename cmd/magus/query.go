@@ -222,6 +222,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		// legitimate answer to a search, and every script that runs `magus query` would
 		// break if it became a failure. The verdict rides the output instead.
 		printVerdict(os.Stdout, out.Answer, hint.Refs.With("<name>"))
+		emitNearest(os.Stdout, g.NearestNode(input))
 		printIndexStaleness(ctx, os.Stdout, root)
 		return nil
 	}
@@ -743,6 +744,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], seedsSymbols, false))
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, hint.Refs.With(pos[0]))
+		emitNearest(os.Stderr, g.NearestNode(pos[0]))
 		return exitForVerdict(ans.Verdict)
 	}
 

@@ -5,11 +5,12 @@ package hint
 // earns. The static per-session map (serverInstructions in the MCP transport)
 // teaches the flow once for free; the FollowUp functions add the paid,
 // context-sensitive part: at most one terse follow-up line, returned only where
-// the tool name plus the call outcome make a next step obvious. Two outcomes
-// earn a line - an error/empty result (recover with the naming tool) and a
-// success that mints an ID the agent will chain. A plain SUCCESS gets nothing: a blanket
-// "related tools" footer on every call is pure context tax, and output bytes
-// are the agent's measured context cost (see magus.mcp.tool.output.size).
+// the tool name plus the call outcome make a next step obvious. Three outcomes
+// earn a line - an error (recover with the naming tool), a success that found
+// nothing (recover in the layer this tool does not cover), and a success that
+// mints an ID the agent will chain. A plain non-empty SUCCESS gets nothing: a
+// blanket "related tools" footer on every call is pure context tax, and output
+// bytes are the agent's measured context cost (see magus.mcp.tool.output.size).
 
 // ToolName is a canonical MCP tool name - the "magus_"-prefixed identifier the
 // daemon registers. Declaring each once here makes a tool rename a compile error
@@ -81,6 +82,21 @@ var errorHints = map[ToolName]string{
 	ToolRefs:        "next: locate a symbol with " + ToolQuery.String(),
 }
 
+// emptyHints maps a tool to the line an EMPTY but successful result earns - a
+// call that worked and found nothing, which no other map covers because it is
+// not an error.
+//
+// magus_query is the only entry, and it is the one that matters: magus_explain,
+// magus_path and magus_refs all recover by saying "locate a node with
+// magus_query", so a query that comes back empty was, until this, the end of the
+// chain. An agent that reaches it concludes the graph does not hold the thing
+// and falls back to grep. The line names the two layers the query did not
+// search rather than repeating the verdict already in the payload.
+var emptyHints = map[ToolName]string{
+	ToolQuery: "next: no match; code symbols are a separate layer - try " + ToolRefs.String() +
+		", or list what exists with " + ToolDescribe.String(),
+}
+
 // staticChainHints maps a tool to a chain hint returned on a SUCCESS that always
 // leads somewhere fixed. Only tools whose whole purpose is to feed a follow-up
 // tool belong here - never general read tools, which get no footer.
@@ -101,6 +117,22 @@ var refChainTools = map[ToolName]bool{
 // earns, or "" when it earns nothing.
 func FollowUpError(tool ToolName) string {
 	return errorHints[tool]
+}
+
+// FollowUpEmpty returns the recovery line a successful-but-empty result earns,
+// or "" when it earns nothing. Separate from FollowUpSuccess because the caller
+// has to establish emptiness from the payload first, and only a tool in
+// emptyHints is worth that read.
+func FollowUpEmpty(tool ToolName) string {
+	return emptyHints[tool]
+}
+
+// WantsEmptyCheck reports whether a successful result from tool is worth
+// inspecting for emptiness before calling FollowUpEmpty, so a tool with no
+// empty-result line never pays for the parse. Mirrors MintsRef.
+func WantsEmptyCheck(tool ToolName) bool {
+	_, ok := emptyHints[tool]
+	return ok
 }
 
 // FollowUpSuccess returns the at-most-one chain line a successful call earns, or

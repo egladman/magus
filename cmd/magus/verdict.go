@@ -10,6 +10,7 @@ import (
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
 
@@ -89,6 +90,21 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 			fmt.Fprintf(w, "  build the missing index with: %s\n", hint.GraphBuild)
 		}
 	}
+}
+
+// emitNearest offers the node id a zero-result lookup was probably reaching for,
+// through the same "hint: did you mean ..." channel an unknown subcommand uses.
+// An empty id (nothing close enough) writes nothing.
+//
+// It rides UNDER the verdict rather than replacing it: the verdict says what
+// magus could search, and a suggestion is a guess about what the reader meant.
+// Neither answers the other, and printing only the guess would drop the one
+// statement the lookup can actually stand behind.
+func emitNearest(w io.Writer, id string) {
+	if id == "" {
+		return
+	}
+	interactive.Emit(w, fmt.Sprintf("did you mean %q?", id))
 }
 
 // exitForVerdict maps a verdict to the process status, for the verbs that treat "nothing

@@ -113,6 +113,25 @@ func TestFollowUpSuccess(t *testing.T) {
 	}
 }
 
+// TestFollowUpEmpty pins the line a successful-but-empty result earns. Only
+// query has one: it is the tool every other recovery hint points AT, so a query
+// that finds nothing was the end of the chain until this line existed.
+func TestFollowUpEmpty(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t,
+		"next: no match; code symbols are a separate layer - try magus_refs, or list what exists with magus_describe",
+		FollowUpEmpty(ToolQuery))
+	assert.True(t, WantsEmptyCheck(ToolQuery))
+
+	// Every other tool: no empty-result line, and no reason to inspect a payload
+	// looking for one.
+	for _, tool := range []ToolName{ToolExplain, ToolRefs, ToolStats, ToolDescribe, ToolWhere, ToolRunTarget} {
+		assert.Empty(t, FollowUpEmpty(tool), "no empty-result line for %s", tool)
+		assert.False(t, WantsEmptyCheck(tool), "no empty-result check for %s", tool)
+	}
+}
+
 // TestAllDeclaredToolsAreRegistered fails if a ToolName is declared but left out
 // of AllToolNames, so TestMCPToolHintsResolve keeps walking the full set.
 //
