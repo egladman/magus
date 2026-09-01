@@ -311,20 +311,22 @@ final GHCR = Registry{
     token_ref = "GHCR_TOKEN",
 };
 
-final DOCKERHUB = Registry{
-    host = "docker.io",
-    repository = "docker.io/egladman/magus",
-    user_ref = "DOCKERHUB_USERNAME",
-    token_ref = "DOCKERHUB_TOKEN",
-};
+// TODO: Docker Hub publishing is disabled until DOCKERHUB_USERNAME / DOCKERHUB_TOKEN
+// exist as repository secrets; uncomment and restore DOCKERHUB to REGISTRIES then.
+// final DOCKERHUB = Registry{
+//     host = "docker.io",
+//     repository = "docker.io/egladman/magus",
+//     user_ref = "DOCKERHUB_USERNAME",
+//     token_ref = "DOCKERHUB_TOKEN",
+// };
 
-// A release publishes to BOTH. Every tag across both goes into a SINGLE buildx
-// invocation, so a variant is built exactly once and both registries receive the
-// identical digest. A second `docker buildx build` aimed at Docker Hub would rebuild
-// every layer rather than reuse them: a fresh CD runner starts with an empty
-// BuildKit cache, so what makes the second registry free is that there is no second
-// build, not a cache that survives between two.
-final REGISTRIES = [GHCR, DOCKERHUB];
+// A release publishes to every registry listed. Every tag across the set goes into a
+// SINGLE buildx invocation, so a variant is built exactly once and every registry
+// receives the identical digest. A second `docker buildx build` aimed at a second
+// registry would rebuild every layer rather than reuse them: a fresh CD runner starts
+// with an empty BuildKit cache, so what makes another registry free is that there is
+// no second build, not a cache that survives between two.
+final REGISTRIES = [GHCR];
 
 fun image_tag() > str !> any { return "magus:" + commit(); }
 
