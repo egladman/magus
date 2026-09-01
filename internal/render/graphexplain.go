@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -86,14 +86,14 @@ func MissText(query string, ans types.KnowledgeAnswer) string {
 	b.WriteString("verdict: unknown, not absent\n")
 	if ans.Reason == types.ReasonSymbolsNotLoaded {
 		b.WriteString("this lookup searched domain entities only, not code symbols; a code symbol by that name may exist.\n")
-		b.WriteString("search code symbols with the magus_refs tool.\n")
+		b.WriteString("search code symbols with the " + hint.ToolRefs.String() + " tool.\n")
 	}
 	if ans.Reason == types.ReasonCoverageUnknown {
 		b.WriteString("magus could not determine which projects it searched, so this is not a verified absence.\n")
 	}
 	if len(ans.Gaps) > 0 {
 		fmt.Fprintf(&b, "outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
-		fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", clihint.GraphBuild)
+		fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", hint.GraphBuild)
 	}
 	return b.String()
 }

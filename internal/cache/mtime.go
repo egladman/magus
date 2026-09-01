@@ -94,21 +94,26 @@ func (s *mtimeStore) load(ctx context.Context) {
 	if s.loaded {
 		return
 	}
-	s.loaded = true
 
 	// Shard maps must exist regardless of whether the disk load below runs,
 	// so set() is total rather than panicking on a nil map after a disabled
 	// or cancelled load.
 	for i := range s.shards {
-		s.shards[i] = make(map[string]mtimeEntry)
+		if s.shards[i] == nil {
+			s.shards[i] = make(map[string]mtimeEntry)
+		}
 	}
 
 	if s.dir == "" {
+		s.loaded = true
 		return
 	}
+	// Latched only on a completed read: marking it before the cancellation check would
+	// leave one cancelled load memoized as an empty store for the rest of the process.
 	if err := ctx.Err(); err != nil {
 		return
 	}
+	defer func() { s.loaded = true }()
 
 	des, _ := os.ReadDir(s.dir)
 	for _, de := range des {

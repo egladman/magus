@@ -28,6 +28,34 @@ func TestParseFrontmatterRoundTrip(t *testing.T) {
 	assert.Equal(t, []string{"reference", "argv"}, f.Tags)
 }
 
+// TestParseFrontmatterRoundTripHazardousTitles pins that titles YAML would read as a flow
+// collection, a comment, or a non-string scalar survive the round trip; unquoted, each makes
+// an unparseable block that drops the page's whole frontmatter.
+func TestParseFrontmatterRoundTripHazardousTitles(t *testing.T) {
+	for _, title := range []string{
+		"[draft] Foo",
+		"#4 release",
+		"404",
+		"true",
+		"null",
+		"1.5 release",
+		"has: a colon",
+		`quote " and \ backslash`,
+		"trailing colon:",
+	} {
+		t.Run(title, func(t *testing.T) {
+			var b strings.Builder
+			WriteFrontmatter(&b, Frontmatter{Title: title, Description: "d", Tags: []string{"t"}})
+			b.WriteString("Body.\n")
+
+			f, ok := ParseFrontmatter(b.String())
+			require.True(t, ok, "block did not parse - frontmatter would be dropped")
+			assert.Equal(t, title, f.Title)
+			assert.Equal(t, []string{"t"}, f.Tags)
+		})
+	}
+}
+
 func TestParseFrontmatterAbsent(t *testing.T) {
 	for _, tc := range []struct {
 		name, in string
@@ -56,4 +84,14 @@ func TestParseFrontmatterMalformedYAML(t *testing.T) {
 	f, ok := ParseFrontmatter("---\ntitle: [unterminated\n---\nBody.\n")
 	assert.False(t, ok)
 	assert.Equal(t, Frontmatter{}, f)
+}
+
+func TestStripFrontmatter(t *testing.T) {
+	assert.Equal(t, "# Heading\nBody.\n", StripFrontmatter("---\ntitle: X\ntags: [a]\n---\n# Heading\nBody.\n"),
+		"the body begins after the closing fence")
+	assert.Equal(t, "# No block\n", StripFrontmatter("# No block\n"),
+		"content with no leading block is returned unchanged")
+	assert.Equal(t, "Body.\n", StripFrontmatter("---\n---\nBody.\n"), "empty block")
+	assert.Equal(t, "---\ntitle: unterminated\nBody.\n", StripFrontmatter("---\ntitle: unterminated\nBody.\n"),
+		"an unterminated block is not a block, so the content is left whole rather than eaten")
 }

@@ -11,17 +11,30 @@ List all discovered projects
 
 ## Synopsis
 
-**magus** ls [flags]
+**magus** ls [\<noun\>] [project...] [flags]
 
 ## Description
 
 Print every discovered project in the workspace along with its language
 pack, source files, outputs, dependencies, and tool requirements.
 
+An optional noun narrows the listing, singular or plural: "magus ls targets"
+lists what the selected projects can run, with the doc or spell ops behind each,
+and takes project paths after the noun. The noun defaults to projects, so a bare
+"magus ls" keeps its meaning.
+
 Output defaults to a human-readable text format. Use the global -o flag with
 json or yaml for structured output suitable for scripting. -o name prints one
 project path per line. -o template accepts a Go text/template evaluated
 against the value -o json emits, so its field names are the json keys.
+
+## Subcommands
+
+**targets**
+: List what the selected projects can run, with the doc or spell ops behind each
+
+**target**
+: The same listing; the noun takes either spelling
 
 ## Examples
 
@@ -29,6 +42,18 @@ against the value -o json emits, so its field names are the json keys.
 
 ```sh
 magus ls
+```
+
+*What the cwd project can run*
+
+```sh
+magus ls targets
+```
+
+*What one project can run*
+
+```sh
+magus ls targets libs/foo
 ```
 
 *Pipe-friendly: one path per line*

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -293,4 +294,54 @@ func TestRelativeToRootKeepsAnOutsidePathAbsolute(t *testing.T) {
 
 	outside := filepath.Join(string(filepath.Separator), "repos", "other", "x.go")
 	assert.Equal(t, outside, relativeToRoot(root, outside))
+}
+
+// unreadableNoteStores declares a shared and a private store and plants a name in the
+// shared one that EXISTS and cannot be read - a directory where the .md should be, so
+// the failure is EISDIR rather than a permission bit root would ignore.
+func unreadableNoteStores(t *testing.T, name string) (root string, privateDir string) {
+	t.Helper()
+	root = t.TempDir()
+	privateDir = t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "notes", name+".md"), 0o755))
+
+	prev := globalCfg
+	globalCfg.Knowledge.Notes.Shared = "notes"
+	globalCfg.Knowledge.Notes.Private = privateDir
+	t.Cleanup(func() { globalCfg = prev })
+	return root, privateDir
+}
+
+// findNote reported an unreadable note as a bare fmt.Errorf, which no caller could
+// match. `notes edit` switches on the error, and with nothing to match on this fell
+// past every case: the name read as free, and the command scaffolded a SECOND copy in
+// the other store on top of the broken one.
+func TestFindNoteMarksAnUnreadableNote(t *testing.T) {
+	root, privateDir := unreadableNoteStores(t, "broken")
+
+	stores, err := notesStores(root, "")
+	require.NoError(t, err)
+	require.Len(t, stores, 2, "both stores must be declared for the duplicate-scaffold case to exist")
+
+	_, _, err = findNote(stores, "broken")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUnreadableNote, "an existing unreadable note needs a sentinel a caller can match")
+	assert.NotErrorIs(t, err, errAmbiguousNote, "unreadable is not ambiguous")
+	assert.NotErrorIs(t, err, os.ErrNotExist, "reporting it absent sends the reader hunting for a missing file")
+	assert.Contains(t, err.Error(), "shared", "the message must name which store holds it")
+	_ = privateDir
+}
+
+// The whole point of the sentinel: refuse rather than scaffold a duplicate.
+func TestNotesEditRefusesAnUnreadableNoteInsteadOfScaffoldingADuplicate(t *testing.T) {
+	root, privateDir := unreadableNoteStores(t, "broken")
+
+	err := notesEdit(context.Background(), root, []string{"broken"})
+	require.Error(t, err, "an unreadable note must not be treated as a free name")
+	assert.ErrorIs(t, err, errUnreadableNote)
+	assert.Contains(t, err.Error(), "fix the file", "a refusal names the next step")
+
+	left, err := os.ReadDir(privateDir)
+	require.NoError(t, err)
+	assert.Empty(t, left, "nothing may be scaffolded into the other store beside the broken note")
 }

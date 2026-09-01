@@ -15,7 +15,6 @@
 # docs/active.urls.lock stays TRACKED on purpose: it lives outside gen/ and is the ledger
 # abandonedLinkCheck reads to prove a previously published URL never starts 404-ing. That
 # gate only works if the ledger survives across builds.
-# docs/vendor/playground/ stays tracked too: TinyGo builds the wasm and CI has none.
 #
 # `docs/gen/*` rather than `docs/gen/`, because git cannot re-include a file whose parent
 # DIRECTORY is excluded - the trailing-slash form would make the negation below silently
@@ -119,7 +118,7 @@ coverage.hand.out
 # Agent surface: GENERATED, not source.
 #
 # `magus agent install` writes these from the binary and stamps each with the schema and
-# content hashes it was built from - so they are a rendering of cmd/magus/skills/, tracked in
+# content hashes it was built from - so they are a rendering of internal/agent/skills/, tracked in
 # three provider trees at once. Committed, one `magus run build` triplicated 33 files into
 # version control and every merge conflicted on output nobody edits. Regenerate them instead:
 #   magus agent install .claude/skills --force

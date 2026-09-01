@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -197,7 +198,7 @@ func notifyUsage(w io.Writer) {
 	fmt.Fprintln(w, "types.Event JSON envelope. --desktop additionally raises an OS notification.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "An event whose outcome is waiting or permission also opens a durable request")
-	fmt.Fprintln(w, "in this repository, which `magus session attention` lists and only a person closes.")
+	fmt.Fprintln(w, "in this repository, which `"+hint.SessionAttention.String()+"` lists and only a person closes.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintf(w, "  printf '%%s\\n' 'needs approval' | magus session notify --outcome permission --desktop\n")

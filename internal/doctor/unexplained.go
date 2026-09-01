@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,7 +58,7 @@ func (r *runner) checkUnexplainedHotspots(_ []*types.Project) types.DoctorCheck 
 			Status:   types.DoctorOK,
 			Evidence: types.EvidenceUnknown,
 			Message:  "no notes in this workspace, so what its hottest files mean is unrecorded rather than unexplained",
-			Details:  []string{"start one where a reason is worth keeping: magus notes new <name>"},
+			Details:  []string{"start one where a reason is worth keeping: " + hint.NotesEdit.With("<name>")},
 		}
 	}
 
@@ -108,7 +109,7 @@ func (r *runner) checkUnexplainedHotspots(_ []*types.Project) types.DoctorCheck 
 		Evidence: types.EvidenceInferred,
 		Message:  msg + "; the code this workspace works on hardest is what it has written down least about",
 		Details: append(bare,
-			fmt.Sprintf("%d note(s) exist and anchor other code; anchor one here: magus notes new <name>", exp.Notes)),
+			fmt.Sprintf("%d note(s) exist and anchor other code; anchor one here: %s", exp.Notes, hint.NotesEdit.With("<name>"))),
 	}
 }
 

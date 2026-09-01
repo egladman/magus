@@ -104,14 +104,14 @@ func isSuspectedRegression(s forecast.Stats, cfg Config) bool {
 	}
 	last := s.RecentOutcomes[n-1]
 	prev := s.RecentOutcomes[n-2]
-	return last.Result == "fail" && last.AffectedByDiff &&
-		prev.Result == "fail" && prev.AffectedByDiff
+	return last.Result == forecast.OutcomeFail && last.AffectedByDiff &&
+		prev.Result == forecast.OutcomeFail && prev.AffectedByDiff
 }
 
 func lastPassTime(s forecast.Stats) time.Time {
 	for i := len(s.RecentOutcomes) - 1; i >= 0; i-- {
 		o := s.RecentOutcomes[i]
-		if o.Result == "pass" || o.Result == "volatile" {
+		if o.Result == forecast.OutcomePass || o.Result == forecast.OutcomeVolatile {
 			return o.At
 		}
 	}
@@ -131,12 +131,17 @@ func recordOutcome(s forecast.Stats, o forecast.Outcome) forecast.Stats {
 	pass, fail, volatileCount := 0, 0, 0
 	for _, ro := range s.RecentOutcomes {
 		switch ro.Result {
-		case "pass":
+		case forecast.OutcomePass:
 			pass++
-		case "fail":
+		case forecast.OutcomeFail:
 			fail++
-		case "volatile":
+		case forecast.OutcomeVolatile:
 			volatileCount++
+		default:
+			// A history file written by a newer magus, or a hand-edited one. The row stays
+			// in RecentOutcomes and out of every counter: scoring a target on a verdict
+			// this version cannot read would be a number nobody could account for. Written
+			// out rather than left implicit so the next case added here is not silent.
 		}
 	}
 	s.PassCount = pass

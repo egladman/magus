@@ -59,13 +59,26 @@ var listCommand = Command{
 	Long: `Print every discovered project in the workspace along with its language
 pack, source files, outputs, dependencies, and tool requirements.
 
+An optional noun narrows the listing, singular or plural: "magus ls targets"
+lists what the selected projects can run, with the doc or spell ops behind each,
+and takes project paths after the noun. The noun defaults to projects, so a bare
+"magus ls" keeps its meaning.
+
 Output defaults to a human-readable text format. Use the global -o flag with
 json or yaml for structured output suitable for scripting. -o name prints one
 project path per line. -o template accepts a Go text/template evaluated
 against the value -o json emits, so its field names are the json keys.`,
-	Usage: "magus ls [flags]",
+	Usage: "magus ls [<noun>] [project...] [flags]",
+	// The noun is routed positionally by lsCmd (cmd/magus/list.go), whose lsNouns
+	// accept-list these mirror.
+	Children: []Command{
+		{Name: "targets", Short: "List what the selected projects can run, with the doc or spell ops behind each"},
+		{Name: "target", Short: "The same listing; the noun takes either spelling"},
+	},
 	Examples: []Example{
 		{"List all projects", "magus ls"},
+		{"What the cwd project can run", "magus ls targets"},
+		{"What one project can run", "magus ls targets libs/foo"},
 		{"Pipe-friendly: one path per line", "magus ls -o name"},
 		{"JSON output", "magus ls -o json"},
 		{"Custom Go template", `magus ls -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'`},
@@ -124,6 +137,11 @@ step at a time.`,
 				{Name: "e", Kind: FlagBool, AliasOf: "evaluated", Doc: "Short for --evaluated"},
 			},
 		},
+		// The singular, as with target/targets above: a trailing name switches the
+		// listing into one project's record, which is the form other commands point at.
+		// One noun, one flag set, so the flags stay declared on the plural rather than
+		// generating a second binder and a second identical options section.
+		{Name: "project", Short: "Detail one named project; takes the same flags as projects"},
 		{
 			Name:  "spells",
 			Short: "List the spells the workspace resolves",
@@ -367,9 +385,10 @@ knowledge graph and returns the ranked matches plus the induced subgraph around
 them, collected up to a node budget. Its siblings explain and path read the same
 graph: explain shows one node's context, path connects two nodes.
 
-Terms are free text plus field filters, and they compose: kind:spell, project:pkg/foo,
-relation:uses, id:build, and negation with a leading dash (-kind:op). A bare word
-matches names and documentation.
+Terms are free text plus field matchers, and they compose: kind=spell, project=pkg/foo,
+relation=uses, id=build, exclusion with kind!=op, and a regex with id=~build$. A bare word
+matches names and documentation. The : grammar (kind:spell, -kind:op) still parses as a
+compat alias.
 
 query is also the retrieval verb for the two ids magus prints, each an EXPLICIT
 subcommand rather than a shape-routed positional, so a search term can never collide
@@ -414,9 +433,9 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "invocation", Short: "Read one run's journal by invocation id (--secrets for the credential reads)"},
 	},
 	Examples: []Example{
-		{"Find a spell by name", "magus query kind:spell go"},
-		{"What uses this target", "magus query relation:uses id:build"},
-		{"Everything but ops", "magus query docker -kind:op"},
+		{"Find a spell by name", "magus query kind=spell go"},
+		{"What uses this target", "magus query relation=uses id=build"},
+		{"Everything but ops", "magus query docker kind!=op"},
 		{"Print a run's captured output", "magus query output out1a2b3c"},
 		{"Compare a run's cache key", "magus query output out1a2b3c --identity"},
 		{"Audit a run's credential reads", "magus query invocation invmsm3vcou1 --secrets"},
@@ -586,7 +605,7 @@ Subcommands (the first argument):
 		{"DAG rooted at one project, dependents up", "magus graph deps pkg/api --upstream"},
 		{"Knowledge graph for an external viewer", "magus graph export -o json > graph.json"},
 		{"GraphML for Gephi or yEd", "magus graph export -o graphml > graph.graphml"},
-		{"A query's neighborhood as Mermaid", "magus graph export --select 'kind:spell go' -o mermaid"},
+		{"A query's neighborhood as Mermaid", "magus graph export --select 'kind=spell go' -o mermaid"},
 		{"Where structural risk concentrates", "magus graph stats"},
 		{"Doc coverage for spells only", "magus graph stats --kind spell"},
 		{"Open knowledge graph in browser", "magus graph export --open"},
@@ -1704,11 +1723,25 @@ agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
 anywhere a shell can reach. The write-to-disk form exists for the in-repo,
 paths-relative-to-<dir> case. Absolute destinations are refused unless
---global is set, so magus cannot silently write outside the working tree.`,
-	Usage: "magus agent <install|sample> [flags]",
+--global is set, so magus cannot silently write outside the working tree.
+
+adoption reads a corpus of shell commands, one per line, from stdin or from
+--commands <file>, and reports how often the graph was reached versus a raw
+text search. -o json emits the report as one object keyed total, graph_verbs,
+text_searches, search_of_source, search_of_prose, file_reads, magus_runs,
+other, and top_symbol_greps. Each top_symbol_greps entry carries pattern,
+count, and run - the graph command to try for that pattern, routed by its
+shape: magus query for a diagnostic code or a Buzz op, which magus refs
+(compiled-language symbols only) would miss, and magus refs otherwise. The
+text report prints the same command after each pattern, and run is empty for
+a pattern no graph verb fits.`,
+	Usage: "magus agent <install|sample|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
 		{Name: "sample", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
+		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []Flag{
+			{Name: "commands", Kind: FlagString, Doc: "File of shell commands, one per line; without it the corpus is read from stdin"},
+		}},
 	},
 	Flags: []Flag{
 		{Name: "dir", Kind: FlagString, Default: ".", Doc: "Repo directory to install into (agent install)"},
@@ -1725,5 +1758,8 @@ paths-relative-to-<dir> case. Absolute destinations are refused unless
 		{"See what a prune would remove first", "magus agent install .claude/skills --prune --dry-run"},
 		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},
 		{"Print a starter AGENTS.md", "magus agent sample"},
+		{"Measure graph adoption over a corpus of shell commands", "magus agent adoption --commands commands.txt"},
+		{"Read the corpus from stdin instead", "magus agent adoption < commands.txt"},
+		{"The report as JSON, for a dashboard", "magus agent adoption --commands commands.txt -o json"},
 	},
 }

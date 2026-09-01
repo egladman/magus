@@ -164,3 +164,57 @@ func TestNewLeaseReportNormalizesTheEmptyLedger(t *testing.T) {
 	assert.Empty(t, report.Leases)
 	assert.Empty(t, report.Overlaps)
 }
+
+// Clone is what makes a row handed out of a store safe to keep, so a slice field it
+// forgets aliases the store's own array. Every field here carries SPARE CAPACITY, which is
+// the shape the ledger actually stores (RecordUnattributedWrite sizes its slice for one
+// more than it fills): an append then lands in place, and the damage is invisible to the
+// appender - it shows up as the NEXT reader's append overwriting the first one's row. So
+// this asserts across two clones rather than back at the original, which is the only form
+// of the check that can fail.
+func TestLeaseCloneCopiesEverySliceField(t *testing.T) {
+	t.Parallel()
+
+	orig := Lease{
+		ID:             "a",
+		OwnedPaths:     append(make([]string, 0, 4), "types/"),
+		ForbiddenPaths: append(make([]string, 0, 4), "gen/"),
+		DependsOn:      append(make([]string, 0, 4), "b"),
+		Releases:       append(make([]LeaseRelease, 0, 4), LeaseRelease{Path: "types/x.go"}),
+		Unattributed:   append(make([]LeaseUnattributedWrite, 0, 4), LeaseUnattributedWrite{Path: "types/y.go"}),
+	}
+
+	first, second := orig.Clone(), orig.Clone()
+	first.OwnedPaths = append(first.OwnedPaths, "first/")
+	first.ForbiddenPaths = append(first.ForbiddenPaths, "first/")
+	first.DependsOn = append(first.DependsOn, "first")
+	first.Releases = append(first.Releases, LeaseRelease{Path: "first/z.go"})
+	first.Unattributed = append(first.Unattributed, LeaseUnattributedWrite{Path: "first/z.go"})
+
+	second.OwnedPaths = append(second.OwnedPaths, "second/")
+	second.ForbiddenPaths = append(second.ForbiddenPaths, "second/")
+	second.DependsOn = append(second.DependsOn, "second")
+	second.Releases = append(second.Releases, LeaseRelease{Path: "second/z.go"})
+	second.Unattributed = append(second.Unattributed, LeaseUnattributedWrite{Path: "second/z.go"})
+
+	assert.Equal(t, []string{"types/", "first/"}, first.OwnedPaths)
+	assert.Equal(t, []string{"gen/", "first/"}, first.ForbiddenPaths)
+	assert.Equal(t, []string{"b", "first"}, first.DependsOn)
+	assert.Equal(t, []LeaseRelease{{Path: "types/x.go"}, {Path: "first/z.go"}}, first.Releases)
+	assert.Equal(t, []LeaseUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}}, first.Unattributed)
+
+	// The original is the store's row and nobody appended through it, so it must still
+	// hold exactly what it held.
+	assert.Equal(t, []string{"types/"}, orig.OwnedPaths)
+	assert.Equal(t, []LeaseUnattributedWrite{{Path: "types/y.go"}}, orig.Unattributed)
+}
+
+// slices.Clone preserves nil, which is what keeps a row that stored null from coming back
+// as [] through the JSON door.
+func TestLeaseCloneKeepsNilSlicesNil(t *testing.T) {
+	t.Parallel()
+
+	c := Lease{ID: "a"}.Clone()
+	assert.Nil(t, c.Unattributed)
+	assert.Nil(t, c.Releases)
+}

@@ -36,6 +36,11 @@ type Graph struct {
 	// projMu guards the build the same way adjMu guards out/in.
 	projMu    sync.Mutex
 	projPaths []string
+
+	// Workspace root the node IDs are relative to, so a query can canonicalise an
+	// absolute path a human pasted. Stamped by Build; empty on a hand-built graph,
+	// which narrows normalization to the shapes that need no workspace on disk.
+	root string
 }
 
 // edgeKey collapses parallel edges: at most one edge per (source, target,
@@ -52,6 +57,11 @@ func NewGraph() *Graph {
 		edges: map[edgeKey]types.KnowledgeEdge{},
 	}
 }
+
+// SetRoot records the workspace root the graph's node IDs are relative to. Every
+// resolution path normalizes a pasted path against it (see normalizePaths), so a graph
+// without one answers absolute and backslash spellings as if they were literal text.
+func (g *Graph) SetRoot(root string) { g.root = root }
 
 // AddNode inserts a node, or upgrades an existing one with the same ID by filling
 // empty fields from the newcomer. Idempotent: the same node from two shards (e.g.
@@ -244,6 +254,7 @@ const QualifierSep = "//"
 func Qualified(g *Graph, workspace string) *Graph {
 	q := workspace + QualifierSep
 	out := NewGraph()
+	out.root = g.root
 	for _, n := range g.Nodes() {
 		n.ID = q + n.ID
 		out.AddNode(n)

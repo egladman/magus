@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"cmp"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,27 +15,47 @@ import (
 // no LLM. It reuses magus's existing fuzzy-finding score (interactive.LeafScore,
 // which powers `magus x`/`magus where`), generalized from project paths to node
 // IDs and labels. The fielded grammar here is a pragmatic subset - field:value
-// filters (kind/project/relation/id), free-text terms (AND), and negation; the
+// matchers (kind/project/relation/id), free-text terms (AND), and negation; the
 // full boolean grammar (OR/parens/wildcards) and the search.js conformance
 // fixture are a later increment.
 
-// SeedsSymbols reports whether an input targets symbol nodes, so a caller knows to
-// lazily load the symbol shards the default graph omits: a symbol: ID, the symbol kind
+// lazyLayerKinds are the node kinds the lazily-loaded @symbols shards can hold. The shards
+// are named for symbols but carry more: assembleSymbols mints a file node per definition
+// and reference path, and hangs it off the dir chain containsChain builds. So a Go source
+// file is reachable ONLY through this layer, while a .buzz file of the same kind sits in
+// the default graph.
+//
+// That is why the set is enumerated rather than assumed to be {symbol}. A query naming only
+// kinds outside it cannot be answered by the layer, so skipping the load is honest; a query
+// naming a kind INSIDE it that skips the load reports a node that exists as absent, which is
+// the one failure the verdict machinery exists to prevent.
+var lazyLayerKinds = []string{types.KindSymbol, types.KindFile, types.KindDir}
+
+// SeedsLazyLayer reports whether an input targets the lazily-loaded @symbols shards, so a
+// caller knows to merge them into the default graph: a symbol: ID, any kind the layer holds
 // (incl. wildcard), a defines/references/calls relation, or any language filter. It must
-// agree with scoreNode - a match that reaches symbols without seeding here returns empty.
-// Over-eager is safe: it only loads shards a later filter may discard.
-func SeedsSymbols(input string) bool {
+// agree with scoreNode - a match that reaches those shards without seeding here returns
+// empty. Over-eager is safe: it only loads shards a later filter may discard.
+func SeedsLazyLayer(input string) bool {
 	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
 		return true
 	}
 	q := parseQuery(input)
-	if len(q.fields["language"]) > 0 {
+	if len(q.fields["language"]) > 0 || len(q.reFields["language"]) > 0 {
 		return true
 	}
 	for _, k := range q.fields["kind"] {
-		if k == types.KindSymbol || (hasWildcard(k) && globMatch(k, types.KindSymbol)) {
+		if slices.Contains(lazyLayerKinds, k) {
 			return true
 		}
+		if hasWildcard(k) && slices.ContainsFunc(lazyLayerKinds, func(lk string) bool { return globMatch(k, lk) }) {
+			return true
+		}
+	}
+	// A kind or id regex that could reach the lazy layer seeds it too - over-seeding is safe
+	// (a later filter discards), an unseeded symbol shard silently omits every code symbol.
+	if slices.ContainsFunc(lazyLayerKinds, func(lk string) bool { return matchesAnyRe(lk, q.reFields["kind"]) }) || len(q.reFields["id"]) > 0 {
+		return true
 	}
 	for _, id := range q.fields["id"] {
 		if hasWildcard(id) && wildcardCouldMatchPrefix(id, types.KindSymbol+":") {
@@ -50,25 +71,31 @@ func SeedsSymbols(input string) bool {
 	})
 }
 
-// CouldMatchSymbol reports whether a query could ever match a symbol node, which is a
-// weaker question than SeedsSymbols: it asks whether the symbol layer is RELEVANT, not
-// whether it was loaded.
+// CouldMatchLazyLayer reports whether a query could ever match a node in the lazily-loaded
+// layer, which is a weaker question than SeedsLazyLayer: it asks whether that layer is
+// RELEVANT, not whether it was loaded.
 //
-// The two differ for exactly the queries where an unloaded-symbols caveat would mislead.
+// It is DERIVED from SeedsLazyLayer rather than deciding the same thing a second way, and
+// that is the whole safety property: relevance is a strict superset of seeding by
+// construction, so widening SeedsLazyLayer can never leave a query that now loads the layer
+// outside the set of queries allowed to caveat it. Two parallel implementations is exactly
+// how `kind=file <name>` came to skip the shards AND assert a verified absence about them.
+//
+// The two differ for exactly the queries where an unloaded-layer caveat would mislead.
 // `kind:author` returning nothing has nothing to do with code symbols, so telling the
 // reader that symbols were not searched points them at a layer that could not have held
-// the answer. A query that names a non-symbol kind and no wildcard has ruled the layer
-// out itself; everything else leaves it open.
-func CouldMatchSymbol(input string) bool {
-	if SeedsSymbols(input) {
+// the answer. A query naming only kinds outside lazyLayerKinds has ruled the layer out
+// itself; everything else leaves it open.
+func CouldMatchLazyLayer(input string) bool {
+	if SeedsLazyLayer(input) {
 		return true
 	}
 	kinds := parseQuery(input).fields["kind"]
 	if len(kinds) == 0 {
-		return true // no kind filter, so a symbol was in scope and simply was not loaded
+		return true // no kind filter, so the layer was in scope and simply was not loaded
 	}
-	// Any explicit kind that is not symbol (and no wildcard reaching it - SeedsSymbols
-	// already returned false, so none does) excludes the layer outright.
+	// Every explicit kind is outside the lazy layer (and no wildcard reaches it -
+	// SeedsLazyLayer already returned false, so none does), which excludes it outright.
 	return false
 }
 
@@ -94,27 +121,39 @@ const wildcardTermScore = 1
 var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true, "language": true, "role": true}
 
 type parsedQuery struct {
-	terms     []string            // positive free-text tokens (AND)
-	negTerms  []string            // negated free-text tokens (must not appear)
-	fields    map[string][]string // field -> allowed values (OR within, AND across)
-	negFields map[string][]string // field -> excluded values
+	terms     []string                    // positive free-text tokens (AND)
+	negTerms  []string                    // negated free-text tokens (must not appear)
+	fields    map[string][]string         // field -> allowed values (OR within, AND across)
+	negFields map[string][]string         // field -> excluded values
+	reFields  map[string][]*regexp.Regexp // field -> regexes its target must match (=~), OR within
 	raw       string
 }
 
-// parseQuery splits a query string into free-text terms and field filters.
-// "kind:spell project:pkg/foo build -kind:op" -> terms[build], fields{kind:[spell],
+// parseQuery splits a query string into free-text terms and field matchers.
+// "kind=spell project=pkg/foo build kind!=op" -> terms[build], fields{kind:[spell],
 // project:[pkg/foo]}, negFields{kind:[op]}. Double-quoted phrases stay one term.
 func parseQuery(input string) parsedQuery {
-	q := parsedQuery{fields: map[string][]string{}, negFields: map[string][]string{}, raw: strings.TrimSpace(input)}
+	q := parsedQuery{fields: map[string][]string{}, negFields: map[string][]string{}, reFields: map[string][]*regexp.Regexp{}, raw: strings.TrimSpace(input)}
 	for _, tok := range tokenize(input) {
 		neg := false
-		if strings.HasPrefix(tok, "-") && len(tok) > 1 {
+		if strings.HasPrefix(tok, "-") && len(tok) > 1 { // compat: -kind:op / -term negation, pre-!= grammar
 			neg, tok = true, tok[1:]
 		}
-		if field, val, ok := splitField(tok); ok {
-			if neg {
+		if field, op, val, ok := parseMatcher(tok); ok {
+			switch {
+			case op == matchRe && field == "relation":
+				// relation is an edge-traversal filter, not a node string, so it has no regex
+				// target; the bare relation name after =~ is what a user meant, so match it exactly.
+				q.fields[field] = append(q.fields[field], val)
+			case op == matchRe:
+				if re, err := regexp.Compile(val); err == nil {
+					q.reFields[field] = append(q.reFields[field], re)
+				} else {
+					q.fields[field] = append(q.fields[field], val) // a malformed regex degrades to a literal rather than an error
+				}
+			case op == matchNe || neg:
 				q.negFields[field] = append(q.negFields[field], val)
-			} else {
+			default:
 				q.fields[field] = append(q.fields[field], val)
 			}
 			continue
@@ -128,17 +167,30 @@ func parseQuery(input string) parsedQuery {
 	return q
 }
 
-// splitField returns (field, value, true) when tok is "<knownField>:<value>".
-func splitField(tok string) (string, string, bool) {
-	i := strings.IndexByte(tok, ':')
-	if i <= 0 {
-		return "", "", false
+type matchOp int
+
+const (
+	matchEq matchOp = iota // field=value or field:value (compat)
+	matchNe                // field!=value
+	matchRe                // field=~regex
+)
+
+// parseMatcher recognizes a field matcher: "<knownField><op><value>". The operators are
+// checked most-specific first so "!=" and "=~" win over a bare "=". The colon is the pre-!=
+// spelling of "=", kept as a compat alias.
+func parseMatcher(tok string) (field string, op matchOp, value string, ok bool) {
+	for _, m := range []struct {
+		sep string
+		op  matchOp
+	}{{"!=", matchNe}, {"=~", matchRe}, {"=", matchEq}, {":", matchEq}} {
+		if i := strings.Index(tok, m.sep); i > 0 {
+			f := strings.ToLower(tok[:i])
+			if knownFields[f] {
+				return f, m.op, tok[i+len(m.sep):], true
+			}
+		}
 	}
-	field := strings.ToLower(tok[:i])
-	if !knownFields[field] {
-		return "", "", false
-	}
-	return field, tok[i+1:], true
+	return "", matchEq, "", false
 }
 
 // tokenize splits on whitespace, keeping "double quoted" spans as one token.
@@ -169,7 +221,7 @@ func tokenize(s string) []string {
 // Resolve returns nodes matching the query, ranked by score (desc) then ID (asc),
 // truncated to limit (0 = no limit).
 func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
-	q := parseQuery(input)
+	q := g.normalizePaths(parseQuery(input))
 	var matches []types.KnowledgeMatch
 	for id, n := range g.nodes {
 		score, ok := g.scoreNode(n, id, q)
@@ -198,12 +250,15 @@ func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 // scoreNode applies node-level field filters and free-text scoring. It returns
 // (score, true) when the node matches every positive constraint and no negation.
 // A relation-only query (no node constraints) matches nodes that touch such an
-// edge, so `magus query relation:uses` still resolves seeds.
+// edge, so `magus query relation=uses` still resolves seeds.
 func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int, bool) {
 	if vals, ok := q.fields["kind"]; ok && !matchesKind(n.Kind, vals) {
 		return 0, false
 	}
 	if vals := q.negFields["kind"]; matchesKind(n.Kind, vals) {
+		return 0, false
+	}
+	if res := q.reFields["kind"]; len(res) > 0 && !matchesAnyRe(n.Kind, res) {
 		return 0, false
 	}
 	if vals, ok := q.fields["project"]; ok {
@@ -217,10 +272,18 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 			return 0, false
 		}
 	}
+	if res := q.reFields["project"]; len(res) > 0 {
+		if proj, owned := g.projectOf(n, id); !owned || !matchesAnyRe(proj, res) {
+			return 0, false
+		}
+	}
 	if vals, ok := q.fields["id"]; ok && !containsAny(id, vals) {
 		return 0, false
 	}
 	if vals := q.negFields["id"]; containsAny(id, vals) {
+		return 0, false
+	}
+	if res := q.reFields["id"]; len(res) > 0 && !matchesAnyRe(id, res) {
 		return 0, false
 	}
 	// language filters on the node's language attr (set on file and symbol nodes), so
@@ -233,13 +296,19 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	if vals := q.negFields["language"]; slices.Contains(vals, n.Attrs["language"]) {
 		return 0, false
 	}
+	if res := q.reFields["language"]; len(res) > 0 && !matchesAnyRe(n.Attrs["language"], res) {
+		return 0, false
+	}
 	// role filters on the doc-classification attr (readme/agent/changelog/...), so
-	// `kind:doc role:agent` finds the agent-instruction files. A node without the attr
+	// `kind=doc role=agent` finds the agent-instruction files. A node without the attr
 	// never matches a positive role constraint.
 	if vals, ok := q.fields["role"]; ok && !slices.Contains(vals, n.Attrs[attrRole]) {
 		return 0, false
 	}
 	if vals := q.negFields["role"]; slices.Contains(vals, n.Attrs[attrRole]) {
+		return 0, false
+	}
+	if res := q.reFields["role"]; len(res) > 0 && !matchesAnyRe(n.Attrs[attrRole], res) {
 		return 0, false
 	}
 
@@ -836,6 +905,17 @@ func containsAny(hay string, needles []string) bool {
 
 // hasWildcard reports whether a term or field value uses the '*' glob metacharacter.
 func hasWildcard(s string) bool { return strings.IndexByte(s, '*') >= 0 }
+
+// matchesAnyRe reports whether s matches at least one of the regexes (OR within a field's
+// =~ values). An empty target never matches, so a =~ on a node lacking the attr excludes it.
+func matchesAnyRe(s string, res []*regexp.Regexp) bool {
+	for _, re := range res {
+		if re.MatchString(s) {
+			return true
+		}
+	}
+	return false
+}
 
 // globMatch reports whether s matches a case-insensitive glob where '*' matches any run
 // of characters, separators ('/', ':') included - node IDs are full of them, so path.Match's

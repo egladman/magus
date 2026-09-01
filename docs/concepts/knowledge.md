@@ -83,19 +83,24 @@ nodes, so an agent knows what exists before running anything.
 
 ## Query grammar
 
-`magus query` takes free-text terms (AND) plus field filters and negation. Terms
-are scored with the same leaf-anchored fuzzy match that powers `magus where`.
+`magus query` takes free-text terms (AND) plus field matchers. A matcher is
+`field<op>value`, where the operator is `=` (match), `!=` (exclude), or `=~` (regex).
+Terms are scored with the same leaf-anchored fuzzy match that powers `magus where`.
 
 | Form               | Meaning                                            |
 | ------------------ | -------------------------------------------------- |
 | `build`            | free text: match node IDs, labels, and docs        |
-| `kind:spell`       | only nodes of that kind                            |
-| `project:pkg/foo`  | the project node and its targets                   |
-| `relation:uses`    | seed from nodes touching a `uses` edge             |
-| `id:build`         | substring match on the node ID                     |
-| `id:target:*build` | `*` wildcard: matches any run (in a value or term) |
-| `-kind:op`         | negation: exclude these                            |
+| `kind=spell`       | only nodes of that kind                            |
+| `project=pkg/foo`  | the project node and its targets                   |
+| `relation=uses`    | seed from nodes touching a `uses` edge             |
+| `id=build`         | substring match on the node ID                     |
+| `kind!=op`         | exclude these                                      |
+| `id=~build$`       | regex over the target; `kind=~"spell\|op"` ORs     |
+| `id=target:*build` | `*` wildcard: matches any run (in a value or term) |
 | `"exact phrase"`   | a quoted span stays one term                       |
+
+The `:` grammar (`kind:spell`, `-kind:op`) is the pre-`=` spelling, kept as a compat
+alias so existing invocations keep working; new queries should use `=`/`!=`/`=~`.
 
 A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node
@@ -110,7 +115,7 @@ build` if you want it fresh; combine field filters freely.
 knows the concrete tool behind every operation - not just the source.
 
 ```sh
-magus query "kind:tool"                    # the workspace's toolchain (go, buf, docker, ...)
+magus query "kind=tool"                    # the workspace's toolchain (go, buf, docker, ...)
 magus explain "tool:go"                    # every op and spell that runs go
 magus explain "op:go:go-test"              # an op's base argv (the `argv` attr) and its tool
 magus path "target:.:test" "tool:go"       # a target reaches its tool via target->op->tool
@@ -190,7 +195,7 @@ current by the drift gate; do not hand-edit the output.)
 ```sh
 magus refs <name>                          # the definition + every reference, each as path:line
 magus explain "symbol:<id>"                # the node's `source` is the definition's path:line
-magus query "kind:symbol <name>" -o json   # each match's `.source` is "path:line"
+magus query "kind=symbol <name>" -o json   # each match's `.source` is "path:line"
 ```
 
 Symbol nodes carry their definition as `source: "path:line"`, and `refs` returns
@@ -212,7 +217,7 @@ profile - a pure code-graph tool cannot answer this.
 
 ```sh
 magus explain "symbol:<id>"      # a function's coverage ratio + test_refs (test files that reference it)
-magus query "kind:file" -o json  # each file node's attrs.coverage (covered/total statements)
+magus query "kind=file" -o json  # each file node's attrs.coverage (covered/total statements)
 ```
 
 After `magus run test` (or `magus run ci`), a `coverage` attr (with `covered_stmts` /
@@ -237,9 +242,9 @@ needed) and you can walk from a target to exactly what it writes.
 node tagged with a `role` from a universal filename convention - so it works in any repo.
 
 ```sh
-magus query "kind:doc role:agent"    # the agent-instruction files (AGENTS.md, CLAUDE.md)
+magus query "kind=doc role=agent"    # the agent-instruction files (AGENTS.md, CLAUDE.md)
 magus query "role:readme"            # every README, wherever it lives
-magus query "kind:doc role:skill"    # skill definitions (SKILL.md)
+magus query "kind=doc role=skill"    # skill definitions (SKILL.md)
 ```
 
 Roles are `readme`, `agent`, `skill`, `changelog`, `contributing`, `license`, or a plain
@@ -494,9 +499,12 @@ Exit codes follow the same split. `refs` and `explain` exit 2 on `absent` - the 
 cannot be carried out as stated, and magus verified that - and 1 on `unknown`, where the
 invocation was fine and a prerequisite artifact was missing. A `refs` lookup that resolved
 but found no references follows the verdict too, exiting 1 when magus could not verify the
-emptiness: "nothing uses this" is a negative claim like any other. `magus query` always exits 0:
-an empty result set is a legitimate answer to a search, so its verdict rides the output
-only.
+emptiness: "nothing uses this" is a negative claim like any other. `magus query` exits 0 when
+it can answer - it matched, or it verified the absence - and 1 when it cannot: nothing
+matched and the verdict is `unknown`, the case `magus graph build` fixes. It never exits 2,
+and it never fails on a populated result, whose `unknown` caveats rows that are facts
+already. An empty result set stays a legitimate answer to a search; a blind spot is not
+one, and a caller that reads it as "not in the graph" goes back to grepping.
 
 The coverage probe is one `stat` per declared index, and it is skipped entirely when the
 symbol layer was irrelevant to the question - `kind:author` returning nothing has nothing
@@ -697,8 +705,8 @@ query engine, and the layout formats become available (they are unreadable on th
 full graph, so they require a scope):
 
 ```sh
-magus graph export --select "kind:spell go" -o mermaid
-magus graph export --select "project:pkg/foo" --budget 80 -o dot
+magus graph export --select "kind=spell go" -o mermaid
+magus graph export --select "project=pkg/foo" --budget 80 -o dot
 ```
 
 ## Diffing against a baseline
@@ -739,7 +747,7 @@ knowledge:
 ```
 
 ```sh
-magus query "kind:spell" --global   # matches across every registered workspace
+magus query "kind=spell" --global   # matches across every registered workspace
 magus graph stats --global          # union shape across repos
 ```
 

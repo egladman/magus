@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
-	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
@@ -127,7 +127,7 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) types.DoctorChec
 }
 
 // checkCITarget fails when no project in the workspace declares a `ci` target.
-// ci is the anchor `magus ci` / `magus affected ci` / `magus affected --plan`
+// ci is the anchor `magus run ci` / `magus affected ci` / `magus affected --plan`
 // key off; a workspace defining none would run that gate as a silent no-op (exit
 // 0 having gated nothing). The runtime path enforces the same rule (MGS1001);
 // this surfaces it as a health check so the gap is visible before CI runs.
@@ -151,12 +151,13 @@ func (*runner) checkCITarget(projects []*types.Project) types.DoctorCheck {
 		}
 	}
 	return types.DoctorCheck{
-		Name:    name,
-		Status:  types.DoctorFail,
-		Message: "no ci target defined in any project; `magus ci` / `magus affected ci` would gate nothing (silent no-op)",
+		Name:   name,
+		Status: types.DoctorFail,
+		Message: fmt.Sprintf("no ci target defined in any project; `%s` / `%s` would gate nothing (silent no-op)",
+			hint.Run.With("ci"), hint.Affected.With("ci")),
 		Details: []string{
 			`define one in your magusfile, e.g.  export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build, test, lint); }`,
-			"run 'magus describe targets' to see the available stages to compose",
+			"run '" + hint.DescribeTargets.String() + "' to see the available stages to compose",
 			fmt.Sprintf("see %s: %s", types.NoCITarget, types.CodeURL(types.NoCITarget)),
 		},
 	}
@@ -184,7 +185,7 @@ func (*runner) checkSpellDocs(spells []*spells.Spell) types.DoctorCheck {
 	return types.DoctorCheck{
 		Name:    name,
 		Status:  types.DoctorAdvice,
-		Message: fmt.Sprintf("%d local spell target(s) missing a doc comment; the doc is what `magus describe` shows a caller", len(undocumented)),
+		Message: fmt.Sprintf("%d local spell target(s) missing a doc comment; the doc is what `%s` shows a caller", len(undocumented), hint.Describe),
 		Details: undocumented,
 	}
 }
@@ -733,7 +734,7 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) typ
 		Status: types.DoctorAdvice,
 		Message: fmt.Sprintf(
 			"%d target(s) name static analysis or formatting rather than a phase of their own; "+
-				"composing the op into lint (or format) lets `magus affected ci` cover it "+
+				"composing the op into lint (or format) lets `"+hint.Affected.With("ci")+"` cover it "+
 				"(docs/targets.md#the-target-name, see %s)",
 			len(found), types.CodeURL(types.BespokePhaseFragmentName)),
 		Details: found,
@@ -1324,15 +1325,15 @@ func (r *runner) checkHasCharmTypos(projects []*types.Project) types.DoctorCheck
 				if _, ok := known[n]; ok {
 					continue // a live read of a real charm
 				}
-				hint := interactive.SuggestNearest(n, knownNames)
-				if hint == "" {
+				sug := hint.Nearest(n, knownNames)
+				if sug == "" {
 					continue // a novel undeclared name: a legitimate runtime toggle
 				}
 				if _, dup := seen[raw]; dup {
 					continue
 				}
 				seen[raw] = struct{}{}
-				details = append(details, fmt.Sprintf("has_charm(%q) matches no charm; did you mean %q?", raw, hint))
+				details = append(details, fmt.Sprintf("has_charm(%q) matches no charm; did you mean %q?", raw, sug))
 			}
 		}
 	}
@@ -1555,7 +1556,7 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 			Name:    name,
 			Status:  types.DoctorFail,
 			Message: "no ./magus and no magus on PATH, so a guard hook is unenforced",
-			Details: []string{"build one: magus run build ."},
+			Details: []string{"build one: " + hint.Run.With("build", ".")},
 		}
 	}
 
@@ -1572,7 +1573,7 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 			Details: []string{
 				"binary:  " + info.ModTime().Format(time.RFC3339),
 				"newest:  " + newest.Format(time.RFC3339) + "  (" + newestPath + ")",
-				"rebuild: magus run build .",
+				"rebuild: " + hint.Run.With("build", "."),
 			},
 		}
 	}
@@ -1624,8 +1625,8 @@ func (r *runner) checkObserverRecording() types.DoctorCheck {
 				fmt.Sprintf("writes: %d   shell: %d   reads: %d", writes, shell, reads),
 				"the usual cause is a hook resolving a magus too old to accept --observe, which",
 				"rejects the flag into an `|| true` and records nothing with nothing saying so",
-				"check which binary the hook runs: magus doctor (see the `guard binary` check)",
-				"re-stamp the hook templates: magus agent install <dir> --force",
+				"check which binary the hook runs: " + hint.Doctor.String() + " (see the `guard binary` check)",
+				"re-stamp the hook templates: " + hint.AgentInstall.With("<dir>", "--force"),
 			},
 		}
 	case reads*observerReadRatio < writes:
@@ -1642,7 +1643,7 @@ func (r *runner) checkObserverRecording() types.DoctorCheck {
 				"a diff can name the agent that wrote a file but not what it had just read,",
 				"which is the one thing no forge can show - so this is the signal worth fixing",
 				"most hosts need the read hook wired separately from the command guard:",
-				"  magus agent install <dir> --force",
+				"  " + hint.AgentInstall.With("<dir>", "--force"),
 			},
 		}
 	default:
@@ -1872,7 +1873,7 @@ func checkGuardWiring(ctx context.Context, root, home string, budget time.Durati
 			Name:    name,
 			Status:  types.DoctorFail,
 			Message: "no ./magus and no magus on PATH, so the guard canary could not run",
-			Details: []string{"build one: magus run build ."},
+			Details: []string{"build one: " + hint.Run.With("build", ".")},
 		}
 	}
 
@@ -1901,7 +1902,7 @@ func checkGuardWiring(ctx context.Context, root, home string, budget time.Durati
 				"command: printf 'git stash' | " + bin + " session hook -o name",
 				"stdout:  " + firstLine,
 				"exit:    " + exit,
-				"rebuild: magus run build .",
+				"rebuild: " + hint.Run.With("build", "."),
 			},
 		}
 	}
@@ -2000,7 +2001,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 			Name:    name,
 			Status:  types.DoctorAdvice,
 			Message: "not installed, so agents in this checkout have no magus vocabulary",
-			Details: []string{"install them: magus agent install .claude/skills"},
+			Details: []string{"install them: " + hint.AgentInstall.With(".claude/skills")},
 		}
 	}
 
@@ -2031,7 +2032,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 				Message: "installed skills are behind this binary, and a reinstall alone will not fix it: " + strings.Join(stale, ", "),
 				Details: append(details,
 					"a rename left these behind, and your agent host still loads them: "+strings.Join(orphans, ", "),
-					"review that list, then: magus agent install "+stale[0]+" --force --prune --dir "+root),
+					"review that list, then: "+hint.AgentInstall.With(stale[0], "--force", "--prune", "--dir", root)),
 			}
 		}
 		// One check carries one remedy, so two stale locations need --fix twice; the
@@ -2053,7 +2054,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 			Name:    name,
 			Status:  types.DoctorAdvice,
 			Message: agent.AgentsFile + " carries an older managed block; magus does not write that file, so replace it yourself",
-			Details: append(details, "print the current block: magus agent sample --section"),
+			Details: append(details, "print the current block: "+hint.AgentSample.With("--section")),
 		}
 	}
 	return types.DoctorCheck{

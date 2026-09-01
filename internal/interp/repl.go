@@ -521,6 +521,10 @@ func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, 
 	case line == ".help":
 		replHelp(stdout, drivers)
 		return true, false
+	case line == ".heap":
+		f, _ := stdout.(*os.File)
+		printHeap(stdout, colorEnabledForFile(f))
+		return true, false
 	case strings.HasPrefix(line, ".load "):
 		path := strings.TrimSpace(strings.TrimPrefix(line, ".load "))
 		loadFile(ctx, sess, path, stderr)
@@ -661,6 +665,12 @@ func Pry(ctx context.Context, sess engine.Session, pctx PryContext, opts ReplOpt
 			depth = 0
 		}
 		if depth > 0 {
+			continue
+		}
+
+		if st.driver == nil {
+			fmt.Fprintln(opts.Stderr, "error: no REPL driver available")
+			pending.Reset()
 			continue
 		}
 

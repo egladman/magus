@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -40,14 +41,19 @@ type answerFn func(matched bool) types.KnowledgeAnswer
 // pagedRefs/pagedQuery testable against a hand-built graph with no workspace behind them.
 type gapProbe func() ([]types.KnowledgeSymbolGap, bool)
 
-// answerFor builds a verdict from a probe, mapping a failed probe to its own reason
-// rather than to an empty gap list that would read as verified coverage.
-func answerFor(matched bool, reason types.KnowledgeUnknownReason, probe gapProbe) types.KnowledgeAnswer {
-	gaps, probed := probe()
-	if !probed {
-		return types.Answer(matched, types.ReasonCoverageUnknown, nil)
+// coverageFor reports what a lookup could consult, for knowledge.Answer to judge. The gap
+// probe is skipped when the lazy layer could not have held the answer, which is the same
+// gate the CLI applies.
+//
+// These tools used to reach their own verdict, and it disagreed with the CLI's on the same
+// graph: MCP set symbols-not-loaded on any unseeded query, CLI first asked whether the
+// layer was relevant. Neither derives one now - both observe and call knowledge.Answer.
+func coverageFor(input string, seeded bool, probe gapProbe) knowledge.Coverage {
+	cov := knowledge.Coverage{Seeded: seeded}
+	if knowledge.CouldMatchLazyLayer(input) {
+		cov.Gaps, cov.Probed = probe()
 	}
-	return types.Answer(matched, reason, gaps)
+	return cov
 }
 
 // knowledgeGraph resolves the DOMAIN knowledge graph for a tool invocation - the warm
@@ -60,7 +66,7 @@ func knowledgeGraph(ctx context.Context, g graphResolver) (*knowledge.Graph, err
 
 type queryTool struct{ graph graphResolver }
 
-func (t *queryTool) Name() string { return "magus_query" }
+func (t *queryTool) Name() string { return hint.ToolQuery.String() }
 
 // paginatedQuery is the query result with the opaque cursor for the next page. It
 // embeds KnowledgeQueryOutput so the wire shape is the plain result plus one
@@ -82,8 +88,8 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 	// answers from the symbol-free warm graph.
 	var g *knowledge.Graph
 	var err error
-	seedsSymbols := knowledge.SeedsSymbols(terms)
-	if seedsSymbols {
+	seedsLazyLayer := knowledge.SeedsLazyLayer(terms)
+	if seedsLazyLayer {
 		g, err = t.graph.KnowledgeGraphWithSymbols(ctx)
 	} else {
 		g, err = knowledgeGraph(ctx, t.graph)
@@ -92,12 +98,8 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 		return spells.InvokeResponse{}, err
 	}
 	probe := func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) }
-	var reason types.KnowledgeUnknownReason
-	if !seedsSymbols {
-		reason = types.ReasonSymbolsNotLoaded
-	}
 	resp, err := pagedQuery(g, terms, budget, limit, cursor, func(matched bool) types.KnowledgeAnswer {
-		return answerFor(matched, reason, probe)
+		return knowledge.Answer(terms, matched, coverageFor(terms, seedsLazyLayer, probe))
 	})
 	if err != nil {
 		return spells.InvokeResponse{}, err
@@ -107,7 +109,7 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 
 type refsTool struct{ graph graphResolver }
 
-func (t *refsTool) Name() string { return "magus_refs" }
+func (t *refsTool) Name() string { return hint.ToolRefs.String() }
 
 // paginatedRefs is the refs result with the opaque cursor for the next page of
 // referencing files. It embeds KnowledgeRefsOutput so the wire shape is the plain
@@ -152,10 +154,10 @@ func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, prob
 			Definition:    types.KnowledgeRefsDefinition,
 			SchemaVersion: types.KnowledgeSchemaVersion,
 			Symbol:        symbol,
-			Answer:        answerFor(false, "", probe),
+			Answer:        knowledge.Answer(symbol, false, coverageFor(symbol, true, probe)),
 		}}, nil
 	}
-	out.Answer = answerFor(len(out.Refs) > 0, "", probe)
+	out.Answer = knowledge.Answer(symbol, len(out.Refs) > 0, coverageFor(symbol, true, probe))
 	if limit <= 0 && cursor == "" {
 		return paginatedRefs{KnowledgeRefsOutput: out}, nil
 	}
@@ -236,7 +238,7 @@ func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor stri
 
 type explainTool struct{ graph graphResolver }
 
-func (t *explainTool) Name() string { return "magus_explain" }
+func (t *explainTool) Name() string { return hint.ToolExplain.String() }
 
 func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	node := paramString(req.Params, "node", "")
@@ -254,14 +256,11 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 		// as a fact about the workspace; the channel is text because that is this tool's
 		// channel for everything.
 		// explain runs against the symbol-free warm graph, so a code symbol was never in
-		// scope - but only say so when the query could have named one. `kind:author` with
+		// scope - but only say so when the query could have named one. `kind=author` with
 		// a typo has nothing to do with the symbol layer, and an absent verdict there is a
 		// fact worth asserting, which is why this is not hardcoded.
-		var reason types.KnowledgeUnknownReason
-		if knowledge.CouldMatchSymbol(node) {
-			reason = types.ReasonSymbolsNotLoaded
-		}
-		ans := answerFor(false, reason, func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) })
+		ans := knowledge.Answer(node, false, coverageFor(node, false,
+			func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) }))
 		if ans.Verdict == types.VerdictUnknown {
 			return spells.InvokeResponse{Text: render.MissText(node, ans)}, nil
 		}
@@ -275,7 +274,7 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 
 type pathTool struct{ graph graphResolver }
 
-func (t *pathTool) Name() string { return "magus_path" }
+func (t *pathTool) Name() string { return hint.ToolPath.String() }
 
 func (t *pathTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	from := paramString(req.Params, "from", "")
@@ -296,7 +295,7 @@ func (t *pathTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 
 type statsTool struct{ graph graphResolver }
 
-func (t *statsTool) Name() string { return "magus_stats" }
+func (t *statsTool) Name() string { return hint.ToolStats.String() }
 
 func (t *statsTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	g, err := knowledgeGraph(ctx, t.graph)

@@ -7,8 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/workspace"
@@ -72,9 +71,9 @@ func rejectUnknownKeys(m vm.Value, known []string, context string) error {
 		if slices.Contains(known, k) {
 			continue
 		}
-		if hint := interactive.SuggestNearest(k, known); hint != "" {
+		if sug := hint.Nearest(k, known); sug != "" {
 			return fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
-				context, k, hint, strings.Join(sortedKnown, ", "))
+				context, k, sug, strings.Join(sortedKnown, ", "))
 		}
 		return fmt.Errorf("%s: unknown option %q (known options: %s)",
 			context, k, strings.Join(sortedKnown, ", "))
@@ -102,12 +101,12 @@ func rejectUnknownSchemaKeys(m vm.Value, known []string, context string) error {
 		return nil
 	}
 	for _, k := range m.MapKeys() {
-		if slices.Contains(known, k) || interactive.SuggestNearest(k, known) != "" {
+		if slices.Contains(known, k) || hint.Nearest(k, known) != "" {
 			continue
 		}
 		return fmt.Errorf("%s\nhint: nothing here is close to %q, so this magus may predate it."+
 			" Upgrade with `%s`, or delete the key if the workspace does not need it",
-			err.Error(), k, clihint.SelfUpdate)
+			err.Error(), k, hint.SelfUpdate)
 	}
 	return err
 }

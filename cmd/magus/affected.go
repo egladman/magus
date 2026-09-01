@@ -21,8 +21,8 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/url"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project/impact"
@@ -53,7 +53,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `magus affected ci`)")
+		fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `"+hint.Affected.With("ci")+"`)")
 		fmt.Fprintln(os.Stderr, "")
 		affectedUsage()
 		return errSilent{exitCode: 2}
@@ -384,7 +384,7 @@ func affectedUsage() {
 	fmt.Fprintln(os.Stderr, "  --base <ref>         override VCS base ref (default: MAGUS_VCS_BASE_REF or origin/main)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Use MAGUS_VCS_BASE_REF or --base to set the comparison ref.")
-	fmt.Fprintf(os.Stderr, "Use --stdin to read changed paths from a pipe (e.g. `%s | %s`).\n", clihint.Watch, clihint.Affected.With("--stdin", "build"))
+	fmt.Fprintf(os.Stderr, "Use --stdin to read changed paths from a pipe (e.g. `%s | %s`).\n", hint.Watch, hint.Affected.With("--stdin", "build"))
 }
 
 // hasModeFlag reports whether --name (or -name, with an optional =value) appears
@@ -498,7 +498,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	if target == "" {
 		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`); run `%s` to list available targets",
-			clihint.Affected.With("ci", "--plan"), clihint.DescribeTargets)
+			hint.Affected.With("ci", "--plan"), hint.DescribeTargets)
 	}
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
 
@@ -860,7 +860,7 @@ func printImpactText(out *types.ImpactResult) error {
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
 
-	fmt.Printf("\nRun the full pipeline over this set with: magus affected ci\n")
+	fmt.Printf("\nRun the full pipeline over this set with: %s\n", hint.Affected.With("ci"))
 	return nil
 }
 
@@ -1108,7 +1108,7 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 
 	out := make(map[string]shardDetail, len(shards))
 	for _, s := range shards {
-		b := shardDetail{Command: "magus run " + target + " " + strings.Join(s.ProjectPaths, " ")}
+		b := shardDetail{Command: hint.Run.With(target, strings.Join(s.ProjectPaths, " "))}
 		for _, path := range s.ProjectPaths {
 			p, ok := byPath[path]
 			if !ok {
@@ -1204,7 +1204,7 @@ func filterShards(ctx context.Context, m *magus.Magus, shards []types.Shard, onl
 	for _, name := range only {
 		clean := strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(name)), "/")
 		if !known[clean] {
-			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace; run `%s` to list them", name, clihint.Ls)
+			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace; run `%s` to list them", name, hint.Ls)
 		}
 		want[clean] = true
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -105,6 +107,53 @@ func TestIsUsageOnlyInvocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := isUsageOnlyInvocation(tc.subArgs); got != tc.want {
 				t.Fatalf("isUsageOnlyInvocation(%v) = %v, want %v", tc.subArgs, got, tc.want)
+			}
+		})
+	}
+}
+
+// -C is bound as the short form of --root, but the pre-scan that peeks the root
+// before config loading only matched -root/--root. `magus -C /other/ws build`
+// therefore loaded THIS workspace's magus.yaml and ran it against the OTHER
+// workspace's magusfile, silently. -c stays the short form of --config
+// (config.ExtractFlag owns that one), so the two must not cross.
+func TestExtractRootFlagReadsTheShortForm(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"-C space", []string{"-C", "ws", "build"}, "ws"},
+		{"--C space", []string{"--C", "ws", "build"}, "ws"},
+		{"-C equals", []string{"-C=ws", "build"}, "ws"},
+		{"--C equals", []string{"--C=ws", "build"}, "ws"},
+		{"-C among other args", []string{"run", "-C", "ws", "build"}, "ws"},
+		{"-C stops at the separator", []string{"run", "build", "--", "-C", "ws"}, ""},
+		{"lowercase -c is config, not root", []string{"-c", "a.yaml", "build"}, ""},
+		{"lowercase -c= is config, not root", []string{"-c=a.yaml", "build"}, ""},
+		{"-C with no value", []string{"-C"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := extractRootFlag(tc.args); got != tc.want {
+				t.Fatalf("extractRootFlag(%v) = %q, want %q", tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+// peekSub reads globalValueFlags to know a token consumes the one after it. Both
+// short forms were missing, so `magus -C /ws run build` read the PATH as the
+// subcommand and reported an unknown command instead of running.
+func TestPeekSubConsumesTheShortGlobalValues(t *testing.T) {
+	for _, flag := range []string{"-C", "--C", "-c", "--c"} {
+		t.Run(flag, func(t *testing.T) {
+			if !globalValueFlags()[flag] {
+				t.Fatalf("globalValueFlags() is missing %q, so peekSub cannot skip its value", flag)
+			}
+			sub, subArgs := peekSub([]string{flag, "value", "run", "build"})
+			if sub != "run" || !slices.Equal(subArgs, []string{"build"}) {
+				t.Fatalf("peekSub(%s value run build) = (%q, %v), want (\"run\", [build])", flag, sub, subArgs)
 			}
 		})
 	}
@@ -314,6 +363,23 @@ func TestWantsUsage(t *testing.T) {
 // being usage, and that is the regression worth catching.
 //
 // Every printer here writes to os.Stderr, which is the convention across the package:
+// TestDiffUsageNamesEveryBoundFlag catches the drift that hid --rev, --patch and
+// --prompt from `magus diff -h`: the flag set is generated from the registry, but the
+// usage prose is hand-written, so a new flag lands in the binding and never in the help.
+// Deriving the expectation from the bound flags rather than a hand-list makes the help
+// self-check against what the command actually accepts.
+func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
+	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
+	gen.BindDiff(fs)
+	var buf bytes.Buffer
+	diffUsage(&buf)
+	out := buf.String()
+	fs.VisitAll(func(f *flag.Flag) {
+		assert.Contains(t, out, "--"+f.Name,
+			"magus diff -h must name --%s; the hand-written help has drifted from the bound flags", f.Name)
+	})
+}
+
 // help is not the command's output, so it must not land in a pipe that expects data.
 func TestUsagePrintersNameTheirSurface(t *testing.T) {
 	tests := []struct {
@@ -349,7 +415,7 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		{
 			name:  "diff",
 			print: func() { diffUsage(os.Stderr) },
-			want:  []string{"Usage: magus diff", "--generated", "--no-tui", "magus graph build"},
+			want:  []string{"Usage: magus diff", "--generated", "--no-tui", "--rev", "--patch", "--prompt", "magus graph build"},
 		},
 		{
 			name:  "graph",

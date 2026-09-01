@@ -121,24 +121,50 @@ declare no index at all - those are not searched.
 
 ## Query grammar
 
-Free-text terms (AND) plus field filters and negation:
+Free-text terms (AND) plus field matchers. A matcher is `field<op>value`, and the operators
+are `=` (match), `!=` (exclude), `=~` (regex):
 
 - `build` - free text over IDs, labels, and docs
-- `kind:spell` - only that node kind
-- `project:pkg/foo` - everything the project owns{{if .Full}}: the project node, its
+- `kind=spell` - only that node kind
+- `project=pkg/foo` - everything the project owns{{if .Full}}: the project node, its
   targets, and the files/functions/docs whose source lives under it (nested
   projects claim their own; the root `.` owns only what no nested project does){{end}}
-- `relation:uses` - seed from nodes touching that edge{{if .Full}} (`relation:calls`
+- `relation=uses` - seed from nodes touching that edge{{if .Full}} (`relation=calls`
   reaches symbol-to-symbol call edges, so it loads the lazy symbol shards){{end}}
-- `id:build` - substring match on the node ID
-- `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
-- `-kind:op` - negation, exclude these
+- `id=build` - substring match on the node ID
+- `kind!=op` - exclude these
+- `id=~build$` - regex over the target; `kind=~"spell|op"` ORs the alternatives
+- `id=target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
 - `"exact phrase"` - keep a quoted span as one term
+
+{{if .Full}}The `:` grammar (`kind:spell`) and dash negation (`-kind:op`) are the pre-`=`
+spelling, kept as a compat alias so old invocations still parse. Prefer `=`/`!=`/`=~`.{{else}}The `:`/`-kind:op` spelling still parses (compat); prefer `=`/`!=`/`=~`.{{end}}
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
 (default 50).{{if .Full}} For a large match set over MCP, pass `limit` and echo the returned
 `next_cursor` to fetch the next page.{{else}} Over MCP, page with `limit` plus the returned
 `next_cursor`.{{end}}
+
+## Retrieving prose from the docs
+
+Every markdown heading in the workspace is a `docsection` node, so documentation is
+QUERYABLE, not something to read whole. When you are looking for WHERE something is
+explained - in this repo's docs, a project's README, any tracked markdown - query the
+section rather than cat or grep the file:
+
+- `magus query "kind=docsection <terms>"` returns the heading whose section covers your
+  terms. Each result's id and Source are `<path>#<anchor>` - a citable pointer to the exact
+  passage, the same fragment a link into the rendered page carries. Read that one section,
+  not the whole page.
+- Scope it with `project=<p>` and combine free-text terms.{{if .Full}} `magus explain
+  "docsection:<path>#<anchor>"` shows the page a section belongs to and what it links to; a
+  page `contains` its sections and a section contains the headings nested under it, so you
+  can walk the outline.{{end}}
+- Prose only: a code file is not indexed this way - `magus refs` and the entity kinds above
+  still cover code and the domain model.
+
+Reading one file you already know the path of is fine. This replaces the SCAN - the grep or
+cat over markdown to find a passage - not a targeted read.
 
 ## Reading results
 
@@ -168,9 +194,9 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
 edges to the projects and files they cover.{{if .Full}} Combine that with dependency edges to
 answer "who owns the blast radius of this change": `magus explain <node>` for the
-node's owners and dependents, or `magus query kind:owner` to list owners. Only
+node's owners and dependents, or `magus query kind=owner` to list owners. Only
 declared CODEOWNERS ownership appears - it is not blame-inferred.{{else}} `magus explain
-<node>` for owners plus dependents; `magus query kind:owner` to list. Declared
+<node>` for owners plus dependents; `magus query kind=owner` to list. Declared
 ownership only, never blame-inferred.{{end}}
 
 ## Across workspaces and neighbors

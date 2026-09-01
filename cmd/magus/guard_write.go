@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
@@ -55,7 +56,7 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 	}
 	return fmt.Sprintf("magus workspace: edit the SOURCE instead, then %s and commit the regenerated file with your source change.\n"+
 		"%s is a DECLARED OUTPUT of project %s. magus read the target's declared globs, so the next run overwrites whatever you write there.\n"+
-		"`magus describe file <path>` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", regenerateAdvice(f, owner), f.Path, owner)
+		"`"+hint.DescribeFile.With("<path>")+"` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", regenerateAdvice(f, owner), f.Path, owner)
 }
 
 // regenerateAdvice names the target that rewrites the path, resolved from the
@@ -84,7 +85,7 @@ func regenerateAdvice(f types.FileEntry, owner string) string {
 		}
 	}
 	if len(producers) == 0 {
-		return "run the target that produces it: `magus describe targets` lists what this workspace defines"
+		return "run the target that produces it: `" + hint.DescribeTargets.String() + "` lists what this workspace defines"
 	}
 	slices.SortFunc(producers, func(a, b types.FileClaim) int {
 		if n := strings.Compare(a.Project, b.Project); n != 0 {
@@ -96,7 +97,7 @@ func regenerateAdvice(f types.FileEntry, owner string) string {
 	if producer == "" {
 		producer = owner
 	}
-	return fmt.Sprintf("run `magus run %s %s`", producers[0].Target, producer)
+	return "run `" + hint.Run.With(producers[0].Target, producer) + "`"
 }
 
 // denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""
@@ -176,9 +177,9 @@ func denyNotesWrite(path string) string {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: recording a DECISION ABOUT THIS WORKSPACE? Use `magus memory put <name>`, the agent-writable store. If it genuinely belongs in the notes, say so and let the person run `magus notes edit %s`.\n"+
+	return fmt.Sprintf("magus workspace: recording a DECISION ABOUT THIS WORKSPACE? Use `"+hint.MemoryPut.With("<name>")+"`, the agent-writable store. If it genuinely belongs in the notes, say so and let the person run `"+hint.NotesEdit.String()+" %s`.\n"+
 		"%s is in this workspace's NOTES store, which only a person may write: a note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
-		"Read the store with `magus notes ls` and `magus notes get <name>`.", strings.TrimSuffix(filepath.Base(path), ".md"), path)
+		"Read the store with `"+hint.NotesLs.String()+"` and `"+hint.NotesGet.With("<name>")+"`.", strings.TrimSuffix(filepath.Base(path), ".md"), path)
 }
 
 // resolveSymlinks canonicalizes as much of path as exists, returning it unchanged when
@@ -263,7 +264,7 @@ func gradeLeasedWrite(ctx context.Context, actingLease, writePath string) writeG
 		// lease whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
 		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-			"magus workspace: no lease boundary was checked for this write. Re-declare the plan with the magus_ledger tool if leased work is meant to be running.\n"+
+			"magus workspace: no lease boundary was checked for this write. Re-declare the plan with the "+hint.ToolLedger.String()+" tool if leased work is meant to be running.\n"+
 				"This workspace's lease ledger could not be read: %v. The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff.", err)}
 	}
 	live := liveLeases(leases)
@@ -295,7 +296,11 @@ func gradeLeasedWrite(ctx context.Context, actingLease, writePath string) writeG
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose ledger row is simply stale.
-	if owner, owned := ownerOf(live, rel, ""); owned {
+	owner, owned, err := ownerOf(live, rel, "")
+	if err != nil {
+		return adviseMalformedDeclaration(err)
+	}
+	if owned {
 		// Recorded as well as reported, so the lease whose file just moved can find out by
 		// asking the ledger. Telling only the writer left the one party who needed it - the agent
 		// still holding a stale read of this path - as the only party never informed.
@@ -337,7 +342,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: "advise", Kind: advisoryUnleasedWrite, Context: fmt.Sprintf(
-		"magus workspace: declare the plan with the magus_ledger tool and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
+		"magus workspace: declare the plan with the "+hint.ToolLedger.String()+" tool and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
 			"This process reports a spawner but names no lease, and this workspace's ledger holds no live one. Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n"+
 			"This is an advisory and never a block: the spawn chain is a claim the environment makes, so it may teach and may not judge. Load the magus-multi-agent skill for how a plan is partitioned.", envHookLease)}
 }
@@ -360,17 +365,25 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	// lease, so they never reach this function at all.
 	if me.Registered == 0 {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: run `magus vcs checkpoint -o name` in this tree and register what it prints with the magus_ledger tool (op register, lease %s), then retry this write.\n"+
+			"magus workspace: run `"+hint.VCSCheckpoint.With("-o", "name")+"` in this tree and register what it prints with the "+hint.ToolLedger.String()+" tool (op register, lease %s), then retry this write.\n"+
 				"Lease %s (%s) has not registered the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
 			me.ID, me.ID, goalLine(me))}
 	}
-	if decl, forbidden := declarationCovering(me.ForbiddenPaths, rel); forbidden {
+	decl, forbidden, err := declarationCovering(me.ForbiddenPaths, rel)
+	if err != nil {
+		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
+	}
+	if forbidden {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: work inside your own owned paths, or report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this.\n"+
 				"%s is covered by %q, which your lease %s (%s) declared FORBIDDEN. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
 			rel, decl, me.ID, goalLine(me))}
 	}
-	if _, mine := declarationCovering(me.OwnedPaths, rel); mine {
+	_, mine, err := declarationCovering(me.OwnedPaths, rel)
+	if err != nil {
+		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
+	}
+	if mine {
 		// Advisory rather than a block: an orchestrator may have rebased the plan deliberately,
 		// and magus cannot tell that from a worker that wandered. What it can do is refuse to let
 		// the divergence stay silent until the merge finds it.
@@ -382,9 +395,13 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 		}
 		return writeGrade{}
 	}
-	if owner, owned := ownerOf(live, rel, me.ID); owned {
+	owner, owned, err := ownerOf(live, rel, me.ID)
+	if err != nil {
+		return adviseMalformedDeclaration(err)
+	}
+	if owned {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If lease %s has finished with this file, have it release the path by shrinking its owned_paths with the magus_ledger tool, then retry.\n"+
+			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If lease %s has finished with this file, have it release the path by shrinking its owned_paths with the "+hint.ToolLedger.String()+" tool, then retry.\n"+
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the lease ledger exists to make visible; this guard is where the declaration gets read.",
 			owner.ID, rel, owner.ID, goalLine(owner), owner.State, me.ID)}
 	}
@@ -424,16 +441,20 @@ func liveLease(live []types.Lease, id string) (types.Lease, bool) {
 // reports as a fact, and naming the first-recorded one keeps the guard's answer stable
 // between two runs over the same file - an answer that changes run to run is one nobody
 // can act on.
-func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool) {
+func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool, error) {
 	for _, u := range live {
 		if u.ID == exclude {
 			continue
 		}
-		if _, ok := declarationCovering(u.OwnedPaths, rel); ok {
-			return u, true
+		_, ok, err := declarationCovering(u.OwnedPaths, rel)
+		if err != nil {
+			return types.Lease{}, false, fmt.Errorf("lease %s: %w", u.ID, err)
+		}
+		if ok {
+			return u, true, nil
 		}
 	}
-	return types.Lease{}, false
+	return types.Lease{}, false, nil
 }
 
 // declarationCovering reports which declaration covers rel, and whether any did. rel is
@@ -449,7 +470,14 @@ func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool) {
 // human reads and wrong here, where the answer denies a write: a guard that blocks
 // legitimate edits is one agents learn to route around, and routing around it is the
 // failure the whole ledger design is built to avoid.
-func declarationCovering(decls []string, rel string) (string, bool) {
+// A declaration the matcher cannot read is surfaced only when nothing else matched, never
+// in place of a real match: a valid "src/**" that covers rel still denies even if an earlier
+// entry was a malformed pattern. Swallowing the error entirely let a forbidden path spelled
+// with a stray bracket stop denying; short-circuiting on the first error would let one bad
+// entry mask a valid sibling that should deny. So a match wins, and an unreadable pattern is
+// reported as the residual uncertainty only when no declaration covered the path.
+func declarationCovering(decls []string, rel string) (string, bool, error) {
+	var firstErr error
 	for _, raw := range decls {
 		decl := path.Clean(strings.TrimSpace(raw))
 		if decl == "." || decl == "/" {
@@ -458,14 +486,37 @@ func declarationCovering(decls []string, rel string) (string, bool) {
 			// entry for the same reason. An explicit "**" is a different thing and stands.
 			continue
 		}
-		if ok, _ := doublestar.Match(decl, rel); ok {
-			return raw, true
+		ok, err := doublestar.Match(decl, rel)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%q: %w", raw, err)
+			}
+			continue
 		}
-		if ok, _ := doublestar.Match(decl+"/**", rel); ok {
-			return raw, true
+		if ok {
+			return raw, true, nil
+		}
+		ok, err = doublestar.Match(decl+"/**", rel)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%q: %w", raw, err)
+			}
+			continue
+		}
+		if ok {
+			return raw, true, nil
 		}
 	}
-	return "", false
+	return "", false, firstErr
+}
+
+// adviseMalformedDeclaration reports a boundary the guard could not check. An advisory
+// rather than a deny, like every other uncertainty here: a pattern magus cannot read says
+// nothing about whether this write is legitimate, only that nothing graded it.
+func adviseMalformedDeclaration(err error) writeGrade {
+	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
+		"magus workspace: fix the path pattern with the "+hint.ToolLedger.String()+" tool, then retry this write.\n"+
+			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means an owned or forbidden path spelled this way is not being enforced at all.", err)}
 }
 
 // workspaceRelative resolves an incoming path to a workspace-relative, slash-separated
@@ -522,7 +573,7 @@ func adviseMemoryWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the handoff journal too: `magus memory put <name>`.\n" +
+	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the handoff journal too: `" + hint.MemoryPut.With("<name>") + "`.\n" +
 		"This file is per-host and per-checkout, so a second worktree or a different agent host never sees it. Host instructions belong right where you are writing them; workspace decisions outlive the file. Load the magus-handoff-journal skill if not already loaded."
 }
 
@@ -558,7 +609,7 @@ func adviseInstalledSkillWrite(path string) string {
 		return ""
 	}
 	return "magus workspace: put rules that belong to THIS workspace in a local skill beside the installed ones, in a directory magus does not ship (conventionally magus-local-development), which install and verify both leave alone.\n" +
-		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `magus doctor` reports your edit as stale rather than reading it, and the next `magus agent install <dir> --force` overwrites it.\n" +
+		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `" + hint.Doctor.String() + "` reports your edit as stale rather than reading it, and the next `" + hint.AgentInstall.With("<dir>", "--force") + "` overwrites it.\n" +
 		"Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format."
 }
 
@@ -585,11 +636,13 @@ func magusOwnSourceTree() bool {
 }
 
 // agentSurfaceSources are the files an edit to what agents are TAUGHT lands in: the
-// shipped skill bodies, and the MCP registry that names what an agent may call.
+// shipped skill bodies, the MCP registry that names what an agent may call, and the
+// hint sources that name the tools and commands hints steer agents toward.
 var agentSurfaceSources = []string{
 	"internal/agent/skills/",
 	"internal/handler/mcp/registry.go",
-	"internal/handler/mcp/toolref.go",
+	"internal/hint/mcptool.go",
+	"internal/hint/clicommand.go",
 }
 
 // adviseAgentSurfaceWrite routes an edit to the agent surface through the method that
@@ -637,9 +690,9 @@ func adviseDescriptorWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: regenerate in the SAME commit as this edit. Run `magus run generate .` once the source change is settled, and commit the source and the regenerated files together.\n" +
+	return "magus workspace: regenerate in the SAME commit as this edit. Run `" + hint.Run.With("generate", ".") + "` once the source change is settled, and commit the source and the regenerated files together.\n" +
 		rel + " is a GENERATOR INPUT, so an edit here moves files nobody types into. Measured: a one-word rename in a std/ descriptor left four generated files stale and three tests red across three commits. CI runs generate as a drift gate, so splitting them is also a red build you did not have to have.\n" +
-		"`magus describe file <path>` says whether a path is generated and by what. Load the magus-vcs-hygiene skill for the commit checklist."
+		"`" + hint.DescribeFile.With("<path>") + "` says whether a path is generated and by what. Load the magus-vcs-hygiene skill for the commit checklist."
 }
 
 // workspaceRelativeFile returns path relative to the working directory, slash-separated,

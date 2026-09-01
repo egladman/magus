@@ -30,9 +30,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `47` |
-| `knowledge-schema-version` | `9` |
-| `skill-content` | `86a22f9ac0c8` |
+| `agent-skill-version` | `49` |
+| `knowledge-schema-version` | `10` |
+| `skill-content` | `366dd99137c4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -102,7 +102,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 - `magus_memory` {op: "put", name, type, refs, body?, status?} upserts a record
   by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
-  `query: kind:op depends cache` or `node: file:internal/hash/hasher.go`).
+  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`. A bare "we chose X" helps
   nobody; the `body` carries the why, and the refs anchor it to the code.
@@ -187,7 +187,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 - `magus_memory` {op: "put", name, type, refs, body?, status?} upserts a record
   by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
-  `query: kind:op depends cache` or `node: file:internal/hash/hasher.go`).
+  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`. Put the why
   in `body` and anchor it with refs.

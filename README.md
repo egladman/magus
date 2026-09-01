@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-<!-- Coverage is generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
+<!-- Coverage badges are regenerated in CI by `magus run coverage-badge` under the gha charm (Go toolchain only, no third-party service); the target is a no-op locally so a laptop never overwrites CI's number. -->
 
 <a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="textsearch coverage" src="./assets/textsearch-coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
@@ -158,7 +158,7 @@ Stated plainly, because a list of strengths on its own is advertising:
 
 ## How it works
 
-Four ideas carry most of the tool. Each has a deeper page; this is the short version.
+Five ideas carry most of the tool. Each has a deeper page; this is the short version.
 
 ### Affected sets
 
@@ -187,7 +187,7 @@ The graph is that same knowledge handed back: a byproduct of being the source
 of truth, never an inference about it. No LLM pass, no fuzzy linking; every
 edge traces to a declaration you can open.
 
-`magus query "kind:target lint"` finds
+`magus query "kind=target lint"` finds
 nodes, `magus explain <node>` shows a node's edges and what reaches it, and
 `magus refs <symbol>` lists where a symbol is defined and used from a SCIP
 index.[^scip] The same graph answers "is this file generated," "what does my diff
@@ -292,7 +292,7 @@ Point magus at that repo and each command returns an answer and stops:
 magus ls                                  # which projects exist
 magus run test                            # run a target, cache the result
 magus affected ci                         # the pipeline, over only what your diff reaches
-magus query "kind:spell"                  # what the graph knows
+magus query "kind=spell"                  # what the graph knows
 magus describe file docs/gen/index.html   # is this file generated, and by what
 ```
 
@@ -335,7 +335,7 @@ File watchers, the SCIP auto-indexer and a coalesced graph-build job all exist t
 
 ### Sharing to a phone
 
-The LAN listener is the only part of magus a second machine can reach. It is minted by a loopback-only endpoint, time-boxed to fifteen minutes, carries a read-only token, and serves no MCP, share or mutating route at all.
+The LAN listener is the only part of magus a second machine can reach. It is minted by a loopback-only endpoint, time-boxed (fifteen minutes by default), carries a read-only token, and serves no MCP, share or mutating route at all.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-share-light.svg">
@@ -384,7 +384,7 @@ command: file watchers invalidate the warm graph and push an SSE event to the
 console, a throttled SCIP indexer keeps symbols current, and a branch switch
 fires the git hook, which submits one coalesced graph-build job over the socket.
 
-Teal is the browser console, four static apps on the daemon, covered in
+Teal is the browser console, five static apps on the daemon, covered in
 [The browser console](#the-browser-console) below.
 
 The graph itself is assembled from declared sources as shards (the magusfile
@@ -439,23 +439,23 @@ matching app.
   </tr>
 </table>
 
-- [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, cache activity, and the live lease plan.[^app-dashboard]
-- [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph export --open`).[^app-graph]
-- [Log Viewer](https://eli.gladman.cc/magus/console/) reads or streams any past run's captured output (`magus query output <ref> --open`).[^app-logs]
-- [Activity Trail](https://eli.gladman.cc/magus/console/) shows recent MCP calls, agent-command observations, background jobs, and config changes.[^app-activity]
-- [Diff](https://eli.gladman.cc/magus/console/) annotates the working tree's uncommitted changes - generated vs source, blast radius, coverage - and hosts the human half of a paired review.
+- [Dashboard](https://eli.gladman.cc/magus/console/dashboard/) shows live daemon health, the concurrency pool, running targets, cache activity, and the live lease plan.[^app-dashboard]
+- [Graph Explorer](https://eli.gladman.cc/magus/console/graph/) navigates targets, spells, and their dependency graph (`magus graph export --open`).[^app-graph]
+- [Log Viewer](https://eli.gladman.cc/magus/console/logs/) reads or streams any past run's captured output (`magus query output <ref> --open`).[^app-logs]
+- [Activity Trail](https://eli.gladman.cc/magus/console/activity/) shows recent MCP calls, agent-command observations, background jobs, and config changes.[^app-activity]
+- [Diff](https://eli.gladman.cc/magus/console/diff/) annotates the working tree's uncommitted changes - generated vs source, blast radius, coverage - and hosts the human half of a paired review.
 
 ### How it stays on your machine
 
 These are add-ons, not a runtime you depend on. Two decisions keep them that way.
 
-#### The binary serves no HTML
+#### The binary embeds no UI
 
-magus never embeds a web server that ships a UI. The pages are a separate static site (built under [`docs/gen/`](https://github.com/egladman/magus/tree/main/docs/gen), hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/), or self-hosted from any file server). All the daemon exposes over loopback is a small API - read-only views (`/api/v1/...`), one bearer-gated [job-control service](docs/reference/console.md#job-control) for maintenance jobs, and the MCP endpoint. There is no page serving.
+magus never embeds a web server that ships a UI, and a released binary carries no pages: the console is a separate static site (rendered from `docs/` at deploy time, hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/), or self-hosted from any file server). What the daemon exposes over loopback is a small API - read-only views (`/api/v1/...`), one bearer-gated [job-control service](docs/reference/console.md#job-control) for maintenance jobs, and the MCP endpoint. It will also serve a console build you point it at on disk (`console/gen`, or `MAGUS_CONSOLE_DIR`) so you can host your own copy, but it ships none and 404s `/console/` until one is built.
 
 #### Your data never leaves the loopback
 
-The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces before any request, or it receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: set `console.enabled: false` and the daemon runs fine without it, serving no browser API at all. See the [Console reference](https://eli.gladman.cc/magus/console/).
+The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces before any request, or it receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: set `console.enabled: false` and the daemon runs fine without it, serving no browser API at all. See the [Console reference](https://eli.gladman.cc/magus/reference/console/).
 
 ## Working with AI agents
 

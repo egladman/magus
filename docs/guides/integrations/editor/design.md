@@ -250,7 +250,7 @@ Two sites decided it independently before it was stated:
 - `internal/doctor/checks_mcp.go` degrades the console check when no daemon is
   running, reasoning that "a check that is red by default is a check people learn
   to ignore, taking the real failures with it".
-- `cmd/magus/graph.go` refuses `--follow` with `clihint.ServerStart` rather than
+- `cmd/magus/graph.go` refuses `--follow` with `hint.ServerStart` rather than
   starting one, under a comment reading "magus never auto-starts a daemon".
 
 The second is the site this decision REVERSES: `--follow` is a plain request for

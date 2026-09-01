@@ -12,6 +12,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/types"
 )
@@ -594,57 +595,13 @@ func rejectUnknownKeys(m vm.Value, known []string, context string) error {
 		slices.Sort(sortedKnown)
 		msg := fmt.Sprintf("%s: unknown option %q (known options: %s)",
 			context, k, strings.Join(sortedKnown, ", "))
-		if hint := suggestNearest(k, known); hint != "" {
+		if sug := hint.Nearest(k, known); sug != "" {
 			return fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
-				context, k, hint, strings.Join(sortedKnown, ", "))
+				context, k, sug, strings.Join(sortedKnown, ", "))
 		}
 		return errors.New(msg)
 	}
 	return nil
-}
-
-// suggestNearest returns the closest candidate to typed by Levenshtein
-// distance, or "" if nothing is close enough. A small local copy (rather than
-// importing internal/interactive) keeps this package a leaf, per the package
-// doc: it must stay free of anything that would break the js/wasm build.
-func suggestNearest(typed string, candidates []string) string {
-	best, bestDist := "", 3
-	for _, c := range candidates {
-		if d := levenshtein(typed, c); d < bestDist {
-			best, bestDist = c, d
-		}
-	}
-	return best
-}
-
-func levenshtein(a, b string) int {
-	if a == b {
-		return 0
-	}
-	if len(a) == 0 {
-		return len(b)
-	}
-	if len(b) == 0 {
-		return len(a)
-	}
-	row := make([]int, len(b)+1)
-	for j := range row {
-		row[j] = j
-	}
-	for i, ca := range a {
-		prev := i + 1
-		for j, cb := range b {
-			cost := 1
-			if ca == cb {
-				cost = 0
-			}
-			cur := min(row[j]+cost, min(prev+1, row[j+1]+1))
-			row[j] = prev
-			prev = cur
-		}
-		row[len(b)] = prev
-	}
-	return row[len(b)]
 }
 
 // traceProject flattens the path and emitted options of a magus.project

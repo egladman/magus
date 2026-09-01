@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 )
 
@@ -25,7 +26,7 @@ type affectedPlanTool struct {
 	opts Options
 }
 
-func (t *affectedPlanTool) Name() string { return "magus_affected_plan" }
+func (t *affectedPlanTool) Name() string { return hint.ToolAffectedPlan.String() }
 
 func (t *affectedPlanTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	target := strings.TrimSpace(paramString(req.Params, "target", "ci"))

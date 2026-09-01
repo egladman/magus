@@ -23,7 +23,13 @@ const (
 )
 
 // Rule is one entry in the policy's filesystem allowlist.
-// Exec grants kernel-level execve; Read alone is sufficient for dlopen/mmap without permitting execve.
+//
+// Exec is the KERNEL layer's input: landlock grants execve where it is set, and Read
+// alone is enough for dlopen/mmap without permitting execve. checkAccess below does
+// not consult it - CheckExec passes on Read, and TestCheckExecRequiresReadNotExec
+// pins that. So on a host with no landlock (darwin, or a kernel below 5.13) a
+// read-only rule does not stop an exec, and Exec: false on a rule is a request the
+// kernel layer carries out or nobody does.
 type Rule struct {
 	Path  string
 	Read  bool

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/share"
 )
@@ -56,6 +57,7 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		// The body is optional: an absent or malformed body means "use the default
 		// lifetime", so a decode error is not fatal - it leaves req zero and Start
 		// falls back to the default. The manager clamps whatever ttl arrives.
+		handler.LimitRequestBody(w, r)
 		var req shareRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		sess, err := mgr.Start(consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)

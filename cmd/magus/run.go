@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
@@ -81,14 +81,22 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// The two env-var defaults below are applied after binding, because they are a
 	// property of THIS process rather than of the documented flag.
 	var rf *gen.RunFlags
+	var shardEnvErr error
 	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
 		rf = bindRunFlags(fs, &skips)
 		// The shard pair defaults from the environment CI sets, so a matrix job
 		// need not repeat itself on every magus call. Applied by seeding the bound
 		// value (an explicit flag still wins, since parsing runs after this) and
 		// mirroring it into DefValue so -h reports what the flag will actually do.
-		envDefault(fs, gen.FlagRunShard, os.Getenv("MAGUS_SHARD"))
-		envDefault(fs, gen.FlagRunNShards, os.Getenv("MAGUS_N_SHARDS"))
+		for _, seed := range []struct{ flag, env string }{
+			{gen.FlagRunShard, "MAGUS_SHARD"},
+			{gen.FlagRunNShards, "MAGUS_N_SHARDS"},
+		} {
+			if err := envDefault(fs, seed.flag, os.Getenv(seed.env)); err != nil {
+				shardEnvErr = fmt.Errorf("%s: %w", seed.env, err)
+				break
+			}
+		}
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -106,6 +114,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
+	// Refused, never ignored: the shard pair decides how much of the selection runs, so
+	// a value magus could not read means this job would gate less than the caller asked
+	// for while still exiting 0.
+	if shardEnvErr != nil {
+		return usagef("magus run: %v", shardEnvErr)
+	}
 	if rf.Wait && !rf.Detach {
 		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
 	}
@@ -115,6 +129,16 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// the un-gated skip this flag exists to prevent.
 		return usagef("magus run: --skip applies to the run selection, not --graph")
 	}
+	// Applied before the --detach branch below, not after it: awaitInvocation polls the
+	// daemon until the run reports a status and has no bound of its own, so `run --detach
+	// --wait --timeout 30s` waited forever on a run that never finished. Its select
+	// already watches ctx.Done, which is all the bound it needs.
+	if rf.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
+		defer cancel()
+	}
+
 	if rf.Detach {
 		return detachToDaemon(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), rf.Wait)
 	}
@@ -130,18 +154,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// worth reading afterwards.
 		interactive.Emit(os.Stderr, fmt.Sprintf(
 			"running quietly; output refs print as targets finish, and `%s` reads any of them",
-			clihint.QueryOutput.With("<ref>")))
+			hint.QueryOutput.With("<ref>")))
 	}
 
 	if rf.Step && !isInteractiveTTY() {
 		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
 		return errSilent{exitCode: 2}
-	}
-
-	if rf.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
-		defer cancel()
 	}
 
 	if rf.Step {
@@ -668,10 +686,10 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "  ls       print selected projects (no execution)")
 	fmt.Fprintln(os.Stderr, "  ci       the magusfile's ci target, run read-only (affected/pipeline anchor)")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "To see what a project can run: `magus ls targets [project]`")
+	fmt.Fprintln(os.Stderr, "To see what a project can run: `"+hint.LsTargets.With("[project]")+"`")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Conventional lifecycle names (you compose these in your magusfile from a")
-	fmt.Fprintln(os.Stderr, "spell's tool-native ops, e.g. global function build(_a) go.build() end):")
+	fmt.Fprintln(os.Stderr, "Conventional lifecycle names (each is an exported magusfile function, e.g.")
+	fmt.Fprintln(os.Stderr, "export fun build(ctx: magus\\Context, args: [str]) > void { ... }):")
 	fmt.Fprintln(os.Stderr, "  build / test / lint / format / clean / generate / ci")
 	fmt.Fprintln(os.Stderr, "  (fmt -> format and gen -> generate are accepted as aliases)")
 	fmt.Fprintln(os.Stderr, "")
@@ -791,18 +809,26 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 // envDefault seeds a bound flag from an environment variable, leaving it alone when
 // the variable is unset. DefValue is updated too, so `-h` shows the value the flag
 // would take rather than the registry's zero.
-func envDefault(fs *flag.FlagSet, name, value string) {
+//
+// A value the flag cannot parse is REPORTED rather than applied. Dropping it left
+// the flag at its default with nothing said, and for the shard pair that default is
+// dangerous: NShards 0 means "do not shard", so a matrix job with a malformed
+// MAGUS_N_SHARDS ran the entire selection in every job and reported success.
+// Returning it keeps the decision with the caller - an unknown flag is still a
+// silent no-op, because that is a wiring mistake and not something a user set.
+func envDefault(fs *flag.FlagSet, name, value string) error {
 	if value == "" {
-		return
+		return nil
 	}
 	f := fs.Lookup(name)
 	if f == nil {
-		return
+		return nil
 	}
 	if err := f.Value.Set(value); err != nil {
-		return
+		return fmt.Errorf("%q is not a valid --%s: %w", value, name, err)
 	}
 	f.DefValue = value
+	return nil
 }
 
 // localOnlyFlags never travel to the daemon. --detach would make it detach
@@ -851,13 +877,13 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil || addr == "" {
 		return types.WrapDiagnostic(types.DaemonRequired, nil,
-			"--detach hands the work to the daemon, and none is running; start one with `%s`", clihint.ServerStart)
+			"--detach hands the work to the daemon, and none is running; start one with `%s`", hint.ServerStart)
 	}
 	st, serr := proc.QueryStatus(ctx, addr)
 	if serr != nil || st == nil || st.Mode != "daemon" {
 		return types.WrapDiagnostic(types.DaemonRequired, nil,
 			"--detach needs the persistent daemon, and %s is not one: a per-process server exits with this command, so the work would be queued and silently dropped. Start it with `%s`",
-			addr, clihint.ServerStart)
+			addr, hint.ServerStart)
 	}
 	inv, err := proc.SubmitJob(ctx, addr, argv, version)
 	if err != nil {
@@ -875,7 +901,7 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 	// whenever the reader actually wants it.
 	if !wait {
 		fmt.Fprintf(os.Stderr, "magus: detached as %s\n  read it with: %s\n",
-			inv, clihint.QueryInvocation.With(inv))
+			inv, hint.QueryInvocation.With(inv))
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "magus: running as %s on the daemon\n", inv)
@@ -908,7 +934,7 @@ func awaitInvocation(ctx context.Context, root, inv string) error {
 			// keeps going, so say how to pick it up again rather than implying
 			// it was cancelled.
 			fmt.Fprintf(os.Stderr, "\nmagus: stopped waiting; %s is still running on the daemon\n  read it with: %s\n",
-				inv, clihint.QueryInvocation.With(inv))
+				inv, hint.QueryInvocation.With(inv))
 			return ctx.Err()
 		case <-time.After(delay):
 		}
@@ -932,10 +958,10 @@ func reportInvocation(header magus.Invocation, inv string) error {
 	took := time.Duration(header.FinishedMs-header.StartedMs) * time.Millisecond
 	if header.Status != "pass" {
 		fmt.Fprintf(os.Stderr, "magus: %s failed (%s)\n  read it with: %s\n",
-			inv, formatDur(took), clihint.QueryInvocation.With(inv))
+			inv, formatDur(took), hint.QueryInvocation.With(inv))
 		return errSilent{exitCode: 1}
 	}
 	fmt.Fprintf(os.Stderr, "magus: %s passed (%s)\n  read it with: %s\n",
-		inv, formatDur(took), clihint.QueryInvocation.With(inv))
+		inv, formatDur(took), hint.QueryInvocation.With(inv))
 	return nil
 }

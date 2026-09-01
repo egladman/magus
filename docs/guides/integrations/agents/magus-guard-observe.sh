@@ -33,7 +33,7 @@
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 8
+# magus-guard-template: 9
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #

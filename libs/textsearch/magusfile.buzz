@@ -50,7 +50,7 @@ import "project/../.." as workspace;
 magus\project({
     // The shared node window, by explicit import (tools/toolchain-policy.buzz).
     // This project drives node; it declares no go window because it drives no Go.
-    "tools": {"node": policy.node},
+    "tools": {"node": policy\node},
     "spells": [typescript],
     // Affected/drift tracks this sources glob, not the import graph, so every input must
     // be named to be watched: the shared TypeScript, the build manifests (package.json +
@@ -129,9 +129,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 // name a .testcache bundle instead of the src/*.ts someone wrote.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    ctx.writesFiles(workspace.file("assets/textsearch-coverage.svg"));
+    ctx.writesFiles(workspace\file("assets/textsearch-coverage.svg"));
     final badge_path = fs\join("..", "..", "assets", "textsearch-coverage.svg");
-    final before = drift.hashes([badge_path]);
+    final before = drift\hashes([badge_path]);
     install();
 
     final tests = fs\glob("src/**/*.test.ts");
@@ -155,7 +155,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     final pct = lcov\percent(fs\readFile("coverage.lcov"), keep: "src/");
     fs\writeFile(badge_path, badge\coverage("textsearch coverage", percent: pct, radius: 3));
     if (ctx.hasCharm("rw")) { return; }
-    if (drift.changedSince(before, [badge_path]).len() > 0) {
+    if (drift\changedSince(before, [badge_path]).len() > 0) {
         throw "test: assets/textsearch-coverage.svg is stale; re-run `magus run test:rw libs/textsearch` and commit the badge";
     }
 }

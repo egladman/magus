@@ -39,7 +39,7 @@ var _ graphv1alpha1connect.GraphServiceHandler = (*Service)(nil)
 // @symbols shards; everything else answers from the warm, symbol-free graph, which is what
 // keeps the default export lazy.
 func (s *Service) graphFor(ctx context.Context, input string) (*knowledge.Graph, bool, error) {
-	if knowledge.SeedsSymbols(input) {
+	if knowledge.SeedsLazyLayer(input) {
 		g, err := s.ws.KnowledgeGraphWithSymbols(ctx)
 		return g, true, err
 	}
@@ -47,25 +47,18 @@ func (s *Service) graphFor(ctx context.Context, input string) (*knowledge.Graph,
 	return g, false, err
 }
 
-// answer classifies a result against what was actually searched.
+// answer reports what was actually searched and lets knowledge.Answer judge it, so this
+// surface cannot reach a different verdict than the CLI or the MCP tools about one graph.
 //
 // The probe is skipped when the symbol layer could not have held the answer: `kind:author`
 // returning nothing has no bearing on a missing symbol index, and caveating it would point
-// the reader at a layer that was never in scope. A failed probe maps to its own reason
-// rather than to an empty gap list, which would read as verified coverage.
+// the reader at a layer that was never in scope.
 func (s *Service) answer(ctx context.Context, input string, matched, seededSymbols bool) types.KnowledgeAnswer {
-	if !knowledge.CouldMatchSymbol(input) {
-		return types.Answer(matched, "", nil)
+	cov := knowledge.Coverage{Seeded: seededSymbols}
+	if knowledge.CouldMatchLazyLayer(input) {
+		cov.Gaps, cov.Probed = s.ws.SymbolGaps(ctx)
 	}
-	gaps, probed := s.ws.SymbolGaps(ctx)
-	if !probed {
-		return types.Answer(matched, types.ReasonCoverageUnknown, nil)
-	}
-	var reason types.KnowledgeUnknownReason
-	if !seededSymbols {
-		reason = types.ReasonSymbolsNotLoaded
-	}
-	return types.Answer(matched, reason, gaps)
+	return knowledge.Answer(input, matched, cov)
 }
 
 func (s *Service) QueryNodes(
@@ -73,7 +66,7 @@ func (s *Service) QueryNodes(
 ) (*connect.Response[graphv1.QueryNodesResponse], error) {
 	query := req.Msg.GetQuery()
 	if query == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(`graph: query is required (e.g. "kind:target project:api")`))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(`graph: query is required (e.g. "kind=target project=api")`))
 	}
 	g, seeded, err := s.graphFor(ctx, query)
 	if err != nil {

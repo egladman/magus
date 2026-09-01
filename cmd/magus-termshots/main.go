@@ -25,7 +25,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -65,22 +64,12 @@ func render() (map[string]string, error) {
 		{"terminal-failure-prompt.svg", failurePrompt},
 		{"terminal-picker.svg", picker},
 	} {
-		// Every surface ships in both palettes: an SVG referenced by <img> is its
-		// own document and cannot read the page's theme, so the page picks the file
-		// rather than the picture adapting itself. The unsuffixed name stays the
-		// dark one, which is what every existing reference already points at.
-		for _, v := range []struct {
-			suffix string
-			theme  screen.Theme
-		}{
-			{"", screen.DarkTheme},
-			{"-light", screen.LightTheme},
-		} {
-			svg, err := s.fn(v.theme)
+		for _, v := range screen.ThemeVariants {
+			svg, err := s.fn(v.Theme)
 			if err != nil {
-				return nil, fmt.Errorf("%s%s: %w", s.name, v.suffix, err)
+				return nil, fmt.Errorf("%s%s: %w", s.name, v.Suffix, err)
 			}
-			out[strings.TrimSuffix(s.name, ".svg")+v.suffix+".svg"] = svg
+			out[screen.VariantPath(s.name, v.Suffix)] = svg
 		}
 	}
 	return out, nil

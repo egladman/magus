@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // hookGate stands up a gate over a temporary cache base, so a test never marks the
@@ -106,6 +109,45 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	assert.Equal(t, "pass\n", run("session-1"),
 		"the repeat is a pass, not an advise carrying empty context: a host renders what it is handed")
 	assert.Contains(t, run("session-2"), "knowledge graph", "a fresh session is owed the fact once")
+}
+
+// TestHookCmdScopesSearchAdviceFromManifest pins the wiring from the knowledge
+// manifest to the advisory text: a search pointed at a project directory gets a
+// project=-scoped query suggestion, and a workspace with no manifest gets the
+// unscoped advice it always got.
+func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
+	run := func(t *testing.T, base, command string) string {
+		t.Helper()
+		ctx := context.WithValue(t.Context(), hookActivityLocationKey{},
+			hookActivityLocation{base: base, workspace: t.TempDir()})
+		var out strings.Builder
+		global = globalFlags{}
+		require.NoError(t, hookCmd(ctx, strings.NewReader(command), &out, []string{"--session", "session-1"}))
+		return out.String()
+	}
+
+	t.Run("manifest projects scope the suggestion", func(t *testing.T) {
+		base := t.TempDir()
+		man := fmt.Sprintf(`{"schema_version":%d,"shards":{"docs":{},".":{},"@runtime":{},"docs@symbols":{}}}`,
+			types.KnowledgeSchemaVersion)
+		require.NoError(t, os.MkdirAll(filepath.Join(base, "knowledge"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(base, "knowledge", "manifest.json"), []byte(man), 0o644))
+
+		got := run(t, base, "grep -rn Foo docs/")
+		require.True(t, strings.HasPrefix(got, "advise: "))
+		assert.Contains(t, got, `magus query Foo 'project=~^docs(/|$)'`)
+	})
+
+	t.Run("no manifest stays unscoped", func(t *testing.T) {
+		got := run(t, t.TempDir(), "grep -rn Foo docs/")
+		require.True(t, strings.HasPrefix(got, "advise: "))
+		// The closing backtick is what carries the assertion: it proves no matcher
+		// follows the pattern. The generic reason below the lead documents the
+		// `project=<p>` grammar in prose, so a bare `project=` is present either way
+		// and asserting its absence could never fail.
+		assert.Contains(t, got, "`magus query Foo` - ")
+		assert.NotContains(t, got, "project=~", "only the scoped path emits a regex project matcher")
+	})
 }
 
 // TestHookCmdRepeatsEveryDenial is the exemption, and it is the more important half. A

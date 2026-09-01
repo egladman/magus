@@ -222,29 +222,61 @@ func TestShippedManifestsPinEveryArtifact(t *testing.T) {
 	}
 }
 
-// TestCompareSemver verifies numeric semver sort direction.
-func TestCompareSemver(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"v0.2.0", "v0.1.0", 1},
-		{"v0.1.0", "v0.2.0", -1},
-		{"v1.0.0", "v0.9.9", 1},
-		{"v0.1.0", "v0.1.0", 0},
-		{"v0.10.0", "v0.2.0", 1}, // numeric: 10 > 2, not lexicographic
-		{"v0.2.0", "v0.10.0", -1},
+// TestLoadManifestsOrdersPrereleasesBelowTheirRelease covers the defect directly:
+// the hand-rolled parser stopped at the first non-digit, so v0.4.0-rc.1 compared
+// equal to v0.4.0 and their order fell out of an unstable sort - into bytes that
+// get signed.
+func TestLoadManifestsOrdersPrereleasesBelowTheirRelease(t *testing.T) {
+	dir := t.TempDir()
+	for _, v := range []string{"v0.4.0-rc.2", "v0.4.0", "v0.4.0-rc.1", "v0.4.1"} {
+		writeManifestFile(t, dir, ReleaseManifest{Version: v, Date: "2026-07-01", Body: "### Added\n\n- x"})
 	}
-	for _, c := range cases {
-		got := compareSemver(c.a, c.b)
-		sign := 0
-		if got > 0 {
-			sign = 1
-		} else if got < 0 {
-			sign = -1
-		}
-		require.Equal(t, c.want, sign, "compareSemver(%q, %q)", c.a, c.b)
+
+	got, err := loadManifests(dir)
+	require.NoError(t, err)
+	versions := make([]string, len(got))
+	for i, m := range got {
+		versions[i] = m.Version
 	}
+	require.Equal(t, []string{"v0.4.1", "v0.4.0", "v0.4.0-rc.2", "v0.4.0-rc.1"}, versions)
+}
+
+// TestLoadManifestsRejectsAnUnparsableVersion: a version the sort cannot order
+// would take an arbitrary position in a signed index.
+func TestLoadManifestsRejectsAnUnparsableVersion(t *testing.T) {
+	dir := t.TempDir()
+	writeManifestFile(t, dir, ReleaseManifest{Version: "0.4", Date: "2026-07-01", Body: "x"})
+
+	_, err := loadManifests(dir)
+	require.ErrorContains(t, err, "not semver")
+}
+
+// TestLoadManifestsRefusesAnEmptySet: a missing or empty releases dir used to
+// return nil, nil, which made generate-changelog erase every released section.
+func TestLoadManifestsRefusesAnEmptySet(t *testing.T) {
+	_, err := loadManifests(filepath.Join(t.TempDir(), "absent"))
+	require.Error(t, err, "a missing releases dir is a path mistake, not an empty release history")
+
+	_, err = loadManifests(t.TempDir())
+	require.ErrorContains(t, err, "no release manifests")
+}
+
+// TestGenerateChangelogRefusesToEraseEveryRelease: release.yaml runs this on every
+// tag, and a wrong -releases path used to rewrite CHANGELOG.md down to its header.
+func TestGenerateChangelogRefusesToEraseEveryRelease(t *testing.T) {
+	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
+	before := "# Changelog\n\n## [Unreleased]\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"
+	require.NoError(t, os.WriteFile(changelogPath, []byte(before), 0o644))
+
+	err := runGenerateChangelog([]string{
+		"-releases", filepath.Join(t.TempDir(), "absent"),
+		"-changelog", changelogPath,
+	})
+	require.Error(t, err)
+
+	after, err := os.ReadFile(changelogPath)
+	require.NoError(t, err)
+	require.Equal(t, before, string(after), "the changelog must be untouched when the manifests cannot be read")
 }
 
 // TestLoadManifestsSortedNewestFirst verifies that loadManifests returns entries
@@ -533,6 +565,33 @@ func TestRunCut_ImmutabilityGuard(t *testing.T) {
 	})
 	require.Error(t, err, "must refuse to overwrite an existing manifest")
 	require.Contains(t, err.Error(), "already exists", "error must mention existing file")
+}
+
+// TestRunCut_FailedChangelogClearIsRetryable: the manifest used to be written
+// before the changelog was cleared, so a failure in the second step left an
+// immutable manifest on disk and [Unreleased] still populated - every retry then
+// died on "already exists" and the release could only proceed by hand.
+func TestRunCut_FailedChangelogClearIsRetryable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the read-only bit this test uses to fail the changelog write")
+	}
+	artifactsDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
+
+	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
+	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- x\n"), 0o444))
+
+	outDir := t.TempDir()
+	args := []string{"-version", "v0.2.0", "-artifacts", artifactsDir, "-changelog", changelogPath, "-out", outDir}
+	require.Error(t, runCut(args))
+
+	entries, err := os.ReadDir(outDir)
+	require.NoError(t, err)
+	require.Empty(t, entries, "a cut that could not clear the changelog must leave no manifest behind")
+
+	require.NoError(t, os.Chmod(changelogPath, 0o644))
+	require.NoError(t, runCut(args), "the retry must not be wedged on an immutable manifest")
+	require.FileExists(t, filepath.Join(outDir, "v0.2.0.yaml"))
 }
 
 // TestRunCut_NoArtifactsGuard verifies that runCut refuses to write a hollow

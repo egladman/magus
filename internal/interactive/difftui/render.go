@@ -3,6 +3,7 @@ package difftui
 import (
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 )
 
@@ -36,7 +37,7 @@ const (
 // file is the most dangerous one. Same wording `magus diff` prints, same reason.
 var unrankedBanner = []string{
 	"UNRANKED: no symbol index, so there is no consequence to rank by.",
-	"This is path order, not a ranking. `magus graph build` gives it one.",
+	"This is path order, not a ranking. `" + hint.GraphBuild.String() + "` gives it one.",
 }
 
 // Chrome is how many rows a frame spends on things that are not changeset rows, so a caller

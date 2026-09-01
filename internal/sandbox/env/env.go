@@ -2,7 +2,11 @@
 // of variable names a child process may inherit and the scrubbing logic.
 package env
 
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
 
 // commonEnvAllow is the cross-platform baseline. Secret-bearing names (AWS_*, GITHUB_TOKEN, VAULT_*, …)
 // are intentionally absent; users opt in via sandbox.env.passthrough.
@@ -103,23 +107,21 @@ func matchGlobs(name string, globs []string) bool {
 	return false
 }
 
-// ValidateGlobs returns the first invalid pattern (must end in exactly one "*" with
-// non-empty prefix), or "" once all patterns pass. An empty-string pattern is itself
-// invalid but cannot be returned verbatim - "" is already the success sentinel, so a
-// caller checking `!= ""` would silently treat it as valid. It is reported as
-// emptyPatternInvalid instead.
-func ValidateGlobs(globs []string) string {
+// ValidateGlobs reports the first pattern that is not a suffix wildcard (exactly
+// one "*", at the end, with a non-empty prefix), naming it in the error. It
+// returns nil once every pattern passes.
+//
+// An error rather than the offending pattern: the string form made "" mean
+// all-valid, so the one pattern that is itself empty could not be reported as
+// itself and needed a stand-in spelling to avoid reading as success.
+func ValidateGlobs(globs []string) error {
 	for _, g := range globs {
 		if len(g) < 2 || strings.Count(g, "*") != 1 || !strings.HasSuffix(g, "*") {
-			if g == "" {
-				return emptyPatternInvalid
-			}
-			return g
+			return fmt.Errorf("%w: %q", ErrInvalidGlob, g)
 		}
 	}
-	return ""
+	return nil
 }
 
-// emptyPatternInvalid is ValidateGlobs' report for an empty-string pattern: it must be
-// non-empty so it can never collide with the "" success sentinel.
-const emptyPatternInvalid = `"" (empty pattern)`
+// ErrInvalidGlob is the sentinel every ValidateGlobs failure wraps.
+var ErrInvalidGlob = errors.New("env: glob must end in a single \"*\" after a non-empty prefix")

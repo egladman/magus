@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/egladman/magus/types"
 )
@@ -41,6 +42,12 @@ func diagnosticID(code string) string { return types.KindDiagnostic + ":" + code
 func charmID(name string) string { return types.KindCharm + ":" + name }
 
 func docID(relPath string) string { return types.KindDoc + ":" + relPath }
+
+// docSectionID names a heading inside a doc as "<rel>#<anchor>", the same shape a link into
+// that section takes, so a retrieval result IS a citable pointer to the rendered page.
+func docSectionID(relPath, anchor string) string {
+	return types.KindDocSection + ":" + relPath + "#" + anchor
+}
 
 func fileID(relPath string) string { return types.KindFile + ":" + relPath }
 
@@ -91,15 +98,15 @@ func noteID(scope, name string) string {
 // assembly had minted the edge correctly all along.
 func AnchorNodeID(kind, target, scope string) string {
 	switch kind {
-	case "symbol":
+	case types.KindSymbol:
 		return symbolID(target)
-	case "file":
+	case types.KindFile:
 		return fileID(target)
-	case "project":
+	case types.KindProject:
 		return projectID(target)
-	case "target":
+	case types.KindTarget:
 		return target // already a fully-formed target id
-	case "note":
+	case types.KindNote:
 		return noteID(scope, target)
 	default:
 		return ""
@@ -124,7 +131,13 @@ func sanitize(s string, limit int) string {
 	}, s)
 	s = strings.TrimSpace(s)
 	if limit > 0 && len(s) > limit {
-		s = strings.TrimSpace(s[:limit])
+		// Back up to a rune boundary so a multibyte rune (a CJK or accented char in a label
+		// drawn from repo text) is not split into invalid UTF-8 that ships as mojibake.
+		cut := limit
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = strings.TrimSpace(s[:cut])
 	}
 	return s
 }
@@ -179,13 +192,18 @@ const (
 	// attrRole classifies a doc node by what the markdown file IS, from a universal
 	// filename convention (readme, agent, changelog, contributing, license), or "doc"
 	// for anything else. It is workspace-agnostic - no magus-specific filenames - so
-	// `query "kind:doc role:agent"` finds the agent-instruction files in any repo.
+	// `query "kind=doc role=agent"` finds the agent-instruction files in any repo.
 	attrRole = "role"
 	// attrSection is a doc page's top-level section under docs/ (guides, concepts,
 	// reference, ...), derived from its path so a page is queryable by where it lives
-	// (`query "kind:doc section:guides"`) without hand-tagging every page. Absent for docs
+	// (`query "kind=doc section=guides"`) without hand-tagging every page. Absent for docs
 	// outside a docs/ tree and for top-level docs (docs/glossary.md) that name no section.
 	attrSection = "section"
+	// attrAnchor is a doc-section node's goldmark auto-heading-id: the fragment a link into
+	// the section carries (concepts/review.md#manual-on-purpose). attrLevel is the heading
+	// depth (1 for #, 2 for ##, ...), so a reader can reconstruct the outline.
+	attrAnchor = "anchor"
+	attrLevel  = "level"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are

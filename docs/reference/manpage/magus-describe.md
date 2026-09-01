@@ -79,6 +79,9 @@ step at a time.
 **projects**
 : List the workspace's projects
 
+**project**
+: Detail one named project; takes the same flags as projects
+
 **spells**
 : List the spells the workspace resolves
 

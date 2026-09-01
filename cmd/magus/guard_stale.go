@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/internal/hint"
 )
 
 // guardSourceGlobs are the files whose changes alter what the guard DECIDES: the
@@ -62,7 +64,7 @@ func staleGuardNotice() string {
 	return "magus workspace: the binary answering this hook was built before the guard rules now in the tree, so this verdict came from the PREVIOUS build.\n" +
 		"newest rule source: " + filepath.ToSlash(newestPath) + " (" + newest.Format(time.RFC3339) + ")\n" +
 		"binary:             " + info.ModTime().Format(time.RFC3339) + "\n" +
-		"Rebuild before trusting a verdict you are testing: `magus run go-build .`"
+		"Rebuild before trusting a verdict you are testing: `" + hint.Run.With("go-build", ".") + "`"
 }
 
 // newestGuardSource returns the most recently modified guard source under root.

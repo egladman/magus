@@ -101,8 +101,28 @@ func peelWrappers(words []string) []guardCommand {
 	for len(words) > 0 {
 		name := path.Base(words[0])
 		switch {
+		case name == "find":
+			// find is not a wrapper - it still runs find - but -exec/-execdir
+			// launches a command find never reparses through a shell, so the
+			// payload has to be judged on its own. Keep find itself too.
+			return append([]guardCommand{{Name: name, Args: words[1:]}}, findExecCommands(words[1:])...)
+
 		case !guardWrappers[name]:
 			return []guardCommand{{Name: name, Args: words[1:]}}
+
+		case name == "env":
+			// env -S / --split-string takes its argument AS the command line and,
+			// unlike sh -c, never reparses it - so it is peeled like -c: the
+			// remainder is parsed and the full ruleset runs over what it contains.
+			if script, ok := envSplitString(words[1:]); ok {
+				inner, _ := parseGuardCommands(script)
+				return inner
+			}
+			rest := skipWrapperArgs(name, words[1:])
+			if len(rest) == 0 {
+				return []guardCommand{{Name: name, Args: words[1:]}}
+			}
+			words = rest
 
 		case name == "mise" || name == "rtx":
 			// A launcher may carry tool selectors before `--`; its short form is
@@ -133,7 +153,7 @@ func peelWrappers(words []string) []guardCommand {
 			return inner
 
 		default:
-			// env, timeout, nice, stdbuf, xargs, nohup, command, exec, time:
+			// timeout, nice, stdbuf, xargs, nohup, command, exec, time:
 			// step over the wrapper's own flags and operands to reach the
 			// program it runs.
 			rest := skipWrapperArgs(name, words[1:])
@@ -150,9 +170,11 @@ var guardShells = map[string]bool{"sh": true, "bash": true, "zsh": true, "ksh": 
 
 // guardWrapperValueFlags are wrapper flags that consume the NEXT word, so the
 // scan does not mistake that word for the wrapped program. `env -u GOROOT go
-// test` is the case that matters here.
+// test` is the case that matters here. env's -S/--split-string is deliberately
+// absent: its value is a command line, not an operand, so it is peeled as a
+// script (see the env case in peelWrappers) rather than skipped over.
 var guardWrapperValueFlags = map[string]bool{
-	"-u": true, "-C": true, "-S": true, "-n": true, "-I": true,
+	"-u": true, "-C": true, "-n": true, "-I": true,
 	"-L": true, "-P": true, "-d": true, "-s": true, "-k": true,
 	"--signal": true, "--kill-after": true,
 }
@@ -183,14 +205,71 @@ func skipWrapperArgs(wrapper string, words []string) []string {
 	return nil
 }
 
-// shellDashC returns the script argument of a `-c` invocation. The flag may be
-// bundled (`sh -ec ...`) and other options may precede it.
-func shellDashC(args []string) (string, bool) {
-	for i, a := range args {
-		if !strings.HasPrefix(a, "-") {
+// envSplitString returns the command line carried by env's -S/--split-string,
+// in each of its spellings: bundled (`-S'cmd'`), `=`-joined
+// (`--split-string='cmd'`), and separated (`-S 'cmd'`, `--split-string 'cmd'`).
+// Other env flags and VAR=value assignments may precede it; the first non-flag,
+// non-assignment word is the program, at which point there is no -S to find.
+func envSplitString(words []string) (string, bool) {
+	for i := 0; i < len(words); i++ {
+		w := words[i]
+		switch {
+		case w == "-S" || w == "--split-string":
+			if i+1 < len(words) {
+				return words[i+1], true
+			}
+			return "", false
+		case strings.HasPrefix(w, "-S"):
+			return w[len("-S"):], true
+		case strings.HasPrefix(w, "--split-string="):
+			return w[len("--split-string="):], true
+		case strings.HasPrefix(w, "-"):
+			continue
+		case strings.Contains(w, "=") && !strings.HasPrefix(w, "/"):
+			continue
+		default:
 			return "", false
 		}
-		if strings.Contains(a, "c") && i+1 < len(args) {
+	}
+	return "", false
+}
+
+// findExecCommands resolves the command(s) find would launch through
+// -exec/-execdir (and their interactive -ok/-okdir forms). Each clause runs the
+// argv from after the flag up to the terminating `;` or `+`; find execs it
+// directly with no shell, so the argv is peeled as its own command rather than
+// reparsed as a script - which still unwraps an inner `sh -c` payload.
+func findExecCommands(args []string) []guardCommand {
+	var out []guardCommand
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-exec", "-execdir", "-ok", "-okdir":
+			var argv []string
+			j := i + 1
+			for ; j < len(args); j++ {
+				if args[j] == ";" || args[j] == "+" {
+					break
+				}
+				argv = append(argv, args[j])
+			}
+			if len(argv) > 0 {
+				out = append(out, peelWrappers(argv)...)
+			}
+			i = j
+		}
+	}
+	return out
+}
+
+// shellDashC returns the script argument of a `-c` invocation. -c consumes the next word as
+// the script and, taking an argument, is always the last flag of a short bundle (`sh -ec ...`);
+// a long option (`--rcfile`, `--norc`) is never -c even when it contains the letter. The scan
+// does not stop at the first non-flag word: an option-argument such as the path after
+// `--rcfile` would otherwise end it before the real -c and let `bash --rcfile x -c '<payload>'`
+// through unjudged.
+func shellDashC(args []string) (string, bool) {
+	for i, a := range args {
+		if len(a) >= 2 && a[0] == '-' && a[1] != '-' && a[len(a)-1] == 'c' && i+1 < len(args) {
 			return args[i+1], true
 		}
 	}

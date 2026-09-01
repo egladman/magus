@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -68,7 +69,7 @@ func attentionList(root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus session attention: takes no arguments (got %q); close one request with `magus session dispose <id>`", rest[0])
+		return usagef("magus session attention: takes no arguments (got %q); close one request with `"+hint.SessionDispose.With("<id>")+"`", rest[0])
 	}
 
 	dir, err := sessions.Dir(root)
@@ -114,7 +115,7 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 		// An empty queue is the good state, so this says how a request would get here
 		// rather than reporting a fault.
 		fmt.Fprintf(os.Stdout, "no open attention requests in %s\n", dir)
-		fmt.Fprintln(os.Stdout, "requests arrive through `magus session notify`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `magus session dispose <id>`")
+		fmt.Fprintln(os.Stdout, "requests arrive through `"+hint.SessionNotify.String()+"`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `"+hint.SessionDispose.With("<id>")+"`")
 		return nil
 	}
 
@@ -134,7 +135,7 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "\n%d open request(s); close one with `magus session dispose <id> -reason <text>`. Nothing here closes on its own.\n", len(requests))
+	fmt.Fprintf(os.Stdout, "\n%d open request(s); close one with `"+hint.SessionDispose.With("<id>", "-reason", "<text>")+"`. Nothing here closes on its own.\n", len(requests))
 	return nil
 }
 
@@ -172,7 +173,7 @@ func attentionDispose(root string, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return usagef("magus session dispose: needs exactly one request id (got %d); run `magus session attention` to list the open ids", len(rest))
+		return usagef("magus session dispose: needs exactly one request id (got %d); run `"+hint.SessionAttention.String()+"` to list the open ids", len(rest))
 	}
 
 	dir, err := sessions.Dir(root)
@@ -221,11 +222,11 @@ func disposeError(err error, ref, dir string) error {
 	)
 	switch {
 	case errors.Is(err, sessions.ErrNoRequest):
-		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s; run `magus session attention` to list the open ids", ref, dir)
+		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s; run `"+hint.SessionAttention.String()+"` to list the open ids", ref, dir)
 	case errors.As(err, &ambiguous):
 		return fmt.Errorf("magus session dispose: %w; name one of them, or add enough characters to tell them apart", ambiguous)
 	case errors.As(err, &disposed):
-		return fmt.Errorf("magus session dispose: %w; a request closes once and stays closed, so run `magus session attention` to see what is still open", disposed)
+		return fmt.Errorf("magus session dispose: %w; a request closes once and stays closed, so run `"+hint.SessionAttention.String()+"` to see what is still open", disposed)
 	}
 	return err
 }
@@ -320,7 +321,7 @@ func attentionWhere(where *types.EventLocation) string {
 // silently never reached the queue is a block nobody will ever be shown, so it says
 // so rather than swallowing it.
 func noteAttentionOpenFailure(err error) {
-	slog.Warn("magus session notify: the attention request was not recorded, so `magus session attention` will not list it",
+	slog.Warn("magus session notify: the attention request was not recorded, so `"+hint.SessionAttention.String()+"` will not list it",
 		slog.String("error", err.Error()))
 }
 

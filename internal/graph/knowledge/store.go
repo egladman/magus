@@ -370,6 +370,30 @@ func (s *Store) shardExists(name string) bool {
 	return err == nil
 }
 
+// ProjectPaths returns the project paths recorded in the knowledge manifest,
+// sorted, or nil when no readable manifest exists. The manifest is the honest
+// cheap source for "which projects exist": its shard keys come from
+// ws.ListProjects at graph-build time, so one small ReadFile answers the
+// question in a hook where a workspace eval is not allowed.
+func ProjectPaths(cacheDir string) []string {
+	// Through the constructor, not a bare &Store: a hand-built one leaves log nil, so
+	// the first logging line added to readManifestOrNil would panic inside a hook.
+	man := NewStore(cacheDir, false, 0, nil, nil).readManifestOrNil()
+	if man == nil {
+		return nil
+	}
+	var out []string
+	for name := range man.Shards {
+		// "@"-prefixed singletons and per-project symbol shards are not projects.
+		if strings.HasPrefix(name, "@") || isSymbolsShard(name) {
+			continue
+		}
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
+}
+
 func (s *Store) readManifestOrNil() *manifest {
 	b, err := os.ReadFile(s.manifestPath())
 	if err != nil {

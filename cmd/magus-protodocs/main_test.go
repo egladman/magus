@@ -645,7 +645,7 @@ func TestWriteAllRendersEveryPageAndPrunesTheRest(t *testing.T) {
 	dir := t.TempDir()
 	stale := filepath.Join(dir, "token", "v1", "removed.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(stale), 0o755))
-	require.NoError(t, os.WriteFile(stale, []byte("gone"), 0o644))
+	require.NoError(t, os.WriteFile(stale, []byte(generatedPage("Removed")), 0o644))
 
 	n, err := writeAll(fixtureAPI(t), dir)
 	require.NoError(t, err)
@@ -659,9 +659,45 @@ func TestWriteAllRendersEveryPageAndPrunesTheRest(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "the page for a removed service survived")
 }
 
+// generatedPage is a page carrying this generator's ownership marker, which is
+// what makes it eligible for pruning.
+func generatedPage(title string) string {
+	var b strings.Builder
+	docs.WriteFrontmatter(&b, docs.Frontmatter{Title: title, GeneratedFrom: pageGeneratedFrom})
+	return b.String()
+}
+
+// TestWriteAllPrunesOnlyItsOwnPages: the sweep used to remove every .md under -out
+// that the run did not write, so a hand-written page added to the API section - or
+// anything else pointed at by a mistaken -out - was deleted without a trace.
+func TestWriteAllPrunesOnlyItsOwnPages(t *testing.T) {
+	dir := t.TempDir()
+	handwritten := filepath.Join(dir, "guide.md")
+	require.NoError(t, os.WriteFile(handwritten, []byte("# Calling the API by hand\n"), 0o644))
+	foreign := filepath.Join(dir, "other.md")
+	var b strings.Builder
+	docs.WriteFrontmatter(&b, docs.Frontmatter{Title: "Other", GeneratedFrom: "internal/other/other.go"})
+	require.NoError(t, os.WriteFile(foreign, []byte(b.String()), 0o644))
+
+	_, err := writeAll(fixtureAPI(t), dir)
+	require.NoError(t, err)
+
+	for _, path := range []string{handwritten, foreign} {
+		_, err := os.Stat(path)
+		assert.NoError(t, err, "%s carries no marker of this generator and must survive", path)
+	}
+}
+
 func TestWriteAllRefusesADescriptorSetWithNoServices(t *testing.T) {
 	_, err := writeAll(api{}, t.TempDir())
 	assert.ErrorContains(t, err, "no magus services found")
+}
+
+// TestWriteAllRefusesAnEmptyOutDir: an empty -out makes every page path relative,
+// pointing the prune walk at the working directory.
+func TestWriteAllRefusesAnEmptyOutDir(t *testing.T) {
+	_, err := writeAll(fixtureAPI(t), "")
+	assert.ErrorContains(t, err, "-out")
 }
 
 func renderedPage(t *testing.T, name string) string {

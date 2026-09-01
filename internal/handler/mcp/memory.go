@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/memory"
 	"github.com/egladman/magus/spells"
 )
@@ -20,7 +21,7 @@ import (
 // (MemoryService RPC) is the second door onto the same store.
 type memoryTool struct{ opts Options }
 
-func (t *memoryTool) Name() string { return toolMemory.String() }
+func (t *memoryTool) Name() string { return hint.ToolMemory.String() }
 
 // memoryRefView is the wire shape of one typed ref on a record.
 type memoryRefView struct {

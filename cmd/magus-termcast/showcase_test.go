@@ -9,14 +9,13 @@ import (
 
 // TestShowcaseUpToDate is the same drift gate the core loop gets, for the same
 // reason: the picture is a pure function of a committed capture, so CI can
-// assert the two agree. Both palettes are checked - only the dark one is a
-// declared output of termcast-generate, which makes the light one exactly the
-// kind of variant that goes stale unnoticed.
+// assert the two agree. Both palettes are checked - a variant nothing gates is
+// a variant that goes stale.
 func TestShowcaseUpToDate(t *testing.T) {
 	capture := repoFile(t, showCapture)
-	for _, v := range themeVariants {
-		path := variantPath(showSVG, v.suffix)
-		want, err := renderShowcase(capture, v.theme)
+	for _, v := range screen.ThemeVariants {
+		path := screen.VariantPath(showSVG, v.Suffix)
+		want, err := renderShowcase(capture, v.Theme)
 		if err != nil {
 			t.Fatalf("render %s: %v", path, err)
 		}

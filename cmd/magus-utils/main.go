@@ -14,7 +14,10 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
+	"slices"
+	"strings"
 )
 
 // scribes maps a subcommand name to its generator. Each reads a source of truth
@@ -60,6 +63,12 @@ func main() {
 	}
 }
 
+// usageLine lists every registered subcommand. Derived from scribes rather than
+// written out: the hand-maintained list named 13 of the 20 that existed.
+func usageLine() string {
+	return "usage: magus-utils <" + strings.Join(slices.Sorted(maps.Keys(scribes)), "|") + "> [flags]"
+}
+
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|buzzobjects|moduledecls|bindings|config|spells|sign|api|verify|cut|migrate|release-index|generate-changelog> [flags]")
+	fmt.Fprintln(os.Stderr, usageLine())
 }

@@ -176,6 +176,10 @@ func providerFingerprint(ctx context.Context, root, spellName string) string {
 	// wiring a spell named "nx" would otherwise overwrite each other's entry on every
 	// command and neither would ever hit.
 	_, _ = h.Write([]byte(root + "\n"))
+	// The spell name, because providerCachePath sanitizes it: "my/nx" and "my_nx" land on
+	// the same file, and without this the two would agree on a fingerprint whenever their
+	// declared globs matched the same files, so each would replay the other's project set.
+	_, _ = h.Write([]byte(spellName + "\n"))
 	_, _ = h.Write([]byte(spellruntime.BuiltinsHash() + "\n"))
 	for _, g := range globs {
 		_, _ = h.Write([]byte(g + "\n"))

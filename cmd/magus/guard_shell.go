@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -15,9 +16,10 @@ import (
 // minus the two large pieces that earned their own files. Tokenizing is in
 // guard_shellparse.go and the git rules are in guard_git.go.
 //
-// evaluateBashGuard is a pure function of the command line and is tested as one, so
-// a rule that has to read live workspace state lives beside its own reader instead
-// (guard_gate.go). The path surface is guard_write.go.
+// evaluateBashGuard is a pure function of its inputs - the command line, plus the
+// hint translator the caller built - and is tested as one, so a rule that has to read
+// live workspace state lives beside its own reader instead (guard_gate.go). The
+// path surface is guard_write.go.
 
 // bashGuardVerdict classifies one Bash command line. Deny blocks the call with a
 // reason the model sees; Context lets it proceed and injects a reminder.
@@ -26,10 +28,41 @@ import (
 // It is empty for the advisories that correct the command in front of the reader, where
 // a second firing reports a second mistake rather than repeating a standing fact, and it
 // is always empty on a deny: a refusal explains itself every time it refuses.
+//
+// Rule is Kind's counterpart on the deny arm: set on every deny, empty otherwise.
 type bashGuardVerdict struct {
 	Deny    string
 	Context string
 	Kind    advisoryKind
+	Rule    denyRule
+}
+
+// denyRuleName identifies WHICH guard rule refused a command - the deny arm's
+// counterpart to advisoryKind. Deny prose is for the reader; the rule is what a
+// test compares, so rewording a reason never churns a test.
+type denyRuleName string
+
+const (
+	denyRuleNotesAuthor     denyRuleName = "notes-author"
+	denyRuleReadAck         denyRuleName = "read-ack"
+	denyRuleSedInPlace      denyRuleName = "sed-in-place"
+	denyRuleScriptedRewrite denyRuleName = "scripted-rewrite"
+	denyRuleRawTool         denyRuleName = "raw-tool"
+	denyRuleThrowawayCopy   denyRuleName = "throwaway-copy"
+	denyRuleSiblingCheckout denyRuleName = "sibling-checkout"
+	denyRuleOutputPipe      denyRuleName = "output-pipe"
+	denyRuleOutputRedirect  denyRuleName = "output-redirect"
+	denyRuleWholeTree       denyRuleName = "whole-tree"
+	denyRuleSharedStash     denyRuleName = "shared-stash"
+	denyRuleWorktreeRemove  denyRuleName = "worktree-remove"
+	denyRuleStageAll        denyRuleName = "stage-all"
+)
+
+// denyRule is the rule plus what it fired on, so a rule that renders a verb or a
+// resolved argv is still compared exactly rather than by substring.
+type denyRule struct {
+	Name denyRuleName
+	Arg  string // the op, verb, or resolved argv; empty when the rule takes none
 }
 
 // cmdPos anchors a pattern to a COMMAND position - line start or just after a
@@ -269,6 +302,14 @@ func firstRawToolDenied(command string) (guardCommand, bool) {
 	return guardCommand{}, false
 }
 
+// resolvedCommand renders a parsed command back as argv text - what the shell
+// would actually run, wrappers and quoting stripped. It is both what explainDeny
+// shows the reader and what the raw-tool rule carries as its Arg, so the two can
+// never disagree about which command was judged.
+func resolvedCommand(c guardCommand) string {
+	return strings.TrimSpace(c.Name + " " + strings.Join(c.Args, " "))
+}
+
 // explainDeny prefixes a rule's reason with the resolved command that tripped
 // it, and says so explicitly when that differs from what was typed - which is
 // the whole point of peeling wrappers, made visible instead of implied.
@@ -277,7 +318,7 @@ func firstRawToolDenied(command string) (guardCommand, bool) {
 // already says the guard reads the command being RUN, and this prefix is
 // prepended to it.
 func explainDeny(typed string, c guardCommand, reason string) string {
-	resolved := strings.TrimSpace(c.Name + " " + strings.Join(c.Args, " "))
+	resolved := resolvedCommand(c)
 	var b strings.Builder
 	b.WriteString("magus guard denied `" + resolved + "`")
 	if strings.TrimSpace(typed) != resolved {
@@ -362,8 +403,12 @@ func guardCommandPrefix(args []string) []string {
 // These remain ONLY as the unparsable-line fallback: gitGuard above is the
 // primary path, and it reads an AST instead of the raw text.
 var (
-	guardStashRe     = regexp.MustCompile(`\bgit\s+stash\b`)
-	guardStashSafeRe = regexp.MustCompile(`\bgit\s+stash\s+(list|show|pop|apply|drop|branch)\b`)
+	guardStashRe = regexp.MustCompile(`\bgit\s+stash\b`)
+	// Reading a stash is safe; RESTORING one is not, and the parsed rule denies the bare
+	// restore forms. Listing pop/apply/drop/branch as safe here left the destructive
+	// spellings with no verdict at all on a line that does not parse, which is the one
+	// place an over-eager deny is the right answer.
+	guardStashSafeRe = regexp.MustCompile(`\bgit\s+stash\s+(list|show)\b`)
 	guardResetRe     = regexp.MustCompile(`\bgit\s+reset\b[^&|;]*--hard`)
 	guardCheckoutRe  = regexp.MustCompile(`\bgit\s+checkout\s+(--\s+)?\.(\s|$)`)
 	guardRestoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
@@ -394,7 +439,9 @@ var (
 	// answer is --root, not a cd.
 	guardCdMagusRe = regexp.MustCompile(`\bcd\s+\S+\s*(&&|;)\s*(\S*/)?magus\s`)
 
-	// guardNotesWriteRe matches an invocation that would AUTHOR a note.
+	// guardNotesWriteRe matches an invocation that would AUTHOR a note. It is the
+	// unparsable-line fallback for magusInvokes below, the way gitGuardFallback is for
+	// gitGuard: anchoring the verb to the program misses every global flag in between.
 	//
 	// The path rule already refuses an agent write into a notes store, but it only ever
 	// sees file writes - and `magus notes edit` reading piped prose is a command, not a
@@ -413,6 +460,7 @@ var (
 	// The guard is the right place precisely because of what it sees: it is wired into
 	// agent hosts, so every command reaching it came from an agent by construction. A
 	// person at a terminal never meets this rule.
+	// The unparsable-line fallback for magusInvokes, as above.
 	guardReadAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
 
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
@@ -441,13 +489,31 @@ var (
 	// while the false negative silently rewrote a dependency's identifier.
 	guardScriptedRewriteRe = regexp.MustCompile(`\b(python3?|perl|ruby|node)\b[\s\S]*\b(re\.subn?|str\.replace|\.replace\()[\s\S]*\.write\(|\b(perl|ruby)\s+-[a-zA-Z]*i[a-zA-Z]*\b`)
 
-	// A repo-wide code search. This does NOT claim the agent asked the wrong
+	// A repo-wide CONTENT search. This does NOT claim the agent asked the wrong
 	// question - a hook cannot know that - only that a whole-tree text search has
 	// a better tool here, because the graph answers from DECLARED sources while a
-	// grep hit is a guess. Deliberately narrow: a recursive grep, a bare ripgrep
-	// (effectively always repo-wide), or a find-by-name. A plain `grep pattern
-	// file` is reading one file and is left alone.
-	guardCodeSearchRe = regexp.MustCompile(`\bgrep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s|\bfind\s+\S+\s+-name\b`)
+	// grep hit is a guess. Deliberately narrow: a recursive grep (egrep and fgrep
+	// included, which internal/hint models as the same family), or a bare ripgrep
+	// or ag, both effectively always repo-wide. A plain `grep pattern file` is
+	// reading one file and is left alone.
+	guardCodeSearchRe = regexp.MustCompile(`\b[ef]?grep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s`)
+
+	// The same advisory reached by a repo-wide search for a file by NAME. Split
+	// from the content arm because the narrowness rule differs: a content search
+	// is admitted on being RECURSIVE, a file-find on asking a NAME question -
+	// `find . -type d` and `fd -t d` list a tree rather than look a name up, and
+	// stay silent. fd is recursive by default, so its admitting shapes are the
+	// name query itself: an extension flag, a glob flag, or a pattern in the
+	// first operand. A pattern behind a value-consuming flag (`fd -t f parse`)
+	// is missed, because telling that operand from the flag's own argument
+	// needs an argv parse this line-shaped rule does not do; erring toward
+	// silence keeps the gate honest. The leading class rejects `git clean -fd`.
+	guardFileFindRe = regexp.MustCompile(`\bfind\s+[^|&;]*-name\b|(^|[^-\w])fd\s+([^|&;]*(-[eg]|--(extension|glob))\b|[^-|&;\s])`)
+	// guardDocSearchRe fires when a read or search command names a markdown file - an agent
+	// looking for something IN prose. Markdown headings are indexed as doc-section nodes, so
+	// the answer is a section query, not a whole-file scan. Matches on ".md" so it fires in
+	// any repo, not just one that keeps docs under a magus convention.
+	guardDocSearchRe = regexp.MustCompile(`\b(cat|bat|head|tail|less|more|grep|egrep|fgrep|rg|ag)\b[^|&;]*\.md\b`)
 
 	// `magus ... && echo "TESTS GREEN"`. The exit status already carries that, which
 	// is what an exit status is for; the echo adds a line that is true by
@@ -469,8 +535,11 @@ var (
 	// rather than fighting it.
 )
 
-const (
-	vcsGuardContext = "magus workspace: classify the dirty tree first with `magus describe file $(git diff --name-only)`, then stage the reviewed paths explicitly: `git add -- <paths>`.\n" +
+// Rendered through hint rather than spelled out, so a subcommand rename is a compile
+// error here instead of a verdict that names a command nobody can run. That makes these
+// vars rather than consts: a Command renders through a method call.
+var (
+	vcsGuardContext = "magus workspace: classify the dirty tree first with `" + hint.DescribeFile.With("$(git diff --name-only)") + "`, then stage the reviewed paths explicitly: `git add -- <paths>`.\n" +
 		"role=output paths are generated: never hand-edit them, and commit them with the source change that moved them. Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
 	// The tail of runGuardContextFor, which supplies the replacements. This half
 	// carries only the WHY and the anti-retry line.
@@ -487,7 +556,7 @@ const (
 	// and those outputs belong in the same commit as the source that moved them.
 	// The honest test is whether the SOURCE changed, not whether the agent typed
 	// into the output.
-	revertGuardContext = "magus workspace: classify before reverting with `magus describe file <paths>`, and do not revert a file just because you did not hand-edit it.\n" +
+	revertGuardContext = "magus workspace: classify before reverting with `" + hint.DescribeFile.With("<paths>") + "`, and do not revert a file just because you did not hand-edit it.\n" +
 		"A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
 	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
 	// search to fall back on, so "where does this string appear" has no magus
@@ -500,39 +569,42 @@ const (
 	// useless is the failure this text exists to prevent.
 	// Names the mechanism, because the fix is not "remember where you are" - it is
 	// that the project is an argument and never needs to be implied by the CWD.
-	cwdGuardContext = "magus workspace: pass the project instead of cd-ing to it (`magus run <target> <project>`, `magus describe project <path>`) so the command means the same thing from anywhere. `magus where <name>` resolves a name to its path.\n" +
+	cwdGuardContext = "magus workspace: pass the project instead of cd-ing to it (`" + hint.Run.With("<target>", "<project>") + "`, `" + hint.DescribeProject.With("<path>") + "`) so the command means the same thing from anywhere. `" + hint.Where.With("<name>") + "` resolves a name to its path.\n" +
 		"magus is CWD-relative, so a `cd` first is how the right command lands on the wrong project; project paths are workspace-relative and written bare (`libs/foo`). Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
 
 	searchGuardReason = "this workspace has a knowledge graph, and a text match misses the generated, indirect, and cross-language references it knows about. Pick by what you are asking:\n" +
-		"  CODE SYMBOL (defined / used where):  magus refs <symbol>\n" +
-		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind:<k> project:<p> relation:<r> filters and -negation\n" +
-		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
-		"  HOW two things connect:  magus path <a> <b>\n" +
-		"`magus query <symbol>` returns 0 for a code symbol, which is refs's job. If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `magus graph build` and ask again rather than falling back to a text match. Searching raw TEXT (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Load the magus-query skill for the full grammar."
+		"  CODE SYMBOL (defined / used where):  " + hint.Refs.With("<symbol>") + "\n" +
+		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  " + hint.Query.With("\"<terms>\"") + "  with kind=<k> project=<p> relation=<r> matchers, kind!=<k> to exclude, id=~<re> for a regex\n" +
+		"  ONE node's edges, provenance, blast radius:  " + hint.Explain.With("<node>") + "\n" +
+		"  HOW two things connect:  " + hint.Path.With("<a>", "<b>") + "\n" +
+		"`" + hint.Query.With("<symbol>") + "` returns 0 for a code symbol, which is refs's job. If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `" + hint.GraphBuild.String() + "` and ask again rather than falling back to a text match. Searching raw text in CODE (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Markdown PROSE does now: `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the section that covers it. Load the magus-query skill for the full grammar."
+
+	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project=<p>` to scope it and `" + hint.Explain.With("<section>") + "` to see what it links to.\n" +
+		"Reading one specific file you already know the path of? Read it. This is for when you are LOOKING for where something is explained: the section query lands you on the passage instead of the page. Load the magus-query skill for the grammar."
 
 	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is
 	// the one literal a shipped verdict may carry; every other target name is
 	// workspace vocabulary and routes through discovery.
-	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `magus affected ci` runs it over every project the diff reaches, including ones you never edited.\n" +
+	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
 	denyReadAck = "A read receipt records that a PERSON read a change, so only a person can record one.\n" +
 		"This is not a permission you are missing - there is no spelling of it an agent may use, and an agent stamping the changeset would make the measure mean nothing for everybody, including the human relying on it.\n" +
-		"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on.\n" +
+		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt, and `" + hint.Diff.With("-o", "json") + "` puts read_state on each file for a caller to branch on.\n" +
 		"If you were asked to mark the change reviewed, say that you cannot and hand back the unread list."
 
-	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
+	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `" + hint.MemoryPut.With("<name>") + "` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is denied however the write is spelled.\n" +
 		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
 
 	denyScriptedRewrite = "A scripted substitute-and-write is the same edit `sed -i` is denied for, by another route. Use your editor tool for a few sites; for a whole-tree rename use the graph:\n" +
-		"  1. `magus graph build` FIRST if `magus refs` says a project is not-indexed: a cold index answers \"unknown, not absent\", and taking that for \"no matches\" is how a rename misses half its sites.\n" +
-		"  2. `magus refs <symbol> --occurrences` gives column-precise, verified sites, per file.\n" +
+		"  1. `" + hint.GraphBuild.String() + "` FIRST if `" + hint.Refs.String() + "` says a project is not-indexed: a cold index answers \"unknown, not absent\", and taking that for \"no matches\" is how a rename misses half its sites.\n" +
+		"  2. `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise, verified sites, per file.\n" +
 		"  3. Edit those sites. Let the compiler enumerate what moved; do not widen the pattern until it goes quiet.\n" +
 		"A regex cannot tell YOUR symbol from a dependency's symbol of the same name: a `\\.Sum\\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. The graph knows which is which; a pattern never can.\n\n" +
 		"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent: say so and use your editor tool."
 
-	denySedInPlace = "Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. For a whole-tree mechanical edit, `magus refs <symbol> --occurrences` gives column-precise sites rather than a pattern that also matches the comment about it.\n" +
+	denySedInPlace = "Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. For a whole-tree mechanical edit, `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites rather than a pattern that also matches the comment about it.\n" +
 		"`sed -i` is not portable and the two spellings destroy each other's work: GNU reads `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the BACKUP SUFFIX, and `sed -i '' ...` makes GNU edit nothing. So it mangles the file on the next machine, by WRITING, before anyone reads a diff. Reading with sed is untouched."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
@@ -542,16 +614,17 @@ const (
 	// a commit about something else. Measured: one such call put 69 files - a whole
 	// regenerated docs site plus five untouched source files - into a commit about
 	// four collection methods.
-	denyStageAll = "Classify the dirty tree first: `magus describe file $(git diff --name-only)`. Then stage only the reviewed paths with `git add -- <paths>`, and confirm the selection with `git diff --cached --stat` before committing.\n" +
-		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. There is deliberately no `magus vcs` wrapper; load the magus-vcs-hygiene skill if not already loaded."
+	denyStageAll = "Stage through the workspace instead: `" + hint.VCSAdd.String() + "` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and REPORTS anything undeclared rather than sweeping it in. `" + hint.VCSAdd.With("--dry-run") + "` classifies and stages nothing.\n" +
+		"For a hand-picked subset, `git add -- <paths>` is still fine; confirm it with `git diff --cached --stat` before committing.\n" +
+		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. Load the magus-vcs-hygiene skill if not already loaded."
 
 	// An ADVISORY, not a deny: two genuinely independent targets in one line is real work
 	// (`magus run build api ; magus run test docs`), and only the dependency graph knows
 	// which case this is. What the guard can see is that the chain is worth questioning.
-	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `magus run lint .` alone runs all three in order.\n" +
-		"Check what a target already pulls in before chaining: `magus run <target> <project> --dry-run` prints the plan without executing it.\n" +
-		"`magus affected ci` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice - and the second run can trip MGS4007 on an output the first one left behind.\n" +
-		"Each extra invocation reloads the workspace and re-evaluates every magusfile. And `magus run` takes one TARGET and many PROJECTS (`magus run build api web`), so two targets never belong in one call either."
+	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `" + hint.Run.With("lint", ".") + "` alone runs all three in order.\n" +
+		"Check what a target already pulls in before chaining: `" + hint.Run.With("<target>", "<project>", "--dry-run") + "` prints the plan without executing it.\n" +
+		"`" + hint.Affected.With("ci") + "` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice - and the second run can trip MGS4007 on an output the first one left behind.\n" +
+		"Each extra invocation reloads the workspace and re-evaluates every magusfile. And `" + hint.Run.String() + "` takes one TARGET and many PROJECTS (`" + hint.Run.With("build", "api", "web") + "`), so two targets never belong in one call either."
 
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
@@ -563,19 +636,19 @@ const (
 		"A pipe also replaces the exit status with the last stage's, so a failing gate reads as exit 0.\n" +
 		outputGuardTail
 	outputRedirectDeny = "magus already wrote the log; you do not need to capture it:\n" +
-		"  magus query output <ref>     the failing target's full captured log (this one may be redirected)\n" +
+		"  " + hint.QueryOutput.With("<ref>") + "     the failing target's full captured log (this one may be redirected)\n" +
 		"  .magus/logs/<hash>.log       the path, printed by the failure itself\n" +
 		"  -o json --tee <file>         mirror structured output to a file (never console text)\n" +
 		"--silent prints the diagnostics and the log path on failure, and a redirect throws exactly that away.\n" +
 		outputGuardTail
-	throwawayCopyDeny = "Run from the workspace and name the project: `magus run <target> <project>`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
+	throwawayCopyDeny = "Run from the workspace and name the project: `" + hint.Run.With("<target>", "<project>") + "`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
 		"A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits."
-	outputGuardTail = "The one exception is `magus query output <ref>`: a raw captured log has no schema to project."
+	outputGuardTail = "The one exception is `" + hint.QueryOutput.With("<ref>") + "`: a raw captured log has no schema to project."
 
 	// ADVISE, never deny: reading the revision is legitimate, and checkpoint is a
 	// strict SUPERSET rather than a substitute, so there is nothing to block. That
 	// also rules out the third deny trigger, which needs an exact equivalent.
-	checkpointGuardContext = "magus workspace: `magus vcs checkpoint` identifies the working state (`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty) and records it on the activity trail, so a later reader knows what the work was looking at.\n" +
+	checkpointGuardContext = "magus workspace: `" + hint.VCSCheckpoint.String() + "` identifies the working state (`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty) and records it on the activity trail, so a later reader knows what the work was looking at.\n" +
 		"A revision alone cannot identify a DIRTY tree: two workers on the same commit with different uncommitted work read as identical, and the patch digest is what separates them. checkpoint RESOLVES AND RECORDS with no tag, no stash, no ref, and no file, so one nobody keeps has cost nothing."
 
 	// ADVISE, never deny: re-resolving dependencies is legitimate work with no
@@ -590,7 +663,7 @@ const (
 	// Shared with the raw-tool deny, which appends it when the denied command is
 	// also a re-resolution (`go mod tidy` is both), so the charm is named whichever
 	// rule answers first.
-	relockAdvice = "Run the covering target with the relock charm (`magus run <target>:relock <project>`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `magus describe targets` lists what this workspace defines.\n" +
+	relockAdvice = "Run the covering target with the relock charm (`" + hint.Run.With("<target>:relock", "<project>") + "`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `" + hint.DescribeTargets.String() + "` lists what this workspace defines.\n" +
 		"relock is the reserved charm for rewriting DEPENDENCY state, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry serves today is relock. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
 	relockGuardContext = "magus workspace: " + relockAdvice
 
@@ -604,19 +677,125 @@ const (
 	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies -
 	// nothing is unrecoverable, nothing is written, and the equivalent is close but
 	// not exact.
-	timeoutMagusAdvice = "magus has its own: `magus run <target> <project> --timeout 5m` (and the same flag on `magus affected`). It cancels the run rather than signaling the process, so the error names the target (`run ci: timed out after 5m`) and it logs elapsed/remaining heartbeats while the run is still going.\n" +
+	timeoutMagusAdvice = "magus has its own: `" + hint.Run.With("<target>", "<project>", "--timeout", "5m") + "` (and the same flag on `" + hint.Affected.String() + "`). It cancels the run rather than signaling the process, so the error names the target (`run ci: timed out after 5m`) and it logs elapsed/remaining heartbeats while the run is still going.\n" +
 		"An external `timeout` sees one opaque process: it cannot say which target was still running, and the SIGTERM lands wherever the run happened to be."
 )
 
-// denySharedStash explains why an unqualified stash restore is refused.
-func denySharedStash(verb string) string {
-	return "Name the entry you meant: read `git stash list`, then `git stash " + verb + " stash@{N}`.\n" +
-		"Bare `git stash " + verb + "` acts on stash@{0}, and the stash stack belongs to the REPOSITORY rather than your worktree: the top entry is often another checkout's work, and " + verb + " applies or destroys it."
+// denySharedStash refuses an unqualified stash restore. The verb it names in the
+// reason is also the rule's Arg, so the two cannot describe different commands.
+func denySharedStash(verb string) bashGuardVerdict {
+	return bashGuardVerdict{
+		Deny: "Name the entry you meant: read `git stash list`, then `git stash " + verb + " stash@{N}`.\n" +
+			"Bare `git stash " + verb + "` acts on stash@{0}, and the stash stack belongs to the REPOSITORY rather than your worktree: the top entry is often another checkout's work, and " + verb + " applies or destroys it.",
+		Rule: denyRule{Name: denyRuleSharedStash, Arg: verb},
+	}
 }
 
-func denyWholeTree(op string) string {
-	return "Verify in place. No magus run needs a clean tree: `magus run <target> <project>`, or `magus affected ci` for everything the diff reaches. If you truly need a pristine tree, use a throwaway git worktree.\n" +
-		"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill."
+// denyWholeTree refuses an operation that discards the whole tree, op naming which
+// one - in the reason and, for the same reason as above, in the rule.
+func denyWholeTree(op string) bashGuardVerdict {
+	return bashGuardVerdict{
+		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use a throwaway git worktree.\n" +
+			"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill.",
+		Rule: denyRule{Name: denyRuleWholeTree, Arg: op},
+	}
+}
+
+// magusInvokes reports whether any resolved command runs magus carrying all of the given
+// words among its arguments.
+//
+// Position-free among magus's OWN arguments on purpose: magus accepts its global flags
+// before the verb, so `magus --root . notes edit x` and `magus -o json diff --ack` are the
+// same invocations the anchored patterns are written for, and both walked past them. Tokens
+// after a bare `--` are passed through to a spell's tool, not read by magus, so they are
+// excluded - otherwise `magus run go::go-test . -- notes edit` reads as note-authoring.
+func magusInvokes(cmds []guardCommand, words ...string) bool {
+	for _, c := range cmds {
+		if c.Name != "magus" {
+			continue
+		}
+		args := c.Args
+		if i := slices.Index(args, "--"); i >= 0 {
+			args = args[:i]
+		}
+		if !slices.ContainsFunc(words, func(w string) bool { return !slices.Contains(args, w) }) {
+			return true
+		}
+	}
+	return false
+}
+
+// magusRuleFires answers off the resolved argv when the line parses and off the anchored
+// pattern when it does not - the same split gitGuard and gitGuardFallback make, and for the
+// same reason: a line with no AST to read must still be judged.
+func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *regexp.Regexp, words ...string) bool {
+	if parsed {
+		return magusInvokes(cmds, words...)
+	}
+	return fallback.MatchString(command)
+}
+
+// searchHints is the unscoped default translator, used when no project list is
+// available (and by the pure guard tests). hookCmd builds a manifest-scoped
+// translator per invocation and hands it to evaluateBashGuardWith, so live
+// suggestions can carry project= scoping.
+var searchHints = hint.NewTranslator()
+
+// searchAdvisoryLead renders hint's suggestions for one command on the line,
+// preferring a search-family command's over a file-find's, as the paragraph
+// prepended to searchGuardReason. The lead hands back something to TRY rather
+// than a principle to weigh - a generic "use the graph" loses to muscle
+// memory; `magus refs HandleFoo` does not. Empty when hint abstains for every
+// command, in which case the generic reason still ships. Routing and hedging
+// rationale live in internal/hint.
+//
+// A content search outranks a file-find: on a line carrying both (`find | xargs
+// grep`), the search answers the content question, the find only the name one.
+func searchAdvisoryLead(cmds []guardCommand, hints *hint.Translator) string {
+	hasFileFind := slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		return c.Name == "find" || c.Name == "fd"
+	})
+	var fallback []hint.Suggestion
+	for _, c := range cmds {
+		suggestions := hints.Suggest(hint.Invocation{Name: c.Name, Args: c.Args})
+		if len(suggestions) == 0 && hasFileFind && hint.IsSearchTool(c.Name) {
+			// A find on the same line is feeding the grep its files, so the
+			// grep is repo-wide even though its own argv is not: ask again as
+			// recursive rather than losing the content question to the find.
+			suggestions = hints.Suggest(hint.Invocation{Name: c.Name, Args: append([]string{"-r"}, c.Args...)})
+		}
+		if len(suggestions) == 0 {
+			continue
+		}
+		if hint.IsSearchTool(c.Name) {
+			return renderAdvisoryLead(suggestions)
+		}
+		if fallback == nil {
+			fallback = suggestions
+		}
+	}
+	if fallback == nil {
+		return ""
+	}
+	return renderAdvisoryLead(fallback)
+}
+
+func renderAdvisoryLead(suggestions []hint.Suggestion) string {
+	var b strings.Builder
+	switch suggestions[0].Confidence {
+	case hint.ConfidenceHigh:
+		b.WriteString("Run")
+	case hint.ConfidenceMedium:
+		b.WriteString("Try")
+	default:
+		b.WriteString("Maybe try")
+	}
+	b.WriteString(" `" + suggestions[0].Run + "` - " + suggestions[0].Why + ".")
+	for _, s := range suggestions[1:] {
+		b.WriteString(" Or `" + s.Run + "` - " + s.Why + ".")
+	}
+	b.WriteString(" " + suggestions[0].Hedge + "\n\n")
+	return b.String()
 }
 
 // evaluateBashGuard applies the guard rules in severity order.
@@ -637,6 +816,13 @@ func denyWholeTree(op string) string {
 // reverted grep deny removed a capability magus had nothing to route to. Do not
 // add one without checking that path end to end.
 func evaluateBashGuard(command string) bashGuardVerdict {
+	return evaluateBashGuardWith(command, searchHints)
+}
+
+// evaluateBashGuardWith is evaluateBashGuard with the caller's hint translator,
+// so hookCmd can pass one scoped from the knowledge manifest while the verdict
+// stays a pure function of what was handed in.
+func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE - a pipe, a redirect, a cd before a magus
 	// call - rather than which program runs.
@@ -644,22 +830,23 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	// A matched git rule that only ADVISES is held, not returned: returning here
 	// let a trailing `git commit` downgrade a deny to an advisory. Deny always
 	// outranks advise, whichever rule saw the line first.
+	cmds, parsed := parseGuardCommands(command)
 	// Authoring a note is refused before anything else, because it is the one rule whose
 	// whole point is that it holds on EVERY surface: the path rule sees file writes, and a
 	// note authored from piped prose is a command, so only this catches it.
-	if guardNotesWriteRe.MatchString(command) {
-		return bashGuardVerdict{Deny: denyNotesAuthor}
+	if magusRuleFires(cmds, parsed, command, guardNotesWriteRe, "notes", "edit") {
+		return bashGuardVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
-	if guardReadAckRe.MatchString(command) {
-		return bashGuardVerdict{Deny: denyReadAck}
+	if magusRuleFires(cmds, parsed, command, guardReadAckRe, "diff", "--ack") {
+		return bashGuardVerdict{Deny: denyReadAck, Rule: denyRule{Name: denyRuleReadAck}}
 	}
 	if guardSedInPlaceRe.MatchString(command) {
-		return bashGuardVerdict{Deny: denySedInPlace}
+		return bashGuardVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	}
 	if guardScriptedRewriteRe.MatchString(command) {
-		return bashGuardVerdict{Deny: denyScriptedRewrite}
+		return bashGuardVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
 	var advisory bashGuardVerdict
 	// Held rather than returned, like the git advisories below: a deny found later on the
@@ -667,7 +854,6 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	if guardChainedRunRe.MatchString(command) {
 		advisory = bashGuardVerdict{Context: adviseChainedRun}
 	}
-	cmds, parsed := parseGuardCommands(command)
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {
 			if v.Deny != "" {
@@ -698,19 +884,24 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(cmds, isDependencyMutation) {
 			reason += "\n" + relockAdvice
 		}
-		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, reason)}
+		return bashGuardVerdict{
+			Deny: explainDeny(command, rawToolCmd, reason),
+			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
+		}
 	case magusInThrowawayCopy(command):
-		return bashGuardVerdict{Deny: throwawayCopyDeny}
+		return bashGuardVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}
 	case magusPipedToFilter(command):
-		return bashGuardVerdict{Deny: outputPipeDeny}
+		return bashGuardVerdict{Deny: outputPipeDeny, Rule: denyRule{Name: denyRuleOutputPipe}}
 	case magusRedirected(command):
-		return bashGuardVerdict{Deny: outputRedirectDeny}
+		return bashGuardVerdict{Deny: outputRedirectDeny, Rule: denyRule{Name: denyRuleOutputRedirect}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
 		return bashGuardVerdict{Context: relockGuardContext}
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
-	case guardCodeSearchRe.MatchString(command):
-		return bashGuardVerdict{Context: searchGuardReason, Kind: advisoryCodeSearch}
+	case guardDocSearchRe.MatchString(command):
+		return bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch}
+	case guardCodeSearchRe.MatchString(command), guardFileFindRe.MatchString(command):
+		return bashGuardVerdict{Context: searchAdvisoryLead(cmds, hints) + searchGuardReason, Kind: advisoryCodeSearch}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):
@@ -730,6 +921,6 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 // would be this repository's vocabulary asserted over someone else's. The op IS
 // named, since it resolved from the spell catalog rather than from a convention.
 func runGuardContextFor(match guardToolMatch) string {
-	return fmt.Sprintf("Run it through magus instead: `magus run <target> <project>`. `magus describe targets` lists what this workspace calls its targets (`-o name` for just the names); add `--dry-run` to print the exact command without running it.\n"+
-		"Only to pass flags to the tool itself, the one-op form forwards everything after `--`: `magus run %s::%s [<project>] -- <tool-args>`.\n\n%s", match.spell, match.operation, runGuardContext)
+	return fmt.Sprintf("Run it through magus instead: `"+hint.Run.With("<target>", "<project>")+"`. `"+hint.DescribeTargets.String()+"` lists what this workspace calls its targets (`-o name` for just the names); add `--dry-run` to print the exact command without running it.\n"+
+		"Only to pass flags to the tool itself, the one-op form forwards everything after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n\n%s", match.spell, match.operation, runGuardContext)
 }

@@ -187,7 +187,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	sampler := newTreeSampler()
 	var runErr error
 	if opts.TTY {
-		runErr = runOnPTY(c, outW, &outBuf, opts, sampler.follow)
+		runErr = runOnPTY(ctx, c, outW, &outBuf, opts, sampler.follow)
 	} else {
 		if runErr = c.Start(); runErr == nil {
 			sampler.follow(c.Process.Pid)

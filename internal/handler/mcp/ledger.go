@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/spells"
@@ -25,7 +26,7 @@ import (
 // refusing is a ledger agents route around. See types.Lease.
 type ledgerTool struct{ store *ledger.Store }
 
-func (t *ledgerTool) Name() string { return toolLedger.String() }
+func (t *ledgerTool) Name() string { return hint.ToolLedger.String() }
 
 func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	switch op := paramString(req.Params, "op", "list"); op {

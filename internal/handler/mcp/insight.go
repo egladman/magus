@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -12,7 +13,7 @@ type insightTool struct {
 	ws types.WorkspaceRepository
 }
 
-func (t *insightTool) Name() string { return "magus_insight" }
+func (t *insightTool) Name() string { return hint.ToolInsight.String() }
 
 func (t *insightTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	analyzer, ok := t.ws.(types.InsightAnalyzer)

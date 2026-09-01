@@ -1,7 +1,6 @@
 package annotate
 
 import (
-	"io"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -27,7 +26,7 @@ func TestNopIsInertButUsable(t *testing.T) {
 	assert.NoError(t, n.StartGroup(Group{Title: "x"}))
 	assert.NoError(t, n.EndGroup("x"))
 	assert.NoError(t, n.Annotate(Annotation{Message: "x"}))
-	assert.Equal(t, "::error::untouched", n.Quote("::error::untouched"),
+	assert.Equal(t, "::error::untouched", n.Defang("::error::untouched"),
 		"with no provider there is no syntax to neutralise")
 }
 
@@ -35,13 +34,13 @@ func TestNopIsInertButUsable(t *testing.T) {
 // CI syntax of its own, so a workspace that names no provider gets none.
 func TestDetectIsNopWithoutAProvider(t *testing.T) {
 	RegisterOpener(nil)
-	assert.IsType(t, Nop{}, Detect(io.Discard))
+	assert.IsType(t, Nop{}, Detect())
 }
 
 func TestDetectUsesAnActiveProvider(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-	RegisterOpener(func(io.Writer) Annotator { return stubProvider{active: true} })
-	assert.IsType(t, stubProvider{}, Detect(io.Discard))
+	RegisterOpener(func() Annotator { return stubProvider{active: true} })
+	assert.IsType(t, stubProvider{}, Detect())
 }
 
 // TestDetectIgnoresAnInactiveProvider covers the common wiring: a spell is
@@ -49,15 +48,15 @@ func TestDetectUsesAnActiveProvider(t *testing.T) {
 // off its own CI system, which must cost nothing.
 func TestDetectIgnoresAnInactiveProvider(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-	RegisterOpener(func(io.Writer) Annotator { return stubProvider{active: false} })
-	assert.IsType(t, Nop{}, Detect(io.Discard))
+	RegisterOpener(func() Annotator { return stubProvider{active: false} })
+	assert.IsType(t, Nop{}, Detect())
 }
 
 func TestDetectToleratesAProviderReturningNil(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-	RegisterOpener(func(io.Writer) Annotator { return nil })
-	require.NotPanics(t, func() { _ = Detect(io.Discard) })
-	assert.IsType(t, Nop{}, Detect(io.Discard))
+	RegisterOpener(func() Annotator { return nil })
+	require.NotPanics(t, func() { _ = Detect() })
+	assert.IsType(t, Nop{}, Detect())
 }
 
 // stubProvider stands in for a spell-backed provider.
@@ -67,51 +66,57 @@ func (s stubProvider) Active() bool            { return s.active }
 func (stubProvider) StartGroup(Group) error    { return nil }
 func (stubProvider) EndGroup(string) error     { return nil }
 func (stubProvider) Annotate(Annotation) error { return nil }
-func (stubProvider) Quote(text string) string  { return text }
+func (stubProvider) Defang(text string) string { return text }
 
 var _ Annotator = stubProvider{}
 
-// TestQuoteWithDefusesInjectedCommands is a security property, not
+// TestDefangWithDefusesInjectedCommands is a security property, not
 // cosmetics: magus replays captured subprocess output, so a dependency
 // printing a workflow command could otherwise forge annotations or close
 // a section magus opened.
-func TestQuoteWithDefusesInjectedCommands(t *testing.T) {
+func TestDefangWithDefusesInjectedCommands(t *testing.T) {
 	t.Parallel()
 	gh := []string{"::"}
 
-	assert.Equal(t, ":error::forged", QuoteWith("::error::forged", gh),
+	assert.Equal(t, ":error::forged", DefangWith("::error::forged", gh),
 		"dropping the prefix's first character leaves readable text that is no longer a command")
-	assert.Equal(t, "  :add-mask::secret", QuoteWith("  ::add-mask::secret", gh),
+	assert.Equal(t, "  :add-mask::secret", DefangWith("  ::add-mask::secret", gh),
 		"indentation is preserved so the line still reads as it was written")
 	assert.Equal(t, "ok\n:error::forged\nstill ok",
-		QuoteWith("ok\n::error::forged\nstill ok", gh))
+		DefangWith("ok\n::error::forged\nstill ok", gh))
+
+	assert.Equal(t, ":error::forged", DefangWith(":::error::forged", gh),
+		"a nested prefix must not be dropped down INTO a live command")
+	assert.Equal(t, ":error::forged", DefangWith("::::error::forged", gh))
+	assert.Equal(t, "  :add-mask::secret", DefangWith("  :::::add-mask::secret", gh),
+		"stripping repeats under indentation too")
 }
 
-func TestQuoteWithLeavesOrdinaryTextAlone(t *testing.T) {
+func TestDefangWithLeavesOrdinaryTextAlone(t *testing.T) {
 	t.Parallel()
 	gh := []string{"::"}
-	assert.Equal(t, "all good", QuoteWith("all good", gh))
-	assert.Equal(t, "http://x/y", QuoteWith("http://x/y", gh),
+	assert.Equal(t, "all good", DefangWith("all good", gh))
+	assert.Equal(t, "http://x/y", DefangWith("http://x/y", gh),
 		"a mid-line colon pair does not start a command")
-	assert.Equal(t, "see foo::bar", QuoteWith("see foo::bar", gh))
+	assert.Equal(t, "see foo::bar", DefangWith("see foo::bar", gh))
 }
 
-// TestQuoteWithHandlesAMultiBytePrefix covers GitLab, whose marker is
+// TestDefangWithHandlesAMultiBytePrefix covers GitLab, whose marker is
 // introduced by an escape byte: the first character must be dropped
 // whole, never split.
-func TestQuoteWithHandlesAMultiBytePrefix(t *testing.T) {
+func TestDefangWithHandlesAMultiBytePrefix(t *testing.T) {
 	t.Parallel()
 	gl := []string{"\x1b[0Ksection_"}
 	assert.Equal(t, "[0Ksection_end:1:x",
-		QuoteWith("\x1b[0Ksection_end:1:x", gl),
+		DefangWith("\x1b[0Ksection_end:1:x", gl),
 		"the escape is dropped, so GitLab reads the rest as ordinary text")
 }
 
-func TestQuoteWithNoPrefixesIsIdentity(t *testing.T) {
+func TestDefangWithNoPrefixesIsIdentity(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "::error::x", QuoteWith("::error::x", nil),
+	assert.Equal(t, "::error::x", DefangWith("::error::x", nil),
 		"a provider that declares no command syntax quotes nothing")
-	assert.Equal(t, "::error::x", QuoteWith("::error::x", []string{""}),
+	assert.Equal(t, "::error::x", DefangWith("::error::x", []string{""}),
 		"an empty prefix matches nothing rather than everything")
 }
 
@@ -166,7 +171,7 @@ func TestSanitizeGroupBoundsItsFields(t *testing.T) {
 }
 
 // TestClampPrefixesRejectsAMatchEverythingPrefix is the sharpest of these:
-// an empty prefix would make QuoteWith rewrite the first character of
+// an empty prefix would make DefangWith rewrite the first character of
 // every line of replayed output.
 func TestClampPrefixesRejectsAMatchEverythingPrefix(t *testing.T) {
 	t.Parallel()
@@ -175,14 +180,14 @@ func TestClampPrefixesRejectsAMatchEverythingPrefix(t *testing.T) {
 }
 
 // TestClampPrefixesBoundsTheList keeps a provider from making magus match
-// an unbounded list against every line; QuoteWith is O(lines x prefixes).
+// an unbounded list against every line; DefangWith is O(lines x prefixes).
 func TestClampPrefixesBoundsTheList(t *testing.T) {
 	t.Parallel()
 	many := make([]string, 100)
 	for i := range many {
 		many[i] = "p"
 	}
-	assert.Len(t, ClampPrefixes(many), maxQuotePrefixes)
+	assert.Len(t, ClampPrefixes(many), maxDefangPrefixes)
 }
 
 func TestClampPrefixesDropsOverlongEntries(t *testing.T) {

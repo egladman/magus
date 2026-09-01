@@ -199,10 +199,8 @@ What still gates on drift is the generated Markdown that _is_ tracked:
 left un-regenerated, so CI still catches a forgotten regen for everything a
 reader can find in the repository.
 
-Two things under `docs/` stay tracked on purpose:
+One thing under `docs/` stays tracked on purpose:
 
-- `docs/vendor/casts/` holds the recorded terminal sessions the guides embed:
-  captured bytes a rebuild cannot reproduce.
 - `docs/active.urls.lock` is the ledger proving a previously published URL never
   starts 404-ing. That gate only works if the ledger outlives a single build.
 
@@ -364,10 +362,10 @@ proto-backed and so are not part of the mapping: `mcp` is a protocol adapter and
 carries the full table plus what does and does not belong in the layer; keep the
 rule there rather than restating it per package.
 
-### Hints belong in `clihint`
+### Hints belong in `hint`
 
 A command path printed inside output goes through
-`internal/interactive/clihint`, never a string literal. A drift test walks every
+`internal/hint`, never a string literal. A drift test walks every
 registered command and asserts it still resolves, so a rename cannot leave a
 hint pointing at a command that no longer exists. That has already happened once:
 a failing target printed `magus query <ref>` long after the command became

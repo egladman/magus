@@ -1,66 +1,141 @@
 package main
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/cli"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 )
 
-// TestClihintHeadsAreRealSubcommands guards against the drift that shipped a
+// TestCLICommandHeadsAreRealSubcommands guards against the drift that shipped a
 // hint for a command that no longer exists. Every canonical command referenced
-// from user-facing output (clihint.All) must have a head token that dispatchSub
+// from user-facing output (hint.AllCommands) must have a head token that dispatchSub
 // actually routes - knownSubcommands is that switch's own accept-list. Rename or
-// remove a subcommand and forget to update clihint, and this fails.
-func TestClihintHeadsAreRealSubcommands(t *testing.T) {
-	for _, c := range clihint.All {
+// remove a subcommand and forget to update hint's command registry, and this fails.
+func TestCLICommandHeadsAreRealSubcommands(t *testing.T) {
+	for _, c := range hint.AllCommands {
 		if !slices.Contains(knownSubcommands, c.Head()) {
-			t.Errorf("clihint %q references head subcommand %q, which is not in knownSubcommands %v",
+			t.Errorf("hint command %q references head subcommand %q, which is not in knownSubcommands %v",
 				c, c.Head(), knownSubcommands)
 		}
 	}
 }
 
-// TestClihintGraphLeavesAreRealSubcommands ties the graph-family hints to
+// TestCLICommandPathsResolve checks the whole path, not just the head token the test
+// above walks. That gap shipped three remedies naming command chains the dispatcher
+// rejects: `magus config mcp token print` (the operator token moved to `config token`),
+// `magus notes new <name>`, and a bare `magus ci`. Each had a real head, so nothing failed.
+//
+// Resolution walks internal/cli's tree, the same hand-maintained mirror
+// TestManpageCoversEverySubcommand pins to knownSubcommands at the top level. A mirror is
+// the strongest target available: most families dispatch on a bare switch with no
+// accept-list to read, so an assertion against the router itself needs those switches
+// restructured first. It is only worth as much as the mirror is complete, which is what
+// the two accept-list tests below enforce for the families that have one.
+func TestCLICommandPathsResolve(t *testing.T) {
+	for _, c := range hint.AllCommands {
+		tokens := strings.Fields(strings.TrimPrefix(c.String(), "magus "))
+		if err := resolveCommandPath(tokens); err != nil {
+			t.Errorf("hint command %q: %v", c, err)
+		}
+	}
+}
+
+// resolveCommandPath reports whether tokens name a routable subcommand chain.
+func resolveCommandPath(tokens []string) error {
+	children := cli.All
+	for i, tok := range tokens {
+		idx := slices.IndexFunc(children, func(c cli.Command) bool { return c.Name == tok })
+		if idx < 0 {
+			parent := "magus " + strings.Join(tokens[:i], " ")
+			return fmt.Errorf("%q is not a subcommand of %q - fix the hint, or add the entry to internal/cli/registry.go",
+				tok, strings.TrimSpace(parent))
+		}
+		children = children[idx].Children
+	}
+	return nil
+}
+
+// TestCLICommandGraphLeavesAreRealSubcommands ties the graph-family hints to
 // graphCmd's own accept-list. `graph` routes its second token positionally, so a
 // hint like `magus graph export` is only valid while graphSubs still lists
 // "export". This is the strongest guard the hand-rolled dispatch allows: graphSubs
 // is the introspectable accept-list, not the switch itself, so it only catches
-// drift if graphSubs stays in sync with graphCmd's switch (which SuggestNearest
+// drift if graphSubs stays in sync with graphCmd's switch (which hint.Nearest
 // already depends on).
-func TestClihintGraphLeavesAreRealSubcommands(t *testing.T) {
-	for _, c := range []clihint.Command{clihint.GraphExport, clihint.GraphStats} {
+func TestCLICommandGraphLeavesAreRealSubcommands(t *testing.T) {
+	for _, c := range []hint.Command{hint.GraphExport, hint.GraphStats} {
 		if c.Head() != "graph" {
 			t.Fatalf("expected a graph-family command, got %q", c)
 		}
 		if !slices.Contains(graphSubs, c.Leaf()) {
-			t.Errorf("clihint %q references graph subcommand %q, which is not in graphSubs %v",
+			t.Errorf("hint command %q references graph subcommand %q, which is not in graphSubs %v",
 				c, c.Leaf(), graphSubs)
 		}
 	}
 }
 
-// TestClihintServerLeavesAreRealSubcommands ties the server-family hints to the
-// tokens serverCmd routes on. serverCmd switches directly on clihint.*.Leaf(), so
-// the accepted form and the hint already share one source of truth; this asserts
-// they remain the exact set start/stop/job/reload, catching a stray edit that renames
-// one side only.
-func TestClihintServerLeavesAreRealSubcommands(t *testing.T) {
-	got := []string{clihint.ServerStart.Leaf(), clihint.ServerStop.Leaf(), clihint.ServerJob.Leaf(), clihint.ServerReload.Leaf()}
-	want := []string{"start", "stop", "job", "reload"}
-	if !slices.Equal(got, want) {
-		t.Errorf("server leaves = %v, want %v", got, want)
+// TestCLICommandLsNounsAreDocumented ties the registry's ls children to lsNouns,
+// lsCmd's own accept-list. `magus ls targets` shipped routable but undocumented, so
+// TestCLICommandPathsResolve had to carry a carve-out for it; comparing the two lists
+// is what keeps the mirror from falling behind the router again.
+func TestCLICommandLsNounsAreDocumented(t *testing.T) {
+	documented := slices.Sorted(slices.Values(childNames(t, "ls")))
+	routed := slices.Sorted(slices.Values(lsNouns))
+	if !slices.Equal(documented, routed) {
+		t.Errorf("internal/cli documents ls nouns %v, lsCmd routes %v", documented, routed)
 	}
-	for _, c := range []clihint.Command{clihint.ServerStart, clihint.ServerStop, clihint.ServerJob, clihint.ServerReload} {
-		if c.Head() != "server" {
-			t.Errorf("clihint %q is not a server-family command", c)
+}
+
+// TestCLIDescribeNounsAreAccepted holds the same line for describe, in the direction
+// that can mislead a reader: a documented noun describeAlias does not accept is a man
+// page for a command that exits 2. The reverse is deliberately not asserted - the alias
+// map carries both spellings of every noun, and documenting each twice would say the
+// same thing on two rows.
+func TestCLIDescribeNounsAreAccepted(t *testing.T) {
+	for _, name := range childNames(t, "describe") {
+		if describeAlias[name] == "" {
+			t.Errorf("internal/cli documents `magus describe %s`, which describeAlias does not accept", name)
 		}
 	}
 }
 
-// TestClihintQueryOutputForm locks the query-output hint to the form queryCmd
-// accepts. queryCmd matches its output positional against clihint.QueryOutput.Leaf(),
+func childNames(t *testing.T, command string) []string {
+	t.Helper()
+	idx := slices.IndexFunc(cli.All, func(c cli.Command) bool { return c.Name == command })
+	if idx < 0 {
+		t.Fatalf("no cli.All entry for %q", command)
+	}
+	names := make([]string, 0, len(cli.All[idx].Children))
+	for _, child := range cli.All[idx].Children {
+		names = append(names, child.Name)
+	}
+	return names
+}
+
+// TestCLICommandServerLeavesAreRealSubcommands ties the server-family hints to the
+// tokens serverCmd routes on. serverCmd switches directly on hint.*.Leaf(), so
+// the accepted form and the hint already share one source of truth; this asserts
+// they remain the exact set start/stop/job/reload, catching a stray edit that renames
+// one side only.
+func TestCLICommandServerLeavesAreRealSubcommands(t *testing.T) {
+	got := []string{hint.ServerStart.Leaf(), hint.ServerStop.Leaf(), hint.ServerJob.Leaf(), hint.ServerReload.Leaf()}
+	want := []string{"start", "stop", "job", "reload"}
+	if !slices.Equal(got, want) {
+		t.Errorf("server leaves = %v, want %v", got, want)
+	}
+	for _, c := range []hint.Command{hint.ServerStart, hint.ServerStop, hint.ServerJob, hint.ServerReload} {
+		if c.Head() != "server" {
+			t.Errorf("hint command %q is not a server-family command", c)
+		}
+	}
+}
+
+// TestCLICommandQueryOutputForm locks the query-output hint to the form queryCmd
+// accepts. queryCmd matches its output positional against hint.QueryOutput.Leaf(),
 // so the hint (`magus query output <ref>`) and the accepted form cannot disagree -
 // the exact bug that shipped `magus query <ref>`. This asserts the shape stays
 // two-token (a bare `magus query` would reopen that gap) and renders as expected.
@@ -69,17 +144,17 @@ func TestClihintServerLeavesAreRealSubcommands(t *testing.T) {
 // command tree, so this cannot execute the router without a workspace. It guards
 // the constant's shape and its rendering; the tie to acceptance is structural
 // (queryCmd reads the same Leaf()), enforced at compile/review time rather than here.
-func TestClihintQueryOutputForm(t *testing.T) {
-	if clihint.QueryOutput.Head() != "query" {
-		t.Errorf("QueryOutput head = %q, want %q", clihint.QueryOutput.Head(), "query")
+func TestCLICommandQueryOutputForm(t *testing.T) {
+	if hint.QueryOutput.Head() != "query" {
+		t.Errorf("QueryOutput head = %q, want %q", hint.QueryOutput.Head(), "query")
 	}
-	if clihint.QueryOutput.Leaf() != "output" {
-		t.Errorf("QueryOutput leaf = %q, want %q", clihint.QueryOutput.Leaf(), "output")
+	if hint.QueryOutput.Leaf() != "output" {
+		t.Errorf("QueryOutput leaf = %q, want %q", hint.QueryOutput.Leaf(), "output")
 	}
-	if got, want := clihint.QueryOutput.With("out1a2b3c"), "magus query output out1a2b3c"; got != want {
+	if got, want := hint.QueryOutput.With("out1a2b3c"), "magus query output out1a2b3c"; got != want {
 		t.Errorf("QueryOutput.With(ref) = %q, want %q", got, want)
 	}
-	if got, want := clihint.QueryOutput.With("out1a2b3c", "--open"), "magus query output out1a2b3c --open"; got != want {
+	if got, want := hint.QueryOutput.With("out1a2b3c", "--open"), "magus query output out1a2b3c --open"; got != want {
 		t.Errorf("QueryOutput.With(ref, --open) = %q, want %q", got, want)
 	}
 }

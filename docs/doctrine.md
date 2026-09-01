@@ -113,9 +113,10 @@ model ([Scope](scope.md#where-others-drew-it) records the missing adapter as
 deliberate). The closest feature, `magus diff --prompt`, prints the context
 magus holds for you to paste into your own model, and never a drafted
 review. Every capability on this surface is a person's to run with no agent
-anywhere in the loop; the agent surface is additive, never load-bearing -
-except in this repo, where `ci` drift-gates the installed skills
-([Scope](scope.md#where-the-claim-is-strained)). A
+anywhere in the loop; the agent surface is additive, never load-bearing.
+The installed skills are gitignored renderings of the binary, so nothing in
+CI can drift-gate them; `magus doctor`'s agent-skills check is what observes
+staleness, per workspace ([Scope](scope.md#where-the-claim-is-strained)). A
 workspace that goes a day, or a Friday, without an agent loses nothing but
 speed.
 

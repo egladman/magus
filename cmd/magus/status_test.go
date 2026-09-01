@@ -120,6 +120,18 @@ func TestClampStatusWatch(t *testing.T) {
 	assert.Equal(t, 30*time.Second, clampStatusWatch(30*time.Second))
 }
 
+// A negative --watch reached time.NewTicker, which PANICS at or below zero: the
+// clamp guarded on `interval > 0` and the single-snapshot branch above it on
+// `== 0`, so anything negative fell between them and took the process down.
+func TestClampStatusWatchFloorsANegativeInterval(t *testing.T) {
+	for _, d := range []time.Duration{-time.Nanosecond, -time.Second, -time.Hour} {
+		assert.Equalf(t, statusWatchMin, clampStatusWatch(d),
+			"clampStatusWatch(%s) must floor at the minimum, not hand a panic to NewTicker", d)
+	}
+	// The value the watch loop actually builds its ticker from must be positive.
+	assert.Positive(t, clampStatusWatch(-time.Second))
+}
+
 func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	long := strings.Repeat("x", 80)

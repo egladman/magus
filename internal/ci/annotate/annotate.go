@@ -22,7 +22,6 @@
 package annotate
 
 import (
-	"io"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -120,7 +119,7 @@ type Annotator interface {
 	EndGroup(id string) error
 	// Annotate raises a message outside the job log.
 	Annotate(a Annotation) error
-	// Quote returns text safe to replay into the job log, neutralizing any
+	// Defang returns text safe to replay into the job log, neutralizing any
 	// provider command syntax it contains.
 	//
 	// Not cosmetic: magus replays captured subprocess output, so a test
@@ -128,9 +127,9 @@ type Annotator interface {
 	// by the runner, forging annotations or closing a section magus opened.
 	//
 	// Providers supply their command prefixes once rather than being
-	// consulted per line (see QuoteWith), which is what keeps this
+	// consulted per line (see DefangWith), which is what keeps this
 	// affordable over every replayed line of a failing build.
-	Quote(text string) string
+	Defang(text string) string
 }
 
 // Nop is the Annotator used when no provider is detected. Every method
@@ -141,18 +140,18 @@ func (Nop) Active() bool              { return false }
 func (Nop) StartGroup(Group) error    { return nil }
 func (Nop) EndGroup(string) error     { return nil }
 func (Nop) Annotate(Annotation) error { return nil }
-func (Nop) Quote(text string) string  { return text }
+func (Nop) Defang(text string) string { return text }
 
 var (
 	openerMu sync.RWMutex
-	opener   func(io.Writer) Annotator
+	opener   func() Annotator
 )
 
 // RegisterOpener installs the hook that supplies a spell-backed
 // Annotator. The bindings layer registers it at init, so core selects a
 // provider without linking the Buzz VM - the same indirection
 // [cache.RegisterRemoteBackendOpener] uses for remote cache backends.
-func RegisterOpener(fn func(io.Writer) Annotator) {
+func RegisterOpener(fn func() Annotator) {
 	openerMu.Lock()
 	defer openerMu.Unlock()
 	opener = fn
@@ -167,19 +166,25 @@ func RegisterOpener(fn func(io.Writer) Annotator) {
 // magus. A spell that reports itself inactive - the github spell outside
 // Actions - yields Nop, so an unconditional wiring costs nothing
 // elsewhere.
-func Detect(w io.Writer) Annotator {
+//
+// Detect hands a provider no destination: a provider spell emits markers with
+// std\print to the real stdout, because a workflow command is only a command if
+// the runner reads it there. magus captures and replays subprocess output, so a
+// marker sent through a writer magus holds would land in the stream
+// [Annotator.Defang] scrubs.
+func Detect() Annotator {
 	openerMu.RLock()
 	fn := opener
 	openerMu.RUnlock()
 	if fn != nil {
-		if a := fn(w); a != nil && a.Active() {
+		if a := fn(); a != nil && a.Active() {
 			return a
 		}
 	}
 	return Nop{}
 }
 
-// QuoteWith neutralizes any line in text that begins with one of the
+// DefangWith neutralizes any line in text that begins with one of the
 // given command prefixes, by dropping the prefix's first character so
 // the provider no longer recognizes the line as a command.
 //
@@ -191,7 +196,11 @@ func Detect(w io.Writer) Annotator {
 // Dropping the first character rather than inserting one keeps the result
 // plain ASCII and legible - "::error::x" becomes ":error::x". Leading
 // whitespace is preserved.
-func QuoteWith(text string, prefixes []string) string {
+//
+// The drop repeats until no prefix matches. A single pass would UPGRADE a
+// nested prefix into the command it was not: ":::error::x" is inert to the
+// runner, and one drop makes it "::error::x", which the runner executes.
+func DefangWith(text string, prefixes []string) string {
 	if len(prefixes) == 0 {
 		return text
 	}
@@ -208,15 +217,23 @@ func QuoteWith(text string, prefixes []string) string {
 	lines := strings.Split(text, "\n")
 	for i, ln := range lines {
 		trimmed := strings.TrimLeft(ln, " \t")
-		for _, p := range prefixes {
-			if p != "" && strings.HasPrefix(trimmed, p) {
-				_, size := utf8.DecodeRuneInString(trimmed)
-				lines[i] = ln[:len(ln)-len(trimmed)] + trimmed[size:]
-				break
-			}
+		rest := trimmed
+		for hasAnyPrefix(rest, prefixes) {
+			_, size := utf8.DecodeRuneInString(rest)
+			rest = rest[size:]
 		}
+		lines[i] = ln[:len(ln)-len(trimmed)] + rest
 	}
 	return strings.Join(lines, "\n")
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if p != "" && strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // Limits on what crosses into a provider. A provider is third-party code
@@ -229,10 +246,10 @@ const (
 	maxMessageLen = 4096
 	// maxFieldLen bounds the short fields, which are headings and paths.
 	maxFieldLen = 512
-	// maxQuotePrefixes bounds what a provider can make magus match against
-	// every replayed line. QuoteWith is O(lines x prefixes), so an
+	// maxDefangPrefixes bounds what a provider can make magus match against
+	// every replayed line. DefangWith is O(lines x prefixes), so an
 	// unbounded list turns a failing build into a hang.
-	maxQuotePrefixes = 16
+	maxDefangPrefixes = 16
 )
 
 // Sanitize returns a copy of a bounded to the limits above and stripped
@@ -284,7 +301,7 @@ func ClampPrefixes(in []string) []string {
 			continue
 		}
 		out = append(out, p)
-		if len(out) == maxQuotePrefixes {
+		if len(out) == maxDefangPrefixes {
 			break
 		}
 	}

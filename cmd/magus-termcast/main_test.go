@@ -32,9 +32,9 @@ func repoFile(t *testing.T, path string) string {
 // agree. Both palettes are checked - a variant nothing gates is a variant that
 // goes stale, which is the failure this gate exists to prevent.
 func TestCoreLoopUpToDate(t *testing.T) {
-	for _, v := range themeVariants {
-		path := variantPath(svgPath, v.suffix)
-		want, err := render(repoFile(t, capturePath), v.theme)
+	for _, v := range screen.ThemeVariants {
+		path := screen.VariantPath(svgPath, v.Suffix)
+		want, err := render(repoFile(t, capturePath), v.Theme)
 		if err != nil {
 			t.Fatalf("render %s: %v", path, err)
 		}
@@ -161,17 +161,6 @@ func TestStripSGRDropsATruncatedSequence(t *testing.T) {
 		if got := stripSGR(tc.in); got != tc.want {
 			t.Errorf("stripSGR(%q) = %q, want %q", tc.in, got, tc.want)
 		}
-	}
-}
-
-// TestVariantPath pins the naming contract the README and docs links depend on:
-// the dark variant keeps the unsuffixed name every existing reference points at.
-func TestVariantPath(t *testing.T) {
-	if got := variantPath("assets/gen/core-loop.svg", ""); got != "assets/gen/core-loop.svg" {
-		t.Errorf("dark variant = %q, want the unsuffixed path", got)
-	}
-	if got := variantPath("assets/gen/core-loop.svg", "-light"); got != "assets/gen/core-loop-light.svg" {
-		t.Errorf("light variant = %q", got)
 	}
 }
 

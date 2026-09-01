@@ -14,7 +14,7 @@
 //	              buckets(map[string]BucketStats), hit_count(int), miss_count(int),
 //	              hit_rate(float64), pass_count(int), fail_count(int),
 //	              volatile_count(int), recent_outcomes([]Outcome)
-//	Outcome:      result(string: "pass"|"fail"|"volatile"), affected(bool),
+//	Outcome:      result(OutcomeResult, a string: "pass"|"fail"|"volatile"), affected(bool),
 //	              duration_ms(int64), at(time), attempts(int)
 //	Run:          commit(string: a commit id), ref(string), target(string),
 //	              status(string: "passed"|"failed"), at(time)
@@ -182,13 +182,29 @@ type Stats struct {
 	RecentOutcomes []Outcome `json:"recent_outcomes,omitempty"`
 }
 
-// Outcome is one recorded test-run result; result is "pass", "fail", or "volatile".
+// OutcomeResult is one recorded run's verdict. A named string type rather than a bare
+// one because the value was compared against literals at six sites: a typo in any of them
+// matched nothing and silently zeroed every volatility score, which is a wrong answer that
+// looks exactly like a healthy one. The underlying type stays string, so the cached JSON
+// is byte-identical to what earlier versions wrote.
+type OutcomeResult string
+
+const (
+	// OutcomePass is a target that succeeded on its first attempt.
+	OutcomePass OutcomeResult = "pass"
+	// OutcomeFail is a target that failed and stayed failed.
+	OutcomeFail OutcomeResult = "fail"
+	// OutcomeVolatile is a target that failed and then passed on a retry.
+	OutcomeVolatile OutcomeResult = "volatile"
+)
+
+// Outcome is one recorded test-run result.
 type Outcome struct {
-	Result         string    `json:"result"`
-	AffectedByDiff bool      `json:"affected"`
-	DurationMs     int64     `json:"duration_ms"`
-	At             time.Time `json:"at"`
-	Attempts       int       `json:"attempts,omitempty"`
+	Result         OutcomeResult `json:"result"`
+	AffectedByDiff bool          `json:"affected"`
+	DurationMs     int64         `json:"duration_ms"`
+	At             time.Time     `json:"at"`
+	Attempts       int           `json:"attempts,omitempty"`
 	// MaxRSSBytes is the target's peak resident memory, the maximum over every
 	// process it ran. Omitted when unknown, and unknown is the honest default:
 	// the platforms that cannot report it and every history file written before

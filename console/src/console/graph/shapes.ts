@@ -27,6 +27,7 @@ const SHAPE_BY_KIND: Readonly<Record<string, NodeShape>> = {
   package: "circle",
   symbol: "circle",
   doc: "diamond",
+  docsection: "diamond",
   rationale: "diamond",
   note: "diamond",
   diagnostic: "hexagon",

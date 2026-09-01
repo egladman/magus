@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -38,6 +38,12 @@ type listOutput struct {
 	Count     int           `json:"count"     yaml:"count"`
 	Projects  []listProject `json:"projects"  yaml:"projects"`
 }
+
+// lsNouns is the noun ls actually routes on, in both spellings - the dispatcher's
+// own accept-list, the way graphSubs is graphCmd's, so a drift test can read the
+// router's data instead of the registry's mirror of it. The project noun is absent
+// because it names the DEFAULT view: anything ls does not route here lists projects.
+var lsNouns = []string{"target", "targets"}
 
 // ls enumerates what exists, optionally narrowed by a noun. It is the counterpart
 // to describe, not a duplicate of it: describe leads with a definition and teaches
@@ -70,10 +76,8 @@ func ls(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if len(pos) > 0 {
-		if pos[0] == "target" || pos[0] == "targets" {
-			return lsTargets(ctx, root, pos[1:])
-		}
+	if len(pos) > 0 && slices.Contains(lsNouns, pos[0]) {
+		return lsTargets(ctx, root, pos[1:])
 	}
 	return lsProjects(ctx, root)
 }
@@ -166,10 +170,10 @@ func lsProjects(ctx context.Context, root string) error {
 	}
 	// Name the neighbors once, so the boundary between the verbs is discoverable
 	// from the command itself rather than only from the docs. Rendered through
-	// clihint (not hand-written) so a subcommand rename cannot leave a hint here
+	// hint's command registry (not hand-written) so a subcommand rename cannot leave a hint here
 	// pointing at a command that no longer exists - the drift test walks these.
-	fmt.Printf("what a target does:   %s\n", clihint.LsTargets.With("<project>"))
-	fmt.Printf("one project in full:  %s\n", clihint.DescribeProject.With("<project>"))
+	fmt.Printf("what a target does:   %s\n", hint.LsTargets.With("<project>"))
+	fmt.Printf("one project in full:  %s\n", hint.DescribeProject.With("<project>"))
 	return nil
 }
 
@@ -283,8 +287,8 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 	// The next two questions a reader has after seeing a target: run it, or see
 	// what it actually dispatches to. Named here so the path forward is in the
 	// output rather than only in the docs.
-	fmt.Printf("run one:              %s\n", clihint.Run.With("<target>", "<project>"))
-	fmt.Printf("what it dispatches:   %s\n", clihint.DescribeTargets.With("<target>"))
+	fmt.Printf("run one:              %s\n", hint.Run.With("<target>", "<project>"))
+	fmt.Printf("what it dispatches:   %s\n", hint.DescribeTargets.With("<target>"))
 	return nil
 }
 

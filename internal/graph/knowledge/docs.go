@@ -7,11 +7,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/text"
 )
 
 // docsShardName is the singleton shard holding markdown doc nodes and the edges
@@ -72,7 +78,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 		// Every doc carries a role - what the markdown IS (readme/agent/changelog/...),
 		// from a universal filename convention - plus its frontmatter title/tags where
 		// present, so a query result reads as the doc's human name and an agent can ask
-		// `kind:doc role:agent` in any repo. A page with no frontmatter (a README, a stub)
+		// `kind=doc role=agent` in any repo. A page with no frontmatter (a README, a stub)
 		// simply carries no title/tags.
 		docAttrs := map[string]string{attrRole: roleFromRel(rel)}
 		if sec := sectionFromRel(rel); sec != "" {
@@ -130,6 +136,37 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 		}
 		s.Nodes = append(s.Nodes, node)
 
+		// Index each markdown heading as its own node so an agent retrieves the relevant
+		// SECTION of a page rather than the whole file. The anchor is goldmark's own
+		// auto-heading-id - the same one the site renders - so a section node IS a citable
+		// pointer into the page (its Source is "<rel>#<anchor>"), and a reader can slice the
+		// body between one heading and the next. A page `contains` its sections; a heading
+		// `contains` the deeper headings nested under it, so the tree mirrors the outline.
+		type frame struct {
+			level int
+			id    string
+		}
+		stack := []frame{{level: 0, id: dID}}
+		for _, h := range docHeadings([]byte(docs.StripFrontmatter(content))) {
+			sID := docSectionID(rel, h.anchor)
+			s.Nodes = append(s.Nodes, types.KnowledgeNode{
+				ID:     sID,
+				Kind:   types.KindDocSection,
+				Label:  h.text,
+				Source: rel + "#" + h.anchor,
+				Attrs:  map[string]string{attrAnchor: h.anchor, attrLevel: strconv.Itoa(h.level)},
+			})
+			for len(stack) > 0 && stack[len(stack)-1].level >= h.level {
+				stack = stack[:len(stack)-1]
+			}
+			parent := dID
+			if len(stack) > 0 {
+				parent = stack[len(stack)-1].id
+			}
+			s.Edges = append(s.Edges, extractedEdge(parent, sID, types.RelationContains, rel))
+			stack = append(stack, frame{level: h.level, id: sID})
+		}
+
 		for _, name := range spellNames {
 			if strings.Contains(content, "`"+name+"`") {
 				s.Edges = append(s.Edges, inferredEdge(dID, spellID(name), types.RelationDocuments, rel, 0.5))
@@ -154,6 +191,67 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 		}
 	}
 	return s
+}
+
+// headingMD mirrors the site's markdown config (std/markdown.go) for the one thing the graph
+// needs from it: the ids goldmark's auto-heading-id assigns. Parsing with the same library
+// and options the renderer uses is what makes a section node's anchor byte-identical to the
+// rendered page's - including the "-1"/"-2" suffixes goldmark adds to a repeated heading -
+// rather than reproducing the slug algorithm and risking drift. Only WithAutoHeadingID affects
+// the id; GFM is included because it is what headings are parsed under on the site.
+var headingMD = goldmark.New(
+	goldmark.WithExtensions(extension.GFM),
+	goldmark.WithParserOptions(parser.WithAutoHeadingID()),
+)
+
+type docHeading struct {
+	level  int
+	text   string
+	anchor string
+}
+
+// docHeadings returns the headings of a markdown body (frontmatter already stripped), each
+// with the anchor the site renders and the plain text of the heading. Content inside a fenced
+// code block is not a heading, because the parser does not treat it as one.
+func docHeadings(body []byte) []docHeading {
+	root := headingMD.Parser().Parse(text.NewReader(body))
+	var out []docHeading
+	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		h, ok := n.(*ast.Heading)
+		if !ok || !entering {
+			return ast.WalkContinue, nil
+		}
+		raw, ok := h.AttributeString("id")
+		if !ok {
+			return ast.WalkSkipChildren, nil
+		}
+		id, _ := raw.([]byte)
+		if len(id) == 0 {
+			return ast.WalkSkipChildren, nil
+		}
+		out = append(out, docHeading{level: h.Level, text: headingText(h, body), anchor: string(id)})
+		return ast.WalkSkipChildren, nil
+	})
+	return out
+}
+
+// headingText is the plain text of a heading: every text and code-span segment under it,
+// concatenated, so "Run `magus build`" reads as "Run magus build" for the node label.
+func headingText(h *ast.Heading, source []byte) string {
+	var b strings.Builder
+	_ = ast.Walk(h, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch t := n.(type) {
+		case *ast.Text:
+			b.Write(t.Segment.Value(source))
+		case *ast.String:
+			b.Write(t.Value)
+		}
+		return ast.WalkContinue, nil
+	})
+	return b.String()
 }
 
 // manpageCommands indexes the manpage docs by the command they document: "magus <sub>" ->

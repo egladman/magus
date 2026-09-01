@@ -268,7 +268,7 @@ func (s *Service) Graph(ctx context.Context, flavor, sel string) (types.Knowledg
 		}
 		return projectSkeleton(tg), nil
 	case "select":
-		g, err := s.knowledgeGraph(ctx, knowledge.SeedsSymbols(sel))
+		g, err := s.knowledgeGraph(ctx, knowledge.SeedsLazyLayer(sel))
 		if err != nil {
 			return types.KnowledgeGraphOutput{}, err
 		}

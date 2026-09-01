@@ -11,6 +11,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/types"
@@ -36,7 +37,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, types.KnowledgeGraphDiffDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The positional argument is a whole-graph export produced earlier with")
-			fmt.Fprintln(os.Stderr, "`magus graph export -o json`; the current working-tree graph is diffed against it.")
+			fmt.Fprintln(os.Stderr, "`"+hint.GraphExport.With("-o", "json")+"`; the current working-tree graph is diffed against it.")
 			fmt.Fprintln(os.Stderr, "Symbol shards in the baseline are matched automatically; pass --global if it was global.")
 			fmt.Fprintln(os.Stderr, "With --rev, the base graph is built from that revision's tracked files (domain-only,")
 			fmt.Fprintln(os.Stderr, "using the current config); no export file is needed. --rev and the positional are exclusive.")
@@ -121,7 +122,7 @@ func diffBaseline(ctx context.Context, root, rev string, pos []string) (types.Kn
 	}
 	var baseline types.KnowledgeGraphOutput
 	if err := json.Unmarshal(raw, &baseline); err != nil {
-		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: decode baseline %q (expected `magus graph export -o json` output): %w", baselinePath, err)
+		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: decode baseline %q (expected `"+hint.GraphExport.With("-o", "json")+"` output): %w", baselinePath, err)
 	}
 	return baseline, baselinePath, nil
 }

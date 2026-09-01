@@ -37,7 +37,7 @@ magus\project({
     // Adopts the shared node window by explicit import, not by position in the tree.
     // Just node: this project drives no Go, and declaring a window for a toolchain it
     // does not use would fail it on a version nobody here runs.
-    "tools": {"node": policy.node},
+    "tools": {"node": policy\node},
     "spells": [typescript],
     // ../proto because proto's buf-generate writes src/gen/ (see proto/buf.gen.yaml and the
     // outputs note below). Without the edge the two are unordered and, worse, a .proto change
@@ -136,7 +136,7 @@ fun install() > void !> any {
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.writesFiles("coverage.svg");
-    final before = drift.hashes(["coverage.svg"]);
+    final before = drift\hashes(["coverage.svg"]);
     install();
     proc\exec("pnpm", ["run", "test"], ".", {});
 
@@ -145,7 +145,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
         keep: "src/");
     fs\writeFile("coverage.svg", badge\coverage("console coverage", percent: pct, radius: 3));
     if (ctx.hasCharm("rw")) { return; }
-    if (drift.changedSince(before, ["coverage.svg"]).len() > 0) {
+    if (drift\changedSince(before, ["coverage.svg"]).len() > 0) {
         // Names the figure this run measured. Node's line coverage differs by a fraction
         // of a point between platforms, so a badge committed from a developer machine can
         // be stale on CI by a rounding step nobody can see from the message alone.
@@ -233,7 +233,7 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 // days in the first place.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    audit.audit();
+    audit\audit();
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the

@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/maintenance"
@@ -39,13 +39,13 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
-	case clihint.ServerStart.Leaf():
+	case hint.ServerStart.Leaf():
 		return serverStart(ctx, rest)
-	case clihint.ServerStop.Leaf():
+	case hint.ServerStop.Leaf():
 		return serverStop(ctx, rest)
-	case clihint.ServerJob.Leaf():
+	case hint.ServerJob.Leaf():
 		return serverJob(ctx, rest)
-	case clihint.ServerReload.Leaf():
+	case hint.ServerReload.Leaf():
 		return serverReload(ctx, rest)
 	case jobs.NameRotateActivities:
 		return serverRotateActivities(ctx, root, rest)
@@ -54,7 +54,7 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 	case jobs.NameCheckReview:
 		return serverCheckReview(ctx, root, rest)
 	default:
-		return usagef("magus server: unknown target %q (want start, stop, reload, or job); use `%s` to inspect daemon state", sub, clihint.Status)
+		return usagef("magus server: unknown target %q (want start, stop, reload, or job); use `%s` to inspect daemon state", sub, hint.Status)
 	}
 }
 
@@ -67,7 +67,7 @@ func serverUsage() {
 	fmt.Fprintln(os.Stderr, "  reload  re-read configuration without restarting: drop the daemon's open workspaces")
 	fmt.Fprintln(os.Stderr, "  job     submit a background maintenance job to a running daemon (run `magus server job` to list)")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "Use `%s` to inspect daemon pool state and check reachability.\n", clihint.Status)
+	fmt.Fprintf(os.Stderr, "Use `%s` to inspect daemon pool state and check reachability.\n", hint.Status)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The socket address is taken from --daemon-address, MAGUS_DAEMON_ADDRESS,")
 	fmt.Fprintln(os.Stderr, "or daemon.address in magus.yaml. When none is set, `server start` uses:")
@@ -94,7 +94,7 @@ func serverStart(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "it is accepting connections, prints its pid, and returns 0. Starting when a")
 			fmt.Fprintln(os.Stderr, "daemon is already running is a no-op that also returns 0.")
 			fmt.Fprintln(os.Stderr, "\nWith --foreground the daemon runs in this process and blocks until stopped")
-			fmt.Fprintln(os.Stderr, "(SIGINT / SIGTERM or `"+clihint.ServerStop.String()+"`). Use it under a process")
+			fmt.Fprintln(os.Stderr, "(SIGINT / SIGTERM or `"+hint.ServerStop.String()+"`). Use it under a process")
 			fmt.Fprintln(os.Stderr, "supervisor (systemd --user) or when debugging.")
 			fmt.Fprintln(os.Stderr, "\nSocket address: --daemon-address flag > MAGUS_DAEMON_ADDRESS env >")
 			fmt.Fprintln(os.Stderr, "daemon.address in magus.yaml > stable default ("+daemonDefaultAddr()+")")
@@ -112,7 +112,7 @@ func serverStart(ctx context.Context, args []string) error {
 		return fmt.Errorf("magus server start: daemon socket not available (no workspace found, or socket bind failed)")
 	}
 	fmt.Fprintf(os.Stderr, "magus: daemon listening on %s\n", addr)
-	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", clihint.ServerStop)
+	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", hint.ServerStop)
 
 	installRefreshHooks(ctx)
 
@@ -496,7 +496,7 @@ func serverJob(ctx context.Context, args []string) error {
 	name := args[0]
 	job, ok := jobs.Lookup(name)
 	if !ok {
-		return fmt.Errorf("magus server job: unknown job %q; run `%s` to list jobs", name, clihint.ServerJob)
+		return fmt.Errorf("magus server job: unknown job %q; run `%s` to list jobs", name, hint.ServerJob)
 	}
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil || addr == "" {
@@ -597,7 +597,7 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-activities")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Trim the activity trail to its cap and drop orphaned payload blobs. This is")
-			fmt.Fprintln(os.Stderr, "the worker for `magus server job rotate-activities`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "the worker for `"+hint.ServerJob.With("rotate-activities")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err
@@ -620,7 +620,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-logs")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Trim the invocation run-log journals to their cap, keeping the most recent.")
-			fmt.Fprintln(os.Stderr, "This is the worker for `magus server job rotate-logs`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "This is the worker for `"+hint.ServerJob.With("rotate-logs")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err
@@ -656,7 +656,7 @@ func installRefreshHooks(ctx context.Context) {
 	if err != nil {
 		root = cwd
 	}
-	installed, err := installer.InstallRefreshHook(ctx, root, "magus server job sync-graph")
+	installed, err := installer.InstallRefreshHook(ctx, root, hint.ServerJob.With("sync-graph"))
 	if err != nil {
 		slog.WarnContext(ctx, "server start: could not install VCS refresh hook", slog.String("error", err.Error()))
 		return
@@ -746,7 +746,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server check-review")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Note when a review this tree took part in has merged. This is the worker")
-			fmt.Fprintln(os.Stderr, "for `magus server job check-review`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "for `"+hint.ServerJob.With("check-review")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err

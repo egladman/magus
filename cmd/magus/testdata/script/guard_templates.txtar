@@ -204,6 +204,52 @@ stdin cursor-shell-deny.json
 exec sh $GUARD_TEMPLATES/cursor-guard.sh
 stdout '"permission":"allow"'
 
+# --- found, but cannot judge: the notice carries its own evidence -------------
+#
+# The case that actually occurs - a stale binary on PATH outlives a missing one - and
+# the one whose notice used to name two suspects while checking neither. One of them,
+# "cannot load this workspace", is not even a cause: the deny rules need no workspace.
+# So these assert the three facts that END the search, and that the guess is gone.
+
+env GUARD_MAGUS_BIN=$WORK/stale-magus
+chmod 0755 $WORK/stale-magus
+
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout 'magus guard is NOT running'
+stdout 'stale-magus'
+stdout 'v0.0.1-stale'
+stdout 'unknown subcommand'
+! stdout 'cannot load this workspace'
+# The config warning a too-old binary prints BEFORE it fails is a symptom of the same
+# staleness. Reporting it as the error would hand back the least useful of the two lines.
+! stdout 'WARN'
+
+# Cursor's template is self-contained, so it carries the same evidence or none at all.
+stdin cursor-shell-deny.json
+exec sh $GUARD_TEMPLATES/cursor-guard.sh
+stdout '"permission":"allow"'
+stderr 'stale-magus'
+stderr 'v0.0.1-stale'
+stderr 'unknown subcommand'
+
+# A host that set its own response still gets exactly that: the evidence is the DEFAULT,
+# not something the template forces on a host that made another choice.
+env GUARD_FAILED_RESPONSE=host-chose-this
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout 'host-chose-this'
+! stdout 'stale-magus'
+env GUARD_FAILED_RESPONSE=
+
+-- stale-magus --
+#!/bin/sh
+# Stands in for the binary a month behind the workspace: it answers `version` and knows
+# nothing about `session hook`, which is what silences the guard.
+[ "$1" = version ] && { echo 'magus v0.0.1-stale (deadbeef) built 2026-08-02T01:05:00Z'; exit 0; }
+echo 'magus: WARN config: unknown or unexpected keys in config file' >&2
+echo 'magus: unknown subcommand "session"' >&2
+exit 2
 -- deny-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
 -- advise-command.json --

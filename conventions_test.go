@@ -663,6 +663,11 @@ var failOpenOptInRe = regexp.MustCompile(`^\[ -n "\$GUARD_[A-Z_]+" \] &&`)
 // default assigned to it can be checked for emptiness.
 var failOpenDefaultRe = regexp.MustCompile(`\$(GUARD_[A-Z_]+_RESPONSE)`)
 
+// failOpenComputedNoticeRe matches an arm that BUILDS its notice from what it observed
+// rather than printing a canned string. There is no variable to give a default to, and
+// the evidence is the point: which binary went silent, its version, what it printed.
+var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\b`)
+
 // failOpenSilentByDesign records the verdict-carrying templates whose fail-open
 // arms deliberately announce NOTHING, and where that decision is written down.
 //
@@ -740,8 +745,16 @@ func failOpenArmEnd(lines []string, start int) int {
 // requires whatever variable carries that notice to have a non-empty default.
 // The second half is the half that matters: an arm printing a variable nobody
 // assigned is silent, and reads like an announcement.
+//
+// An arm that COMPUTES its notice satisfies both halves by construction, and is
+// checked first: the override variable it consults before falling back is the
+// first thing the block mentions, so reading that line as the notice would
+// demand a default the arm exists to do without.
 func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line int) {
 	t.Helper()
+	if failOpenComputedNoticeRe.MatchString(strings.Join(block, "\n")) {
+		return
+	}
 	for _, l := range block {
 		trimmed := strings.TrimSpace(l)
 		if failOpenOptInRe.MatchString(trimmed) || !failOpenNoticeRe.MatchString(trimmed) {

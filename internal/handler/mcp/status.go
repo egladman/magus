@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/spells"
 )
@@ -18,7 +19,7 @@ type statusTool struct {
 	opts Options
 }
 
-func (t *statusTool) Name() string { return "magus_status" }
+func (t *statusTool) Name() string { return hint.ToolStatus.String() }
 
 func (t *statusTool) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
 	addr, err := resolveStatusAddr(ctx, t.opts)

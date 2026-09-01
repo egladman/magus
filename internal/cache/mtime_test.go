@@ -107,6 +107,28 @@ func TestMtimeStoreLoadCancelledCtx(t *testing.T) {
 	assert.False(t, ok, "cancelled load must not read shard files from disk")
 }
 
+// TestMtimeStoreLoadRetriesAfterCancellation: load is memoized, so latching before the
+// disk read means one cancelled load leaves the store permanently empty and every
+// subsequent file re-hashes for the life of the process (the daemon's, not one run's).
+func TestMtimeStoreLoadRetriesAfterCancellation(t *testing.T) {
+	dir := t.TempDir()
+	seed := newMtimeStore(dir, nil)
+	seed.load(context.Background())
+	seed.set("/ws/x.go", "cafef00d", 1, 2)
+	seed.flush(context.Background())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := newMtimeStore(dir, nil)
+	s.load(ctx)
+	require.False(t, s.loaded, "a cancelled load read nothing, so it must not count as loaded")
+
+	s.load(context.Background())
+	got, ok := s.get("/ws/x.go", 1, 2)
+	require.True(t, ok, "the retry must read the shard the cancelled load skipped")
+	assert.Equal(t, "cafef00d", got)
+}
+
 // TestMtimeStoreSetAfterCancelledLoadDoesNotPanic verifies that set is total
 // even when load's disk-read was skipped by a cancelled context: load must
 // still initialise the (empty) shard maps, or set's plain map write panics

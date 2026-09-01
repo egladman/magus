@@ -28,6 +28,58 @@ func TestDocsDanglingCodeReferenceMGS7002(t *testing.T) {
 	assert.Contains(t, d.Attrs["unknown_codes"], "MGS9998")
 }
 
+// TestDocHeadingsAnchorsMatchGoldmark pins the section anchors to what the site renders. A
+// section node's anchor must be byte-identical to the page's rendered heading id, or the
+// pointer names a fragment that does not exist. These cases mirror the glossarySlug pin in
+// docs/lib/glossary.buzz, the site's own check of the same algorithm.
+func TestDocHeadingsAnchorsMatchGoldmark(t *testing.T) {
+	got := docHeadings([]byte("# Output reference\n\n## MAGUS.md\n\n### One-off\n\n# CI\n"))
+	assert.Equal(t, []docHeading{
+		{level: 1, text: "Output reference", anchor: "output-reference"},
+		{level: 2, text: "MAGUS.md", anchor: "magusmd"},
+		{level: 3, text: "One-off", anchor: "one-off"},
+		{level: 1, text: "CI", anchor: "ci"},
+	}, got)
+}
+
+func TestDocHeadingsDedupsRepeatedAnchors(t *testing.T) {
+	got := docHeadings([]byte("# Setup\n\n## Setup\n"))
+	require.Len(t, got, 2)
+	assert.Equal(t, "setup", got[0].anchor)
+	assert.Equal(t, "setup-1", got[1].anchor, "goldmark suffixes a repeated heading id; the graph must match the page")
+}
+
+func TestDocHeadingsIgnoresCodeFences(t *testing.T) {
+	// A "#" inside a fenced code block is a comment, not a heading.
+	got := docHeadings([]byte("# Real\n\n```sh\n# not a heading\n```\n"))
+	require.Len(t, got, 1)
+	assert.Equal(t, "Real", got[0].text)
+}
+
+// TestAssembleDocsEmitsSectionNodes checks the retrieval unit: a page node plus one node per
+// heading, each a citable pointer, with a heading contained by its enclosing heading rather
+// than by the page - so the graph mirrors the outline and a nested query stays scoped.
+func TestAssembleDocsEmitsSectionNodes(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "docs/guide.md", "---\ntitle: Guide\n---\n# Top\n\nintro\n\n## Sub\n\nbody\n")
+
+	out := mergeAll([]Shard{assembleDocs(root, nil, nil, "")}).Output()
+
+	top, ok := nodeByID(out, "docsection:docs/guide.md#top")
+	require.True(t, ok, "a section node per heading")
+	assert.Equal(t, types.KindDocSection, top.Kind)
+	assert.Equal(t, "Top", top.Label)
+	assert.Equal(t, "top", top.Attrs[attrAnchor])
+	assert.Equal(t, "1", top.Attrs[attrLevel])
+	assert.Equal(t, "docs/guide.md#top", top.Source, "the node is a citable pointer into the page")
+
+	// The page contains the top heading; the top heading (not the page) contains the sub.
+	assert.True(t, hasEdge(out, "doc:docs/guide.md", "docsection:docs/guide.md#top", types.RelationContains))
+	assert.True(t, hasEdge(out, "docsection:docs/guide.md#top", "docsection:docs/guide.md#sub", types.RelationContains))
+	assert.False(t, hasEdge(out, "doc:docs/guide.md", "docsection:docs/guide.md#sub", types.RelationContains),
+		"a nested heading is contained by its parent heading, not the page")
+}
+
 func TestDocsFrontmatterAttrs(t *testing.T) {
 	root := t.TempDir()
 	// A page with frontmatter title/tags, and one without: the second must carry

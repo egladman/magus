@@ -28,11 +28,12 @@ func (m *Magus) newServiceSession(ctx context.Context) *service.Session {
 	acquire := func(ctx context.Context, key string, svc spells.Service) error {
 		return proc.AcquireService(ctx, addr, key, svc)
 	}
-	release := func(key string) {
-		// context.Background: release must run even after the run's ctx is cancelled
-		// (Ctrl-C), or the daemon's ref-count would leak and the service never reap.
-		if err := proc.ReleaseService(context.Background(), addr, key); err != nil {
-			slog.WarnContext(ctx, "magus: releasing daemon-hosted service failed; it will idle-reap on the daemon",
+	release := func(relCtx context.Context, key string) {
+		// relCtx is ReleaseAll's teardown ctx, which is already detached from the run's
+		// (Ctrl-C must not skip the release, or the daemon's ref-count leaks and the
+		// service never reaps) and bounded, so a wedged daemon socket cannot hang exit.
+		if err := proc.ReleaseService(relCtx, addr, key); err != nil {
+			slog.WarnContext(relCtx, "magus: releasing daemon-hosted service failed; it will idle-reap on the daemon",
 				slog.String("key", key), slog.String("err", err.Error()))
 		}
 	}

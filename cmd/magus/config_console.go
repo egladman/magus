@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -38,7 +39,7 @@ func configConsoleCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Manage the console (PWA) auth tokens. These are SEPARATE from MCP connector")
 		fmt.Fprintln(os.Stderr, "tokens: a console token is rejected at /mcp, and an MCP token is rejected by")
-		fmt.Fprintln(os.Stderr, "the console. Mint MCP credentials with `magus config mcp connector create`.")
+		fmt.Fprintln(os.Stderr, "the console. Mint MCP credentials with `"+hint.ConfigMCPConnectorCreate.String()+"`.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  token   create, list, or revoke console tokens")
@@ -181,7 +182,7 @@ func configConsoleTokenList(args []string) error {
 	}
 	toks := store.ListScope(consoleScopes...)
 	if len(toks) == 0 {
-		fmt.Fprintln(os.Stderr, "no console tokens; create one with `magus config console token create`")
+		fmt.Fprintln(os.Stderr, "no console tokens; create one with `"+hint.ConfigConsoleTokenCreate.String()+"`")
 		return nil
 	}
 	now := time.Now()
@@ -231,7 +232,7 @@ func configConsoleTokenRevoke(args []string) error {
 	// console command - the two pools must not be reachable through each other.
 	if !matchesScoped(store.ListScope(consoleScopes...), q) {
 		if matchesScoped(store.ListScope(auth.ScopeMCP), q) {
-			return usagef("magus config console token revoke: %q is an MCP connector, not a console token; revoke it with `magus config mcp connector revoke %s`", q, q)
+			return usagef("magus config console token revoke: %q is an MCP connector, not a console token; revoke it with `"+hint.ConfigMCPConnectorRevoke.With("%s")+"`", q, q)
 		}
 		return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config console token revoke: no console token matches %q", q)
 	}

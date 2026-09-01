@@ -23,7 +23,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
@@ -208,7 +208,7 @@ func FindRoot(dir string) (string, error) {
 	}
 	return "", types.DiagnosticErrorf(types.NoWorkspaceRoot,
 		"magus: could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found); "+
-			"run `magus init` to bootstrap one")
+			"run `%s` to bootstrap one", hint.Init)
 }
 
 // Inspect discovers the workspace without opening the cache (for introspection commands).
@@ -446,8 +446,8 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 				continue
 			}
 			msg := fmt.Sprintf("magus: project %q: per-target policy names unknown target %q", p.Path, name)
-			if hint := interactive.SuggestNearest(name, declared); hint != "" {
-				msg += fmt.Sprintf("; did you mean %q?", hint)
+			if sug := hint.Nearest(name, declared); sug != "" {
+				msg += fmt.Sprintf("; did you mean %q?", sug)
 			}
 			if len(declared) > 0 {
 				msg += fmt.Sprintf(" (declared targets: %s)", strings.Join(declared, ", "))
@@ -565,6 +565,14 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		tel = built
 	}
 	m.tel = tel
+	// Close is what shuts a provider Open built, and neither error path below reaches it:
+	// they return before the caller has a *Magus to close. An injected provider is the
+	// daemon's, so it is left alone here for the reason Close leaves it alone.
+	shutdownTel := func() {
+		if m.injectedTel == nil {
+			_ = tel.Shutdown(ctx)
+		}
+	}
 	// A magusfile may wire a remote cache backend via magus.cache.remote(<spell>);
 	// resolve it through the bindings-registered opener and attach it. The backend
 	// self-gates, so wiring it is harmless locally; InstrumentRemoteBackend is a
@@ -574,6 +582,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if name := m.wsReg.RemoteBackend(); name != "" {
 		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure)
 		if sErr != nil {
+			shutdownTel()
 			return nil, sErr
 		}
 		cfgOpts = append(cfgOpts, trusted...)
@@ -585,6 +594,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 	c, err := cache.Open(ctx, cacheDir, cfgOpts...)
 	if err != nil {
+		shutdownTel()
 		return nil, err
 	}
 	m.cache = c
@@ -1431,7 +1441,7 @@ func (m *Magus) suggestProjectPath(path string) string {
 	for _, p := range all {
 		candidates = append(candidates, p.Path)
 	}
-	return interactive.SuggestNearest(path, candidates)
+	return hint.Nearest(path, candidates)
 }
 
 // ExpandCwd resolves t for the project containing cwd; found=false when cwd is not inside any project.

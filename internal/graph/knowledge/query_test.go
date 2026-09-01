@@ -19,7 +19,7 @@ func matchIDs(ms []types.KnowledgeMatch) []string {
 	return out
 }
 
-func TestSeedsSymbols(t *testing.T) {
+func TestSeedsLazyLayer(t *testing.T) {
 	// A wildcard that reaches symbols must seed too, or the query loads no symbol
 	// shards and silently returns empty (the match side and the load side must agree).
 	for _, in := range []string{
@@ -27,13 +27,13 @@ func TestSeedsSymbols(t *testing.T) {
 		"kind:sym*", "kind:symbol*", "kind:*", "id:sym*",
 		"relation:calls", // symbol->symbol calls live only in the lazy shards
 	} {
-		assert.Truef(t, SeedsSymbols(in), "%q should seed symbols", in)
+		assert.Truef(t, SeedsLazyLayer(in), "%q should seed symbols", in)
 	}
 	for _, in := range []string{
 		"kind:target build", "build", "project:pkg/a", "relation:uses",
 		"kind:tar*", "id:target:*", // wildcards that cannot reach symbols
 	} {
-		assert.Falsef(t, SeedsSymbols(in), "%q should NOT seed symbols", in)
+		assert.Falsef(t, SeedsLazyLayer(in), "%q should NOT seed symbols", in)
 	}
 }
 
@@ -110,6 +110,42 @@ func TestResolveNegationExcludesKind(t *testing.T) {
 	for _, id := range ids {
 		assert.NotContains(t, id, "op:")
 	}
+}
+
+func TestParseQueryOperators(t *testing.T) {
+	q := parseQuery(`kind=spell project=web kind!=op id=~build`)
+	assert.Equal(t, []string{"spell"}, q.fields["kind"])
+	assert.Equal(t, []string{"web"}, q.fields["project"])
+	assert.Equal(t, []string{"op"}, q.negFields["kind"], "!= routes to the same exclusion as -kind:op")
+	require.Len(t, q.reFields["id"], 1)
+	assert.True(t, q.reFields["id"][0].MatchString("target:pkg/a:build"), "=~ compiles a regex over the id target")
+}
+
+func TestResolveEqualsIsColonAlias(t *testing.T) {
+	g := sampleGraph()
+	assert.Equal(t, matchIDs(g.Resolve("kind:spell", 0)), matchIDs(g.Resolve("kind=spell", 0)),
+		"= is the canonical spelling of the : field grammar; both resolve identically")
+}
+
+func TestResolveBangEqualsExcludesKind(t *testing.T) {
+	// kind!=op is the canonical negation and must behave exactly like the compat -kind:op.
+	ids := matchIDs(sampleGraph().Resolve("go kind!=op", 0))
+	assert.Contains(t, ids, "spell:go")
+	for _, id := range ids {
+		assert.NotContains(t, id, "op:")
+	}
+}
+
+func TestResolveRegexFieldMatchesID(t *testing.T) {
+	ids := matchIDs(sampleGraph().Resolve(`id=~build$`, 0))
+	assert.Contains(t, ids, "target:pkg/a:build")
+	assert.Contains(t, ids, "target:pkg/b:build")
+	assert.NotContains(t, ids, "target:pkg/a:gen")
+}
+
+func TestResolveRegexKind(t *testing.T) {
+	assert.Equal(t, []string{"spell:go"}, matchIDs(sampleGraph().Resolve(`kind=~^spell$`, 0)),
+		"a kind regex ranges over node kinds, here anchored to spell alone")
 }
 
 func TestResolveLimit(t *testing.T) {
@@ -353,16 +389,16 @@ func TestGrammarConformance(t *testing.T) {
 	}
 }
 
-// CouldMatchSymbol is the weaker "was the symbol layer relevant" question. It exists so
+// CouldMatchLazyLayer is the weaker "was the symbol layer relevant" question. It exists so
 // an empty result does not point its reader at a layer that could never have held the
 // answer: `kind:author` returning nothing has nothing to do with code symbols.
-func TestCouldMatchSymbol(t *testing.T) {
+func TestCouldMatchLazyLayer(t *testing.T) {
 	for _, in := range []string{
 		"kind:symbol Foo", "relation:calls", "someBareName", "project:pkg/a", "",
 	} {
-		assert.Truef(t, CouldMatchSymbol(in), "%q leaves the symbol layer in scope", in)
+		assert.Truef(t, CouldMatchLazyLayer(in), "%q leaves the symbol layer in scope", in)
 	}
 	for _, in := range []string{"kind:author", "kind:target build", "kind:spell"} {
-		assert.Falsef(t, CouldMatchSymbol(in), "%q rules the symbol layer out itself", in)
+		assert.Falsef(t, CouldMatchLazyLayer(in), "%q rules the symbol layer out itself", in)
 	}
 }

@@ -24,7 +24,7 @@ var fixtureDirs = []string{"testdata", "fixtures", "__snapshots__"}
 // a hardcoded language list that goes stale the first time magus grows a spell for a
 // language nobody added to it.
 //
-// The gap this closes is a measured one. magus-architecture's description already
+// The gap this closes is a measured one. magus-architecture-review's description already
 // covers "deciding where new code belongs", and its own text says to prefer folding
 // into an existing mechanism over adding one, but nothing LOADS it at the moment
 // the decision is made. Measured: a directory was added for a helper with two
@@ -96,5 +96,5 @@ func workspaceRelativeDir(path string) (string, bool) {
 func newSourceDirAdvice(dir string) string {
 	return "magus workspace: `" + dir + "` holds nothing yet, so this write creates a NEW DIRECTORY: whatever your language calls an importable unit (package, module, crate).\n" +
 		"Before it exists, check that it has to. Is there an existing directory whose stated purpose already covers this, and would folding it there serve callers better than a new import? A boundary that exists for one helper with two callers is one nobody asked for, and it is far cheaper to not create than to remove later.\n" +
-		"Load the magus-architecture skill. It answers this from the workspace's own dependency and churn data rather than from taste."
+		"Load the magus-architecture-review skill. It answers this from the workspace's own dependency and churn data rather than from taste."
 }

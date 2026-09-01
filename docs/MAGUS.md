@@ -33,10 +33,10 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v9). Query it instead of grepping:
+This workspace has a knowledge graph (schema v10). Query it instead of grepping:
 
 ```sh
-magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
+magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
 magus explain <node>        # one node: its edges, provenance, blast radius
 magus path <a> <b>          # how two nodes connect
 magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats)
@@ -45,35 +45,35 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Size | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `format` |
-| spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
-| op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `dprint` |
-| tool | 20+ | `magus query kind:tool` | `go`, `pnpm`, `buf` |
-| charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
-| module | 30+ | `magus query kind:module` | `fs`, `magus`, `charm` |
-| method | 200+ | `magus query kind:method` | `archive.compress`, `archive.list`, `archive.read_file` |
-| diagnostic | 70+ | `magus query kind:diagnostic` | `MGS4001`, `MGS2001`, `MGS1002` |
-| doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage` |
-| file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
-| function | 900+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
-| import | 100+ | `magus query kind:import` | `magus`, `fs`, `std` |
-| rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
-| package | 100+ | `magus query kind:package` | `github.com/davecgh/go-spew`, `github.com/dlclark/regexp2`, `github.com/ebitengine/purego` |
+| project | 10+ | `magus query kind=project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 100+ | `magus query kind=target` | `content-generate`, `site-generate`, `format` |
+| spell | 10+ | `magus query kind=spell` | `go`, `markdown`, `typescript` |
+| op | 60+ | `magus query kind=op` | `go-build`, `go-test`, `dprint` |
+| tool | 20+ | `magus query kind=tool` | `go`, `pnpm`, `buf` |
+| charm | 10+ | `magus query kind=charm` | `rw`, `cd`, `stable` |
+| module | 30+ | `magus query kind=module` | `fs`, `magus`, `charm` |
+| method | 200+ | `magus query kind=method` | `archive.compress`, `archive.list`, `archive.read_file` |
+| diagnostic | 70+ | `magus query kind=diagnostic` | `MGS1002`, `MGS4001`, `MGS1021` |
+| doc | 300+ | `magus query kind=doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 100+ | `magus query kind=dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage` |
+| file | 200+ | `magus query kind=file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
+| function | 900+ | `magus query kind=function` | `tail`, `sign`, `renderContentHTML` |
+| import | 100+ | `magus query kind=import` | `magus`, `fs`, `std` |
+| rationale | 6 | `magus query kind=rationale` | `TODO`, `WHY`, `NOTE` |
+| package | 100+ | `magus query kind=package` | `github.com/davecgh/go-spew`, `github.com/dlclark/regexp2`, `github.com/ebitengine/purego` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 44 | `magus query project:.` | `generate`, `buzz-test`, `image-build` |
-| console | 8 | `magus query project:console` | `preflight`, `build`, `ci` |
-| docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
-| libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `lint` |
-| libs/diagram | 2 | `magus query project:libs/diagram` | `test`, `ci` |
-| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `lint` |
-| libs/testlayout | 8 | `magus query project:libs/testlayout` | `format`, `build`, `lint` |
-| libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `preflight`, `test` |
-| proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
+| . | 44 | `magus query project=.` | `generate`, `buzz-test`, `image-build` |
+| console | 8 | `magus query project=console` | `preflight`, `build`, `ci` |
+| docs | 18 | `magus query project=docs` | `content-generate`, `site-generate`, `diagrams-generate` |
+| docs/guides/integrations/agents | 5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint` |
+| libs/diagnostics | 8 | `magus query project=libs/diagnostics` | `format`, `build`, `lint` |
+| libs/diagram | 2 | `magus query project=libs/diagram` | `test`, `ci` |
+| libs/gopherbuzz | 10 | `magus query project=libs/gopherbuzz` | `format`, `build`, `lint` |
+| libs/testlayout | 8 | `magus query project=libs/testlayout` | `format`, `build`, `lint` |
+| libs/textsearch | 6 | `magus query project=libs/textsearch` | `lint`, `preflight`, `test` |
+| proto | 3 | `magus query project=proto` | `generate`, `lint`, `ci` |
 
 ## Project: docs
 

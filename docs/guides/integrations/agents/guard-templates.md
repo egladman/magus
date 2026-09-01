@@ -53,15 +53,15 @@ your host config points at, and fails when it is stale or missing.
 
 One implementation per guard surface. A host sets overrides and delegates:
 
-| variable                     | what it is                                                                                      |
-| ---------------------------- | ----------------------------------------------------------------------------------------------- |
-| `HOST_EVENT_PATH`            | dot-path to the command or file path inside your host's event JSON                              |
-| `HOST_SESSION_PATH`          | dot-path to the session id inside your host's event JSON                                        |
-| `HOST_RESPONSE`              | Go template rendering your host's reply from the verdict                                        |
-| `GUARD_AGENT_NAME`           | the agent host name recorded on the activity event (`claude-code`, `codex`, ...)                |
-| `GUARD_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance |
-| `GUARD_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input                                  |
-| `GUARD_MAGUS_BIN`            | absolute path to magus when it is not on PATH                                                   |
+| variable                     | what it is                                                                                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `HOST_EVENT_PATH`            | dot-path to the command or file path inside your host's event JSON                                       |
+| `HOST_SESSION_PATH`          | dot-path to the session id inside your host's event JSON                                                 |
+| `HOST_RESPONSE`              | Go template rendering your host's reply from the verdict                                                 |
+| `GUARD_AGENT_NAME`           | the agent host name recorded on the activity event (`claude-code`, `codex`, ...)                         |
+| `GUARD_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance          |
+| `GUARD_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input; unset, the notice is built from evidence |
+| `GUARD_MAGUS_BIN`            | absolute path to magus when it is not on PATH                                                            |
 
 `GUARD_AGENT_NAME` and `HOST_SESSION_PATH` feed `magus session hook --agent-name` and
 `--session`, which are pure attribution: they label the recorded observation and
@@ -101,7 +101,9 @@ overrides and execs it, so there is one implementation to reason about.
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
 #                    host can choose its own fail-open or fail-closed stance
 #   GUARD_FAILED_RESPONSE  the same, for a magus that IS found but cannot judge
-#                    the command (too old for `session hook`, cannot load the workspace)
+#                    the command. Left unset, this file builds one from evidence:
+#                    which binary it resolved, that binary's version, and the
+#                    error it actually printed
 #
 # The defaults are Claude Code's event and response shape.
 #
@@ -123,7 +125,7 @@ overrides and execs it, so there is one implementation to reason about.
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 8
+# magus-guard-template: 9
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=none pass=none
 
@@ -170,7 +172,6 @@ while [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ]; do
 done
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
-[ -n "$GUARD_FAILED_RESPONSE" ] || GUARD_FAILED_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the session hook subcommand, or cannot load this workspace - run magus session hook by hand to see the error, then rebuild or update it to restore the guard."}}'
 
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
@@ -199,6 +200,27 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 guard() {
   printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
 }
+
+# guard_failure_notice states WHICH binary went silent, what version it is, and what it
+# actually said - the three facts a reader otherwise spends a session collecting.
+#
+# The text this replaces offered two suspects, "too old for session hook, or cannot load
+# this workspace", and the second is not a cause at all: the deny rules need no workspace,
+# and a current binary run from an empty directory still denies. Naming a suspect the
+# evidence does not support is worse than naming none, because the reader goes and checks it.
+#
+# It re-runs the guard to capture stderr, which the verdict path discards. One extra
+# process, only on the path that is already broken - the same trade the attribution retry
+# above makes. WARN lines are dropped because a config the binary is too old to parse warns
+# BEFORE it fails, and that warning is a symptom of the same staleness, not the error.
+guard_failure_notice() {
+  ver=$("$GUARD_MAGUS_BIN" version 2>/dev/null | head -n 1)
+  [ -n "$ver" ] || ver='version unreadable'
+  why=$(guard 2>&1 >/dev/null | grep -v 'WARN' | head -n 1)
+  [ -n "$why" ] || why='it printed no error'
+  printf 'magus guard is NOT running: %s (%s) could not judge this command, so its deny and advise rules are unenforced. It said: %s. Rebuild or update THAT binary to restore the guard.' \
+    "$GUARD_MAGUS_BIN" "$ver" "$why"
+}
 # A DENY exits non-zero (2) with the verdict on stdout, so a bare `||` retry would treat
 # every blocked command as "this binary rejected the attribution flags" and judge it a
 # second time - unattributed, and recorded twice in the activity trail. Emptiness alone
@@ -225,8 +247,17 @@ fi
 #
 # Fail OPEN either way. A guard that blocks work because it cannot judge it has its
 # priorities backwards, and an unguarded session you know about beats one you do not.
+#
+# This repeats on every tool call, because nothing here survives between two of them: the
+# process is short-lived and the binary that owns magus's own once-per-session state is the
+# one that just failed to run. So the notice is kept to a line instead - twenty commits of
+# identical text is wallpaper, and wallpaper is how a real failure goes unread.
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
-  printf '%s' "$GUARD_FAILED_RESPONSE"
+  if [ -n "$GUARD_FAILED_RESPONSE" ]; then
+    printf '%s' "$GUARD_FAILED_RESPONSE"
+  else
+    guard_failure_notice | jq -Rc '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:.}}'
+  fi
   exit 0
 fi
 printf '%s' "$verdict"
@@ -275,7 +306,7 @@ wasteful, not destructive.
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 8
+# magus-guard-template: 9
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=none pass=none
 
@@ -417,7 +448,7 @@ surface, and this file carries no verdict on no surface.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 8
+# magus-guard-template: 9
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -515,7 +546,11 @@ output because there was nothing to say. A binary that cannot run - too old for
 `session hook`, unable to load the workspace, half-written by a concurrent build - exits
 non-zero with empty output. Printing that as a pass disables every rule with
 nothing anywhere saying so. Both scripts discriminate on status and emptiness
-together, and print `GUARD_FAILED_RESPONSE` for the second case.
+together, and announce the second case. The announcement names its evidence -
+the binary path they resolved, that binary's version, and the first line it
+printed on stderr - because the guesses it used to offer sent readers to check a
+workspace that was never the problem. Set `GUARD_FAILED_RESPONSE` to replace it
+with a fixed response of your own.
 
 **Attribution must never break a verdict.** `--agent-name` and `--session`
 postdate the current release, and an older binary rejects an unknown flag by

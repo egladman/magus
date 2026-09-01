@@ -44,8 +44,8 @@
 .opencode/skills/magus-workspace-rules*/** merge=magus linguist-generated
 MAGUS.md merge=magus linguist-generated
 assets/coverage.svg merge=magus linguist-generated
-assets/gen/core-loop.svg merge=magus linguist-generated
-assets/gen/showcase.svg merge=magus linguist-generated
+assets/gen/core-loop*.svg merge=magus linguist-generated
+assets/gen/showcase*.svg merge=magus linguist-generated
 assets/gen/terminal-*.svg merge=magus linguist-generated
 assets/textsearch-coverage.svg merge=magus linguist-generated
 cmd/magus/completions/* merge=magus linguist-generated

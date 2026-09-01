@@ -59,7 +59,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 - `magus_memory` {op: "put", name, type, refs, body?, status?} upserts a record
   by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
-  `query: kind:op depends cache` or `node: file:internal/hash/hasher.go`).
+  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`.{{if .Full}} A bare "we chose X" helps
   nobody; the `body` carries the why, and the refs anchor it to the code.{{else}} Put the why

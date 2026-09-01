@@ -178,6 +178,44 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 	})
 }
 
+// TestGradeLeasedWriteMalformedDeclaration pins the fail-open being made VISIBLE. The
+// matcher's error was discarded, so a declaration it could not read matched nothing: a
+// forbidden path spelled with a stray bracket stopped denying and said so nowhere, which
+// is the shape of failure this rule is least able to afford - a boundary that looks
+// enforced and is not.
+func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
+	t.Run("the acting lease's own forbidden list", func(t *testing.T) {
+		leases := fleetLeases()
+		leases[1].ForbiddenPaths = []string{"cmd/magus/[gen/**"}
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		require.Equal(t, "advise", got.Decision, "an unreadable pattern says nothing about the write, only that nothing graded it")
+		assert.Contains(t, got.Context, "cmd/magus/[gen/**", "the advisory must name the pattern to fix")
+		assert.Contains(t, got.Context, "lease-b")
+		assert.Contains(t, got.Context, "not being enforced")
+	})
+
+	t.Run("another lease's owned paths", func(t *testing.T) {
+		leases := fleetLeases()
+		leases[0].OwnedPaths = []string{"internal/[ledger/**"}
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "advise", got.Decision)
+		assert.Contains(t, got.Context, "lease-a")
+	})
+
+	t.Run("a valid entry still denies through an earlier malformed one", func(t *testing.T) {
+		// The malformed pattern comes first, the valid glob that covers the write second.
+		// Short-circuiting on the bad pattern downgraded this deny to an advisory - a valid
+		// forbidden boundary must still hold when a sibling entry is unreadable.
+		leases := fleetLeases()
+		leases[1].ForbiddenPaths = []string{"cmd/magus/[gen/**", "cmd/magus/gen/**"}
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		require.Equal(t, "deny", got.Decision, "the valid forbidden pattern must deny even though an earlier entry could not be read")
+	})
+}
+
 // TestGradeLeasedWriteUnenrolled is the doctrine case: a writer magus cannot attribute
 // is told what it is walking into and is never stopped. magus cannot tell "not part of the
 // fleet" from "part of it and not saying so", and blocking a person in their own checkout
@@ -272,15 +310,27 @@ func TestDeclarationCovering(t *testing.T) {
 		{"/", "internal/ledger/store.go", false},
 	} {
 		t.Run(tt.decl+" vs "+tt.rel, func(t *testing.T) {
-			_, got := declarationCovering([]string{tt.decl}, tt.rel)
+			_, got, err := declarationCovering([]string{tt.decl}, tt.rel)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
 
 	t.Run("returns the declaration it matched, verbatim", func(t *testing.T) {
-		decl, ok := declarationCovering([]string{"docs/**", "internal/ledger/**"}, "internal/ledger/store.go")
+		decl, ok, err := declarationCovering([]string{"docs/**", "internal/ledger/**"}, "internal/ledger/store.go")
+		require.NoError(t, err)
 		require.True(t, ok)
 		assert.Equal(t, "internal/ledger/**", decl, "a denial quotes the declaration as the orchestrator wrote it")
+	})
+
+	// A pattern the matcher rejects used to be swallowed and read as "no declaration
+	// covers this path", so a forbidden entry with a stray bracket silently stopped
+	// denying while the rule still looked enforced.
+	t.Run("a malformed pattern is reported, not silently unmatched", func(t *testing.T) {
+		_, ok, err := declarationCovering([]string{"internal/[ledger"}, "internal/ledger/store.go")
+		require.Error(t, err)
+		assert.False(t, ok)
+		assert.Contains(t, err.Error(), "internal/[ledger", "the advisory has to name the pattern to fix")
 	})
 }
 
@@ -471,6 +521,13 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 		"magus notes edit team-conventions",
 		"printf 'prose' | magus notes edit team-conventions --anchor project:.",
 		"cat body.md | ./magus notes edit foo",
+		// A GLOBAL FLAG between the program and the verb. magus accepts these ahead of
+		// the subcommand, so requiring `notes` immediately after `magus` left the rule
+		// with a one-word bypass.
+		"magus --root . notes edit team-conventions",
+		"magus -o json notes edit foo",
+		// A line the parser cannot read still falls back to the pattern.
+		"magus notes edit foo && (",
 	} {
 		v := evaluateBashGuard(cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
@@ -686,7 +743,8 @@ func TestAdviseAgentSurfaceWrite(t *testing.T) {
 	for _, rel := range []string{
 		"internal/agent/skills/magus-run/SKILL.md",
 		"internal/handler/mcp/registry.go",
-		"internal/handler/mcp/toolref.go",
+		"internal/hint/mcptool.go",
+		"internal/hint/clicommand.go",
 	} {
 		got := adviseAgentSurfaceWrite(rel)
 		assert.Contains(t, got, "magus-skill-authoring", rel)

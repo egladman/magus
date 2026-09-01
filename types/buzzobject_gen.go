@@ -401,6 +401,7 @@ func (v FileEntry) BuzzObject() BuzzObject {
 		"claims":    itemsClaims,
 		"dependsOn": v.DependsOn,
 		"hint":      v.Hint,
+		"exists":    v.Exists,
 	}
 }
 
@@ -745,9 +746,10 @@ func (v KnowledgeAnswer) BuzzObject() BuzzObject {
 		itemsGaps[indexGaps] = v.Gaps[indexGaps].BuzzObject()
 	}
 	return BuzzObject{
-		"verdict": string(v.Verdict),
-		"reason":  string(v.Reason),
-		"gaps":    itemsGaps,
+		"verdict":      string(v.Verdict),
+		"reason":       string(v.Reason),
+		"gaps":         itemsGaps,
+		"staleIndexes": v.StaleIndexes,
 	}
 }
 

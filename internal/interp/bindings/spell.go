@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service/identity"
@@ -95,20 +95,34 @@ func docsByTarget(targets map[string]spells.Op) map[string]string {
 	return out
 }
 
+// maxProbeOutput bounds what one probe contributes. A version line is one short
+// line; a tool that ignores its version flag and prints its whole help - or a log -
+// would otherwise be held whole and mixed into the cache key whole.
+const maxProbeOutput = 4 << 10
+
 // versionProber runs one tool's version argv in the project dir and returns trimmed
-// stdout. One function for every tool now that no binary is privileged: the argv comes
-// from the Tool entry rather than being baked into a per-tool closure.
+// stdout, bounded by maxProbeOutput. One function for every tool now that no binary
+// is privileged: the argv comes from the Tool entry rather than being baked into a
+// per-tool closure.
+//
+// It forks through run.Exec, like every other spell-declared command, rather than
+// exec.Command directly. A spell's `probe` argv is authored input, so it must meet
+// the sandbox's exec check; and the fork wants the process group and wait delay that
+// let a probe which hangs be reaped with its children.
 func versionProber(ctx context.Context, probe spells.Command, dir string) (string, error) {
 	if probe.Bin == "" {
 		return "", nil
 	}
-	c := exec.CommandContext(ctx, probe.Bin, probe.Args...)
-	c.Dir = dir
-	out, err := c.Output()
+	res, err := run.Exec(ctx, probe.Bin, probe.Args, run.ExecOptions{Dir: dir, Capture: true, Quiet: true})
 	if err != nil {
 		return "", fmt.Errorf("version probe %s %v in %s: %w", probe.Bin, probe.Args, dir, err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	out := strings.TrimSpace(res.Stdout)
+	if len(out) > maxProbeOutput {
+		// The cut can land inside a rune, and the token is displayed as well as hashed.
+		out = strings.ToValidUTF8(out[:maxProbeOutput], "")
+	}
+	return out, nil
 }
 
 // newCommandRenderer returns the command preview used by `magus describe`: it
@@ -641,7 +655,7 @@ func suggestSpellName(name string) string {
 	const threshold = 3
 	best, bestDist := "", threshold+1
 	for _, h := range builtinSpellHandles() {
-		if d := levenshtein(lower, h); d < bestDist || (d == bestDist && h < best) {
+		if d := hint.Distance(lower, h); d < bestDist || (d == bestDist && h < best) {
 			best, bestDist = h, d
 		}
 	}
@@ -661,41 +675,4 @@ func builtinSpellHandles() []string {
 	}
 	slices.Sort(out)
 	return out
-}
-
-// levenshtein is the edit distance between a and b, for the did-you-mean search.
-func levenshtein(a, b string) int {
-	if a == b {
-		return 0
-	}
-	if len(a) == 0 {
-		return len(b)
-	}
-	if len(b) == 0 {
-		return len(a)
-	}
-	row := make([]int, len(b)+1)
-	for j := range row {
-		row[j] = j
-	}
-	for i, ca := range a {
-		prev := i + 1
-		for j, cb := range b {
-			cost := 1
-			if ca == cb {
-				cost = 0
-			}
-			next := row[j+1] + 1
-			if d := prev + 1; d < next {
-				next = d
-			}
-			if d := row[j] + cost; d < next {
-				next = d
-			}
-			row[j] = prev
-			prev = next
-		}
-		row[len(b)] = prev
-	}
-	return row[len(b)]
 }

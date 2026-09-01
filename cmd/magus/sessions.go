@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 )
 
@@ -141,7 +142,7 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 		// An empty store is the normal state before any run, so this says how facts
 		// get there rather than reporting a fault.
 		fmt.Fprintf(os.Stdout, "no sessions recorded yet in %s\n", dir)
-		fmt.Fprintln(os.Stdout, "magus records one as soon as a `magus run` finishes a target in any worktree of this repository")
+		fmt.Fprintln(os.Stdout, "magus records one as soon as a `"+hint.Run.String()+"` finishes a target in any worktree of this repository")
 		return nil
 	}
 
@@ -171,7 +172,7 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 	if open := len(sessions.AttentionQueue(fold)); open > 0 {
 		// A reader of the history is often looking for what needs them; one line
 		// points at the other view of the same store.
-		fmt.Fprintf(os.Stdout, "\n%d attention request(s) open; `magus session attention` lists them\n", open)
+		fmt.Fprintf(os.Stdout, "\n%d attention request(s) open; `%s` lists them\n", open, hint.SessionAttention)
 	}
 
 	if fold.Skipped > 0 {

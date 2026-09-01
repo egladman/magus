@@ -847,9 +847,21 @@ func (a api) packageOf(full string) string {
 	return ""
 }
 
+// generatedFrom values this generator stamps into every page's frontmatter. They are
+// what the prune below treats as proof of ownership, so a page must carry one to be
+// eligible for deletion.
+const (
+	indexGeneratedFrom = "proto/magus/**/*.proto"
+	pageGeneratedFrom  = "reference/api/"
+)
+
 func writeAll(a api, outDir string) (int, error) {
 	if len(a.services) == 0 {
 		return 0, fmt.Errorf("no magus services found in descriptor set")
+	}
+	// An empty -out would make the prune below walk the working directory.
+	if outDir == "" {
+		return 0, fmt.Errorf("no output directory: pass -out")
 	}
 	usedBy := a.computeUsedBy()
 	// Render everything before writing anything: a failure partway through a direct-write loop
@@ -875,6 +887,10 @@ func writeAll(a api, outDir string) (int, error) {
 	// generator writes, so one it stops writing is invisible to it: a deleted RPC's page
 	// would otherwise sit in the committed tree indefinitely, describing something the
 	// daemon no longer serves.
+	//
+	// Only a page carrying this generator's own generated_from is removed. Without that
+	// check the sweep deletes every .md under -out that this run did not write, which
+	// includes any hand-written page someone adds to the section.
 	err := filepath.WalkDir(outDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
 			return err
@@ -883,10 +899,18 @@ func writeAll(a api, outDir string) (int, error) {
 		if err != nil {
 			return err
 		}
-		if _, keep := pages[filepath.ToSlash(rel)]; !keep {
-			return os.Remove(path)
+		if _, keep := pages[filepath.ToSlash(rel)]; keep {
+			return nil
 		}
-		return nil
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		fm, ok := docs.ParseFrontmatter(string(body))
+		if !ok || (fm.GeneratedFrom != indexGeneratedFrom && fm.GeneratedFrom != pageGeneratedFrom) {
+			return nil
+		}
+		return os.Remove(path)
 	})
 	if err != nil {
 		return 0, err
@@ -948,7 +972,7 @@ func renderIndex(a api) string {
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:         "Daemon API",
 		Description:   "The magus daemon's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract.",
-		GeneratedFrom: "proto/magus/**/*.proto",
+		GeneratedFrom: indexGeneratedFrom,
 		Tags:          []string{"api", "proto", "protobuf", "connect", "grpc", "daemon", "reference"},
 	})
 
@@ -1106,7 +1130,7 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 		Description: firstSentence(s.Doc, fmt.Sprintf("The %s service in the magus daemon API: every method, request, response, and enum.", s.Name)),
 		// The heading-level source links already point at this page's own .proto file
 		// and line; the section overview is where the whole schema's source is named.
-		GeneratedFrom: "reference/api/",
+		GeneratedFrom: pageGeneratedFrom,
 		Tags:          []string{"api", "proto", "connect", "grpc", strings.ToLower(s.Name)},
 	})
 
@@ -1158,7 +1182,7 @@ func renderPackage(a api, p pkgPage, usedBy map[string][]usage) string {
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:         title,
 		Description:   firstSentence(p.Doc, fmt.Sprintf("The %s package in the magus daemon API: shared types with no service of their own.", title)),
-		GeneratedFrom: "reference/api/",
+		GeneratedFrom: pageGeneratedFrom,
 		Tags:          []string{"api", "proto", "connect", "grpc", strings.ReplaceAll(strings.TrimPrefix(p.Package, "magus."), ".", "-")},
 	})
 

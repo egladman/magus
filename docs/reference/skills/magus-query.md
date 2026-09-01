@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 11553
-skill_simple_bytes: 9343
+skill_full_bytes: 13065
+skill_simple_bytes: 10541
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `47` |
-| `knowledge-schema-version` | `9` |
-| `skill-content` | `0a52fd75b017` |
+| `agent-skill-version` | `49` |
+| `knowledge-schema-version` | `10` |
+| `skill-content` | `247a38915217` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -161,23 +161,49 @@ declare no index at all - those are not searched.
 
 ## Query grammar
 
-Free-text terms (AND) plus field filters and negation:
+Free-text terms (AND) plus field matchers. A matcher is `field<op>value`, and the operators
+are `=` (match), `!=` (exclude), `=~` (regex):
 
 - `build` - free text over IDs, labels, and docs
-- `kind:spell` - only that node kind
-- `project:pkg/foo` - everything the project owns: the project node, its
+- `kind=spell` - only that node kind
+- `project=pkg/foo` - everything the project owns: the project node, its
   targets, and the files/functions/docs whose source lives under it (nested
   projects claim their own; the root `.` owns only what no nested project does)
-- `relation:uses` - seed from nodes touching that edge (`relation:calls`
+- `relation=uses` - seed from nodes touching that edge (`relation=calls`
   reaches symbol-to-symbol call edges, so it loads the lazy symbol shards)
-- `id:build` - substring match on the node ID
-- `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
-- `-kind:op` - negation, exclude these
+- `id=build` - substring match on the node ID
+- `kind!=op` - exclude these
+- `id=~build$` - regex over the target; `kind=~"spell|op"` ORs the alternatives
+- `id=target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
 - `"exact phrase"` - keep a quoted span as one term
+
+The `:` grammar (`kind:spell`) and dash negation (`-kind:op`) are the pre-`=`
+spelling, kept as a compat alias so old invocations still parse. Prefer `=`/`!=`/`=~`.
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
 (default 50). For a large match set over MCP, pass `limit` and echo the returned
 `next_cursor` to fetch the next page.
+
+## Retrieving prose from the docs
+
+Every markdown heading in the workspace is a `docsection` node, so documentation is
+QUERYABLE, not something to read whole. When you are looking for WHERE something is
+explained - in this repo's docs, a project's README, any tracked markdown - query the
+section rather than cat or grep the file:
+
+- `magus query "kind=docsection <terms>"` returns the heading whose section covers your
+  terms. Each result's id and Source are `<path>#<anchor>` - a citable pointer to the exact
+  passage, the same fragment a link into the rendered page carries. Read that one section,
+  not the whole page.
+- Scope it with `project=<p>` and combine free-text terms. `magus explain
+  "docsection:<path>#<anchor>"` shows the page a section belongs to and what it links to; a
+  page `contains` its sections and a section contains the headings nested under it, so you
+  can walk the outline.
+- Prose only: a code file is not indexed this way - `magus refs` and the entity kinds above
+  still cover code and the domain model.
+
+Reading one file you already know the path of is fine. This replaces the SCAN - the grep or
+cat over markdown to find a passage - not a targeted read.
 
 ## Reading results
 
@@ -207,7 +233,7 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
 edges to the projects and files they cover. Combine that with dependency edges to
 answer "who owns the blast radius of this change": `magus explain <node>` for the
-node's owners and dependents, or `magus query kind:owner` to list owners. Only
+node's owners and dependents, or `magus query kind=owner` to list owners. Only
 declared CODEOWNERS ownership appears - it is not blame-inferred.
 
 ## Across workspaces and neighbors
@@ -345,20 +371,42 @@ declare no index at all - those are not searched.
 
 ## Query grammar
 
-Free-text terms (AND) plus field filters and negation:
+Free-text terms (AND) plus field matchers. A matcher is `field<op>value`, and the operators
+are `=` (match), `!=` (exclude), `=~` (regex):
 
 - `build` - free text over IDs, labels, and docs
-- `kind:spell` - only that node kind
-- `project:pkg/foo` - everything the project owns
-- `relation:uses` - seed from nodes touching that edge
-- `id:build` - substring match on the node ID
-- `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
-- `-kind:op` - negation, exclude these
+- `kind=spell` - only that node kind
+- `project=pkg/foo` - everything the project owns
+- `relation=uses` - seed from nodes touching that edge
+- `id=build` - substring match on the node ID
+- `kind!=op` - exclude these
+- `id=~build$` - regex over the target; `kind=~"spell|op"` ORs the alternatives
+- `id=target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
 - `"exact phrase"` - keep a quoted span as one term
+
+The `:`/`-kind:op` spelling still parses (compat); prefer `=`/`!=`/`=~`.
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
 (default 50). Over MCP, page with `limit` plus the returned
 `next_cursor`.
+
+## Retrieving prose from the docs
+
+Every markdown heading in the workspace is a `docsection` node, so documentation is
+QUERYABLE, not something to read whole. When you are looking for WHERE something is
+explained - in this repo's docs, a project's README, any tracked markdown - query the
+section rather than cat or grep the file:
+
+- `magus query "kind=docsection <terms>"` returns the heading whose section covers your
+  terms. Each result's id and Source are `<path>#<anchor>` - a citable pointer to the exact
+  passage, the same fragment a link into the rendered page carries. Read that one section,
+  not the whole page.
+- Scope it with `project=<p>` and combine free-text terms.
+- Prose only: a code file is not indexed this way - `magus refs` and the entity kinds above
+  still cover code and the domain model.
+
+Reading one file you already know the path of is fine. This replaces the SCAN - the grep or
+cat over markdown to find a passage - not a targeted read.
 
 ## Reading results
 
@@ -384,7 +432,7 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
 edges to the projects and files they cover. `magus explain
-<node>` for owners plus dependents; `magus query kind:owner` to list. Declared
+<node>` for owners plus dependents; `magus query kind=owner` to list. Declared
 ownership only, never blame-inferred.
 
 ## Across workspaces and neighbors

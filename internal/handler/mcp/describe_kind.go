@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -17,7 +18,7 @@ type describeKindTool struct {
 	cfg types.WorkspaceConfig
 }
 
-func (t *describeKindTool) Name() string { return "magus_describe" }
+func (t *describeKindTool) Name() string { return hint.ToolDescribe.String() }
 
 func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	kind := paramString(req.Params, "kind", "")
@@ -168,7 +169,7 @@ type describeFileTool struct {
 	ws types.Inspector
 }
 
-func (t *describeFileTool) Name() string { return toolDescribeFile.String() }
+func (t *describeFileTool) Name() string { return hint.ToolDescribeFile.String() }
 
 func (t *describeFileTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	raw := paramString(req.Params, "paths", "")

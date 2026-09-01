@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/memory"
@@ -55,7 +56,7 @@ func notesCmd(ctx context.Context, root string, args []string) error {
 		// Named rather than left to the generic unknown-subcommand error, because the
 		// reason it is absent is the whole point of the store and is worth stating at the
 		// moment someone reaches for it.
-		return usagef("magus notes: there is no `put`; a note is written by a person, not a program (run `magus notes edit <name>`)")
+		return usagef("magus notes: there is no `put`; a note is written by a person, not a program (run `%s`)", hint.NotesEdit.With("<name>"))
 	default:
 		return usagef("magus notes: unknown subcommand %q (want ls, get, edit, verify, capture, or promote)", args[0])
 	}
@@ -148,7 +149,7 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 			// The note EXISTS and could not be read. Reporting that as "no such note"
 			// sends the reader hunting for a missing file, and lets `notes edit` scaffold
 			// a second copy in the other store on top of the broken one.
-			return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q exists in the %s store but could not be read: %w", name, st.scope, err)
+			return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q %w (%s store): %w", name, errUnreadableNote, st.scope, err)
 		}
 	}
 	switch len(found) {
@@ -166,6 +167,13 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 // the diagnosis, because it is the text every wrapping caller prints and a reader told
 // the name is ambiguous still needs the flag that resolves it.
 var errAmbiguousNote = errors.New("exists in both stores; say which with --shared or --private")
+
+// errUnreadableNote marks a note whose file is THERE and unreadable, so a caller can
+// tell it apart from "not found" the way errAmbiguousNote separates out "in both". It
+// exists for `notes edit`: without a sentinel to match, an unreadable note fell past
+// every case of that switch and was handled as if the name were free, scaffolding a
+// second copy in the other store on top of the broken one.
+var errUnreadableNote = errors.New("exists but could not be read")
 
 // notesScopeFlags binds the pair of filters every subcommand accepts.
 func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
@@ -334,7 +342,7 @@ func notesList(root string, args []string) error {
 		return notesIssuesError(issues, false)
 	}
 	if len(found) == 0 {
-		fmt.Println("No notes yet. Write the first one with `magus notes edit <name>`.")
+		fmt.Println("No notes yet. Write the first one with `" + hint.NotesEdit.With("<name>") + "`.")
 	} else {
 		for _, n := range found {
 			fmt.Printf("%-8s %s  %s  (%s)\n", n.Scope, n.Name, n.Title, notesAnchorSummary(n.Note))
@@ -441,6 +449,10 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 		// Never guess which store was meant: the two mean different things to a reader,
 		// and silently editing the shared one is the mistake this error exists to prevent.
 		return err
+	case errors.Is(err, errUnreadableNote):
+		// The name is TAKEN, just not readable. Falling through would treat it as free
+		// and scaffold a second copy beside the broken one, so refuse and say what to fix.
+		return fmt.Errorf("%w\n  fix the file's permissions or contents, then edit it again", err)
 	}
 	dir := target.dir
 	path := existing
@@ -513,7 +525,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 		// failed is the re-attestation, and reporting it as success would leave the author
 		// believing their note is fingerprinted against today's code when it is not. So it
 		// is a real error, with the saved path named so nobody goes looking for lost work.
-		return fmt.Errorf("magus notes edit: saved %s, but its anchors could not be fingerprinted because the knowledge graph would not load; run `magus notes edit %s` again once it does: %w", path, pos[0], err)
+		return fmt.Errorf("magus notes edit: saved %s, but its anchors could not be fingerprinted because the knowledge graph would not load; run `%s` again once it does: %w", path, hint.NotesEdit.With(pos[0]), err)
 	}
 	changed, err := store.RecordDigests(ctx, dir, pos[0], notesRevision(ctx, root), res.ForScope(string(target.scope)))
 	if err != nil {
@@ -668,7 +680,7 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 		// accumulate duplicates on every run, and each duplicate re-reports every dangling
 		// or drifted finding for the rest of the note's life.
 		if len(anchors) != 0 {
-			return fmt.Errorf("magus notes edit: %q already exists, so --anchor is refused; its anchors are what the note is about, and piping new prose does not change that. Edit the note with `magus notes edit %s` (no pipe) to change them", name, name)
+			return fmt.Errorf("magus notes edit: %q already exists, so --anchor is refused; its anchors are what the note is about, and piping new prose does not change that. Edit the note with `%s` (no pipe) to change them", name, hint.NotesEdit.With(name))
 		}
 	case errors.Is(err, os.ErrNotExist):
 		n = store.Note{Name: name, Title: strings.ReplaceAll(name, "-", " ")}
@@ -1192,7 +1204,7 @@ func newRemarkLine(threads []types.ReviewThread) string {
 	if fresh == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `magus diff` marks them new.",
+	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `"+hint.Diff.String()+"` marks them new.",
 		fresh, pluralSuffix(fresh, "", "s"))
 }
 
@@ -1346,7 +1358,7 @@ func anchorsFromRefs(rec memory.Record) ([]store.Anchor, error) {
 	}
 	if len(anchors) == 0 {
 		return nil, fmt.Errorf("magus notes promote: %q has no node ref naming a symbol, file, project or target, so the note would be unanchored and nobody would find it again.\n"+
-			"  Add one with `magus memory put %s --ref node:<id>`, or write the note directly with `magus notes edit`", rec.Name, rec.Name)
+			"  Add one with `%s`, or write the note directly with `%s`", rec.Name, hint.MemoryPut.With(rec.Name, "--ref", "node:<id>"), hint.NotesEdit)
 	}
 	return anchors, nil
 }

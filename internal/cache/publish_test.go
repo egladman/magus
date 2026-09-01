@@ -135,6 +135,56 @@ func TestImportRejectsTamperedLog(t *testing.T) {
 	}
 }
 
+// TestImportWithCorruptBlobKeepsTheStoredOne: a CAS blob is shared by every manifest whose
+// output has those bytes, so an artifact carrying a blob that does not hash to the name it
+// claims must never reach the final path. Importing one is how a single corrupt artifact
+// destroyed a valid blob other entries still replay from.
+func TestImportWithCorruptBlobKeepsTheStoredOne(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err, "NewFSRemoteBackend")
+	pub, seed := genKeypair(t)
+	trusted := [][]byte{pub}
+
+	rootA, cA := openSigned(t, remote, seed, trusted)
+	rA, _ := buildCanonical(t, rootA, cA)
+	require.NotEmpty(t, rA.Hash)
+
+	stored := findBackendArtifact(t, remote, "test__pkg")
+	raw, err := os.ReadFile(stored)
+	require.NoError(t, err)
+
+	_, cB := openSigned(t, remote, nil, trusted)
+	require.NoError(t, cB.importArtifact(context.Background(), bytes.NewReader(raw), "test/pkg", rA.Hash),
+		"the untampered artifact must import")
+	m, err := cB.readManifest("test/pkg", rA.Hash)
+	require.NoError(t, err)
+	require.NotEmpty(t, m.Outputs[0].Blob)
+	blob := cB.blobPath(m.Outputs[0].Blob)
+	before, err := os.ReadFile(blob)
+	require.NoError(t, err)
+	require.Equal(t, "built", string(before), "sanity: the imported blob holds A's output")
+
+	poisoned := rewriteTarMember(t, stored, func(name string) bool {
+		return strings.HasPrefix(name, "cas/")
+	}, []byte("MALICIOUS: not the bytes this blob is named for\n"))
+	err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned), "test/pkg", rA.Hash)
+	require.Error(t, err, "a blob whose content does not match its name must fail the import")
+	assert.Contains(t, err.Error(), "content hashes to")
+
+	after, err := os.ReadFile(blob)
+	require.NoError(t, err, "the valid blob must survive a rejected import")
+	assert.Equal(t, before, after, "a rejected import must not overwrite a valid CAS blob")
+
+	var leftovers []string
+	_ = filepath.WalkDir(filepath.Join(cB.dir, "cas"), func(p string, d os.DirEntry, werr error) error {
+		if werr == nil && !d.IsDir() && strings.Contains(d.Name(), ".tmp") {
+			leftovers = append(leftovers, p)
+		}
+		return nil
+	})
+	assert.Empty(t, leftovers, "a rejected import must not leave staged bytes behind")
+}
+
 // TestPublishedBundleResolvesRemotely covers the failure-sharing path: a FAILING run
 // is never pushed with the cache, so it is published explicitly, and a teammate then
 // resolves that exact ref through the remote fallback.

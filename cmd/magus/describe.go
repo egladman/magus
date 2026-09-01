@@ -18,8 +18,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -72,7 +72,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.
-			fmt.Fprintf(os.Stderr, "magus describe: `describe knowledge` moved to `%s`\n", clihint.GraphExport)
+			fmt.Fprintf(os.Stderr, "magus describe: `describe knowledge` moved to `%s`\n", hint.GraphExport)
 			return errSilent{exitCode: 2}
 		}
 		fmt.Fprintf(os.Stderr, "magus describe: unknown noun %q\n", noun)
@@ -81,7 +81,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 			spellings = append(spellings, k)
 		}
 		slices.Sort(spellings)
-		if sug := interactive.SuggestNearest(noun, spellings); sug != "" {
+		if sug := hint.Nearest(noun, spellings); sug != "" {
 			interactive.Emit(os.Stderr, fmt.Sprintf("did you mean %q?", sug))
 		}
 		fmt.Fprintln(os.Stderr, "")
@@ -100,7 +100,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "  spell        language/runtime adapters")
 	fmt.Fprintln(os.Stderr, "  charm        execution modifiers (rw, gha) and the targets that declare them")
 	fmt.Fprintln(os.Stderr, "  target       targets dispatched to projects; `target <path:target>` evaluates one")
-	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (magus.needs DAG) per project")
+	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (ctx.needs DAG) per project")
 	fmt.Fprintln(os.Stderr, "  project      directories recognized as units of work; `project <path>` details one")
 	fmt.Fprintln(os.Stderr, "  workspace    the active workspace root and its config")
 	fmt.Fprintln(os.Stderr, "  module       magus stdlib modules; `module <name>` lists its methods + signatures")
@@ -243,7 +243,7 @@ func namesOf[T any](items []T, nameOf func(T) string) []string {
 // returns the already-printed sentinel.
 func unknownEntity(kind, name string, all []string) error {
 	msg := fmt.Sprintf("magus describe %s: unknown %s %q", kind, kind, name)
-	if sug := interactive.SuggestNearest(name, all); sug != "" {
+	if sug := hint.Nearest(name, all); sug != "" {
 		msg += fmt.Sprintf("; did you mean %q?", sug)
 	}
 	fmt.Fprintln(os.Stderr, msg)
@@ -693,8 +693,8 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		return errSilent{exitCode: 2}
 	}
 	if against != "" && len(evaluated) > 1 {
-		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step; name the project (e.g. `magus describe target %s %s --cache --against %s`)\n",
-			pos[0], len(evaluated), pos[0], evaluated[0].Project, against)
+		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step; name the project (e.g. `%s`)\n",
+			pos[0], len(evaluated), hint.DescribeTarget.With(pos[0], evaluated[0].Project, "--cache", "--against", against))
 		return errSilent{exitCode: 2}
 	}
 
@@ -865,8 +865,8 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 	switch {
 	case errors.Is(lookupErr, fs.ErrNotExist):
 		return targetCacheLastRun{Explanation: fmt.Sprintf(
-			"nothing recorded for this target here, so there is nothing to compare against: run `magus run %s %s` once and this section will name what moved.",
-			target, project)}
+			"nothing recorded for this target here, so there is nothing to compare against: run `%s` once and this section will name what moved.",
+			hint.Run.With(target, project))}
 	case lookupErr != nil:
 		return targetCacheLastRun{Explanation: fmt.Sprintf(
 			"the last recorded entry could not be read, so there is nothing to compare against: %v", lookupErr)}
@@ -888,14 +888,14 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 	}
 	if lr.WouldReplay {
 		lr.Explanation = fmt.Sprintf(
-			"a run now HITS: an OLDER entry here is already stored under the live key, so a run replays %s and never reaches %s. An edit and a revert leave the cache exactly this way. Next: `magus query output %s` reads the entry that would replay.",
-			lr.ReplaysRef, lr.Ref, lr.ReplaysRef)
+			"a run now HITS: an OLDER entry here is already stored under the live key, so a run replays %s and never reaches %s. An edit and a revert leave the cache exactly this way. Next: `%s` reads the entry that would replay.",
+			lr.ReplaysRef, lr.Ref, hint.QueryOutput.With(lr.ReplaysRef))
 		return lr
 	}
 	if rec.KeyInputs == nil {
 		lr.Explanation = fmt.Sprintf(
-			"a run now MISSES, but that entry predates key-input persistence, so no input can be named: run `magus run %s %s` once to record them, then ask again.",
-			target, project)
+			"a run now MISSES, but that entry predates key-input persistence, so no input can be named: run `%s` once to record them, then ask again.",
+			hint.Run.With(target, project))
 		return lr
 	}
 	changes := cache.FirstKeyInputChange(rec.KeyInputs, liveLines)
@@ -908,8 +908,8 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 	// claiming nothing changed while the ref plainly moved.
 	if lr.Differences == 0 {
 		lr.Explanation = fmt.Sprintf(
-			"a run now MISSES, but no single input differs: the keys disagree on the ORDER or repetition of inputs, which this comparison collapses. Next: `magus describe target %s %s --cache --inputs` to read the key line by line.",
-			target, project)
+			"a run now MISSES, but no single input differs: the keys disagree on the ORDER or repetition of inputs, which this comparison collapses. Next: `%s` to read the key line by line.",
+			hint.DescribeTarget.With(target, project, "--cache", "--inputs"))
 		return lr
 	}
 	noun := "inputs"
@@ -917,8 +917,8 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 		noun = "input"
 	}
 	lr.Explanation = fmt.Sprintf(
-		"a run now MISSES: the cache key is a hash of these inputs and %d %s moved since. Next: `magus describe target %s %s --cache --inputs` to see every line.",
-		lr.Differences, noun, target, project)
+		"a run now MISSES: the cache key is a hash of these inputs and %d %s moved since. Next: `%s` to see every line.",
+		lr.Differences, noun, hint.DescribeTarget.With(target, project, "--cache", "--inputs"))
 	return lr
 }
 
@@ -1544,6 +1544,11 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 			fmt.Printf("  project: %s\n", f.Project)
 		}
 		fmt.Printf("  role: %s\n", f.Role)
+		// Only when absent. Present is the overwhelmingly common case, and a line on
+		// every entry would bury the one reading that changes what the rest means.
+		if !f.Exists {
+			fmt.Printf("  exists: false\n")
+		}
 		if len(f.OutputOf) > 0 {
 			fmt.Printf("  output_of: %v\n", f.OutputOf)
 		}

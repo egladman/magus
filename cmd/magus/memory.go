@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/hint"
 	store "github.com/egladman/magus/internal/memory"
 )
 
@@ -32,7 +33,7 @@ func memoryCmd(_ context.Context, root string, args []string) error {
 		// Renamed to ls in v0.4.0, for one spelling of "enumerate" across the whole
 		// surface (`magus ls`, `magus run ls`). Named rather than left to the generic
 		// unknown-subcommand error so the message says what to type instead.
-		return usagef("magus memory: `list` is now `ls` (run `magus memory ls`)")
+		return usagef("magus memory: `list` is now `ls` (run `%s`)", hint.MemoryLs)
 	default:
 		return usagef("magus memory: unknown subcommand %q (want ls, get, put, delete, or verify)", args[0])
 	}
@@ -53,7 +54,7 @@ func memoryUsage() {
 	fmt.Fprintln(os.Stderr, "  verify   check malformed, stale, and broken-linked entries")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Use `magus memory <subcommand> -h` for flags. The same entries are available")
-	fmt.Fprintln(os.Stderr, "through the magus_memory MCP tool and the console.")
+	fmt.Fprintln(os.Stderr, "through the "+hint.ToolMemory.String()+" MCP tool and the console.")
 }
 
 type memoryListOutput struct {
@@ -101,7 +102,7 @@ func memoryList(root string, args []string) error {
 		return memoryIssuesError(issues)
 	}
 	if len(recs) == 0 {
-		fmt.Println("No handoff entries. Add an explicit decision or plan with `magus memory put`.")
+		fmt.Println("No handoff entries. Add an explicit decision or plan with `" + hint.MemoryPut.String() + "`.")
 	} else {
 		for _, rec := range recs {
 			status := rec.Status
@@ -204,7 +205,7 @@ func memoryPut(root string, args []string) error {
 	if opts.Format != outputText {
 		return emitFormatted(opts, rec)
 	}
-	fmt.Printf("Saved handoff entry %q. Verify it with `magus memory verify`.\n", rec.Name)
+	fmt.Printf("Saved handoff entry %q. Verify it with `%s`.\n", rec.Name, hint.MemoryVerify)
 	return nil
 }
 

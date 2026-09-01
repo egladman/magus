@@ -321,7 +321,7 @@ func TestSessionRoutesToDaemonWhenPresent(t *testing.T) {
 			acquired = append(acquired, key)
 			return nil
 		},
-		func(key string) { released = append(released, key) },
+		func(_ context.Context, key string) { released = append(released, key) },
 	)
 	ctx := WithSupervision(WithSession(context.Background(), sess))
 
@@ -350,7 +350,7 @@ func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
 			acquireCount++
 			return nil
 		},
-		func(string) { releaseCount++ },
+		func(context.Context, string) { releaseCount++ },
 	)
 	ctx := WithSupervision(WithSession(context.Background(), sess))
 
@@ -364,12 +364,36 @@ func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
 	assert.Equal(t, acquireCount, releaseCount, "every daemon acquire must be matched by a release")
 }
 
+// The daemon release is an RPC to a socket that may be wedged, so ReleaseAll's bounded
+// teardown ctx has to reach it. While it took no ctx at all there was no bound anywhere
+// on that path and a wedged daemon hung every run at exit.
+func TestSessionReleaseAllPassesItsContextToTheDaemon(t *testing.T) {
+	f := &fakeRunner{}
+	var got context.Context
+	sess := NewSession(New(f, time.Hour),
+		func(context.Context, string, spells.Service) error { return nil },
+		func(ctx context.Context, _ string) { got = ctx },
+	)
+	ctx := WithSupervision(WithSession(context.Background(), sess))
+
+	_, err := TrySupervise(ctx, "pg", svc())
+	require.NoError(t, err)
+
+	teardown, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	sess.ReleaseAll(teardown)
+
+	require.NotNil(t, got, "the daemon release must be reachable by a cancellation")
+	_, ok := got.Deadline()
+	assert.True(t, ok, "ReleaseAll's bound is what stops a wedged socket hanging exit")
+}
+
 func TestSessionFallsBackToInProcessOnDaemonFailure(t *testing.T) {
 	f := &fakeRunner{}
 	var released []string
 	sess := NewSession(New(f, time.Hour),
 		func(context.Context, string, spells.Service) error { return errors.New("daemon gone") },
-		func(key string) { released = append(released, key) },
+		func(_ context.Context, key string) { released = append(released, key) },
 	)
 	ctx := WithSupervision(WithSession(context.Background(), sess))
 

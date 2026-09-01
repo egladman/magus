@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,6 +70,26 @@ func TestReadBatches_ContextCancel(t *testing.T) {
 		// drain any items that may have squeezed through before cancel
 	}
 	// Channel must be closed; we must not block here.
+}
+
+// The leak this closes: the ctx checks inside readBatches only run BETWEEN reads, so a
+// cancelled stream whose input had merely gone quiet left the reader goroutine parked in
+// a blocking read that no cancellation could reach.
+func TestReadBatches_CancelUnblocksAParkedRead(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	defer pw.Close()
+
+	ch := readBatches(ctx, pr, false) // nothing is ever written, so the read parks
+	cancel()
+
+	select {
+	case _, ok := <-ch:
+		assert.False(t, ok, "the channel closes once the parked read is released")
+	case <-time.After(5 * time.Second):
+		t.Fatal("readBatches stayed parked in a read after its ctx was cancelled")
+	}
 }
 
 // TestStream_ContextCancellation verifies that Stream returns nil when ctx is

@@ -433,6 +433,32 @@ func TestPry_EOFResumesContinue(t *testing.T) {
 	assert.Equal(t, ResumeContinue, resume)
 }
 
+// A session advertising no driver reaches the debugger the same way it reaches
+// the REPL - which reports it and keeps prompting. Pry dereferenced the driver
+// instead, so a breakpoint under an engine with no REPL driver panicked on the
+// first line typed.
+func TestPry_NoDriverReportsError(t *testing.T) {
+	isolatePryHistory(t)
+	sess := newFakeSession() // no drivers advertised
+	resume, _, errOut, err := runPry(t, sess, PryContext{File: "p.buzz"}, "1 + 1\n.exit\n")
+	require.NoError(t, err)
+	assert.Equal(t, ResumeContinue, resume)
+	assert.Contains(t, errOut, "no REPL driver available")
+}
+
+// .heap is offered by Tab completion and listed by .help, so the REPL must
+// handle it. Without a case it fell through to the evaluator and the advertised
+// command ran as Buzz source.
+func TestRepl_HeapMetaCommandIsHandled(t *testing.T) {
+	drv := &scriptDriver{lang: "buzz"}
+	sess := newFakeSession(drv)
+	out, errOut, err := runRepl(t, sess, ReplOptions{}, ".heap\n")
+	require.NoError(t, err)
+	assert.Empty(t, errOut)
+	assert.Contains(t, out, "heap:")
+	assert.Empty(t, drv.evalInputs, "a meta-command must never reach the evaluator")
+}
+
 func TestPry_HelpIsConsumed(t *testing.T) {
 	isolatePryHistory(t)
 	sess := newFakeSession(&scriptDriver{lang: "buzz"})

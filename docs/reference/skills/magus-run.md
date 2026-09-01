@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `47` |
-| `knowledge-schema-version` | `9` |
-| `skill-content` | `4e30fbc894ca` |
+| `agent-skill-version` | `49` |
+| `knowledge-schema-version` | `10` |
+| `skill-content` | `1e0aa373960a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -191,7 +191,7 @@ Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
 composition. A pipe whose right-hand side is a text filter is a missing `-o`.
 
 WRONG: `magus run test | head -50` (drops the failing tail that matters).
-WRONG: `magus query "kind:target" -o name | grep -c .` (use the JSON count).
+WRONG: `magus query "kind=target" -o name | grep -c .` (use the JSON count).
 CORRECT: `magus run test -s`, then fetch the printed ref for full detail.
 
 The silent run plus ref-fetch IS the low-token failure loop: never re-run a

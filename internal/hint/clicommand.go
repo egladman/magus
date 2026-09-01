@@ -1,6 +1,8 @@
-// Package clihint is the single source of truth for magus command paths that
-// appear inside user-facing OUTPUT - hints, error messages, and examples that
-// point the reader at another command to run.
+package hint
+
+// This file is the single source of truth for magus command paths that appear
+// inside user-facing OUTPUT - hints, error messages, and examples that point
+// the reader at another command to run.
 //
 // Hardcoding these strings let them drift from the real command surface: a
 // failing target once printed "magus query <ref>" long after the command had
@@ -12,16 +14,6 @@
 // literal, and those are the ones that can silently go stale. A Command declared for
 // a path nothing renders buys nothing though - it drifts just as quietly, with no
 // output depending on it - so declare one when an emitter starts using it.
-//
-// It is nested under internal/interactive - the hints home (interactive.Emit and
-// the "did you mean" suggester) - since these command references exist to be shown
-// in hints; keeping it here rather than a top-level package co-locates the two.
-// It stays a stdlib-only leaf: it does NOT import its parent interactive, which pulls in
-// project, vcs and internal/graph/dependency. That is about WEIGHT, not cycles - there is
-// no cycle to avoid here, and `go list -deps ./internal/cache` already reaches
-// internal/interactive through internal/proc/run. The point is that a package needing
-// nothing but command strings should not acquire that dependency set to get them.
-package clihint
 
 import "strings"
 
@@ -61,14 +53,16 @@ func (c Command) Head() string { return c.tokens[0] }
 func (c Command) Leaf() string { return c.tokens[len(c.tokens)-1] }
 
 // Canonical commands referenced from user-facing output. Register every new one
-// in All so the drift test walks it.
+// in AllCommands so the drift test walks it.
 var (
 	Run              = cmd("run")
+	Query            = cmd("query")
 	QueryOutput      = cmd("query", "output")
 	QueryInvocation  = cmd("query", "invocation")
 	GraphExport      = cmd("graph", "export")
 	GraphStats       = cmd("graph", "stats")
 	GraphBuild       = cmd("graph", "build")
+	GraphDiff        = cmd("graph", "diff")
 	ServerStart      = cmd("server", "start")
 	ServerStop       = cmd("server", "stop")
 	ServerJob        = cmd("server", "job")
@@ -76,22 +70,68 @@ var (
 	Status           = cmd("status")
 	Watch            = cmd("watch")
 	Affected         = cmd("affected")
+	Describe         = cmd("describe")
 	DescribeTargets  = cmd("describe", "targets")
+	DescribeTarget   = cmd("describe", "target")
 	DescribeProject  = cmd("describe", "project")
+	DescribeFile     = cmd("describe", "file")
+	DescribeGraph    = cmd("describe", "graph")
+	DescribeMCPTools = cmd("describe", "mcp-tools")
+	Explain          = cmd("explain")
+	Path             = cmd("path")
+	Diff             = cmd("diff")
+	Init             = cmd("init")
+	Doctor           = cmd("doctor")
+	Where            = cmd("where")
+	X                = cmd("x")
 	Ls               = cmd("ls")
 	LsTargets        = cmd("ls", "targets")
 	Refs             = cmd("refs")
+	MemoryLs         = cmd("memory", "ls")
+	MemoryPut        = cmd("memory", "put")
+	MemoryVerify     = cmd("memory", "verify")
+	NotesLs          = cmd("notes", "ls")
+	NotesGet         = cmd("notes", "get")
+	NotesEdit        = cmd("notes", "edit")
+	SessionAttention = cmd("session", "attention")
+	SessionDispose   = cmd("session", "dispose")
+	SessionNotify    = cmd("session", "notify")
+	VCSAdd           = cmd("vcs", "add")
+	VCSResolve       = cmd("vcs", "resolve")
+	VCSCheckpoint    = cmd("vcs", "checkpoint")
+	AgentInstall     = cmd("agent", "install")
+	AgentSample      = cmd("agent", "sample")
+	ConfigView       = cmd("config", "view")
+	ConfigToken      = cmd("config", "token")
+	ConfigTokenPrint = cmd("config", "token", "print")
 	MCPTokenGenerate = cmd("config", "token", "generate")
-	SelfUpdate       = cmd("self", "update")
+
+	ConfigConsoleToken       = cmd("config", "console", "token")
+	ConfigConsoleTokenCreate = cmd("config", "console", "token", "create")
+	ConfigConsoleTokenRevoke = cmd("config", "console", "token", "revoke")
+	ConfigMCPConnectorCreate = cmd("config", "mcp", "connector", "create")
+	ConfigMCPConnectorLs     = cmd("config", "mcp", "connector", "ls")
+	ConfigMCPConnectorRevoke = cmd("config", "mcp", "connector", "revoke")
+
+	SelfUpdate  = cmd("self", "update")
+	SelfRefresh = cmd("self", "refresh")
 )
 
-// All is every canonical command referenced in output, for the drift test to
-// walk. Keep new Command values registered here - TestAllDeclaredAreRegistered
-// reads this file and fails if a declaration is missing, which is how ServerReload
-// sat outside the guard while serverCmd routed on it.
-var All = []Command{
-	Run, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
-	ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
-	DescribeTargets, DescribeProject, Ls, LsTargets, Refs, MCPTokenGenerate,
-	SelfUpdate,
+// AllCommands is every canonical command referenced in output, for the drift
+// test to walk. Keep new Command values registered here -
+// TestAllDeclaredAreRegistered reads this file and fails if a declaration is
+// missing, which is how ServerReload sat outside the guard while serverCmd
+// routed on it.
+var AllCommands = []Command{
+	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
+	GraphDiff, ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
+	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
+	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
+	MemoryLs, MemoryPut, MemoryVerify, NotesLs, NotesGet, NotesEdit,
+	SessionAttention, SessionDispose, SessionNotify,
+	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
+	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
+	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
+	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,
+	SelfUpdate, SelfRefresh,
 }

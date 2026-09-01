@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -23,7 +24,7 @@ type vcsCheckpointTool struct {
 	ws types.WorkspaceReader
 }
 
-func (t *vcsCheckpointTool) Name() string { return toolVCSCheckpoint.String() }
+func (t *vcsCheckpointTool) Name() string { return hint.ToolVCSCheckpoint.String() }
 
 func (t *vcsCheckpointTool) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
 	root := t.ws.Root()

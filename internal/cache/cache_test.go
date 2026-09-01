@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -537,6 +539,48 @@ func TestOnResultMultiple(t *testing.T) {
 	require.NoError(t, err, "Run")
 	assert.Equal(t, 1, first, "first OnResult must fire")
 	assert.Equal(t, 1, second, "second OnResult must fire (not clobbered by the first)")
+}
+
+// TestImportRejectsPoisonedBlob verifies Cache.Import refuses a CAS blob whose
+// content does not hash to the name it is stored under. Without this an archive
+// could seat bytes that never hash to their content-address, and replay - which
+// never re-hashes on read - would serve them as a legitimate output.
+func TestImportRejectsPoisonedBlob(t *testing.T) {
+	casArchive := func(name string, content []byte) *bytes.Buffer {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gz)
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeReg,
+			Name:     "cas/" + name[:2] + "/" + name,
+			Size:     int64(len(content)),
+			Mode:     0o644,
+		}))
+		_, err := tw.Write(content)
+		require.NoError(t, err)
+		require.NoError(t, tw.Close())
+		require.NoError(t, gz.Close())
+		return &buf
+	}
+
+	good := []byte("authentic blob bytes")
+	sum := sha256.Sum256(good)
+	name := hex.EncodeToString(sum[:])
+
+	// Positive control: the same archive shape with matching content imports
+	// cleanly, so the rejection below is due to the content/name mismatch alone,
+	// not a malformed archive or misplaced entry.
+	cGood, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
+	require.NoError(t, err)
+	require.NoError(t, cGood.Import(context.Background(), casArchive(name, good)), "control: well-formed blob must import")
+	require.FileExists(t, cGood.blobPath(name), "control: blob must be present after a valid import")
+
+	// Poison: the same (matching) name, tampered content.
+	cBad, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
+	require.NoError(t, err)
+	err = cBad.Import(context.Background(), casArchive(name, []byte("tampered bytes")))
+	require.Error(t, err, "Import must reject a blob whose content does not match its name")
+	assert.NoFileExists(t, cBad.blobPath(name), "a mismatched blob must not remain in the store")
 }
 
 // TestExportImportUnsafePath verifies that Import rejects tar entries

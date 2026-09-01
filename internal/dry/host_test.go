@@ -188,8 +188,8 @@ func TestEvalInContext_compileError(t *testing.T) {
 }
 
 // TestTraceProject_unknownKeyHint drives rejectUnknownKeys through
-// suggestNearest/levenshtein: a near-miss project option key yields a "did you
-// mean" hint naming the intended key.
+// hint.Nearest: a near-miss project option key yields a "did you mean" hint
+// naming the intended key.
 func TestTraceProject_unknownKeyHint(t *testing.T) {
 	const src = `import "magus"; magus.project({"outputz": ["bin/**"]});`
 	g := LoadMagusfile(context.Background(), src)

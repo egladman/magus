@@ -495,7 +495,12 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 	ref = blobRef(prefix, data)
 	path := filepath.Join(d, ref)
 	if _, err := os.Stat(path); err == nil {
-		return ref, size // already stored
+		// A dedup hit is a fresh reference to an old file, and gcBlobs decides by mtime: without
+		// this touch a rotate between here and the caller's Append sees a blob older than
+		// blobGraceWindow that no kept event names yet, and deletes a payload about to go live.
+		now := time.Now()
+		_ = os.Chtimes(path, now, now)
+		return ref, size
 	}
 	tmp, err := os.CreateTemp(d, ref+".*")
 	if err != nil {

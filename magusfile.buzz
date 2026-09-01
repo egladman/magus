@@ -71,7 +71,7 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
 // `magus clean --outputs` still sees them all (Project.AllOutputs unions the
 // per-target sets). See docs/cache.md#per-target-inputs-and-outputs.
 magus\project({
-    "tools": policy.all,
+    "tools": policy\all,
     // Declared so the root project's label is stable. Without it the label falls
     // back to the checkout's directory basename, so a worktree, a differently
     // named clone, or a CI checkout each renamed the root project and rewrote
@@ -1110,7 +1110,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // longer hides the answer.
     var dirtyBefore: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyBefore.append(f.value); }
-    final before = drift.hashes(dirtyBefore);
+    final before = drift\hashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     if (ctx.hasCharm("rw")) { return; }
@@ -1123,7 +1123,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // compare it always lands on the dev-build verdict.
     var dirtyNow: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
-    final changed = drift.changedSince(before, dirtyNow);
+    final changed = drift\changedSince(before, dirtyNow);
     if (changed.len() > 0) {
         final detail = ": " + changed.join(", ");
         // Print the diff, not just the names. This gate fires where its reader has a
@@ -1148,7 +1148,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         // message routes there rather than reimplementing it (and a nested `generate`
         // would contend for this target's own exclusive lock).
         throw "generate: regeneration changed generated files; re-run "
-            + "`magus run generate:rw .` and commit" + detail + drift.secondCause;
+            + "`magus run generate:rw .` and commit" + detail + drift\secondCause;
     }
 }
 
@@ -1171,12 +1171,6 @@ export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-termcast", "-record"]);
 }
 
-// Renders tapes/core-loop.capture into the README's animated SVG.
-//
-// Deterministic - it replays committed bytes through the terminal emulator and
-// emits text - so it can be drift-gated, and is. That gate is the point: a
-// recording nothing checks goes stale in silence, until the README's alt text is
-// describing a project count magus no longer reports.
 // Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real
 // keystrokes, showing the surfaces a transcript cannot - the pinned band, the
 // failure tree beside its captured output, the picker searching the graph.
@@ -1191,10 +1185,19 @@ export fun termcast_showcase(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-termcast", "-showcase"]);
 }
 
+// Renders tapes/core-loop.capture into the README's animated SVG.
+//
+// Deterministic - it replays committed bytes through the terminal emulator and
+// emits text - so it can be drift-gated, and is. That gate is the point: a
+// recording nothing checks goes stale in silence, until the README's alt text is
+// describing a project count magus no longer reports.
 export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("tapes/*.capture", "cmd/magus-termcast/*.go",
         "internal/interactive/screen/*.go");
-    ctx.writesFiles("assets/gen/core-loop.svg", "assets/gen/showcase.svg");
+    // Globbed, the way termshots_generate declares its shots: each picture ships
+    // in both palettes, and naming only the dark half let a cache hit restore a
+    // half-written assets/gen.
+    ctx.writesFiles("assets/gen/core-loop*.svg", "assets/gen/showcase*.svg");
     proc\exec("go", ["run", "./cmd/magus-termcast"]);
 }
 
@@ -2201,7 +2204,7 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
 export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
     var input = "";
     if (!proc\stdinIsTerminal()) {
-        input = io.stdin.readAll();
+        input = io\stdin.readAll();
     }
     if (input == "") {
         throw "ci-shard: no shard plan on stdin - pipe one in: magus affected ci --plan | magus run ci-shard:gha";
@@ -2276,33 +2279,6 @@ fun rerender_docs() > void !> any {
     var bin = os\env("MAGUS");
     if (bin == null or ("{bin}") == "") { bin = "magus"; }
     proc\exec("{bin}", ["run", "render", "docs"], ".", {});
-}
-
-// missing_input phrases a deploy-generate precondition that ANOTHER project owns.
-//
-// Naming one single-project command teaches the wrong habit: the reader runs it, gets the
-// next precondition, runs another, and learns the set by failing once per producer. So name
-// every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run
-// build docs console` is one dispatch over both - which is the idiom this message teaches.
-//
-// Deliberately NOT "magus affected build" or "magus run build /". Both would include this
-// project, and neither can order it after the producers: the root declares no dependency on
-// docs or console, so there is no edge to schedule on. It cannot declare one either - docs
-// already depends on the root, so the reverse edge closes a cycle. That missing edge is
-// exactly why this runtime check exists instead of ctx.needs, and why the remedy has to name
-// the producers rather than a whole-workspace verb that would just fail here first.
-//
-// The command leads the sentence: a long cause line is elided with an ellipsis in run
-// output, so anything after the first clause may never reach the reader.
-//
-// Defined ABOVE deploy-generate's doc comment, not between it and the target: the extractor
-// binds the immediately preceding comment run to the next declaration, so sitting in that
-// gap silently stole the target's doc string out of the graph.
-fun missing_input(path: str, project: str) > str {
-    return "deploy-generate: " + path
-        + " is missing - run `magus run build docs console` first (one dispatch, both "
-        + "producers). The " + project + " project owns it, and this target reads across "
-        + "that boundary without depending on it, so no run order builds it for you.";
 }
 
 // missing_input phrases a deploy-generate precondition that ANOTHER project owns.

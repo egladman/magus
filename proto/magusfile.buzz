@@ -94,7 +94,7 @@ magus\project({
 // gen/** is restated because ctx.writesFiles REPLACES the project and spell baseline for this
 // target rather than adding to it, so the buf spell's own gen/** would otherwise drop out.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/**", docs.file("src/gen/**"), console.file("src/gen/**"));
+    ctx.writesFiles("gen/**", docs\file("src/gen/**"), console\file("src/gen/**"));
     // Gate the same three trees the declaration above names, because nothing else does.
     // The root generate gate looks whole-tree but composes only its own *-generate
     // siblings, so it never runs buf; and when this target runs first it hashes AFTER
@@ -106,11 +106,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // gate armed on a dirty tree, which is the state the documented pre-push check runs in.
     final GENERATED = ["gen", fs\join("..", "docs", "src", "gen"),
                        fs\join("..", "console", "src", "gen")];
-    final before = drift.hashes(GENERATED);
+    final before = drift\hashes(GENERATED);
     buf["buf-generate"](ctx);
     buf["buf-build"](ctx, {"args": ["-o", "gen/descriptor.binpb"]});
     if (ctx.hasCharm("rw")) { return; }
-    final changed = drift.changedSince(before, GENERATED);
+    final changed = drift\changedSince(before, GENERATED);
     if (changed.len() > 0) {
         // Print the diff, not just the names. This fires on a runner, where the reader has
         // the log and not the tree, and two of the three trees are ~30 generated .ts files
@@ -128,7 +128,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         // and someone removes it by hand, as 01da2b4e9 did for the v1 -> v1alpha1 move.
         throw "generate: regeneration changed generated files; re-run "
             + "`magus run generate:rw proto` and commit: " + changed.join(", ")
-            + drift.secondCause;
+            + drift\secondCause;
     }
 }
 export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }

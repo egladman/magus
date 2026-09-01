@@ -109,6 +109,7 @@ func (h *RunHandler) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		h.answer(r.Context(), w, req, false)
 	case http.MethodPost:
+		handler.LimitRequestBody(w, r)
 		var req diffRunRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "malformed request", http.StatusBadRequest)

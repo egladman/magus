@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/spells"
@@ -198,7 +199,7 @@ func totalHunks(files []changeset.FileHunks) int {
 	return n
 }
 
-func (t *diffTool) Name() string { return toolDiff.String() }
+func (t *diffTool) Name() string { return hint.ToolDiff.String() }
 
 func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	if t.sessions == nil || t.root == "" {

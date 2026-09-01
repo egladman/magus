@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
@@ -440,7 +441,8 @@ func TestCreateTokenMintsAConsoleTokenThatCannotReachMCP(t *testing.T) {
 	s := newIsolatedService(t, nil)
 
 	resp, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
-		Scope: tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE,
+		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE,
+		ExpireTime: timestamppb.New(time.Now().Add(time.Hour)),
 	}))
 	require.NoError(t, err)
 	secret := resp.Msg.GetSecret()
@@ -454,6 +456,45 @@ func TestCreateTokenMintsAConsoleTokenThatCannotReachMCP(t *testing.T) {
 	assert.False(t, auth.VerifyMCPBearer(secret), "a console token must be refused at /mcp")
 }
 
+// TestCreateTokenRequiresAndClampsExpiry pins the two halves of the TTL rule a
+// browser-minted token must obey: a nil, zero, or past expire_time is refused (it would
+// store as never-expires), and an expiry past maxConsoleTokenTTL is clamped to that
+// window rather than honored, so no console mint can be made permanent.
+func TestCreateTokenRequiresAndClampsExpiry(t *testing.T) {
+	s := newIsolatedService(t, nil)
+
+	// Nil expiry: refused.
+	_, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+		Scope: tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE,
+	}))
+	require.Error(t, err, "a nil expiry must be refused")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	// Past expiry: refused.
+	_, err = s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE,
+		ExpireTime: timestamppb.New(time.Now().Add(-time.Hour)),
+	}))
+	require.Error(t, err, "a past expiry must be refused")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	store, err := auth.LoadConnectorStore()
+	require.NoError(t, err)
+	assert.Empty(t, store.List(), "a refused mint must store nothing")
+
+	// An over-long expiry is clamped to the ceiling, not honored.
+	requested := time.Now().Add(maxConsoleTokenTTL + 365*24*time.Hour)
+	resp, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE,
+		ExpireTime: timestamppb.New(requested),
+	}))
+	require.NoError(t, err)
+	got := resp.Msg.GetToken().GetExpireTime().AsTime()
+	assert.True(t, got.Before(requested), "an over-long expiry must be clamped below what was asked")
+	assert.False(t, got.After(time.Now().Add(maxConsoleTokenTTL+time.Minute)),
+		"the clamped expiry must not exceed the ceiling")
+}
+
 // TestCreateTokenMintsAViewerThatCannotWrite pins the read/write split on the tier the
 // console hands to a phone: the viewer opens the read surface and is refused by the
 // guard every mutating console mount uses.
@@ -461,7 +502,8 @@ func TestCreateTokenMintsAViewerThatCannotWrite(t *testing.T) {
 	s := newIsolatedService(t, nil)
 
 	resp, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
-		Scope: tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ,
+		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ,
+		ExpireTime: timestamppb.New(time.Now().Add(time.Hour)),
 	}))
 	require.NoError(t, err)
 	secret := resp.Msg.GetSecret()

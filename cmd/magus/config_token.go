@@ -24,7 +24,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -39,8 +39,8 @@ func configToken(args []string) error {
 		fmt.Fprintln(os.Stderr, "`Authorization: Bearer <token>`. The daemon generates one on first start.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "For a credential scoped to ONE surface, mint a client token instead:")
-		fmt.Fprintln(os.Stderr, "  magus config mcp connector create     an agent, /mcp only")
-		fmt.Fprintln(os.Stderr, "  magus config console token create     the PWA, console only")
+		fmt.Fprintln(os.Stderr, "  "+hint.ConfigMCPConnectorCreate.String()+"     an agent, /mcp only")
+		fmt.Fprintln(os.Stderr, "  "+hint.ConfigConsoleTokenCreate.String()+"     the PWA, console only")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  generate   mint a new token (refuses to overwrite unless --force)")
@@ -128,7 +128,7 @@ func configTokenPrint(args []string) error {
 	}
 	tok, err := auth.Load()
 	if errors.Is(err, auth.ErrNoToken) {
-		return types.DiagnosticErrorf(types.NoAuthToken, "magus config token print: no token configured; run `%s`", clihint.MCPTokenGenerate)
+		return types.DiagnosticErrorf(types.NoAuthToken, "magus config token print: no token configured; run `%s`", hint.MCPTokenGenerate)
 	}
 	if err != nil {
 		return err

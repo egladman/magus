@@ -2,11 +2,14 @@ package run
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"strconv"
+	"sync"
+	"time"
 )
 
 // runOnPTY is Exec's TTY branch: it runs c with its standard streams on a
@@ -24,12 +27,14 @@ import (
 //     deadlock, and the reason this is not three lines.
 //  3. Copy master -> writers until EIO, which is how a pty master reports "the
 //     slave side is gone" and is the normal end of a session rather than a fault.
-//  4. Only then Wait, so no output is dropped between exit and the final read.
+//     The copy runs on its own goroutine and is drained AFTER Wait, so nothing is
+//     dropped between exit and the final read while still being bounded: see
+//     drainPTY for why the read has no end of its own.
 //
 // onStarted is called once with the child's pid, from this goroutine, as soon as
 // it exists. It is how the caller follows the process tree without reading
 // c.Process across a goroutine boundary, which races with Start.
-func runOnPTY(c *exec.Cmd, w io.Writer, capture *bytes.Buffer, opts ExecOptions, onStarted func(int)) error {
+func runOnPTY(ctx context.Context, c *exec.Cmd, w io.Writer, capture *bytes.Buffer, opts ExecOptions, onStarted func(int)) error {
 	if !ptySupported {
 		_, _, err := openPTY(0, 0) // returns the platform's explanatory error
 		return err
@@ -42,6 +47,10 @@ func runOnPTY(c *exec.Cmd, w io.Writer, capture *bytes.Buffer, opts ExecOptions,
 	if err != nil {
 		return err
 	}
+	// Registered before the close so it runs after it: closing the master is what
+	// unblocks a stdin replay nobody read, and waiting first would deadlock on it.
+	var stdinDone sync.WaitGroup
+	defer stdinDone.Wait()
 	defer master.Close()
 
 	c.Stdout, c.Stderr = slave, slave
@@ -69,20 +78,84 @@ func runOnPTY(c *exec.Cmd, w io.Writer, capture *bytes.Buffer, opts ExecOptions,
 	slave.Close()
 
 	if stdinToWrite != "" {
+		stdinDone.Add(1)
 		go func() {
+			defer stdinDone.Done()
 			_, _ = io.WriteString(master, stdinToWrite)
 		}()
 	}
 
-	dst := w
+	dst := &detachableWriter{w: w}
 	if capture != nil && opts.Capture {
-		dst = io.MultiWriter(w, capture)
+		dst.w = io.MultiWriter(w, capture)
 	}
-	if _, err := io.Copy(dst, master); err != nil && !isPTYClosed(err) {
-		_ = c.Wait()
+	copyDone := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(dst, master)
+		copyDone <- err
+	}()
+
+	waitErr := c.Wait()
+	if err := drainPTY(ctx, c, copyDone, dst); err != nil && !isPTYClosed(err) {
 		return err
 	}
-	return c.Wait()
+	return waitErr
+}
+
+// ptyDrainDelay bounds the master read once the child is gone, mirroring the
+// WaitDelay exec.Cmd applies to pipes it owns. A test shortens it; nothing else
+// writes it.
+var ptyDrainDelay = 5 * time.Second
+
+// drainPTY waits for the master copy to finish and bounds it.
+//
+// The copy has no end of its own: a pty master reports EOF only once the LAST
+// writer closes the slave, and a grandchild that outlived the child still holds
+// one - so an unbounded read hangs the build for as long as that grandchild
+// lives. Killing the group is what actually ends it; the deadline before it lets
+// a well-behaved tail of output finish first, and the deadline after it covers a
+// read the kill did not free.
+//
+// Abandoning the copy detaches it, because Exec reads the capture buffer as soon
+// as this returns.
+func drainPTY(ctx context.Context, c *exec.Cmd, copyDone <-chan error, dst *detachableWriter) error {
+	select {
+	case err := <-copyDone:
+		return err
+	case <-ctx.Done():
+	case <-time.After(ptyDrainDelay):
+	}
+	KillGroup(c)
+	select {
+	case err := <-copyDone:
+		return err
+	case <-time.After(ptyDrainDelay):
+		dst.detach()
+		return nil
+	}
+}
+
+// detachableWriter forwards to w until detach, after which writes are dropped.
+// It exists so a copy goroutine that outlives runOnPTY cannot write into the
+// caller's buffers while Exec is reading them.
+type detachableWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (d *detachableWriter) Write(p []byte) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.w == nil {
+		return len(p), nil
+	}
+	return d.w.Write(p)
+}
+
+func (d *detachableWriter) detach() {
+	d.mu.Lock()
+	d.w = nil
+	d.mu.Unlock()
 }
 
 // isPTYClosed reports whether err is the read error a pty master returns once the

@@ -629,7 +629,7 @@
         {
           "name": "termcast-showcase",
           "declared": "termcast_showcase",
-          "doc": "Renders tapes/core-loop.capture into the README's animated SVG.",
+          "doc": "Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real keystrokes, showing the surfaces a transcript cannot - the pinned band, the failure tree beside its captured output, the picker searching the graph.",
           "reads_files": [
             {
               "project": ".",
@@ -650,6 +650,7 @@
         {
           "name": "termcast-generate",
           "declared": "termcast_generate",
+          "doc": "Renders tapes/core-loop.capture into the README's animated SVG.",
           "reads_files": [
             {
               "project": ".",
@@ -667,10 +668,10 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "assets/gen/core-loop.svg"
+              "glob": "assets/gen/core-loop*.svg"
             },
             {
-              "glob": "assets/gen/showcase.svg"
+              "glob": "assets/gen/showcase*.svg"
             }
           ]
         },

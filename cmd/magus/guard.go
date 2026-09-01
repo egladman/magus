@@ -12,6 +12,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 )
@@ -94,7 +96,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// trail.LeaseFromEnv, never a raw Getenv: the journal producers read the variable
 	// through the same helper, and two readers with different trimming rules split one
 	// exported lease into a journal identity and an unguarded write.
-	envDefault(fset, flagHookLease, trail.LeaseFromEnv())
+	// Discarded, unlike `magus run`'s shard pair: --lease is a plain string flag whose
+	// Set cannot fail, and a hook that refused to answer over a malformed lease would
+	// block the tool call this comment's first line says must always get a verdict.
+	_ = envDefault(fset, flagHookLease, trail.LeaseFromEnv())
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -111,8 +116,8 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if err != nil {
 		return err
 	}
-	// Read through Lookup rather than off a bound variable so the value is the same
-	// whichever registration above owns the flag. Goes with the TODO there.
+	// The bound value, which envDefault has already filled from the environment when no
+	// --lease was passed, so an explicit flag still wins.
 	actingLease := hf.Lease
 
 	input, hasInput, readErr := readGuardInput(in)
@@ -141,6 +146,14 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
 	if req, isEnvelope := decodeHookEnvelope(input.Value); isEnvelope {
+		if req.NothingToJudge {
+			// A host envelope whose tool_input carries no command, path or prompt - a todo
+			// list, a search - has nothing any rule can read. Falling through judged the raw
+			// JSON as a shell line, so a denied command merely NAMED inside a todo blocked
+			// the tool call that wrote the todo.
+			return writeGuardVerdict(out, opts,
+				guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"})
+		}
 		input.Value = req.Value
 		if req.IsPath {
 			hf.Path = true
@@ -169,7 +182,8 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// session. Built AFTER the envelope is decoded: a host that reports its session id only
 	// inside the payload would otherwise be graded as having reported none, and every
 	// session on that host would share the anonymous bucket.
-	gate := newAdvisoryGate(hookActivityTrail(ctx).base, who.Session)
+	location := hookActivityTrail(ctx)
+	gate := newAdvisoryGate(location.base, who.Session)
 	tool := hookToolCommand
 	switch {
 	case hf.Observe:
@@ -190,7 +204,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// about a CONCURRENT AGENT rather than about the file itself, so nothing else can
 		// outrank it: the regeneration advice below is still true after a collision, and
 		// saying that instead would let two leases edit one path in silence.
-		context := ""
+		advice := ""
 		// spoken reports that a rule MATCHED, which is not the same as a rule that
 		// produced text. A once-per-session advisory that already fired this session
 		// matched and stayed quiet, and the rules below it must not step into the silence
@@ -202,14 +216,14 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Decision = "deny"
 			verdict.Reason = g.Reason
 		case "advise":
-			context, spoken = gate.once(g.Kind, g.Context), true
+			advice, spoken = gate.once(g.Kind, g.Context), true
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
 		// outranks the heuristics below; the memory nudge is a heuristic on the
 		// filename and only fills the silence it leaves.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseGeneratedWrite(ctx, input.Value); text != "" {
-				context, spoken = text, true
+				advice, spoken = text, true
 			}
 		}
 		// The notes rule DENIES, so it is checked before the advisories: a verdict
@@ -224,12 +238,12 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseInstalledSkillWrite(input.Value); text != "" {
-				context, spoken = text, true
+				advice, spoken = text, true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseMemoryWrite(input.Value); text != "" {
-				context, spoken = text, true
+				advice, spoken = text, true
 			}
 		}
 		// Both of these name paths and a target belonging to magus's own checkout, and
@@ -238,27 +252,30 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// load is the more useful of the two answers.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseAgentSurfaceWrite(input.Value); text != "" {
-				context, spoken = gate.once(advisorySkillSource, text), true
+				advice, spoken = gate.once(advisorySkillSource, text), true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseDescriptorWrite(input.Value); text != "" {
-				context, spoken = gate.once(advisoryRegenSource, text), true
+				advice, spoken = gate.once(advisoryRegenSource, text), true
 			}
 		}
 		// Last rung, so it sets no flag: there is nothing below it to hold back.
 		if verdict.Decision == "pass" && !spoken {
-			context = adviseNewSourceDir(input.Value)
+			advice = adviseNewSourceDir(input.Value)
 		}
-		if verdict.Decision == "pass" && context != "" {
+		if verdict.Decision == "pass" && advice != "" {
 			verdict.Decision = "advise"
-			verdict.Context = context
+			verdict.Context = advice
 		}
 	default:
 		// The sibling-checkout rule ranks with the throwaway-copy deny it generalizes,
 		// but reads the filesystem, so it cannot live inside evaluateBashGuard's pure
 		// rule set. Ranking the two is pure, and is where the ordering is tested.
-		switch v := rankSiblingCheckout(evaluateBashGuard(input.Value), denySiblingCheckout(input.Value)); {
+		//
+		// The hint graph is built here unconditionally: the manifest read behind it is
+		// one small file, and laziness would buy nothing on a hook this short-lived.
+		switch v := rankSiblingCheckout(evaluateBashGuardWith(input.Value, hookSearchHints(location.base)), denySiblingCheckout(input.Value)); {
 		case v.Deny != "":
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
@@ -323,7 +340,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if hf.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, input, who, tool, record)
+	appendHookActivity(ctx, location, input, who, tool, record)
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
@@ -498,7 +515,17 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 			}
 		}
 	default:
-		return hookRequest{}, false
+		// A payload that identifies itself as a host hook is an envelope even when its
+		// tool_input holds nothing this guard reads. Reporting "not an envelope" here sent
+		// the raw JSON to the shell rules, which read a denied command quoted inside a todo
+		// or a search string as the command about to run and blocked it.
+		//
+		// Keyed on the envelope's OWN fields, so a bare `{"tool_input":{}}` - which names no
+		// host event and could be anything - still falls through to the literal form.
+		if env.HookEventName == "" && env.ToolName == "" && env.SessionID == "" {
+			return hookRequest{}, false
+		}
+		req.NothingToJudge = true
 	}
 	return req, true
 }
@@ -507,12 +534,15 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 // path rather than a command, and who reported it. A spawn asks for nothing to be judged - it
 // carries the handed context and the callee's label, and is recorded rather than evaluated.
 type hookRequest struct {
-	Value   string
-	IsPath  bool
-	IsSpawn bool
-	Tool    string
-	Child   string
-	Who     hookAttribution
+	Value  string
+	IsPath bool
+	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
+	// Distinct from "not an envelope", which is judged as the literal text it is.
+	NothingToJudge bool
+	IsSpawn        bool
+	Tool           string
+	Child          string
+	Who            hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be
@@ -537,12 +567,8 @@ type hookActivityLocationKey struct{}
 // trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
 // the host may choose not to execute a denied command, and a pre-hook never learns the eventual
 // exit status. An audit failure must therefore be invisible to both the verdict and the command.
-func appendHookActivity(ctx context.Context, input guardInput, who hookAttribution, tool string, verdict guardVerdict) {
-	if input.Value == "" {
-		return
-	}
-	location := hookActivityTrail(ctx)
-	if location.base == "" {
+func appendHookActivity(ctx context.Context, location hookActivityLocation, input guardInput, who hookAttribution, tool string, verdict guardVerdict) {
+	if input.Value == "" || location.base == "" {
 		return
 	}
 	command := trail.AgentCommand{
@@ -587,6 +613,21 @@ func appendHookSpawn(ctx context.Context, req hookRequest, who hookAttribution) 
 		Child:     req.Child,
 		Context:   req.Value,
 	})
+}
+
+// hookSearchHints builds the search translator scoped to the projects the
+// knowledge manifest records, so a caught search can be answered with a
+// project=-scoped query. An absent or unreadable manifest yields the unscoped
+// default, identical to a workspace that never built a graph.
+func hookSearchHints(cacheDir string) *hint.Translator {
+	if cacheDir == "" {
+		return searchHints
+	}
+	paths := knowledge.ProjectPaths(cacheDir)
+	if len(paths) == 0 {
+		return searchHints
+	}
+	return hint.NewTranslator(hint.WithProjects(paths))
 }
 
 // hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived

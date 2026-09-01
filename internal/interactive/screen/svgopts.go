@@ -100,6 +100,29 @@ var LightTheme = Theme{
 	White:      "#22242a",
 }
 
+// ThemeVariant pairs a palette with the filename suffix a picture rendered in
+// it carries.
+type ThemeVariant struct {
+	Suffix string
+	Theme  Theme
+}
+
+// ThemeVariants is every palette a committed picture ships in. An SVG
+// referenced by <img> is its own document and cannot read the page's theme, so
+// the page picks the file rather than the picture adapting itself. The
+// unsuffixed name stays the dark one, which is what every existing reference
+// already points at.
+var ThemeVariants = []ThemeVariant{
+	{"", DarkTheme},
+	{"-light", LightTheme},
+}
+
+// VariantPath names the file one variant of a picture is written to, given the
+// unsuffixed name and the variant's suffix.
+func VariantPath(path, suffix string) string {
+	return strings.TrimSuffix(path, ".svg") + suffix + ".svg"
+}
+
 // resolve turns one run's attributes into the fill, background, weight and
 // opacity that draw it.
 //

@@ -260,38 +260,47 @@ function parse(toks: Token[]): QueryNode | null {
     const k = kids.filter((x): x is QueryNode => x !== null);
     return k.length === 1 ? k[0] : k.length ? { op: "and", kids: k } : null;
   }
+  // Counted, not recursed. A search box is a paste target, and a run of tens of thousands
+  // of "-" characters is one stack frame per token here and another per node in evalNode.
+  // Double negation cancels, so the run's parity is the whole of what it means and the
+  // depth never grows past one.
   function parseNot(): QueryNode | null {
-    const tk = peek();
-    if (tk && tk.t === "not") {
+    let negations = 0;
+    let tk: Token | undefined;
+    while ((tk = peek()) && tk.t === "not") {
       pos++;
-      const k = parseNot();
-      return k ? { op: "not", kid: k } : null;
+      negations++;
     }
-    return parsePrimary();
+    const k = parsePrimary();
+    if (!k) return null;
+    return negations % 2 ? { op: "not", kid: k } : k;
   }
+  // Looped for the reason parseNot is counted: skipping a stray token was a tail call, so
+  // a pasted run of ")" recursed once per character.
   function parsePrimary(): QueryNode | null {
-    const tk = peek();
-    if (!tk) return null;
-    if (tk.t === "(") {
-      pos++;
-      const inner = parseOr();
-      const close = peek();
-      if (close && close.t === ")") pos++;
-      return inner;
+    for (;;) {
+      const tk = peek();
+      if (!tk) return null;
+      if (tk.t === "(") {
+        pos++;
+        const inner = parseOr();
+        const close = peek();
+        if (close && close.t === ")") pos++;
+        return inner;
+      }
+      if (tk.t === "term") {
+        pos++;
+        return {
+          op: "term",
+          field: tk.field,
+          value: tk.value,
+          phrase: tk.phrase,
+          wildcard: tk.wildcard,
+          re: tk.wildcard ? buildWild(tk.value, tk.field) : null,
+        };
+      }
+      pos++; // stray ) / operator - skip and continue
     }
-    if (tk.t === "term") {
-      pos++;
-      return {
-        op: "term",
-        field: tk.field,
-        value: tk.value,
-        phrase: tk.phrase,
-        wildcard: tk.wildcard,
-        re: tk.wildcard ? buildWild(tk.value, tk.field) : null,
-      };
-    }
-    pos++; // stray ) / operator - skip and continue
-    return parsePrimary();
   }
   return parseOr();
 }
@@ -510,9 +519,10 @@ function buildSnippet(text: string, terms: string[], windowChars = 150): string 
 // searcher object, so an app need not thread the index through every call. The source is the
 // injected dependency: either the records themselves (ready immediately) or a loader the app
 // owns (its own retrieval, cache path, and locations - none of which live here). load() resolves
-// the loader once and memoizes it; a failed/empty load leaves the searcher not-ready so a later
-// load() retries rather than wedging. runSearch() ranks the loaded records, or returns null
-// before they land (distinct from an empty array, which means "loaded, no matches").
+// the loader once and memoizes it; a FAILED load (null, or a rejection) leaves the searcher
+// not-ready so a later load() retries rather than wedging, while an EMPTY array is a successful
+// load of zero records and caches like any other. runSearch() ranks the loaded records, or
+// returns null before they land (distinct from an empty array, which means "loaded, no matches").
 
 // The data a searcher is built over: a ready array, or a loader the caller owns. The loader
 // may be sync or async, takes an optional AbortSignal (so the caller can cancel a torn-down or
@@ -540,16 +550,20 @@ export function createTextSearch<E extends TextSearchEntry>(
   let inflight: Promise<readonly E[] | null> | null = null;
 
   const load = (signal?: AbortSignal): Promise<readonly E[] | null> => {
-    if (cached) return Promise.resolve(cached);
+    // Null tests rather than truthiness throughout: an empty array is a LOADED index of
+    // zero records, and the two read the same under `if (cached)` only by accident of
+    // arrays being truthy. Saying which one is meant is what keeps the distinction from
+    // inverting under a later edit.
+    if (cached !== null) return Promise.resolve(cached);
     if (!loader) return Promise.resolve(null);
     if (inflight) return inflight;
     const p = Promise.resolve(loader(signal)).then((data) => {
-      if (data) cached = data;
+      if (data != null) cached = data;
       return data;
     });
     // Clear inflight once the load settles, whether it fulfilled, rejected, or yielded null.
     // A rejected or null load leaves `cached` null, so isReady() stays false and the next
-    // load() re-runs the loader rather than replaying the same failed/empty promise forever.
+    // load() re-runs the loader rather than replaying the same failed promise forever.
     inflight = p.finally(() => {
       inflight = null;
     });
@@ -560,7 +574,7 @@ export function createTextSearch<E extends TextSearchEntry>(
     load,
     isReady: () => cached !== null,
     entries: () => cached,
-    runSearch: (query) => (cached ? runSearch(cached, query) : null),
+    runSearch: (query) => (cached !== null ? runSearch(cached, query) : null),
     getPositiveTerms: (query) => getPositiveTerms(query),
     describeQuery: (query) => describeQuery(query),
     buildSnippet: (text, terms, windowChars) => buildSnippet(text, terms, windowChars),

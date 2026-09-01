@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -95,7 +95,7 @@ func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root 
 	// which workspaces are loaded. A per-process proc server never does, so
 	// report that honestly instead of a misleading "no workspaces loaded".
 	if status.Mode == "proc" {
-		return false, "daemon is in per-process mode; readiness requires `magus server start`"
+		return false, "daemon is in per-process mode; readiness requires `" + hint.ServerStart.String() + "`"
 	}
 	if root != "" {
 		clean := filepath.Clean(root)
@@ -256,7 +256,7 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 		st.Note = "MCP endpoint is listening but no workspace is loaded yet."
 	default:
 		st.State = "unreachable"
-		st.Note = fmt.Sprintf("nothing is serving MCP at %s; start the daemon: %s", addr, clihint.ServerStart)
+		st.Note = fmt.Sprintf("nothing is serving MCP at %s; start the daemon: %s", addr, hint.ServerStart)
 	}
 	return st
 }

@@ -22,7 +22,7 @@ Query before grepping. The committed MAGUS.md lists every project, target,
 and the graph's routing table.
 
 ```sh
-magus query "<terms>"        # find/relate entities: kind:spell, project:web, -negation
+magus query "<terms>"        # find/relate entities: kind=spell, project=web, kind!=op, id=~regex
 magus explain <node>         # one node: edges, provenance, blast radius
 magus path <a> <b>           # how two entities relate
 magus refs <symbol>          # where a code symbol is defined and referenced

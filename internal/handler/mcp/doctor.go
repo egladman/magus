@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/doctor"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/spells"
 )
 
@@ -11,7 +12,7 @@ type doctorTool struct {
 	opts Options
 }
 
-func (t *doctorTool) Name() string { return "magus_doctor" }
+func (t *doctorTool) Name() string { return hint.ToolDoctor.String() }
 
 func (t *doctorTool) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
 	ws := t.opts.Magus

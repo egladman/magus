@@ -13,6 +13,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -43,11 +44,11 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "output glob; it keeps the current version instead of writing conflict")
 	fmt.Fprintln(os.Stderr, "markers.")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `magus init`.")
+	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `"+hint.Init.String()+"`.")
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
 	fmt.Fprintln(os.Stderr, "hg calls it as:   magus vcs merge-driver $base $local $other 0 $local")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "To settle a conflicted merge yourself, run `magus vcs resolve`: it decides")
+	fmt.Fprintln(os.Stderr, "To settle a conflicted merge yourself, run `"+hint.VCSResolve.String()+"`: it decides")
 	fmt.Fprintln(os.Stderr, "every conflicted path at once, regenerates once, and stages the result -")
 	fmt.Fprintln(os.Stderr, "including the files one side deleted, which no VCS calls a driver for.")
 	return nil
@@ -65,7 +66,7 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 
 	globs := workspaceOutputGlobs(m)
 	if len(globs) == 0 {
-		slog.InfoContext(ctx, "init: no projects declare Outputs yet; re-run `magus init` after adding them to wire the merge driver")
+		slog.InfoContext(ctx, "init: no projects declare Outputs yet; re-run `"+hint.Init.String()+"` after adding them to wire the merge driver")
 		return nil
 	}
 
@@ -218,7 +219,7 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	// untouched IS the resolution - there is nothing to write.
 	slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
 		slog.String("path", relPath),
-		slog.String("regenerate", "magus run "+target+" "+types.ProjectLabel(p.Path, p.Dir)))
+		slog.String("regenerate", hint.Run.With(target, types.ProjectLabel(p.Path, p.Dir))))
 	return nil
 }
 

@@ -20,9 +20,10 @@ knowledge graph and returns the ranked matches plus the induced subgraph around
 them, collected up to a node budget. Its siblings explain and path read the same
 graph: explain shows one node's context, path connects two nodes.
 
-Terms are free text plus field filters, and they compose: kind:spell, project:pkg/foo,
-relation:uses, id:build, and negation with a leading dash (-kind:op). A bare word
-matches names and documentation.
+Terms are free text plus field matchers, and they compose: kind=spell, project=pkg/foo,
+relation=uses, id=build, exclusion with kind!=op, and a regex with id=~build$. A bare word
+matches names and documentation. The : grammar (kind:spell, -kind:op) still parses as a
+compat alias.
 
 query is also the retrieval verb for the two ids magus prints, each an EXPLICIT
 subcommand rather than a shape-routed positional, so a search term can never collide
@@ -97,19 +98,19 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 *Find a spell by name*
 
 ```sh
-magus query kind:spell go
+magus query kind=spell go
 ```
 
 *What uses this target*
 
 ```sh
-magus query relation:uses id:build
+magus query relation=uses id=build
 ```
 
 *Everything but ops*
 
 ```sh
-magus query docker -kind:op
+magus query docker kind!=op
 ```
 
 *Print a run's captured output*

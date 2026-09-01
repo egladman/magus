@@ -22,8 +22,10 @@ func BuildPolicy(workspace string, userExtras, spellExtras []filesystem.Rule, ex
 
 	tmp := os.TempDir()
 	if tmp != "" {
-		// /tmp: read+write but NOT exec — world-shared on multiuser hosts, so exec would allow running
+		// /tmp: read+write but NOT exec - world-shared on multiuser hosts, so exec would allow running
 		// payloads planted by other users. Add via sandbox.allow if a spell needs exec there.
+		// Enforced by the kernel layer only; where there is no landlock nothing carries it
+		// out, because the path-shape check passes an exec on Read (see filesystem.Rule).
 		rules = append(rules, filesystem.Rule{Path: tmp, Read: true, Write: true, Exec: false})
 	}
 

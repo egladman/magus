@@ -85,7 +85,15 @@ var guardSurfaces = []string{"command", "path"}
 // this silently judges with PATH's binary there - or, where PATH's copy cannot load
 // the workspace, does not judge at all. Version 4 established preferring the
 // workspace's binary; this is the half of it that was only true from the root.
-const GuardTemplateVersion = 8
+//
+// 9: the notice a template prints when the binary is found but cannot judge now names
+// the evidence - which binary path it resolved, that binary's version, and the error it
+// actually printed - instead of guessing. The wording it replaces blamed "too old for
+// session hook, or cannot load this workspace", and the second half is not a cause: the
+// deny rules need no workspace, so a reader who took the sentence at its word went looking
+// for a workspace problem that was never there. A copy that predates this keeps sending
+// them, which is why this bumps even though enforcement is unchanged.
+const GuardTemplateVersion = 9
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

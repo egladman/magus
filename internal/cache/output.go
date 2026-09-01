@@ -919,10 +919,16 @@ func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 // starts here.
 //
 // inv must be a FULL invocation id - unlike an output ref there is no prefix resolution,
-// because a run log is addressed by exact filename. Returns fs.ErrNotExist when the log has
-// aged out under the RotateLogs cap.
+// because a run log is addressed by exact filename. An id failing [LooksLikeInvocationID] is
+// refused before it is joined onto the runs dir: this is reachable from the daemon's Connect
+// API, where an unvalidated id reads any .jsonl on the machine. Returns fs.ErrNotExist when
+// the log has aged out under the RotateLogs cap.
 func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error) {
-	events, err := readEvents(filepath.Join(s.cacheDir, RunsDir, inv+runExt))
+	path, err := s.runLogPath(inv)
+	if err != nil {
+		return journal.Invocation{}, nil, err
+	}
+	events, err := readEvents(path)
 	if err != nil {
 		return journal.Invocation{}, nil, err
 	}
@@ -941,9 +947,13 @@ func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []jo
 //
 // A file shorter than from means the id was reused after a cache clean, so the read restarts at
 // zero rather than seeking past the end and reporting nothing forever. Returns fs.ErrNotExist when
-// the log never existed or has aged out.
+// the log never existed, has aged out, or inv is not shaped like an invocation id.
 func (s *OutputStore) InvocationEventsFrom(inv string, from int64) ([]journal.Event, int64, error) {
-	f, err := os.Open(filepath.Join(s.cacheDir, RunsDir, inv+runExt))
+	path, err := s.runLogPath(inv)
+	if err != nil {
+		return nil, from, err
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, from, err
 	}
@@ -1125,6 +1135,18 @@ var invPattern = regexp.MustCompile("^inv[0-9a-z]+$")
 // LooksLikeInvocationID reports whether s is shaped like an invocation id. The counterpart to
 // [LooksLikeRef], and deliberately only a recognizer: retrieval stays an explicit subcommand.
 func LooksLikeInvocationID(s string) bool { return invPattern.MatchString(s) }
+
+// runLogPath resolves one invocation's journal path, refusing an id that is not shaped like one.
+// The shape check is what keeps the join inside RunsDir: the id reaches here straight off a
+// Connect request, so anything else would let "inv/../../../etc/hosts" name any file on disk.
+// A rejected id wraps fs.ErrNotExist, so a caller that already treats an aged-out log as absent
+// needs no new branch.
+func (s *OutputStore) runLogPath(inv string) (string, error) {
+	if !LooksLikeInvocationID(inv) {
+		return "", fmt.Errorf("magus/cache: %q is not an invocation id: %w", inv, fs.ErrNotExist)
+	}
+	return filepath.Join(s.cacheDir, RunsDir, inv+runExt), nil
+}
 
 // refPattern matches a full ref id or a hex prefix of one: the literal "out" then
 // one or more lowercase hex digits, anchored. The anchored hex tail is what makes

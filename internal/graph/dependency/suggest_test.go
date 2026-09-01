@@ -7,26 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLevenshtein(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"", "", 0},
-		{"abc", "abc", 0},
-		{"", "abc", 3},
-		{"abc", "", 3},
-		{"kitten", "sitting", 3},
-		{"lib", "libx", 1},
-		{"flaw", "lawn", 2},
-	}
-	for _, c := range cases {
-		assert.Equalf(t, c.want, levenshtein(c.a, c.b), "levenshtein(%q, %q)", c.a, c.b)
-		// Edit distance is symmetric.
-		assert.Equalf(t, c.want, levenshtein(c.b, c.a), "levenshtein(%q, %q) reversed", c.b, c.a)
-	}
-}
-
 func TestNearestProjectPath(t *testing.T) {
 	w := workspace(
 		[]string{"services/api"},

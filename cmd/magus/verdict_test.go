@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,7 +31,7 @@ func TestPrintVerdictFoundIsSilent(t *testing.T) {
 // An absent verdict asserts the absence positively. It must not suggest building an
 // index: nothing is missing, so the remedy would point at nothing.
 func TestPrintVerdictAbsentAssertsAndSuggestsNothing(t *testing.T) {
-	got := renderVerdict(types.Answer(false, "", nil), "")
+	got := renderVerdict(types.ClassifyAnswer(false, "", nil), "")
 	assert.Contains(t, got, "verdict: absent")
 	assert.NotContains(t, got, "graph build")
 	assert.NotContains(t, got, "outside coverage")
@@ -40,7 +41,7 @@ func TestPrintVerdictAbsentAssertsAndSuggestsNothing(t *testing.T) {
 // it. A verdict the reader cannot act on is barely better than the empty result it
 // replaced.
 func TestPrintVerdictUnknownNamesGapsAndRemedy(t *testing.T) {
-	got := renderVerdict(types.Answer(false, "", []types.KnowledgeSymbolGap{gap("libs/api"), gap("docs")}), "")
+	got := renderVerdict(types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api"), gap("docs")}), "")
 	assert.Contains(t, got, "verdict: unknown, not absent")
 	assert.Contains(t, got, "outside coverage: libs/api (not-indexed), docs (not-indexed)")
 	assert.Contains(t, got, "magus graph build")
@@ -49,7 +50,7 @@ func TestPrintVerdictUnknownNamesGapsAndRemedy(t *testing.T) {
 // The not-loaded reason is a different fix: the index may be perfectly fine and this
 // lookup simply did not consult it, so the remedy is another command, not a build.
 func TestPrintVerdictNotLoadedPointsAtTheOtherVerb(t *testing.T) {
-	got := renderVerdict(types.Answer(false, types.ReasonSymbolsNotLoaded, nil), "magus refs Foo")
+	got := renderVerdict(types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil), "magus refs Foo")
 	assert.Contains(t, got, "searched domain entities only, not code symbols")
 	assert.Contains(t, got, "magus refs Foo")
 	assert.NotContains(t, got, "graph build", "nothing is missing, so do not send them to build one")
@@ -59,9 +60,10 @@ func TestPrintVerdictNotLoadedPointsAtTheOtherVerb(t *testing.T) {
 // reach every terminal that runs an empty lookup.
 func TestPrintVerdictIsPlainASCII(t *testing.T) {
 	for _, ans := range []types.KnowledgeAnswer{
-		types.Answer(false, "", nil),
-		types.Answer(false, types.ReasonSymbolsNotLoaded, nil),
-		types.Answer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")}),
+		types.ClassifyAnswer(false, "", nil),
+		types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil),
+		types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")}),
+		knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, IndexOnly: true, Stale: []string{"libs/api"}}),
 	} {
 		got := renderVerdict(ans, "magus refs Foo")
 		for _, r := range got {
@@ -74,10 +76,31 @@ func TestPrintVerdictIsPlainASCII(t *testing.T) {
 // The exit code IS the feature at the process boundary. Both cases used to be 2, so a
 // script could not tell "this does not exist" from "I could not look".
 func TestExitForVerdictSplitsUnknownFromAbsent(t *testing.T) {
-	assert.Equal(t, errSilent{exitCode: 1}, exitForVerdict(types.Answer(false, types.ReasonSymbolsNotLoaded, nil).Verdict),
+	assert.Equal(t, errSilent{exitCode: 1}, exitForVerdict(types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil).Verdict),
 		"unknown is exit 1: invoked correctly, the work could not be done")
-	assert.Equal(t, errSilent{exitCode: 2}, exitForVerdict(types.Answer(false, "", nil).Verdict),
+	assert.Equal(t, errSilent{exitCode: 2}, exitForVerdict(types.ClassifyAnswer(false, "", nil).Verdict),
 		"absent is exit 2: the request cannot be carried out as stated")
+}
+
+// query keeps exit 0 for both real answers and fails only where it has none. A caller who
+// hits a stale index and reads 0 as "not in the graph" falls back to a text search, which
+// is the habit the graph exists to replace.
+func TestExitForQueryFailsOnlyOnAnEmptyUnknown(t *testing.T) {
+	assert.Equal(t, errSilent{exitCode: 1},
+		exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, types.ReasonIndexStale, nil)}),
+		"unknown is exit 1: magus could not search what the question was about")
+	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, "", nil)}),
+		"absent is exit 0: an empty result set is a legitimate answer to a search")
+	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 3, Answer: types.ClassifyAnswer(true, "", nil)}))
+}
+
+// The condition that keeps the rule usable. A bare free-text query never loads the symbol
+// layer, so its answer is `unknown` even when it matched twelve nodes - and failing there
+// would make an ordinary lookup exit non-zero.
+func TestExitForQueryIgnoresUnknownWhenSomethingMatched(t *testing.T) {
+	ans := knowledge.Answer("lint", true, knowledge.Coverage{Probed: true})
+	require.Equal(t, types.VerdictUnknown, ans.Verdict)
+	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 12, Answer: ans}))
 }
 
 // A gap whose index exists but will not decode reads differently from one never built,
@@ -93,7 +116,7 @@ func TestDescribeGapsRendersDetailOverState(t *testing.T) {
 // Every line of the block is indented under the verdict, so an empty result reads as one
 // finding rather than as several unrelated warnings.
 func TestPrintVerdictIndentsUnderTheVerdict(t *testing.T) {
-	got := renderVerdict(types.Answer(false, types.ReasonSymbolsNotLoaded, []types.KnowledgeSymbolGap{gap("libs/api")}), "magus refs Foo")
+	got := renderVerdict(types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, []types.KnowledgeSymbolGap{gap("libs/api")}), "magus refs Foo")
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
 	require.Greater(t, len(lines), 1)
 	assert.Equal(t, "verdict: unknown, not absent", lines[0])
@@ -105,17 +128,45 @@ func TestPrintVerdictIndentsUnderTheVerdict(t *testing.T) {
 // A probe that could not run must not come back as a verified absence: reporting the
 // coverage it failed to establish is the one outcome this verdict exists to prevent.
 func TestPrintVerdictCoverageUnknownDoesNotAssertAbsence(t *testing.T) {
-	got := renderVerdict(types.Answer(false, types.ReasonCoverageUnknown, nil), "")
+	got := renderVerdict(types.ClassifyAnswer(false, types.ReasonCoverageUnknown, nil), "")
 	assert.Contains(t, got, "verdict: unknown, not absent")
 	assert.Contains(t, got, "could not determine which projects it searched")
 	assert.NotContains(t, got, "absent (magus searched everything")
 }
 
+// The caveat where it is the whole explanation. `magus refs <real name>` on an index built
+// before that definition existed printed a verdict byte-identical to `magus refs <typo>`,
+// while the stale-index line showed up only under answers that FOUND something - the one
+// case where it did not change what to do.
+func TestPrintVerdictIndexStaleNamesTheProjectsAndTheRefresh(t *testing.T) {
+	got := renderVerdict(knowledge.Answer("adoptionRun", false, knowledge.Coverage{
+		Seeded: true, Probed: true, IndexOnly: true, Stale: []string{"libs/api", "."},
+	}), "")
+	assert.Contains(t, got, "verdict: unknown, not absent")
+	assert.Contains(t, got, "libs/api, .")
+	assert.Contains(t, got, "magus graph build")
+	assert.NotContains(t, got, "absent (magus searched everything")
+}
+
+// The CLI and the MCP tools must reach the same verdict about one graph. Both surfaces
+// build a knowledge.Coverage of what they observed and hand it to knowledge.Answer; neither
+// derives a reason. The mirror of this assertion lives in internal/handler/mcp.
+func TestVerdictDerivationIsSharedWithMCP(t *testing.T) {
+	const q = "kind=target nothingmatchesthis"
+	// The gate that used to be CLI-only: a kind outside the lazy layer rules it out, so the
+	// absence is verified whether or not symbols were loaded.
+	assert.Equal(t, types.VerdictAbsent, knowledge.Answer(q, false, knowledge.Coverage{}).Verdict)
+	// And the case the CLI used to get wrong on its own: kind=file names a kind those shards
+	// hold, so an unseeded lookup may not assert anything.
+	assert.Equal(t, types.VerdictUnknown,
+		knowledge.Answer("kind=file nothingmatchesthis", false, knowledge.Coverage{Probed: true}).Verdict)
+}
+
 // A found result still carries a coverage caveat when one applies, and prints nothing
 // when it does not.
 func TestPrintVerdictFoundWithGapsStillWarns(t *testing.T) {
-	assert.Empty(t, renderVerdict(types.Answer(true, "", nil), ""))
-	got := renderVerdict(types.Answer(true, "", []types.KnowledgeSymbolGap{gap("libs/api")}), "")
+	assert.Empty(t, renderVerdict(types.ClassifyAnswer(true, "", nil), ""))
+	got := renderVerdict(types.ClassifyAnswer(true, "", []types.KnowledgeSymbolGap{gap("libs/api")}), "")
 	assert.Contains(t, got, "outside coverage: libs/api (not-indexed)",
 		"a populated list from a half-indexed workspace is as misleading as an empty one")
 }

@@ -153,6 +153,28 @@ func TestProviderCachePathSanitizesTheSpellName(t *testing.T) {
 	assert.Equal(t, filepath.Join("/cache", "providers", "______etc_passwd.json"), got)
 }
 
+// Sanitizing is what makes two names share a file, so the fingerprint has to be what
+// tells them apart: with the same declared globs in the same root, the pair agreed on a
+// fingerprint and each replayed the other's project set out of the shared entry.
+func TestProviderCacheDistinguishesNamesThatShareAFile(t *testing.T) {
+	require.Equal(t, providerCachePath("/cache", "my/nx"), providerCachePath("/cache", "my_nx"),
+		"the premise: these two names sanitize to one file")
+
+	registerProviderSpell(t, "my/nx", "nx.json")
+	registerProviderSpell(t, "my_nx", "nx.json")
+	ws := newWorkspace(t, []string{"libs/foo"})
+	require.NoError(t, os.WriteFile(filepath.Join(ws.Root, "nx.json"), []byte(`{}`), 0o644))
+	cacheDir := t.TempDir()
+	calls := 0
+	withRunner(t, countingRunner(t, &calls))
+
+	require.NoError(t, AddProvidedProjects(context.Background(), ws, []string{"my/nx"}, ProviderCache{Dir: cacheDir}))
+	ws.Projects = map[string]*types.Project{}
+	require.NoError(t, AddProvidedProjects(context.Background(), ws, []string{"my_nx"}, ProviderCache{Dir: cacheDir}))
+
+	assert.Equal(t, 2, calls, "one provider's answer must not replay for a differently-named one")
+}
+
 func TestProviderCacheRespectsImmutable(t *testing.T) {
 	registerProviderSpell(t, "nx-immutable", "nx.json")
 	ws := newWorkspace(t, []string{"libs/foo"})

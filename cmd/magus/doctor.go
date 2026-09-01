@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/doctor"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -317,7 +318,7 @@ func applyDoctorFixes(ctx context.Context, root string, rc runConfig, out types.
 	case failed > 0:
 		return fmt.Errorf("magus doctor --fix: %d of %d remedy/remedies failed", failed, ran+failed)
 	default:
-		fmt.Printf("\napplied %d remedy/remedies; re-run `magus doctor` to confirm\n", ran)
+		fmt.Printf("\napplied %d remedy/remedies; re-run `%s` to confirm\n", ran, hint.Doctor)
 	}
 	return nil
 }

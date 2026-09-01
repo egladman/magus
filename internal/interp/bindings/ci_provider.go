@@ -2,7 +2,7 @@ package bindings
 
 import (
 	"context"
-	"io"
+	"fmt"
 	"sync"
 	"time"
 
@@ -37,7 +37,7 @@ func SetCIProvider(name string) {
 
 // openSpellAnnotator resolves the selected spell, if any, into an
 // Annotator. Returning nil leaves the built-in providers to apply.
-func openSpellAnnotator(io.Writer) annotate.Annotator {
+func openSpellAnnotator() annotate.Annotator {
 	ciProviderMu.RLock()
 	name := ciProviderName
 	ciProviderMu.RUnlock()
@@ -116,8 +116,13 @@ func (a *spellAnnotator) Active() bool {
 	}
 	if resp.Data == nil {
 		a.active = true // no enabled() op declared -> always active
+	} else if b, ok := resp.Data.(bool); ok {
+		a.active = b
 	} else {
-		a.active, _ = resp.Data.(bool)
+		// A declared enabled() that returns a non-bool is a spell contract violation. Stay
+		// inactive rather than guess: activating on a malformed signal could emit a provider's
+		// markers outside its CI, the exact misfire Active exists to prevent.
+		a.active = false
 	}
 	a.activeKnown = true
 	return a.active
@@ -153,7 +158,7 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 	})
 }
 
-// Quote neutralizes the provider's own command syntax in replayed output.
+// Defang neutralizes the provider's own command syntax in replayed output.
 //
 // The spell declares its command prefixes once, via quote_prefixes, and
 // the matching runs here in Go. That split is the point: this is called
@@ -161,8 +166,8 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 // spell per line would cost far more than the feature is worth, while
 // asking it once costs nothing and keeps the syntax knowledge in the
 // spell where it belongs.
-func (a *spellAnnotator) Quote(text string) string {
-	return annotate.QuoteWith(text, a.quotePrefixes())
+func (a *spellAnnotator) Defang(text string) string {
+	return annotate.DefangWith(text, a.quotePrefixes())
 }
 
 // quotePrefixes reads the spell's optional quote_prefixes op once. A
@@ -199,12 +204,17 @@ func (a *spellAnnotator) quotePrefixes() []string {
 // call invokes an optional op, treating an undeclared op as success. A
 // spell implements only the verbs its provider supports, and the missing
 // rest are not errors: annotations do not exist at all on some providers.
+//
+// That tolerance is the INVOKER's, not this method's: an op the spell does not
+// declare comes back as a nil result with no error (see newBuzzSpellInvoker), so
+// every error reaching here is a real failure - a handler that raised, a spell
+// that would not load, an op that timed out - and is reported. Swallowing it made
+// a broken provider report success for the life of the build.
 func (a *spellAnnotator) call(op string, params map[string]any) error {
 	ctx, cancel := spellCtx()
 	defer cancel()
-	_, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: op, Params: params})
-	if err != nil {
-		return nil
+	if _, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: op, Params: params}); err != nil {
+		return fmt.Errorf("ci provider op %q: %w", op, err)
 	}
 	return nil
 }

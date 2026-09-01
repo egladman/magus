@@ -101,31 +101,40 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 				continue
 			}
 			if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
-				return bashGuardVerdict{Deny: denySharedStash(rest[0])}, true
+				return denySharedStash(rest[0]), true
 			}
-			return bashGuardVerdict{Deny: denyWholeTree("git stash")}, true
+			return denyWholeTree("git stash"), true
 		case "worktree":
 			if len(rest) > 0 && rest[0] == "remove" {
-				return bashGuardVerdict{Deny: "Check it is clean first with `git -C <path> status`, then remove the worktree from a session that owns it.\n" +
-					"git worktree remove deletes that worktree's uncommitted and untracked work, which in a repo running several worktrees is routinely another session's and is in no commit to recover from."}, true
+				return bashGuardVerdict{
+					Deny: "Check it is clean first with `git -C <path> status`, then remove the worktree from a session that owns it.\n" +
+						"git worktree remove deletes that worktree's uncommitted and untracked work, which in a repo running several worktrees is routinely another session's and is in no commit to recover from.",
+					Rule: denyRule{Name: denyRuleWorktreeRemove},
+				}, true
 			}
 		case "reset":
 			if slices.Contains(rest, "--hard") {
-				return bashGuardVerdict{Deny: denyWholeTree("git reset --hard")}, true
+				return denyWholeTree("git reset --hard"), true
 			}
 		case "checkout":
 			if isWholeTreePathspec(rest) {
-				return bashGuardVerdict{Deny: denyWholeTree("git checkout .")}, true
+				return denyWholeTree("git checkout ."), true
 			}
 		case "restore":
 			if isWholeTreePathspec(rest) {
-				return bashGuardVerdict{Deny: denyWholeTree("git restore .")}, true
+				return denyWholeTree("git restore ."), true
 			}
 		case "clean":
-			for _, a := range rest {
-				if strings.HasPrefix(a, "-") && strings.ContainsAny(a, "fdxX") {
-					return bashGuardVerdict{Deny: denyWholeTree("git clean")}, true
-				}
+			if isDeletingClean(rest) {
+				return denyWholeTree("git clean"), true
+			}
+		case "add":
+			// In the DENY pass, not beside the advisory below it: a stage-everything
+			// form reached second - `git restore -- x && git add -A` - lost its deny to
+			// whichever advisory the first command earned, which is the ordering the
+			// two-pass split exists to prevent.
+			if slices.ContainsFunc(rest, isStageAllOperand) {
+				return bashGuardVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
 			}
 		}
 	}
@@ -141,11 +150,7 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 		case "push":
 			return bashGuardVerdict{Context: pushGuardContext}, true
 		case "add":
-			if slices.ContainsFunc(rest, func(a string) bool {
-				return a == "-A" || a == "--all" || a == "-u" || a == "--update" || a == "."
-			}) {
-				return bashGuardVerdict{Deny: denyStageAll}, true
-			}
+			// The stage-everything forms already denied in the first pass.
 			return bashGuardVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 		case "commit":
 			return bashGuardVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
@@ -216,19 +221,22 @@ func isTreeIdentityQuery(args []string) bool {
 func gitGuardFallback(command string) (bashGuardVerdict, bool) {
 	switch {
 	case guardStashRe.MatchString(command) && !guardStashSafeRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git stash")}, true
+		return denyWholeTree("git stash"), true
 	case guardResetRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git reset --hard")}, true
+		return denyWholeTree("git reset --hard"), true
 	case guardCheckoutRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git checkout .")}, true
+		return denyWholeTree("git checkout ."), true
 	case guardRestoreRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git restore .")}, true
+		return denyWholeTree("git restore ."), true
 	case guardCleanRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyWholeTree("git clean")}, true
+		return denyWholeTree("git clean"), true
+	// Above the push ADVISORY, which used to answer first: `git add -A && git push` on an
+	// unparsable line got a reminder instead of the deny, in the one place the file's own
+	// invariant says an over-eager deny is the safe direction.
+	case guardStageAllRe.MatchString(command):
+		return bashGuardVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
 	case guardPushRe.MatchString(command):
 		return bashGuardVerdict{Context: pushGuardContext}, true
-	case guardStageAllRe.MatchString(command):
-		return bashGuardVerdict{Deny: denyStageAll}, true
 	case guardStageRe.MatchString(command):
 		return bashGuardVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 	case guardScopedRevertRe.MatchString(command):
@@ -239,15 +247,46 @@ func gitGuardFallback(command string) (bashGuardVerdict, bool) {
 
 // isWholeTreePathspec reports the `.` pathspec forms, with or without the `--`
 // separator, and nothing narrower.
+//
+// Not every operand is a pathspec, which is what the earlier "first non-flag word"
+// reading missed: `git checkout HEAD -- .` names a tree-ish first and `git restore
+// --source HEAD .` passes one as a flag value, so both compared a REVISION against "."
+// and fell through to the advisory. Everything after `--` is a pathspec by definition;
+// without the separator a bare `.` is one wherever it sits, since no revision is spelled
+// that way.
 func isWholeTreePathspec(args []string) bool {
-	for _, a := range args {
-		if a == "--" {
-			continue
-		}
-		if strings.HasPrefix(a, "-") {
-			continue
-		}
-		return a == "."
+	if i := slices.Index(args, "--"); i >= 0 {
+		args = args[i+1:]
 	}
-	return false
+	return slices.Contains(args, ".")
+}
+
+// isStageAllOperand reports the stage-everything spellings of `git add`.
+func isStageAllOperand(a string) bool {
+	return a == "-A" || a == "--all" || a == "-u" || a == "--update" || a == "."
+}
+
+// isDeletingClean reports whether a `git clean` would actually delete.
+//
+// Read as short-flag CLUSTERS rather than as any word containing one of fdxX, which
+// denied `git clean --dry-run` (the d in "dry") and `git clean --exclude=x` (the x) -
+// two invocations that remove nothing. A dry run anywhere wins: -n and --dry-run only
+// list what would go.
+func isDeletingClean(args []string) bool {
+	deletes := false
+	for _, a := range args {
+		switch {
+		case a == "--dry-run":
+			return false
+		case strings.HasPrefix(a, "--"):
+			deletes = deletes || a == "--force"
+		case strings.HasPrefix(a, "-"):
+			cluster := a[1:]
+			if strings.Contains(cluster, "n") {
+				return false
+			}
+			deletes = deletes || strings.ContainsAny(cluster, "fdxX")
+		}
+	}
+	return deletes
 }

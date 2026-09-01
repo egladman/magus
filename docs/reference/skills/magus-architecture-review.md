@@ -30,9 +30,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `47` |
-| `knowledge-schema-version` | `9` |
-| `skill-content` | `45b6741d98df` |
+| `agent-skill-version` | `49` |
+| `knowledge-schema-version` | `10` |
+| `skill-content` | `e4b75fa969de` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -111,14 +111,14 @@ and nothing it exports would need to be exported once merged.
    them with `magus graph build` before trusting it.
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain -
    use it to test whether a proposed boundary actually separates them.
-4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
+4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
 
 ## Match the existing conventions
 
 Derive the pattern from the graph rather than imposing one: where similar code
-already lives (`magus query kind:<kind> <term>`), which modules import which
-(`relation:imports`), how existing projects segment (`magus graph deps`). A
+already lives (`magus query kind=<kind> <term>`), which modules import which
+(`relation=imports`), how existing projects segment (`magus graph deps`). A
 suggestion that follows the workspace's own conventions costs less than an
 imported ideal. State the observed convention in the proposal, with the query
 that shows it.
@@ -133,7 +133,7 @@ stats for smells (see the magus-query skill for the query syntax):
 magus graph stats                    # god nodes, orphans, doc coverage
 for k in project target spell op tool charm module method diagnostic doc file \
          function symbol import owner; do
-  printf "%-11s %s\n" "$k" "$(magus query "kind:$k" -o json | jq length)"
+  printf "%-11s %s\n" "$k" "$(magus query "kind=$k" -o json | jq length)"
 done                                  # population per abstraction
 magus explain "<node>"               # compare a kind's edges against a neighbor's
 ```
@@ -239,14 +239,14 @@ and nothing it exports would need to be exported once merged.
    any exported symbol. An empty result carries a
    verdict; `unknown` means an index is missing, not that nothing uses it.
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain.
-4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
+4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
 
 ## Match the existing conventions
 
 Derive the pattern from the graph rather than imposing one: where similar code
-already lives (`magus query kind:<kind> <term>`), which modules import which
-(`relation:imports`), how existing projects segment (`magus graph deps`). State the observed convention in the proposal, with the query
+already lives (`magus query kind=<kind> <term>`), which modules import which
+(`relation=imports`), how existing projects segment (`magus graph deps`). State the observed convention in the proposal, with the query
 that shows it.
 
 ## Audit the domain model itself
@@ -257,7 +257,7 @@ Census the kinds, then read the stats for smells:
 magus graph stats                    # god nodes, orphans, doc coverage
 for k in project target spell op tool charm module method diagnostic doc file \
          function symbol import owner; do
-  printf "%-11s %s\n" "$k" "$(magus query "kind:$k" -o json | jq length)"
+  printf "%-11s %s\n" "$k" "$(magus query "kind=$k" -o json | jq length)"
 done                                  # population per abstraction
 magus explain "<node>"               # compare a kind's edges against a neighbor's
 ```

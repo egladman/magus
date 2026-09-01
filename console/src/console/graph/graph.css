@@ -52,7 +52,7 @@
   --gk-function: var(--console-node-function); --gk-method: var(--console-node-method);
   --gk-import: var(--console-node-import); --gk-package: var(--console-node-package);
   --gk-symbol: var(--console-node-symbol);
-  --gk-doc: var(--console-node-doc); --gk-rationale: var(--console-node-rationale);
+  --gk-doc: var(--console-node-doc); --gk-docsection: var(--console-node-docsection); --gk-rationale: var(--console-node-rationale);
   --gk-note: var(--console-node-note);
   --gk-diagnostic: var(--console-node-diagnostic); --gk-charm: var(--console-node-charm);
   --gk-owner: var(--console-node-owner); --gk-author: var(--console-node-author);
@@ -337,6 +337,7 @@
 .console-graph-kinddot[data-kind="package"] { background: var(--gk-package); }
 .console-graph-kinddot[data-kind="symbol"] { background: var(--gk-symbol); }
 .console-graph-kinddot[data-kind="doc"] { background: var(--gk-doc); }
+.console-graph-kinddot[data-kind="docsection"] { background: var(--gk-docsection); }
 .console-graph-kinddot[data-kind="rationale"] { background: var(--gk-rationale); }
 .console-graph-kinddot[data-kind="note"] { background: var(--gk-note); }
 .console-graph-kinddot[data-kind="diagnostic"] { background: var(--gk-diagnostic); }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -29,8 +30,8 @@ func configMCPCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "Connector tokens are named, hashed-at-rest, and expiring; mint one per external")
 		fmt.Fprintln(os.Stderr, "MCP client (a hosted connector, an IDE). They reach /mcp and nothing else.")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "The operator token is `magus config token`; console tokens are")
-		fmt.Fprintln(os.Stderr, "`magus config console token`.")
+		fmt.Fprintln(os.Stderr, "The operator token is `"+hint.ConfigToken.String()+"`; console tokens are")
+		fmt.Fprintln(os.Stderr, "`"+hint.ConfigConsoleToken.String()+"`.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp <subcommand> -h` for flags.")
 	}
@@ -48,8 +49,8 @@ func configMCPCmd(args []string) error {
 		// Moved to `magus config token`: this is the OPERATOR credential, not an MCP
 		// one, and leaving it here taught every reader the opposite. Same hard-redirect
 		// shape as the list -> ls rename below.
-		return usagef("magus config mcp: the operator token moved to `magus config token` " +
-			"(it is not an MCP credential; for an MCP client use `magus config mcp connector create`)")
+		return usagef("magus config mcp: the operator token moved to `%s` "+
+			"(it is not an MCP credential; for an MCP client use `%s`)", hint.ConfigToken, hint.ConfigMCPConnectorCreate)
 	case "connector":
 		return configMCPConnector(subArgs)
 	case "-h", "--help", "help":
@@ -99,8 +100,8 @@ func configMCPConnector(args []string) error {
 		return nil
 	case "list":
 		// Renamed to ls in v0.4.0; see the note in memoryCmd.
-		return usagef("magus config mcp connector: `list` is now `ls` " +
-			"(run `magus config mcp connector ls`)")
+		return usagef("magus config mcp connector: `list` is now `ls` "+
+			"(run `%s`)", hint.ConfigMCPConnectorLs)
 	default:
 		fs.Usage()
 		return usagef("magus config mcp connector: unknown subcommand %q", sub)
@@ -164,7 +165,7 @@ func configMCPConnectorCreate(args []string) error {
 	// The two scopes reach disjoint surfaces, so naming the wrong one here would send
 	// the reader to an endpoint that will reject the token they just minted.
 	fmt.Fprintln(os.Stderr, "This token reaches /mcp only. It is REJECTED by the console; mint a console")
-	fmt.Fprintln(os.Stderr, "credential with `magus config console token create`.")
+	fmt.Fprintln(os.Stderr, "credential with `"+hint.ConfigConsoleTokenCreate.String()+"`.")
 	return nil
 }
 
@@ -178,7 +179,7 @@ func configMCPConnectorList(args []string) error {
 	}
 	conns := store.ListScope(auth.ScopeMCP)
 	if len(conns) == 0 {
-		fmt.Fprintln(os.Stderr, "no connector tokens; create one with `magus config mcp connector create`")
+		fmt.Fprintln(os.Stderr, "no connector tokens; create one with `"+hint.ConfigMCPConnectorCreate.String()+"`")
 		return nil
 	}
 	now := time.Now()
@@ -222,7 +223,7 @@ func configMCPConnectorRevoke(args []string) error {
 	// through the connector command. See config_console.go for the mirror of this.
 	if !matchesScoped(store.ListScope(auth.ScopeMCP), rest[0]) {
 		if matchesScoped(store.ListScope(consoleScopes...), rest[0]) {
-			return usagef("magus config mcp connector revoke: %q is a console token, not an MCP connector; revoke it with `magus config console token revoke %s`", rest[0], rest[0])
+			return usagef("magus config mcp connector revoke: %q is a console token, not an MCP connector; revoke it with `"+hint.ConfigConsoleTokenRevoke.With("%s")+"`", rest[0], rest[0])
 		}
 		return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config mcp connector revoke: no connector matches %q", rest[0])
 	}

@@ -221,6 +221,15 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 			return nil, err
 		}
 		dst := filepath.Join(root, filepath.FromSlash(rec.Path))
+		// A manifest can be attacker-controlled (an insecure remote, or a signed
+		// supply-chain artifact whose recorded outputs magus never authored), so
+		// nothing here may write or delete outside root. Refuse a destination that
+		// escapes root, or whose parent chain traverses a symlink - checked before
+		// the Remove and MkdirAll below, either of which would otherwise follow a
+		// symlink an earlier record planted (record "link"->"../" then "link/evil").
+		if err := ensureReplayDstSafe(root, dst, rec.Path); err != nil {
+			return nil, err
+		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return nil, err
 		}
@@ -228,6 +237,11 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 			return nil, fmt.Errorf("replay %s: remove existing: %w", rec.Path, err)
 		}
 		if rec.Symlink != "" {
+			// A symlink target is unchecked bytes from the manifest; a later record
+			// writing through it would escape root. Refuse one that resolves outside.
+			if err := ensureSymlinkTargetInRoot(root, dst, rec.Symlink); err != nil {
+				return nil, err
+			}
 			if err := os.Symlink(rec.Symlink, dst); err != nil {
 				return nil, err
 			}
@@ -244,6 +258,58 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 		paths = append(paths, dst)
 	}
 	return paths, nil
+}
+
+// ensureReplayDstSafe refuses a replay destination that escapes root or whose
+// parent chain traverses a symlink. Both would let a write or delete land
+// outside the workspace when the manifest is hostile. A parent component that
+// does not yet exist stops the walk: MkdirAll creates the rest as real dirs.
+func ensureReplayDstSafe(root, dst, recPath string) error {
+	rel, err := filepath.Rel(root, dst)
+	if err != nil {
+		return fmt.Errorf("replay: output path %q: %w", recPath, err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("replay: refusing output path %q: escapes workspace root", recPath)
+	}
+	cur := root
+	comps := strings.Split(rel, string(filepath.Separator))
+	for _, comp := range comps[:len(comps)-1] { // parents only; the base is created last
+		if comp == "" || comp == "." {
+			continue
+		}
+		cur = filepath.Join(cur, comp)
+		info, err := os.Lstat(cur)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("replay: refusing output path %q: parent %q is a symlink", recPath, cur)
+		}
+	}
+	return nil
+}
+
+// ensureSymlinkTargetInRoot refuses a symlink whose target resolves outside
+// root. A relative target is interpreted against the link's own directory, the
+// same way the OS resolves it.
+func ensureSymlinkTargetInRoot(root, dst, target string) error {
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(dst), target)
+	}
+	resolved = filepath.Clean(resolved)
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return fmt.Errorf("replay: symlink target %q: %w", target, err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("replay: refusing symlink target %q: escapes workspace root", target)
+	}
+	return nil
 }
 
 // replayBlob materializes blob at dst (dst must not exist). Tries reflink (CoW) → copy.

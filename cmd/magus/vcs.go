@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -199,7 +200,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution, ref string) (undo func(), err error) {
 	starter, ok := res.VCS.(types.MergeStarter)
 	if !ok {
-		return nil, fmt.Errorf("vcs resolve: %s cannot start a merge through magus; merge %q yourself, then run `magus vcs resolve`", res.Name, ref)
+		return nil, fmt.Errorf("vcs resolve: %s cannot start a merge through magus; merge %q yourself, then run `"+hint.VCSResolve.String()+"`", res.Name, ref)
 	}
 	dirty, err := res.VCS.DirtyFiles(ctx, root, nil)
 	if err != nil {
@@ -245,7 +246,7 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 	if staleDecls {
 		fmt.Println("vcs resolve: not regenerating - the magusfile is still mid-merge, and a " +
 			"generator it changes would produce bytes matching neither side. Resolve the " +
-			"magusfile, then `magus run generate:rw` to finish.")
+			"magusfile, then `" + hint.Run.With("generate:rw") + "` to finish.")
 	} else if err := runRebuildTargets(ctx, root, rc, plan.rebuild); err != nil {
 		return fmt.Errorf("vcs resolve: regenerate: %w\n%s", err, resolveTreeState(plan,
 			"the conflict markers were cleared and the deletions recorded, but nothing was marked resolved"))
@@ -454,7 +455,7 @@ func runRebuildTargets(ctx context.Context, root string, rc runConfig, rebuild m
 	for _, target := range slices.Sorted(maps.Keys(rebuild)) {
 		projects := rebuild[target]
 		slices.Sort(projects)
-		fmt.Printf("regenerating: magus run %s %s\n", target, strings.Join(projects, " "))
+		fmt.Printf("regenerating: %s\n", hint.Run.With(target, strings.Join(projects, " ")))
 		if err := runTarget(ctx, root, rc, append([]string{target}, projects...)); err != nil {
 			return err
 		}
@@ -534,7 +535,7 @@ func unresolvedError(plan resolutionPlan) error {
 	if len(plan.manual) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d conflict(s) still need you; resolve them, then `magus vcs add` and continue", len(plan.manual))
+	return fmt.Errorf("%d conflict(s) still need you; resolve them, then `"+hint.VCSAdd.String()+"` and continue", len(plan.manual))
 }
 
 // ------------------------------------------------------------- vcs checkpoint
@@ -551,7 +552,7 @@ func vcsCheckpointUsage(w io.Writer) {
 	fmt.Fprintln(w, "do not keep costs nothing either. Record it when you hand work out, so a")
 	fmt.Fprintln(w, "later reader knows what that work was looking at.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Feed the revision to anything that takes one (magus graph diff --rev <rev>).")
+	fmt.Fprintln(w, "Feed the revision to anything that takes one ("+hint.GraphDiff.With("--rev", "<rev>")+").")
 	fmt.Fprintln(w, "Compare two digests to learn whether two workers saw the same uncommitted")
 	fmt.Fprintln(w, "tree, which the revision alone cannot tell you: a dirty tree's revision is")
 	fmt.Fprintln(w, "the same one everybody else has.")
