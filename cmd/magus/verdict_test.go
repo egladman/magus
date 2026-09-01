@@ -82,6 +82,27 @@ func TestExitForVerdictSplitsUnknownFromAbsent(t *testing.T) {
 		"absent is exit 2: the request cannot be carried out as stated")
 }
 
+// query keeps exit 0 for both real answers and fails only where it has none. A caller who
+// hits a stale index and reads 0 as "not in the graph" falls back to a text search, which
+// is the habit the graph exists to replace.
+func TestExitForQueryFailsOnlyOnAnEmptyUnknown(t *testing.T) {
+	assert.Equal(t, errSilent{exitCode: 1},
+		exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, types.ReasonIndexStale, nil)}),
+		"unknown is exit 1: magus could not search what the question was about")
+	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, "", nil)}),
+		"absent is exit 0: an empty result set is a legitimate answer to a search")
+	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 3, Answer: types.ClassifyAnswer(true, "", nil)}))
+}
+
+// The condition that keeps the rule usable. A bare free-text query never loads the symbol
+// layer, so its answer is `unknown` even when it matched twelve nodes - and failing there
+// would make an ordinary lookup exit non-zero.
+func TestExitForQueryIgnoresUnknownWhenSomethingMatched(t *testing.T) {
+	ans := knowledge.Answer("lint", true, knowledge.Coverage{Probed: true})
+	require.Equal(t, types.VerdictUnknown, ans.Verdict)
+	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 12, Answer: ans}))
+}
+
 // A gap whose index exists but will not decode reads differently from one never built,
 // because the fix differs: rebuild versus build.
 func TestDescribeGapsRendersDetailOverState(t *testing.T) {

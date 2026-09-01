@@ -499,9 +499,12 @@ Exit codes follow the same split. `refs` and `explain` exit 2 on `absent` - the 
 cannot be carried out as stated, and magus verified that - and 1 on `unknown`, where the
 invocation was fine and a prerequisite artifact was missing. A `refs` lookup that resolved
 but found no references follows the verdict too, exiting 1 when magus could not verify the
-emptiness: "nothing uses this" is a negative claim like any other. `magus query` always exits 0:
-an empty result set is a legitimate answer to a search, so its verdict rides the output
-only.
+emptiness: "nothing uses this" is a negative claim like any other. `magus query` exits 0 when
+it can answer - it matched, or it verified the absence - and 1 when it cannot: nothing
+matched and the verdict is `unknown`, the case `magus graph build` fixes. It never exits 2,
+and it never fails on a populated result, whose `unknown` caveats rows that are facts
+already. An empty result set stays a legitimate answer to a search; a blind spot is not
+one, and a caller that reads it as "not in the graph" goes back to grepping.
 
 The coverage probe is one `stat` per declared index, and it is skipped entirely when the
 symbol layer was irrelevant to the question - `kind:author` returning nothing has nothing

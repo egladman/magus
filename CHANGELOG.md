@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.3.0...main
 
+### Breaking
+
+- **`magus query` exits 1 when it could not answer.** A search that matched nothing
+  and reported the `unknown` verdict - a stale symbol index, or a lazily-loaded layer
+  the lookup never consulted - now exits 1 where it exited 0. `found` and `absent`
+  still exit 0, which is the documented rule this keeps rather than the one it
+  changes: an empty result set is a legitimate answer to a search. What changes is
+  the case that was never an answer at all, where exit 0 with a caveat buried in the
+  text reads as "not in the graph" and sends the caller back to a text search - and
+  it is the one case a command fixes, `magus graph build`. The status is the same
+  under every `-o`, `query` still never exits 2, and a populated result still exits 0
+  whatever its verdict, because there the caveat rides rows that are already facts.
+  `magus query <terms> && next-step` against a workspace whose index is missing or
+  stale now stops where it used to continue; a caller that wants the old behavior
+  branches on `.answer.verdict` from `-o json` instead.
+
 ### Removed
 
 - The four JSON run-browser routes are gone: `GET /api/v1/outputs`,
@@ -50,9 +66,16 @@ https://github.com/egladman/magus/compare/v0.3.0...main
   rather than asking the VCS what is dirty afterwards. Bytes that did not move
   are not drift however dirty the surrounding tree is, and detection no longer
   depends on the VCS at all - only attribution does.
-- Agent guard templates are at version 8. Codex's hook commands now carry
-  `GUARD_NO_ADVISE=1` in `hooks.json`; re-download the templates to pick it up.
-  Other hosts render as before.
+- Agent guard templates are at version 9. Codex's hook commands now carry
+  `GUARD_NO_ADVISE=1` in `hooks.json`, and the notice a template prints when the
+  magus it found cannot judge a command now names the evidence - which binary
+  path it resolved, that binary's version, and the error it actually printed -
+  rather than offering "too old for `session hook`, or cannot load this
+  workspace" as equal suspects. The second was never a cause: the deny rules need
+  no workspace, and a current binary run from an empty directory still denies, so
+  that half of the sentence sent readers to check something no evidence pointed
+  at. Re-download the templates to pick both up; enforcement and the rendered
+  verdict are unchanged.
 
 ### Fixed
 

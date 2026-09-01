@@ -205,26 +205,31 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	out := g.Query(input, qf.Budget)
 	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsLazyLayer, false))
 
+	// The status is decided once, for every format: a rule that held only for text would
+	// leave the callers most likely to branch on it - `-o name` in a chain, `-o json` in a
+	// script - reading a blind spot as an emptiness.
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		if err := emitFormatted(opts, out); err != nil {
+			return err
+		}
+		return exitForQuery(out)
 	case outputName:
 		for _, m := range out.Matches {
 			fmt.Println(m.ID)
 		}
-		return nil
+		return exitForQuery(out)
 	}
 
 	fmt.Printf("query: %s\n", out.Query)
 	fmt.Printf("matches: %d  (neighborhood budget %d)\n\n", out.MatchCount, out.Budget)
 	if out.MatchCount == 0 {
-		// query's exit status stays 0 whatever the verdict: an empty result set is a
-		// legitimate answer to a search, and every script that runs `magus query` would
-		// break if it became a failure. The verdict rides the output instead.
 		printVerdict(os.Stdout, out.Answer, hint.Refs.With("<name>"))
 		emitNearest(os.Stdout, g.NearestNode(input))
 		printIndexStaleness(ctx, os.Stdout, root)
-		return nil
+		// An empty result set is still a legitimate answer to a search, so this exits 0 on
+		// `absent` and only fails on `unknown`. See exitForQuery.
+		return exitForQuery(out)
 	}
 	shown := out.Matches
 	if len(shown) > 20 {

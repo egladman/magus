@@ -34,7 +34,7 @@
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 8
+# magus-guard-template: 9
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=none pass=none
 

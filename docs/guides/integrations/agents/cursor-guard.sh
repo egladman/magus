@@ -41,7 +41,7 @@
 # the two lines say exactly where: an advise on a shell command is delivered
 # nowhere (Cursor sends nothing on an allow), and an advise on a file write
 # reaches the person via stderr but never the model.
-# magus-guard-template: 8
+# magus-guard-template: 9
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=human advise=human pass=none
 
@@ -125,8 +125,21 @@ verdict=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" session h
 # magus that could not run leaves this empty - too old for `session hook`, unable
 # to load the workspace, half-written by a concurrent build. Allowing is still
 # right (Cursor fails open on a crash anyway), announcing it is what was missing.
+#
+# It names the evidence rather than guessing at it: which binary went silent, its version,
+# and the error it printed. The wording this replaces blamed "too old, or cannot load this
+# workspace", and the second half is not a cause - the deny rules need no workspace at all -
+# so it sent readers looking for a problem there was never any sign of. The re-run is what
+# captures the stderr the verdict call discards, and it only ever happens here, on the path
+# that is already broken. WARN lines are dropped: a config too new for the binary warns
+# before it fails, which is a symptom of the same staleness rather than the error.
 if [ -z "$verdict" ]; then
-	printf '%s\n' "magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the session hook subcommand, or cannot load this workspace - run magus session hook by hand to see the error, then rebuild or update it to restore the guard." >&2
+	ver=$("$GUARD_MAGUS_BIN" version 2>/dev/null | head -n 1)
+	[ -n "$ver" ] || ver='version unreadable'
+	why=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" session hook --agent-name cursor 2>&1 >/dev/null | grep -v 'WARN' | head -n 1)
+	[ -n "$why" ] || why='it printed no error'
+	printf 'magus guard is NOT running: %s (%s) could not judge this command, so its deny and advise rules are unenforced. It said: %s. Rebuild or update THAT binary to restore the guard.\n' \
+		"$GUARD_MAGUS_BIN" "$ver" "$why" >&2
 	verdict='{"permission":"allow"}'
 fi
 printf '%s' "$verdict"

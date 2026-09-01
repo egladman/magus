@@ -121,3 +121,24 @@ func exitForVerdict(v types.KnowledgeVerdict) error {
 	}
 	return errSilent{exitCode: 2}
 }
+
+// exitForQuery maps a search's answer to the process status: 0 when query can answer -
+// matches, or a verified absence - and 1 when it cannot.
+//
+// absent staying 0 is the documented rule and the reason query never adopted the split
+// above: an empty result set is a legitimate answer to a SEARCH, and every script running
+// `magus query` would break if it became a failure. `unknown` is not an answer at all,
+// and it is the one a caller mistakes for "not in the graph" before falling back to a text
+// search - the habit the graph exists to replace. It is also the fixable one, by
+// hint.GraphBuild. query never exits 2: it takes terms, not a name that must resolve.
+//
+// The empty-result condition is load-bearing rather than shorthand for the verdict. A
+// POPULATED answer carries `unknown` routinely, because a bare free-text query never loads
+// the symbol layer, so dropping the condition would make an ordinary successful lookup exit
+// non-zero and teach a caller to ignore the status.
+func exitForQuery(out types.KnowledgeQueryOutput) error {
+	if out.MatchCount == 0 && out.Answer.Verdict == types.VerdictUnknown {
+		return errSilent{exitCode: 1}
+	}
+	return nil
+}

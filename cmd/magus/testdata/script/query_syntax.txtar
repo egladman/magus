@@ -1,7 +1,8 @@
 # query_syntax.txtar - drift fixture for the graph explorer's help-panel examples.
 # Every data-q example button in website/graph.html must be accepted by the real
-# magus query CLI. This test asserts each one runs (exit 0) so the page can't
-# drift into teaching syntax the CLI rejects.
+# magus query CLI. This test asserts each one is accepted so the page can't drift
+# into teaching syntax the CLI rejects. Accepted is not the same as exit 0: a search
+# that matched nothing and could not verify the emptiness exits 1.
 #
 # The example queries (from graph.html data-q attributes):
 #   render
@@ -25,8 +26,14 @@ stdout '(matches:|0 match)'
 exec magus query kind:target
 stdout '(matches:|0 match)'
 
-exec magus query project:website
-stdout '(matches:|0 match)'
+# The one example that matches nothing in this fixture, and the one whose exit is not 0.
+# Accepted syntax and an answer are different things: a bare project filter never loads the
+# symbol layer, so the verdict is `unknown` and query reports that it could not answer.
+# Rejected syntax exits before any result block, so the two assertions below are what tell
+# a non-zero exit that ran from one that never started.
+! exec magus query project:website
+stdout 'matches: 0'
+stdout 'verdict: unknown, not absent'
 
 exec magus query relation:uses
 stdout '(matches:|0 match)'

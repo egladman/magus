@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5168,
-  "edge_count": 9149,
+  "node_count": 5170,
+  "edge_count": 9151,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -6222,6 +6222,16 @@
       }
     },
     {
+      "id": "docsection:CHANGELOG.md#breaking-1",
+      "kind": "docsection",
+      "label": "Breaking",
+      "source": "CHANGELOG.md#breaking-1",
+      "attrs": {
+        "anchor": "breaking-1",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:CHANGELOG.md#changed",
       "kind": "docsection",
       "label": "Changed",
@@ -8108,6 +8118,16 @@
       "source": "docs/changelog.md#breaking",
       "attrs": {
         "anchor": "breaking",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/changelog.md#breaking-1",
+      "kind": "docsection",
+      "label": "Breaking",
+      "source": "docs/changelog.md#breaking-1",
+      "attrs": {
+        "anchor": "breaking-1",
         "level": "3"
       }
     },
@@ -78069,6 +78089,14 @@
     },
     {
       "source": "docsection:CHANGELOG.md#unreleased",
+      "target": "docsection:CHANGELOG.md#breaking-1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "docsection:CHANGELOG.md#unreleased",
       "target": "docsection:CHANGELOG.md#changed",
       "relation": "contains",
       "confidence": "extracted",
@@ -79454,6 +79482,14 @@
     {
       "source": "docsection:docs/changelog.md#unreleased",
       "target": "docsection:docs/changelog.md#breaking",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "docsection:docs/changelog.md#unreleased",
+      "target": "docsection:docs/changelog.md#breaking-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
