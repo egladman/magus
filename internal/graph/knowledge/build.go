@@ -54,5 +54,13 @@ func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, l
 	}
 
 	store := NewStore(cacheDir, opts.Immutable, opts.MaxBytes, opts.Remote, log)
-	return store.Sync(ctx, shards, fps, opts.Refresh)
+	g, err := store.Sync(ctx, shards, fps, opts.Refresh)
+	if err != nil {
+		return nil, err
+	}
+	// Stamped here rather than by each caller: this is the one path every surface loads a
+	// graph through, and a graph that has forgotten its root answers a pasted absolute
+	// path with a verified-looking zero.
+	g.SetRoot(in.Root)
+	return g, nil
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -306,4 +307,29 @@ func mustOutput(t *testing.T, cmd *exec.Cmd) []byte {
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "%v: %s", cmd.Args, out)
 	return out
+}
+
+// The CLI half of the path-normalization mirror; the MCP half is
+// TestPathNormalizationIsSharedWithCLI in internal/handler/mcp. `magus query` hands the
+// raw terms to the graph and canonicalises nothing of its own, so the two surfaces
+// cannot resolve one pasted path to different nodes.
+func TestPathNormalizationIsSharedWithMCP(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "console"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "console", "magusfile.buzz"), []byte("x"), 0o644))
+
+	g := knowledge.NewGraph()
+	g.SetRoot(root)
+	g.AddNode(types.KnowledgeNode{ID: "file:console/magusfile.buzz", Kind: types.KindFile, Label: "magusfile.buzz"})
+
+	for _, q := range []string{
+		"kind:file ./console/magusfile.buzz",
+		"kind:file /console/magusfile.buzz",
+		"kind:file " + filepath.Join(root, "console", "magusfile.buzz"),
+		`kind:file console\magusfile.buzz`,
+	} {
+		out := g.Query(q, knowledge.DefaultBudget)
+		require.Lenf(t, out.Matches, 1, "%q should resolve", q)
+		assert.Equal(t, "file:console/magusfile.buzz", out.Matches[0].ID)
+	}
 }

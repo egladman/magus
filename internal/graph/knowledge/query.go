@@ -221,7 +221,7 @@ func tokenize(s string) []string {
 // Resolve returns nodes matching the query, ranked by score (desc) then ID (asc),
 // truncated to limit (0 = no limit).
 func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
-	q := parseQuery(input)
+	q := g.normalizePaths(parseQuery(input))
 	var matches []types.KnowledgeMatch
 	for id, n := range g.nodes {
 		score, ok := g.scoreNode(n, id, q)

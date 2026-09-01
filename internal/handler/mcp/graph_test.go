@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -351,4 +353,38 @@ func TestPagedRefsProbeFailureIsUnknown(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictUnknown, resp.Answer.Verdict)
 	assert.Equal(t, types.ReasonCoverageUnknown, resp.Answer.Reason)
+}
+
+// pathShapeGraph is the mirror of the CLI's fixture in cmd/magus/query_test.go: one file
+// node under a real workspace root, so both surfaces can be asked the same pasted path.
+func pathShapeGraph(t *testing.T) (*knowledge.Graph, string) {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "console"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "console", "magusfile.buzz"), []byte("x"), 0o644))
+
+	g := knowledge.NewGraph()
+	g.SetRoot(root)
+	g.AddNode(types.KnowledgeNode{ID: "file:console/magusfile.buzz", Kind: types.KindFile, Label: "magusfile.buzz"})
+	return g, root
+}
+
+// The CLI and the MCP tools must resolve one pasted path to the same node. Neither
+// surface canonicalises it: both ask the graph, which normalizes in Resolve. The mirror
+// of this assertion lives in cmd/magus, next to the verdict one it is modelled on.
+func TestPathNormalizationIsSharedWithCLI(t *testing.T) {
+	g, root := pathShapeGraph(t)
+	const want = "file:console/magusfile.buzz"
+
+	for _, q := range []string{
+		"kind:file ./console/magusfile.buzz",
+		"kind:file /console/magusfile.buzz",
+		"kind:file " + filepath.Join(root, "console", "magusfile.buzz"),
+		`kind:file console\magusfile.buzz`,
+	} {
+		resp, err := pagedQuery(g, q, 50, 0, "", verdictFor(q, true, noGaps))
+		require.NoError(t, err)
+		require.Lenf(t, resp.Matches, 1, "%q should resolve", q)
+		assert.Equal(t, want, resp.Matches[0].ID)
+	}
 }

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -53,6 +55,22 @@ func emitWhere(wsRoot string, matches []whereMatch) error {
 		fmt.Println(m.Path)
 	}
 	return nil
+}
+
+// normalizeFilters canonicalises the path-SHAPED filters to the workspace-relative slash
+// form both matchers compare against, so a filter a human tab-completed ("./cmd/x") or
+// copied out of an editor (an absolute path) reaches what a bare "cmd/x" reaches. It is
+// the same normalization `magus query` applies to a path-shaped term.
+//
+// The result is a copy: the filters the user typed are what the no-match error reports.
+func normalizeFilters(filters []string, wsRoot string) []string {
+	out := slices.Clone(filters)
+	for i, f := range out {
+		if norm, ok := file.NormalizeWorkspacePath(f, wsRoot); ok {
+			out[i] = norm
+		}
+	}
+	return out
 }
 
 // whereCmd fuzzy-matches a project and prints its absolute path. On ambiguity, lists candidates and exits 2.
@@ -138,9 +156,11 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		matchFn = watch.IgnorePatterns(ws.Root(), []types.IgnorePattern{pat})
 	}
 
-	scored := interactive.ScoreProjects(all, filters)
+	match := normalizeFilters(filters, ws.Root())
+
+	scored := interactive.ScoreProjects(all, match)
 	if len(scored) == 0 {
-		files, ferr := interactive.SearchFiles(ctx, ws.Root(), filters, matchFn)
+		files, ferr := interactive.SearchFiles(ctx, ws.Root(), match, matchFn)
 		if ferr != nil {
 			return ferr
 		}

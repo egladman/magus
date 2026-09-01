@@ -64,6 +64,9 @@ func BuildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 		}
 		knowledge.UnionInto(merged, knowledge.Qualified(g, workspaceName(abs)))
 	}
+	// A pasted path is measured from the workspace the command was run in; the registered
+	// ones contribute nodes, not a second frame of reference.
+	merged.SetRoot(root)
 	return merged, nil
 }
 
