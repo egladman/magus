@@ -9,7 +9,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/egladman/magus/types"
 )
@@ -227,16 +226,6 @@ func validLease(id string) string {
 	return id
 }
 
-// clampSpawner bounds a label, cutting on a rune boundary so the stored record stays valid
-// UTF-8. Not validated further: it is a claim meant for a person to read, and rejecting it for
-// its shape would drop attribution rather than improve it.
-func clampSpawner(s string) string {
-	if len(s) <= MaxSpawnerLen {
-		return s
-	}
-	cut := MaxSpawnerLen
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
-		cut--
-	}
-	return s[:cut]
-}
+// clampSpawner bounds a label. Not validated further: it is a claim meant for a person to
+// read, and rejecting it for its shape would drop attribution rather than improve it.
+func clampSpawner(s string) string { return clampRunes(s, MaxSpawnerLen) }

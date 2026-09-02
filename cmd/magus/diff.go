@@ -1165,8 +1165,9 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "                on its own, so a script needs no flag.")
 	fmt.Fprintln(w, "  --impact      append the blast radius of landing this: which projects")
 	fmt.Fprintln(w, "                rebuild, who owns them, an estimate from recorded run times,")
-	fmt.Fprintln(w, "                what the advisors say, and which notes anchor what you")
-	fmt.Fprintln(w, "                changed. It gates nothing and changes no exit code.")
+	fmt.Fprintln(w, "                what the advisors say, which notes anchor what you changed,")
+	fmt.Fprintln(w, "                and what the authors asked magus while writing it. It gates")
+	fmt.Fprintln(w, "                nothing and changes no exit code.")
 	fmt.Fprintln(w, "  --ack         record that you have read the named changed files, or all of")
 	fmt.Fprintln(w, "                them when you name none. Needs a terminal.")
 	fmt.Fprintln(w, "  --reason      an optional note kept with an --ack")
@@ -1470,7 +1471,11 @@ type diffImpact struct {
 	AdvisorBase *impactAdvisorBase `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
 	Anchors     []anchorHit        `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
 	Rationale   []rationaleHit     `json:"rationale,omitempty"    yaml:"rationale,omitempty"`
-	Review      *impactReview      `json:"review,omitempty"       yaml:"review,omitempty"`
+	// Evidence is what the agents that wrote this asked magus before writing it. It is the
+	// reasoning half of the record types.DiffTouch already carries: that says which files an
+	// agent had READ, this says which questions it put to the graph.
+	Evidence []trail.Consultation `json:"evidence,omitempty" yaml:"evidence,omitempty"`
+	Review   *impactReview        `json:"review,omitempty"   yaml:"review,omitempty"`
 }
 
 // impactAdvisorBase is the revision the advisors compared against, and how current this
@@ -1582,6 +1587,9 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	// exactly as diffCmd's own load did.
 	p.Anchors = impactAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
 	p.Rationale = collectRationale(m.Root(), rev)
+	// The same trail and the same window AttachReplay walked for the per-file story, asked the
+	// other question: not what the author read, but what it asked magus.
+	p.Evidence = trail.Consulted(m.Root(), m.CacheDir(), diffPaths(rev), diffReplayEvents)
 	var requiredIn func(string) bool
 	if ws, werr := inspectWorkspace(ctx, rootOverride); werr == nil {
 		requiredIn = reviewRequiredMatcher(ws)
@@ -1726,6 +1734,7 @@ func impactLines(p diffImpact) []string {
 		impactAdvisorLines(p.Advisors, p.AdvisorNotes, p.AdvisorBase),
 		impactAnchorLines(p.Anchors),
 		impactRationaleLines(p.Rationale),
+		impactEvidenceLines(p.Evidence),
 		impactReviewLines(p.Review),
 	}
 	for _, s := range sections {
@@ -2317,6 +2326,37 @@ func impactRationaleLines(hits []rationaleHit) []string {
 		out = append(out, fmt.Sprintf("      and %d more", len(hits)-len(shown)))
 	}
 	return out
+}
+
+// impactEvidenceLines names what the authors of this changeset asked magus before writing it, so
+// a reviewer can audit the reasoning rather than only the result.
+//
+// One line per distinct subject, and no output text at all. This section sits beside a diff a
+// person is already reading, and a transcript of what each answer said would cost more attention
+// than the whole report repays. Anyone who wants an answer back re-asks the question.
+func impactEvidenceLines(hits []trail.Consultation) []string {
+	if len(hits) == 0 {
+		return []string{
+			"EVIDENCE: nothing recorded, so what the author consulted is unknown",
+			"      An agent's magus queries land here once its host wires `" + hint.AgentInstall.String() + "`",
+			"      and it works under a lease (BAGGAGE magus.lease).",
+		}
+	}
+	out := []string{fmt.Sprintf("EVIDENCE: %d question%s the authors asked magus while writing this",
+		len(hits), pluralSuffix(len(hits), "", "s"))}
+	for _, h := range impactCap(hits) {
+		// A verb can be asked with no subject, and a trailing space is how that reads as a
+		// truncated line rather than as the whole question.
+		line := "      " + h.Verb
+		if h.Subject != "" {
+			line += " " + h.Subject
+		}
+		if h.Count > 1 {
+			line += fmt.Sprintf(" (x%d)", h.Count)
+		}
+		out = append(out, line)
+	}
+	return append(out, impactMoreLine(len(hits))...)
 }
 
 // adviceSection is one advisor's finding: the section it owns in the pull-request

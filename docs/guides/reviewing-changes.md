@@ -45,7 +45,15 @@ This is the same question `magus affected --impact` answers, asked of a changese
 than of a target: which projects rebuild and which were merely edited, who has been
 changing them, an estimate of the rebuild drawn from recorded run durations, what the
 workspace's advisors say, which human-authored notes anchor a file or symbol you touched,
-and which `compat(until:)` markers sit in the files you changed.
+which `compat(until:)` markers sit in the files you changed, and what the authors asked
+magus while writing it.
+
+That last one is the EVIDENCE section, and it is the only one about the reasoning rather
+than the result: the graph queries, explains and lookups an agent ran before it wrote,
+one line per distinct subject. It appears when the agent worked under a lease and its host
+wires `magus agent install`, because a lease is the only identity shared by the process
+that observed the question and the write it explains. Without one the section says so, so
+a silent record never reads as a change nobody researched.
 
 None of it is a verdict. Nothing is gated on it and the exit code does not change. Each
 section says when it could not measure something, so an empty one reads as "nobody
