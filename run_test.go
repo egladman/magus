@@ -286,6 +286,9 @@ func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
 	}
 	assert.Equal(t, []string{"libs/gb/MAGUS.md"}, types.ChainSkipCacheOutputs(root, "ci", lookup),
 		"a cross-project step's output is rooted at the project that declares it")
+	assert.Equal(t, []types.ChainStep{{Project: "libs/gb", Target: "index-generate"}},
+		types.ChainSkipCacheSteps(root, "ci", lookup),
+		"a gate the caller has to run carries the project that owns it")
 
 	looped := &types.Project{
 		Path:           ".",
@@ -294,6 +297,107 @@ func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
 		TargetChains:   map[string][]types.ChainStep{"a": {{Target: "b"}}, "b": {{Target: "a"}}},
 	}
 	assert.Equal(t, []string{"out.txt"}, types.ChainSkipCacheOutputs(looped, "a", nil))
+	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "b"}},
+		types.ChainSkipCacheSteps(looped, "a", nil))
+}
+
+// The two walks split where they treat a nested skip_cache target differently.
+// Running `generate` runs the `index-generate` inside it, so only the outer one is a
+// gate to invoke, while the key needs the inner one's artifact because that is where
+// the bytes a stale replay would miss actually live.
+func TestChainSkipCacheStepsStopsAtTheOutermostGate(t *testing.T) {
+	p := &types.Project{
+		Path: ".",
+		TargetPolicies: map[string]types.Target{
+			"generate":       {SkipCache: true},
+			"index-generate": {SkipCache: true},
+		},
+		TargetOutputs: map[string][]types.OutputRef{"index-generate": {{Glob: "MAGUS.md"}}},
+		TargetChains: map[string][]types.ChainStep{
+			"lint":     {{Target: "generate"}},
+			"generate": {{Target: "index-generate"}},
+		},
+	}
+	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "generate"}},
+		types.ChainSkipCacheSteps(p, "lint", nil),
+		"descending past generate would run index-generate a second time")
+	assert.Equal(t, []string{"MAGUS.md"}, types.ChainSkipCacheOutputs(p, "lint", nil),
+		"the artifact lives on the inner target, so keying stops at neither")
+}
+
+// A skip_cache target that maintains nothing is not a gate. image-build opts out
+// because it pushes a signed digest per invocation, and a composer that replays has
+// no artifact of its to validate, so running it would buy a side effect and an eight
+// minute docker build for no verdict.
+func TestChainSkipCacheStepsSkipsATargetThatMaintainsNoArtifact(t *testing.T) {
+	p := &types.Project{
+		Path: ".",
+		TargetPolicies: map[string]types.Target{
+			"image-build":    {SkipCache: true},
+			"index-generate": {SkipCache: true},
+		},
+		TargetOutputs: map[string][]types.OutputRef{"index-generate": {{Glob: "MAGUS.md"}}},
+		TargetChains:  map[string][]types.ChainStep{"ci": {{Target: "image-build"}, {Target: "index-generate"}}},
+	}
+	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "index-generate"}},
+		types.ChainSkipCacheSteps(p, "ci", nil))
+}
+
+// The acceptance behavior skip_cache promises: a target the magusfile says always
+// runs must run even when the target that composes it replays. Counted through a
+// spell invoker, following TestRun_RaceReexecutesCachedTarget.
+func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
+	const spellName = "zzz-gate-test-spell"
+	var composer, gate atomic.Int32
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("composer", "gate"),
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case "composer":
+				composer.Add(1)
+			case "gate":
+				gate.Add(1)
+			}
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+	// This package's tests do not link the Buzz interpreter, so a magusfile stating
+	// the policy and the chain would never evaluate (see interp.Available in Open).
+	p.TargetPolicies = map[string]types.Target{"gate": {SkipCache: true}}
+	p.TargetChains = map[string][]types.ChainStep{"composer": {{Target: "gate"}}}
+	// The artifact is what makes it a gate rather than a side effect to leave alone.
+	p.TargetOutputs = map[string][]types.OutputRef{"gate": {{Glob: "GATE.md"}}}
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "composer"}}
+
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	assert.Equal(t, int32(1), composer.Load(), "first run: the composer executes")
+	assert.Equal(t, int32(0), gate.Load(),
+		"a miss runs the composer's body, which is where the chain already runs")
+
+	require.NoError(t, m.Run(ctx, targets), "second run")
+	assert.Equal(t, int32(1), composer.Load(), "second run: the composer replays")
+	assert.Equal(t, int32(1), gate.Load(), "a replayed composer must still run its gate")
+
+	require.NoError(t, m.Run(ctx, targets, WithNoCache()), "third run (--no-cache)")
+	assert.Equal(t, int32(2), composer.Load(), "--no-cache re-executes the composer")
+	assert.Equal(t, int32(1), gate.Load(),
+		"--no-cache runs the body, so pre-running the gate would execute it twice")
 }
 
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a

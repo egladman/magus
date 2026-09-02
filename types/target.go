@@ -365,25 +365,17 @@ func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project)
 	return walk(p, target)
 }
 
-// ChainSkipCacheOutputs is the declared output of every skip_cache target a target
-// composes with ctx.needs, transitively, as workspace-rooted globs. target's own
-// outputs are excluded.
-//
-// ctx.needs runs a composed target inside the parent's body, so it gets no cache
-// step of its own: a cache HIT on the parent skips it, skip_cache included. The
-// engine cannot key such a target's real inputs (not being keyable is why it
-// opted out). It can key the artifact the target maintains: with these globs in
-// the parent's sources, a stale artifact turns the parent's HIT into a miss and
-// the chain re-runs. The cost is one extra miss after the artifact changes.
+// walkChain visits every target that target composes with ctx.needs, transitively,
+// in the order the body invokes them. target itself is not visited: it is the
+// caller's own step. visit reports whether to descend past the target it was given.
 //
 // lookup resolves a cross-project step and may return nil, in which case that step
 // contributes nothing.
-func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *Project) []string {
+func walkChain(p *Project, target string, lookup func(path string) *Project, visit func(proj *Project, name string) bool) {
 	seen := map[string]bool{}
-	var out []string
 
-	var walk func(proj *Project, name string, collect bool)
-	walk = func(proj *Project, name string, collect bool) {
+	var walk func(proj *Project, name string, root bool)
+	walk = func(proj *Project, name string, root bool) {
 		if proj == nil {
 			return
 		}
@@ -393,7 +385,36 @@ func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *
 		}
 		seen[key] = true
 
-		if collect && proj.TargetPolicies[name].SkipCache {
+		if !root && !visit(proj, name) {
+			return
+		}
+		for _, step := range proj.TargetChains[name] {
+			next := proj
+			if step.Project != "" {
+				if lookup == nil {
+					continue
+				}
+				next = lookup(step.Project)
+			}
+			walk(next, step.Target, false)
+		}
+	}
+	walk(p, target, true)
+}
+
+// ChainSkipCacheOutputs is the declared output of every skip_cache target a target
+// composes with ctx.needs, transitively, as workspace-rooted globs.
+//
+// These globs belong in the composing step's cache key. The engine cannot key a
+// skip_cache target's real inputs, since not being keyable is why it opted out, but
+// it can key the artifact the target maintains: with these globs in the parent's
+// sources, an artifact that moved turns the parent's hit into a miss, so the parent
+// re-runs against what the gate below actually produced instead of replaying an
+// entry recorded against different bytes.
+func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *Project) []string {
+	var out []string
+	walkChain(p, target, lookup, func(proj *Project, name string) bool {
+		if proj.TargetPolicies[name].SkipCache {
 			for _, ref := range proj.TargetOutputs[name] {
 				owner := ref.Project
 				if owner == "" {
@@ -404,17 +425,42 @@ func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *
 				}
 			}
 		}
-		for _, step := range proj.TargetChains[name] {
-			next := proj
-			if step.Project != "" {
-				if lookup == nil {
-					continue
-				}
-				next = lookup(step.Project)
-			}
-			walk(next, step.Target, true)
+		return true
+	})
+	return out
+}
+
+// ChainSkipCacheSteps is the skip_cache targets a target composes with ctx.needs
+// that a caller must run itself before replaying it, in invocation order, each
+// carrying its owning project path.
+//
+// skip_cache says a target always runs. ctx.needs runs a composed target inside the
+// parent's body, which a cache hit never executes, so the policy stopped holding the
+// moment the target was reached through a chain rather than named on the command
+// line. A caller replaying the parent runs these to make it hold again.
+//
+// The set is narrower than "every composed skip_cache target", and
+// ChainSkipCacheOutputs is what narrows it: a target qualifies only when it maintains
+// an artifact that is already in the parent's key. That is what the parent needs
+// before it can trust a replay, and it leaves out the skip_cache targets that opted
+// out for a reason a replay cannot invalidate. `image-build` pushes a signed digest
+// per invocation, so it composes into `ci` and belongs nowhere near a hit path; eight
+// minutes of docker build measured the difference.
+//
+// The walk stops at the outermost qualifying target on each path because running one
+// runs everything it composes: descending past `generate` would run the
+// `index-generate` inside it a second time.
+func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
+	var out []ChainStep
+	walkChain(p, target, lookup, func(proj *Project, name string) bool {
+		if !proj.TargetPolicies[name].SkipCache {
+			return true
 		}
-	}
-	walk(p, target, false)
+		if len(proj.TargetOutputs[name]) == 0 && len(ChainSkipCacheOutputs(proj, name, lookup)) == 0 {
+			return true
+		}
+		out = append(out, ChainStep{Project: proj.Path, Target: name})
+		return false
+	})
 	return out
 }

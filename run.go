@@ -524,6 +524,74 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	return step
 }
 
+// runComposedSkipCacheGates runs the artifact-maintaining skip_cache targets a step
+// composes, for each step that would otherwise replay. types.ChainSkipCacheSteps
+// picks which ones qualify.
+//
+// skip_cache states that a target always runs. ctx.needs runs a composed target
+// inside the parent's body and a cache hit never executes that body, so the policy
+// held only for a target named on the command line: `magus run lint libs/gopherbuzz`
+// replayed over a MAGUS.md truncated to one word and reported success, because the
+// index-generate that maintains it is reached through lint's chain. Running the gates
+// here is what makes the magusfile's claim true again.
+//
+// They run before RunAll rather than from inside it, which is the one window where
+// every project is already locked by acquireProjectLocks and no limiter slot is held
+// yet, so a gate needs neither a second lock nor a nested slot. Each gate goes through
+// cache.Run like any other target work, so its console output, output ref, journal
+// entry and report events look the same as a directly invoked target's; its own
+// skip_cache policy is what keeps that call from replaying or snapshotting.
+//
+// A gate that changes an artifact turns its composer's hit into a miss, because
+// types.ChainSkipCacheOutputs put that artifact in the composer's key. The composer
+// then re-runs and its body runs the gate a second time. That costs one redundant
+// generator run on the repair path, where the artifact was stale to begin with.
+func (m *Magus) runComposedSkipCacheGates(ctx context.Context, steps []cache.Step, newStep func(*types.Project, string) cache.Step, opts []cache.RunOption) error {
+	ran := map[string]bool{}
+	for i := range steps {
+		s := &steps[i]
+		if s.NoCache || s.SkipReplay {
+			continue // this step runs its body, and the body runs the chain
+		}
+		p := m.Get(s.ProjectPath)
+		if p == nil {
+			continue
+		}
+		gates := types.ChainSkipCacheSteps(p, s.Target, m.Get)
+		if len(gates) == 0 {
+			continue
+		}
+		// Asked before any gate runs: on a miss the body runs the chain, so a gate run
+		// here would be a generator's second execution rather than its first. A hashing
+		// failure means only "do not pre-run"; RunAll reports it below.
+		if fresh, err := m.cache.IsCached(ctx, *s); err != nil || !fresh {
+			continue
+		}
+		for _, g := range gates {
+			key := g.Project + "\x00" + g.Target
+			if ran[key] {
+				continue
+			}
+			ran[key] = true
+			owner := m.Get(g.Project)
+			if owner == nil {
+				continue
+			}
+			// No ExtraArgs and no Spell: `--` args and a spell::op filter belong to the
+			// target the user named, the same boundary runBuzzDependencies draws for a
+			// dependency.
+			handler := m.targetHandler(g.Target)
+			_, err := m.cache.Run(ctx, newStep(owner, g.Target), func(ctx context.Context) error {
+				return handler(buzz.WithTargetMemo(ctx, buzz.NewTargetMemo()), owner)
+			}, opts...)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // ComputeTargetKey computes target's live cache key and the pre-hash key inputs behind
 // it for the project at projectPath, without executing anything. The step is keyed
 // exactly as a run with these charms would key it - spell claims, tool versions and
@@ -1054,6 +1122,17 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Normalized by applyRunKeying below, shared with ComputeTargetKey.
 	charmKey := opts.Charms
 
+	// The keying every step of this invocation shares. runComposedSkipCacheGates mints
+	// steps outside the stage loop, so the two would otherwise key differently.
+	newStep := func(p *types.Project, target string) cache.Step {
+		step := m.buildStep(p, target)
+		applyRunKeying(&step, toolVer[p.Path], charmKey)
+		step.Revision = revision
+		step.Dirty = dirty
+		step.VCSName = vcsName
+		return step
+	}
+
 	var steps []cache.Step
 	byPath := make(map[string]*types.Project)
 	handlerOf := make(map[string]TargetHandler, len(stages))
@@ -1066,11 +1145,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			trackVolatile = true
 		}
 		for _, p := range st.projects {
-			step := m.buildStep(p, st.target)
-			applyRunKeying(&step, toolVer[p.Path], charmKey)
-			step.Revision = revision
-			step.Dirty = dirty
-			step.VCSName = vcsName
+			step := newStep(p, st.target)
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
@@ -1259,6 +1334,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		svcSession.ReleaseAll(shutdownCtx)
 	}()
 	ctx = service.WithSession(ctx, svcSession)
+	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
+		return err
+	}
 	_, runErr := m.cache.RunAll(ctx, steps, func(ctx context.Context, s cache.Step) error {
 		// Each step invocation gets a fresh TargetMemo so depends_on diamonds
 		// within one target's inline dispatch run shared deps exactly once.
