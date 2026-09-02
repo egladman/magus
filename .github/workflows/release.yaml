@@ -455,9 +455,11 @@ jobs:
       # image-login hands each token to docker on stdin, so no secret enters an argv
       # that magus would capture into the run log.
       #
-      # DOCKERHUB_USERNAME / DOCKERHUB_TOKEN are repository secrets (Settings > Secrets
-      # and variables > Actions). The token is a Docker Hub access token with Read/Write
-      # scope, NOT the account password.
+      # TODO: Docker Hub publishing is disabled - the magusfile's REGISTRIES no longer
+      # lists DOCKERHUB. Once DOCKERHUB_USERNAME / DOCKERHUB_TOKEN exist as repository
+      # secrets (Settings > Secrets and variables > Actions; the token is a Docker Hub
+      # access token with Read/Write scope, NOT the account password), restore that
+      # registry and the commented env lines below.
       # Preflight, and the answer to "where do these variable names come from?" - it
       # prints the registry-by-registry table this env block exists to satisfy, then
       # fails on a NAMED variable if any is unset. That happens here, before the build
@@ -471,16 +473,16 @@ jobs:
         env:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          # DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          # DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: magus run image-registries:cd,stable,verify --no-default-charms
 
       - name: Log in to image registries
         env:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          # DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          # DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: magus run image-login:cd,tagged --no-default-charms
 
       - name: Build, push, and sign images
