@@ -1198,6 +1198,11 @@ add stages what the workspace declares: sources, and the generated outputs a
 source change in the same commit accounts for. Anything undeclared is reported
 rather than swept in, which is the difference between it and git add -A.
 
+--untracked says yes to every undeclared path at once, so it needs --reason: it
+switches off the one report that separates this command from git add -A, and the
+files it sweeps in land in a commit everybody pulls. The reason is kept with the
+staging verdict. Naming a path stays the way to stage one file without it.
+
 resolve settles an in-progress merge, rebase, or cherry-pick. It classifies
 every conflicted path at once, regenerates once instead of once per file,
 settles the files one side deleted (which no VCS invokes a merge driver for),
@@ -1233,7 +1238,8 @@ base in yourself on the others, then run resolve.`,
 			Name:  "add",
 			Short: "Stage a change the way this workspace's declarations say it should be staged",
 			Flags: []Flag{
-				{Name: "untracked", Kind: FlagBool, Doc: "Also stage undeclared files"},
+				{Name: "untracked", Kind: FlagBool, Doc: "Also stage undeclared files; requires --reason"},
+				{Name: "reason", Kind: FlagString, Doc: "Why the undeclared files belong in this change; required with --untracked, and kept with the staging verdict"},
 			},
 		},
 		{
@@ -1252,6 +1258,7 @@ base in yourself on the others, then run resolve.`,
 	Examples: []Example{
 		{"Stage a change without sweeping in build residue", "magus vcs add"},
 		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
+		{"Sweep in the undeclared files, on the record", "magus vcs add --untracked --reason \"new fixtures the go spell does not claim\""},
 		{"Settle a conflicted merge", "magus vcs resolve"},
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
 		{"Record what a lease was handed", "magus vcs checkpoint"},

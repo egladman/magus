@@ -299,3 +299,35 @@ func TestSplitExplainedOutputsCountsCommittedSources(t *testing.T) {
 		"a source change committed since the base ref accounts for it just as well")
 	assert.Empty(t, unexplained)
 }
+
+// TestVCSAddUntrackedNeedsAReason pins the articulated-decision rule at the CLI site.
+// --untracked clears the undeclared-file report, which is the only thing separating this
+// command from `git add -A`, so a bare one is refused. The refusal names the accepted
+// spelling verbatim, because the caller it breaks is usually a script.
+//
+// The temp dir is no magus workspace, and that is the second assertion: the refusal is
+// about the flags, so it lands before the workspace loads and before anything is staged.
+// The accepted form is covered end to end by testdata/script/vcs_add_paths.txtar, which
+// can reach a real tree without tripping this process's one-shot workspace memo.
+func TestVCSAddUntrackedNeedsAReason(t *testing.T) {
+	err := vcsAddCmd(context.Background(), t.TempDir(), []string{"--untracked"})
+
+	require.Error(t, err, "a bare --untracked swept in every undeclared file with nothing recorded")
+	assert.Contains(t, err.Error(), `magus vcs add --untracked --reason "<why>"`)
+	assert.IsType(t, errUsage{}, err, "a missing required flag is misuse, which the CLI exits 2 for")
+}
+
+// TestVCSAddReportsTheReason proves the reason is kept rather than merely demanded: it
+// reaches the terminal beside the files it admitted. The -o json half is the same value,
+// StagingPlan.Reason.
+func TestVCSAddReportsTheReason(t *testing.T) {
+	plan := types.StagingPlan{
+		Undeclared: []string{"testdata/fixture.golden"},
+		Staged:     []string{"testdata/fixture.golden"},
+		Reason:     "golden files the go spell does not claim",
+	}
+
+	out := captureStdout(t, func() { reportStaging(plan, nil, true, false) })
+
+	assert.Contains(t, out, "reason: golden files the go spell does not claim")
+}

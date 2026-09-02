@@ -88,7 +88,19 @@ stdout 'no target claims them'
 exec git diff --cached --name-only
 ! stdout '^loose\.txt$'
 
-exec magus vcs add --untracked
+# And the flag alone is not the asking: it clears the report that separates this command
+# from `git add -A`, so it is refused until it says why. The refusal has to carry the
+# whole accepted spelling, because what it breaks is usually a script.
+! exec magus vcs add --untracked
+stderr 'needs a reason'
+stderr 'magus vcs add --untracked --reason'
+exec git diff --cached --name-only
+! stdout '^loose\.txt$'
+
+# The reason is kept rather than merely demanded: it reaches the report beside the files
+# it admitted.
+exec magus vcs add --untracked --reason 'a scratch file this fixture wants staged'
+stdout 'reason: a scratch file this fixture wants staged'
 exec git diff --cached --name-only
 stdout '^loose\.txt$'
 

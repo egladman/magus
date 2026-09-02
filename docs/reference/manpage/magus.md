@@ -157,7 +157,10 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Cache disk usage cap in MB (binary, 1\<\<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: **cache.size_mb**.
 
 **MAGUS_CACHE_REMOTE_INSECURE**
-: Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only (default: false). Equivalent magus.yaml key: **cache.remote.insecure**.
+: Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only. Requires cache.remote.insecure_reason (default: false). Equivalent magus.yaml key: **cache.remote.insecure**.
+
+**MAGUS_CACHE_REMOTE_INSECURE_REASON**
+: Why this cache runs unverified; required whenever cache.remote.insecure is true. Equivalent magus.yaml key: **cache.remote.insecure_reason**.
 
 **MAGUS_LOG_FORMAT**
 : Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: **log.format**.

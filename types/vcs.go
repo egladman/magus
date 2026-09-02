@@ -824,6 +824,11 @@ type StagingPlan struct {
 	// Staged is what actually reached the index, empty on a dry run. It is the plan's
 	// product, so it is what -o jsonl streams.
 	Staged []string `json:"staged" yaml:"staged" jsonl:"primary"`
+	// Reason is the prose --untracked was given, and is empty on every other run.
+	// The flag switches off the undeclared-file report, so the plan is where that
+	// decision is answerable afterwards: it reaches the terminal, `-o json`, and the
+	// hook reading the verdict, which is every audience that sees the staging at all.
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
 	// Code, Message and URL classify Unexplained via ClassifyDrift, and are empty when
 	// nothing is unexplained.
 	Code    string `json:"code,omitempty" yaml:"code,omitempty"`

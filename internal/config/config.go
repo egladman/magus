@@ -267,8 +267,15 @@ type CacheRemote struct {
 	// Insecure disables remote-cache signature verification: unsigned artifacts are
 	// imported and produced with no trust set. A shared cache without signing is a
 	// supply-chain hazard — use only for trusted single-repo CI, or to validate a
-	// backend before minting keys. When true, trusted_keys is not required.
+	// backend before minting keys. When true, trusted_keys is not required and
+	// InsecureReason is.
 	Insecure bool `json:"insecure" yaml:"insecure"`
+	// InsecureReason is the prose behind Insecure, required whenever it is true. Same
+	// rule SkipCacheReason and DriftReason carry: switching off the check that decides
+	// whether an artifact came from who it claims is a claim about this cache, not a
+	// preference, and this file is committed, so the next machine to trust the cache
+	// reads the answer here rather than guessing at a bare `true`.
+	InsecureReason string `json:"insecure_reason,omitempty" yaml:"insecure_reason,omitempty"`
 }
 
 // CI controls CI fan-out behavior.
@@ -561,7 +568,8 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "false", "When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "false", "When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},
-		{"MAGUS_CACHE_REMOTE_INSECURE", "cache.remote.insecure", "false", "Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only"},
+		{"MAGUS_CACHE_REMOTE_INSECURE", "cache.remote.insecure", "false", "Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only. Requires cache.remote.insecure_reason"},
+		{"MAGUS_CACHE_REMOTE_INSECURE_REASON", "cache.remote.insecure_reason", "", "Why this cache runs unverified; required whenever cache.remote.insecure is true"},
 		{"MAGUS_LOG_FORMAT", "log.format", "pretty", "Output format: pretty, plain, text, or json"},
 		{"MAGUS_LOG_LEVEL", "log.level", "info", "Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table)"},
 		{"MAGUS_CONCURRENCY", "concurrency", "min(NumCPU,8)", "Maximum number of concurrently running per-project build steps"},

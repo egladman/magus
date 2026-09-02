@@ -389,6 +389,8 @@ const (
 	FlagStatusWatch = "watch"
 	// status: --workspace
 	FlagStatusWorkspace = "workspace"
+	// vcs add: --reason
+	FlagVCSAddReason = "reason"
 	// vcs add: --untracked
 	FlagVCSAddUntracked = "untracked"
 	// vcs resolve: --against
@@ -884,13 +886,15 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 
 // VCSAddFlags are the flags declared for `magus vcs add`.
 type VCSAddFlags struct {
-	Untracked bool // --untracked
+	Untracked bool   // --untracked
+	Reason    string // --reason
 }
 
 // BindVCSAdd registers `magus vcs add`'s flags on fs and returns the destination.
 func BindVCSAdd(fs *flag.FlagSet) *VCSAddFlags {
 	var f VCSAddFlags
-	fs.BoolVar(&f.Untracked, FlagVCSAddUntracked, false, "Also stage undeclared files")
+	fs.BoolVar(&f.Untracked, FlagVCSAddUntracked, false, "Also stage undeclared files; requires --reason")
+	fs.StringVar(&f.Reason, FlagVCSAddReason, "", "Why the undeclared files belong in this change; required with --untracked, and kept with the staging verdict")
 	return &f
 }
 
