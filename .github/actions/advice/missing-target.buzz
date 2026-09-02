@@ -136,16 +136,16 @@ fun body(items: [{str: str}]) > str {
             + (f["evidence"] ?? "") + " (uses `" + (f["kind"] ?? "") + "`) |\n");
     }
     return parts.join("")
-        + "\nThe comparison is against projects that use the same spells, not against the "
-        + "whole workspace - a schema project is only ever measured against other schema "
+        + "\nThe comparison covers only projects that use the same spells: a schema "
+        + "project is measured against other schema "
         + "projects. Nobody declared this convention; magus derived it from what projects "
         + "of this kind already expose.\n\n"
         + "A missing target is usually a gap in what CI checks: `magus affected ci` runs "
         + "what each project declares, so a project with no `test` is quietly exempt from "
         + "testing rather than visibly failing.\n\n"
-        + "If it genuinely does not apply here - the project has nothing to test, or the "
-        + "work happens somewhere else - then this is wrong and worth ignoring. Add the "
-        + "`magus:silence:" + section + "` label and it will stay quiet.\n";
+        + "If this does not apply to your project, because it has nothing to test or that "
+        + "work happens somewhere else, then this finding is wrong and worth ignoring. "
+        + "Add the `magus:silence:" + section + "` label to keep it quiet.\n";
 }
 
 fun main() > void !> any {
@@ -284,5 +284,6 @@ test "body explains the cohort and names the escape hatch" {
     final text = body([{"project": "svc-new", "missing": "test", "evidence": "11 of 12", "kind": "go"}]);
     std\assert(text.indexOf("11 of 12") != null, message: "the count is the argument");
     std\assert(text.indexOf("quietly exempt") != null, message: "says why a gap matters");
-    std\assert(text.indexOf("label") != null, message: "declining must be easy and permanent");
+    std\assert(text.indexOf("`magus:silence:missing-target` label") != null,
+        message: "declining must be easy and permanent, and the label is how");
 }

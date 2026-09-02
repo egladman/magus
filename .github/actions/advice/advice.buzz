@@ -140,6 +140,37 @@ export fun diffRange(base: str, head: str) > str !> any {
     return merged.stdout.trim();
 }
 
+// addedTargets returns the target names a diff introduces, read from its added
+// `export fun` lines. The magusfile is the declaration, so the diff answers "new" without
+// checking out the base to load a second graph.
+//
+// Both conformance and target-outputs open their finding on the word "adds", so both need
+// this answer. Only one of them checked, and the other named a target that had sat on the
+// base for weeks.
+export fun addedTargets(diff: str) > [str] {
+    var names = mut [];
+    foreach (line in diff.split("\n")) {
+        if (!line.startsWith("+export fun ")) { continue; }
+        final rest = line.sub("+export fun ".len());
+        final open = rest.indexOf("(");
+        if (open == null) { continue; }
+        final name = rest.sub(0, open).trim();
+        if (name != "") { names.append(name); }
+    }
+    return names;
+}
+
+// declaredAtBase reports whether a target of this name existed before the change.
+//
+// Editing a target's body rewrites its `export fun` line, so the diff alone calls that
+// target added. On those grounds a comment about NEW targets once listed `preflight`,
+// which predated the pull request. Only the base tree settles it.
+export fun declaredAtBase(name: str, base: str) > bool !> any {
+    final res = proc\exec("git", args: ["grep", "-q", "export fun " + name + "(",
+        "origin/" + base, "--", "*.buzz"], dir: ".", opts: {"allow_failure": true});
+    return res.ok;
+}
+
 export fun beginMarker(name: str) > str {
  return "<!-- magus:advice:" + name + ":begin -->"; }
 export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
@@ -153,9 +184,9 @@ export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":e
 // run page is already the right home for everything a reader might want next.
 fun preface() > str {
     var text = "### magus\n\n"
-        + "> Checked this pull request against the build graph. Findings are collapsed "
-        + "below - open what concerns you. **Nothing here blocks the merge**; disagree "
-        + "with a note and label it away.\n";
+        + "> Checked this pull request against the build graph. Each finding below starts "
+        + "collapsed; open the ones that concern you. **Nothing here blocks the merge**; "
+        + "disagree with a note and label it away.\n";
     final repo = env("REPO");
     final run = env("GITHUB_RUN_ID");
     if (repo != "" and run != "") {
@@ -376,6 +407,31 @@ test "withoutFooter tolerates a comment with no footer yet" {
     assert\equal(withoutFooter("  bare  "), want: "bare", message: "trimmed, not dropped");
 }
 
+// hasSection reports whether a composed comment still carries a finding.
+//
+// A begin marker is the only proof one survived: compose writes the preface and the
+// footer on every path, so neither tells you anything. Matching the marker SHAPE rather
+// than a list of names keeps this correct as we add advisors.
+//
+// The merge-conflict and hand-edited-generated advisors paste tracked files, so quoted
+// repository text can carry a marker of its own. hasSection keeps that comment rather
+// than risk discarding a real finding.
+fun hasSection(text: str) > bool {
+    return text.indexOf(":begin -->") != null;
+}
+
+// resolved is the body a comment takes once its last finding goes away.
+//
+// publish PATCHes to this instead of deleting, holding the decision that function already
+// records: a delete takes the thread's replies with it. A later reader of the merged pull
+// request still learns that magus raised something and that someone settled it. Editing a
+// comment notifies nobody, so this records a disposal without asking for attention.
+fun resolved() > str {
+    return comment_marker + "\n### magus\n\n"
+        + "> Everything magus raised on this pull request is resolved.\n"
+        + footer();
+}
+
 export fun compose(current: str, name: str, title: str, body: str) > str {
     final begin = beginMarker(name);
     final end = endMarker(name);
@@ -400,7 +456,24 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
         if (inTail != null) { tail = tail.sub(0, len: inTail); }
     }
     if (body == "") {
-        return (head + tail).trim() + "\n" + footer();
+        final remainder = (head + tail).trim();
+        // Nothing found here, and no other advisor left a section behind: there is no
+        // comment to make. "" tells publish to write nothing.
+        //
+        // THE THRESHOLD, for every advisor at once: a section is what earns a reviewer's
+        // attention. compose writes the preface and the footer on every path, so a comment
+        // carrying only those reports that a run happened, which the checks list already
+        // reports. Across pull requests 120 to 125 that shell ran 510 bytes. Open it five
+        // times for nothing and you stop opening it, including the time it has a finding.
+        if (!hasSection(remainder)) { return ""; }
+        return remainder + "\n" + footer();
+    }
+    // Two shells reach this point: the preface just built, and the resolved note a
+    // previous run left. Rebuild either, or a finding raised after magus settled an
+    // earlier one lands under a line saying everything is resolved.
+    if (!hasSection(head + tail)) {
+        head = comment_marker + "\n" + preface();
+        tail = "";
     }
     // Collapsed by default. Six findings expanded is a wall nobody reads to the end of;
     // six one-line summaries is a table of contents you scan in two seconds and open the
@@ -470,8 +543,11 @@ export fun sectionLine(name: str, title: str, body: str) > str {
 }
 
 // publish upserts one advisor's section into the PR's magus comment. An empty body
-// retracts the section, and a comment left with no sections at all is emptied to the
-// bare marker rather than deleted - deleting would lose the thread's history.
+// retracts the section. A comment left with no sections says so; deleting it would lose
+// the thread's history.
+//
+// A pull request with nothing to report gets NO comment: the first advisor with a finding
+// opens it, so a shell of preface and footer never reaches the page.
 //
 // In local mode it writes the section to stdout instead and touches nothing else. The
 // section is emitted even when the body is EMPTY: a retraction says "this advisor looked
@@ -498,7 +574,14 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
             dir: ".", opts: {"quiet": true});
         current = serialize\jsonDecode(got.stdout).q("body").stringValue();
     }
-    final composed = compose(current, name: name, title: title, body: body);
+    var composed = compose(current, name: name, title: title, body: body);
+    if (composed == "") {
+        // No comment yet, and nothing to open one about. A pull request magus found
+        // nothing on carries no trace of magus.
+        if (id == "") { return; }
+        // This one carried findings before, so the thread stays and records their end.
+        composed = resolved();
+    }
     if (withoutFooter(composed) == withoutFooter(current)) { return; }
 
     // The body goes through a JSON file, never an -f flag: it is markdown with newlines,
@@ -553,6 +636,65 @@ test "an empty body retracts the section and its heading" {
     std\assert(body.indexOf("there is a conflict") == null, message: "the text is withdrawn");
     std\assert(body.indexOf("Merge conflicts") == null, message: "the summary line goes too");
     std\assert(body.indexOf("drift text") != null, message: "the other section survives");
+}
+
+test "a pull request with nothing to report composes no comment at all" {
+    std\assert(compose("", name: "doctor", title: "Workspace health", body: "") == "",
+        message: "no finding and no comment yet means nothing to post");
+}
+
+test "the last finding going away empties the comment" {
+    final one = compose("", name: "conformance", title: "C", body: "a divergent target");
+    std\assert(one != "", message: "a finding does compose a comment");
+    std\assert(compose(one, name: "conformance", title: "C", body: "") == "",
+        message: "withdrawing the only finding leaves nothing to say");
+}
+
+test "a silent advisor leaves the comment for the next one to open" {
+    var body = compose("", name: "doctor", title: "Workspace health", body: "");
+    std\assert(body == "", message: "the first advisor found nothing");
+    body = compose(body, name: "unclaimed", title: "Unclaimed", body: "a stray file");
+    std\assert(body.indexOf("a stray file") != null, message: "the second one still opens it");
+    std\assert(body.indexOf("### magus") != null, message: "and carries the preface");
+}
+
+test "a finding raised after a resolution does not land under the resolved line" {
+    // publish rewrites an emptied comment to say everything is settled. A later push can
+    // still raise a finding, and the two must not stack.
+    final settled = comment_marker + "\n### magus\n\n"
+        + "> Everything magus raised on this pull request is resolved.\n"
+        + footer_marker + "\n<sub><i>Last updated 2026-09-02T00:00:00Z.</i></sub>\n";
+    final body = compose(settled, name: "doctor", title: "Workspace health (1 failing)",
+        body: "a check broke");
+    std\assert(body.indexOf("a check broke") != null, message: "the new finding is there");
+    std\assert(body.indexOf("is resolved") == null, message: "and the settled line is gone");
+    std\assert(body.indexOf("Checked this pull request") != null, message: "the preface is back");
+}
+
+test "recomposing an empty body against a resolved comment stays put" {
+    // Otherwise every push PATCHes the comment again, which is the notification churn
+    // withoutFooter exists to prevent.
+    final settled = comment_marker + "\n### magus\n\n"
+        + "> Everything magus raised on this pull request is resolved.\n"
+        + footer_marker + "\n<sub><i>Last updated 2026-09-02T00:00:00Z.</i></sub>\n";
+    std\assert(compose(settled, name: "doctor", title: "Workspace health", body: "") == "",
+        message: "nothing to say about a comment already saying nothing");
+}
+
+test "addedTargets reads new target names out of a diff" {
+    final diff = "+export fun release(ctx: magus\\Context, args: [str]) > void\n"
+        + "-export fun gone(ctx: magus\\Context) > void\n"
+        + " export fun untouched(ctx: magus\\Context) > void\n"
+        + "+export fun  spaced (ctx: magus\\Context) > void\n";
+    final got = addedTargets(diff);
+    std\assert(got.len() == 2, message: "only the added lines");
+    std\assert(got[0] == "release", message: "the first new target");
+    std\assert(got[1] == "spaced", message: "trimmed");
+}
+
+test "addedTargets ignores a diff with no new targets" {
+    std\assert(addedTargets("+    ctx.needs(build);\n-export fun old() > void\n").len() == 0,
+        message: "nothing added");
 }
 
 test "the preface survives a section being replaced" {
