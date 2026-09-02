@@ -3,7 +3,8 @@
 // magus.memory.v1alpha1.MemoryService.
 //
 // Memory is a set of discrete records, each a typed POINTER into the magus domain (the refs
-// ARE the payload); only a decision/plan carries a prose caption. The view is a list built
+// ARE the payload); a decision, plan or elimination also carries a prose caption, and an
+// elimination carries the captured evidence that killed its hypothesis. The view is a list built
 // for scanning and pruning many rows at once - per-row edit/delete plus checkbox
 // multi-select with a single bulk delete - not roomy cards. A cursor snapshot ("where you
 // left off") is pinned on top as the one genuine free-text blob.
@@ -75,8 +76,14 @@ const TYPE_LABELS: Record<MemoryType, string> = {
   [MemoryType.POINTER]: "pointer",
   [MemoryType.DECISION]: "decision",
   [MemoryType.PLAN]: "plan",
+  [MemoryType.ELIMINATION]: "elimination",
 };
-const TYPE_OPTIONS = [MemoryType.POINTER, MemoryType.DECISION, MemoryType.PLAN];
+const TYPE_OPTIONS = [
+  MemoryType.POINTER,
+  MemoryType.DECISION,
+  MemoryType.PLAN,
+  MemoryType.ELIMINATION,
+];
 
 const REFKIND_LABELS: Record<MemoryRefKind, string> = {
   [MemoryRefKind.UNSPECIFIED]: "?",
@@ -94,9 +101,15 @@ const REFKIND_OPTIONS = [
   MemoryRefKind.DOC,
 ];
 
-// hasCaption reports whether a type carries a prose body (decision/plan). A pointer never does.
+// hasCaption reports whether a type carries a prose body. A pointer carries none.
 function hasCaption(t: MemoryType): boolean {
-  return t === MemoryType.DECISION || t === MemoryType.PLAN;
+  return t === MemoryType.DECISION || t === MemoryType.PLAN || t === MemoryType.ELIMINATION;
+}
+
+// hasExcerpt reports whether a type carries captured evidence. The server rejects an excerpt
+// on every other type, so the control stays hidden and the form offers no save that fails.
+function hasExcerpt(t: MemoryType): boolean {
+  return t === MemoryType.ELIMINATION;
 }
 
 // DraftRef is one editable ref row in the form: a typed kind plus a target still in its pre-wire
@@ -313,6 +326,7 @@ export function buildMemorySection(
     const needle = filterText.toLowerCase();
     if (rec.name.toLowerCase().includes(needle)) return true;
     if (rec.body.toLowerCase().includes(needle)) return true;
+    if (rec.excerpt.toLowerCase().includes(needle)) return true;
     return rec.refs.some((ref) => ref.target.toLowerCase().includes(needle));
   }
 
@@ -379,6 +393,9 @@ export function buildMemorySection(
     const main = h("div", "console-settings-memory__rowmain");
     main.append(head, chips);
     if (rec.body) main.append(h("p", "console-settings-memory__caption", rec.body));
+    // Preformatted: an excerpt is captured tool output, so its line breaks and columns
+    // are the content. Still textContent through h(), as every untrusted string is.
+    if (rec.excerpt) main.append(h("pre", "console-settings-memory__excerpt", rec.excerpt));
 
     const actions = h("div", "console-settings-memory__rowactions");
     const edit = button("Edit", "pf-m-secondary pf-m-small");
@@ -444,11 +461,24 @@ export function buildMemorySection(
     const bodyLabel = h("label", "console-settings-memory__label", "Caption");
     bodyLabel.htmlFor = bodyId;
     bodyWrap.append(bodyLabel, formControl(bodyArea));
-    const syncBodyVisibility = (): void => {
-      bodyWrap.hidden = !hasCaption(Number(typeSel.value) as MemoryType);
+    const excerptId = "console-memory-field-" + ++fieldSeq;
+    const excerptWrap = h("div", "console-settings-memory__bodywrap");
+    const excerptArea = h("textarea");
+    excerptArea.id = excerptId;
+    excerptArea.rows = 4;
+    excerptArea.placeholder = "The captured evidence that ruled the hypothesis out";
+    excerptArea.value = rec?.excerpt ?? "";
+    const excerptLabel = h("label", "console-settings-memory__label", "Evidence");
+    excerptLabel.htmlFor = excerptId;
+    excerptWrap.append(excerptLabel, formControl(excerptArea));
+
+    const syncFieldVisibility = (): void => {
+      const t = Number(typeSel.value) as MemoryType;
+      bodyWrap.hidden = !hasCaption(t);
+      excerptWrap.hidden = !hasExcerpt(t);
     };
-    typeSel.addEventListener("change", syncBodyVisibility);
-    syncBodyVisibility();
+    typeSel.addEventListener("change", syncFieldVisibility);
+    syncFieldVisibility();
 
     const refsInput = labeledInput(
       "References (comma-separated names, optional)",
@@ -468,6 +498,7 @@ export function buildMemorySection(
         type: t,
         status: statusInput.input.value.trim(),
         body: hasCaption(t) ? bodyArea.value : "",
+        excerpt: hasExcerpt(t) ? excerptArea.value : "",
         refs: drafts
           .filter((d) => d.target.trim() !== "")
           .map((d) => ({ kind: d.kind, target: d.target.trim() })),
@@ -508,6 +539,7 @@ export function buildMemorySection(
       statusInput.wrap,
       refsBox,
       bodyWrap,
+      excerptWrap,
       refsInput.wrap,
       actions,
     );

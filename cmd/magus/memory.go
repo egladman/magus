@@ -13,7 +13,7 @@ import (
 	store "github.com/egladman/magus/internal/memory"
 )
 
-func memoryCmd(_ context.Context, root string, args []string) error {
+func memoryCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		memoryUsage()
 		return nil
@@ -28,7 +28,7 @@ func memoryCmd(_ context.Context, root string, args []string) error {
 	case "delete":
 		return memoryDelete(root, args[1:])
 	case "verify":
-		return memoryVerify(root, args[1:])
+		return memoryVerify(ctx, root, args[1:])
 	case "list":
 		// Renamed to ls in v0.4.0, for one spelling of "enumerate" across the whole
 		// surface (`magus ls`, `magus run ls`). Named rather than left to the generic
@@ -167,14 +167,19 @@ func memoryPut(root string, args []string) error {
 		fs.Var(&references, gen.FlagMemoryPutReference, "Name of another entry this one relates to; repeat as needed")
 		pf = gen.BindMemoryPut(fs)
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus memory put <name> --type <pointer|decision|plan> --ref 'kind: target' [--ref ...] [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus memory put <name> --type <pointer|decision|plan|elimination> --ref 'kind: target' [--ref ...] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Create or replace a visible handoff entry. Use refs for things magus can re-open;")
-			fmt.Fprintln(os.Stderr, "only a decision or plan may carry a short why in --body.")
+			fmt.Fprintln(os.Stderr, "a pointer carries no prose, and every other type takes a short why in --body.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "An elimination records a hypothesis an investigation killed, and needs --excerpt.")
+			fmt.Fprintln(os.Stderr, "An output ref resolves only from the checkout that minted it, so copy the evidence")
+			fmt.Fprintln(os.Stderr, "in and the entry outlives the ref.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Examples:")
 			fmt.Fprintln(os.Stderr, "  magus memory put installer-key --type decision --ref 'doc: docs/setup.md#verification' --body 'Keep one bootstrap key; rotation ships a compatibility release first.'")
 			fmt.Fprintln(os.Stderr, "  magus memory put next-release --type plan --ref 'command: magus affected ci' --status active --body 'Run the release gate after docs regenerate.'")
+			fmt.Fprintln(os.Stderr, "  magus memory put cache-key-drift --type elimination --ref 'output: out1a2b3c' --body 'Not the cache key: both runs hashed the same inputs.' --excerpt 'key inputs identical, 0 differing lines'")
 			fs.PrintDefaults()
 		}
 	})
@@ -190,7 +195,7 @@ func memoryPut(root string, args []string) error {
 	}
 	rec, err := store.Put(root, store.Record{
 		Name: pos[0], Type: store.RecordType(pf.Type), Status: pf.Status, Body: pf.Body,
-		Refs: parsed, References: references,
+		Excerpt: pf.Excerpt, Refs: parsed, References: references,
 	})
 	if err != nil {
 		return err
@@ -244,20 +249,34 @@ func memoryDelete(root string, args []string) error {
 	return nil
 }
 
-func memoryVerify(root string, args []string) error {
+func memoryVerify(ctx context.Context, root string, args []string) error {
 	_, err := cmdParse("memory verify", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus memory verify [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Check every entry for malformed frontmatter, invalid shape, stale status, and")
-			fmt.Fprintln(os.Stderr, "references to deleted entries. Errors exit non-zero; stale entries are warnings.")
+			fmt.Fprintln(os.Stderr, "Check every entry for malformed frontmatter, invalid shape, stale status,")
+			fmt.Fprintln(os.Stderr, "references to deleted entries, and evidence refs that no longer resolve.")
+			fmt.Fprintln(os.Stderr, "Errors exit non-zero; stale entries and decayed evidence are warnings.")
 			fs.PrintDefaults()
 		}
 	})
 	if err != nil {
 		return err
 	}
-	report, err := store.Verify(root)
+	// Resolving evidence needs the cache, and the cache needs an open workspace. ls, get
+	// and put stay workspace-free, so the journal is readable while the magusfile is the
+	// thing being repaired.
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	report, err := store.Verify(root, func(ref store.Ref) error {
+		if ref.Kind != store.RefKindOutput {
+			return nil
+		}
+		_, err := m.OutputDescriptorByRef(ref.Target)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -307,6 +326,14 @@ func printMemoryRecord(rec store.Record) {
 	}
 	if rec.Body != "" {
 		fmt.Printf("why: %s\n", rec.Body)
+	}
+	// Indented as a block so a reader tells captured tool output from the record's own
+	// fields at a glance.
+	if rec.Excerpt != "" {
+		fmt.Println("evidence:")
+		for _, line := range strings.Split(rec.Excerpt, "\n") {
+			fmt.Printf("  %s\n", line)
+		}
 	}
 	fmt.Println("refs:")
 	for _, ref := range rec.Refs {

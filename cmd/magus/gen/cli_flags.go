@@ -243,6 +243,8 @@ const (
 	FlagManInstallDryRun = "dry-run"
 	// memory put: --body
 	FlagMemoryPutBody = "body"
+	// memory put: --excerpt
+	FlagMemoryPutExcerpt = "excerpt"
 	// memory put: --ref
 	FlagMemoryPutRef = "ref"
 	// memory put: --reference
@@ -1117,17 +1119,19 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 
 // MemoryPutFlags are the flags declared for `magus memory put`.
 type MemoryPutFlags struct {
-	Type   string // --type
-	Status string // --status
-	Body   string // --body
+	Type    string // --type
+	Status  string // --status
+	Body    string // --body
+	Excerpt string // --excerpt
 }
 
 // BindMemoryPut registers `magus memory put`'s flags on fs and returns the destination.
 func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	var f MemoryPutFlags
-	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, or plan")
+	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, plan, or elimination")
 	fs.StringVar(&f.Status, FlagMemoryPutStatus, "", "Lifecycle label, e.g. accepted, active, done, stale")
-	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision and plan only")
+	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision, plan and elimination only")
+	fs.StringVar(&f.Excerpt, FlagMemoryPutExcerpt, "", "The evidence that ruled a hypothesis out, copied inline; elimination only and required there")
 	return &f
 }
 

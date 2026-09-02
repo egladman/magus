@@ -8,8 +8,8 @@
 // records under the user's XDG state directory - never a second store of its own.
 //
 // Memory is a set of discrete records, each a typed POINTER into the magus domain (a
-// saved query, a graph node, an output ref, a command, a doc); only a decision/plan
-// carries a prose caption. Its reason to exist as an editable surface: an agent can
+// saved query, a graph node, an output ref, a command, a doc); a decision, plan or
+// elimination also carries a prose caption. Its reason to exist as an editable surface: an agent can
 // accumulate stale or bloated records, and a human read/edit/delete surface is the
 // safety valve. Every record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: a
 // client must render them as text, never as trusted HTML.
@@ -34,7 +34,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/memory/v1alpha1/memory.proto.
  */
 export const file_magus_memory_v1alpha1_memory: GenFile = /*@__PURE__*/
-  fileDesc("CiJtYWd1cy9tZW1vcnkvdjFhbHBoYTEvbWVtb3J5LnByb3RvEhVtYWd1cy5tZW1vcnkudjFhbHBoYTEiTwoJTWVtb3J5UmVmEjIKBGtpbmQYASABKA4yJC5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5UmVmS2luZBIOCgZ0YXJnZXQYAiABKAkiiwIKBk1lbW9yeRIMCgRuYW1lGAEgASgJEi8KBHR5cGUYAiABKA4yIS5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5VHlwZRIuCgRyZWZzGAMgAygLMiAubWFndXMubWVtb3J5LnYxYWxwaGExLk1lbW9yeVJlZhIOCgZzdGF0dXMYBCABKAkSDAoEYm9keRgFIAEoCRISCgpyZWZlcmVuY2VzGAYgAygJEi8KC2NyZWF0ZV90aW1lGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiSAoTTGlzdE1lbW9yaWVzUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgCIAEoCSJgChRMaXN0TWVtb3JpZXNSZXNwb25zZRIvCghtZW1vcmllcxgBIAMoCzIdLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5NZW1vcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIpQBChNVcGRhdGVNZW1vcnlSZXF1ZXN0EjUKBm1lbW9yeRgBIAEoCzIdLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5NZW1vcnlCBrpIA8gBARIvCgt1cGRhdGVfbWFzaxgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2sSFQoNYWxsb3dfbWlzc2luZxgDIAEoCCJDChNEZWxldGVNZW1vcnlSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESFQoNYWxsb3dfbWlzc2luZxgCIAEoCCIWChREZWxldGVNZW1vcnlSZXNwb25zZSISChBHZXRDdXJzb3JSZXF1ZXN0IhkKBkN1cnNvchIPCgdjb250ZW50GAEgASgJIiYKE1VwZGF0ZUN1cnNvclJlcXVlc3QSDwoHY29udGVudBgBIAEoCSpyCgpNZW1vcnlUeXBlEhsKF01FTU9SWV9UWVBFX1VOU1BFQ0lGSUVEEAASFwoTTUVNT1JZX1RZUEVfUE9JTlRFUhABEhgKFE1FTU9SWV9UWVBFX0RFQ0lTSU9OEAISFAoQTUVNT1JZX1RZUEVfUExBThADKrcBCg1NZW1vcnlSZWZLaW5kEh8KG01FTU9SWV9SRUZfS0lORF9VTlNQRUNJRklFRBAAEhkKFU1FTU9SWV9SRUZfS0lORF9RVUVSWRABEhgKFE1FTU9SWV9SRUZfS0lORF9OT0RFEAISGgoWTUVNT1JZX1JFRl9LSU5EX09VVFBVVBADEhsKF01FTU9SWV9SRUZfS0lORF9DT01NQU5EEAQSFwoTTUVNT1JZX1JFRl9LSU5EX0RPQxAFMuwDCg1NZW1vcnlTZXJ2aWNlEmcKDExpc3RNZW1vcmllcxIqLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5MaXN0TWVtb3JpZXNSZXF1ZXN0GisubWFndXMubWVtb3J5LnYxYWxwaGExLkxpc3RNZW1vcmllc1Jlc3BvbnNlElkKDFVwZGF0ZU1lbW9yeRIqLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5VcGRhdGVNZW1vcnlSZXF1ZXN0Gh0ubWFndXMubWVtb3J5LnYxYWxwaGExLk1lbW9yeRJnCgxEZWxldGVNZW1vcnkSKi5tYWd1cy5tZW1vcnkudjFhbHBoYTEuRGVsZXRlTWVtb3J5UmVxdWVzdBorLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5EZWxldGVNZW1vcnlSZXNwb25zZRJTCglHZXRDdXJzb3ISJy5tYWd1cy5tZW1vcnkudjFhbHBoYTEuR2V0Q3Vyc29yUmVxdWVzdBodLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5DdXJzb3ISWQoMVXBkYXRlQ3Vyc29yEioubWFndXMubWVtb3J5LnYxYWxwaGExLlVwZGF0ZUN1cnNvclJlcXVlc3QaHS5tYWd1cy5tZW1vcnkudjFhbHBoYTEuQ3Vyc29yQusBChljb20ubWFndXMubWVtb3J5LnYxYWxwaGExQgtNZW1vcnlQcm90b1ABWktnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9tZW1vcnkvdjFhbHBoYTE7bWVtb3J5djFhbHBoYTGiAgNNTViqAhVNYWd1cy5NZW1vcnkuVjFhbHBoYTHKAhVNYWd1c1xNZW1vcnlcVjFhbHBoYTHiAiFNYWd1c1xNZW1vcnlcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhdNYWd1czo6TWVtb3J5OjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
+  fileDesc("CiJtYWd1cy9tZW1vcnkvdjFhbHBoYTEvbWVtb3J5LnByb3RvEhVtYWd1cy5tZW1vcnkudjFhbHBoYTEiTwoJTWVtb3J5UmVmEjIKBGtpbmQYASABKA4yJC5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5UmVmS2luZBIOCgZ0YXJnZXQYAiABKAkinAIKBk1lbW9yeRIMCgRuYW1lGAEgASgJEi8KBHR5cGUYAiABKA4yIS5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5VHlwZRIuCgRyZWZzGAMgAygLMiAubWFndXMubWVtb3J5LnYxYWxwaGExLk1lbW9yeVJlZhIOCgZzdGF0dXMYBCABKAkSDAoEYm9keRgFIAEoCRISCgpyZWZlcmVuY2VzGAYgAygJEi8KC2NyZWF0ZV90aW1lGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHZXhjZXJwdBgJIAEoCSJIChNMaXN0TWVtb3JpZXNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUY6AcoABISCgpwYWdlX3Rva2VuGAIgASgJImAKFExpc3RNZW1vcmllc1Jlc3BvbnNlEi8KCG1lbW9yaWVzGAEgAygLMh0ubWFndXMubWVtb3J5LnYxYWxwaGExLk1lbW9yeRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkilAEKE1VwZGF0ZU1lbW9yeVJlcXVlc3QSNQoGbWVtb3J5GAEgASgLMh0ubWFndXMubWVtb3J5LnYxYWxwaGExLk1lbW9yeUIGukgDyAEBEi8KC3VwZGF0ZV9tYXNrGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFzaxIVCg1hbGxvd19taXNzaW5nGAMgASgIIkMKE0RlbGV0ZU1lbW9yeVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIVCg1hbGxvd19taXNzaW5nGAIgASgIIhYKFERlbGV0ZU1lbW9yeVJlc3BvbnNlIhIKEEdldEN1cnNvclJlcXVlc3QiGQoGQ3Vyc29yEg8KB2NvbnRlbnQYASABKAkiJgoTVXBkYXRlQ3Vyc29yUmVxdWVzdBIPCgdjb250ZW50GAEgASgJKo8BCgpNZW1vcnlUeXBlEhsKF01FTU9SWV9UWVBFX1VOU1BFQ0lGSUVEEAASFwoTTUVNT1JZX1RZUEVfUE9JTlRFUhABEhgKFE1FTU9SWV9UWVBFX0RFQ0lTSU9OEAISFAoQTUVNT1JZX1RZUEVfUExBThADEhsKF01FTU9SWV9UWVBFX0VMSU1JTkFUSU9OEAQqtwEKDU1lbW9yeVJlZktpbmQSHwobTUVNT1JZX1JFRl9LSU5EX1VOU1BFQ0lGSUVEEAASGQoVTUVNT1JZX1JFRl9LSU5EX1FVRVJZEAESGAoUTUVNT1JZX1JFRl9LSU5EX05PREUQAhIaChZNRU1PUllfUkVGX0tJTkRfT1VUUFVUEAMSGwoXTUVNT1JZX1JFRl9LSU5EX0NPTU1BTkQQBBIXChNNRU1PUllfUkVGX0tJTkRfRE9DEAUy7AMKDU1lbW9yeVNlcnZpY2USZwoMTGlzdE1lbW9yaWVzEioubWFndXMubWVtb3J5LnYxYWxwaGExLkxpc3RNZW1vcmllc1JlcXVlc3QaKy5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTGlzdE1lbW9yaWVzUmVzcG9uc2USWQoMVXBkYXRlTWVtb3J5EioubWFndXMubWVtb3J5LnYxYWxwaGExLlVwZGF0ZU1lbW9yeVJlcXVlc3QaHS5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5EmcKDERlbGV0ZU1lbW9yeRIqLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5EZWxldGVNZW1vcnlSZXF1ZXN0GisubWFndXMubWVtb3J5LnYxYWxwaGExLkRlbGV0ZU1lbW9yeVJlc3BvbnNlElMKCUdldEN1cnNvchInLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5HZXRDdXJzb3JSZXF1ZXN0Gh0ubWFndXMubWVtb3J5LnYxYWxwaGExLkN1cnNvchJZCgxVcGRhdGVDdXJzb3ISKi5tYWd1cy5tZW1vcnkudjFhbHBoYTEuVXBkYXRlQ3Vyc29yUmVxdWVzdBodLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5DdXJzb3JC6wEKGWNvbS5tYWd1cy5tZW1vcnkudjFhbHBoYTFCC01lbW9yeVByb3RvUAFaS2dpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL21lbW9yeS92MWFscGhhMTttZW1vcnl2MWFscGhhMaICA01NWKoCFU1hZ3VzLk1lbW9yeS5WMWFscGhhMcoCFU1hZ3VzXE1lbW9yeVxWMWFscGhhMeICIU1hZ3VzXE1lbW9yeVxWMWFscGhhMVxHUEJNZXRhZGF0YeoCF01hZ3VzOjpNZW1vcnk6OlYxYWxwaGExYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
 
 /**
  * MemoryRef is one typed pointer: the payload of a record.
@@ -64,7 +64,7 @@ export const MemoryRefSchema: GenMessage<MemoryRef> = /*@__PURE__*/
 
 /**
  * Memory is one record. name is the kebab-slug identity; refs are the required payload;
- * body is the caption (decision/plan only); status is the optional lifecycle field;
+ * body is the caption (every type but pointer); status is the optional lifecycle field;
  * references links to other records by name. create_time/update_time are output-only.
  *
  * @generated from message magus.memory.v1alpha1.Memory
@@ -119,6 +119,15 @@ export type Memory = Message<"magus.memory.v1alpha1.Memory"> & {
    * @generated from field: google.protobuf.Timestamp update_time = 8;
    */
   updateTime?: Timestamp;
+
+  /**
+   * UNTRUSTED captured evidence, required on an elimination and rejected on every other
+   * type. It is copied in because an output ref resolves only from the checkout that
+   * produced it, and agent worktrees get deleted.
+   *
+   * @generated from field: string excerpt = 9;
+   */
+  excerpt: string;
 };
 
 /**
@@ -309,6 +318,8 @@ export const UpdateCursorRequestSchema: GenMessage<UpdateCursorRequest> = /*@__P
 /**
  * MemoryType is the subject axis of a record (stable, closed). pointer carries refs only;
  * decision and plan additionally carry a prose caption (the why the graph cannot derive).
+ * elimination is a hypothesis an investigation falsified: it carries the caption plus the
+ * excerpt of evidence that killed it.
  *
  * @generated from enum magus.memory.v1alpha1.MemoryType
  */
@@ -332,6 +343,11 @@ export enum MemoryType {
    * @generated from enum value: MEMORY_TYPE_PLAN = 3;
    */
   PLAN = 3,
+
+  /**
+   * @generated from enum value: MEMORY_TYPE_ELIMINATION = 4;
+   */
+  ELIMINATION = 4,
 }
 
 /**

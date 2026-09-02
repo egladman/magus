@@ -36,22 +36,32 @@ import (
 // RecordType is the closed subject axis a record's Type may take. A named string type so
 // the compiler carries the closed set the values below promise, not just Validate at
 // runtime. pointer carries no prose; decision/plan carry a ref-anchored prose caption.
+//
+// elimination is the falsified axis: a hypothesis an investigation ruled out. The other
+// three report intent, a settled choice, and a location, so overloading one would make a
+// listing misreport the entry.
 type RecordType string
 
 const (
-	TypePointer  RecordType = "pointer"
-	TypeDecision RecordType = "decision"
-	TypePlan     RecordType = "plan"
+	TypePointer     RecordType = "pointer"
+	TypeDecision    RecordType = "decision"
+	TypePlan        RecordType = "plan"
+	TypeElimination RecordType = "elimination"
 )
 
 // RefKind is the closed set a Ref.Kind may take. node/doc/output name a magus-domain node;
 // query/command are re-runnable strings.
 //
-// All five are resolvable IN PRINCIPLE, which is not the same as resolved: nothing here
-// resolves any of them, so staleness is undetectable today and a record kept a year ago
-// reads exactly like one kept this morning. The "deferred Phase 2 shard" an earlier version
-// of this comment pointed at was never built, so this is an open gap rather than work
-// living somewhere else.
+// All five are resolvable IN PRINCIPLE, which is not the same as resolved. This package
+// knows none of the stores behind them, so Verify takes a RefResolver from its caller and
+// reports a decayed ref only when it gets one. The "deferred Phase 2 shard" an earlier
+// version of this comment pointed at was never built, so the graph side of the gap is
+// still open.
+//
+// An output ref is the shortest-lived of the five. Output blobs live under the checkout
+// that produced them while this store is keyed by repository, so a ref minted in a
+// worktree that has since been removed resolves from nowhere. That asymmetry is why an
+// elimination copies its evidence into Excerpt.
 //
 // A node ref's Target is additionally a notes-anchor-shaped string ("symbol:...", "file:...",
 // "project:...", "target:..."), parsed by notes.ParseAnchor when `magus notes promote` turns a
@@ -77,8 +87,13 @@ type Ref struct {
 }
 
 // Record is one persisted memory. The payload is one or more typed Refs; Body is a
-// prose caption present only for decision/plan records (empty for pointer). Created
-// and Updated are unix seconds, stamped by the store (output-only to callers).
+// prose caption present only for decision/plan/elimination records (empty for pointer).
+// Created and Updated are unix seconds, stamped by the store (output-only to callers).
+//
+// Excerpt belongs to an elimination alone: the captured evidence that falsified the
+// hypothesis, copied in so the record outlives the ref beside it. It lives in the
+// frontmatter because Body already owns everything after the closing delimiter, and the
+// two round-trip separately.
 type Record struct {
 	Name       string     `json:"name" yaml:"name"`
 	Type       RecordType `json:"type" yaml:"type"`
@@ -87,12 +102,13 @@ type Record struct {
 	References []string   `json:"references,omitempty" yaml:"references,omitempty"`
 	Created    int64      `json:"created" yaml:"created,omitempty"`
 	Updated    int64      `json:"updated" yaml:"updated,omitempty"`
+	Excerpt    string     `json:"excerpt,omitempty" yaml:"excerpt,omitempty"`
 	Body       string     `json:"body,omitempty" yaml:"-"`
 }
 
-// Issue is one actionable problem found by Verify. A warning does not make a
-// journal unreadable; an error does and causes list consumers to stop rather than
-// quietly omit the entry.
+// Issue is one actionable problem found by Verify. Severity says whether a human has
+// repair work to do, and no severity withholds a record: every problem here is scoped to
+// one entry, so the readable entries are always returned beside it.
 type Issue struct {
 	Severity string `json:"severity"`
 	Code     string `json:"code"`
@@ -156,18 +172,27 @@ func repoIdentity(root string) string {
 	return filepath.Clean(gitdir)
 }
 
+// ErrUnknownType marks a record whose Type this binary does not know. Writing one is an
+// error; reading one is not. The journal is durable user data shared by binaries of many
+// ages, so a type a newer magus introduced has to degrade to a skipped entry with a
+// warning, leaving the rest of the journal readable by the older binary that met it.
+var ErrUnknownType = errors.New("memory: unknown record type")
+
 // Validate enforces the record schema on the way IN (the rules the whole feature rests
 // on): a known type, at least one ref, a known kind on every ref, and prose only where
 // it is allowed. Rejecting a bad record at the door keeps the store, the graph, and the
 // console from ever holding a shape the model does not expect.
+//
+// It also runs on the way OUT, where its verdict is advisory: readRecordFile reports a
+// failure as an issue against that one file and scan skips it.
 func Validate(r Record) error {
 	if !nameRE.MatchString(r.Name) {
 		return fmt.Errorf("memory: name %q must be a kebab slug (lowercase alphanumerics and hyphens)", r.Name)
 	}
 	switch r.Type {
-	case TypePointer, TypeDecision, TypePlan:
+	case TypePointer, TypeDecision, TypePlan, TypeElimination:
 	default:
-		return fmt.Errorf("memory: type must be one of pointer, decision, plan (got %q)", r.Type)
+		return fmt.Errorf("%w %q (want pointer, decision, plan, or elimination)", ErrUnknownType, r.Type)
 	}
 	if len(r.Refs) == 0 {
 		return errors.New("memory: a record needs at least one ref; if you cannot name a ref kind, it is not a memory, it is a query you should just run")
@@ -183,12 +208,35 @@ func Validate(r Record) error {
 		}
 	}
 	if r.Type == TypePointer && strings.TrimSpace(r.Body) != "" {
-		return errors.New("memory: a pointer carries no prose; its refs are the payload (only decision/plan take a caption)")
+		return errors.New("memory: a pointer carries no prose; its refs are the payload (only decision/plan/elimination take a caption)")
+	}
+	if err := validateExcerpt(r); err != nil {
+		return err
 	}
 	for _, name := range r.References {
 		if !nameRE.MatchString(name) {
 			return fmt.Errorf("memory: reference %q must be a kebab slug", name)
 		}
+	}
+	return nil
+}
+
+// validateExcerpt enforces the rule the elimination type exists for: the record has to
+// stand on its own once the ref beside it stops resolving. A body with no excerpt is a
+// verdict a later reader can only take on faith, so both are required here and nowhere
+// else.
+func validateExcerpt(r Record) error {
+	if r.Type != TypeElimination {
+		if strings.TrimSpace(r.Excerpt) != "" {
+			return fmt.Errorf("memory: only an elimination carries an excerpt (type is %q)", r.Type)
+		}
+		return nil
+	}
+	if strings.TrimSpace(r.Body) == "" {
+		return errors.New("memory: an elimination needs a body saying why the hypothesis is dead")
+	}
+	if strings.TrimSpace(r.Excerpt) == "" {
+		return errors.New("memory: an elimination needs an excerpt of the evidence that killed the hypothesis; a ref alone dies with the checkout that minted it")
 	}
 	return nil
 }
@@ -211,27 +259,55 @@ func ParseRefs(s string) ([]Ref, error) {
 	return refs, nil
 }
 
-// List returns every record in name order. An error-severity issue (e.g. an unparsable
-// file or a broken reference) fails the call rather than silently skipping the record;
-// run Verify for every problem and its repair hint. A warning-only issue (e.g. a record
-// marked stale, a normal lifecycle state) does not withhold any record.
+// List returns every readable record in name order, skipping the entries it cannot read.
+// This journal is the surface a human uses to find and delete a bad entry, so a corrupt
+// file that took the listing down would leave nowhere to make the repair from. Only a
+// failure to read the store itself returns an error. Run Verify for what was skipped and
+// why.
 func List(root string) ([]Record, error) {
-	recs, issues, err := Inspect(root)
-	if err != nil {
-		return nil, err
-	}
-	if err := issuesError(issues); err != nil {
-		return nil, err
-	}
-	return recs, nil
+	recs, _, err := Inspect(root)
+	return recs, err
 }
 
-// Verify scans every entry without hiding malformed files or broken journal links.
-// A missing store is valid and reports zero entries.
-func Verify(root string) (Verification, error) {
+// RefResolver reports whether one external evidence ref can still be reopened, returning
+// nil when it can. A kind the caller does not check resolves trivially.
+//
+// The caller supplies it because the stores behind a ref are not this package's to know:
+// the cache answers an output ref, the graph a node. Threading either store in here would
+// make the record serializer depend on the engine to read its own files.
+type RefResolver func(Ref) error
+
+// Verify scans every entry without hiding malformed files or broken journal links, then
+// asks resolve whether each record's evidence can still be reopened. A missing store is
+// valid and reports zero entries.
+//
+// A decayed ref is a warning. The entry keeps whatever it copied inline, so it degrades
+// and stays readable.
+func Verify(root string, resolve RefResolver) (Verification, error) {
 	recs, issues, err := Inspect(root)
 	if err != nil {
 		return Verification{}, err
+	}
+	dir, err := Dir(root)
+	if err != nil {
+		return Verification{}, err
+	}
+	for _, rec := range recs {
+		for _, ref := range rec.Refs {
+			if resolve(ref) == nil {
+				continue
+			}
+			// The underlying error is dropped on purpose: a cache miss reports that the
+			// run had different inputs, which misdiagnoses the common case of a ref whose
+			// checkout was deleted.
+			issues = append(issues, Issue{
+				Severity: "warning", Code: "unresolvable-ref",
+				Path:    filepath.Join(dir, recordsSubdir, rec.Name+".md"),
+				Record:  rec.Name,
+				Message: fmt.Sprintf("evidence ref %q no longer resolves", string(ref.Kind)+": "+ref.Target),
+				Hint:    "An output blob lives in the checkout that produced it, so a ref minted in a removed worktree cannot be reopened anywhere. Re-run the work for a fresh ref, or copy what it showed into the entry's excerpt.",
+			})
+		}
 	}
 	return Verification{Records: len(recs), Issues: issues}, nil
 }
@@ -263,6 +339,16 @@ func scan(root string) ([]Record, []Issue, error) {
 		}
 		path := filepath.Join(rdir, e.Name())
 		rec, err := readRecordFile(path)
+		if errors.Is(err, ErrUnknownType) {
+			// A record a newer magus wrote. Nothing is broken and there is nothing to
+			// repair, so this stays a warning and `verify` stays green on it.
+			issues = append(issues, Issue{
+				Severity: "warning", Code: "unknown-entry-type", Path: path,
+				Message: err.Error(),
+				Hint:    "A newer magus wrote this entry. Skipped here; upgrade to read it, or delete it with `magus memory delete`.",
+			})
+			continue
+		}
 		if err != nil {
 			issues = append(issues, Issue{
 				Severity: "error", Code: "invalid-entry", Path: path,
@@ -299,15 +385,6 @@ func scan(root string) ([]Record, []Issue, error) {
 	return out, issues, nil
 }
 
-func issuesError(issues []Issue) error {
-	for _, issue := range issues {
-		if issue.Severity == "error" {
-			return fmt.Errorf("memory: journal has invalid entries; run `magus memory verify` for repair steps (%s)", issue.Message)
-		}
-	}
-	return nil
-}
-
 // Get returns one record by name, or os.ErrNotExist if it is absent.
 func Get(root, name string) (Record, error) {
 	dir, err := Dir(root)
@@ -328,6 +405,9 @@ func Put(root string, r Record) (Record, error) {
 	if err := Validate(r); err != nil {
 		return Record{}, err
 	}
+	// Captured output ends in a newline and a YAML block scalar drops it. Trimming on the
+	// way in keeps the returned record equal to what a later Get reads.
+	r.Excerpt = strings.TrimRight(r.Excerpt, "\n")
 	dir, err := Dir(root)
 	if err != nil {
 		return Record{}, err
@@ -410,7 +490,9 @@ func readRecordFile(path string) (Record, error) {
 	}
 	r.Name = name
 	if err := Validate(r); err != nil {
-		return Record{}, fmt.Errorf("memory: %s: %w", filepath.Base(path), err)
+		// No "memory:" prefix here: every Validate message carries one, and the doubled
+		// package name is the first thing a reader sees on a skipped entry.
+		return Record{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
 	return r, nil
 }

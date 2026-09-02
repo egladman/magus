@@ -1440,10 +1440,16 @@ implicitly. An entry earns its place when a later reader needs to reopen the
 evidence behind a decision - the run, the query, the output reference, the
 document - rather than to be told a conclusion.
 
+An elimination entry records what an investigation ruled OUT: the hypothesis,
+why it is dead, and an excerpt of the evidence that killed it. The excerpt is
+required because an output reference resolves only from the checkout that
+produced it, which leaves the ref beside it a best-effort handle.
+
 verify is the maintenance verb: it reports entries that are malformed, stale,
-or that link to something no longer there. The same entries are reachable
-through the magus_memory MCP tool and the console, so a journal written from
-the CLI is readable by an agent without either side learning a new format.`,
+that link to something no longer there, or whose evidence no longer resolves.
+The same entries are reachable through the magus_memory MCP tool and the
+console, so a journal written from the CLI is readable by an agent without
+either side learning a new format.`,
 	Usage: "magus memory <ls|get|put|delete|verify> [flags]",
 	Children: []Command{
 		{Name: "ls", Short: "Show entries and any repair warnings"},
@@ -1452,9 +1458,10 @@ the CLI is readable by an agent without either side learning a new format.`,
 			Name:  "put",
 			Short: "Create or replace a named entry",
 			Flags: []Flag{
-				{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, or plan"},
+				{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, plan, or elimination"},
 				{Name: "status", Kind: FlagString, Doc: "Lifecycle label, e.g. accepted, active, done, stale"},
-				{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision and plan only"},
+				{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision, plan and elimination only"},
+				{Name: "excerpt", Kind: FlagString, Doc: "The evidence that ruled a hypothesis out, copied inline; elimination only and required there"},
 				// Repeatable, so bound by the command itself; declared here only so
 				// they reach the man page, which never listed them.
 				{Name: "ref", Kind: FlagCustom, Doc: "Entry ref in 'kind: target' form; repeat for multiple refs"},
@@ -1462,11 +1469,12 @@ the CLI is readable by an agent without either side learning a new format.`,
 			},
 		},
 		{Name: "delete", Short: "Remove one entry"},
-		{Name: "verify", Short: "Check malformed, stale, and broken-linked entries"},
+		{Name: "verify", Short: "Check malformed, stale, broken-linked, and unresolvable-evidence entries"},
 	},
 	Examples: []Example{
 		{"List entries and warnings", "magus memory ls"},
 		{"Read one entry", "magus memory get release-checklist"},
+		{"Record what an investigation ruled out", "magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'"},
 		{"Check the journal's health", "magus memory verify"},
 	},
 }

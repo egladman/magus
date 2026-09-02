@@ -25,6 +25,7 @@ Record types (the subject axis):
 | `pointer`  | refs only, the saved lens onto graphed knowledge    | no     |
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
+| `elimination` | a hypothesis an investigation killed, the why, and an `excerpt` of the evidence | yes, plus the excerpt |
 
 Every type is ref-anchored; none of them is free prose.{{if .Full}} A claim that is true about
 the code is a `pointer` of kind `query` (fetch it live) or `output`, never stored prose.{{else}}
@@ -53,17 +54,25 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Use `delete` for entries that no longer earn their keep. Run `magus memory
   verify` (or MCP `{op: "verify"}`) after editing entries or when list reports
   an issue.{{if .Full}} It gives a path and repair step for malformed, stale, or broken
-  linked entries.{{end}}
+  linked entries, and warns when an entry's evidence ref no longer resolves.{{end}}
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, status?} upserts a record
+- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} upserts a record
   by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
   `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`.{{if .Full}} A bare "we chose X" helps
   nobody; the `body` carries the why, and the refs anchor it to the code.{{else}} Put the why
   in `body` and anchor it with refs.{{end}}
+- Ruled a hypothesis OUT: record an `elimination`. `body` says why it is dead and
+  `excerpt` carries the lines that killed it{{if .Full}}, because an output ref resolves
+  only from the checkout that minted it and agent worktrees get deleted, which decays a
+  ref-only record into a dangling pointer with a confident tone{{else}}, because an
+  output ref dies with the checkout that minted it{{end}}. The ref stays beside the excerpt
+  as a best-effort handle. Record what an investigation ELIMINATED as well as what it
+  concluded, so the next session reopens the reasoning; a conclusion on its own leaves it
+  re-proposing a branch that is already dead.
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
   it{{if .Full}}, not a sentence that rots{{end}}.
 - Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.

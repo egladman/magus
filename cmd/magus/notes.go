@@ -1389,6 +1389,14 @@ func promoteBody(rec memory.Record) string {
 			b.WriteString("  " + e + "\n")
 		}
 	}
+	// An elimination's excerpt is the half of the record that survives its refs, so a
+	// promotion carrying only the refs hands the reader the dangling half.
+	if excerpt := strings.TrimSpace(rec.Excerpt); excerpt != "" {
+		b.WriteString("\nCaptured evidence:\n")
+		for _, line := range strings.Split(excerpt, "\n") {
+			b.WriteString("  " + line + "\n")
+		}
+	}
 	b.WriteString("\nDrafted by an agent as memory record " + rec.Name +
 		". Delete this line once the prose above is yours.\n")
 	return b.String()

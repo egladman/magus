@@ -371,6 +371,19 @@
 }
 .console-settings-memory__chipkind { color: var(--pf-t--global--text--color--subtle); }
 .console-settings-memory__caption { margin: 0; font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; }
+/* Captured evidence on an elimination: monospace and pre-wrapped, because the line breaks
+   and columns of the excerpt are the content. Height is bounded so one long log cannot
+   own the list. */
+.console-settings-memory__excerpt {
+  margin: 0;
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+  color: var(--pf-t--global--text--color--subtle);
+  overflow-wrap: anywhere;
+}
 .console-settings-memory__rowactions { display: flex; gap: var(--pf-t--global--spacer--sm); flex: 0 0 auto; }
 .console-settings-memory__empty { margin: 0; padding: var(--pf-t--global--spacer--sm) 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 /* Inline create/edit form. */

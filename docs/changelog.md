@@ -49,6 +49,17 @@ https://github.com/egladman/magus/compare/v0.3.0...main
 
 ### Changed
 
+- **One unreadable handoff entry no longer takes the readable ones down with it.**
+  `magus memory` used to fail a whole listing when any single record failed to parse or
+  validate, which disabled the surface a person would use to find and delete that record.
+  Reading now skips the bad entry and returns the rest, with the problem reported by
+  `magus memory verify`. An entry whose `type` this binary does not know is reported as a
+  warning and skipped, so a journal written by a newer magus stays usable by an older one;
+  `verify` stays green on it, since there is nothing to repair. Writing an unknown type is
+  still an error: the tolerance is on the read path alone. This helps only binaries built
+  from this release forward. A magus already shipped still refuses the whole listing when
+  it meets an `elimination` entry, so a journal shared with an older checkout needs that
+  checkout upgraded.
 - **`magus query` gains operators: `kind=spell` (match), `kind!=op` (exclude),
   `id=~build$` (regex).** `=` reads as a match over a structured graph the way
   kubectl selectors and PromQL matchers do, and `!=` carries negation without the
@@ -128,6 +139,19 @@ https://github.com/egladman/magus/compare/v0.3.0...main
 
 ### Added
 
+- **The handoff journal records what an investigation ruled OUT as well as what it
+  concluded.** A fourth entry type, `elimination`, names the dead hypothesis, carries the
+  reason in `--body`, and requires `--excerpt`: the captured evidence that killed it,
+  copied into the record. The excerpt is required because the ref beside it is not
+  durable. An output blob lives under the checkout that produced it while the journal is
+  keyed by repository, so a ref minted in an agent worktree stops resolving the moment
+  that worktree is removed, which decays a ref-only record into a dangling pointer with a
+  confident tone. The ref stays as a best-effort reopen handle, and `magus memory verify`
+  now warns when one no longer resolves. A session that hits its limit used to take its
+  whole elimination trail with it, leaving the next one to re-tread falsified branches.
+  Available from `magus memory put`, the `magus_memory` MCP tool, and the console;
+  `magus notes promote` carries the excerpt into the note. Nothing is captured
+  automatically and nothing gates on it.
 - **`magus agent adoption` measures whether agents actually use the knowledge graph.** It
   reads a corpus of shell commands (stdin or `--commands`) and reports how often the graph
   (`query`/`refs`/`explain`/`path`) was reached versus a raw text search, the graph-to-grep
