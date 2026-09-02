@@ -394,7 +394,7 @@ func TestAcquireRejectsNonDeclared(t *testing.T) {
 	defer cancel()
 
 	lim := cache.NewLimiter(1)
-	reg := newWSRegistry(ctx, lim, 0, nil)
+	reg := newWSRegistry(ctx, lim, nil, 0, nil)
 	defer reg.close()
 
 	reg.setDeclared([]string{allowed})
@@ -419,7 +419,7 @@ func TestAcquireAdmitsDeclaredEvenWithoutMagusYaml(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	lim := cache.NewLimiter(1)
-	reg := newWSRegistry(ctx, lim, 0, nil)
+	reg := newWSRegistry(ctx, lim, nil, 0, nil)
 	defer reg.close()
 	reg.setDeclared([]string{allowed})
 
@@ -442,7 +442,7 @@ func TestWarmRespectsContextCancellation(t *testing.T) {
 	cancel() // cancel before warm is called
 
 	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(context.Background(), lim, 0, nil)
+	reg := newWSRegistry(context.Background(), lim, nil, 0, nil)
 	defer reg.close()
 
 	// Supply several roots; warm should bail after the first ctx.Err() check.
@@ -471,7 +471,7 @@ func TestWarmCompletesAndPopulatesStatus(t *testing.T) {
 	defer cancel()
 
 	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(ctx, lim, 0, nil)
+	reg := newWSRegistry(ctx, lim, nil, 0, nil)
 	defer reg.close()
 	reg.setDeclared([]string{root1, root2})
 
@@ -499,7 +499,7 @@ func TestWarmInBackgroundTrackedByClose(t *testing.T) {
 	defer cancel()
 
 	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(ctx, lim, 0, nil)
+	reg := newWSRegistry(ctx, lim, nil, 0, nil)
 	reg.setDeclared([]string{root})
 	reg.warmInBackground(ctx, []string{root})
 

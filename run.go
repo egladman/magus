@@ -514,11 +514,11 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// understands. A target declaring memory_mb holds however many slots that memory
 	// is worth on THIS host, so an 8GB suite throttles peers on a 16GB runner and
 	// barely registers on a 64GB workstation, without the magusfile naming either.
-	// Both halves of admission read the SAME folded figure. Slots throttle peers
-	// inside this process (a wait); the claim arbitrates the host (a refusal). Feeding
-	// slots the target's own declaration while the claim used the chain's would let
-	// several composed steps take one slot each and a full claim each, so a single
-	// invocation refused itself over memory its own siblings held.
+	// Both halves of admission read the SAME folded figure. Slots throttle peers inside
+	// this process; the machine budget arbitrates the host. Feeding slots the target's
+	// own declaration while the claim used the chain's would let several composed steps
+	// take one slot each and a full claim each, so a single invocation queued behind
+	// memory its own siblings held.
 	step.MemoryMB, step.MemoryDeclaredBy = m.chainMemoryMB(p, target)
 	step.Slots = slotsForPolicy(pol.Slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
 	return step

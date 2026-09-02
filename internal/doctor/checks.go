@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -1430,6 +1431,10 @@ func (r *runner) checkWorkspaceRegistration() types.DoctorCheck {
 	}
 }
 
+// procPoolSocketRe matches a per-process proc server's socket, which proc.Server names
+// magus-<pid>-<rand>.sock. The user's daemon is the fixed magus-daemon.sock.
+var procPoolSocketRe = regexp.MustCompile(`^magus-\d+-[^/]*\.sock$`)
+
 // checkStaleSockets scans the magus socket directory. Multiple live daemons
 // fail the check; leftover dead sockets are harmless and reported only as
 // context.
@@ -1462,11 +1467,17 @@ func (r *runner) checkStaleSockets() types.DoctorCheck {
 			continue
 		}
 		p := filepath.Join(sockDir, e.Name())
-		if isSocketAlive(r.runCtx(), p) {
-			live = append(live, p)
-		} else {
+		if !isSocketAlive(r.runCtx(), p) {
 			stale = append(stale, p)
+			continue
 		}
+		// A LIVE per-process pool is not a daemon. It is named for its pid, it lasts one
+		// invocation, and a top-level run hosts one alongside the user's daemon, so
+		// counting it reports the ordinary state as a conflict.
+		if procPoolSocketRe.MatchString(e.Name()) {
+			continue
+		}
+		live = append(live, p)
 	}
 
 	if len(stale) == 0 && len(live) <= 1 {

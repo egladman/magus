@@ -309,6 +309,42 @@ func TestDrawRunningTreeSingleWorkspaceCollapses(t *testing.T) {
 	assert.Contains(t, out, "test")
 }
 
+// TestPrintMachineStatusNamesEveryClaim covers the question the section exists to
+// answer: WHERE the machine's budget went. One daemon serves every worktree, so a pid
+// alone does not say which tree to go and look at.
+func TestPrintMachineStatusNamesEveryClaim(t *testing.T) {
+	var buf bytes.Buffer
+	printMachineStatus(&buf, &types.StatusMachine{
+		BudgetMB: 48 << 10, HeldMB: 10 << 10, BudgetSlots: 8, HeldSlots: 6,
+		Holders: []types.StatusMachineClaim{
+			{Project: ".", Target: "test", PID: 41221, MemoryMB: 10 << 10, Dir: "/tree/polish", Since: time.Now().Add(-90 * time.Second)},
+		},
+		Waiters: []types.StatusMachineClaim{
+			{Project: "docs", Target: "ci", PID: 41999, Dir: "/tree/hardening"},
+		},
+	})
+	out := buf.String()
+	assert.Contains(t, out, "memory  10.0GB of 48.0GB held")
+	assert.Contains(t, out, "slots   6 of 8 held")
+	assert.Contains(t, out, "held  . test  pid 41221  10.0GB")
+	assert.Contains(t, out, "in /tree/polish")
+	assert.Contains(t, out, "queued docs ci  pid 41999")
+	assert.Contains(t, out, "in /tree/hardening")
+}
+
+// An idle budget still prints. "Nothing is queued" is the answer to the question people
+// open this section to ask, and a silent section reads as a missing feature.
+func TestPrintMachineStatusIdleAndAbsent(t *testing.T) {
+	var idle bytes.Buffer
+	printMachineStatus(&idle, &types.StatusMachine{BudgetMB: 48 << 10, BudgetSlots: 8})
+	assert.Contains(t, idle.String(), "nothing is holding or waiting")
+
+	// No daemon answered, so there is no machine budget to report on.
+	var absent bytes.Buffer
+	printMachineStatus(&absent, nil)
+	assert.Empty(t, absent.String())
+}
+
 // readyzServer stands up an httptest server whose /readyz returns code, and returns
 // its host:port (the form mcp.address takes). Other paths 404, proving the probe keys
 // on /readyz specifically.

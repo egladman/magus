@@ -215,7 +215,17 @@ const (
 	// declares a workspace (magus.yaml) or a contiguous run of projects (magusfile.buzz,
 	// magusfiles/, go.mod) reaching one. `magus init` is the fix in both cases, so the
 	// message names it directly rather than leaving the reader to find the command.
-	NoWorkspaceRoot           DiagnosticCode = "MGS3008"
+	NoWorkspaceRoot DiagnosticCode = "MGS3008"
+	// MachineBudgetExhausted is a step magus did not start because the concurrency and
+	// declared memory it needs do not fit alongside what every other magus on this
+	// machine holds. It joins MGS3007 in the environment family for the same reason: the
+	// workspace is correct and the code is fine, the machine cannot seat the work.
+	//
+	// Ordinarily a queue rather than an error - the daemon that owns the budget tells a
+	// waiter when its turn comes. It surfaces as this code in the two cases a wait
+	// cannot fix: MAGUS_NO_WAIT asked to fail fast, or the declaration does not fit in
+	// the whole budget, so an idle machine would refuse it too. Both exit 75.
+	MachineBudgetExhausted    DiagnosticCode = "MGS3009"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -293,7 +303,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
-	ProjectLockHeldByAncestor, NoWorkspaceRoot,
+	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,

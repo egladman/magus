@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,10 @@ import (
 // only config loaded, so the per-subcommand usage reaches the caller's stderr.
 func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 	usageOnly := dispatchProfile{needsConfig: true}
-	full := dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
+	// spawnsWork is what makes a run pay for machine-wide admission (and start the
+	// daemon that owns it), so it belongs to exactly the invocations that run targets:
+	// every usage-only, --detach and forensic case below must NOT carry it.
+	full := dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true, spawnsWork: true}
 	// server subcommands never forward and never host their own proc server: doing so let a
 	// version-mismatched `server stop` shut down its own throwaway server instead of the real
 	// daemon (a silent no-op). Config-only, like a usage-only invocation.
@@ -286,14 +290,24 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 	restore()
 }
 
-// The exit-code contract magus does keep: 0 for success, 2 for a misuse the
-// invocation never got past, 1 for work that ran and failed. There is deliberately
-// no code for "the machine was busy" - magus no longer refuses work on that ground.
+// The exit-code contract: 0 for success, 2 for a misuse the invocation never got
+// past, 1 for work that ran and failed, and 75 for work the MACHINE would not seat.
+// The last one is what lets a harness retry instead of debugging a target that never
+// ran, so its ordering against the others is part of the contract.
 func TestExitCodeOf(t *testing.T) {
 	assert.Equal(t, 0, exitCodeOf(nil))
 	assert.Equal(t, 1, exitCodeOf(errors.New("go exited 1")))
 	assert.Equal(t, 1, exitCodeOf(errors.Join(errors.New("go exited 1"), nil)))
 	assert.Equal(t, exitUsage, exitCodeOf(usagef("no such target")))
+
+	busy := types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting (root) ci: the machine is full")
+	assert.Equal(t, exitMachineBusy, exitCodeOf(busy))
+	assert.Equal(t, exitMachineBusy, exitCodeOf(fmt.Errorf("run: %w", busy)),
+		"the refusal reaches exitCodeOf wrapped by every layer between the step and main")
+	// A run where real targets ALSO failed is a broken build, not a scheduling problem:
+	// errSilent is checked first and keeps 1, so a peer being busy cannot rewrite the
+	// verdict on work that actually ran.
+	assert.Equal(t, 1, exitCodeOf(errors.Join(errSilent{exitCode: 1}, busy)))
 }
 
 // TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do

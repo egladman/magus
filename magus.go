@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/ward"
@@ -99,7 +100,10 @@ type Magus struct {
 	tel            observability.Provider
 	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
 	metricsCollect bool                   // daemon: build an always-on local metrics collector for the dashboard
-	skipProviders  bool                   // open without running wired workspace providers (see WithoutWorkspaceProviders)
+	// machineAdmitter is the machine budget supplied by the process that HOLDS it (the
+	// daemon); nil everywhere else, where Open finds the daemon over its socket.
+	machineAdmitter cache.MachineAdmitter
+	skipProviders   bool // open without running wired workspace providers (see WithoutWorkspaceProviders)
 
 	daemon Daemon
 }
@@ -334,6 +338,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if o.Limiter != nil {
 		m.limOnce.Do(func() { m.lim = o.Limiter })
 	}
+	m.machineAdmitter = o.MachineAdmitter
 	m.metricsCollect = o.MetricsCollect
 	m.injectedTel = o.Provider
 	m.skipProviders = o.SkipWorkspaceProviders
@@ -591,6 +596,18 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		} else if rb != nil {
 			cfgOpts = append(cfgOpts, cache.WithRemoteBackend(observability.InstrumentRemoteBackend(rb, tel)))
 		}
+	}
+	// Machine-wide admission. Wired here rather than inside cache.Open because the
+	// arbiter is a property of the HOST, and the composition root is the only layer
+	// that knows where this machine keeps it. A cache that found its own arbiter would
+	// give every worktree a different one, and N of them would each admit a full
+	// machine's worth of work.
+	//
+	// The daemon injects the budget it holds; everyone else dials it.
+	if admitter := m.machineAdmitter; admitter != nil {
+		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(admitter, noWaitLocks()))
+	} else if addr, ok := proc.LookupStableSocket(ctx); ok {
+		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.MachineAdmitter{Addr: addr}, noWaitLocks()))
 	}
 	c, err := cache.Open(ctx, cacheDir, cfgOpts...)
 	if err != nil {

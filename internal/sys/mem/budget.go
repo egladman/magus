@@ -13,6 +13,16 @@ import "context"
 // figures that drifted apart would be two different answers to it.
 const UsableFraction = 0.75
 
+// BudgetMB is the memory build work may plan against, in megabytes: usable narrowed by
+// UsableFraction. Zero when the host is unmeasurable, which every caller reads as no
+// budget to arbitrate rather than as a budget of nothing.
+func BudgetMB(usableBytes int64) int {
+	if usableBytes <= 0 {
+		return 0
+	}
+	return int(float64(usableBytes) * UsableFraction / (1 << 20))
+}
+
 // UsableBytes is the memory THIS PROCESS may actually commit: the machine's total,
 // narrowed by any ceiling the process runs under.
 //

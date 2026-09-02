@@ -70,6 +70,21 @@ func WithCollapse(collapse bool) Option {
 	return func(c *Cache) { c.collapse = collapse }
 }
 
+// WithMachineAdmission routes every step through machine-wide admission: it takes its
+// concurrency slots and declared memory_mb from a budget shared by every magus on the
+// host, queueing behind the peers already holding it. noWait fails fast (MGS3009)
+// instead of queueing.
+//
+// admitter must reach the ONE arbiter for this machine, which is the user's daemon.
+// Omitting the option leaves admission per-process, which is what a library caller
+// with no host to arbitrate wants.
+//
+// Applied after WithLogger, so a lost arbiter is reported through the caller's logger
+// rather than the default one.
+func WithMachineAdmission(admitter MachineAdmitter, noWait bool) Option {
+	return func(c *Cache) { c.machineAdmitter, c.machineNoWait = admitter, noWait }
+}
+
 // RunOption configures a single Cache.Run (or RunAll) invocation.
 type RunOption func(*runCtx)
 

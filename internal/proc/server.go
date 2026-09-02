@@ -131,6 +131,11 @@ type Options struct {
 	// dropped and how many were left alone as busy. Only the daemon sets it; a per-process
 	// proc server holds one workspace for one invocation and has nothing to reload.
 	ConfigReloader func() (dropped, busy int)
+	// MachineBudget, if set, makes this server the arbiter of machine-wide admission:
+	// every magus on the host asks it before starting a step. Only the daemon sets it,
+	// and only one daemon exists per user, which is what makes the budget the machine's
+	// rather than a process's.
+	MachineBudget *cache.MachineBudget
 }
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
@@ -269,6 +274,7 @@ func New(opts Options) (*Server, error) {
 	svc := &service{
 		handler:         opts.Handler,
 		serviceHost:     opts.ServiceHost,
+		machineBudget:   opts.MachineBudget,
 		configReloader:  opts.ConfigReloader,
 		parentCtx:       serverCtx,
 		lim:             lim,
@@ -465,6 +471,25 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		}
 		_ = writeFrame(conn, typeServiceStopAllReply, serviceStopAllReply{Count: count})
 
+	case typeAdmit:
+		var req admitRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode admit request: "+err.Error())
+			return
+		}
+		var reply admitReply
+		svc.admit(req, &reply)
+		_ = writeFrame(conn, typeAdmitReply, reply)
+
+	case typeAdmitRelease:
+		var req admitReleaseRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode admit.release request: "+err.Error())
+			return
+		}
+		svc.admitRelease(req)
+		_ = writeFrame(conn, typeAdmitReleaseReply, admitReleaseReply{})
+
 	case typeConfigReload:
 		var req configReloadRequest
 		if err := json.Unmarshal(line, &req); err != nil {
@@ -483,6 +508,35 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	default:
 		writeErr(conn, fmt.Sprintf("proc: unknown frame type %q", typ))
+	}
+}
+
+// admit answers one poll against the machine budget. A server holding no budget (a
+// per-process proc server) says so rather than granting: a client that read silence as
+// a grant would run unarbitrated against a daemon that IS arbitrating its peers.
+func (s *service) admit(req admitRequest, reply *admitReply) {
+	if req.Protocol != "" && req.Protocol != protocolV2 {
+		reply.Err = ErrProtocolMismatch.Error()
+		return
+	}
+	if s.machineBudget == nil {
+		reply.Err = "this server does not arbitrate the machine budget"
+		return
+	}
+	reply.Verdict = s.machineBudget.Request(req.Waiter, req.Claim)
+}
+
+// admitRelease returns a granted claim or retires a waiter. Silent on a server with no
+// budget: there is nothing to give back, and a teardown must not fail over it.
+func (s *service) admitRelease(req admitReleaseRequest) {
+	if s.machineBudget == nil || (req.Protocol != "" && req.Protocol != protocolV2) {
+		return
+	}
+	if req.ID != "" {
+		s.machineBudget.Release(req.ID)
+	}
+	if req.Waiter != "" {
+		s.machineBudget.Drop(req.Waiter)
 	}
 }
 
@@ -525,6 +579,7 @@ type service struct {
 	workspaceLister func() []Workspace
 	serviceLister   func() []types.StatusService
 	serviceHost     ServiceHost
+	machineBudget   *cache.MachineBudget
 	configReloader  func() (dropped, busy int)
 	onJobDone       func(ctx context.Context, args []string, dur time.Duration, err error)
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
@@ -731,6 +786,10 @@ func (s *service) status(req statusRequest, reply *StatusReply) error {
 	}
 	snap := s.lim.Snapshot()
 	reply.Capacity, reply.Running, reply.Queued = snap.Capacity, snap.Running, snap.Queued
+	if s.machineBudget != nil {
+		m := s.machineBudget.Snapshot()
+		reply.Machine = &m
+	}
 	s.calls.Range(func(_, v any) bool {
 		c, ok := v.(*activeCall)
 		if !ok {

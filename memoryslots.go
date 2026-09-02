@@ -33,11 +33,13 @@ func (m *Magus) chainMemoryMB(p *types.Project, target string) (mb int, declared
 // slotsForPolicy resolves a target's declared policy to the number of concurrency
 // slots it holds.
 //
-// Slots and MemoryMB are two spellings of one claim, so both land on the existing
-// limiter and there is a single admission path. See types.Target.MemoryMB for why
-// memory is the one an author can state. The larger spelling wins when both are
-// given: they describe the same resource, and the safe reading of a disagreement
-// is the more conservative one.
+// Slots and MemoryMB are two spellings of one claim, so both land on the limiter and a
+// target's author states whichever they know. See types.Target.MemoryMB for why memory
+// is usually that one. The larger spelling wins when both are given: they describe the
+// same resource, and the safe reading of a disagreement is the more conservative one.
+//
+// The MACHINE budget reads the megabytes directly rather than this conversion, which
+// divides by a per-process budget and so cannot be inverted.
 //
 // Pure, with hostTotalBytes passed in. It reads /proc on Linux and forks sysctl on
 // darwin, and buildStep calls this per target, so a describe over a large

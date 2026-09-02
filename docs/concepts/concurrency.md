@@ -1,7 +1,7 @@
 ---
 title: Concurrency
 order: 8
-description: How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, and the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache.
+description: How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache, and the daemon-owned machine budget that keeps every magus on the host from oversubscribing it.
 tags:
   [
     concurrency,
@@ -11,6 +11,9 @@ tags:
     daemon,
     needs,
     MAGUS_NO_WAIT,
+    machine budget,
+    admission,
+    memory_mb,
   ]
 ---
 
@@ -24,9 +27,11 @@ apart:
   and per-target policy (`slots`, `exclusive`) doing their job.
 - **Across separate runs** - the **workspace lock** stops two _independent_ `magus`
   processes from mutating the same project at the same time.
+- **Across the whole machine** - the **machine budget** stops every magus on the
+  host, in every worktree, from starting more work than the machine can carry.
 
-The first is about _ordering and fan-out_; the second is about _mutual exclusion_.
-They solve different problems and neither replaces the other.
+The first is about _ordering and fan-out_, the second about _mutual exclusion_, the
+third about _capacity_. They solve different problems and none replaces the others.
 
 ## Within one run: the scheduler
 
@@ -37,9 +42,11 @@ much of it runs at once ([targets](targets.md)). When a daemon is present, that
 fan-out draws from **one shared concurrency pool** across every client
 ([daemon](../guides/integrations/daemon.md)).
 
-All of this lives inside one process. It has no bearing on a _second_ `magus` you
-start in another terminal - the two invocations have separate graphs and separate
-schedulers, and neither can see the other.
+All of this lives inside one process. It orders nothing in a _second_ `magus` you
+start in another terminal: the two invocations have separate graphs and separate
+schedulers, and neither can see the other's plan. What they DO share is the machine
+budget below, which is what stops them from starting more work than the host can
+carry.
 
 ## Across separate runs: the workspace lock
 
@@ -101,13 +108,57 @@ even set up, so a blocked run does not yet appear in `magus status` (there is no
 running to report - it is queued behind the lock). The stderr line above is how you
 know why.
 
+## Across the whole machine: the budget
+
+The lock protects a project's outputs. Nothing in it protects the machine: two runs
+on _different_ projects proceed in parallel by design, and so do runs in different
+worktrees, so N agents each running `magus affected ci` start N budgets' worth of
+work against one host. Measured on a ten-core workstation: four concurrent gates,
+load average 13.7, and tests failing because they were starved rather than wrong.
+
+So before a step starts, magus takes its concurrency slots and its declared
+`memory_mb` from a budget shared by every magus on the machine. The budget lives in
+the [daemon](../guides/integrations/daemon.md) - one daemon per user means one budget
+per machine - and a run starts one if none is up.
+
+Key properties:
+
+- **Per machine, not per workspace.** The whole point is the worktree this run
+  cannot see. The budget is a fraction of the memory the daemon may commit, and the
+  daemon's concurrency capacity.
+- **Declared, not observed.** It arbitrates what targets say they need
+  ([`memory_mb`](targets.md)), so the same command on the same machine reaches the
+  same verdict whatever else is running. Observed pressure warns separately and
+  never blocks.
+- **It queues.** A step that does not fit waits, and starts the moment room frees.
+  The wait names who holds the budget - pid, project, target, and directory - and
+  repeats on a heartbeat, so it never reads as a hang. `MAGUS_NO_WAIT=1` fails fast
+  instead, exiting **75** ([MGS3009](../reference/codes/sandbox/MGS3009.md)) so a
+  script can tell a busy machine from a broken build.
+- **It fails open.** A daemon that will not start, or that dies mid-run, leaves the
+  run unarbitrated and finishing, having said once that it is. Claims are retired by
+  process liveness, so nothing has to release cleanly.
+- **Only runs pay for it.** `magus ls`, `describe`, and `query` cost the same however
+  loaded the machine is, so none of them starts a daemon.
+
+`magus status` shows the whole budget: what is held, what is queued, and by whom,
+across every worktree on the machine.
+
 ## Relationship to the daemon
 
-The [daemon](../guides/integrations/daemon.md) is the long-lived process that hosts the shared pool and
-serves clients. When it is coordinating your work, it is the natural single point
-that knows what is running. The workspace lock is what protects the case the daemon
-does _not_ cover: two plain `magus` invocations with no daemon in the loop. The two
-compose - the lock is the floor that holds even when nothing else is watching.
+The [daemon](../guides/integrations/daemon.md) is the long-lived process that hosts the shared pool,
+owns the machine budget, and serves clients. It is the natural single point that
+knows what is running everywhere, which is why the budget lives there and why a run
+starts one.
+
+It does not run your work. A top-level `magus run` executes in your own process and
+prints to your own terminal; it asks the daemon for admission and nothing else. A
+nested `magus` a magusfile spawns still adopts into its parent's pool, which is where
+its output belongs.
+
+The workspace lock is the floor underneath both: it holds even with no daemon in the
+loop, because it is an OS file lock rather than a process anyone has to start. The
+three compose - ordering inside a run, exclusion per project, capacity per machine.
 
 ## See also
 
@@ -115,3 +166,4 @@ compose - the lock is the floor that holds even when nothing else is watching.
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
 - [Daemon](../guides/integrations/daemon.md): the persistent process and the shared concurrency pool.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.
+- [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, when it queues and when it refuses.

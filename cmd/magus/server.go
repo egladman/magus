@@ -323,6 +323,41 @@ func ensureConsoleDaemon(ctx context.Context, addr, root string) error {
 	}
 }
 
+// ensureAdmissionDaemon brings up the daemon that owns this machine's build budget and
+// returns its socket, or "" when it could not be started.
+//
+// This is the one place magus starts a daemon for a command that did not ask for one,
+// and it is deliberate: machine-wide admission has no other arbiter, so a run with no
+// daemon is a run that admits itself against a machine several other magus processes
+// are also admitting themselves against. Only a run reaches here (see
+// dispatchProfile.spawnsWork), so `magus ls` and every other question still costs
+// nothing.
+//
+// Fails OPEN, loudly. A daemon that will not start must not stop a build: the run
+// proceeds unarbitrated and says so, which is a smaller failure than refusing to build
+// because a background process would not come up.
+func ensureAdmissionDaemon(ctx context.Context) string {
+	if sock, ok := proc.LookupStableSocket(ctx); ok {
+		return sock
+	}
+	pid, logPath, err := spawnDetachedDaemon([]string{"server", "start", "--foreground"})
+	if err != nil {
+		slog.Warn("magus: machine-wide admission is OFF for this run: the daemon that holds the budget could not be started",
+			slog.String("error", err.Error()))
+		return ""
+	}
+	if err := waitDaemonReady(ctx, daemonDefaultAddr(), daemonReadyTimeout); err != nil {
+		reapDaemon(pid)
+		slog.Warn("magus: machine-wide admission is OFF for this run: the daemon that holds the budget did not come up",
+			slog.String("error", err.Error()), slog.String("log", logPath))
+		return ""
+	}
+	slog.Info("magus: started the daemon that arbitrates this machine's build budget",
+		slog.Int("pid", pid), slog.String("log", logPath))
+	sock, _ := proc.LookupStableSocket(ctx)
+	return sock
+}
+
 // reapDaemon kills a daemon this process spawned but never got a console out of. Without it
 // every failure path leaks the process: with console.enabled=false the wait times out by
 // construction, so each attempt left one more running.

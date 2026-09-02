@@ -27,11 +27,12 @@ const (
 // checkMemoryDeclarations is MGS1030: a target whose declared memory_mb disagrees
 // with the peak resident memory magus has measured for it.
 //
-// What `memory_mb` still does after machine-wide admission was removed: it converts
-// to concurrency slots on the in-process limiter (see slotsForPolicy), so a heavy
-// target throttles its peers WITHIN a run. A declaration written at 2GB for a target
-// that now reaches 9GB throttles nothing, and magus already records what each target
-// reached, which makes the disagreement a fact rather than a question.
+// This is what keeps MGS3009 honest. A declared-budget gate is only as good as its
+// declarations, and declarations rot silently: a target written at 2GB grows to 9GB
+// over a year and the machine budget quietly stops protecting anything, while a target
+// declared far above what it uses queues peers that would have fit. magus already
+// records what each target reached, which makes the disagreement a fact rather than a
+// question.
 //
 // Advice, never a failure: the magusfile figure stays a human's to write, and a
 // deliberate ceiling above the measured peak is a legitimate thing to declare.
@@ -110,7 +111,7 @@ func gradeDeclaration(project, target, declaredBy string, declaredMB, peakMB int
 			return ""
 		}
 		return fmt.Sprintf(
-			"%s %s declares no memory_mb anywhere in what it runs and reached at least %dMB; an undeclared target takes one slot like any other, so magus starts its peers alongside it",
+			"%s %s declares no memory_mb anywhere in what it runs and reached at least %dMB; an undeclared target claims no memory, so every other magus on the machine is blind to it",
 			project, target, peakMB)
 	case float64(peakMB) > float64(declaredMB)*underDeclaredRatio && peakMB-declaredMB >= materialGapMB:
 		return fmt.Sprintf(

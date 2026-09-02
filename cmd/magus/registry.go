@@ -36,7 +36,7 @@ type wsEntry struct {
 	inflight   int          // in-flight dispatches holding m; guarded by wsRegistry.mu
 }
 
-func (e *wsEntry) load(_ context.Context, lim *cache.Limiter, tel observability.Provider) {
+func (e *wsEntry) load(_ context.Context, lim *cache.Limiter, budget *cache.MachineBudget, tel observability.Provider) {
 	e.once.Do(func() {
 		now := time.Now()
 		e.lastAccess.Store(now.UnixNano())
@@ -58,6 +58,9 @@ func (e *wsEntry) load(_ context.Context, lim *cache.Limiter, tel observability.
 			context.Background(), e.root,
 			magus.WithLoadedConfig(cfg),
 			workspace.WithLimiter(lim),
+			// The budget is held HERE, so hand it over directly: a workspace inside the
+			// daemon that dialled the daemon's socket would be waiting on itself.
+			workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}),
 			metricsOpt,
 		)
 		if err != nil {
@@ -91,6 +94,7 @@ type wsRegistry struct {
 	entries  map[string]*wsEntry
 	declared map[string]struct{} // nil/empty = legacy lazy mode (any workspace admissible)
 	lim      *cache.Limiter
+	budget   *cache.MachineBudget   // the machine's admission budget; shared with every workspace this daemon serves
 	tel      observability.Provider // shared with the bridge Magus; owned by the daemon, outlives evictions
 	ttl      time.Duration
 	now      func() time.Time // injectable for tests
@@ -98,13 +102,14 @@ type wsRegistry struct {
 	wg       sync.WaitGroup
 }
 
-func newWSRegistry(ctx context.Context, lim *cache.Limiter, ttl time.Duration, tel observability.Provider) *wsRegistry {
+func newWSRegistry(ctx context.Context, lim *cache.Limiter, budget *cache.MachineBudget, ttl time.Duration, tel observability.Provider) *wsRegistry {
 	if ttl <= 0 {
 		ttl = defaultIdleTTL
 	}
 	r := &wsRegistry{
 		entries: make(map[string]*wsEntry),
 		lim:     lim,
+		budget:  budget,
 		tel:     tel,
 		ttl:     ttl,
 		now:     time.Now,
@@ -191,7 +196,7 @@ func (r *wsRegistry) acquire(ctx context.Context, root string) (*wsEntry, error)
 	}
 	r.mu.Unlock()
 
-	e.load(ctx, r.lim, r.tel)
+	e.load(ctx, r.lim, r.budget, r.tel)
 	if e.loadErr != nil {
 		// Remove failed entry so it can be retried after TTL eviction.
 		r.mu.Lock()

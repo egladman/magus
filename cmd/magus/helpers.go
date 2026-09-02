@@ -217,6 +217,20 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 // and 2 from `self <unknown>` - so nothing scripting magus could branch on it.
 const exitUsage = 2
 
+// exitMachineBusy is the exit code for a run the MACHINE refused: a step whose
+// concurrency and declared memory do not fit alongside what every other magus on this
+// host holds (MGS3009). It extends the contract above with the case neither 1 nor 2
+// covers - the invocation was right, the work is fine, and nothing was attempted:
+//
+//	75  the machine could not seat the work; the same command will succeed later
+//
+// Distinct because the remediation is unrelated to the code. A caller that cannot tell
+// this from 1 reads a full machine as a broken build: CI retries nothing, and an agent
+// starts debugging a target that never ran. 75 is EX_TEMPFAIL from sysexits.h, the
+// long-standing Unix code for "failed, try again later", the same kind of borrowed
+// convention as exitUsage taking 2 from flag.ExitOnError.
+const exitMachineBusy = 75
+
 // errUsage marks a command-line misuse so it exits exitUsage rather than the generic
 // 1. Wrap the message a user needs to fix their invocation; the usage text itself is
 // printed separately by the command, as it always was.

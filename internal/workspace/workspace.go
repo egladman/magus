@@ -24,11 +24,16 @@ import (
 
 // Load is the accumulated state of an Open or Inspect call.
 type Load struct {
-	ConfigPath     string
-	Preloaded      *config.Config
-	Limiter        *cache.Limiter
-	Registry       *WorkspaceRegistry
-	MetricsCollect bool // build an always-on local metrics collector (daemon dashboard feed)
+	ConfigPath string
+	Preloaded  *config.Config
+	Limiter    *cache.Limiter
+	Registry   *WorkspaceRegistry
+	// MachineAdmitter injects the machine budget directly, for the ONE process that
+	// holds it. Every other process finds the daemon over its socket; the daemon
+	// cannot, because dialing its own socket from inside a request it is serving would
+	// wait on itself.
+	MachineAdmitter cache.MachineAdmitter
+	MetricsCollect  bool // build an always-on local metrics collector (daemon dashboard feed)
 	// Provider injects an already-constructed observability provider so several Magus
 	// instances share one set of OTel instruments and one metrics collector. When set it
 	// takes precedence over MetricsCollect (Open skips otlp.New and adopts it).
@@ -54,6 +59,13 @@ func WithLoadedConfig(cfg config.Config) Option {
 // WithLimiter injects a pre-built concurrency limiter (e.g. shared across daemon workspaces).
 func WithLimiter(lim *cache.Limiter) Option {
 	return func(o *Load) { o.Limiter = lim }
+}
+
+// WithMachineAdmitter injects the machine-wide admission budget the daemon holds, so
+// the workspaces it serves arbitrate against the same one every other magus on the
+// host reaches over the socket.
+func WithMachineAdmitter(a cache.MachineAdmitter) Option {
+	return func(o *Load) { o.MachineAdmitter = a }
 }
 
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace so

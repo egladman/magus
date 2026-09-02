@@ -63,6 +63,40 @@ func TestServerStopNoDaemonExitsNonzero(t *testing.T) {
 	assert.NotZero(t, silent.exitCode, "stopping nothing must exit non-zero")
 }
 
+// TestEnsureAdmissionDaemonAdoptsALiveOne pins the idempotent half of the auto-start: a
+// run must adopt the daemon that is already arbitrating this machine, never spawn a
+// second one. Two daemons would be two budgets, which is the exact failure the feature
+// exists to remove, and `magus doctor` reports the pair as a fault.
+//
+// The spawning half re-execs the binary, so it belongs to `magus server start`'s own
+// path (startDaemonBackground) rather than to a unit test here.
+func TestEnsureAdmissionDaemonAdoptsALiveOne(t *testing.T) {
+	// A private socket dir, so this never adopts (or spawns against) the developer's own
+	// daemon. Short: a t.TempDir() path can exceed the unix socket length limit on macOS.
+	dir, err := os.MkdirTemp("", "mgadmit")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(dir) }()
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+
+	addr := daemonDefaultAddr()
+	srv, err := proc.New(proc.Options{
+		Handler: func(context.Context, []string) error { return nil },
+		Address: addr,
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	got := ensureAdmissionDaemon(context.Background())
+	assert.Equal(t, addr, got, "the run arbitrates against the daemon that is already up")
+	select {
+	case <-srv.Done():
+		t.Fatal("a second daemon was spawned over the live one")
+	default:
+	}
+}
+
 func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {
 	assert.True(t, isServerStartHelp([]string{"start", "-h"}))
 	assert.True(t, isServerStartHelp([]string{"start", "--foreground", "--help"}))

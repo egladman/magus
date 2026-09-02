@@ -189,6 +189,44 @@ That was rejected, and a narrower rule adopted instead:
 
 > No capability is daemon-only. The daemon is only ever an accelerant.
 
+### Amended 2026-09-02: machine-wide admission is daemon-owned
+
+One capability is now daemon-only, by an explicit decision rather than by drift:
+**a machine-wide budget for concurrency and declared memory**. A run routes its
+admission through the user's daemon, and starts one if none is up. Everything
+else about the daemon remains an accelerant, and the rule above still governs it.
+
+The invariant could not survive this feature, and the honest thing is to say so
+rather than to claim a lease directory or a lock file counts. magus tried the
+directory ([bae836df6](https://github.com/egladman/magus/commit/bae836df6), deleted
+20 hours later): a passive registry can add up what its peers claim, and it cannot
+tell a waiter that its turn came, so every contended run had to be REFUSED. That
+is a capability magus could not offer without a process, which is the definition
+of daemon-only. What the rule protects against - documentation that forks on
+whether a daemon is running - is bought back by starting one, so no page says "if
+the daemon is up, X; otherwise Y".
+
+Two things bound it:
+
+- **Only a run pays.** `dispatchProfile.spawnsWork` is true for `run` and
+  `affected` and nothing else, so `magus ls`, `describe`, `query`, and every other
+  question still spawns no background process. This is the same reading that lets
+  `graph export --follow` start a daemon: asking for the machine's budget IS
+  asking for the thing that holds it.
+- **It fails open, loudly.** A daemon that will not start, or that dies mid-run,
+  leaves the run unarbitrated and finishing, having said once that it is. A
+  scheduler that can fail a build it was only supposed to order is worse than no
+  scheduler.
+
+A related correction landed with it. An adopted run executes in the daemon's
+process, where its console output goes to the daemon's log and the caller's
+terminal shows nothing - measured, not theoretical. That was survivable while
+nobody started a daemon for an ordinary build, and it is not now that a run starts
+one. So a TOP-LEVEL `run`/`affected` no longer forwards to the stable daemon: it
+runs here, prints here, and asks the daemon only for admission. A NESTED call
+still forwards to the socket its parent exported, which is its parent's own
+process, and prints where the parent does.
+
 ### Why not global auto-start
 
 - It trades a legible failure for an illegible one. "Daemon off" is visible today
@@ -210,8 +248,8 @@ X; otherwise Y". It says X, and the daemon makes X faster.
 ### The residual set, and why it is not a violation
 
 `/mcp` and the console are network surfaces BY DEFINITION - something connects to
-them over a socket. The shared concurrency pool and background jobs are
-cross-process by definition. Nobody is surprised that asking for a server needs a
+them over a socket. The shared concurrency pool, machine-wide
+admission, and background jobs are cross-process by definition. Nobody is surprised that asking for a server needs a
 server, so these are not a capability split; they are the daemon's own surface.
 
 For those, a command SHOULD auto-start the daemon, because asking for the console

@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5170,
-  "edge_count": 9152,
+  "node_count": 5178,
+  "edge_count": 9180,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -479,6 +479,14 @@
       }
     },
     {
+      "id": "diagnostic:MGS3009",
+      "kind": "diagnostic",
+      "label": "MGS3009",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3009/"
+      }
+    },
+    {
       "id": "diagnostic:MGS4001",
       "kind": "diagnostic",
       "label": "MGS4001",
@@ -796,7 +804,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "584",
+        "dir_files": "585",
         "dir_languages": "markdown,md#1-built-in-command-spells-import-maguscharm,md#2-workspace-spells--magusfiles-import-charm,md#3-raw-rfc-6902-data-the-lowest-level,md#4-function-targets--ops-branch-in-code,md#a-bypass-fails-closed,md#a-gap-worth-knowing,md#a-known-leak-a-multi"
       }
     },
@@ -886,7 +894,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "226",
+        "dir_files": "227",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#--no-autoload,md#--step,md#-c-dir,md#1-install-magus,md#2-bootstrap-a-workspace-with-magus-init,md#3-read-your-first-magusfile,md#4-bind-your-first-spell,md#5-compose-a-ci-target-and-run-only-what-changed,md#a-"
       }
     },
@@ -896,8 +904,8 @@
       "label": "docs/guides/integrations",
       "source": "docs/guides/integrations",
       "attrs": {
-        "dir_files": "137",
-        "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#agents,md#annotations-and-folded-logs,md#available-tools,md#azure-pipelines,md#before-the-push-the-same-advisors-locally,md#bounding-the-depth-too,md#ci-checkout,md#circleci-buildkite-jenk"
+        "dir_files": "138",
+        "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#agents,md#amended-2026-09-02-machine-wide-admission-is-daemon-owned,md#annotations-and-folded-logs,md#available-tools,md#azure-pipelines,md#before-the-push-the-same-advisors-locally,md#bou"
       }
     },
     {
@@ -906,8 +914,8 @@
       "label": "docs/guides/integrations/editor",
       "source": "docs/guides/integrations/editor",
       "attrs": {
-        "dir_files": "38",
-        "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#compatibility,md#decision-the-daemon-is-an-accelerant-never-a-capability-gate,md#direction-outbound-only,md#event-stream-design-notes,md#filtering,md#how-the-invariant-is-enforced,md#known"
+        "dir_files": "39",
+        "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#amended-2026-09-02-machine-wide-admission-is-daemon-owned,md#compatibility,md#decision-the-daemon-is-an-accelerant-never-a-capability-gate,md#direction-outbound-only,md#event-stream-design"
       }
     },
     {
@@ -936,7 +944,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1515",
+        "dir_files": "1520",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1206,7 +1214,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "458",
+        "dir_files": "463",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -1286,7 +1294,7 @@
       "label": "docs/reference/codes/sandbox",
       "source": "docs/reference/codes/sandbox",
       "attrs": {
-        "dir_files": "98",
+        "dir_files": "103",
         "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#extending-the-allowlist,md#fix,md#mgs2001-path-read-denied-by-sandbox,md#mgs2002-path-write-denied-by-sandbox,md#mgs2003"
       }
     },
@@ -2379,7 +2387,7 @@
       "attrs": {
         "role": "doc",
         "section": "concepts",
-        "tags": "concurrency,parallelism,workspace-lock,scheduler,daemon,needs,MAGUS_NO_WAIT",
+        "tags": "concurrency,parallelism,workspace-lock,scheduler,daemon,needs,MAGUS_NO_WAIT,machine budget,admission,memory_mb",
         "title": "Concurrency"
       }
     },
@@ -4728,6 +4736,18 @@
         "section": "reference",
         "tags": "MGS3008,workspace root,magus init,first run,magus.yaml",
         "title": "MGS3008: no workspace root found"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS3009.md",
+      "source": "docs/reference/codes/sandbox/MGS3009.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS3009,memory,memory_mb,concurrency,worktrees,admission,daemon,MAGUS_NO_WAIT",
+        "title": "MGS3009: machine budget exhausted"
       }
     },
     {
@@ -9558,6 +9578,16 @@
       "source": "docs/concepts/concurrency.md#across-separate-runs-the-workspace-lock",
       "attrs": {
         "anchor": "across-separate-runs-the-workspace-lock",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/concepts/concurrency.md#across-the-whole-machine-the-budget",
+      "kind": "docsection",
+      "label": "Across the whole machine: the budget",
+      "source": "docs/concepts/concurrency.md#across-the-whole-machine-the-budget",
+      "attrs": {
+        "anchor": "across-the-whole-machine-the-budget",
         "level": "2"
       }
     },
@@ -16189,6 +16219,16 @@
       "attrs": {
         "anchor": "--limit-0-means-replay-nothing",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/editor/design.md#amended-2026-09-02-machine-wide-admission-is-daemon-owned",
+      "kind": "docsection",
+      "label": "Amended 2026-09-02: machine-wide admission is daemon-owned",
+      "source": "docs/guides/integrations/editor/design.md#amended-2026-09-02-machine-wide-admission-is-daemon-owned",
+      "attrs": {
+        "anchor": "amended-2026-09-02-machine-wide-admission-is-daemon-owned",
+        "level": "3"
       }
     },
     {
@@ -26876,6 +26916,46 @@
       "kind": "docsection",
       "label": "Why",
       "source": "docs/reference/codes/sandbox/MGS3008.md#why",
+      "attrs": {
+        "anchor": "why",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3009.md#mgs3009-machine-budget-exhausted",
+      "kind": "docsection",
+      "label": "MGS3009: machine budget exhausted",
+      "source": "docs/reference/codes/sandbox/MGS3009.md#mgs3009-machine-budget-exhausted",
+      "attrs": {
+        "anchor": "mgs3009-machine-budget-exhausted",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3009.md#resolution",
+      "kind": "docsection",
+      "label": "Resolution",
+      "source": "docs/reference/codes/sandbox/MGS3009.md#resolution",
+      "attrs": {
+        "anchor": "resolution",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3009.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/codes/sandbox/MGS3009.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3009.md#why",
+      "kind": "docsection",
+      "label": "Why",
+      "source": "docs/reference/codes/sandbox/MGS3009.md#why",
       "attrs": {
         "anchor": "why",
         "level": "2"
@@ -52217,6 +52297,14 @@
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
       "target": "doc:docs/reference/codes/sandbox/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -57129,6 +57217,14 @@
     },
     {
       "source": "doc:docs/concepts/concurrency.md",
+      "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
       "target": "doc:docs/concepts/cache.md",
       "relation": "references",
       "confidence": "extracted",
@@ -57169,7 +57265,23 @@
     },
     {
       "source": "doc:docs/concepts/concurrency.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -61441,6 +61553,22 @@
     },
     {
       "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/concepts/concurrency.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
       "target": "doc:docs/concepts/knowledge.md",
       "relation": "references",
       "confidence": "extracted",
@@ -61473,10 +61601,26 @@
     },
     {
       "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
       "target": "doc:docs/reference/console.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/guides/integrations/daemon.md"
     },
     {
@@ -65977,7 +66121,23 @@
     },
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1030.md",
+      "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1030.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1030.md",
       "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1030.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1030.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -67120,6 +67280,94 @@
       "provenance": "docs/reference/codes/sandbox/MGS3008.md"
     },
     {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "diagnostic:MGS1030",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "diagnostic:MGS3007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "doc:docs/concepts/concurrency.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1030.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3007.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3009.md#mgs3009-machine-budget-exhausted",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -67193,6 +67441,14 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -67258,6 +67514,14 @@
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2010.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -80545,6 +80809,14 @@
     },
     {
       "source": "docsection:docs/concepts/concurrency.md#concurrency",
+      "target": "docsection:docs/concepts/concurrency.md#across-the-whole-machine-the-budget",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "docsection:docs/concepts/concurrency.md#concurrency",
       "target": "docsection:docs/concepts/concurrency.md#relationship-to-the-daemon",
       "relation": "contains",
       "confidence": "extracted",
@@ -85398,6 +85670,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/editor/design.md#decision-the-daemon-is-an-accelerant-never-a-capability-gate",
+      "target": "docsection:docs/guides/integrations/editor/design.md#amended-2026-09-02-machine-wide-admission-is-daemon-owned",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor/design.md"
     },
     {
       "source": "docsection:docs/guides/integrations/editor/design.md#decision-the-daemon-is-an-accelerant-never-a-capability-gate",
@@ -92814,6 +93094,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS3008.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3009.md#mgs3009-machine-budget-exhausted",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3009.md#resolution",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3009.md#mgs3009-machine-budget-exhausted",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3009.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3009.md#mgs3009-machine-budget-exhausted",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3009.md#why",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3009.md"
     },
     {
       "source": "docsection:docs/reference/codes/sandbox/README.md#the-sandbox",

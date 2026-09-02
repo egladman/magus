@@ -33,25 +33,29 @@ magus config set key=concurrency,value=4
 MAGUS_CONCURRENCY=4 magus run build
 ```
 
-When a [daemon](#daemon) is running, all clients share a single concurrency pool. Parallel CI steps and nested `magus` invocations all draw from the same budget.
+That limit is per process. The **machine budget** is the one that spans them: every `magus run` and `magus affected` takes its concurrency slots and its declared `memory_mb` from a budget the daemon owns, so runs in separate worktrees queue behind each other instead of each admitting a full machine's worth of work. A run starts the daemon if none is up, because nothing else can arbitrate it; see [Concurrency](../../concepts/concurrency.md#across-the-whole-machine-the-budget) and [MGS3009](../../reference/codes/sandbox/MGS3009.md).
 
-`magus status` shows the live pool state and current slot usage.
+The daemon arbitrates that budget; it does not run your work. A top-level `magus run` executes in your own process and prints to your own terminal. Nested `magus` invocations still adopt into their parent's pool.
+
+`magus status` shows the live pool state, current slot usage, and the machine budget with every claim and waiter across worktrees.
 
 ## Daemon
 
-By default every `magus run` is a short-lived process with its own concurrency limiter, so parallel invocations oversubscribe the machine. A daemon holds workspace state in memory and enforces **one** concurrency pool across all clients.
+Every `magus run` is a short-lived process with its own concurrency limiter. The daemon holds workspace state in memory, hosts shared services, and owns the one budget that keeps those separate limiters from oversubscribing the machine between them.
 
 ```sh
-magus server start &        # foreground process; & or a supervisor backgrounds it
+magus server start          # detaches and returns once it is accepting
+magus server start --foreground # blocking, for a supervisor
 magus server stop           # graceful shutdown; waits for in-flight work
 magus server stop --services # stop the daemon's hosted services, leave the daemon up
 magus status                # live pool + MCP endpoint health (reports the reason when down)
 magus status -W 15s         # poll and reprint every 15 seconds
 ```
 
-`magus server start` runs in the **foreground** and blocks. It does not daemonize itself;
-you background it with `&`, `nohup`, or - better - a process supervisor so it stays up
-across shells and reboots (see [Keeping the daemon running](#keeping-the-daemon-running)).
+`magus server start` detaches by default: it spawns the daemon, waits until it is
+accepting, prints the pid, and returns 0 - including when one is already running, so a
+script can chain on it. Pass `--foreground` to run it blocking in the current process,
+which is what a supervisor wants (see [Keeping the daemon running](#keeping-the-daemon-running)).
 
 ## Two transports
 
