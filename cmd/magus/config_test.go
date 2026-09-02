@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -116,6 +117,23 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 	assert.Equal(t, 0, exitCodeOf(flag.ErrHelp), "an explicit -h is a request that was satisfied")
 	assert.Equal(t, exitUsage, exitCodeOf(usagef("bad invocation")), "misuse")
 	assert.Equal(t, 1, exitCodeOf(errors.New("the work failed")), "runtime failure")
+}
+
+// selfStatusErr is any failure that names its own process status, the shape a contended
+// no-wait workspace lock arrives in. Declared here rather than imported because the
+// package that returns it keeps the type unexported; what exitCodeOf reads is the method.
+type selfStatusErr struct{ code int }
+
+func (selfStatusErr) Error() string   { return "the machine is busy" }
+func (e selfStatusErr) ExitCode() int { return e.code }
+
+// TestSelfDescribedExitStatusSurvives pins that a failure carrying its own status keeps
+// it locally, matching what the daemon already forwards for an adopted run. A contended
+// MAGUS_NO_WAIT lock exits 75 (EX_TEMPFAIL); collapsing it to 1 is what made a busy
+// machine read as a broken build.
+func TestSelfDescribedExitStatusSurvives(t *testing.T) {
+	assert.Equal(t, 75, exitCodeOf(selfStatusErr{code: 75}))
+	assert.Equal(t, 75, exitCodeOf(fmt.Errorf("run: %w", selfStatusErr{code: 75})), "survives wrapping")
 }
 
 // runOnlyFlags lists flags that intentionally exist on `magus run` but not

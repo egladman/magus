@@ -95,6 +95,17 @@ acquired. See [Terminal](terminal.md).
 
 Set `MAGUS_NO_WAIT=1` to make a contended run **fail fast** instead of blocking -
 useful in CI or a script that would rather error than queue behind another process.
+It names the holder the same way the wait message does, and exits **75**
+(`EX_TEMPFAIL`) rather than 1:
+
+```text
+magus: project web is locked by another magus process (pid 4821 (magus run ci .),
+running 12s, in /Users/me/src/acme); not waiting (MAGUS_NO_WAIT set)
+```
+
+75 is the transient-failure convention, so a caller can branch on "the machine is
+busy, retry later" without treating a genuinely broken build the same way. Nothing
+ran, and the same invocation succeeds once the holder finishes.
 
 The wait happens at the very start of the invocation, before the concurrency pool is
 even set up, so a blocked run does not yet appear in `magus status` (there is nothing

@@ -148,6 +148,9 @@ history to find the commit that introduced a regression.
 **2**
 : Misuse: no target named, or --step without an interactive terminal.
 
+**75**
+: MAGUS_NO_WAIT only: another magus process holds a selected project's workspace lock, so nothing ran. 75 is EX_TEMPFAIL, the transient-failure convention; the error names the holding pid, command and directory, and the same invocation succeeds once that process finishes.
+
 ## Examples
 
 *Build projects changed since the default base ref*

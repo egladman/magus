@@ -114,6 +114,9 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 **2**
 : Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation.
 
+**75**
+: MAGUS_NO_WAIT only: another magus process holds a selected project's workspace lock, so nothing ran. 75 is EX_TEMPFAIL, the transient-failure convention; the error names the holding pid, command and directory, and the same invocation succeeds once that process finishes.
+
 ## Examples
 
 *Build everything*
