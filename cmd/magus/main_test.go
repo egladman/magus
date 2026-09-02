@@ -390,6 +390,42 @@ func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 	})
 }
 
+// Folding a usage block with tty.Prose replaces hand-placed line breaks, so this
+// pins the words themselves: the same text in the same order, wrapped for the
+// reader's terminal instead of the author's. A buffer has no descriptor, so the
+// fold takes the off-terminal fallback width and the output is deterministic.
+func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
+	var buf bytes.Buffer
+	agentUsage(&buf)
+	want := "Usage: magus agent <install|sample|adoption> [flags] Subcommands: " +
+		"install render the embedded skills and write or stream them into named destinations " +
+		"(.claude/skills, .agents/skills, .opencode/skills, ...) " +
+		"sample print a starter AGENTS.md to stdout to own and tweak; never writes a file " +
+		"adoption report how often agents used the graph versus grep, over shell commands piped in (stdin or --commands) " +
+		"magus never writes your AGENTS.md. That file is yours, and an installer that edits a file you own " +
+		"leaves bytes you did not write and cannot audit. So `install` PRINTS the managed magus block for you " +
+		"to paste, and only when your AGENTS.md is missing it or carrying a stale one. " +
+		"Stdout philosophy: `magus agent` is a pure data generator. To install skills anywhere your shell " +
+		"can reach, use --tar and pipe to tar: " +
+		"magus agent install --tar | tar -xf - -C .claude/skills " +
+		"magus agent install --tar | tar -xf - -C ~/.config/opencode/skills " +
+		"The write-to-disk form is only for the in-repo, paths-relative-to-<dir> case, where it preserves " +
+		"the previous one-line ergonomics. Absolute destinations are refused unless --global is set, to keep " +
+		"magus from silently writing outside the working tree. " +
+		"install flags: " +
+		"--dir <path> repo directory to install into (default .) " +
+		"--force overwrite existing installed skill files " +
+		"--prune also remove installed skills this binary no longer ships; without it they are reported and " +
+		"left in place. Only skills magus wrote are candidates - a hand-authored one beside them is never touched " +
+		"--tar stream a tar archive to stdout instead of writing files " +
+		"--global allow absolute destination paths in write mode"
+	assert.Equal(t, want, strings.Join(strings.Fields(buf.String()), " "))
+
+	for _, line := range strings.Split(buf.String(), "\n") {
+		assert.LessOrEqual(t, len(line), 80, "folded to the off-terminal width: %q", line)
+	}
+}
+
 // help is not the command's output, so it must not land in a pipe that expects data.
 func TestUsagePrintersNameTheirSurface(t *testing.T) {
 	tests := []struct {

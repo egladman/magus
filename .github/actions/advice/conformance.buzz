@@ -23,16 +23,17 @@
 // happen to invoke the same op. An exact-op-set rule with a naive threshold would have
 // made that its first finding, and been wrong 7 times.
 //
-// It fires only on projects the pull request actually edited. Reporting every
-// pre-existing inconsistency would produce a backlog nobody burns down, and shipping one
-// as the first output guarantees the feature is ignored. The valuable moment is the pull
-// request that adds project 49 with a target named `unit-test`, before it becomes the
-// 49th thing to migrate later.
+// It fires only on targets the pull request ADDS. Reporting every pre-existing
+// inconsistency would produce a backlog nobody burns down, and shipping one as the first
+// output guarantees the feature is ignored. The valuable moment is the pull request that
+// adds project 49 with a target named `unit-test`, before it becomes the 49th thing to
+// migrate later. keepAdded records the measurement behind that gate.
 //
 // It never renames anything. Renaming a target breaks every caller, CI config, and
 // script outside the workspace, so this advises and stops.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, MIN_COHORT, MIN_SHARE.
+import "proc";
 import "advice";
 import "magus";
 import "std";
@@ -131,13 +132,34 @@ export fun findings(members: [{str: str}], minCohort: int, minShare: double) > [
     return found;
 }
 
-// keepEdited drops findings outside the projects this pull request actually touched, so
-// the comment is about what the author can still change rather than a workspace backlog.
-export fun keepEdited(all: [{str: str}], edited: [str]) > [{str: str}] {
+// keepAdded keeps the findings this pull request introduced and drops the rest.
+//
+// Gating on the PROJECT a pull request touched is too coarse to carry a finding. This
+// workspace's root project owns cmd/, internal/, types/ and the module root, so nearly
+// every pull request seeds it, and one pre-existing divergent target then reports on all
+// of them. This section carried `compress-cgo-test` through pull requests 120 to 125,
+// none of which touched its sources, under a heading reading "This adds a target". The
+// target had sat on main for weeks under a comment explaining that its name diverges on
+// purpose, so the magusfile answered the advice before anyone read it.
+//
+// The heading is the contract, so the gate is the name being NEW. `added` runs the pair
+// of checks target-outputs runs for that same word: the diff proposes a name and the base
+// tree settles it. Sharing those checks is why they live in advice.
+//
+// The project still has to be one the diff seeded, because a diff yields NAMES and a name
+// is not unique across a workspace. Eight projects here declare `preflight`, so adding a
+// ninth would otherwise report the eight already standing, which is the mistake
+// target-outputs made once with that exact name.
+export fun keepAdded(all: [{str: str}], added: [str], seeded: [str]) > [{str: str}] {
     var kept = mut [];
     foreach (f in all) {
-        foreach (p in edited) {
-            if ((f["project"] ?? "") == p) { kept.append(f); }
+        var inSeed = false;
+        foreach (p in seeded) {
+            if ((f["project"] ?? "") == p) { inSeed = true; }
+        }
+        if (!inSeed) { continue; }
+        foreach (name in added) {
+            if ((f["name"] ?? "") == name) { kept.append(f); }
         }
     }
     return kept;
@@ -160,9 +182,9 @@ fun body(items: [{str: str}]) > str {
         + "Renaming now is cheap. Later it means changing every caller, CI config, and "
         + "script that names the target, across teams that each have to be persuaded "
         + "separately.\n\n"
-        + "If the divergence is deliberate - the target really is a different job that "
-        + "happens to run the same tool - then this is wrong and worth ignoring. Add the "
-        + "`magus:silence:" + section + "` label and it will stay quiet.\n";
+        + "If you diverged on purpose, because this target really is a different job that "
+        + "happens to run the same tool, then this finding is wrong and worth ignoring. "
+        + "Add the `magus:silence:" + section + "` label to keep it quiet.\n";
 }
 
 fun main() > void !> any {
@@ -202,18 +224,27 @@ fun main() > void !> any {
         }
     }
 
-    // Only what this pull request edited. A seed is a project the diff touched directly;
-    // a project pulled in downstream did not add the target and cannot answer for it.
-    var edited = mut [];
-    foreach (p in magus\affectedImpact("origin/" + base).affectedProjects) {
-        if (p.seed) { edited.append(p.path); }
+    // Only the targets this pull request adds. The magusfile is the declaration, so the
+    // diff proposes the names and the base tree rejects the ones already there.
+    advice\fetchBase(base, refspec: false);
+    final diff = proc\exec("git", args: ["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
+    var added = mut [<str>];
+    foreach (n in advice\addedTargets(diff)) {
+        if (advice\declaredAtBase(n, base: base)) { continue; }
+        added.append(magus\canonicalName(n));
     }
 
-    final items = keepEdited(findings(members, minCohort: minCohort, minShare: minShare),
-        edited: edited);
+    var seeded = mut [<str>];
+    foreach (p in magus\affectedImpact("origin/" + base).affectedProjects) {
+        if (p.seed) { seeded.append(p.path); }
+    }
+
+    final items = keepAdded(findings(members, minCohort: minCohort, minShare: minShare),
+        added: added, seeded: seeded);
     if (items.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "A target name diverges from the workspace", body: "");
-        std\print("conformance: nothing to say ({members.len()} targets, cohort>={minCohort}, share>={minShare})");
+        std\print("conformance: nothing to say ({members.len()} targets, {added.len()} added by this change)");
         return;
     }
     advice\publish(repo, pr: pr, name: section,
@@ -279,14 +310,34 @@ test "findings ignores targets that invoke no op" {
         message: "no signature, nothing to compare");
 }
 
-test "keepEdited drops a pre-existing outlier the pull request did not touch" {
+test "keepAdded drops an outlier the pull request did not add" {
     final all = [
         {"project": "checkout", "name": "unit-test", "majority": "test", "evidence": "6 of 7", "ops": "node:jest"},
         {"project": "legacy", "name": "run-tests", "majority": "test", "evidence": "6 of 7", "ops": "node:jest"},
     ];
-    final kept = keepEdited(all, edited: ["checkout"]);
+    final kept = keepAdded(all, added: ["unit-test"], seeded: ["checkout", "legacy"]);
     std\assert(kept.len() == 1, message: "only what this change added");
-    std\assert(kept[0]["project"] == "checkout", message: "the edited one");
+    std\assert(kept[0]["name"] == "unit-test", message: "the new one");
+}
+
+test "keepAdded says nothing when the pull request adds no target" {
+    // The regression: editing one Go file seeds the root project, which was enough to
+    // report every outlier that project already owned.
+    final all = [
+        {"project": ".", "name": "compress-cgo-test", "majority": "test", "evidence": "4 of 5", "ops": "go:go-test"},
+    ];
+    std\assert(keepAdded(all, added: [], seeded: ["."]).len() == 0,
+        message: "a change that adds nothing says nothing");
+}
+
+test "keepAdded does not blame another project for a name it already had" {
+    final all = [
+        {"project": "apps/new", "name": "preflight", "majority": "check", "evidence": "7 of 8", "ops": "node:jest"},
+        {"project": "apps/old", "name": "preflight", "majority": "check", "evidence": "7 of 8", "ops": "node:jest"},
+    ];
+    final kept = keepAdded(all, added: ["preflight"], seeded: ["apps/new"]);
+    std\assert(kept.len() == 1, message: "a diff yields names, so the seed decides whose it is");
+    std\assert(kept[0]["project"] == "apps/new", message: "the project that gained it");
 }
 
 test "body shows the evidence and names the escape hatch" {
@@ -294,5 +345,6 @@ test "body shows the evidence and names the escape hatch" {
         "majority": "test", "evidence": "47 of 48", "ops": "node:jest"}]);
     std\assert(text.indexOf("47 of 48") != null, message: "the count is the argument");
     std\assert(text.indexOf("`unit-test` in `apps/checkout`") != null, message: "names the target");
-    std\assert(text.indexOf("label") != null, message: "declining must be easy and permanent");
+    std\assert(text.indexOf("`magus:silence:conformance` label") != null,
+        message: "declining must be easy and permanent, and the label is how");
 }

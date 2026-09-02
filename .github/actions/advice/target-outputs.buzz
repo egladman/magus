@@ -17,32 +17,6 @@ import "std";
 
 final section = "target-outputs";
 
-// added returns the target names this PR introduces, by reading the added `export fun`
-// lines out of the diff. The magusfile is the declaration, so the diff is the honest
-// source for "new" - comparing two loaded graphs would need the base checked out.
-export fun added(diff: str) > [str] {
-    var names = mut [];
-    foreach (line in diff.split("\n")) {
-        if (!line.startsWith("+export fun ")) { continue; }
-        final rest = line.sub("+export fun ".len());
-        final open = rest.indexOf("(");
-        if (open == null) { continue; }
-        final name = rest.sub(0, open).trim();
-        if (name != "") { names.append(name); }
-    }
-    return names;
-}
-
-// existed reports whether a target of this name was already declared before the change.
-// Editing a target's body rewrites its `export fun` line, so the diff calls it added -
-// which is how a comment about NEW targets listed `preflight`, a target older than the
-// pull request. The base tree is the only thing that settles it.
-fun existed(name: str, base: str) > bool !> any {
-    final res = proc\exec("git", args: ["grep", "-q", "export fun " + name + "(",
-        "origin/" + base, "--", "*.buzz"], dir: ".", opts: {"allow_failure": true});
-    return res.ok;
-}
-
 fun body(targets: [str]) > str {
     final parts = mut ["**New targets that declare no outputs:**\n\n"];
     foreach (t in targets) { parts.append("- `" + t + "`\n"); }
@@ -78,7 +52,7 @@ fun main() > void !> any {
     advice\fetchBase(base, refspec: false);
     final diff = proc\exec("git", args: ["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
         dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
-    final names = added(diff);
+    final names = advice\addedTargets(diff);
     if (names.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");
         return;
@@ -96,7 +70,7 @@ fun main() > void !> any {
             if (t.writesFiles.len() != 0) { continue; }
             foreach (n in names) {
                 if (magus\canonicalName(n) != t.name) { continue; }
-                if (!existed(n, base: base)) { bare.append(project.path + ":" + t.name); }
+                if (!advice\declaredAtBase(n, base: base)) { bare.append(project.path + ":" + t.name); }
             }
         }
     }
@@ -110,17 +84,3 @@ fun main() > void !> any {
 }
 
 
-test "added reads new target names out of a diff" {
-    final diff = "+export fun release(ctx: magus\\Context, args: [str]) > void\n"
-        + "-export fun gone(ctx: magus\\Context) > void\n"
-        + " export fun untouched(ctx: magus\\Context) > void\n"
-        + "+export fun  spaced (ctx: magus\\Context) > void\n";
-    final got = added(diff);
-    std\assert(got.len() == 2, message: "only the added lines");
-    std\assert(got[0] == "release", message: "the first new target");
-    std\assert(got[1] == "spaced", message: "trimmed");
-}
-
-test "added ignores a diff with no new targets" {
-    std\assert(added("+    ctx.needs(build);\n-export fun old() > void\n").len() == 0, message: "nothing added");
-}

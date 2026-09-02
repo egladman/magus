@@ -114,7 +114,7 @@ which is not a question a working tree can answer.
 | `target-outputs`        | a new target declares no outputs, which means it never replays from cache                                           |
 | `skip-cache`            | a target opts out of the cache, quoting the reason magus requires for it                                            |
 | `blast-radius`          | the change reaches a large share of the workspace, with the chain that pulled each project in                       |
-| `doctor`                | `magus doctor` reports a failing or advisory check                                                                  |
+| `doctor`                | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                           |
 | `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                     |
 | `conformance`           | a new target's name diverges from what the rest of the workspace already calls the same work                        |
 | `missing-target`        | a changed project lacks a target that projects of the same kind overwhelmingly have                                 |
@@ -136,6 +136,22 @@ rather than what was true three pushes ago.
 
 Each section is collapsed, and its summary line carries the count, so the comment
 stays a table of contents until you open something.
+
+## When it says nothing
+
+A pull request with no findings gets **no comment at all**. The first advisor with
+something to say opens the comment, so a clean change carries no trace that magus looked.
+There is no "nothing found" placeholder: open one five times for nothing and you stop
+opening it, including the time it has a finding. Your checks list already reports that
+the run happened.
+
+Once you settle the last finding, magus rewrites the comment to say so and leaves it in
+place. That keeps the thread and its replies, and it tells whoever reads the merged pull
+request that magus raised something and that someone handled it.
+
+Every advisor answers one question: what did **this** pull request do? A finding that
+holds on the base branch is backlog, and you work through backlog with `magus doctor` at
+the keyboard.
 
 ## What it costs
 
