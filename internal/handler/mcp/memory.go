@@ -37,6 +37,7 @@ type memoryRecordView struct {
 	Refs       []memoryRefView `json:"refs"`
 	References []string        `json:"references,omitempty"`
 	Body       string          `json:"body,omitempty"`
+	Excerpt    string          `json:"excerpt,omitempty"`
 	Created    int64           `json:"created"`
 	Updated    int64           `json:"updated"`
 }
@@ -48,7 +49,8 @@ func toRecordView(r memory.Record) memoryRecordView {
 	}
 	return memoryRecordView{
 		Name: r.Name, Type: string(r.Type), Status: r.Status, Refs: refs,
-		References: r.References, Body: r.Body, Created: r.Created, Updated: r.Updated,
+		References: r.References, Body: r.Body, Excerpt: r.Excerpt,
+		Created: r.Created, Updated: r.Updated,
 	}
 }
 
@@ -85,6 +87,7 @@ func (t *memoryTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 			Type:       memory.RecordType(strings.TrimSpace(paramString(req.Params, "type", ""))),
 			Status:     strings.TrimSpace(paramString(req.Params, "status", "")),
 			Body:       paramString(req.Params, "body", ""),
+			Excerpt:    paramString(req.Params, "excerpt", ""),
 			Refs:       refs,
 			References: splitCommaList(paramString(req.Params, "references", "")),
 		}
@@ -102,7 +105,13 @@ func (t *memoryTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 		return spells.InvokeResponse{Data: map[string]any{"deleted": name}}, nil
 
 	case "verify":
-		report, err := memory.Verify(root)
+		report, err := memory.Verify(root, func(ref memory.Ref) error {
+			if ref.Kind != memory.RefKindOutput {
+				return nil
+			}
+			_, err := t.opts.Magus.OutputDescriptorByRef(ref.Target)
+			return err
+		})
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}

@@ -14,15 +14,24 @@ implicitly. An entry earns its place when a later reader needs to reopen the
 evidence behind a decision \- the run, the query, the output reference, the
 document \- rather than to be told a conclusion.
 .PP
+An elimination entry records what an investigation ruled OUT: the hypothesis,
+why it is dead, and an excerpt of the evidence that killed it. The excerpt is
+required because an output reference resolves only from the checkout that
+produced it, which leaves the ref beside it a best\-effort handle.
+.PP
 verify is the maintenance verb: it reports entries that are malformed, stale,
-or that link to something no longer there. The same entries are reachable
-through the magus_memory MCP tool and the console, so a journal written from
-the CLI is readable by an agent without either side learning a new format.
+that link to something no longer there, or whose evidence no longer resolves.
+The same entries are reachable through the magus_memory MCP tool and the
+console, so a journal written from the CLI is readable by an agent without
+either side learning a new format.
 .SS memory put options
 .RS
 .TP
 \fB\-\-body\fR \fIstring\fR
-Short why/caption, decision and plan only
+Short why/caption, decision, plan and elimination only
+.TP
+\fB\-\-excerpt\fR \fIstring\fR
+The evidence that ruled a hypothesis out, copied inline; elimination only and required there
 .TP
 \fB\-\-ref\fR \fIstring\fR
 Entry ref in 'kind: target' form; repeat for multiple refs
@@ -34,7 +43,7 @@ Name of another entry this one relates to; repeat as needed
 Lifecycle label, e.g. accepted, active, done, stale
 .TP
 \fB\-\-type\fR \fIstring\fR
-Entry type: pointer, decision, or plan
+Entry type: pointer, decision, plan, or elimination
 .RE
 .SH SUBCOMMANDS
 .RS
@@ -52,7 +61,7 @@ Create or replace a named entry
 Remove one entry
 .TP
 \fBverify\fR
-Check malformed, stale, and broken\-linked entries
+Check malformed, stale, broken\-linked, and unresolvable\-evidence entries
 .RE
 .SH EXAMPLES
 \fIList entries and warnings\fR
@@ -65,6 +74,12 @@ magus memory ls
 .PP
 .EX
 magus memory get release-checklist
+.EE
+.PP
+\fIRecord what an investigation ruled out\fR
+.PP
+.EX
+magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'
 .EE
 .PP
 \fICheck the journal's health\fR

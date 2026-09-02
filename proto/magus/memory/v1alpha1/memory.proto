@@ -6,8 +6,8 @@ syntax = "proto3";
 // records under the user's XDG state directory - never a second store of its own.
 //
 // Memory is a set of discrete records, each a typed POINTER into the magus domain (a
-// saved query, a graph node, an output ref, a command, a doc); only a decision/plan
-// carries a prose caption. Its reason to exist as an editable surface: an agent can
+// saved query, a graph node, an output ref, a command, a doc); a decision, plan or
+// elimination also carries a prose caption. Its reason to exist as an editable surface: an agent can
 // accumulate stale or bloated records, and a human read/edit/delete surface is the
 // safety valve. Every record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: a
 // client must render them as text, never as trusted HTML.
@@ -46,11 +46,14 @@ service MemoryService {
 
 // MemoryType is the subject axis of a record (stable, closed). pointer carries refs only;
 // decision and plan additionally carry a prose caption (the why the graph cannot derive).
+// elimination is a hypothesis an investigation falsified: it carries the caption plus the
+// excerpt of evidence that killed it.
 enum MemoryType {
   MEMORY_TYPE_UNSPECIFIED = 0;
   MEMORY_TYPE_POINTER = 1;
   MEMORY_TYPE_DECISION = 2;
   MEMORY_TYPE_PLAN = 3;
+  MEMORY_TYPE_ELIMINATION = 4;
 }
 
 // MemoryRefKind is the closed set a ref points at. node/doc/output name a magus-domain
@@ -71,7 +74,7 @@ message MemoryRef {
 }
 
 // Memory is one record. name is the kebab-slug identity; refs are the required payload;
-// body is the caption (decision/plan only); status is the optional lifecycle field;
+// body is the caption (every type but pointer); status is the optional lifecycle field;
 // references links to other records by name. create_time/update_time are output-only.
 message Memory {
   string name = 1;
@@ -82,6 +85,10 @@ message Memory {
   repeated string references = 6;             // other record names (memory -> memory)
   google.protobuf.Timestamp create_time = 7;  // output only
   google.protobuf.Timestamp update_time = 8;  // output only
+  // UNTRUSTED captured evidence, required on an elimination and rejected on every other
+  // type. It is copied in because an output ref resolves only from the checkout that
+  // produced it, and agent worktrees get deleted.
+  string excerpt = 9;
 }
 
 message ListMemoriesRequest {
