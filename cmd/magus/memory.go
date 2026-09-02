@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -49,7 +50,7 @@ func memoryUsage() {
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  ls       show entries and any repair warnings")
 	fmt.Fprintln(os.Stderr, "  get      show one entry")
-	fmt.Fprintln(os.Stderr, "  put      create or replace a named entry")
+	fmt.Fprintln(os.Stderr, "  put      create a named entry, or update the fields you name on one")
 	fmt.Fprintln(os.Stderr, "  delete   remove one entry")
 	fmt.Fprintln(os.Stderr, "  verify   check malformed, stale, and broken-linked entries")
 	fmt.Fprintln(os.Stderr, "")
@@ -169,8 +170,12 @@ func memoryPut(root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus memory put <name> --type <pointer|decision|plan|elimination> --ref 'kind: target' [--ref ...] [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Create or replace a visible handoff entry. Use refs for things magus can re-open;")
+			fmt.Fprintln(os.Stderr, "Create a visible handoff entry. Use refs for things magus can re-open;")
 			fmt.Fprintln(os.Stderr, "a pointer carries no prose, and every other type takes a short why in --body.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "On an entry that already exists this writes only the flags you pass; the rest")
+			fmt.Fprintln(os.Stderr, "keep what is stored. An omitted flag therefore cannot clear a field, and a type")
+			fmt.Fprintln(os.Stderr, "change is refused: delete the entry and create it again for either.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "An elimination records a hypothesis an investigation killed, and needs --excerpt.")
 			fmt.Fprintln(os.Stderr, "An output ref resolves only from the checkout that minted it, so copy the evidence")
@@ -180,6 +185,7 @@ func memoryPut(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus memory put installer-key --type decision --ref 'doc: docs/setup.md#verification' --body 'Keep one bootstrap key; rotation ships a compatibility release first.'")
 			fmt.Fprintln(os.Stderr, "  magus memory put next-release --type plan --ref 'command: magus affected ci' --status active --body 'Run the release gate after docs regenerate.'")
 			fmt.Fprintln(os.Stderr, "  magus memory put cache-key-drift --type elimination --ref 'output: out1a2b3c' --body 'Not the cache key: both runs hashed the same inputs.' --excerpt 'key inputs identical, 0 differing lines'")
+			fmt.Fprintln(os.Stderr, "  magus memory put next-release --amend --status done")
 			fs.PrintDefaults()
 		}
 	})
@@ -193,11 +199,17 @@ func memoryPut(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	rec, err := store.Put(root, store.Record{
+	// No mask: the flags the caller typed ARE the mask, which is the reading AIP-134 gives
+	// an absent one. --amend is the CLI's spelling of allow_missing=false, because a
+	// negated boolean flag does not read as a sentence.
+	rec, err := store.Update(root, store.Record{
 		Name: pos[0], Type: store.RecordType(pf.Type), Status: pf.Status, Body: pf.Body,
 		Excerpt: pf.Excerpt, Refs: parsed, References: references,
-	})
+	}, store.UpdateOptions{AllowMissing: !pf.Amend})
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("magus memory put: the journal holds no entry named %q; drop --amend to create it, or see what is there with `%s`", pos[0], hint.MemoryLs)
+		}
 		return err
 	}
 	opts, err := outputOptionsOrDefault()

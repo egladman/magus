@@ -202,7 +202,9 @@ export type UpdateMemoryRequest = Message<"magus.memory.v1alpha1.UpdateMemoryReq
   memory?: Memory;
 
   /**
-   * empty = full replace (the only mode today)
+   * Names the fields to write; every field the record already holds is kept. Empty is a
+   * full replace on THIS service, because its caller is a person editing a form that shows
+   * every field, so an emptied box has to clear the field rather than read as "unchanged".
    *
    * @generated from field: google.protobuf.FieldMask update_mask = 2;
    */

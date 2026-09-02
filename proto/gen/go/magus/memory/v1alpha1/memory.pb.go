@@ -444,8 +444,11 @@ type UpdateMemoryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Required: the payload IS the request. An upsert with no memory names nothing to
 	// create and carries nothing to write, so it can only be a client bug.
-	Memory        *Memory                `protobuf:"bytes,1,opt,name=memory,proto3" json:"memory,omitempty"`
-	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`        // empty = full replace (the only mode today)
+	Memory *Memory `protobuf:"bytes,1,opt,name=memory,proto3" json:"memory,omitempty"`
+	// Names the fields to write; every field the record already holds is kept. Empty is a
+	// full replace on THIS service, because its caller is a person editing a form that shows
+	// every field, so an emptied box has to clear the field rather than read as "unchanged".
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	AllowMissing  bool                   `protobuf:"varint,3,opt,name=allow_missing,json=allowMissing,proto3" json:"allow_missing,omitempty"` // true => create when absent (AIP-134 upsert)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

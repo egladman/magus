@@ -59,7 +59,7 @@ Takes [UpdateCursorRequest](#updatecursorrequest), returns [Cursor](#cursor).
 
 Cursor is the singleton "where did I leave off" snapshot. A singleton per AIP-156: read with GetCursor, overwritten with UpdateCursor, never listed and never created.
 
-Source: [memory.proto:130](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L130).
+Source: [memory.proto:133](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L133).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -69,7 +69,7 @@ Used by: [GetCursor (response)](memory.md#getcursor), [UpdateCursor (response)](
 
 ### DeleteMemoryRequest
 
-Source: [memory.proto:117](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L117).
+Source: [memory.proto:120](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L120).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -80,7 +80,7 @@ Used by: [DeleteMemory (request)](memory.md#deletememory).
 
 ### DeleteMemoryResponse
 
-Source: [memory.proto:124](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L124).
+Source: [memory.proto:127](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L127).
 
 No fields.
 
@@ -88,7 +88,7 @@ Used by: [DeleteMemory (response)](memory.md#deletememory).
 
 ### GetCursorRequest
 
-Source: [memory.proto:126](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L126).
+Source: [memory.proto:129](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L129).
 
 No fields.
 
@@ -151,7 +151,7 @@ Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (reque
 
 ### UpdateCursorRequest
 
-Source: [memory.proto:134](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L134).
+Source: [memory.proto:137](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L137).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -166,7 +166,7 @@ Source: [memory.proto:109](https://github.com/egladman/magus/blob/main/proto/mag
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `memory` | [Memory](#memory) | 1 | _required_ Required: the payload IS the request. An upsert with no memory names nothing to create and carries nothing to write, so it can only be a client bug. |
-| `update_mask` | FieldMask | 2 | empty = full replace (the only mode today) |
+| `update_mask` | FieldMask | 2 | Names the fields to write; every field the record already holds is kept. Empty is a full replace on THIS service, because its caller is a person editing a form that shows every field, so an emptied box has to clear the field rather than read as "unchanged". |
 | `allow_missing` | bool | 3 | true => create when absent (AIP-134 upsert) |
 
 Used by: [UpdateMemory (request)](memory.md#updatememory).

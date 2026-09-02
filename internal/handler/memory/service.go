@@ -54,31 +54,32 @@ func (s *Service) ListMemories(_ context.Context, _ *connect.Request[memoryv1.Li
 	return connect.NewResponse(&memoryv1.ListMemoriesResponse{Memories: out}), nil
 }
 
-// UpdateMemory upserts a record keyed by memory.name. allow_missing=true creates the record
-// when absent (the upsert); allow_missing=false rejects an absent record with NotFound. Only
-// a full replace is supported, so a non-empty update_mask is rejected rather than silently
-// dropping the fields the mask omits.
+// UpdateMemory writes a record keyed by memory.name under AIP-134 semantics: update_mask
+// names the fields to write, and allow_missing decides whether an absent name is created or
+// answered NotFound.
+//
+// An ABSENT mask means every field here, not the fields the request populated. This surface
+// is a person editing a record they can see in full, and a form submits every field it
+// shows: reading an emptied box as "unchanged" would make clearing a body silently fail on
+// the one surface that exists to repair agent-written entries. It also keeps a full replace
+// available for a record too malformed for the store to merge into. The agent-facing
+// surfaces take the opposite default, where the caller sends a few fields and means only
+// those.
 func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.UpdateMemoryRequest]) (*connect.Response[memoryv1.Memory], error) {
-	if paths := req.Msg.GetUpdateMask().GetPaths(); len(paths) > 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("memory: partial update_mask is not supported; send the full record"))
+	mask := req.Msg.GetUpdateMask().GetPaths()
+	if len(mask) == 0 {
+		mask = store.MutableFields()
 	}
-	root := s.ws.Root()
-	rec := recordFromProto(req.Msg.GetMemory())
-	// Validate up front so a schema violation is an honest InvalidArgument, distinct from the
-	// storage failures Put can also return (which are Internal below).
-	if err := store.Validate(rec); err != nil {
+	stored, err := store.Update(s.ws.Root(), recordFromProto(req.Msg.GetMemory()), store.UpdateOptions{
+		Mask:         mask,
+		AllowMissing: req.Msg.GetAllowMissing(),
+	})
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("memory: no record named "+req.Msg.GetMemory().GetName()+" (set allow_missing to create it)"))
+	case errors.Is(err, store.ErrInvalid):
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	if !req.Msg.GetAllowMissing() {
-		if _, err := store.Get(root, rec.Name); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return nil, connect.NewError(connect.CodeNotFound, errors.New("memory: no record named "+rec.Name+" (set allow_missing to create it)"))
-			}
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-	}
-	stored, err := store.Put(root, rec) // validation already passed, so an error here is storage
-	if err != nil {
+	case err != nil:
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(recordToProto(stored)), nil

@@ -1454,6 +1454,13 @@ why it is dead, and an excerpt of the evidence that killed it. The excerpt is
 required because an output reference resolves only from the checkout that
 produced it, which leaves the ref beside it a best-effort handle.
 
+put creates an entry, and on one that already exists it writes only the fields
+you pass. Omitting a flag keeps what is stored, so refreshing a status cannot
+drop the body beside it - the store keeps no history and there would be nothing
+to restore it from. The cost is that an omitted flag cannot CLEAR a field
+either; delete the entry and create it again for that. Pass --amend to require
+the name to exist, and change a record's type by deleting and recreating it.
+
 verify is the maintenance verb: it reports entries that are malformed, stale,
 that link to something no longer there, or whose evidence no longer resolves.
 The same entries are reachable through the magus_memory MCP tool and the
@@ -1465,9 +1472,10 @@ either side learning a new format.`,
 		{Name: "get", Short: "Show one entry"},
 		{
 			Name:  "put",
-			Short: "Create or replace a named entry",
+			Short: "Create a named entry, or update the fields you name on one",
 			Flags: []Flag{
-				{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, plan, or elimination"},
+				{Name: "amend", Kind: FlagBool, Doc: "Require the entry to exist: refuse a name the journal does not hold instead of creating it"},
+				{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, plan, or elimination. Required to create; on an existing entry it must match the type already stored"},
 				{Name: "status", Kind: FlagString, Doc: "Lifecycle label, e.g. accepted, active, done, stale"},
 				{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision, plan and elimination only"},
 				{Name: "excerpt", Kind: FlagString, Doc: "The evidence that ruled a hypothesis out, copied inline; elimination only and required there"},
@@ -1484,6 +1492,7 @@ either side learning a new format.`,
 		{"List entries and warnings", "magus memory ls"},
 		{"Read one entry", "magus memory get release-checklist"},
 		{"Record what an investigation ruled out", "magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'"},
+		{"Refresh one field and keep the rest", "magus memory put release-checklist --amend --status done"},
 		{"Check the journal's health", "magus memory verify"},
 	},
 }
