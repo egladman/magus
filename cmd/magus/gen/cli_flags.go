@@ -894,7 +894,7 @@ type VCSAddFlags struct {
 func BindVCSAdd(fs *flag.FlagSet) *VCSAddFlags {
 	var f VCSAddFlags
 	fs.BoolVar(&f.Untracked, FlagVCSAddUntracked, false, "Also stage undeclared files; requires --reason")
-	fs.StringVar(&f.Reason, FlagVCSAddReason, "", "Why the undeclared files belong in this change; required with --untracked, and kept with the staging verdict")
+	fs.StringVar(&f.Reason, FlagVCSAddReason, "", "Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict")
 	return &f
 }
 

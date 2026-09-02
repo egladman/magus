@@ -300,15 +300,14 @@ func TestSplitExplainedOutputsCountsCommittedSources(t *testing.T) {
 	assert.Empty(t, unexplained)
 }
 
-// TestVCSAddUntrackedNeedsAReason pins the articulated-decision rule at the CLI site.
-// --untracked clears the undeclared-file report, which is the only thing separating this
-// command from `git add -A`, so a bare one is refused. The refusal names the accepted
-// spelling verbatim, because the caller it breaks is usually a script.
+// TestVCSAddUntrackedNeedsAReason pins the rule at the CLI site: --untracked clears the
+// undeclared-file report, so a bare one is refused, and the refusal carries the whole
+// accepted spelling because a script is what it breaks.
 //
-// The temp dir is no magus workspace, and that is the second assertion: the refusal is
-// about the flags, so it lands before the workspace loads and before anything is staged.
+// The temp dir is no magus workspace, which is the second assertion: the refusal is
+// about the flags, so it lands before the workspace loads and before anything stages.
 // The accepted form is covered end to end by testdata/script/vcs_add_paths.txtar, which
-// can reach a real tree without tripping this process's one-shot workspace memo.
+// reaches a real tree without tripping this process's one-shot workspace memo.
 func TestVCSAddUntrackedNeedsAReason(t *testing.T) {
 	err := vcsAddCmd(context.Background(), t.TempDir(), []string{"--untracked"})
 
@@ -317,9 +316,8 @@ func TestVCSAddUntrackedNeedsAReason(t *testing.T) {
 	assert.IsType(t, errUsage{}, err, "a missing required flag is misuse, which the CLI exits 2 for")
 }
 
-// TestVCSAddReportsTheReason proves the reason is kept rather than merely demanded: it
-// reaches the terminal beside the files it admitted. The -o json half is the same value,
-// StagingPlan.Reason.
+// TestVCSAddReportsTheReason covers the keeping half: the reason reaches the terminal
+// beside the files it admitted. -o json carries the same StagingPlan.Reason.
 func TestVCSAddReportsTheReason(t *testing.T) {
 	plan := types.StagingPlan{
 		Undeclared: []string{"testdata/fixture.golden"},

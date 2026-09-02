@@ -489,12 +489,11 @@ const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 //
 // Every other machine that reads this cache inherits the decision from the committed
 // config, and the check it drops is the one that says whether an artifact came from
-// who it claims. That is a claim about this cache, so it is spelled out rather than
-// left as a bare true.
+// who it claims. A bare true leaves the next reader nothing to weigh.
 var insecureRemoteOverride = ward.Override{
 	Name:     "cache.remote.insecure",
-	Silences: "accepts and produces unsigned remote-cache artifacts, which is the whole of the signature check",
-	Spelling: `cache.remote.insecure_reason: "<why>" in magus.yaml, beside it`,
+	Silences: "turns off remote-cache signature verification, so unsigned artifacts are imported and produced",
+	Spelling: `cache.remote.insecure_reason: "<why>" beside it in magus.yaml`,
 	Records:  "stays in the committed config, where every machine that trusts this cache reads it",
 }
 

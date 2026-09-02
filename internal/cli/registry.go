@@ -1199,9 +1199,9 @@ source change in the same commit accounts for. Anything undeclared is reported
 rather than swept in, which is the difference between it and git add -A.
 
 --untracked says yes to every undeclared path at once, so it needs --reason: it
-switches off the one report that separates this command from git add -A, and the
-files it sweeps in land in a commit everybody pulls. The reason is kept with the
-staging verdict. Naming a path stays the way to stage one file without it.
+drops the one report that separates this command from git add -A, and the files
+it sweeps in land in a commit everybody pulls. The reason is kept with the
+staging verdict. Naming a path stages one file without the flag.
 
 resolve settles an in-progress merge, rebase, or cherry-pick. It classifies
 every conflicted path at once, regenerates once instead of once per file,
@@ -1239,7 +1239,7 @@ base in yourself on the others, then run resolve.`,
 			Short: "Stage a change the way this workspace's declarations say it should be staged",
 			Flags: []Flag{
 				{Name: "untracked", Kind: FlagBool, Doc: "Also stage undeclared files; requires --reason"},
-				{Name: "reason", Kind: FlagString, Doc: "Why the undeclared files belong in this change; required with --untracked, and kept with the staging verdict"},
+				{Name: "reason", Kind: FlagString, Doc: "Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict"},
 			},
 		},
 		{

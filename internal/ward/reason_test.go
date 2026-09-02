@@ -15,13 +15,13 @@ var testOverride = Override{
 }
 
 // TestRequireReasonRefusesABareOverride pins the whole point: the switch on its own is
-// an error, and the error carries the exact replacement spelling, because the caller it
-// breaks is often a script whose author is not reading the docs.
+// an error, and the error carries the replacement spelling in full, because a script is
+// what it breaks.
 func TestRequireReasonRefusesABareOverride(t *testing.T) {
 	t.Parallel()
 	err := RequireReason(testOverride, true, "")
 	require.Error(t, err, "a bare override was accepted")
-	assert.Contains(t, err.Error(), testOverride.Spelling, "the refusal must name the accepted spelling verbatim")
+	assert.Contains(t, err.Error(), testOverride.Spelling, "the refusal must carry the whole accepted spelling")
 	assert.Contains(t, err.Error(), testOverride.Silences, "the refusal must say what the override switches off")
 	assert.Contains(t, err.Error(), testOverride.Records, "a reason nobody keeps is a form field; the refusal says where it lands")
 

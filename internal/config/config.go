@@ -267,14 +267,13 @@ type CacheRemote struct {
 	// Insecure disables remote-cache signature verification: unsigned artifacts are
 	// imported and produced with no trust set. A shared cache without signing is a
 	// supply-chain hazard — use only for trusted single-repo CI, or to validate a
-	// backend before minting keys. When true, trusted_keys is not required and
-	// InsecureReason is.
+	// backend before minting keys. When true, trusted_keys stops being required and
+	// InsecureReason starts.
 	Insecure bool `json:"insecure" yaml:"insecure"`
 	// InsecureReason is the prose behind Insecure, required whenever it is true. Same
-	// rule SkipCacheReason and DriftReason carry: switching off the check that decides
-	// whether an artifact came from who it claims is a claim about this cache, not a
-	// preference, and this file is committed, so the next machine to trust the cache
-	// reads the answer here rather than guessing at a bare `true`.
+	// rule SkipCacheReason and DriftReason carry: switching off the check that says
+	// whether an artifact came from who it claims is a claim about this cache. This
+	// file is committed, so the next machine to trust the cache reads the answer here.
 	InsecureReason string `json:"insecure_reason,omitempty" yaml:"insecure_reason,omitempty"`
 }
 

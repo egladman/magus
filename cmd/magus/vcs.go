@@ -660,14 +660,13 @@ func vcsAddUsage(w io.Writer) {
 // untrackedOverride phrases the refusal a bare --untracked earns.
 //
 // The flag clears the one report that separates this command from `git add -A`, and
-// what it sweeps in lands in a commit everybody pulls, so it is a claim about the
-// change rather than a preference about this run. Naming a path is the narrower
-// permission and stays free of this: it says yes to one file the caller looked at.
+// what it sweeps in lands in a commit everybody pulls. Naming a path stays free of the
+// requirement: that says yes to one file the caller looked at.
 var untrackedOverride = ward.Override{
 	Name:     "magus vcs add --untracked",
-	Silences: "stages every undeclared file at once, which is the report that separates it from git add -A",
+	Silences: "stages every undeclared file at once, dropping the report that is the difference between this and git add -A",
 	Spelling: `magus vcs add --untracked --reason "<why>"`,
-	Records:  "is kept with the staging verdict, which the report prints and -o json carries",
+	Records:  "is kept with the staging verdict, in the report and in -o json",
 }
 
 // vcsAddCmd classifies the paths, stages what is declared, and reports the rest.
@@ -683,8 +682,8 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	// Before the workspace loads: a refusal about the flags must not depend on the tree
-	// being resolvable, and must not run after anything has been staged.
+	// Before the workspace loads: a refusal about the flags must not need a resolvable
+	// tree, and must not land after anything is staged.
 	if err := ward.RequireReason(untrackedOverride, af.Untracked, af.Reason); err != nil {
 		return usagef("%s", err)
 	}
@@ -896,7 +895,7 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 		if len(v.Maintained) > 0 {
 			fmt.Printf("skipped %d file(s) magus itself maintains outside any target's declared outputs:\n", len(v.Maintained))
 			printPaths(v.Maintained)
-			fmt.Println("  these are not residue - name them explicitly or pass --untracked --reason \"<why>\" to stage them")
+			fmt.Println("  these are not residue; name them explicitly or pass --untracked --reason \"<why>\" to stage them")
 		}
 	}
 	if len(v.Staged) > 0 {
