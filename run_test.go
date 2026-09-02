@@ -302,10 +302,10 @@ func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {
 }
 
 // The two walks split where they treat a nested skip_cache target differently.
-// Running `generate` runs the `index-generate` inside it, so only the outer one is a
-// gate to invoke, while the key needs the inner one's artifact because that is where
+// Running `generate` runs the `index-generate` inside it, so only the covering one is
+// a gate to invoke, while the key needs the inner one's artifact because that is where
 // the bytes a stale replay would miss actually live.
-func TestChainSkipCacheStepsStopsAtTheOutermostGate(t *testing.T) {
+func TestChainSkipCacheStepsDropsAGateItsCallerAlreadyCovers(t *testing.T) {
 	p := &types.Project{
 		Path: ".",
 		TargetPolicies: map[string]types.Target{
@@ -323,6 +323,41 @@ func TestChainSkipCacheStepsStopsAtTheOutermostGate(t *testing.T) {
 		"descending past generate would run index-generate a second time")
 	assert.Equal(t, []string{"MAGUS.md"}, types.ChainSkipCacheOutputs(p, "lint", nil),
 		"the artifact lives on the inner target, so keying stops at neither")
+}
+
+// Root `ci` reaches `generate` through `lint` and again through `security`, and
+// `security` is a gate in its own right. Emitting both runs `generate` once on its own
+// and once more inside security's body.
+func TestChainSkipCacheStepsDropsAGateUnderAnotherGate(t *testing.T) {
+	policies := map[string]types.Target{"generate": {SkipCache: true}, "security": {SkipCache: true}}
+	outputs := map[string][]types.OutputRef{"generate": {{Glob: "MAGUS.md"}}}
+
+	p := &types.Project{
+		Path:           ".",
+		TargetPolicies: policies,
+		TargetOutputs:  outputs,
+		TargetChains: map[string][]types.ChainStep{
+			"ci":       {{Target: "lint"}, {Target: "security"}},
+			"lint":     {{Target: "generate"}},
+			"security": {{Target: "generate"}},
+		},
+	}
+	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "security"}},
+		types.ChainSkipCacheSteps(p, "ci", nil),
+		"security runs generate itself, so running both runs generate twice")
+
+	noSecurity := &types.Project{
+		Path:           ".",
+		TargetPolicies: policies,
+		TargetOutputs:  outputs,
+		TargetChains: map[string][]types.ChainStep{
+			"ci":   {{Target: "lint"}},
+			"lint": {{Target: "generate"}},
+		},
+	}
+	assert.Equal(t, []types.ChainStep{{Project: ".", Target: "generate"}},
+		types.ChainSkipCacheSteps(noSecurity, "ci", nil),
+		"with nothing above it, generate is the gate to run")
 }
 
 // A skip_cache target that maintains nothing is not a gate. image-build opts out

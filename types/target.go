@@ -430,6 +430,19 @@ func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *
 	return out
 }
 
+// chainReaches is every target reachable from name through ctx.needs, keyed the way
+// walkChain keys a visit.
+func chainReaches(p *Project, name string, lookup func(path string) *Project) map[string]bool {
+	out := map[string]bool{}
+	walkChain(p, name, lookup, func(proj *Project, n string) bool {
+		out[chainKey(proj.Path, n)] = true
+		return true
+	})
+	return out
+}
+
+func chainKey(projectPath, target string) string { return projectPath + "\x00" + target }
+
 // ChainSkipCacheSteps is the skip_cache targets a target composes with ctx.needs
 // that a caller must run itself before replaying it, in invocation order, each
 // carrying its owning project path.
@@ -447,9 +460,10 @@ func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *
 // per invocation, so it composes into `ci` and belongs nowhere near a hit path; eight
 // minutes of docker build measured the difference.
 //
-// The walk stops at the outermost qualifying target on each path because running one
-// runs everything it composes: descending past `generate` would run the
-// `index-generate` inside it a second time.
+// Running a gate runs everything it composes, so a gate the caller can reach from
+// another gate is already covered and is left out. One rule covers both shapes that
+// produces: `generate` composing `index-generate` directly, and root `ci` reaching
+// `generate` through `lint` and again through `security`.
 func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
 	var out []ChainStep
 	walkChain(p, target, lookup, func(proj *Project, name string) bool {
@@ -460,7 +474,39 @@ func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Pr
 			return true
 		}
 		out = append(out, ChainStep{Project: proj.Path, Target: name})
-		return false
+		return true
 	})
-	return out
+	if len(out) < 2 {
+		return out
+	}
+
+	owner := func(path string) *Project {
+		if path == p.Path {
+			return p
+		}
+		if lookup == nil {
+			return nil
+		}
+		return lookup(path)
+	}
+	reach := make([]map[string]bool, len(out))
+	for i, g := range out {
+		reach[i] = chainReaches(owner(g.Project), g.Target, lookup)
+	}
+	var kept []ChainStep
+	for i, g := range out {
+		covered := false
+		for j, h := range out {
+			// The second half keeps a pair that reaches each other from erasing both.
+			// Load rejects such a cycle; this only has to leave one of them standing.
+			if i != j && reach[j][chainKey(g.Project, g.Target)] && !reach[i][chainKey(h.Project, h.Target)] {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			kept = append(kept, g)
+		}
+	}
+	return kept
 }
