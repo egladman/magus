@@ -106,9 +106,49 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	require.True(t, strings.HasPrefix(first, "advise: "))
 	assert.Contains(t, first, "knowledge graph")
 
-	assert.Equal(t, "pass\n", run("session-1"),
-		"the repeat is a pass, not an advise carrying empty context: a host renders what it is handed")
+	repeat := run("session-1")
+	assert.NotContains(t, repeat, "knowledge graph", "the repeat drops the full text")
+	assert.Contains(t, repeat, "magus refs", "the repeat still names the command, which is what converts")
+	assert.Less(t, len(repeat), len(first)/4, "a repeat nobody has to read around")
+
 	assert.Contains(t, run("session-2"), "knowledge graph", "a fresh session is owed the fact once")
+}
+
+// The families that carry a command degrade rather than go silent, and the ones
+// reporting a condition still go quiet: an empty brief is how a kind says so.
+func TestAdvisoryGateDegradesToTheBrief(t *testing.T) {
+	g := hookGate(t, "session-1")
+
+	assert.Equal(t, "full text", g.onceOrBrief(advisoryCodeSearch, "full text", "run this"))
+	assert.Equal(t, "run this", g.onceOrBrief(advisoryCodeSearch, "full text", "run this"))
+	assert.Equal(t, "run this", g.onceOrBrief(advisoryCodeSearch, "full text", "run this"))
+
+	assert.Equal(t, "condition", g.onceOrBrief(advisoryStaleBinary, "condition", ""))
+	assert.Empty(t, g.onceOrBrief(advisoryStaleBinary, "condition", ""),
+		"a notice with no command to re-offer has nothing to say twice")
+
+	assert.Equal(t, "other full", g.onceOrBrief(advisoryPrecedent, "other full", "other brief"),
+		"one family's firing must not spend another's")
+}
+
+// A precedent hunt is one distinctive name; an output filter is not. The second shape
+// was 26% of grep invocations in the mining, so firing on it would train the reader to
+// skip the family.
+func TestPrecedentIdentClassifier(t *testing.T) {
+	ident := func(command string) string {
+		cmds, ok := parseGuardCommands(command)
+		require.True(t, ok, "fixture must parse")
+		return precedentIdent(cmds)
+	}
+
+	assert.Equal(t, "HandleRequest", ident("rg HandleRequest"))
+	assert.Equal(t, "parse_config", ident("rg parse_config"))
+	assert.Equal(t, "buildStep", ident("grep -r buildStep internal/"))
+
+	assert.Empty(t, ident("go test ./... | grep FAIL"), "an output filter is not a precedent hunt")
+	assert.Empty(t, ident("rg needle"), "a lowercase run is as likely to be prose")
+	assert.Empty(t, ident("rg Foo"), "under the length floor")
+	assert.Empty(t, ident("cat internal/hint/hint.go"), "reading a known path asks nothing of the graph")
 }
 
 // TestHookCmdScopesSearchAdviceFromManifest pins the wiring from the knowledge

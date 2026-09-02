@@ -33,6 +33,7 @@ const (
 	advisoryStaleBinary   advisoryKind = "stale-binary"
 	advisoryCodeSearch    advisoryKind = "code-search"
 	advisoryDocSearch     advisoryKind = "doc-search"
+	advisoryPrecedent     advisoryKind = "precedent-search"
 	advisoryStageClassify advisoryKind = "stage-classify"
 	advisoryUnleasedWrite advisoryKind = "unleased-write"
 	advisorySkillSource   advisoryKind = "skill-source"
@@ -80,16 +81,30 @@ func newAdvisoryGate(base, session string) advisoryGate {
 // A silent rule never spends its firing: the text is checked before the state is, so a
 // rule that had nothing to say has not used up the one time it may speak.
 func (g advisoryGate) once(kind advisoryKind, text string) string {
+	return g.onceOrBrief(kind, text, "")
+}
+
+// onceOrBrief returns full the first time kind fires in this session and brief on every
+// repeat after it.
+//
+// Degrading beats going silent for a family that carries a command to run. Measured over
+// 1,499 sessions: 95% of all advisory bytes were same-session repeats, and conversion
+// happens on first contact, so a repeat earns its place only at a size nobody has to read
+// around. A one-line repeat still names the command; a suppressed one cannot.
+//
+// An empty brief goes quiet on the repeat, which is right for a notice reporting a
+// condition rather than offering a command.
+func (g advisoryGate) onceOrBrief(kind advisoryKind, full, brief string) string {
 	// An unenrolled kind speaks every time, which is what an empty kind MEANS. Reading it
 	// as a key instead would give every such advisory one shared marker and silence all of
 	// them the moment any one of them fired.
-	if text == "" || kind == "" || g.base == "" {
-		return text
+	if full == "" || kind == "" || g.base == "" {
+		return full
 	}
 	if g.fireOnce(kind) {
-		return ""
+		return brief
 	}
-	return text
+	return full
 }
 
 // seen reports whether kind has already been reported for this session, WITHOUT marking
