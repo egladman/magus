@@ -444,15 +444,19 @@ var (
 	guardCdMagusRe = regexp.MustCompile(`\bcd\s+\S+\s*(&&|;)\s*(\S*/)?magus\s`)
 
 	// guardNotesWriteRe matches an invocation that would AUTHOR a note. It is the
-	// unparsable-line fallback for magusInvokes below, the way gitGuardFallback is for
+	// unparsable-line fallback for notesWriteFires below, the way gitGuardFallback is for
 	// gitGuard: anchoring the verb to the program misses every global flag in between.
 	//
 	// The path rule already refuses an agent write into a notes store, but it only ever
-	// sees file writes - and `magus notes edit` reading piped prose is a command, not a
-	// file write, so it would sail past a boundary that is supposed to be about WHO is
-	// writing rather than which surface they used. This closes that, so the rule holds
-	// however the write is spelled.
-	guardNotesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+edit\b`)
+	// sees file writes, and every verb here writes through magus instead: `edit` reads
+	// piped prose, `capture` renders a review transcript, `promote` signs a memory record.
+	// All three would sail past a boundary that is supposed to be about WHO is writing
+	// rather than which surface they used. This closes that, so the rule holds however the
+	// write is spelled.
+	//
+	// The path rule also resolves the SHARED store alone, so `capture`, which defaults to
+	// the private one, has no other rule that can see it at all.
+	guardNotesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
 
 	// guardReadAckRe matches an invocation that would mint a read receipt.
 	//
@@ -614,6 +618,7 @@ var (
 
 	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `" + hint.MemoryPut.With("<name>") + "` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is denied however the write is spelled.\n" +
+		"`capture` and `promote` are that same write under other names. `capture` files a review transcript as a note; `promote` writes a memory record into the SHARED store, where the commit puts a person's name on prose they never read.\n" +
 		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
 
 	denyScriptedRewrite = "A scripted substitute-and-write is the same edit `sed -i` is denied for, by another route. Use your editor tool for a few sites; for a whole-tree rename use the graph:\n" +
@@ -754,6 +759,26 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 	return fallback.MatchString(command)
 }
 
+// notesWriteVerbs are the `magus notes` subcommands that AUTHOR a note. `ls`, `get` and
+// `verify` read, and reading is what an agent should be doing with a note.
+//
+// `promote` is the one that reaches the shared store unconditionally: it writes an agent's
+// own memory record there for a person to sign. Its refusal of an unmodified body is what
+// makes the signature mean anything, and an agent editing the draft it wrote satisfies that
+// check while leaving nobody behind the prose.
+var notesWriteVerbs = []string{"edit", "capture", "promote"}
+
+// notesWriteFires is magusRuleFires over a SET of verbs. magusInvokes requires every word
+// it is handed, and these verbs are alternatives rather than a conjunction.
+func notesWriteFires(cmds []guardCommand, parsed bool, command string) bool {
+	if !parsed {
+		return guardNotesWriteRe.MatchString(command)
+	}
+	return slices.ContainsFunc(notesWriteVerbs, func(verb string) bool {
+		return magusInvokes(cmds, "notes", verb)
+	})
+}
+
 // searchHints is the unscoped default translator, used when no project list is
 // available (and by the pure guard tests). hookCmd builds a manifest-scoped
 // translator per invocation and hands it to evaluateBashGuardWith, so live
@@ -889,9 +914,9 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	// outranks advise, whichever rule saw the line first.
 	cmds, parsed := parseGuardCommands(command)
 	// Authoring a note is refused before anything else, because it is the one rule whose
-	// whole point is that it holds on EVERY surface: the path rule sees file writes, and a
-	// note authored from piped prose is a command, so only this catches it.
-	if magusRuleFires(cmds, parsed, command, guardNotesWriteRe, "notes", "edit") {
+	// whole point is that it holds on EVERY surface: the path rule sees file writes, and
+	// every verb that authors a note is a command, so only this catches them.
+	if notesWriteFires(cmds, parsed, command) {
 		return bashGuardVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a

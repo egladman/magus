@@ -511,10 +511,10 @@ func TestDenyNotesWriteDefendsAnEmptyDeclaredStore(t *testing.T) {
 	assert.Empty(t, denyNotesWrite("internal/foo.go"))
 }
 
-// TestGuardDeniesAuthoringANote closes the surface the path rule cannot see. `magus notes
-// edit` can take prose on stdin, which is a COMMAND rather than a file write, so without
-// this an agent could author a note through a boundary that is supposed to be about who is
-// writing rather than which surface they reached for.
+// TestGuardDeniesAuthoringANote closes the surface the path rule cannot see. Every write
+// verb here is a COMMAND rather than a file write, so without this an agent could author a
+// note through a boundary that is supposed to be about who is writing rather than which
+// surface they reached for.
 func TestGuardDeniesAuthoringANote(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
@@ -528,11 +528,27 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 		"magus -o json notes edit foo",
 		// A line the parser cannot read still falls back to the pattern.
 		"magus notes edit foo && (",
+		// `capture` writes a transcript note, and it defaults to the PRIVATE store, which
+		// denyNotesWrite never resolves. Nothing else in the guard can see this one.
+		"magus notes capture",
+		"magus notes capture --shared --title x",
+		"./magus --root . notes capture",
+		"magus notes capture && (",
+		// `promote` always writes the SHARED store, so an unguarded one commits an agent's
+		// memory record under whoever runs it.
+		"magus notes promote review-cache-keys",
+		"magus -o json notes promote foo --name bar",
+		"cd /tmp && ./magus notes promote foo",
+		"magus notes promote foo && (",
 	} {
 		v := evaluateBashGuard(cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 		assert.Contains(t, v.Deny, "magus memory put", "the reason routes to the store an agent MAY write")
+		assert.Equal(t, denyRule{Name: denyRuleNotesAuthor}, v.Rule, "%q must deny as the notes rule", cmd)
 	}
+	// A tool argument after `--` is read by the tool, not by magus, so it must not read as
+	// note-authoring.
+	assert.Empty(t, evaluateBashGuard("magus run go::go-test . -- notes capture").Deny)
 	// Reading is untouched: the boundary is on authorship, not on access.
 	for _, cmd := range []string{"magus notes ls", "magus notes get foo", "magus notes verify"} {
 		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q only reads", cmd)
