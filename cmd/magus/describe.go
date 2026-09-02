@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -93,24 +94,26 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 func describeUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus describe <noun> [<name>] [flags]")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Define a magus concept and list every entity of that kind. Singular and")
-	fmt.Fprintln(os.Stderr, "plural are interchangeable; pass a name to detail one entity.")
+	tty.Prose(os.Stderr, tty.SystemProbe,
+		"Define a magus concept and list every entity of that kind.",
+		"Singular and plural are interchangeable; pass a name to detail one entity.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Nouns (each accepts singular or plural):")
-	fmt.Fprintln(os.Stderr, "  spell        language/runtime adapters")
-	fmt.Fprintln(os.Stderr, "  charm        execution modifiers (rw, gha) and the targets that declare them")
-	fmt.Fprintln(os.Stderr, "  target       targets dispatched to projects; `target <path:target>` evaluates one")
-	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (ctx.needs DAG) per project")
-	fmt.Fprintln(os.Stderr, "  project      directories recognized as units of work; `project <path>` details one")
-	fmt.Fprintln(os.Stderr, "  workspace    the active workspace root and its config")
-	fmt.Fprintln(os.Stderr, "  module       magus stdlib modules; `module <name>` lists its methods + signatures")
-	fmt.Fprintln(os.Stderr, "  mcp-tool     tools exposed to AI agents via the MCP daemon")
-	fmt.Fprintln(os.Stderr, "  file         classify paths against declared globs: generated output, source, maintained, or unclaimed")
-	fmt.Fprintln(os.Stderr, "  tool         binaries the spells drive, their probed versions, and the window each is held to")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  spell        ", "language/runtime adapters")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  charm        ", "execution modifiers (rw, gha) and the targets that declare them")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  target       ", "targets dispatched to projects; `target <path:target>` evaluates one")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  graph        ", "target dependency graph (ctx.needs DAG) per project")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  project      ", "directories recognized as units of work; `project <path>` details one")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  workspace    ", "the active workspace root and its config")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  module       ", "magus stdlib modules; `module <name>` lists its methods + signatures")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  mcp-tool     ", "tools exposed to AI agents via the MCP daemon")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  file         ", "classify paths against declared globs: generated output, source, maintained, or unclaimed")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  tool         ", "binaries the spells drive, their probed versions, and the window each is held to")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
-	fmt.Fprintln(os.Stderr, "See also: `magus config view` for runtime configuration; `magus graph` for")
-	fmt.Fprintln(os.Stderr, "the dependency DAG and the knowledge graph (export, stats).")
+	tty.Prose(os.Stderr, tty.SystemProbe, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
+	tty.Prose(os.Stderr, tty.SystemProbe,
+		"See also: `magus config view` for runtime configuration;",
+		"`magus graph` for the dependency DAG and the knowledge graph (export, stats).")
 }
 
 func describeGraph(ctx context.Context, root string, args []string) error {
