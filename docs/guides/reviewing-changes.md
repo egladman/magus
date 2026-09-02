@@ -48,12 +48,20 @@ workspace's advisors say, which human-authored notes anchor a file or symbol you
 which `compat(until:)` markers sit in the files you changed, and what the authors asked
 magus while writing it.
 
-That last one is the EVIDENCE section, and it is the only one about the reasoning rather
-than the result: the graph queries, explains and lookups an agent ran before it wrote,
-one line per distinct subject. It appears when the agent worked under a lease and its host
-wires `magus agent install`, because a lease is the only identity shared by the process
-that observed the question and the write it explains. Without one the section says so, so
-a silent record never reads as a change nobody researched.
+That last one is the EVIDENCE section. Every other section describes the result; this one
+describes the reasoning, as the graph queries, explains and lookups an agent ran before it
+wrote, one line per distinct subject and no answer text.
+
+It needs two things: a host that wires `magus agent install`, and an agent working under a
+lease (`BAGGAGE magus.lease`). The lease is the join, because it is the one identity shared
+by the process that saw the question and the write it explains, and it holds across an
+orchestrator and the sub-agents it hands work to.
+
+The record lives in the cache of the tree the work was done in, so a reviewer reading
+someone else's branch has none of it. When the list is empty the section names which of the
+four silences it is: nothing observed here, observations that carry no lease, leases that
+wrote other files, or authors who genuinely asked magus nothing. Only the last is a fact
+about the change.
 
 None of it is a verdict. Nothing is gated on it and the exit code does not change. Each
 section says when it could not measure something, so an empty one reads as "nobody
