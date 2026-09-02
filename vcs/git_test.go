@@ -639,6 +639,55 @@ func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
 	}
 }
 
+// TestTagsNamesATagSharedWithABranch pins %(refname:lstrip=2) over %(refname:short).
+//
+// :short abbreviates a ref only as far as it stays unambiguous, so a branch named for the
+// release it was cut from renders refs/tags/v1.0.0 as "tags/v1.0.0". That name matches no
+// "v*" pattern and splits into prefix "tags/", so the tag vanished from every caller asking
+// whether HEAD carries a release - which is how v0.4.0 was released by a build that could
+// not see its own tag.
+func TestTagsNamesATagSharedWithABranch(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	gitRun(t, repo, "tag", "v1.0.0")
+	gitRun(t, repo, "branch", "v1.0.0")
+
+	tags, err := gitVCS{}.Tags(t.Context(), repo, "v*")
+	require.NoError(t, err, "Tags")
+	require.Len(t, tags, 1)
+	assert.Equal(t, "v1.0.0", tags[0].Name)
+	assert.Empty(t, tags[0].Prefix, "the tag is at the root, not under a tags/ module prefix")
+}
+
+// TestTagsSeesLooseAndPackedRefs covers both ref storages in one repository, since a
+// release cut today is a loose file while the repository's history is packed - and pins
+// that pattern filtering still keeps wildcards from crossing "/".
+func TestTagsSeesLooseAndPackedRefs(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	gitRun(t, repo, "tag", "v1.0.0")
+	gitRun(t, repo, "tag", "libs/diagnostics/v0.1.0")
+	gitRun(t, repo, "pack-refs", "--all")
+	gitRun(t, repo, "tag", "v1.1.0")
+
+	all, err := gitVCS{}.Tags(t.Context(), repo, "")
+	require.NoError(t, err, "Tags")
+	names := make([]string, 0, len(all))
+	for _, tag := range all {
+		names = append(names, tag.Name)
+	}
+	assert.ElementsMatch(t, []string{"v1.0.0", "libs/diagnostics/v0.1.0", "v1.1.0"}, names)
+
+	roots, err := gitVCS{}.Tags(t.Context(), repo, "v*")
+	require.NoError(t, err, "Tags")
+	rootNames := make([]string, 0, len(roots))
+	for _, tag := range roots {
+		rootNames = append(rootNames, tag.Name)
+	}
+	assert.ElementsMatch(t, []string{"v1.0.0", "v1.1.0"}, rootNames,
+		"a wildcard stops at / so the namespaced tag stays out")
+}
+
 // TestChangedFilesKeepsNonASCIIPathsRaw pins core.quotePath=false on BOTH of ChangedFiles'
 // probes. git otherwise renders a path outside ASCII as a C-quoted, backslash-escaped
 // literal ("uni/caf\303\251.md"), and project.normalizeFiles only trims and slash-converts -

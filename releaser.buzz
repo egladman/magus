@@ -80,6 +80,42 @@ export fun releasableModules(projects: [any]) > [{str: str}] {
     return mods;
 }
 
+// isReleaseTag reports whether name is a ROOT release tag: "v" followed by a
+// digit, with no module prefix.
+//
+// A `v*` refspec is NOT a version filter, and reading it as one has already
+// shipped a bug twice. This repository carries a tag called
+// "verified-refinements": it matches the glob, sorts newest by creation date, and
+// once became the version the published install instructions told people to
+// download. The "/" check is what makes the answer ROOT-specific, so a caller
+// handed the unfiltered tag list cannot mistake libs/gopherbuzz/v0.1.0 for the
+// magus release it sits beside.
+//
+// A shape check on the NAME, not a semver parse, because the two answer different
+// questions: parsing says what a tag means, and this says which tags are eligible
+// to be asked. docs/site/release.buzz keeps its own isVersionTag rather than
+// importing this one: that module is self-contained on lib/text so it unit-tests
+// inside the docs project, and it wants the stricter three-numeric-parts shape
+// for rendering a download URL.
+export fun isReleaseTag(name: str) > bool {
+    if (!name.startsWith("v")) { return false; }
+    if (name.indexOf("/") != null) { return false; }
+    if (name.len() < 2) { return false; }
+    final b = name.byte(1);
+    return b >= 48 and b <= 57;
+}
+
+test "isReleaseTag accepts root release tags and rejects the lookalikes" {
+    std\assert(isReleaseTag("v0.4.0"), message: "a plain release tag");
+    std\assert(isReleaseTag("v1.0.0-rc.1"), message: "a prerelease suffix");
+    std\assert(!isReleaseTag("verified-refinements"), message: "the tag that caused this");
+    std\assert(!isReleaseTag("vendor"), message: "a word starting with v");
+    std\assert(!isReleaseTag("libs/gopherbuzz/v0.1.0"), message: "a nested module's tag is not the root's");
+    std\assert(!isReleaseTag("0.4.0"), message: "no leading v");
+    std\assert(!isReleaseTag("v"), message: "nothing after the v");
+    std\assert(!isReleaseTag(""), message: "the empty name");
+}
+
 // currentVersion returns a module's highest STABLE released version, or "" when
 // it has never had one. Compared on the PARSED major/minor/patch, not the tag
 // text, because string order puts v0.10.0 before v0.9.0.
