@@ -932,6 +932,20 @@
               "target": "test"
             }
           ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "coverage.hand.out"
+            },
+            {
+              "project": ".",
+              "glob": "assets/coverage.svg"
+            },
+            {
+              "project": ".",
+              "glob": "badge.buzz"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
