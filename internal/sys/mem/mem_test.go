@@ -80,6 +80,15 @@ func TestNarrowToLimit(t *testing.T) {
 	}
 }
 
+// BudgetMB is the arithmetic machine-wide admission is sized from, so an unmeasurable
+// host must read as "no budget to arbitrate" rather than as a budget of nothing - the
+// difference between admitting everything and refusing everything.
+func TestBudgetMB(t *testing.T) {
+	assert.Equal(t, 12288, BudgetMB(16<<30), "three quarters of the machine")
+	assert.Equal(t, 0, BudgetMB(0), "an unmeasurable host has no budget to arbitrate")
+	assert.Equal(t, 0, BudgetMB(-1))
+}
+
 // UsableBytes never exceeds the machine, whatever this host reports.
 func TestUsableNeverExceedsTotal(t *testing.T) {
 	ctx := context.Background()

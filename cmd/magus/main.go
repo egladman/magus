@@ -58,6 +58,7 @@ import (
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/types"
 )
 
@@ -174,6 +175,11 @@ type dispatchProfile struct {
 	needsConfig    bool // load magus.yaml + env vars
 	needsDaemonFwd bool // attempt forward to a running daemon
 	needsWorkspace bool // call loadMagus + start per-process proc server
+	// spawnsWork marks the invocations that will run targets, as opposed to answering a
+	// question about them. Only these pay for machine-wide admission: `magus ls` costs
+	// the same however loaded the machine is, and starting a daemon for one would make
+	// every read command spawn a background process.
+	spawnsWork bool
 }
 
 // isUsageOnlyInvocation reports whether a run/affected invocation only wants usage
@@ -361,7 +367,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		if sub == "affected" && isForensicAffected(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
-		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
+		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true, spawnsWork: true}
 	case "config":
 		// config history/cache need the workspace; view/set/help do not.
 		if len(subArgs) > 0 {
@@ -569,6 +575,9 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		stopSock := trace.phase("startup.daemon_socket_lookup")
 		sock := os.Getenv("MAGUS_DAEMON_SOCKET")
 		stableSock := false
+		// topLevel: no parent exported a socket, so this process is the head of its own
+		// tree rather than a magus a magusfile spawned.
+		topLevel := sock == ""
 		if sock == "" {
 			// daemon.enabled gates discovery of the SHARED, persistent daemon only.
 			// When off, this invocation never adopts the stable per-user daemon and
@@ -576,7 +585,20 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			// MAGUS_DAEMON_SOCKET already set (below) still forwards to its parent, and
 			// a top-level still stands up its own per-process pool for its children.
 			if globalCfg.Daemon.Enabled {
-				if s, ok := proc.LookupStableSocket(rootCtx); ok {
+				s, ok := proc.LookupStableSocket(rootCtx)
+				// A run needs the daemon whether or not one is up: it owns the machine's
+				// build budget, and nothing else can arbitrate it. Starting it is doing
+				// what was asked rather than a side effect, the same reading that lets
+				// `graph export --follow` start one for the console.
+				//
+				// admissionDaemonAddr, not the stable path: a configured daemon.address
+				// is where the daemon this run starts will actually bind, and looking for
+				// it anywhere else finds nothing however healthy it is.
+				if !ok && profile.spawnsWork {
+					s = ensureAdmissionDaemon(rootCtx, admissionDaemonAddr(globalCfg))
+					ok = s != ""
+				}
+				if ok {
 					sock = s
 					stableSock = true
 					// Propagate to child processes spawned by this invocation.
@@ -587,6 +609,23 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			stableSock = strings.HasSuffix(sock, "/"+proc.StableSocketName())
 		}
 		stopSock()
+		// A TOP-LEVEL run stays in this process. The daemon executes an adopted run in
+		// its own process, where the run's console output goes to the daemon's log and
+		// the caller's terminal shows nothing at all - measured, not theoretical. That
+		// was tolerable while nobody started a daemon for an ordinary build; it is not,
+		// now that a run starts one for admission. The budget travels over the socket
+		// instead, which is what the daemon is for here: it arbitrates the machine, it
+		// does not take the work. A NESTED call still forwards to the socket its parent
+		// exported, which is the parent's own process and prints where the parent does.
+		// Its children stay here too, which is why the socket is cleared rather than
+		// kept: a child that adopted into the daemon would print into the daemon's log
+		// for the same reason. This process hosts its own pool, as it does when no
+		// daemon is running, and the machine budget is what keeps the two pools from
+		// oversubscribing the host.
+		if stableSock && topLevel && profile.spawnsWork {
+			sock = ""
+			_ = os.Unsetenv("MAGUS_DAEMON_SOCKET")
+		}
 		if sock != "" {
 			stopFwd := trace.phase("startup.daemon_forward")
 			// Skip client-side FindRoot when forwarding to the stable daemon; the daemon walks itself.
@@ -1050,6 +1089,18 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		n = cache.DefaultConcurrency()
 	}
 	lim := cache.NewLimiter(n)
+	// The machine budget. One daemon per user means one of these per machine, which is
+	// the whole point: a limiter caps a process, this caps the host.
+	//
+	// Sized from HOST facts, never from the workspace that happened to start the daemon.
+	// The daemon is started by whichever run got there first, and its concurrency is
+	// that ONE tree's magus.yaml: a project setting `concurrency: 2` for its own reasons
+	// would have capped every other worktree on the machine at two slots between them,
+	// for as long as that daemon lived. Memory comes from what this process may commit,
+	// so a daemon inside a memory-limited container budgets the container rather than
+	// the machine it sits on; slots come from the cores, which is the same ceiling
+	// ClampConcurrency holds every individual run to.
+	machineBudget := cache.NewMachineBudget(mem.BudgetMB(mem.UsableBytes(ctx)), cache.MachineCeiling())
 
 	ttl := cfg.Daemon.IdleTTL
 	if ttl <= 0 {
@@ -1077,7 +1128,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	daemonRuns = console.NewRunRegistry()
 
 	declared := resolveDeclaredWorkspaces(cfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
-	reg := newWSRegistry(ctx, lim, ttl, sharedTel)
+	reg := newWSRegistry(ctx, lim, machineBudget, ttl, sharedTel)
 	reg.setDeclared(declared)
 	daemonRegistry = reg // publish so startMCPWithDaemon can adopt the bridge workspace into it
 
@@ -1128,6 +1179,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		ConfigReloader:  reg.evictAll,
 		Context:         ctx,
 		Limiter:         lim,
+		MachineBudget:   machineBudget,
 		Version:         version,
 		Address:         cfg.Daemon.Address,
 	})
@@ -1142,6 +1194,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		return
 	}
 	daemonServer = srv // publish so serverStart's blocking loop unblocks on an RPC shutdown
+	watchAdmissionIdle(ctx, srv)
 	go func() {
 		// Tear down on either path: a signal (ctx cancelled via NotifyContext) or an RPC
 		// `server stop` (which calls srv.Close, closing srv.Done). Waiting only on ctx.Done
@@ -1335,8 +1388,14 @@ func exitCodeOf(err error) int {
 	}
 	slog.Error(err.Error())
 	// A failure that names its own status keeps it, the same question internal/proc's
-	// server asks of an adopted run. A contended no-wait workspace lock exits 75
-	// (EX_TEMPFAIL), so a caller can retry a busy machine and not a broken build.
+	// server asks of an adopted run. Two say 75 (EX_TEMPFAIL), so a caller can retry a
+	// busy machine and not a broken build: a contended no-wait workspace lock, and a
+	// step the machine's build budget could not seat (MGS3009).
+	//
+	// Checked after the branches above and not before them: a run where real targets
+	// ALSO failed reaches errSilent first and stays 1, which is the more actionable
+	// verdict - a broken build does not become a scheduling problem because a peer
+	// happened to be busy too.
 	if code, ok := proc.ExitCode(err); ok {
 		return code
 	}

@@ -40,26 +40,32 @@ type Cache struct {
 	dir string
 	// inflight records running targets on disk so a killed run can be reported by the
 	// next one; nil when the cache has no directory to write into.
-	inflight       *inflight
-	mutable        bool // true = read+write (default); false = read-only
-	sizeMB         int
-	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
-	log            *slog.Logger
-	logLevel       slog.Level // effective minimum level; used by captureRun
-	silent         bool       // silent output mode: bounded failure dumps + bubbled important lines
-	collapse       bool       // collapse-on-success: withhold live subprocess output, replay it only on failure
-	hits           atomic.Int64
-	misses         atomic.Int64
-	errs           atomic.Int64
-	savedMs        atomic.Int64  // summed Manifest.DurationMs over hits: work replayed instead of run
-	diskMu         sync.Mutex    // guards the memoized on-disk size below
-	diskBytes      int64         // last computed cache size in bytes
-	diskAt         time.Time     // when diskBytes was computed (zero = never)
-	mtimes         *mtimeStore   // mtime fast-path for source hashing
-	outputs        *OutputStore  // per-execution captured-output store (target output refs)
-	exportMu       sync.RWMutex  // guards Export/Import against concurrent Run writes
-	evictMu        sync.Mutex    // serializes evictLRU so concurrent Runs don't over-evict each other's fresh manifests
-	remote         RemoteBackend // optional remote backend; nil = local-only
+	inflight *inflight
+	// machine arbitrates concurrency slots and declared memory across every magus on
+	// the host; nil when no arbiter was wired, which admits every step as before. Built
+	// in Open from the two fields below, which is where the caller's logger exists.
+	machine         *machineGate
+	machineAdmitter MachineAdmitter
+	machineNoWait   bool
+	mutable         bool // true = read+write (default); false = read-only
+	sizeMB          int
+	maxImportBytes  int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
+	log             *slog.Logger
+	logLevel        slog.Level // effective minimum level; used by captureRun
+	silent          bool       // silent output mode: bounded failure dumps + bubbled important lines
+	collapse        bool       // collapse-on-success: withhold live subprocess output, replay it only on failure
+	hits            atomic.Int64
+	misses          atomic.Int64
+	errs            atomic.Int64
+	savedMs         atomic.Int64  // summed Manifest.DurationMs over hits: work replayed instead of run
+	diskMu          sync.Mutex    // guards the memoized on-disk size below
+	diskBytes       int64         // last computed cache size in bytes
+	diskAt          time.Time     // when diskBytes was computed (zero = never)
+	mtimes          *mtimeStore   // mtime fast-path for source hashing
+	outputs         *OutputStore  // per-execution captured-output store (target output refs)
+	exportMu        sync.RWMutex  // guards Export/Import against concurrent Run writes
+	evictMu         sync.Mutex    // serializes evictLRU so concurrent Runs don't over-evict each other's fresh manifests
+	remote          RemoteBackend // optional remote backend; nil = local-only
 	// annotator folds failure output and raises notices for whichever CI
 	// provider is running the job; Nop off CI, so call sites never branch.
 	// annotateMu serializes a whole failure block (group open, dump, group
@@ -287,6 +293,9 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	}
 	for _, o := range opts {
 		o(c)
+	}
+	if c.machineAdmitter != nil {
+		c.machine = &machineGate{admit: c.machineAdmitter, noWait: c.machineNoWait, log: c.log}
 	}
 	if err := c.initSigning(); err != nil {
 		return nil, err
@@ -962,6 +971,36 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := lim.AcquireN(gctx, slots); err != nil {
 				return fail(err)
 			}
+			// The machine-wide half of the same admission, taken after the local slot so
+			// in-process ordering is unchanged: a step the machine cannot seat queues
+			// here, behind peers this run does not schedule, rather than starting
+			// alongside them and taking the host down.
+			//
+			// It is taken while this step already holds the isolation lock (an exclusive
+			// step took it above) and its local slots. That ordering is deliberate but it
+			// is not free: an exclusive step queued on the machine budget blocks every
+			// replay in THIS process for as long as it waits, so one worktree's wait
+			// becomes another target's wait here. Acquiring the machine budget first
+			// would trade that for a worse one - the step would hold machine-wide memory
+			// while waiting for a local lock, which is the resource that spans every
+			// worktree rather than just this run.
+			releaseMachine, machineErr := c.machine.acquire(gctx, types.MachineClaim{
+				Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
+				MemoryMB: s.MemoryMB, Slots: slots,
+				PID: os.Getpid(), Dir: workingDir(),
+				Invocation: selfInvocation(gctx), Ancestors: ancestorInvocations(gctx),
+			})
+			if machineErr != nil {
+				lim.ReleaseN(slots)
+				c.logPool(gctx, lim)
+				// An independent finding, so it is marked as one: nothing upstream failed
+				// and the batch was not cancelled, the machine refused this step on its
+				// own account. Without this the refusal takes the never-started path,
+				// where it spends no failure budget and joins no error, and a run that did
+				// nothing reports success.
+				ran = true
+				return fail(machineErr)
+			}
 			// Report occupancy as it changes, so an interactive run can show
 			// a live pool counter. Emitted on both edges of the slot's life:
 			// once here (this step is now running) and once after release
@@ -975,6 +1014,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			doneInflight := c.inflight.start(s.ProjectPath, s.Target)
 			defer func() {
 				doneInflight()
+				// The machine claim goes back BEFORE the slot, because freeing the slot is
+				// what wakes a local waiter: releasing in the other order lets that waiter
+				// ask the budget while this step's claim is still held, and a plain
+				// sequential run then queues behind memory it has already returned.
+				releaseMachine()
 				lim.ReleaseN(slots)
 				c.logPool(gctx, lim)
 			}()

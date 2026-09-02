@@ -1,12 +1,12 @@
 //go:build windows
 
-package cache
+package pid
 
 import "os"
 
-// processAlive on Windows: FindProcess only succeeds for a live process, unlike unix
+// Alive on Windows: FindProcess only succeeds for a live process, unlike unix
 // where it always succeeds and the signal does the work.
-func processAlive(pid int) bool {
+func Alive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}

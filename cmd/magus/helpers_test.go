@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/cache"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -194,6 +195,34 @@ func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
 	_, ok := proc.ExitCode(errors.New("the work failed"))
 	assert.False(t, ok, "an ordinary failure names no code and stays the daemon's default 1")
 }
+
+// TestMachineBusyRidesTheExitCodeSeam pins that a machine-budget refusal needs no
+// branch of its own in exitCodeOf. The local path and the daemon now ask the error the
+// same question, so the refusal must answer it rather than be recognised by type or by
+// diagnostic code - which is what lets one seam serve both this and a contended lock.
+func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
+	// The refusal is built inside the cache, so stand in for it with an error carrying
+	// the same two properties the real one does (machine_test.go pins that it does).
+	busy := machineBusyStub{types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")}
+
+	code, ok := proc.ExitCode(busy)
+	require.True(t, ok, "the daemon must be able to read the code off a forwarded refusal")
+	assert.Equal(t, cache.ExitCodeMachineBusy, code)
+	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(busy), "and the local path must agree")
+	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(fmt.Errorf("run: %w", busy)),
+		"through every layer between the step and main")
+
+	// A run where real targets ALSO failed is a broken build, not a scheduling problem:
+	// errSilent is matched first and keeps 1, so a peer being busy cannot rewrite the
+	// verdict on work that actually ran.
+	assert.Equal(t, 1, exitCodeOf(errors.Join(errSilent{exitCode: 1}, busy)))
+}
+
+type machineBusyStub struct{ error }
+
+func (machineBusyStub) ExitCode() int { return cache.ExitCodeMachineBusy }
+
+func (e machineBusyStub) Unwrap() error { return e.error }
 
 func TestUsagefCarriesTheMisuseMessage(t *testing.T) {
 	err := usagef("magus diff: %d is too many", 3)

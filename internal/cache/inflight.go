@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sys/pid"
 )
 
 // inflight records which targets are RUNNING, on disk, so the answer survives a death
@@ -206,7 +207,7 @@ func (i *inflight) takeAbandoned() []inflightTarget {
 		// number is free or belongs to something unrelated. Testing the pid first, as an
 		// unconditional short-circuit, made exactly that case invisible.
 		p := prev[0]
-		if p.Host == host && (p.Pid == self || processAlive(p.Pid)) {
+		if p.Host == host && (p.Pid == self || pid.Alive(p.Pid)) {
 			continue // ourselves, or a live peer mid-run
 		}
 		dead = append(dead, prev...)

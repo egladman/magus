@@ -1,6 +1,6 @@
 //go:build !windows
 
-package cache
+package pid
 
 import (
 	"errors"
@@ -8,11 +8,11 @@ import (
 	"syscall"
 )
 
-// processAlive reports whether pid is still running. Signal 0 performs the permission
+// Alive reports whether pid is still running. Signal 0 performs the permission
 // and existence checks without delivering anything, which is the portable-POSIX way to
 // ask. A process owned by another user answers EPERM, and that still proves it exists,
 // so only ESRCH ("no such process") counts as dead.
-func processAlive(pid int) bool {
+func Alive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}

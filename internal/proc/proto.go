@@ -37,7 +37,55 @@ const (
 
 	typeJob      = "job"
 	typeJobReply = "job.reply"
+
+	typeBudgetAcquire      = "budget.acquire"
+	typeBudgetAcquireReply = "budget.acquire.reply"
+	typeBudgetRelease      = "budget.release"
+	typeBudgetReleaseReply = "budget.release.reply"
 )
+
+// budgetMagic guards the two frames above. Both MUTATE state shared by every magus on
+// the machine - one takes a claim against the host's memory, the other hands one back -
+// and a release in particular is unauthenticated denial of service if anything on the
+// socket can send it: drop a peer's claim and the budget re-admits work against memory
+// that is still held. The same reasoning as jobMagic and shutdownMagic, and the same
+// shape, so a request without it is answered as unrecognized rather than acted on.
+const budgetMagic = "magus-budget-v1"
+
+// budgetAcquireRequest asks the machine budget to seat one step. It is a POLL, not a
+// blocking wait: the budget answers immediately with a grant, a refusal, or a queue
+// position, and the client owns the waiting. The client is the process that can print
+// the wait and whose death should retire the waiter, and a poll needs no per-connection
+// queue state to survive a daemon restart.
+type budgetAcquireRequest struct {
+	Magic    string `json:"magic"`
+	Protocol string `json:"protocol"`
+	// Waiter identifies this step across its polls, so the budget can hold its place.
+	Waiter string             `json:"waiter"`
+	Claim  types.MachineClaim `json:"claim"`
+}
+
+// budgetAcquireReply carries the verdict. Err is non-empty only when this server holds
+// no budget to arbitrate, which a client treats as no arbiter rather than as a failure.
+type budgetAcquireReply struct {
+	Verdict types.MachineVerdict `json:"verdict"`
+	Err     string               `json:"err,omitempty"`
+}
+
+// budgetReleaseRequest returns a granted claim (ID) or retires a waiter that gave up
+// (Waiter). One frame for both because they are the same event from the budget's side:
+// this step is no longer asking for room.
+type budgetReleaseRequest struct {
+	Magic    string `json:"magic"`
+	Protocol string `json:"protocol"`
+	ID       string `json:"id,omitempty"`
+	Waiter   string `json:"waiter,omitempty"`
+}
+
+// budgetReleaseReply is the response to a release. It carries no fields: the client
+// only checks the frame's type tag, so a field added here would need a matching decode
+// arm added to the client at the same time.
+type budgetReleaseReply struct{}
 
 // jobMagic guards jobRequest: a fire-and-forget submission that the daemon runs in the
 // background is a privileged operation (it executes arbitrary magus args), so a request
@@ -135,6 +183,10 @@ type StatusReply struct {
 	// Services are the long-running shared services the daemon is hosting right now.
 	// Nil for a per-process proc server (no cross-invocation service host).
 	Services []types.StatusService `json:"services,omitempty"`
+	// Machine is the host-wide admission budget this daemon arbitrates: what every
+	// magus on the machine holds and who is queued for it. Nil for a per-process proc
+	// server, which arbitrates nothing beyond itself.
+	Machine *types.MachineSnapshot `json:"machine,omitempty"`
 }
 
 // Call describes a single adopted call currently executing.

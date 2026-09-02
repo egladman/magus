@@ -341,6 +341,16 @@ down. What remains is real - the console and the MCP server both need one
 running. "No second toolchain" holds for installation and holds less firmly at
 runtime.
 
+It got one degree less firm on 2026-09-02. `magus run` and `magus affected` now
+START a daemon if none is up, because it owns the machine-wide build budget and
+nothing else can arbitrate it, so a run is the first command that spawns a
+long-lived process without being asked to. Two things keep this inside the
+promise rather than outside it: no capability is lost when the daemon cannot
+start (the run proceeds unarbitrated and says so once), and a daemon started this
+way exits by itself after ten minutes of nobody needing it. Still nothing extra
+to install; one more thing that runs. The reasoning, and the doctrine it amends,
+are in [the daemon decision](guides/integrations/editor/design.md).
+
 **The upgrade path runs on a server we operate.** `magus self update` fetches
 `https://eli.gladman.cc/magus/public/release/index.json`. We sign the releases
 and you opt into the check, and it remains infrastructure we control, in a

@@ -19,9 +19,9 @@ const (
 	// LowHeadroomDivisor sets the threshold: the watchdog talks below total/8. Above
 	// it a build is using the machine, which is what a build is for.
 	//
-	// Exported because the agent guard advises on the same threshold. Two copies
-	// could drift into a guard that calls a machine busy while the run it is about to
-	// start calls the same machine healthy.
+	// This is the OBSERVED half and it only ever warns. What magus queues or refuses on
+	// is the DECLARED half, cache.MachineBudget, so the same command reaches the same
+	// verdict whatever else the machine happens to be doing.
 	LowHeadroomDivisor = 8
 
 	// reWarnDropBytes is how much further the floor must fall before saying so

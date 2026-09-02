@@ -22,7 +22,9 @@ import (
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service/console"
+	sysPID "github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -214,14 +216,24 @@ func servingSuffix(st *proc.StatusReply) string {
 	return ", serving " + strings.Join(roots, ", ")
 }
 
-// daemonChildEnv returns this process's environment with MAGUS_DAEMON_SOCKET removed. A
-// child inheriting it believes it is already adopted, binds no socket, and reports the
-// parent's - leaving a daemon `server stop` cannot find.
+// daemonChildEnv returns this process's environment with the variables a daemon must not
+// inherit removed.
+//
+// MAGUS_DAEMON_SOCKET: a child inheriting it believes it is already adopted, binds no
+// socket, and reports the parent's - leaving a daemon `server stop` cannot find.
+//
+// The invocation ancestry and recursion depth, because THE DAEMON DESCENDS FROM NOBODY -
+// the same rule submitJob already applies to a job's context. A run starts the daemon,
+// so without this the daemon's process environment permanently records that one run's
+// ancestry, and every workspace it serves would read those refs as its own: claims
+// belonging to an invocation that ended hours ago would be excused from the budget, and
+// a run with no ancestry of its own would be judged a nested magus that had lost it.
 func daemonChildEnv() []string {
+	drop := []string{"MAGUS_DAEMON_SOCKET=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
-		if strings.HasPrefix(kv, "MAGUS_DAEMON_SOCKET=") {
+		if slices.ContainsFunc(drop, func(p string) bool { return strings.HasPrefix(kv, p) }) {
 			continue
 		}
 		out = append(out, kv)
@@ -238,7 +250,7 @@ func daemonChildEnv() []string {
 // user set is honored. Any other caller must pass an explicit `server start --foreground`:
 // daemonDetachEnv is read only on the server-start path, so re-execing another command with
 // it set would rerun that command instead of starting a daemon.
-func spawnDetachedDaemon(args []string) (pid int, logPath string, err error) {
+func spawnDetachedDaemon(args []string, extraEnv ...string) (pid int, logPath string, err error) {
 	exe, err := os.Executable()
 	if err != nil {
 		exe = os.Args[0]
@@ -251,7 +263,7 @@ func spawnDetachedDaemon(args []string) (pid int, logPath string, err error) {
 	defer func() { _ = logf.Close() }()
 
 	cmd := exec.Command(exe, args...) //nolint:gosec // G702: re-execs this same magus binary to detach the daemon
-	cmd.Env = append(daemonChildEnv(), daemonDetachEnv+"=1")
+	cmd.Env = append(append(daemonChildEnv(), daemonDetachEnv+"=1"), extraEnv...)
 	cmd.Stdin = nil
 	cmd.Stdout = logf
 	cmd.Stderr = logf
@@ -311,24 +323,153 @@ func ensureConsoleDaemon(ctx context.Context, addr, root string) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			reapDaemon(pid)
+			reapDaemon(ctx, pid, "")
 			return fmt.Errorf("daemon (pid %d) did not serve the console at %s within %s; see %s", pid, addr, consoleReadyTimeout, logPath)
 		}
 		select {
 		case <-ctx.Done():
-			reapDaemon(pid)
+			reapDaemon(ctx, pid, "")
 			return ctx.Err()
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }
 
-// reapDaemon kills a daemon this process spawned but never got a console out of. Without it
-// every failure path leaks the process: with console.enabled=false the wait times out by
-// construction, so each attempt left one more running.
+// ensureAdmissionDaemon brings up the daemon that owns this machine's build budget and
+// returns its socket, or "" when it could not be started.
 //
-// os.FindProcess rather than the spawned handle, which was Release()d to detach it.
-func reapDaemon(pid int) {
+// This is the one place magus starts a daemon for a command that did not ask for one,
+// and it is deliberate: machine-wide admission has no other arbiter, so a run with no
+// daemon is a run that admits itself against a machine several other magus processes
+// are also admitting themselves against. Only a run reaches here (see
+// dispatchProfile.spawnsWork), so `magus ls` and every other question still costs
+// nothing.
+//
+// Fails OPEN, loudly. A daemon that will not start must not stop a build: the run
+// proceeds unarbitrated and says so, which is a smaller failure than refusing to build
+// because a background process would not come up.
+// admissionDaemonAddr is where the machine budget lives for this invocation: the
+// configured daemon.address when there is one, the per-user default otherwise. One
+// resolution, used to spawn, to wait, and to look up, because three spellings of the
+// answer is how a healthy daemon got waited out and then killed.
+func admissionDaemonAddr(cfg config.Config) string {
+	if cfg.Daemon.Address != "" {
+		return cfg.Daemon.Address
+	}
+	return daemonDefaultAddr()
+}
+
+// admissionDaemonEnv marks a daemon that nobody asked for: one a run started only so
+// something could arbitrate the machine budget. It is set on the spawned child and read
+// by that child, which is the only process that can know how it came to exist.
+const admissionDaemonEnv = "MAGUS_DAEMON_FOR_ADMISSION"
+
+const (
+	// admissionIdleExit is how long an unasked-for daemon stays up with nothing to do.
+	//
+	// The bound exists because auto-start reversed a documented promise: `magus ls`
+	// inside a `docker build` layer leaving an orphan was the objection that rejected
+	// global auto-start, and a run inside one is the same shape. A daemon a person
+	// STARTED has no such bound - they said what they wanted, and `magus server stop`
+	// is how they unsay it.
+	//
+	// Ten minutes: longer than the gap between commands in an active edit-run loop, so
+	// an interactive session never pays the restart, and short enough that a machine
+	// left alone reclaims the process within one interruption. Cheap to be wrong about
+	// in either direction - a restart costs a second, and the daemon holds nothing a
+	// run cannot rebuild.
+	admissionIdleExit = 10 * time.Minute
+
+	// admissionIdleCheck is how often that is tested. Coarse on purpose: the question
+	// is whether ten minutes have passed.
+	admissionIdleCheck = 30 * time.Second
+)
+
+// watchAdmissionIdle stops a daemon that was started for admission once nothing has
+// wanted it for admissionIdleExit. A no-op for a daemon somebody started deliberately.
+func watchAdmissionIdle(ctx context.Context, srv *proc.Server) {
+	if os.Getenv(admissionDaemonEnv) == "" {
+		return
+	}
+	go func() {
+		tick := time.NewTicker(admissionIdleCheck)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-srv.Done():
+				return
+			case now := <-tick.C:
+				idle, busy := srv.IdleFor(now)
+				if busy || idle < admissionIdleExit {
+					continue
+				}
+				slog.Info("magus: stopping the daemon started for machine-wide admission; nothing has needed it",
+					slog.Duration("idle", idle.Round(time.Second)))
+				srv.Close()
+				return
+			}
+		}
+	}()
+}
+
+// spawnAdmissionDaemon is the seam a test replaces to observe that a daemon WOULD be
+// started without one actually being. Spawning is the whole observable effect of
+// ensureAdmissionDaemon, and asserting on the incumbent's liveness instead passes just
+// as well when the early return is deleted.
+var spawnAdmissionDaemon = func() (pid int, logPath string, err error) {
+	return spawnDetachedDaemon([]string{"server", "start", "--foreground"}, admissionDaemonEnv+"=1")
+}
+
+func ensureAdmissionDaemon(ctx context.Context, addr string) string {
+	// ONE address for all three steps. Spawning against the configured address while
+	// waiting on the default meant any non-default daemon.address timed out after the
+	// full readiness window and then reaped the healthy daemon it had just started -
+	// a minute of latency per command, ending in a SIGKILL of the thing that worked.
+	if proc.SocketLive(ctx, addr) {
+		return addr
+	}
+	pid, logPath, err := spawnAdmissionDaemon()
+	if err != nil {
+		slog.Warn("magus: machine-wide admission is OFF for this run: the daemon that holds the budget could not be started",
+			slog.String("error", err.Error()))
+		return ""
+	}
+	if err := waitDaemonReady(ctx, addr, daemonReadyTimeout); err != nil {
+		reapDaemon(ctx, pid, addr)
+		slog.Warn("magus: machine-wide admission is OFF for this run: the daemon that holds the budget did not come up",
+			slog.String("error", err.Error()), slog.String("log", logPath))
+		return ""
+	}
+	slog.Info("magus: started the daemon that arbitrates this machine's build budget",
+		slog.Int("pid", pid), slog.String("log", logPath))
+	return addr
+}
+
+// reapDaemon kills a daemon this process spawned but never got a working socket out of.
+// Without it every failure path leaks the process: with console.enabled=false the wait
+// times out by construction, so each attempt left one more running.
+//
+// It checks WHO it is about to kill. The pid was Release()d to detach the child, so
+// this process is not its parent any more and the number is free for reuse the moment
+// it exits - and the two callers reach here precisely when something went wrong, which
+// is when that is likeliest. A daemon answering on sock under a different pid means
+// ours is already gone and the number belongs to somebody else now. An empty sock skips
+// that half and checks liveness only, for a caller with no socket address to ask.
+//
+// os.FindProcess rather than the spawned handle, which was Release()d.
+func reapDaemon(ctx context.Context, pid int, sock string) {
+	if !sysPID.Alive(pid) {
+		return
+	}
+	if sock != "" {
+		if st, err := proc.QueryStatus(ctx, sock); err == nil && st.ParentPID != 0 && st.ParentPID != pid {
+			// Somebody else's daemon owns the socket, so ours exited and this pid is no
+			// longer ours to kill.
+			return
+		}
+	}
 	p, err := os.FindProcess(pid)
 	if err != nil {
 		return

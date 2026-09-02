@@ -230,6 +230,19 @@ func TestCheckStaleSockets(t *testing.T) {
 			assert.True(t, strings.HasPrefix(d, "live: "), d)
 		}
 	})
+
+	// A daemon plus a run in flight is the ORDINARY state now that a run takes its
+	// admission from the daemon and hosts its own pool for its children. Counting the
+	// pool as a daemon reported that state as a conflict.
+	t.Run("a live per-process pool beside the daemon is not a conflict", func(t *testing.T) {
+		dir := t.TempDir()
+		listenUnix(t, filepath.Join(dir, "magus-daemon.sock"))
+		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
+
+		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "1 live socket(s)", got.Message)
+	})
 }
 
 func TestCheckStaleShadowAcks(t *testing.T) {

@@ -78,6 +78,15 @@ type StatusReport struct {
 	// holds one indefinitely, and every other run simply waits. Surfacing who holds
 	// what turns that from a hang into a fact.
 	Locks []StatusLock `json:"locks,omitempty" yaml:"locks,omitempty"`
+	// Machine is the host-wide admission budget the daemon arbitrates: what every magus
+	// on this machine holds and who is queued for it. Nil when no daemon is running, or
+	// when the one that answered is a per-process proc server, which arbitrates nothing
+	// beyond itself.
+	//
+	// It belongs beside Locks for the same reason: held is the normal state, and what
+	// makes it worth reporting is WHO. A run queued for the machine is otherwise a run
+	// with nothing to show for itself in another terminal.
+	Machine *MachineSnapshot `json:"machine,omitempty" yaml:"machine,omitempty"`
 	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (an editor,
 	// IDEs, Desktop) actually connect to: its address and whether it is really serving.
 	// It is checked independently of the Pool fields above, which report the proc socket

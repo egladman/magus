@@ -239,6 +239,11 @@ func applyStatusPools(ctx context.Context, report *types.StatusReport, addrs []s
 		if len(pools) == 0 {
 			report.Services = reply.Services
 		}
+		// The budget is the MACHINE's, so the first server that reports one owns the
+		// section: only the daemon arbitrates it, and there is one daemon per user.
+		if report.Machine == nil && reply.Machine != nil {
+			report.Machine = reply.Machine
+		}
 		pools = append(pools, *out)
 	}
 	if len(pools) == 0 {
@@ -447,7 +452,46 @@ func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame 
 	printMCPEndpointStatus(w, r.MCPEndpoint)
 	printServiceStatus(w, r.Services)
 	printSymbolIndexStatus(w, r.SymbolIndexes)
+	printMachineStatus(w, r.Machine)
 	printLockStatus(w, r.Locks)
+}
+
+// printMachineStatus renders the machine-wide budget: the figure, what is spent, and
+// every claim against it across worktrees. Printed whenever a daemon answered, held or
+// idle, because "nothing is queued" is the answer to the question people ask it.
+func printMachineStatus(w io.Writer, m *types.MachineSnapshot) {
+	if m == nil {
+		return
+	}
+	fmt.Fprintln(w, "\nmachine budget")
+	if m.BudgetMB > 0 {
+		fmt.Fprintf(w, "  memory  %s of %s held\n", cache.FormatMB(m.HeldMB), cache.FormatMB(m.BudgetMB))
+	}
+	if m.BudgetSlots > 0 {
+		fmt.Fprintf(w, "  slots   %d of %d held\n", m.HeldSlots, m.BudgetSlots)
+	}
+	claim := func(prefix string, c types.MachineClaimant) {
+		line := fmt.Sprintf("  %s %s %s  pid %d", prefix, c.Project, c.Target, c.PID)
+		if c.MemoryMB > 0 {
+			line += "  " + cache.FormatMB(c.MemoryMB)
+		}
+		if !c.Since.IsZero() {
+			line += "  " + formatDur(time.Since(c.Since))
+		}
+		fmt.Fprintln(w, line)
+		if c.Dir != "" {
+			fmt.Fprintln(w, "      in "+c.Dir)
+		}
+	}
+	for _, h := range m.Holders {
+		claim("held ", h)
+	}
+	for _, wt := range m.Waiters {
+		claim("queued", wt)
+	}
+	if len(m.Holders) == 0 && len(m.Waiters) == 0 {
+		fmt.Fprintln(w, "  nothing is holding or waiting for the machine budget")
+	}
 }
 
 // printPoolServers lists every live proc server when this machine is running more than

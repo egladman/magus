@@ -131,6 +131,11 @@ type Options struct {
 	// dropped and how many were left alone as busy. Only the daemon sets it; a per-process
 	// proc server holds one workspace for one invocation and has nothing to reload.
 	ConfigReloader func() (dropped, busy int)
+	// MachineBudget, if set, makes this server the arbiter of machine-wide admission:
+	// every magus on the host asks it before starting a step. Only the daemon sets it,
+	// and only one daemon exists per user, which is what makes the budget the machine's
+	// rather than a process's.
+	MachineBudget *cache.MachineBudget
 }
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
@@ -208,6 +213,36 @@ func (s *Server) Addr() string { return s.ep.String() }
 // listener's context is a sibling of the process context, not its parent.
 func (s *Server) Done() <-chan struct{} { return s.done }
 
+// IdleFor reports how long since a client last asked this server for anything, and
+// whether it is doing nothing right now. A daemon nobody asked for uses the pair to
+// decide it is no longer wanted; see the admission self-exit in cmd/magus.
+//
+// Busy covers work in flight AND the machine budget, because a daemon holding claims is
+// serving runs that are not talking to it: they took their claim, went quiet for the
+// length of a build, and will come back to release it. Exiting under them would drop
+// every claim on the machine.
+func (s *Server) IdleFor(now time.Time) (idle time.Duration, busy bool) {
+	svc := s.svc
+	if snap := svc.lim.Snapshot(); snap.Running > 0 || snap.Queued > 0 {
+		return 0, true
+	}
+	if b := svc.machineBudget; b != nil {
+		m := b.Snapshot()
+		if len(m.Holders) > 0 || len(m.Waiters) > 0 {
+			return 0, true
+		}
+	}
+	inflight := false
+	svc.calls.Range(func(any, any) bool { inflight = true; return false })
+	if inflight {
+		return 0, true
+	}
+	return now.Sub(time.Unix(0, svc.lastActive.Load())), false
+}
+
+// markActive records that a client asked for something.
+func (s *service) markActive() { s.lastActive.Store(time.Now().UnixNano()) }
+
 // Close shuts down the listener, removes the socket file, and waits for all in-flight handlers.
 // Safe to call multiple times.
 func (s *Server) Close() {
@@ -269,6 +304,7 @@ func New(opts Options) (*Server, error) {
 	svc := &service{
 		handler:         opts.Handler,
 		serviceHost:     opts.ServiceHost,
+		machineBudget:   opts.MachineBudget,
 		configReloader:  opts.ConfigReloader,
 		parentCtx:       serverCtx,
 		lim:             lim,
@@ -278,6 +314,7 @@ func New(opts Options) (*Server, error) {
 		serviceLister:   opts.ServiceLister,
 		onJobDone:       opts.OnJobDone,
 	}
+	svc.markActive() // a daemon that has served nobody yet is not instantly idle
 	srv := &Server{
 		ep:     ep,
 		svc:    svc,
@@ -372,6 +409,11 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 	if errors.Is(err, io.EOF) {
 		return // bare liveness probe (isSocketLive dialed and closed), silent no-op
 	}
+	// Anything that got as far as a frame is a client asking for something, which is
+	// what an idle self-exit has to not interrupt. Recorded after the EOF check so a
+	// bare liveness probe - which every `magus status` and every socket check performs -
+	// does not read as use and keep an unwanted daemon alive forever.
+	svc.markActive()
 	if err != nil {
 		writeErr(conn, err.Error())
 		return
@@ -465,6 +507,25 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		}
 		_ = writeFrame(conn, typeServiceStopAllReply, serviceStopAllReply{Count: count})
 
+	case typeBudgetAcquire:
+		var req budgetAcquireRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode budget.acquire request: "+err.Error())
+			return
+		}
+		var reply budgetAcquireReply
+		svc.budgetAcquire(req, &reply)
+		_ = writeFrame(conn, typeBudgetAcquireReply, reply)
+
+	case typeBudgetRelease:
+		var req budgetReleaseRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode budget.release request: "+err.Error())
+			return
+		}
+		svc.budgetRelease(req)
+		_ = writeFrame(conn, typeBudgetReleaseReply, budgetReleaseReply{})
+
 	case typeConfigReload:
 		var req configReloadRequest
 		if err := json.Unmarshal(line, &req); err != nil {
@@ -483,6 +544,40 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	default:
 		writeErr(conn, fmt.Sprintf("proc: unknown frame type %q", typ))
+	}
+}
+
+// budgetAcquire answers one poll against the machine budget. A server holding no budget
+// (a per-process proc server) says so rather than granting: a client that read silence
+// as a grant would run unarbitrated against a daemon that IS arbitrating its peers.
+func (s *service) budgetAcquire(req budgetAcquireRequest, reply *budgetAcquireReply) {
+	if req.Magic != budgetMagic {
+		reply.Err = "unrecognized request"
+		return
+	}
+	if req.Protocol != "" && req.Protocol != protocolV2 {
+		reply.Err = ErrProtocolMismatch.Error()
+		return
+	}
+	if s.machineBudget == nil {
+		reply.Err = "this server does not arbitrate the machine budget"
+		return
+	}
+	reply.Verdict = s.machineBudget.Request(req.Waiter, req.Claim)
+}
+
+// budgetRelease returns a granted claim or retires a waiter. Silent on a server with no
+// budget: there is nothing to give back, and a teardown must not fail over it.
+func (s *service) budgetRelease(req budgetReleaseRequest) {
+	if req.Magic != budgetMagic || s.machineBudget == nil ||
+		(req.Protocol != "" && req.Protocol != protocolV2) {
+		return
+	}
+	if req.ID != "" {
+		s.machineBudget.Release(req.ID)
+	}
+	if req.Waiter != "" {
+		s.machineBudget.Drop(req.Waiter)
 	}
 }
 
@@ -525,6 +620,8 @@ type service struct {
 	workspaceLister func() []Workspace
 	serviceLister   func() []types.StatusService
 	serviceHost     ServiceHost
+	machineBudget   *cache.MachineBudget
+	lastActive      atomic.Int64 // unix nanoseconds of the last client frame; read by IdleFor
 	configReloader  func() (dropped, busy int)
 	onJobDone       func(ctx context.Context, args []string, dur time.Duration, err error)
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
@@ -731,6 +828,10 @@ func (s *service) status(req statusRequest, reply *StatusReply) error {
 	}
 	snap := s.lim.Snapshot()
 	reply.Capacity, reply.Running, reply.Queued = snap.Capacity, snap.Running, snap.Queued
+	if s.machineBudget != nil {
+		m := s.machineBudget.Snapshot()
+		reply.Machine = &m
+	}
 	s.calls.Range(func(_, v any) bool {
 		c, ok := v.(*activeCall)
 		if !ok {

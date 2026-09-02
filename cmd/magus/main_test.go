@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,10 @@ import (
 // only config loaded, so the per-subcommand usage reaches the caller's stderr.
 func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 	usageOnly := dispatchProfile{needsConfig: true}
-	full := dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
+	// spawnsWork is what makes a run pay for machine-wide admission (and start the
+	// daemon that owns it), so it belongs to exactly the invocations that run targets:
+	// every usage-only, --detach and forensic case below must NOT carry it.
+	full := dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true, spawnsWork: true}
 	// server subcommands never forward and never host their own proc server: doing so let a
 	// version-mismatched `server stop` shut down its own throwaway server instead of the real
 	// daemon (a silent no-op). Config-only, like a usage-only invocation.
@@ -286,14 +290,20 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 	restore()
 }
 
-// The exit-code contract magus does keep: 0 for success, 2 for a misuse the
-// invocation never got past, 1 for work that ran and failed. There is deliberately
-// no code for "the machine was busy" - magus no longer refuses work on that ground.
+// The exit-code contract: 0 for success, 2 for a misuse the invocation never got
+// past, and 1 for work that ran and failed. 75 is not in this table: it is never
+// recognised here by type or code, only read off an error that states it.
 func TestExitCodeOf(t *testing.T) {
 	assert.Equal(t, 0, exitCodeOf(nil))
 	assert.Equal(t, 1, exitCodeOf(errors.New("go exited 1")))
 	assert.Equal(t, 1, exitCodeOf(errors.Join(errors.New("go exited 1"), nil)))
 	assert.Equal(t, exitUsage, exitCodeOf(usagef("no such target")))
+
+	// A diagnostic that names no exit code is ordinary work that failed. 75 is carried
+	// by the error's own ExitCode(), never by its diagnostic code, so the two errors
+	// that claim it are pinned where they are built: TestMachineBusyRidesTheExitCodeSeam
+	// and lock_test.go's contention case.
+	assert.Equal(t, 1, exitCodeOf(types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")))
 }
 
 // TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do
