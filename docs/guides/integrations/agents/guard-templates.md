@@ -125,7 +125,7 @@ overrides and execs it, so there is one implementation to reason about.
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 9
+# magus-guard-template: 10
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=none pass=none
 
@@ -173,18 +173,49 @@ done
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
 
-if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-  printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
-  exit 0
-fi
-
 # stdin is a pipe and can only be drained once, so the event is read into a
 # variable and selected from twice - the command to judge, and the session id to
 # attribute it to. `// empty` keeps a host without that field at the empty
 # string rather than the literal "null".
+#
+# Read BEFORE the availability check below, because the notices that check prints are
+# held to one firing per session and the session id is what keys them. jq failing here
+# leaves the session empty, which guard_notice_once handles as an unidentified session.
 event=$(cat)
-session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
-transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
+transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
+
+# guard_notice_once succeeds the first time $1 fires in this session and fails on every
+# repeat, so a caller writes `guard_notice_once <family> && printf ...`.
+#
+# The notices it holds report a BROKEN INSTALLATION. That is a fact for the person, and
+# there is nothing in it an agent can act on, so a repeat is pure noise: measured at 2,741
+# firings over recent sessions, 99% of them same-session repeats of text already declined.
+#
+# The marker lives under TMPDIR rather than in magus's own state because this runs when
+# magus is missing or too broken to judge, so it cannot ask magus for anything. cksum and
+# mkdir are POSIX; creating the marker is idempotent, so two concurrent tool calls race to
+# the same harmless result.
+#
+# A host that reports no session id shares one marker aged out after GUARD_NOTICE_WINDOW
+# minutes, so the first session on such a host cannot silence every session after it.
+guard_notice_once() {
+  notice_dir=${TMPDIR:-/tmp}/magus-guard-notices
+  notice_key=$(printf '%s' "${session:-anon}" | cksum | cut -d' ' -f1)
+  notice_marker=$notice_dir/$notice_key.$1
+  mkdir -p "$notice_dir" 2>/dev/null || return 0
+  if [ -f "$notice_marker" ]; then
+    [ -n "$session" ] && return 1
+    find "$notice_marker" -mmin +"${GUARD_NOTICE_WINDOW:-120}" 2>/dev/null | grep -q . || return 1
+  fi
+  : > "$notice_marker" 2>/dev/null
+  return 0
+}
+
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+  guard_notice_once unavailable && printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
+  exit 0
+fi
 
 # Attribution is BEST EFFORT; the verdict is not.
 #
@@ -248,15 +279,17 @@ fi
 # Fail OPEN either way. A guard that blocks work because it cannot judge it has its
 # priorities backwards, and an unguarded session you know about beats one you do not.
 #
-# This repeats on every tool call, because nothing here survives between two of them: the
-# process is short-lived and the binary that owns magus's own once-per-session state is the
-# one that just failed to run. So the notice is kept to a line instead - twenty commits of
+# Said once per session. The line above used to repeat on every tool call, on the
+# reasoning that nothing survives between two of them; guard_notice_once is what does,
+# without asking the binary that just failed to run for anything. Twenty copies of
 # identical text is wallpaper, and wallpaper is how a real failure goes unread.
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
-  if [ -n "$GUARD_FAILED_RESPONSE" ]; then
-    printf '%s' "$GUARD_FAILED_RESPONSE"
-  else
-    guard_failure_notice | jq -Rc '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:.}}'
+  if guard_notice_once failed; then
+    if [ -n "$GUARD_FAILED_RESPONSE" ]; then
+      printf '%s' "$GUARD_FAILED_RESPONSE"
+    else
+      guard_failure_notice | jq -Rc '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:.}}'
+    fi
   fi
   exit 0
 fi
@@ -306,7 +339,7 @@ wasteful, not destructive.
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 9
+# magus-guard-template: 10
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=none pass=none
 
@@ -448,7 +481,7 @@ surface, and this file carries no verdict on no surface.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 9
+# magus-guard-template: 10
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #

@@ -41,7 +41,7 @@
 # the two lines say exactly where: an advise on a shell command is delivered
 # nowhere (Cursor sends nothing on an allow), and an advise on a file write
 # reaches the person via stderr but never the model.
-# magus-guard-template: 9
+# magus-guard-template: 10
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=human advise=human pass=none
 
@@ -71,6 +71,30 @@ done
 
 event=$(cat)
 
+# guard_notice_once succeeds the first time $1 fires in this session and fails on every
+# repeat, so a caller writes `guard_notice_once <family> && printf ...`. See
+# magus-guard-command.sh for the full reasoning; the short version is that these notices
+# report a broken installation, which is a fact for the person with nothing in it an agent
+# can act on, so a repeat is noise.
+#
+# The marker lives under TMPDIR because this runs when magus is missing or too broken to
+# judge, so it cannot ask magus for anything. Cursor may send no session id, and an event
+# without one shares a marker aged out after GUARD_NOTICE_WINDOW minutes rather than going
+# quiet forever.
+session=$(printf '%s' "$event" | jq -r '.session_id // empty' 2>/dev/null)
+guard_notice_once() {
+	notice_dir=${TMPDIR:-/tmp}/magus-guard-notices
+	notice_key=$(printf '%s' "${session:-anon}" | cksum | cut -d' ' -f1)
+	notice_marker=$notice_dir/$notice_key.$1
+	mkdir -p "$notice_dir" 2>/dev/null || return 0
+	if [ -f "$notice_marker" ]; then
+		[ -n "$session" ] && return 1
+		find "$notice_marker" -mmin +"${GUARD_NOTICE_WINDOW:-120}" 2>/dev/null | grep -q . || return 1
+	fi
+	: > "$notice_marker" 2>/dev/null
+	return 0
+}
+
 case "$event" in
 *'"file_path"'*)
 	# afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
@@ -78,7 +102,7 @@ case "$event" in
 	# verdict. Exiting quietly here is indistinguishable from a clean edit, and an
 	# unguarded session you know about beats one you do not.
 	if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-		printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its rules did not judge this edit. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard." >&2
+		guard_notice_once unavailable && printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its rules did not judge this edit. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard." >&2
 		exit 0
 	fi
 	# Ask for the MESSAGE, not the bare decision word. Several rules judge this
@@ -108,7 +132,7 @@ esac
 # on an allow, so this is the only channel left, and a silent fail-open on the
 # shell surface is the one outcome nobody can tell from a guarded session.
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-	printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard." >&2
+	guard_notice_once unavailable && printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard." >&2
 	printf '%s' '{"permission":"allow"}'
 	exit 0
 fi
@@ -138,7 +162,7 @@ if [ -z "$verdict" ]; then
 	[ -n "$ver" ] || ver='version unreadable'
 	why=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" session hook --agent-name cursor 2>&1 >/dev/null | grep -v 'WARN' | head -n 1)
 	[ -n "$why" ] || why='it printed no error'
-	printf 'magus guard is NOT running: %s (%s) could not judge this command, so its deny and advise rules are unenforced. It said: %s. Rebuild or update THAT binary to restore the guard.\n' \
+	guard_notice_once failed && printf 'magus guard is NOT running: %s (%s) could not judge this command, so its deny and advise rules are unenforced. It said: %s. Rebuild or update THAT binary to restore the guard.\n' \
 		"$GUARD_MAGUS_BIN" "$ver" "$why" >&2
 	verdict='{"permission":"allow"}'
 fi
