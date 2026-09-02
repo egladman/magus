@@ -27,7 +27,7 @@
 // inconsistency would produce a backlog nobody burns down, and shipping one as the first
 // output guarantees the feature is ignored. The valuable moment is the pull request that
 // adds project 49 with a target named `unit-test`, before it becomes the 49th thing to
-// migrate later. See keepAdded for the measurement that moved this gate off projects.
+// migrate later. keepAdded records the measurement behind that gate.
 //
 // It never renames anything. Renaming a target breaks every caller, CI config, and
 // script outside the workspace, so this advises and stops.
@@ -132,24 +132,24 @@ export fun findings(members: [{str: str}], minCohort: int, minShare: double) > [
     return found;
 }
 
-// keepAdded drops every finding this pull request did not introduce.
+// keepAdded keeps the findings this pull request introduced and drops the rest.
 //
-// PROJECT granularity was the old gate and it is far too coarse to mean anything. This
+// Gating on the PROJECT a pull request touched is too coarse to carry a finding. This
 // workspace's root project owns cmd/, internal/, types/ and the module root, so nearly
-// every pull request seeds it, and one pre-existing divergent target then reported on all
-// of them: `compress-cgo-test` rode pull requests 120 through 125, none of which touched
-// its sources, under a heading that says "This adds a target". It had been on main for
-// weeks, with a comment above it explaining that the divergence is deliberate - so the
-// advice was not merely repeated, it was answered before it was first printed.
+// every pull request seeds it, and one pre-existing divergent target then reports on all
+// of them. This section carried `compress-cgo-test` through pull requests 120 to 125,
+// none of which touched its sources, under a heading reading "This adds a target". The
+// target had sat on main for weeks under a comment explaining that its name diverges on
+// purpose, so the magusfile answered the advice before anyone read it.
 //
-// The heading is the contract, so the gate is the name being NEW. `added` is the same
-// pair of checks target-outputs uses for the same word - the diff proposes a name and the
-// base tree settles it - which is also why they now live in advice.
+// The heading is the contract, so the gate is the name being NEW. `added` runs the pair
+// of checks target-outputs runs for that same word: the diff proposes a name and the base
+// tree settles it. Sharing those checks is why they live in advice.
 //
 // The project still has to be one the diff seeded, because a diff yields NAMES and a name
-// is not unique across a workspace. Eight projects here declare `preflight`; adding one
-// of them would otherwise report the seven that were already there, which is the mistake
-// target-outputs already made once with that exact name.
+// is not unique across a workspace. Eight projects here declare `preflight`, so adding a
+// ninth would otherwise report the eight already standing, which is the mistake
+// target-outputs made once with that exact name.
 export fun keepAdded(all: [{str: str}], added: [str], seeded: [str]) > [{str: str}] {
     var kept = mut [];
     foreach (f in all) {
@@ -182,9 +182,9 @@ fun body(items: [{str: str}]) > str {
         + "Renaming now is cheap. Later it means changing every caller, CI config, and "
         + "script that names the target, across teams that each have to be persuaded "
         + "separately.\n\n"
-        + "If the divergence is deliberate - the target really is a different job that "
-        + "happens to run the same tool - then this is wrong and worth ignoring. Add the "
-        + "`magus:silence:" + section + "` label and it will stay quiet.\n";
+        + "If you diverged on purpose, because this target really is a different job that "
+        + "happens to run the same tool, then this finding is wrong and worth ignoring. "
+        + "Add the `magus:silence:" + section + "` label to keep it quiet.\n";
 }
 
 fun main() > void !> any {
@@ -225,7 +225,7 @@ fun main() > void !> any {
     }
 
     // Only the targets this pull request adds. The magusfile is the declaration, so the
-    // diff proposes the names and the base tree rejects the ones that were already there.
+    // diff proposes the names and the base tree rejects the ones already there.
     advice\fetchBase(base, refspec: false);
     final diff = proc\exec("git", args: ["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
         dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
@@ -321,8 +321,8 @@ test "keepAdded drops an outlier the pull request did not add" {
 }
 
 test "keepAdded says nothing when the pull request adds no target" {
-    // The regression: editing a Go file seeds the root project, and the old
-    // project-granularity gate then reported every pre-existing outlier it owned.
+    // The regression: editing one Go file seeds the root project, which was enough to
+    // report every outlier that project already owned.
     final all = [
         {"project": ".", "name": "compress-cgo-test", "majority": "test", "evidence": "4 of 5", "ops": "go:go-test"},
     ];
@@ -345,5 +345,6 @@ test "body shows the evidence and names the escape hatch" {
         "majority": "test", "evidence": "47 of 48", "ops": "node:jest"}]);
     std\assert(text.indexOf("47 of 48") != null, message: "the count is the argument");
     std\assert(text.indexOf("`unit-test` in `apps/checkout`") != null, message: "names the target");
-    std\assert(text.indexOf("label") != null, message: "declining must be easy and permanent");
+    std\assert(text.indexOf("`magus:silence:conformance` label") != null,
+        message: "declining must be easy and permanent, and the label is how");
 }

@@ -141,12 +141,12 @@ export fun diffRange(base: str, head: str) > str !> any {
 }
 
 // addedTargets returns the target names a diff introduces, read from its added
-// `export fun` lines. The magusfile is the declaration, so the diff is the honest source
-// for "new" - comparing two loaded graphs would need the base checked out.
+// `export fun` lines. The magusfile is the declaration, so the diff answers "new" without
+// checking out the base to load a second graph.
 //
-// Shared because two advisors ask the same question and got different answers. Both
-// conformance and target-outputs open on the word "adds", and only one of them was
-// checking; the other reported a target that had been on the base for weeks.
+// Both conformance and target-outputs open their finding on the word "adds", so both need
+// this answer. Only one of them checked, and the other named a target that had sat on the
+// base for weeks.
 export fun addedTargets(diff: str) > [str] {
     var names = mut [];
     foreach (line in diff.split("\n")) {
@@ -160,10 +160,11 @@ export fun addedTargets(diff: str) > [str] {
     return names;
 }
 
-// declaredAtBase reports whether a target of this name was already declared before the
-// change. Editing a target's body rewrites its `export fun` line, so the diff alone calls
-// it added - which is how a comment about NEW targets once listed `preflight`, a target
-// older than the pull request. The base tree is the only thing that settles it.
+// declaredAtBase reports whether a target of this name existed before the change.
+//
+// Editing a target's body rewrites its `export fun` line, so the diff alone calls that
+// target added. On those grounds a comment about NEW targets once listed `preflight`,
+// which predated the pull request. Only the base tree settles it.
 export fun declaredAtBase(name: str, base: str) > bool !> any {
     final res = proc\exec("git", args: ["grep", "-q", "export fun " + name + "(",
         "origin/" + base, "--", "*.buzz"], dir: ".", opts: {"allow_failure": true});
@@ -183,9 +184,9 @@ export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":e
 // run page is already the right home for everything a reader might want next.
 fun preface() > str {
     var text = "### magus\n\n"
-        + "> Checked this pull request against the build graph. Findings are collapsed "
-        + "below - open what concerns you. **Nothing here blocks the merge**; disagree "
-        + "with a note and label it away.\n";
+        + "> Checked this pull request against the build graph. Each finding below starts "
+        + "collapsed; open the ones that concern you. **Nothing here blocks the merge**; "
+        + "disagree with a note and label it away.\n";
     final repo = env("REPO");
     final run = env("GITHUB_RUN_ID");
     if (repo != "" and run != "") {
@@ -408,25 +409,23 @@ test "withoutFooter tolerates a comment with no footer yet" {
 
 // hasSection reports whether a composed comment still carries a finding.
 //
-// The begin marker is the only proof one survived: the preface and the footer are
-// unconditional, so their presence says nothing. Matching the marker SHAPE rather than a
-// list of names keeps this right as advisors are added.
+// A begin marker is the only proof one survived: compose writes the preface and the
+// footer on every path, so neither tells you anything. Matching the marker SHAPE rather
+// than a list of names keeps this correct as we add advisors.
 //
-// Repository text quoted inside a section can carry a marker of its own - merge-conflict
-// and hand-edited-generated both paste tracked files. That over-matches toward KEEPING a
-// comment, which is the safe direction: the failure it prevents is discarding a real
-// finding, and the cost is a comment that had one anyway.
+// The merge-conflict and hand-edited-generated advisors paste tracked files, so quoted
+// repository text can carry a marker of its own. hasSection keeps that comment rather
+// than risk discarding a real finding.
 fun hasSection(text: str) > bool {
     return text.indexOf(":begin -->") != null;
 }
 
-// resolved is what a comment becomes once its last finding is gone.
+// resolved is the body a comment takes once its last finding goes away.
 //
-// PATCHED to this rather than deleted, keeping the decision already recorded in publish:
-// a delete takes the thread's replies with it, and the move from "magus flagged this" to
-// "it is settled" is the one thing a later reader of a merged pull request needs. It is
-// also not a new interruption - editing a comment nobody is subscribed to notifies no
-// one, so this records a disposal instead of requesting attention for it.
+// publish PATCHes to this instead of deleting, holding the decision that function already
+// records: a delete takes the thread's replies with it. A later reader of the merged pull
+// request still learns that magus raised something and that someone settled it. Editing a
+// comment notifies nobody, so this records a disposal without asking for attention.
 fun resolved() > str {
     return comment_marker + "\n### magus\n\n"
         + "> Everything magus raised on this pull request is resolved.\n"
@@ -458,22 +457,20 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
     }
     if (body == "") {
         final remainder = (head + tail).trim();
-        // Nothing found here, and nothing left that another advisor found: there is no
-        // comment to make. "" is the caller's signal to write nothing at all.
+        // Nothing found here, and no other advisor left a section behind: there is no
+        // comment to make. "" tells publish to write nothing.
         //
-        // THE THRESHOLD, for every advisor at once: a section is the only thing worth
-        // interrupting a reviewer for. The preface and the footer are written on every
-        // path, so a comment carrying only those says a run happened, which the checks
-        // list already says. Measured over pull requests 120 to 125, that shell is 510
-        // bytes of "magus looked" - and a reader who opens it five times for nothing
-        // stops opening it on the sixth, taking the finding that mattered with them.
+        // THE THRESHOLD, for every advisor at once: a section is what earns a reviewer's
+        // attention. compose writes the preface and the footer on every path, so a comment
+        // carrying only those reports that a run happened, which the checks list already
+        // reports. Across pull requests 120 to 125 that shell ran 510 bytes. Open it five
+        // times for nothing and you stop opening it, including the time it has a finding.
         if (!hasSection(remainder)) { return ""; }
         return remainder + "\n" + footer();
     }
-    // A comment with no section left is a shell, and the only two shells that exist are
-    // the preface just built and the resolved note a previous run wrote. Rebuild it, or a
-    // finding raised after an earlier one was settled lands underneath a line saying
-    // everything is resolved.
+    // Two shells reach this point: the preface just built, and the resolved note a
+    // previous run left. Rebuild either, or a finding raised after magus settled an
+    // earlier one lands under a line saying everything is resolved.
     if (!hasSection(head + tail)) {
         head = comment_marker + "\n" + preface();
         tail = "";
@@ -546,12 +543,11 @@ export fun sectionLine(name: str, title: str, body: str) > str {
 }
 
 // publish upserts one advisor's section into the PR's magus comment. An empty body
-// retracts the section, and a comment left with no sections at all says so rather than
-// being deleted - deleting would lose the thread's history.
+// retracts the section. A comment left with no sections says so; deleting it would lose
+// the thread's history.
 //
-// A pull request with nothing to report gets NO comment. The comment is created by the
-// first advisor with a finding, never by the run itself, so the shell of preface and
-// footer can no longer reach a page on its own.
+// A pull request with nothing to report gets NO comment: the first advisor with a finding
+// opens it, so a shell of preface and footer never reaches the page.
 //
 // In local mode it writes the section to stdout instead and touches nothing else. The
 // section is emitted even when the body is EMPTY: a retraction says "this advisor looked
@@ -580,10 +576,10 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     }
     var composed = compose(current, name: name, title: title, body: body);
     if (composed == "") {
-        // Never opened a comment and has nothing to open one about. Say nothing: a
-        // pull request that magus had no finding for should carry no trace of magus.
+        // No comment yet, and nothing to open one about. A pull request magus found
+        // nothing on carries no trace of magus.
         if (id == "") { return; }
-        // It had findings once, so the thread stays and records that they are gone.
+        // This one carried findings before, so the thread stays and records their end.
         composed = resolved();
     }
     if (withoutFooter(composed) == withoutFooter(current)) { return; }
@@ -654,17 +650,17 @@ test "the last finding going away empties the comment" {
         message: "withdrawing the only finding leaves nothing to say");
 }
 
-test "a silent advisor does not open a comment for a noisy one to join" {
+test "a silent advisor leaves the comment for the next one to open" {
     var body = compose("", name: "doctor", title: "Workspace health", body: "");
     std\assert(body == "", message: "the first advisor found nothing");
     body = compose(body, name: "unclaimed", title: "Unclaimed", body: "a stray file");
     std\assert(body.indexOf("a stray file") != null, message: "the second one still opens it");
-    std\assert(body.indexOf("### magus") != null, message: "with the preface it would have had");
+    std\assert(body.indexOf("### magus") != null, message: "and carries the preface");
 }
 
 test "a finding raised after a resolution does not land under the resolved line" {
     // publish rewrites an emptied comment to say everything is settled. A later push can
-    // still raise something, and the two must not stack.
+    // still raise a finding, and the two must not stack.
     final settled = comment_marker + "\n### magus\n\n"
         + "> Everything magus raised on this pull request is resolved.\n"
         + footer_marker + "\n<sub><i>Last updated 2026-09-02T00:00:00Z.</i></sub>\n";
