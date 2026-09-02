@@ -1,0 +1,68 @@
+name: assert release assets
+description: >
+  Fail the BUILD step when an asset magus just computed is not one the upload will
+  collect.
+
+  release-build writes dist/ASSETS, one line per archive it named. This expands the
+  same glob the upload step is about to expand and requires every one of those names
+  to be in it. The failure then names the computed asset, in the job that produced it.
+
+  The alternative it replaces is a blind handoff: the build reports success, the
+  uploader expands a glob, and a glob that selects nothing is not an error in any
+  shell. That is how v0.4.0 published zero assets while every build job passed -
+  version() had resolved to a namespaced tag, so the archives were written to
+  dist/magus_libs/diagnostics/ and dist/magus_*.tar.gz never looked there.
+  `if-no-files-found: error` on the upload catches only the case where NOTHING
+  matches; this catches the one where the wrong thing does.
+
+  Run it immediately before the upload step, and pass that step's own glob, so the two
+  values sit a line apart and a mismatch is visible without opening another file.
+
+inputs:
+  assets-glob:
+    description: >
+      The glob the upload step collects archives with. Required and deliberately
+      undefaulted: a default here would be a third copy of the pattern, silently
+      applied, which is the drift this action exists to catch.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Assert every computed asset is one the upload collects
+      shell: bash
+      env:
+        ASSETS_GLOB: ${{ inputs.assets-glob }}
+      run: |
+        set -euo pipefail
+
+        # An absent or empty manifest means release-build named nothing, which for a job
+        # whose whole purpose is producing an archive is a failure rather than a no-op.
+        if [ ! -s dist/ASSETS ]; then
+          echo "::error::release-build wrote no dist/ASSETS manifest, so it computed no release archives" >&2
+          exit 1
+        fi
+
+        # Expanded by the shell, which is what the publish job does with the same pattern
+        # when it builds the `gh release` argument list. An unmatched glob stays literal
+        # and simply matches no name below.
+        # shellcheck disable=SC2206
+        collected=($ASSETS_GLOB)
+
+        status=0
+        while IFS= read -r name; do
+          [ -n "$name" ] || continue
+          found=0
+          for candidate in "${collected[@]}"; do
+            if [ "$candidate" = "dist/$name" ]; then found=1; fi
+          done
+          if [ "$found" -ne 1 ]; then
+            echo "::error::magus computed the release asset 'dist/${name}', which '${ASSETS_GLOB}' does not select; the upload would silently skip it" >&2
+            status=1
+          fi
+        done < dist/ASSETS
+
+        if [ "$status" -eq 0 ]; then
+          echo "every asset in dist/ASSETS is collected by ${ASSETS_GLOB}" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$status"

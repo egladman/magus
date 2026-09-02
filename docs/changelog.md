@@ -97,6 +97,17 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Fixed
 
+- **`release-build` works on an untagged commit again.** When HEAD carries no root
+  release tag, `version()` falls back to `git describe`, and describe picked among
+  every tag in the repository - so with four v0.4.0-era tags on one commit it
+  answered `libs/diagnostics/v0.1.0-1-g<sha>`, a version with a `/` in it, and
+  `release-build` refused. That made the target unusable on main, which is a large
+  part of why the release path went two versions without being exercised. The
+  fallback now constrains describe to `v[0-9]*`, which is the same shape check
+  `isReleaseTag` applies: it excludes this repository's `verified-refinements` tag by
+  the digit and every `libs/<name>/v0.1.0` by the leading `v`. The magusfile's note
+  claiming a namespaced base was something "no version resolution here can prevent"
+  was simply wrong.
 - **`vcs\tags` no longer renames a tag that shares its name with a branch.** The
   git backend asked for `%(refname:short)`, which abbreviates a ref only as far as
   it stays unambiguous - so a repository holding both a `v0.4.0` branch and a
@@ -159,6 +170,43 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Added
 
+- **`magus run release` preflights the release before it creates a tag.** Every
+  named module's would-be tag now goes through checks that used to fire hours later
+  in CI, on a tag that a pushed version number makes unreusable: a branch already
+  using the tag's name, which leaves the tag ambiguous to every tool that resolves a
+  short ref even though magus itself now reads tags as written; the version
+  `release-build` would stamp once those tags sit on HEAD, and whether every asset
+  name it produces matches the glob `release.yaml` uploads with; the two things
+  `magus-utils cut` refuses on in the publish job, an existing
+  `releases/v<version>.yaml` and an empty `[Unreleased]` section; and that the root
+  tag matches the workflow's trigger while no module tag does. The dry run prints
+  every verdict and refuses nothing, so a rehearsal shows all the problems at once;
+  `release:cd` refuses on any failure and tags nothing. The dirty-tree refusal moved
+  after the transcript for the same reason - it used to hide every check behind it.
+  This is the v0.4.0 release stated as a gate: `git describe` chose
+  `libs/diagnostics/v0.1.0` from among four tags on one commit, every asset was named
+  `magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz`, and a glob star does not cross a
+  `/`, so `dist/magus_*.tar.gz` matched nothing and the release published zero assets
+  while every build job passed.
+- **`release-build` writes `dist/ASSETS` and every build job asserts it before
+  uploading.** One line per archive the build named, checked against the same glob the
+  upload step is about to expand, through the new
+  `.github/actions/assert-release-assets`. A naming regression now fails the build job
+  with the computed asset named, rather than the uploader finding nothing - and a glob
+  that selects nothing is not an error in any shell, which is how the failing upload
+  reported success. `release-build`'s own guard now asks the upload glob instead of
+  `fs\basename`, so it also catches a rename of the `magus_` prefix on one side of the
+  handoff alone.
+- **`audit.yaml` builds and checks one real release asset weekly.** The release path
+  went from v0.3.0 to v0.4.0 with no `release.yaml` runs between them, so the combined
+  library-plus-root flow had never run end to end when it was first asked to publish.
+  Its own job rather than a fold into `determinism`, whose charter is generator
+  byte-stability, and on the weekly audit rather than on every pull request because it
+  guards against staleness rather than against any particular diff.
+- `buzz-test` now runs `releaser.buzz`. Its test blocks had never been executed by any
+  target - the root list named `badge.buzz` and `coverage.buzz` and nothing else - so
+  the rules deciding what a release may be versioned as were covered by tests nobody
+  ran.
 - **The handoff journal records what an investigation ruled OUT as well as what it
   concluded.** A fourth entry type, `elimination`, names the dead hypothesis, carries the
   reason in `--body`, and requires `--excerpt`: the captured evidence that killed it,

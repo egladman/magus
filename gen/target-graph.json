@@ -968,6 +968,10 @@
             },
             {
               "project": ".",
+              "glob": "releaser.buzz"
+            },
+            {
+              "project": ".",
               "glob": "spells/**/*.buzz"
             },
             {

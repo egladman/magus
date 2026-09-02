@@ -164,11 +164,11 @@ magus\project({
 
 // The ROOT release tag HEAD sits EXACTLY on, or "" when HEAD carries none.
 //
-// Two filters, and a release commit needs both. `v*` is a refspec, not a version filter, so
-// it also selects this repository's `verified-refinements` tag - isReleaseTag is the shape
-// check that rejects it. And a release commit carries a tag PER independently-versioned
-// module, so `t.prefix` has to be empty or the root would adopt libs/gopherbuzz/v0.1.0 as
-// its own version.
+// The shape check is releaser\rootReleaseTag, which is also what the release preflight
+// asks, so a rehearsal and a build cannot disagree about which tag names the version. It
+// rejects both lookalikes a naive `v*` refspec admits: this repository's
+// `verified-refinements` tag, and the per-module tag a release commit also carries, which
+// would otherwise let the root adopt libs/gopherbuzz/v0.1.0 as its own version.
 //
 // Comparing revision ids rather than reading a version string is what makes this exact.
 // describe() renders an untagged commit as v0.4.0-3-gabc123, whose prerelease component is
@@ -176,14 +176,24 @@ magus\project({
 // distance past a stable tag - and reading it as the former would file an ordinary
 // mid-development commit under a published channel.
 fun exact_release_tag() > str !> any {
+    return releaser\rootReleaseTag(tag_names_on_head());
+}
+
+// Every tag name HEAD carries, in the order the VCS reports them. Separated from the
+// selection above so the release preflight can ask the same question of a tag set that
+// does not exist yet: what version would this commit stamp once these tags are on it.
+//
+// UNPATTERNED, where this used to ask for "v*": the preflight has to see the namespaced
+// tags too, because they are what `git describe` picks from when no root tag is there to
+// win. A pattern could not select them anyway - a glob wildcard stops at "/", which is the
+// same rule that hid the assets.
+fun tag_names_on_head() > [str] !> any {
     final head = vcs\commit().id;
-    final tags = vcs\tags("v*");
-    foreach (t in tags) {
-        if (t.prefix != "") { continue; }
-        if (!releaser\isReleaseTag(t.name)) { continue; }
-        if (t.id == head) { return t.name; }
+    var names = mut [<str>];
+    foreach (t in vcs\tags()) {
+        if (t.id == head) { names.append(t.name); }
     }
-    return "";
+    return names;
 }
 
 // The version stamped into the binary, into BUILDINFO, and into every release asset name.
@@ -204,9 +214,22 @@ fun exact_release_tag() > str !> any {
 // very repository still reported `libs/diagnostics/v0.1.0-dirty`. Naming the tag and
 // appending the suffix keeps both facts.
 //
-// describe() is still the answer for an untagged HEAD. It can pick a namespaced tag as the
-// base there too, which no version resolution here can prevent; build_release_variant's
-// separator guard is what turns that into a loud failure instead of a silent one.
+// An untagged HEAD still falls to describe, but describe CONSTRAINED to root release tags.
+// This used to say the namespaced base was a thing "no version resolution here can
+// prevent", and that was wrong: `--match` takes the shape check git already applies to
+// names. `v[0-9]*` is isReleaseTag as an fnmatch pattern - it excludes `verified-refinements`
+// by the digit and every `libs/<name>/v0.1.0` by the leading `v` - so the base is a root
+// release or nothing.
+//
+// Measured on this repository, where all four v0.4.0-era tags sit on one commit: a plain
+// describe answered `libs/diagnostics/v0.1.0-1-gf9b575121` and the constrained one answers
+// `v0.4.0-1-gf9b575121`. The unconstrained form made `magus run release-build` REFUSE on
+// every untagged commit here, which is to say on main, which is why the release path could
+// not be exercised between releases at all.
+//
+// vcs\cmd rather than vcs\describe because the descriptor takes no match argument, and the
+// args are git's own. release() already shells `vcs\cmd(["tag", ...])` the same way.
+// build_release_variant's glob guard stays: it is what catches whatever this does not.
 fun version() > str !> any {
     try {
         final tag = exact_release_tag();
@@ -214,7 +237,8 @@ fun version() > str !> any {
             if (vcs\isDirty()) { return tag + "-dirty"; }
             return tag;
         }
-        final v = vcs\describe();
+        final v = vcs\cmd(["describe", "--tags", "--always", "--dirty", "--match", "v[0-9]*"],
+            {"quiet": true}).stdout.trim();
         if (v == "") { return "unknown"; }
         return v;
     } catch (e) {
@@ -1254,6 +1278,38 @@ export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-termshots"]);
 }
 
+// The two patterns release.yaml and this file both have to agree on. They are STATED
+// here and CHECKED against the workflow (see verify_release_workflow), rather than
+// parsed out of it.
+//
+// Parsing was the alternative and it is worse in both directions. The globs live in
+// five `path:` block scalars plus a `tags:` sequence, so reading them means a YAML
+// walk that is itself a thing that can be wrong, and it would make the workflow the
+// source of truth for a rule the BUILD has to apply before any workflow exists - the
+// preflight runs on a laptop, before the tag, which is the whole point. A constant
+// plus a containment check keeps one source of truth and still fails loudly when
+// somebody edits the workflow alone: whichever side moves, the check names it.
+//
+// RELEASE_ASSET_GLOB is what actions/upload-artifact collects out of dist/ and what
+// the publish job re-expands into the `gh release` argument list. An asset the build
+// writes outside it does not exist as far as a release is concerned - which is not
+// hypothetical, it is what v0.4.0 shipped.
+final RELEASE_ASSET_GLOB = "dist/magus_*.tar.gz";
+
+// RELEASE_TAG_REFSPEC is the `on.push.tags` filter. GitHub's ref filter is the same
+// single-star glob matchesGlob models - "*" stops at "/" - which is why pushing
+// libs/gopherbuzz/v0.2.0 publishes nothing and pushing v0.4.0 publishes everything.
+final RELEASE_TAG_REFSPEC = "v*";
+
+final RELEASE_WORKFLOW = ".github/workflows/release.yaml";
+
+// The name of one release asset, and the one place that name is spelled. build_release_variant
+// WRITES it and the preflight PREDICTS it, so a change to the scheme cannot reach a tag
+// while only one of the two knows about it.
+fun release_asset_name(v: str, goos: str, goarch: str, suffix: str) > str {
+    return "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz";
+}
+
 // Builds one (goos, goarch) release binary and archives it into dist/, writing a
 // standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format).
 // No cross-job aggregation needed: CD's publish job later does
@@ -1375,19 +1431,24 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     final goarm = goarm_level(goos, goarch);
 
     final v = version();
-    final name = "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz";
+    final name = release_asset_name(v, goos, goarch, suffix);
+    final asset = fs\join("dist", name);
     // Checked HERE, beside goarm_level and before the first write, for the same reason: a
     // request that cannot produce a usable asset should leave no trace and should not pay
     // for a cross-compile first.
     //
-    // A version carrying a "/" turns the asset NAME into a PATH. fs\join then writes
-    // dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz, the archive is real and
-    // the build is green, but the release workflow's dist/magus_*.tar.gz glob matches
-    // nothing: a release that uploads no assets and reports success. That shipped once.
-    if (fs\basename(name) != name) {
-        throw "release-build: version `" + v + "` contains a path separator, so the asset "
-            + "would be written to `" + fs\join("dist", name) + "` instead of a file in "
-            + "dist/ that the release upload can find. Check that HEAD's root release tag "
+    // Against the UPLOAD GLOB rather than against fs\basename, which is the same test
+    // stated as the thing it protects. A version carrying a "/" turns the asset NAME into
+    // a PATH: fs\join then writes dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz,
+    // the archive is real and the build is green, and dist/magus_*.tar.gz matches nothing
+    // because a glob star does not cross a separator - a release that uploads no assets and
+    // reports success. That shipped once. Asking the glob also catches the other half a
+    // basename check never could, a rename of the `magus_` prefix or the `.tar.gz` suffix on
+    // one side of the handoff alone.
+    if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, asset)) {
+        throw "release-build: the asset would be `" + asset + "`, which `"
+            + RELEASE_ASSET_GLOB + "` does not match, so the release upload would not find "
+            + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
             + "resolves.";
     }
 
@@ -1478,12 +1539,24 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
         + "variant:  " + variant + "\n"
         + "\nRun `go version -m magus` for the full module list and build settings.\n");
 
-    final asset = fs\join("dist", name);
     archive\compress(stage, asset, {});
     fs\removeAll(stage);
 
     final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset));
     fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
+
+    // The manifest release.yaml checks before it uploads: one line per asset THIS build
+    // computed, so the workflow asserts against a name magus produced rather than against
+    // whatever a glob happens to expand to. A glob that matches nothing is not an error in
+    // any shell, which is how the failing v0.4.0 upload reported success; a list of names
+    // to look for cannot be satisfied by an empty dist/.
+    //
+    // Appended, not written: the windows job builds two platforms and the dynamic charm
+    // adds a second variant, each a separate process, and the assertion has to cover every
+    // one of them. A stale line from an earlier local run names a file that is still on
+    // disk, so it costs a redundant check rather than a false failure; `magus clean
+    // --outputs` clears it with the rest of dist/.
+    fs\appendFile(fs\join("dist", "ASSETS"), name + "\n");
 }
 
 // Resolves which platform to build: the explicit (goos, goarch) args when given, else
@@ -1579,6 +1652,214 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
 }
 
+// One preflight verdict. `ok` is the gate, `detail` is the line the rehearsal prints -
+// on a pass as much as on a failure, because "which checks ran" is half of what a
+// rehearsal is for.
+object Verdict {
+    ok: bool = false,
+    name: str = "",
+    detail: str = "",
+}
+
+fun passed(name: str, detail: str) > Verdict { return Verdict{ok = true, name = name, detail = detail}; }
+fun failed(name: str, detail: str) > Verdict { return Verdict{ok = false, name = name, detail = detail}; }
+
+// Local branch names, which are the ones that can shadow a tag.
+//
+// refs/heads ONLY, and that is a claim about git's disambiguation rather than a
+// shortcut. A short ref resolves through refs/, refs/tags/, refs/heads/, then
+// refs/remotes/, and a name is rendered long only when two of those match it - so
+// refs/remotes/origin/v0.4.0 shortens to `origin/v0.4.0` and collides with nothing,
+// while refs/heads/v0.4.0 collides exactly. Measured in this repository, which carries
+// both a v0.4.0 tag and a v0.4.0 branch: `for-each-ref` renders that tag as
+// `tags/v0.4.0` and `git rev-parse v0.4.0` warns that the name is ambiguous.
+fun local_branches() > [str] !> any {
+    var names = mut [<str>];
+    final listing = vcs\cmd(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"],
+        {"quiet": true}).stdout;
+    foreach (line in listing.split("\n")) {
+        final name = line.trim();
+        if (name != "") { names.append(name); }
+    }
+    return names;
+}
+
+// Does release.yaml still upload what this file thinks it uploads, and trigger on what
+// this file thinks triggers it?
+//
+// The containment check that keeps RELEASE_ASSET_GLOB and RELEASE_TAG_REFSPEC from
+// becoming a private opinion. Neither constant is derived from the workflow, so nothing
+// but this notices when one side is edited alone - and an asset glob the uploader no
+// longer uses is worse than no constant at all, because the preflight would go on
+// approving names against a pattern nobody reads.
+fun verify_release_workflow() > [Verdict] !> any {
+    if (!fs\exists(RELEASE_WORKFLOW)) {
+        return [failed("workflow", RELEASE_WORKFLOW + " is missing, so neither the upload glob nor the tag trigger can be confirmed")];
+    }
+    final body = fs\readFile(RELEASE_WORKFLOW);
+    var checks = mut [<Verdict>];
+    if (body.indexOf(RELEASE_ASSET_GLOB) == null) {
+        checks.append(failed("workflow upload glob",
+            RELEASE_WORKFLOW + " no longer contains `" + RELEASE_ASSET_GLOB
+            + "`; the asset names below were checked against a pattern the upload does not use"));
+    } else {
+        checks.append(passed("workflow upload glob", "`" + RELEASE_ASSET_GLOB + "` is what "
+            + RELEASE_WORKFLOW + " uploads"));
+    }
+    if (body.indexOf("- '" + RELEASE_TAG_REFSPEC + "'") == null) {
+        checks.append(failed("workflow tag trigger",
+            RELEASE_WORKFLOW + " no longer triggers on `" + RELEASE_TAG_REFSPEC + "`"));
+    } else {
+        checks.append(passed("workflow tag trigger", "`" + RELEASE_TAG_REFSPEC + "` is what "
+            + RELEASE_WORKFLOW + " triggers on"));
+    }
+    return checks;
+}
+
+// Every check that has to hold BEFORE a tag exists, given the tag names this release
+// would add to the ones HEAD already carries.
+//
+// The order this runs in is the reason it exists. Each of these already had an owner:
+// the asset name is checked by release-build, the changelog and the manifest path by
+// `magus-utils cut`, the branch collision by nothing at all. All of them fired hours
+// after the tag was pushed, in a workflow, on a version number that a pushed tag makes
+// unreusable - the Go module proxy caches a tag within the hour, so a failed release
+// burns the number rather than being retried on it. Nothing here is a new rule; what is
+// new is that they are answered while the answer is still free.
+//
+// Returns a LIST rather than throwing on the first failure. A rehearsal that stops at
+// the first problem hides the second one, and the next thing the developer does is fix
+// one line and rehearse again.
+fun release_preflight(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
+    var checks = mut [<Verdict>];
+    final onHead = tag_names_on_head();
+    final branches = local_branches();
+
+    // (a) A branch already using a tag's name.
+    //
+    // magus is immune since the tag query started asking for the name as written, so
+    // nothing else here would report this. The name stays ambiguous for everything ELSE
+    // reading the repository: `git describe`, `git checkout v0.4.0`, any tool reading
+    // `for-each-ref --format=%(refname:short)`, and a `git rev-parse` that prints a warning
+    // to stderr and an answer to stdout. A refusal because the fix is one command.
+    foreach (tag in wouldBeTags) {
+        var collides = false;
+        foreach (b in branches) {
+            if (b == tag) { collides = true; }
+        }
+        if (collides) {
+            checks.append(failed("branch collision", "a BRANCH named `" + tag + "` already exists, so "
+                + "the tag of that name would be ambiguous to every tool that resolves a short ref "
+                + "- `git describe`, `git checkout " + tag + "`, anything reading %(refname:short). "
+                + "magus reads tags by their written name and is not fooled, which is exactly why "
+                + "nothing else here would report it. Rename or delete the branch: "
+                + "`git branch -m " + tag + " <name>`"));
+        } else {
+            checks.append(passed("branch collision", "no branch is named `" + tag + "`"));
+        }
+    }
+
+    // (b) The post-tag state, simulated: what version() would answer with these tags on
+    // HEAD, and whether every asset release-build would then name lands where the upload
+    // looks.
+    //
+    // Scoped to a release that will RUN the workflow, which means a root tag on HEAD.
+    // Without one there are no published assets to misname, and gating here would refuse
+    // every library-only release forever: describe() then picks among the namespaced tags,
+    // so `libs/gopherbuzz/v0.2.0` is what a local release-build stamps. That is already
+    // true of any commit sitting past those tags, so the release does not introduce it and
+    // is not the place to refuse it. Reported instead.
+    final root = releaser\rootReleaseTag(wouldBeTags + onHead);
+    if (root == "") {
+        var stamped = "the nearest tag by distance";
+        final near = wouldBeTags + onHead;
+        if (near.len() > 0) { stamped = "one of " + near.join(", ") + ", chosen arbitrarily"; }
+        checks.append(passed("asset names", "no root release tag would sit on HEAD, so "
+            + RELEASE_WORKFLOW + " does not run and nothing is published. A local "
+            + "`magus run release-build` on this commit stamps " + stamped
+            + ", and refuses when that carries a separator"));
+    } else {
+        // The platform list mirrors release.yaml's build jobs so the transcript names assets
+        // a release would really produce. The check's strength does not rest on the list
+        // being current: goos, goarch and the suffix are fixed tokens with no separator in
+        // them, so the version is the only part that can push a name out of the glob - and
+        // the glob itself is the other half, which is what catches a rename on one side of
+        // the handoff alone.
+        var offenders = mut [<str>];
+        foreach (p in [["linux", "amd64"], ["linux", "arm64"], ["darwin", "amd64"],
+                       ["darwin", "arm64"], ["windows", "amd64"], ["windows", "arm64"]]) {
+            foreach (suffix in ["_static", ""]) {
+                final asset = fs\join("dist", release_asset_name(root, p[0], p[1], suffix));
+                if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, asset)) { offenders.append(asset); }
+            }
+        }
+        if (offenders.len() > 0) {
+            checks.append(failed("asset names", "HEAD would stamp version `" + root + "`, naming assets "
+                + "like `" + offenders[0] + "` that `" + RELEASE_ASSET_GLOB + "` cannot match. The "
+                + "build would be green and the release would publish nothing. " + "{offenders.len()}"
+                + " of the assets release.yaml builds are affected."));
+        } else {
+            checks.append(passed("asset names", "version `" + root + "` names assets `"
+                + RELEASE_ASSET_GLOB + "` matches on every platform release.yaml builds"));
+        }
+    }
+
+    // (c) and (d) below are about the ROOT release only: publishing, the changelog, and the
+    // workflow trigger all key off a root tag, and a release that cuts libraries alone
+    // starts no workflow run and cuts no manifest.
+    if (rootVersion == "") {
+        checks.append(passed("publish prerequisites", "no root version named, so nothing publishes"));
+        return checks;
+    }
+    final rootTag = "v" + rootVersion;
+
+    // (c) What `magus-utils cut` needs, asked now instead of after the binaries are built.
+    // Both of these already fail the release - they just fail it in the publish job, on a
+    // tag that is pushed and cached and cannot be reused.
+    final manifest = fs\join("releases", rootTag + ".yaml");
+    if (fs\exists(manifest)) {
+        checks.append(failed("release manifest", manifest + " already exists, and release manifests "
+            + "are immutable once committed - `magus-utils cut` would refuse after the binaries "
+            + "were built"));
+    } else {
+        checks.append(passed("release manifest", manifest + " is absent, as cut requires"));
+    }
+
+    if (!fs\exists("CHANGELOG.md")) {
+        checks.append(failed("changelog", "CHANGELOG.md is missing; cut reads the release notes out of it"));
+    } else if (releaser\unreleasedBody(fs\readFile("CHANGELOG.md")) == "") {
+        checks.append(failed("changelog", "CHANGELOG.md's [Unreleased] section is empty, so "
+            + "`magus-utils cut` would refuse and this release would publish binaries with no notes. "
+            + "Write the entry before tagging"));
+    } else {
+        checks.append(passed("changelog", "CHANGELOG.md's [Unreleased] section has content for cut to move"));
+    }
+
+    // (d) The trigger, from both sides. The root tag has to start the workflow and the
+    // library tags have to not - a nested tag that matched would run the whole release
+    // pipeline off a library bump, and a root tag that did not would publish nothing while
+    // every local check passed.
+    if (!releaser\matchesGlob(RELEASE_TAG_REFSPEC, rootTag)) {
+        checks.append(failed("workflow trigger", "`" + rootTag + "` does not match "
+            + RELEASE_WORKFLOW + "'s `" + RELEASE_TAG_REFSPEC + "` trigger, so pushing it would "
+            + "publish nothing"));
+    } else {
+        checks.append(passed("workflow trigger", "`" + rootTag + "` matches `" + RELEASE_TAG_REFSPEC
+            + "` and starts the release"));
+    }
+    foreach (tag in wouldBeTags) {
+        if (tag == rootTag) { continue; }
+        if (releaser\matchesGlob(RELEASE_TAG_REFSPEC, tag)) {
+            checks.append(failed("workflow trigger", "the module tag `" + tag + "` also matches `"
+                + RELEASE_TAG_REFSPEC + "`, so pushing it would start a second release run"));
+        } else {
+            checks.append(passed("workflow trigger", "the module tag `" + tag + "` starts no release run"));
+        }
+    }
+
+    return checks;
+}
+
 // release cuts a version across the workspace in the order Go's multi-module
 // convention requires - the part that is easy to get wrong by hand:
 //
@@ -1656,6 +1937,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // Survey ALWAYS, before anything else: it is the whole interface for choosing
     // a version, and printing it up front means the numbers you act on are the
     // numbers you just read.
+    final branches = local_branches();
     foreach (m in modules) {
         final cur = releaser\currentVersion(m["prefix"]);
         final n = releaser\nextFor(cur);
@@ -1663,6 +1945,19 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         if (cur == "") { at = "unreleased"; }
         magus\log.info("release: {m["key"]} - {at}"
             + ", next: patch {n.patch} | minor {n.minor} | major {n.major}");
+        // A candidate whose name a branch already holds, said HERE because the survey is
+        // where the number gets chosen. The preflight refuses it later, but by then the
+        // developer has typed it, and the cheapest place to learn a name is taken is
+        // before you pick it.
+        foreach (c in [n.patch, n.minor, n.major]) {
+            final tag = m["prefix"] + c;
+            foreach (b in branches) {
+                if (b == tag) {
+                    magus\log.warn("release:   a BRANCH named `" + tag + "` exists; that candidate "
+                        + "would make the tag ambiguous to every tool resolving a short ref");
+                }
+            }
+        }
     }
 
     if (wanted.keys().len() == 0) {
@@ -1682,8 +1977,6 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
                 + "` - run `magus run release` with no arguments to list them";
         }
     }
-
-    if (deliver and dirty) { throw "release: tree is dirty; commit before releasing"; }
 
     // Refuse a version that is not one of the three offered. Cutting a release is
     // tedious precisely because a wrong number is silent - nothing catches a typo
@@ -1738,9 +2031,49 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
 
+    // PREFLIGHT. The refusals above answer "is this version legal"; these answer "does the
+    // release that follows this tag actually work" - the question v0.4.0 got wrong, in CI,
+    // an hour after the tag was immovable.
+    //
+    // Everything above throws on the first problem, and that is right for a version number:
+    // there is one, and it is either legal or not. These are a rehearsal, so they all run
+    // and all print. Under `cd` a single failure refuses the whole release; without it the
+    // transcript is the deliverable and nothing is refused, which is the same shape the
+    // dirty-tree check already has.
+    var wouldBeTags = mut [<str>];
+    foreach (m in modules) {
+        final v = wanted[m["key"]];
+        if (v == null) { continue; }
+        wouldBeTags.append(m["prefix"] + "v" + v);
+    }
+    var rootVersion = "";
+    if (wanted["magus"] != null) { rootVersion = "{wanted["magus"]}"; }
+
+    var failures = 0;
+    foreach (c in verify_release_workflow() + release_preflight(wouldBeTags, rootVersion: rootVersion)) {
+        if (c.ok) {
+            magus\log.info("release: OK   " + c.name + " - " + c.detail);
+        } else {
+            failures = failures + 1;
+            magus\log.warn("release: FAIL " + c.name + " - " + c.detail);
+        }
+    }
+    // Both refusals come AFTER the whole transcript, where the dirty-tree one used to come
+    // before every check above it. A run that stops at the first problem sends you back for
+    // the second one, and the tree being dirty is the one fact `git status` already tells
+    // you - it should not be what hides a branch collision.
+    if (failures > 0 and deliver) {
+        throw "release: " + failures + " preflight check(s) failed; nothing was tagged. "
+            + "Drop the cd charm to rehearse until they pass.";
+    }
+    if (deliver and dirty) { throw "release: tree is dirty; commit before releasing"; }
+
     if (!deliver) {
         magus\log.info("release: DRY RUN - add the cd charm to execute");
         if (dirty) { magus\log.info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
+        if (failures > 0) {
+            magus\log.info("release: NOTE - " + failures + " preflight check(s) failed; cd will refuse until they pass");
+        }
     }
 
     // 1. Nested modules first: the root's go.mod must require a version that
@@ -1965,11 +2298,17 @@ export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
 // ten had never run in CI - nothing invoked them, and the buzz-check gate above only ever
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("badge.buzz", "coverage.buzz", "spells/**/*.buzz", "docs/lib/*.buzz",
-        "std/lib/*.buzz", "tools/*.buzz");
+    ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
+        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz");
     foreach (mod in ["badge.buzz", "coverage.buzz"]) {
         magus\cmd("buzz", args: ["-t", mod]);
     }
+    // releaser.buzz carries the version and release-name rules the `release` target
+    // decides on, and NOTHING ran its test blocks until now - the two hand-named modules
+    // above were the whole root list. They passed the entire time, which is what a test
+    // nobody runs looks like from the outside. --embedded because it is a magusfile
+    // import, the same reason tools/audit.buzz is.
+    magus\cmd("buzz", args: ["-t", "--embedded", "releaser.buzz"]);
     // GLOBBED, for the reason the spell paragraph below gives, applied to the two trees
     // that were still hand-omitted. Both were carrying real breakage precisely because
     // nothing ran them:
