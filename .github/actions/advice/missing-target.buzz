@@ -1,5 +1,5 @@
-// Comment when a pull request touches a project that is missing a target every
-// comparable project has.
+// Comment when a pull request leaves a project without a target every comparable project
+// has, by declaring the project without one or by removing the one it had.
 //
 // The sibling of conformance.buzz and the same inversion: the norm is derived from the
 // corpus, never declared. Nobody writes down "every Go service shall expose a test
@@ -24,7 +24,36 @@
 // no `build`. Judged against projects of the same KIND instead, those comparisons never
 // arise - a schema project is only ever measured against other schema projects.
 //
+// IT FIRES ONLY WHEN THIS CHANGE OPENED THE GAP. A missing target is an ABSENCE, so
+// conformance's gate does not transfer: that one waits for the diff to ADD the thing
+// being judged, and no diff adds a target that is not there. Seeding was tried first and
+// is far too coarse. This workspace's root project owns cmd/, internal/ and types/, so
+// nearly every pull request seeds it, and one standing gap then reported on all of them.
+// That is the boilerplate that teaches a reader to skip the whole comment.
+//
+// So the base TREE settles it rather than the diff. An absence is new when the base
+// cannot account for it, which is two cases and only two: the project's magusfile was not
+// there, so this change declares the project; or it was there and declared the target, so
+// this change removes it. Anything else already stood on the base branch.
+//
+// REJECTED, gating on the diff touching the project's magusfile. It reads as the author
+// having target declarations open right now, but that is attention rather than
+// attribution: the gap is exactly as old either way. It also repeats the failure it
+// replaces at a smaller scale, because 43 of the 120 commits on main since 2026-08-01
+// touch the root magusfile, so one standing root gap would still report 43 times.
+//
+// REJECTED, gating on the cohort threshold crossing, where another project gaining the
+// target newly isolates this one. The finding is then about a project the author never
+// opened, and answering it means editing somebody else's magusfile. It also wants the
+// cohort as it stood at the base, which means loading a second graph from a checkout of
+// the base, the cost advice\declaredAtBase exists to avoid.
+//
+// A KIND CHANGE is what this misses: a project that already existed and gained the spell
+// binding that moved it into this cohort. Only the base graph can see that, so the gate
+// reads it as a standing gap and stays quiet. Silence is the safe direction.
+//
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, MIN_COHORT, MIN_SHARE.
+import "proc";
 import "advice";
 import "magus";
 import "std";
@@ -116,20 +145,49 @@ export fun gaps(projects: [{str: any}], minCohort: int, minShare: double) > [{st
     return found;
 }
 
-// keepEdited drops findings outside the projects this pull request touched, so the
-// comment is about what the author can still change rather than a workspace backlog.
-export fun keepEdited(all: [{str: str}], edited: [str]) > [{str: str}] {
+// magusfilePath is where a project declares its targets. The graph reports a
+// workspace-relative path and spells the root ".", which is not a directory prefix.
+export fun magusfilePath(project: str) > str {
+    if (project == "" or project == ".") { return "magusfile.buzz"; }
+    return project + "/magusfile.buzz";
+}
+
+// declaredTargets reads the target names a magusfile declares, in the spelling the graph
+// uses. Canonicalizing is not cosmetic: the source writes `index_generate` and the graph
+// calls it `index-generate`, and comparing the two spellings raw reports a fresh gap in
+// every project that names a target with an underscore.
+export fun declaredTargets(source: str) > [str] {
+    var names = mut [<str>];
+    foreach (line in source.split("\n")) {
+        if (!line.startsWith("export fun ")) { continue; }
+        final rest = line.sub("export fun ".len());
+        final open = rest.indexOf("(");
+        if (open == null) { continue; }
+        final name = rest.sub(0, len: open).trim();
+        if (name != "") { names.append(magus\canonicalName(name)); }
+    }
+    return names;
+}
+
+// keepIntroduced keeps the gaps this change opened and drops the ones it inherited.
+//
+// base maps a project path to what it declared BEFORE the change. A project ABSENT from
+// the map had no magusfile at the base, so this change is what declared it. A project
+// present in the map and already short of the target carried this gap on the base branch,
+// and a comment about it is backlog rather than review.
+export fun keepIntroduced(all: [{str: str}], base: {str: any}) > [{str: str}] {
     var kept = mut [];
     foreach (f in all) {
-        foreach (p in edited) {
-            if ((f["project"] ?? "") == p) { kept.append(f); }
-        }
+        final before = base[f["project"] ?? ""];
+        if (before == null) { kept.append(f); continue; }
+        if (has(before ?? [], name: f["missing"] ?? "")) { kept.append(f); }
     }
     return kept;
 }
 
 fun body(items: [{str: str}]) > str {
-    final parts = mut ["**This project is missing a target that comparable projects have.**\n\n"
+    final parts = mut ["**This change leaves a project without a target that comparable "
+        + "projects have.**\n\n"
         + "| project | missing | projects of this kind that have it |\n| --- | --- | --- |\n"];
     foreach (f in items) {
         parts.append("| `" + (f["project"] ?? "") + "` | `" + (f["missing"] ?? "") + "` | "
@@ -140,6 +198,9 @@ fun body(items: [{str: str}]) > str {
         + "project is measured against other schema "
         + "projects. Nobody declared this convention; magus derived it from what projects "
         + "of this kind already expose.\n\n"
+        + "This change is what opened the gap: it adds the project, or it removes the "
+        + "target. A gap that already stood on the base branch is not yours to answer, and "
+        + "magus stays quiet about those.\n\n"
         + "A missing target is usually a gap in what CI checks: `magus affected ci` runs "
         + "what each project declares, so a project with no `test` is quietly exempt from "
         + "testing rather than visibly failing.\n\n"
@@ -185,16 +246,29 @@ fun main() > void !> any {
         projects.append({"path": p.path, "kind": kind(spells), "targets": targets});
     }
 
-    var edited = mut [];
-    foreach (p in magus\affectedImpact("origin/" + base).affectedProjects) {
-        if (p.seed) { edited.append(p.path); }
+    final all = gaps(projects, minCohort: minCohort, minShare: minShare);
+
+    // The base TREE, never a second graph: one `git show` per project that has a gap
+    // answers both halves of the gate at once, whether the project was declared at the
+    // base and whether it declared the target there. Asked only about the projects a gap
+    // names, so a workspace with nothing to report pays for no git at all.
+    advice\fetchBase(base, refspec: false);
+    var atBase = mut {<str: any>};
+    var asked = mut [<str>];
+    foreach (f in all) {
+        final path = f["project"] ?? "";
+        if (has(asked, name: path)) { continue; }
+        asked.append(path);
+        final res = proc\exec("git",
+            args: ["show", "origin/" + base + ":" + magusfilePath(path)],
+            dir: ".", opts: {"quiet": true, "allow_failure": true});
+        if (res.ok) { atBase[path] = declaredTargets(res.stdout); }
     }
 
-    final items = keepEdited(gaps(projects, minCohort: minCohort, minShare: minShare),
-        edited: edited);
+    final items = keepIntroduced(all, base: atBase);
     if (items.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "A project is missing a target its peers have", body: "");
-        std\print("missing-target: nothing to say ({projects.len()} projects, cohort>={minCohort}, share>={minShare})");
+        std\print("missing-target: nothing to say ({projects.len()} projects, cohort>={minCohort}, share>={minShare}; {all.len()} standing gap(s), none opened here)");
         return;
     }
     advice\publish(repo, pr: pr, name: section,
@@ -270,20 +344,55 @@ test "gaps says nothing when nobody is missing the target" {
         message: "unanimous agreement has no outlier to report");
 }
 
-test "keepEdited drops a pre-existing gap the pull request did not touch" {
-    final all = [
-        {"project": "svc-new", "missing": "test", "evidence": "5 of 6", "kind": "go"},
-        {"project": "old", "missing": "test", "evidence": "5 of 6", "kind": "go"},
-    ];
-    final kept = keepEdited(all, edited: ["svc-new"]);
-    std\assert(kept.len() == 1, message: "only what this change touched");
-    std\assert(kept[0]["project"] == "svc-new", message: "the edited one");
+test "magusfilePath knows the root project is not a directory prefix" {
+    std\assert(magusfilePath(".") == "magusfile.buzz", message: "the root declares at the top");
+    std\assert(magusfilePath("libs/textsearch") == "libs/textsearch/magusfile.buzz",
+        message: "every other project declares in its own directory");
 }
 
-test "body explains the cohort and names the escape hatch" {
+test "declaredTargets reads a magusfile in the spelling the graph uses" {
+    final got = declaredTargets("export fun index_generate(ctx: any) > void\n"
+        + "export fun ci(ctx: any) > void\n");
+    std\assert(got.len() == 2, message: "both exports");
+    std\assert(got[0] == "index-generate",
+        message: "the source writes index_generate and the graph calls it index-generate");
+}
+
+test "declaredTargets ignores what is not a target declaration" {
+    final got = declaredTargets("// mentions export fun in passing\nfun helper() > void\n"
+        + "export fun ci(ctx: any) > void\n");
+    std\assert(got.len() == 1, message: "a private helper is not a target");
+    std\assert(got[0] == "ci", message: "only the export");
+}
+
+test "keepIntroduced drops a gap that already stood on the base branch" {
+    // The regression. This workspace's root project owns cmd/, internal/ and types/, so
+    // nearly every pull request seeds it; seeding was the old gate, and one standing gap
+    // reported on every one of them under a heading claiming the change did it.
+    final all = [{"project": ".", "missing": "test", "evidence": "5 of 6", "kind": "go"}];
+    std\assert(keepIntroduced(all, base: {".": ["build", "lint"]}).len() == 0,
+        message: "the gap is as old as the base branch, so it is nobody's review comment");
+}
+
+test "keepIntroduced keeps a gap in a project this change declares" {
+    final all = [{"project": "svc-new", "missing": "test", "evidence": "5 of 6", "kind": "go"}];
+    final kept = keepIntroduced(all, base: {"svc-a": ["build", "test"]});
+    std\assert(kept.len() == 1, message: "no magusfile at the base means this change wrote it");
+    std\assert(kept[0]["project"] == "svc-new", message: "the project that arrived without one");
+}
+
+test "keepIntroduced keeps a target this change removed" {
+    final all = [{"project": "svc-a", "missing": "test", "evidence": "5 of 6", "kind": "go"}];
+    std\assert(keepIntroduced(all, base: {"svc-a": ["build", "test"]}).len() == 1,
+        message: "the base declared it and the graph no longer sees it, so this change dropped it");
+}
+
+test "body explains the cohort, says the change opened the gap, and names the escape hatch" {
     final text = body([{"project": "svc-new", "missing": "test", "evidence": "11 of 12", "kind": "go"}]);
     std\assert(text.indexOf("11 of 12") != null, message: "the count is the argument");
     std\assert(text.indexOf("quietly exempt") != null, message: "says why a gap matters");
+    std\assert(text.indexOf("This change is what opened the gap") != null,
+        message: "the heading claims this change did it, so the body owes the reader why");
     std\assert(text.indexOf("`magus:silence:missing-target` label") != null,
         message: "declining must be easy and permanent, and the label is how");
 }
