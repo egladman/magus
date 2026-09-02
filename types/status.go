@@ -86,7 +86,7 @@ type StatusReport struct {
 	// It belongs beside Locks for the same reason: held is the normal state, and what
 	// makes it worth reporting is WHO. A run queued for the machine is otherwise a run
 	// with nothing to show for itself in another terminal.
-	Machine *StatusMachine `json:"machine,omitempty" yaml:"machine,omitempty"`
+	Machine *MachineSnapshot `json:"machine,omitempty" yaml:"machine,omitempty"`
 	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (an editor,
 	// IDEs, Desktop) actually connect to: its address and whether it is really serving.
 	// It is checked independently of the Pool fields above, which report the proc socket
@@ -200,32 +200,6 @@ type StatusService struct {
 	State      ServiceState `json:"state,omitempty" yaml:"state,omitempty"`
 	Dependents int          `json:"dependents,omitempty" yaml:"dependents,omitempty"`
 	StartedAt  time.Time    `json:"started_at,omitempty" yaml:"started_at,omitempty"`
-}
-
-// StatusMachine is the machine-wide admission budget: what it is, what is spent, and
-// the claims spending it.
-type StatusMachine struct {
-	BudgetMB    int `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
-	HeldMB      int `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
-	BudgetSlots int `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
-	HeldSlots   int `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
-	// Holders are the steps running against the budget; Waiters are the ones queued for
-	// it, oldest first.
-	Holders []StatusMachineClaim `json:"holders,omitempty" yaml:"holders,omitempty"`
-	Waiters []StatusMachineClaim `json:"waiters,omitempty" yaml:"waiters,omitempty"`
-}
-
-// StatusMachineClaim is one step's hold on (or place in the queue for) the machine
-// budget. Dir is what makes it actionable: one socket per user serves every worktree,
-// so a pid alone does not say which tree to go and look at.
-type StatusMachineClaim struct {
-	Project  string    `json:"project" yaml:"project"`
-	Target   string    `json:"target" yaml:"target"`
-	PID      int       `json:"pid,omitzero" yaml:"pid,omitempty"`
-	MemoryMB int       `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
-	Slots    int       `json:"slots,omitzero" yaml:"slots,omitempty"`
-	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
-	Since    time.Time `json:"since,omitempty" yaml:"since,omitempty"`
 }
 
 // StatusLock is one held per-project workspace lock and the process holding it.

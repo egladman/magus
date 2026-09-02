@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/sys/pid"
+	"github.com/egladman/magus/types"
 )
 
 // MachineBudget is admission across every magus on the host: one budget of
@@ -51,66 +53,8 @@ const (
 	machineWaiterStaleAfter = 30 * time.Second
 )
 
-// MachineClaim is one step's request on the machine budget. It crosses the proc socket,
-// so every field carries its wire name; numeric fields use omitzero because the jsonv2
-// codec's omitempty does not omit 0.
-type MachineClaim struct {
-	Project    string `json:"project"`
-	Target     string `json:"target"`
-	DeclaredBy string `json:"declared_by,omitempty"` // absent when that is Target itself
-	MemoryMB   int    `json:"memory_mb,omitzero"`
-	Slots      int    `json:"slots,omitzero"`
-	Pid        int    `json:"pid"`
-	Cwd        string `json:"cwd,omitempty"`
-	Command    string `json:"command,omitempty"`
-	// Invocation is this run's own reference, recorded so a DESCENDANT magus can tell a
-	// claim it runs underneath from one competing with it.
-	Invocation string `json:"invocation,omitempty"`
-	// Ancestors is the invocations this claim runs underneath, which do not count
-	// against it.
-	Ancestors []string `json:"ancestors,omitempty"`
-}
-
-// MachineHolder is a live claim as a waiter or `magus status` sees it.
-type MachineHolder struct {
-	Project  string    `json:"project"`
-	Target   string    `json:"target"`
-	Pid      int       `json:"pid"`
-	MemoryMB int       `json:"memory_mb,omitzero"`
-	Slots    int       `json:"slots,omitzero"`
-	Cwd      string    `json:"cwd,omitempty"`
-	Command  string    `json:"command,omitempty"`
-	Started  time.Time `json:"started"`
-}
-
-// MachineVerdict is the budget's answer to one request.
-type MachineVerdict struct {
-	// Granted means the claim is recorded and ID releases it.
-	Granted bool   `json:"granted"`
-	ID      string `json:"id,omitempty"`
-	// Fits is false when no state of the machine admits this claim, so waiting is a
-	// hang rather than a queue.
-	Fits        bool            `json:"fits"`
-	Holders     []MachineHolder `json:"holders,omitempty"`
-	Ahead       int             `json:"ahead,omitzero"` // waiters queued in front of this one
-	BudgetMB    int             `json:"budget_mb,omitzero"`
-	HeldMB      int             `json:"held_mb,omitzero"`
-	BudgetSlots int             `json:"budget_slots,omitzero"`
-	HeldSlots   int             `json:"held_slots,omitzero"`
-}
-
-// MachineSnapshot is the whole budget, for `magus status`.
-type MachineSnapshot struct {
-	BudgetMB    int             `json:"budget_mb,omitzero"`
-	HeldMB      int             `json:"held_mb,omitzero"`
-	BudgetSlots int             `json:"budget_slots,omitzero"`
-	HeldSlots   int             `json:"held_slots,omitzero"`
-	Holders     []MachineHolder `json:"holders,omitempty"`
-	Waiters     []MachineHolder `json:"waiters,omitempty"`
-}
-
 type machineEntry struct {
-	claim    MachineClaim
+	claim    types.MachineClaim
 	started  time.Time
 	lastSeen time.Time
 }
@@ -142,9 +86,9 @@ func (b *MachineBudget) live(p int) bool {
 }
 
 // Request is one poll for admission on behalf of waiter, an id stable across this
-// step's polls. It grants, refuses, or queues, and never blocks: the wait belongs to
-// the client, which is the process that can report it.
-func (b *MachineBudget) Request(waiter string, c MachineClaim) MachineVerdict {
+// step's polls and unique machine-wide. It grants, refuses, or queues, and never
+// blocks: the wait belongs to the client, which is the process that can report it.
+func (b *MachineBudget) Request(waiter string, c types.MachineClaim) types.MachineVerdict {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.reap()
@@ -153,7 +97,7 @@ func (b *MachineBudget) Request(waiter string, c MachineClaim) MachineVerdict {
 		c.Slots = 1
 	}
 	heldMB, heldSlots := b.held(c.Ancestors)
-	v := MachineVerdict{
+	v := types.MachineVerdict{
 		Fits:        b.fits(c, 0, 0),
 		Holders:     b.holders(c.Ancestors),
 		BudgetMB:    b.budgetMB,
@@ -177,7 +121,7 @@ func (b *MachineBudget) Request(waiter string, c MachineClaim) MachineVerdict {
 	// Reserve for the head of the queue. Granting whatever fits right now is simpler
 	// and starves the claim this exists for: a ci gate reserving 10GB would sit behind
 	// an unbroken stream of one-slot runs forever.
-	reserveMB, reserveSlots := b.headReservation(waiter)
+	reserveMB, reserveSlots := b.headReservation(waiter, c.Ancestors)
 	if !b.fits(c, heldMB+reserveMB, heldSlots+reserveSlots) {
 		v.Ahead = b.ahead(waiter)
 		return v
@@ -185,7 +129,7 @@ func (b *MachineBudget) Request(waiter string, c MachineClaim) MachineVerdict {
 
 	delete(b.waiters, waiter)
 	b.seq++
-	id := fmt.Sprintf("%d.%d", c.Pid, b.seq)
+	id := fmt.Sprintf("%d.%d", c.PID, b.seq)
 	b.claims[id] = &machineEntry{claim: c, started: now, lastSeen: now}
 	v.Granted, v.ID = true, id
 	v.HeldMB, v.HeldSlots = heldMB+c.MemoryMB, heldSlots+c.Slots
@@ -209,18 +153,20 @@ func (b *MachineBudget) Drop(waiter string) {
 }
 
 // Snapshot reports the whole budget. Read-only: it retires nothing, so a status
-// command can ask what the machine is doing without moving a queue.
-func (b *MachineBudget) Snapshot() MachineSnapshot {
+// command can ask what the machine is doing without moving a queue. Entries whose
+// process is gone are FILTERED rather than deleted, so the report never shows a corpse
+// the next Request would retire anyway.
+func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	heldMB, heldSlots := b.held(nil)
-	return MachineSnapshot{
+	return types.MachineSnapshot{
 		BudgetMB:    b.budgetMB,
 		HeldMB:      heldMB,
 		BudgetSlots: b.budgetSlots,
 		HeldSlots:   heldSlots,
 		Holders:     b.holders(nil),
-		Waiters:     sortMachineHolders(b.waiters),
+		Waiters:     b.claimants(b.waiters, nil),
 	}
 }
 
@@ -229,27 +175,36 @@ func (b *MachineBudget) Snapshot() MachineSnapshot {
 func (b *MachineBudget) reap() {
 	now := b.clock()
 	for id, e := range b.claims {
-		if now.Sub(e.started) > machineClaimStaleAfter || !b.live(e.claim.Pid) {
+		if now.Sub(e.started) > machineClaimStaleAfter || !b.live(e.claim.PID) {
 			delete(b.claims, id)
 		}
 	}
 	for id, e := range b.waiters {
-		if now.Sub(e.lastSeen) > machineWaiterStaleAfter || !b.live(e.claim.Pid) {
+		if now.Sub(e.lastSeen) > machineWaiterStaleAfter || !b.live(e.claim.PID) {
 			delete(b.waiters, id)
 		}
 	}
 }
 
 // held sums what counts against a claim with these ancestors: every live claim except
-// the ones an invocation this claim runs UNDERNEATH is holding.
+// the one each ancestor invocation is holding on this claim's behalf.
 //
 // The ancestor exclusion is what makes a nested magus possible. A target whose suite
 // runs `magus run test .` is a descendant of a run already holding that target's
 // declaration, and counting it would refuse its own child. The memory is not doubled
 // either, since the ancestor is blocked in exec.
+//
+// ONE claim per ancestor invocation, not all of them. An invocation is not a step: a
+// parent running four steps concurrently, one of which spawned this child, holds four
+// claims, and excluding all four would make the child blind to three genuine peers and
+// re-admit the oversubscription this exists to stop. The largest is the one excluded,
+// because the parent step blocked in exec waiting for this child is at most that, and
+// under-excluding is the direction that deadlocks: the child would queue behind memory
+// its own parent cannot release until the child finishes.
 func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
-	for _, e := range b.claims {
-		if isMachineAncestor(e.claim.Invocation, ancestors) {
+	excused := b.excusedClaims(ancestors)
+	for id, e := range b.claims {
+		if excused[id] {
 			continue
 		}
 		mb += e.claim.MemoryMB
@@ -258,9 +213,32 @@ func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 	return mb, slots
 }
 
+// excusedClaims picks the one claim per ancestor invocation that does not count against
+// a descendant: that invocation's largest, by the reasoning on held.
+func (b *MachineBudget) excusedClaims(ancestors []string) map[string]bool {
+	if len(ancestors) == 0 {
+		return nil
+	}
+	biggest := make(map[string]string, len(ancestors)) // invocation -> claim id
+	for id, e := range b.claims {
+		inv := e.claim.Invocation
+		if inv == "" || !slices.Contains(ancestors, inv) {
+			continue
+		}
+		if cur, ok := biggest[inv]; !ok || b.claims[cur].claim.MemoryMB < e.claim.MemoryMB {
+			biggest[inv] = id
+		}
+	}
+	out := make(map[string]bool, len(biggest))
+	for _, id := range biggest {
+		out[id] = true
+	}
+	return out
+}
+
 // fits reports whether c still fits once mb and slots are spoken for. A non-positive
 // budget is unlimited on that axis.
-func (b *MachineBudget) fits(c MachineClaim, mb, slots int) bool {
+func (b *MachineBudget) fits(c types.MachineClaim, mb, slots int) bool {
 	if b.budgetMB > 0 && mb+c.MemoryMB > b.budgetMB {
 		return false
 	}
@@ -269,15 +247,32 @@ func (b *MachineBudget) fits(c MachineClaim, mb, slots int) bool {
 
 // headReservation is what the oldest waiting claim needs, so a younger one cannot take
 // the room it is queued for. Zero when this waiter IS the head.
-func (b *MachineBudget) headReservation(waiter string) (mb, slots int) {
+//
+// A waiter belonging to one of this claim's ANCESTORS is skipped, and the next-oldest
+// stranger reserved instead. Reserving for an ancestor deadlocks the pair outright: the
+// parent step is blocked in exec waiting for this child, so it cannot reach the front
+// of the queue until the child runs, and the child will not run while it reserves room
+// for the parent. held() already excuses an ancestor's granted claim for the same
+// reason; a queued one has to be excused on the same terms or the exclusion has a hole
+// exactly the width of the deadlock.
+func (b *MachineBudget) headReservation(waiter string, ancestors []string) (mb, slots int) {
 	head := ""
 	var headAt time.Time
 	for id, e := range b.waiters {
+		if id == waiter || isMachineAncestor(e.claim.Invocation, ancestors) {
+			continue
+		}
 		if head == "" || e.started.Before(headAt) || (e.started.Equal(headAt) && id < head) {
 			head, headAt = id, e.started
 		}
 	}
-	if head == "" || head == waiter {
+	if head == "" {
+		return 0, 0
+	}
+	// Only a waiter OLDER than this one reserves against it; a younger stranger is
+	// behind us in the queue and reserving for it would invert the order.
+	me, queued := b.waiters[waiter]
+	if queued && !headAt.Before(me.started) {
 		return 0, 0
 	}
 	c := b.waiters[head].claim
@@ -286,6 +281,11 @@ func (b *MachineBudget) headReservation(waiter string) (mb, slots int) {
 
 // ahead counts the waiters queued in front of this one, so a wait notice can say where
 // it stands.
+//
+// Ties count as ahead: two waiters minted in the same clock tick each report the other,
+// so the figure can exceed the true queue depth by the size of the tie. It is a
+// progress indicator in a sentence, not a position anything schedules on, and rounding
+// it up reads as the more honest error.
 func (b *MachineBudget) ahead(waiter string) int {
 	me, ok := b.waiters[waiter]
 	if !ok {
@@ -300,29 +300,27 @@ func (b *MachineBudget) ahead(waiter string) int {
 	return n
 }
 
-func (b *MachineBudget) holders(ancestors []string) []MachineHolder {
-	out := make(map[string]*machineEntry, len(b.claims))
-	for id, e := range b.claims {
-		if isMachineAncestor(e.claim.Invocation, ancestors) {
-			continue
-		}
-		out[id] = e
-	}
-	return sortMachineHolders(out)
+func (b *MachineBudget) holders(ancestors []string) []types.MachineClaimant {
+	return b.claimants(b.claims, b.excusedClaims(ancestors))
 }
 
-func sortMachineHolders(m map[string]*machineEntry) []MachineHolder {
-	out := make([]MachineHolder, 0, len(m))
-	for _, e := range m {
-		out = append(out, MachineHolder{
-			Project: e.claim.Project, Target: e.claim.Target, Pid: e.claim.Pid,
+// claimants projects an entry set onto the wire type, dropping any whose process has
+// gone. Sorted oldest first, so a reader meets the queue in the order it will move.
+func (b *MachineBudget) claimants(entries map[string]*machineEntry, excused map[string]bool) []types.MachineClaimant {
+	out := make([]types.MachineClaimant, 0, len(entries))
+	for id, e := range entries {
+		if excused[id] || !b.live(e.claim.PID) {
+			continue
+		}
+		out = append(out, types.MachineClaimant{
+			Project: e.claim.Project, Target: e.claim.Target, PID: e.claim.PID,
 			MemoryMB: e.claim.MemoryMB, Slots: e.claim.Slots,
-			Cwd: e.claim.Cwd, Command: e.claim.Command, Started: e.started,
+			Dir: e.claim.Dir, Since: e.started,
 		})
 	}
-	slices.SortFunc(out, func(a, b MachineHolder) int {
-		if !a.Started.Equal(b.Started) {
-			return a.Started.Compare(b.Started)
+	slices.SortFunc(out, func(a, b types.MachineClaimant) int {
+		if !a.Since.Equal(b.Since) {
+			return a.Since.Compare(b.Since)
 		}
 		if a.Project != b.Project {
 			return strings.Compare(a.Project, b.Project)
@@ -341,19 +339,37 @@ func isMachineAncestor(invocation string, ancestors []string) bool {
 // have it wait on itself.
 type LocalAdmitter struct{ Budget *MachineBudget }
 
-func (l LocalAdmitter) Request(_ context.Context, waiter string, c MachineClaim) (MachineVerdict, error) {
+// errNoLocalBudget is what a LocalAdmitter with no budget answers. An error rather than
+// a grant: the gate reads it as "no arbiter" and fails open with a notice, where a
+// silent grant would report an arbitrated run that was never arbitrated.
+var errNoLocalBudget = errors.New("cache: this process holds no machine budget")
+
+func (l LocalAdmitter) Request(_ context.Context, waiter string, c types.MachineClaim) (types.MachineVerdict, error) {
+	if l.Budget == nil {
+		return types.MachineVerdict{}, errNoLocalBudget
+	}
 	return l.Budget.Request(waiter, c), nil
 }
 
-func (l LocalAdmitter) Release(_ context.Context, id string) { l.Budget.Release(id) }
+func (l LocalAdmitter) Release(_ context.Context, id string) {
+	if l.Budget != nil {
+		l.Budget.Release(id)
+	}
+}
 
-func (l LocalAdmitter) Drop(_ context.Context, waiter string) { l.Budget.Drop(waiter) }
+func (l LocalAdmitter) Drop(_ context.Context, waiter string) {
+	if l.Budget != nil {
+		l.Budget.Drop(waiter)
+	}
+}
 
-// FormatMB renders megabytes as GB once MB stops being legible at a glance. Exported
-// so a refusal, a wait notice, and `magus status` say the same figure the same way.
+// FormatMB renders a declared memory figure. Base-1024 with binary suffixes and a
+// space, matching fmtBytesLog rather than inventing a second spelling of the same
+// quantity in one binary. Exported so a refusal, a wait notice, and `magus status` all
+// say the same figure the same way.
 func FormatMB(mb int) string {
 	if mb >= 1024 {
-		return fmt.Sprintf("%.1fGB", float64(mb)/1024)
+		return fmt.Sprintf("%.1f GiB", float64(mb)/1024)
 	}
-	return fmt.Sprintf("%dMB", mb)
+	return fmt.Sprintf("%d MiB", mb)
 }

@@ -20,8 +20,14 @@ import (
 // after this and restores afterwards - defaults_test.go does exactly that for
 // MAGUS_CONCURRENCY and GITHUB_ACTIONS. Clearing here rather than per-test also keeps
 // t.Parallel available, which t.Setenv would forbid.
+// MAGUS_LEVEL is cleared for the same reason and it is the sharpest case of it: this
+// suite is RUN BY magus, so the test binary is a magus child and inherits level 1. The
+// machine gate reads that to mean "nested", and every gate test then took the
+// nested-without-ancestry path and refused instead of queueing - a whole feature's
+// tests exercising the branch none of them meant to. A test that wants to be nested
+// says so with t.Setenv.
 func TestMain(m *testing.M) {
-	for _, k := range []string{"MAGUS_CACHE_WRITE_ENABLED", "MAGUS_CACHE_SIZE_MB"} {
+	for _, k := range []string{"MAGUS_CACHE_WRITE_ENABLED", "MAGUS_CACHE_SIZE_MB", "MAGUS_LEVEL"} {
 		_ = os.Unsetenv(k)
 	}
 	os.Exit(m.Run())

@@ -53,16 +53,20 @@ func (e *wsEntry) load(_ context.Context, lim *cache.Limiter, budget *cache.Mach
 		if tel != nil {
 			metricsOpt = magus.WithProvider(tel)
 		}
-		// context.Background(): workspace goroutines must outlive individual RPC contexts.
-		m, err := magus.Open(
-			context.Background(), e.root,
+		opts := []magus.Option{
 			magus.WithLoadedConfig(cfg),
 			workspace.WithLimiter(lim),
-			// The budget is held HERE, so hand it over directly: a workspace inside the
-			// daemon that dialled the daemon's socket would be waiting on itself.
-			workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}),
 			metricsOpt,
-		)
+		}
+		// The budget is held HERE, so hand it over directly: a workspace inside the
+		// daemon that dialled the daemon's socket would be waiting on itself. Only when
+		// there IS one - a registry built without a budget (every test that does) must
+		// not hand the cache an admitter that arbitrates nothing.
+		if budget != nil {
+			opts = append(opts, workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}))
+		}
+		// context.Background(): workspace goroutines must outlive individual RPC contexts.
+		m, err := magus.Open(context.Background(), e.root, opts...)
 		if err != nil {
 			e.loadErr = fmt.Errorf("daemon: open workspace %s: %w", e.root, err)
 			return

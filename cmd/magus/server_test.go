@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/changeset"
@@ -68,16 +69,18 @@ func TestServerStopNoDaemonExitsNonzero(t *testing.T) {
 // second one. Two daemons would be two budgets, which is the exact failure the feature
 // exists to remove, and `magus doctor` reports the pair as a fault.
 //
-// The spawning half re-execs the binary, so it belongs to `magus server start`'s own
-// path (startDaemonBackground) rather than to a unit test here.
+// It asserts on the SPAWN, through the seam, because spawning is the whole observable
+// effect. Checking that the incumbent is still alive passes just as well with the early
+// return deleted - and leaks a real detached daemon while doing it.
 func TestEnsureAdmissionDaemonAdoptsALiveOne(t *testing.T) {
-	// A private socket dir, so this never adopts (or spawns against) the developer's own
-	// daemon. Short: a t.TempDir() path can exceed the unix socket length limit on macOS.
+	// A private socket dir, so this never adopts the developer's own daemon. Short: a
+	// t.TempDir() path can exceed the unix socket length limit on macOS.
 	dir, err := os.MkdirTemp("", "mgadmit")
 	require.NoError(t, err)
 	defer func() { _ = os.RemoveAll(dir) }()
 	t.Setenv("XDG_RUNTIME_DIR", dir)
 	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+	spawned := trapAdmissionSpawn(t)
 
 	addr := daemonDefaultAddr()
 	srv, err := proc.New(proc.Options{
@@ -88,12 +91,59 @@ func TestEnsureAdmissionDaemonAdoptsALiveOne(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	got := ensureAdmissionDaemon(context.Background())
+	got := ensureAdmissionDaemon(context.Background(), addr)
 	assert.Equal(t, addr, got, "the run arbitrates against the daemon that is already up")
+	assert.Zero(t, *spawned, "a second daemon was started over the live one")
+}
+
+// TestEnsureAdmissionDaemonStartsOneWhenAbsent is the other half: with nothing serving,
+// a run does start the arbiter. Together with the test above, the pair pins that the
+// early return is a decision rather than an accident.
+func TestEnsureAdmissionDaemonStartsOneWhenAbsent(t *testing.T) {
+	dir, err := os.MkdirTemp("", "mgadmit")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(dir) }()
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+	spawned := trapAdmissionSpawn(t)
+
+	// The spawn is trapped, so nothing comes up and the readiness wait fails. What is
+	// under test is that a start was ATTEMPTED, and that a run whose daemon never
+	// arrives is told there is no arbiter rather than being blocked.
+	got := ensureAdmissionDaemon(context.Background(), daemonDefaultAddr())
+	assert.Equal(t, 1, *spawned, "with nothing serving, a run starts the arbiter")
+	assert.Empty(t, got, "and a daemon that never came up is reported as no arbiter, not as one")
+}
+
+// trapAdmissionSpawn replaces the spawn seam for one test and counts the calls. No
+// process is ever started: a unit test that re-execs the binary leaves a detached
+// daemon behind on every failure path.
+func trapAdmissionSpawn(t *testing.T) *int {
+	t.Helper()
+	calls := 0
+	old := spawnAdmissionDaemon
+	spawnAdmissionDaemon = func() (int, string, error) {
+		calls++
+		return 0, "", errors.New("spawn trapped by the test")
+	}
+	t.Cleanup(func() { spawnAdmissionDaemon = old })
+	return &calls
+}
+
+// TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon pins the bound the doctrine amendment
+// promises, and its limit: a daemon a person started stays up until they stop it.
+func TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon(t *testing.T) {
+	srv, err := proc.New(proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	t.Setenv(admissionDaemonEnv, "")
+	watchAdmissionIdle(t.Context(), srv)
 	select {
 	case <-srv.Done():
-		t.Fatal("a second daemon was spawned over the live one")
-	default:
+		t.Fatal("a daemon somebody started deliberately must not time itself out")
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 

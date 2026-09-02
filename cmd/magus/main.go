@@ -590,8 +590,12 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 				// build budget, and nothing else can arbitrate it. Starting it is doing
 				// what was asked rather than a side effect, the same reading that lets
 				// `graph export --follow` start one for the console.
+				//
+				// admissionDaemonAddr, not the stable path: a configured daemon.address
+				// is where the daemon this run starts will actually bind, and looking for
+				// it anywhere else finds nothing however healthy it is.
 				if !ok && profile.spawnsWork {
-					s = ensureAdmissionDaemon(rootCtx)
+					s = ensureAdmissionDaemon(rootCtx, admissionDaemonAddr(globalCfg))
 					ok = s != ""
 				}
 				if ok {
@@ -1086,10 +1090,17 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	}
 	lim := cache.NewLimiter(n)
 	// The machine budget. One daemon per user means one of these per machine, which is
-	// the whole point: a limiter caps a process, this caps the host. Sized from the
-	// memory THIS process may commit, so a daemon inside a memory-limited container
-	// budgets the container rather than the machine it happens to sit on.
-	machineBudget := cache.NewMachineBudget(mem.BudgetMB(mem.UsableBytes(ctx)), lim.Capacity())
+	// the whole point: a limiter caps a process, this caps the host.
+	//
+	// Sized from HOST facts, never from the workspace that happened to start the daemon.
+	// The daemon is started by whichever run got there first, and its concurrency is
+	// that ONE tree's magus.yaml: a project setting `concurrency: 2` for its own reasons
+	// would have capped every other worktree on the machine at two slots between them,
+	// for as long as that daemon lived. Memory comes from what this process may commit,
+	// so a daemon inside a memory-limited container budgets the container rather than
+	// the machine it sits on; slots come from the cores, which is the same ceiling
+	// ClampConcurrency holds every individual run to.
+	machineBudget := cache.NewMachineBudget(mem.BudgetMB(mem.UsableBytes(ctx)), cache.MachineCeiling())
 
 	ttl := cfg.Daemon.IdleTTL
 	if ttl <= 0 {
@@ -1183,6 +1194,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		return
 	}
 	daemonServer = srv // publish so serverStart's blocking loop unblocks on an RPC shutdown
+	watchAdmissionIdle(ctx, srv)
 	go func() {
 		// Tear down on either path: a signal (ctx cancelled via NotifyContext) or an RPC
 		// `server stop` (which calls srv.Close, closing srv.Done). Waiting only on ctx.Done

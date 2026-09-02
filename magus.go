@@ -618,11 +618,15 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// give every worktree a different one, and N of them would each admit a full
 	// machine's worth of work.
 	//
-	// The daemon injects the budget it holds; everyone else dials it.
+	// The daemon injects the budget it holds; everyone else dials it, at the configured
+	// address when there is one - the stable path is only where an unconfigured daemon
+	// happens to land.
 	if admitter := m.machineAdmitter; admitter != nil {
 		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(admitter, noWaitLocks()))
+	} else if addr := m.cfg.Daemon.Address; addr != "" && proc.SocketLive(ctx, addr) {
+		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.DaemonAdmitter{Addr: addr}, noWaitLocks()))
 	} else if addr, ok := proc.LookupStableSocket(ctx); ok {
-		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.MachineAdmitter{Addr: addr}, noWaitLocks()))
+		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.DaemonAdmitter{Addr: addr}, noWaitLocks()))
 	}
 	c, err := cache.Open(ctx, cacheDir, cfgOpts...)
 	if err != nil {

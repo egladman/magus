@@ -254,8 +254,25 @@ server, so these are not a capability split; they are the daemon's own surface.
 
 For those, a command SHOULD auto-start the daemon, because asking for the console
 IS asking for the daemon and starting it is doing what was asked rather than a
-side effect. CI never spawns one under this rule - not by a special case, but
-because CI never asks for a console. That absence of a conditional is the point.
+side effect.
+
+**Amended 2026-09-02.** This paragraph used to end "CI never spawns one under
+this rule - not by a special case, but because CI never asks for a console. That
+absence of a conditional is the point." That is no longer true, and the honest
+correction is to say so rather than to add the special case it was praising.
+`magus run` and `magus affected` now start a daemon for machine-wide admission,
+and CI runs exactly those. A CI-only exemption would be precisely the conditional
+this passage argued against, and it would also be wrong on the merits: a
+self-hosted runner executing several jobs at once is the machine the budget is
+for.
+
+What bounds it instead is a lifetime, not a caller. A daemon started for
+admission exits on its own after ten minutes with no claims held, no work in
+flight, and no client asking (`watchAdmissionIdle`); a daemon a person started
+with `magus server start` has no such bound, because they said what they wanted.
+That keeps the `docker build` objection answered - a layer that runs one magus
+command leaves a process that reaps itself, rather than one that lives as long as
+the machine.
 
 `graph export --open --follow` does this, via `ensureConsoleDaemon`. A first
 implementation was reverted before merge and rebuilt, and the three failures that

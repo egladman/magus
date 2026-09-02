@@ -8,20 +8,25 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
 
 // MachineAdmitter is the budget as a client reaches it: the daemon over the proc
 // socket, or a MachineBudget directly when this process IS the daemon.
 type MachineAdmitter interface {
-	Request(ctx context.Context, waiter string, c MachineClaim) (MachineVerdict, error)
+	Request(ctx context.Context, waiter string, c types.MachineClaim) (types.MachineVerdict, error)
 	Release(ctx context.Context, id string)
 	Drop(ctx context.Context, waiter string)
 }
 
-const (
+// Vars, not consts, for the reason lock.go states about its own wait timings: a test
+// that has to spend the real cadence either sleeps for it or does not cover it, and a
+// wait whose reporting is untested is a wait that goes silent without anyone noticing.
+var (
 	// machinePollEvery is how often a queued step re-asks. The budget never blocks, so
 	// the wait is the client's, which is the process that can print it and the one whose
 	// death should retire the waiter.
@@ -30,7 +35,20 @@ const (
 	// machineWaitHeartbeat matches the project lock's cadence: a queued run must keep
 	// saying it is queued, or it reads as hung.
 	machineWaitHeartbeat = 15 * time.Second
+
+	// machineReleaseTimeout bounds handing a claim back. The release runs in the defer
+	// that still holds this step's local limiter slot, so it must never outlast a sick
+	// daemon.
+	machineReleaseTimeout = 5 * time.Second
 )
+
+// machineWaiterSeq numbers waiters within this PROCESS, not within a Cache.
+//
+// The daemon holds one Cache per workspace and every one of them reports the daemon's
+// pid, so a per-Cache counter handed two workspaces the same "<pid>.1" and their
+// waiters overwrote each other in the registry: one run's queue entry silently became
+// the other's, and the budget then reserved for a claim nobody was waiting on.
+var machineWaiterSeq atomic.Int64
 
 // ExitCodeMachineBusy is the process status a machine-budget refusal asks for: 75,
 // EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
@@ -48,8 +66,6 @@ type machineGate struct {
 	admit  MachineAdmitter
 	noWait bool
 	log    *slog.Logger
-	seq    int
-	mu     sync.Mutex
 	lost   sync.Once
 	// notify replaces the stderr writes when set, so a test observes the wait without
 	// a terminal.
@@ -64,11 +80,11 @@ type machineGate struct {
 //
 // Fails OPEN. A daemon that dies mid-wait, or a transport that breaks, admits the step
 // and says so once: losing the arbiter must not stop a build that was going to run.
-func (g *machineGate) acquire(ctx context.Context, c MachineClaim) (func(), error) {
+func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
 	if g == nil || g.admit == nil {
 		return func() {}, nil
 	}
-	waiter := g.waiterID(c)
+	waiter := machineWaiterID(c)
 	v, err := g.admit.Request(ctx, waiter, c)
 	if err != nil {
 		return g.admitOpen(ctx, err), nil
@@ -77,18 +93,34 @@ func (g *machineGate) acquire(ctx context.Context, c MachineClaim) (func(), erro
 	case v.Granted:
 		return g.releaser(v.ID), nil
 	case !v.Fits:
-		return nil, machineTooBigError(c, v)
+		return nil, machineDoesNotFitError(c, v)
 	case g.noWait:
 		g.admit.Drop(ctx, waiter)
 		return nil, machineBusyError(c, v)
+	case blindToOwnAncestry(ctx):
+		// A nested magus that cannot name its ancestors cannot be excused from its own
+		// parent's claim, so queueing here is queueing behind a step that is blocked in
+		// exec waiting for THIS process: a deadlock the heartbeat would report as "not
+		// hung" forever. Refusing turns it into an answer a caller can act on.
+		g.admit.Drop(ctx, waiter)
+		return nil, machineBlindError(c, v)
 	}
 	return g.wait(ctx, waiter, c, v)
+}
+
+// blindToOwnAncestry reports a nested magus whose invocation ancestry did not survive
+// into it. MAGUS_LEVEL says a magus started this one; an empty ancestry says we cannot
+// tell which claims are our parent's. Ordinarily both travel together (run.SelfVars
+// rewrites the ancestry for every child magus spawns), so this is the shape a magusfile
+// that clears the environment produces.
+func blindToOwnAncestry(ctx context.Context) bool {
+	return runPkg.CurrentLevel() > 0 && len(types.InvocationAncestorsFromContext(ctx)) == 0
 }
 
 // wait polls until the budget admits the step. The notice names the holders up front
 // and repeats on a heartbeat, because a queued run with nothing on screen is
 // indistinguishable from a hung one.
-func (g *machineGate) wait(ctx context.Context, waiter string, c MachineClaim, first MachineVerdict) (func(), error) {
+func (g *machineGate) wait(ctx context.Context, waiter string, c types.MachineClaim, first types.MachineVerdict) (func(), error) {
 	g.say(machineWaitingMessage(c, first))
 	started := time.Now()
 	poll := time.NewTicker(machinePollEvery)
@@ -106,6 +138,12 @@ func (g *machineGate) wait(ctx context.Context, waiter string, c MachineClaim, f
 		case <-poll.C:
 			v, err := g.admit.Request(ctx, waiter, c)
 			if err != nil {
+				// Leaving the queue on the way out matters most HERE: this waiter may be
+				// the head, and the head's whole claim is reserved against every peer
+				// until it is retired. A best-effort drop on a broken transport usually
+				// fails, but when the daemon is merely slow rather than gone it saves
+				// every other run on the machine a stale reservation.
+				g.admit.Drop(context.WithoutCancel(ctx), waiter)
 				return g.admitOpen(ctx, err), nil
 			}
 			switch {
@@ -116,17 +154,24 @@ func (g *machineGate) wait(ctx context.Context, waiter string, c MachineClaim, f
 			case !v.Fits:
 				// A peer grew its claim while this one queued, and the budget can no
 				// longer seat this step at all. No position in the queue fixes that.
-				return nil, machineTooBigError(c, v)
+				return nil, machineDoesNotFitError(c, v)
 			}
 		}
 	}
 }
 
-// releaser hands the claim back on a fresh context: the step's own is cancelled by the
-// time a failing run tears down, and a release that skipped would leave the machine
-// paying for work that has stopped.
+// releaser hands the claim back on a fresh, BOUNDED context. Fresh because the step's
+// own is cancelled by the time a failing run tears down, and a release that skipped
+// would leave the machine paying for work that has stopped. Bounded because this runs
+// inside the defer that still holds the local limiter slot: an unbounded release
+// against a wedged daemon would pin that slot for as long as the daemon stays wedged,
+// turning one sick process into a stalled run.
 func (g *machineGate) releaser(id string) func() {
-	return func() { g.admit.Release(context.Background(), id) }
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), machineReleaseTimeout)
+		defer cancel()
+		g.admit.Release(ctx, id)
+	}
 }
 
 // admitOpen is the fail-open path: the arbiter is unreachable, so this run proceeds
@@ -140,13 +185,11 @@ func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 	return func() {}
 }
 
-// waiterID identifies this step across its polls. The pid keeps it unique across the
-// machine and the counter across concurrent steps in one process.
-func (g *machineGate) waiterID(c MachineClaim) string {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.seq++
-	return fmt.Sprintf("%d.%d", c.Pid, g.seq)
+// machineWaiterID identifies this step across its polls. The pid keeps it unique across
+// the machine and the process-wide counter across every concurrent step in this one,
+// whichever Cache they belong to.
+func machineWaiterID(c types.MachineClaim) string {
+	return fmt.Sprintf("%d.%d", c.PID, machineWaiterSeq.Add(1))
 }
 
 // ancestorInvocations is the invocations this one runs underneath, this one excluded.
@@ -196,7 +239,7 @@ func (g *machineGate) say(msg string) {
 
 // machineWaitingMessage is the one-shot notice a queued run prints. It names the
 // holders because a wait a reader cannot attribute is a wait they can only interrupt.
-func machineWaitingMessage(c MachineClaim, v MachineVerdict) string {
+func machineWaitingMessage(c types.MachineClaim, v types.MachineVerdict) string {
 	ahead := ""
 	if v.Ahead > 0 {
 		ahead = fmt.Sprintf(", %d ahead of it", v.Ahead)
@@ -221,26 +264,37 @@ func (e machineRefusal) Unwrap() error { return e.error }
 
 // machineBusyError is the fail-fast answer: the machine is full right now, the same
 // command will succeed later, and the caller asked not to queue.
-func machineBusyError(c MachineClaim, v MachineVerdict) error {
+func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
 	return machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this machine's build budget is full and MAGUS_NO_WAIT is set; %s, and %s. %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
 }
 
-// machineTooBigError is the refusal no wait can fix: the declaration does not fit in
-// the whole budget, so an empty machine would refuse it too.
-func machineTooBigError(c MachineClaim, v MachineVerdict) error {
+// machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit
+// in the whole budget, so an empty machine would refuse it too.
+func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error {
 	return machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; correct the declaration if it is wrong, or run this on a bigger machine.",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		FormatMB(v.BudgetMB), v.BudgetSlots)}
 }
 
+// machineBlindError is the refusal for a nested magus that cannot name its ancestors.
+// It says what to fix, because the cause is a magusfile clearing the environment rather
+// than anything about the machine.
+func machineBlindError(c types.MachineClaim, v types.MachineVerdict) error {
+	return machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted,
+		"not starting %s %s: this magus runs underneath another one but was started without %s, so it cannot tell its own parent's claim from a stranger's and will not queue behind a run that is waiting for it; %s. %s."+
+			" Pass that variable through to nested magus invocations, or let magus set it by not clearing the environment.",
+		displayProject(c.Project), c.Target, runPkg.AncestorsEnvVar,
+		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
+}
+
 // describeMachineDeclaration says where the figure came from. A composed target is
 // held over a number a target in its chain wrote, and a reader sent to its own policy
 // would find nothing to change there.
-func describeMachineDeclaration(c MachineClaim) string {
+func describeMachineDeclaration(c types.MachineClaim) string {
 	slots := fmt.Sprintf("%d slot", max(c.Slots, 1))
 	if max(c.Slots, 1) != 1 {
 		slots += "s"
@@ -255,7 +309,7 @@ func describeMachineDeclaration(c MachineClaim) string {
 	return what
 }
 
-func describeMachineRemaining(v MachineVerdict) string {
+func describeMachineRemaining(v types.MachineVerdict) string {
 	parts := make([]string, 0, 2)
 	if v.BudgetMB > 0 {
 		parts = append(parts, fmt.Sprintf("%s of %s is left", FormatMB(max(v.BudgetMB-v.HeldMB, 0)), FormatMB(v.BudgetMB)))
@@ -271,19 +325,19 @@ func describeMachineRemaining(v MachineVerdict) string {
 
 // describeMachineHolders names who is holding the budget, so a wait or a refusal is a
 // fact the reader can act on rather than a number.
-func describeMachineHolders(holders []MachineHolder) string {
+func describeMachineHolders(holders []types.MachineClaimant) string {
 	if len(holders) == 0 {
 		return "nothing else holds a claim"
 	}
 	const show = 4
 	parts := make([]string, 0, min(len(holders), show))
 	for _, h := range holders[:min(len(holders), show)] {
-		desc := fmt.Sprintf("pid %d %s %s", h.Pid, displayProject(h.Project), h.Target)
+		desc := fmt.Sprintf("pid %d %s %s", h.PID, displayProject(h.Project), h.Target)
 		if h.MemoryMB > 0 {
 			desc += " (" + FormatMB(h.MemoryMB) + ")"
 		}
-		if h.Cwd != "" {
-			desc += ", in " + h.Cwd
+		if h.Dir != "" {
+			desc += ", in " + h.Dir
 		}
 		parts = append(parts, desc)
 	}

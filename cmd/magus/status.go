@@ -242,7 +242,7 @@ func applyStatusPools(ctx context.Context, report *types.StatusReport, addrs []s
 		// The budget is the MACHINE's, so the first server that reports one owns the
 		// section: only the daemon arbitrates it, and there is one daemon per user.
 		if report.Machine == nil && reply.Machine != nil {
-			report.Machine = machineStatusFromSnapshot(*reply.Machine)
+			report.Machine = reply.Machine
 		}
 		pools = append(pools, *out)
 	}
@@ -253,25 +253,6 @@ func applyStatusPools(ctx context.Context, report *types.StatusReport, addrs []s
 	report.Pool = &pools[0]
 	if len(pools) > 1 {
 		report.Pools = pools
-	}
-}
-
-// machineStatusFromSnapshot projects the daemon's budget onto the report shape.
-func machineStatusFromSnapshot(s cache.MachineSnapshot) *types.StatusMachine {
-	claims := func(in []cache.MachineHolder) []types.StatusMachineClaim {
-		out := make([]types.StatusMachineClaim, 0, len(in))
-		for _, h := range in {
-			out = append(out, types.StatusMachineClaim{
-				Project: h.Project, Target: h.Target, PID: h.Pid,
-				MemoryMB: h.MemoryMB, Slots: h.Slots, Dir: h.Cwd, Since: h.Started,
-			})
-		}
-		return out
-	}
-	return &types.StatusMachine{
-		BudgetMB: s.BudgetMB, HeldMB: s.HeldMB,
-		BudgetSlots: s.BudgetSlots, HeldSlots: s.HeldSlots,
-		Holders: claims(s.Holders), Waiters: claims(s.Waiters),
 	}
 }
 
@@ -478,7 +459,7 @@ func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame 
 // printMachineStatus renders the machine-wide budget: the figure, what is spent, and
 // every claim against it across worktrees. Printed whenever a daemon answered, held or
 // idle, because "nothing is queued" is the answer to the question people ask it.
-func printMachineStatus(w io.Writer, m *types.StatusMachine) {
+func printMachineStatus(w io.Writer, m *types.MachineSnapshot) {
 	if m == nil {
 		return
 	}
@@ -489,7 +470,7 @@ func printMachineStatus(w io.Writer, m *types.StatusMachine) {
 	if m.BudgetSlots > 0 {
 		fmt.Fprintf(w, "  slots   %d of %d held\n", m.HeldSlots, m.BudgetSlots)
 	}
-	claim := func(prefix string, c types.StatusMachineClaim) {
+	claim := func(prefix string, c types.MachineClaimant) {
 		line := fmt.Sprintf("  %s %s %s  pid %d", prefix, c.Project, c.Target, c.PID)
 		if c.MemoryMB > 0 {
 			line += "  " + cache.FormatMB(c.MemoryMB)

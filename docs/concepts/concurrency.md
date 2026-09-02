@@ -38,8 +38,8 @@ third about _capacity_. They solve different problems and none replaces the othe
 A single `magus run`/`magus affected` invocation builds the dependency graph, then
 runs targets concurrently where the graph allows. `magus\needs` edges order the work
 ([dependencies](dependencies.md)); a target's `slots` and `exclusive` policy tune how
-much of it runs at once ([targets](targets.md)). When a daemon is present, that
-fan-out draws from **one shared concurrency pool** across every client
+much of it runs at once ([targets](targets.md)). Nested `magus` invocations a magusfile
+spawns adopt into this same pool rather than standing up their own
 ([daemon](../guides/integrations/daemon.md)).
 
 All of this lives inside one process. It orders nothing in a _second_ `magus` you
@@ -149,8 +149,11 @@ Key properties:
 - **It fails open.** A daemon that will not start, or that dies mid-run, leaves the
   run unarbitrated and finishing, having said once that it is. Claims are retired by
   process liveness, so nothing has to release cleanly.
-- **Only runs pay for it.** `magus ls`, `describe`, and `query` cost the same however
-  loaded the machine is, so none of them starts a daemon.
+- **Only runs pay for it, and only for as long as they need it.** `magus ls`,
+  `describe`, and `query` cost the same however loaded the machine is, so none of them
+  starts a daemon. A daemon a run started exits by itself after ten minutes in which
+  nothing held a claim and no client asked it for anything; one you started with
+  `magus server start` stays up until you stop it.
 
 `magus status` shows the whole budget: what is held, what is queued, and by whom,
 across every worktree on the machine.
@@ -175,6 +178,6 @@ three compose - ordering inside a run, exclusion per project, capacity per machi
 
 - [Dependencies](dependencies.md): `magus\needs` and `depends_on`, how a single run is ordered.
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
-- [Daemon](../guides/integrations/daemon.md): the persistent process and the shared concurrency pool.
+- [Daemon](../guides/integrations/daemon.md): the persistent process that owns the machine budget.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.
 - [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, when it queues and when it refuses.

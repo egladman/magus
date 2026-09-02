@@ -975,10 +975,19 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// in-process ordering is unchanged: a step the machine cannot seat queues
 			// here, behind peers this run does not schedule, rather than starting
 			// alongside them and taking the host down.
-			releaseMachine, machineErr := c.machine.acquire(gctx, MachineClaim{
+			//
+			// It is taken while this step already holds the isolation lock (an exclusive
+			// step took it above) and its local slots. That ordering is deliberate but it
+			// is not free: an exclusive step queued on the machine budget blocks every
+			// replay in THIS process for as long as it waits, so one worktree's wait
+			// becomes another target's wait here. Acquiring the machine budget first
+			// would trade that for a worse one - the step would hold machine-wide memory
+			// while waiting for a local lock, which is the resource that spans every
+			// worktree rather than just this run.
+			releaseMachine, machineErr := c.machine.acquire(gctx, types.MachineClaim{
 				Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 				MemoryMB: s.MemoryMB, Slots: slots,
-				Pid: os.Getpid(), Cwd: workingDir(), Command: strings.Join(os.Args, " "),
+				PID: os.Getpid(), Dir: workingDir(),
 				Invocation: selfInvocation(gctx), Ancestors: ancestorInvocations(gctx),
 			})
 			if machineErr != nil {

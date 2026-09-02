@@ -1,6 +1,6 @@
 ---
 title: Daemon and concurrency
-description: The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.
+description: The magus daemon holds workspace state, hosts shared services, and owns the machine-wide build budget every magus takes its concurrency slots and declared memory from, so runs in separate worktrees do not oversubscribe the host.
 tags:
   [
     daemon,
@@ -33,7 +33,7 @@ magus config set key=concurrency,value=4
 MAGUS_CONCURRENCY=4 magus run build
 ```
 
-That limit is per process. The **machine budget** is the one that spans them: every `magus run` and `magus affected` takes its concurrency slots and its declared `memory_mb` from a budget the daemon owns, so runs in separate worktrees queue behind each other instead of each admitting a full machine's worth of work. A run starts the daemon if none is up, because nothing else can arbitrate it; see [Concurrency](../../concepts/concurrency.md#across-the-whole-machine-the-budget) and [MGS3009](../../reference/codes/sandbox/MGS3009.md).
+That limit is per process. The **machine budget** is the one that spans them: every `magus run` and `magus affected` takes its concurrency slots and its declared `memory_mb` from a budget the daemon owns, so runs in separate worktrees queue behind each other instead of each admitting a full machine's worth of work. A run starts the daemon if none is up, because nothing else can arbitrate it, and a daemon started that way stops itself after ten minutes in which nothing held a claim and no client asked it for anything. One you start with `magus server start` stays up until you stop it. See [Concurrency](../../concepts/concurrency.md#across-the-whole-machine-the-budget) and [MGS3009](../../reference/codes/sandbox/MGS3009.md).
 
 The daemon arbitrates that budget; it does not run your work. A top-level `magus run` executes in your own process and prints to your own terminal. Nested `magus` invocations still adopt into their parent's pool.
 

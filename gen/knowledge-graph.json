@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5178,
-  "edge_count": 9182,
+  "node_count": 5179,
+  "edge_count": 9188,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -894,7 +894,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "227",
+        "dir_files": "228",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#--no-autoload,md#--step,md#-c-dir,md#1-install-magus,md#2-bootstrap-a-workspace-with-magus-init,md#3-read-your-first-magusfile,md#4-bind-your-first-spell,md#5-compose-a-ci-target-and-run-only-what-changed,md#a-"
       }
     },
@@ -904,7 +904,7 @@
       "label": "docs/guides/integrations",
       "source": "docs/guides/integrations",
       "attrs": {
-        "dir_files": "138",
+        "dir_files": "139",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#agents,md#amended-2026-09-02-machine-wide-admission-is-daemon-owned,md#annotations-and-folded-logs,md#available-tools,md#azure-pipelines,md#before-the-push-the-same-advisors-locally,md#bou"
       }
     },
@@ -17088,6 +17088,16 @@
       "source": "docs/guides/integrations/pr-advice.md#what-it-costs",
       "attrs": {
         "anchor": "what-it-costs",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/pr-advice.md#when-it-says-nothing",
+      "kind": "docsection",
+      "label": "When it says nothing",
+      "source": "docs/guides/integrations/pr-advice.md#when-it-says-nothing",
+      "attrs": {
+        "anchor": "when-it-says-nothing",
         "level": "2"
       }
     },
@@ -61745,6 +61755,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/editor/design.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor/design.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/design.md",
       "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "inferred",
@@ -61754,6 +61772,14 @@
     {
       "source": "doc:docs/guides/integrations/editor/design.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor/design.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor/design.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -77041,7 +77067,31 @@
     },
     {
       "source": "doc:docs/scope.md",
+      "target": "doc:docs/guides/integrations/editor/design.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/scope.md"
+    },
+    {
+      "source": "doc:docs/scope.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/scope.md"
+    },
+    {
+      "source": "doc:docs/scope.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/scope.md"
+    },
+    {
+      "source": "doc:docs/scope.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -86330,6 +86380,14 @@
     {
       "source": "docsection:docs/guides/integrations/pr-advice.md#pull-request-advice",
       "target": "docsection:docs/guides/integrations/pr-advice.md#what-it-costs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/pr-advice.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/pr-advice.md#pull-request-advice",
+      "target": "docsection:docs/guides/integrations/pr-advice.md#when-it-says-nothing",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

@@ -213,6 +213,36 @@ func (s *Server) Addr() string { return s.ep.String() }
 // listener's context is a sibling of the process context, not its parent.
 func (s *Server) Done() <-chan struct{} { return s.done }
 
+// IdleFor reports how long since a client last asked this server for anything, and
+// whether it is doing nothing right now. A daemon nobody asked for uses the pair to
+// decide it is no longer wanted; see the admission self-exit in cmd/magus.
+//
+// Busy covers work in flight AND the machine budget, because a daemon holding claims is
+// serving runs that are not talking to it: they took their claim, went quiet for the
+// length of a build, and will come back to release it. Exiting under them would drop
+// every claim on the machine.
+func (s *Server) IdleFor(now time.Time) (idle time.Duration, busy bool) {
+	svc := s.svc
+	if snap := svc.lim.Snapshot(); snap.Running > 0 || snap.Queued > 0 {
+		return 0, true
+	}
+	if b := svc.machineBudget; b != nil {
+		m := b.Snapshot()
+		if len(m.Holders) > 0 || len(m.Waiters) > 0 {
+			return 0, true
+		}
+	}
+	inflight := false
+	svc.calls.Range(func(any, any) bool { inflight = true; return false })
+	if inflight {
+		return 0, true
+	}
+	return now.Sub(time.Unix(0, svc.lastActive.Load())), false
+}
+
+// markActive records that a client asked for something.
+func (s *service) markActive() { s.lastActive.Store(time.Now().UnixNano()) }
+
 // Close shuts down the listener, removes the socket file, and waits for all in-flight handlers.
 // Safe to call multiple times.
 func (s *Server) Close() {
@@ -284,6 +314,7 @@ func New(opts Options) (*Server, error) {
 		serviceLister:   opts.ServiceLister,
 		onJobDone:       opts.OnJobDone,
 	}
+	svc.markActive() // a daemon that has served nobody yet is not instantly idle
 	srv := &Server{
 		ep:     ep,
 		svc:    svc,
@@ -378,6 +409,11 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 	if errors.Is(err, io.EOF) {
 		return // bare liveness probe (isSocketLive dialed and closed), silent no-op
 	}
+	// Anything that got as far as a frame is a client asking for something, which is
+	// what an idle self-exit has to not interrupt. Recorded after the EOF check so a
+	// bare liveness probe - which every `magus status` and every socket check performs -
+	// does not read as use and keep an unwanted daemon alive forever.
+	svc.markActive()
 	if err != nil {
 		writeErr(conn, err.Error())
 		return
@@ -471,24 +507,24 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		}
 		_ = writeFrame(conn, typeServiceStopAllReply, serviceStopAllReply{Count: count})
 
-	case typeAdmit:
-		var req admitRequest
+	case typeBudgetAcquire:
+		var req budgetAcquireRequest
 		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode admit request: "+err.Error())
+			writeErr(conn, "proc: decode budget.acquire request: "+err.Error())
 			return
 		}
-		var reply admitReply
-		svc.admit(req, &reply)
-		_ = writeFrame(conn, typeAdmitReply, reply)
+		var reply budgetAcquireReply
+		svc.budgetAcquire(req, &reply)
+		_ = writeFrame(conn, typeBudgetAcquireReply, reply)
 
-	case typeAdmitRelease:
-		var req admitReleaseRequest
+	case typeBudgetRelease:
+		var req budgetReleaseRequest
 		if err := json.Unmarshal(line, &req); err != nil {
-			writeErr(conn, "proc: decode admit.release request: "+err.Error())
+			writeErr(conn, "proc: decode budget.release request: "+err.Error())
 			return
 		}
-		svc.admitRelease(req)
-		_ = writeFrame(conn, typeAdmitReleaseReply, admitReleaseReply{})
+		svc.budgetRelease(req)
+		_ = writeFrame(conn, typeBudgetReleaseReply, budgetReleaseReply{})
 
 	case typeConfigReload:
 		var req configReloadRequest
@@ -511,10 +547,14 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 	}
 }
 
-// admit answers one poll against the machine budget. A server holding no budget (a
-// per-process proc server) says so rather than granting: a client that read silence as
-// a grant would run unarbitrated against a daemon that IS arbitrating its peers.
-func (s *service) admit(req admitRequest, reply *admitReply) {
+// budgetAcquire answers one poll against the machine budget. A server holding no budget
+// (a per-process proc server) says so rather than granting: a client that read silence
+// as a grant would run unarbitrated against a daemon that IS arbitrating its peers.
+func (s *service) budgetAcquire(req budgetAcquireRequest, reply *budgetAcquireReply) {
+	if req.Magic != budgetMagic {
+		reply.Err = "unrecognized request"
+		return
+	}
 	if req.Protocol != "" && req.Protocol != protocolV2 {
 		reply.Err = ErrProtocolMismatch.Error()
 		return
@@ -526,10 +566,11 @@ func (s *service) admit(req admitRequest, reply *admitReply) {
 	reply.Verdict = s.machineBudget.Request(req.Waiter, req.Claim)
 }
 
-// admitRelease returns a granted claim or retires a waiter. Silent on a server with no
+// budgetRelease returns a granted claim or retires a waiter. Silent on a server with no
 // budget: there is nothing to give back, and a teardown must not fail over it.
-func (s *service) admitRelease(req admitReleaseRequest) {
-	if s.machineBudget == nil || (req.Protocol != "" && req.Protocol != protocolV2) {
+func (s *service) budgetRelease(req budgetReleaseRequest) {
+	if req.Magic != budgetMagic || s.machineBudget == nil ||
+		(req.Protocol != "" && req.Protocol != protocolV2) {
 		return
 	}
 	if req.ID != "" {
@@ -580,6 +621,7 @@ type service struct {
 	serviceLister   func() []types.StatusService
 	serviceHost     ServiceHost
 	machineBudget   *cache.MachineBudget
+	lastActive      atomic.Int64 // unix nanoseconds of the last client frame; read by IdleFor
 	configReloader  func() (dropped, busy int)
 	onJobDone       func(ctx context.Context, args []string, dur time.Duration, err error)
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
