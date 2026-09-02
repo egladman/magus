@@ -1334,5 +1334,11 @@ func exitCodeOf(err error) int {
 		return exitErr.Code
 	}
 	slog.Error(err.Error())
+	// A failure that names its own status keeps it, the same question internal/proc's
+	// server asks of an adopted run. A contended no-wait workspace lock exits 75
+	// (EX_TEMPFAIL), so a caller can retry a busy machine and not a broken build.
+	if code, ok := proc.ExitCode(err); ok {
+		return code
+	}
 	return 1
 }

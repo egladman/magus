@@ -105,6 +105,9 @@ At least one target failed. The failure was already reported with the path to it
 .TP
 \fB2\fR
 Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation.
+.TP
+\fB75\fR
+MAGUS_NO_WAIT only: another magus process holds a selected project's workspace lock, so nothing ran. 75 is EX_TEMPFAIL, the transient\-failure convention; the error names the holding pid, command and directory, and the same invocation succeeds once that process finishes.
 .RE
 .SH EXAMPLES
 \fIBuild everything\fR

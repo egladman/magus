@@ -238,14 +238,39 @@ func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) er
 
 // lockContendedError is returned by a no-wait acquire when another magus process holds
 // the project's lock. It is the fail-fast signal for MAGUS_NO_WAIT.
-type lockContendedError struct{ Project string }
+type lockContendedError struct {
+	Project string
+	Owner   string // describeOwner's rendering of the holder, "" when the sidecar says nothing
+}
+
+// lockContendedExit is the process status a contended no-wait acquire carries.
+//
+// 75 is EX_TEMPFAIL from BSD sysexits: the work was never attempted and the same command
+// succeeds once the holder finishes. 1 leaves a caller unable to tell a busy machine from
+// a broken build, so a harness has to retry genuine failures or never retry at all.
+const lockContendedExit = 75
+
+// ExitCode is read by the local exit-code seam and by the daemon, which forwards an
+// adopted run's status by asking the error rather than naming a type it cannot import.
+func (e *lockContendedError) ExitCode() int { return lockContendedExit }
 
 func (e *lockContendedError) Error() string {
 	p := e.Project
 	if p == "" {
 		p = "."
 	}
-	return fmt.Sprintf("magus: project %s is locked by another magus process; not waiting (MAGUS_NO_WAIT set)", p)
+	// Named for the same reason the waiting path names it: a fail-fast that cannot say
+	// who won leaves the caller nothing to act on.
+	return fmt.Sprintf("magus: project %s is locked by another magus process%s; not waiting (MAGUS_NO_WAIT set)", p, heldBy(e.Owner))
+}
+
+// heldBy renders a describeOwner string as a parenthetical, or "" when there is nothing
+// trustworthy to say. Shared so the fail-fast and the wait render a holder the same way.
+func heldBy(owner string) string {
+	if owner == "" {
+		return ""
+	}
+	return " (held by " + owner + ")"
 }
 
 // acquire takes the project's EXCLUSIVE lock, blocking until it is free. If
@@ -273,7 +298,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 			return nil, err
 		}
 		if l.noWait {
-			return nil, &lockContendedError{Project: projectPath}
+			return nil, &lockContendedError{Project: projectPath, Owner: l.describeOwner(projectPath)}
 		}
 		l.emitWaiting(ctx, projectPath)
 		stopWaiter := l.recordWaiter(ctx, projectPath)
@@ -371,12 +396,7 @@ func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	owner := l.describeOwner(projectPath)
-	held := ""
-	if owner != "" {
-		held = " (held by " + owner + ")"
-	}
-	fmt.Fprintf(os.Stderr, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, held)
+	fmt.Fprintf(os.Stderr, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
 	// Also as a record, so the sticky terminal region can PIN the wait. The stderr
 	// line above announces the event and then scrolls away; a run that is blocked
 	// needs the state to stay on screen, because the alternative a reader sees is

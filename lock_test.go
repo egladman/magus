@@ -142,9 +142,15 @@ func TestNoWaitFailsFast(t *testing.T) {
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	waitForFile(t, filepath.Join(lockDir, "p", "ready"), 3*time.Second)
 
+	// The helper inherits this process's directory, so this is the cwd it recorded.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+
 	locker := newProjectLocker(cacheDir, testWorkspaceRoot, true) // noWait
 	start := time.Now()
-	_, err := locker.acquire(context.Background(), "p")
+	_, err = locker.acquire(context.Background(), "p")
 	if time.Since(start) > time.Second {
 		t.Fatalf("no-wait acquire blocked instead of failing fast")
 	}
@@ -154,6 +160,24 @@ func TestNoWaitFailsFast(t *testing.T) {
 	}
 	if c.Project != "p" {
 		t.Fatalf("Contended.Project = %q, want %q", c.Project, "p")
+	}
+
+	// A fail-fast that cannot say who won is not actionable: the waiting path names the
+	// holder, so this one has to as well.
+	msg := c.Error()
+	for _, want := range []string{
+		fmt.Sprintf("pid %d", cmd.Process.Pid),
+		"-test.run=TestHelperHold",
+		wd,
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("no-wait error does not name the holder's %q:\n%s", want, msg)
+		}
+	}
+
+	// EX_TEMPFAIL, not 1: a harness branches machine-busy against build-broken on this.
+	if got := c.ExitCode(); got != 75 {
+		t.Fatalf("ExitCode() = %d, want 75", got)
 	}
 }
 
