@@ -4,13 +4,15 @@ package interactive
 
 import (
 	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -60,58 +62,76 @@ func ScoreProjects(all []*types.Project, filters []string) []ScoredProject {
 	return out
 }
 
-// State is the persisted interactive-session state.
-// LastTarget is keyed by absolute project Dir.
-type State struct {
-	LastTarget map[string]string `json:"lastTarget,omitempty"`
-}
-
-// StatePath returns the path to the State file under XDG_STATE_HOME.
-func StatePath() (string, error) {
-	dir := os.Getenv("XDG_STATE_HOME")
-	if dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		dir = filepath.Join(home, ".local", "state")
-	}
-	return filepath.Join(dir, "magus", "x-state.json"), nil
-}
-
-// LoadState reads the persisted State. A missing file is not an error.
-// A corrupt file returns a parse error; callers that want reset-on-corrupt
-// behavior should treat a non-nil error as an empty State.
-func LoadState() (State, error) {
-	var s State
-	path, err := StatePath()
+// stateDir is <XDG state>/magus/x, holding one file per project: the target last
+// run there.
+//
+// A DIRECTORY rather than the single x-state.json it replaces, for the reason
+// connectors.d next to it is one. A map in one document made every pick a
+// read-modify-write of every other project's entry, so two pickers finishing at once
+// interleaved into it and both renamed it into place - and the read only ever wanted
+// the current project's entry anyway. Nothing here reads another project's file, so
+// there is nothing left to serialize, and a corrupt file costs one re-pick in one
+// project instead of the whole map.
+//
+// Nothing prunes it. The entries are one small file per project the user has ever
+// picked in, which is bounded by how many projects a person works in; an age-based
+// sweep would delete exactly the long-tail entry - the project returned to after
+// months - that remembering is for.
+func stateDir() (string, error) {
+	dir, err := config.UserStateDir()
 	if err != nil {
-		return s, err
+		return "", err
+	}
+	return filepath.Join(dir, "magus", "x"), nil
+}
+
+// targetPath is the file recording the last target for the project rooted at dir.
+//
+// The absolute dir is hashed rather than embedded, the same construction and width
+// workspaceLockKey and symbols.IndexPath use to name a directory after an absolute
+// path: it is the identity that matters, a path is not a legal single filename, and a
+// digest keeps a listing of this directory from reproducing the user's disk layout.
+// Not canonicalized through EvalSymlinks the way the symbols index is, because both
+// sides of this one are the same Project.Dir in one process rather than two producers
+// deriving a dir independently.
+func targetPath(dir string) (string, error) {
+	root, err := stateDir()
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(abs)))
+	return filepath.Join(root, hex.EncodeToString(sum[:8])), nil
+}
+
+// LastTarget returns the target last run for the project rooted at dir, "" when there
+// is none. Every failure yields "" rather than an error: the value only pre-highlights
+// a picker row, so a missing, unreadable, or truncated file must not stop x opening.
+func LastTarget(dir string) string {
+	path, err := targetPath(dir)
+	if err != nil {
+		return ""
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return s, nil
-		}
-		return s, err
+		return ""
 	}
-	if err := json.Unmarshal(b, &s); err != nil {
-		return s, err
-	}
-	return s, nil
+	return strings.TrimSpace(string(b))
 }
 
-// SaveState atomically writes s to the State file. Every magus x on the machine writes
-// that one file, so the temp name must be unique: two savers sharing a fixed one
-// interleave their bytes into it and then both rename it into place.
-func SaveState(s State) error {
-	path, err := StatePath()
+// SaveLastTarget records target as the last one run for the project rooted at dir.
+//
+// Atomic even though the file holds one short line: two pickers finishing in the SAME
+// project still race for it, and a plain write truncates before it fills, so the
+// shorter name lands inside the longer one ("ci\nerage-badge-...", measured) and the
+// next pick pre-highlights that.
+func SaveLastTarget(dir, target string) error {
+	path, err := targetPath(dir)
 	if err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return file.WriteFileAtomic(path, b, 0o644)
+	return file.WriteFileAtomic(path, []byte(target+"\n"), 0o644)
 }
