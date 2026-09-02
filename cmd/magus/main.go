@@ -1375,13 +1375,17 @@ func exitCodeOf(err error) int {
 		return exitErr.Code
 	}
 	slog.Error(err.Error())
-	// The machine refused the work, so the same command will succeed once a peer frees
-	// its budget. Checked after the branches above and not before them: a run where real
-	// targets ALSO failed reaches errSilent first and stays 1, which is the more
-	// actionable verdict - a broken build does not become a scheduling problem because a
-	// peer happened to be busy too.
-	if errors.Is(err, types.MachineBudgetExhausted) {
-		return exitMachineBusy
+	// A failure that names its own status keeps it, the same question internal/proc's
+	// server asks of an adopted run. Two say 75 (EX_TEMPFAIL), so a caller can retry a
+	// busy machine and not a broken build: a contended no-wait workspace lock, and a
+	// step the machine's build budget could not seat (MGS3009).
+	//
+	// Checked after the branches above and not before them: a run where real targets
+	// ALSO failed reaches errSilent first and stays 1, which is the more actionable
+	// verdict - a broken build does not become a scheduling problem because a peer
+	// happened to be busy too.
+	if code, ok := proc.ExitCode(err); ok {
+		return code
 	}
 	return 1
 }

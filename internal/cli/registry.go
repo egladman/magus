@@ -227,6 +227,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
 		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
 		{2, "Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation."},
+		{75, "MAGUS_NO_WAIT only: another magus process holds a selected project's workspace lock, so nothing ran. 75 is EX_TEMPFAIL, the transient-failure convention; the error names the holding pid, command and directory, and the same invocation succeeds once that process finishes."},
 	},
 }
 
@@ -372,6 +373,7 @@ history to find the commit that introduced a regression.`,
 		{0, "Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs-only commit."},
 		{1, "At least one target failed, already reported with the path to its captured log."},
 		{2, "Misuse: no target named, or --step without an interactive terminal."},
+		{75, "MAGUS_NO_WAIT only: another magus process holds a selected project's workspace lock, so nothing ran. 75 is EX_TEMPFAIL, the transient-failure convention; the error names the holding pid, command and directory, and the same invocation succeeds once that process finishes."},
 	},
 }
 

@@ -205,9 +205,10 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 // subcommand, a wrong argument count, an unrecognized value. It is deliberately
 // distinct from 1:
 //
-//	0  the command did what was asked (an explicit -h/--help included)
-//	1  the command was invoked correctly and the WORK failed
-//	2  the invocation itself was wrong; nothing was attempted
+//	0   the command did what was asked (an explicit -h/--help included)
+//	1   the command was invoked correctly and the WORK failed
+//	2   the invocation itself was wrong; nothing was attempted
+//	75  the machine could not seat the work; the same command succeeds later
 //
 // 2 matches Go's own flag package (flag.ExitOnError) and the long-standing Unix
 // convention, and it is already what magus returns when a request cannot be carried
@@ -215,27 +216,15 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 // terminal). Before this was unified, the same "you forgot the subcommand" situation
 // exited 0 from `config`, `self` and `merge-driver`, 1 from `man` and `completion`,
 // and 2 from `self <unknown>` - so nothing scripting magus could branch on it.
+//
+// 75 is EX_TEMPFAIL from sysexits.h, borrowed the same way. Two failures carry it: a
+// contended no-wait project lock (lockContendedExit) and a step the machine's build
+// budget could not seat (cache.ExitCodeMachineBusy, MGS3009). Neither is named here -
+// each error states its own code and exitCodeOf reads it through proc.ExitCode, which
+// is what lets the daemon report the same status for a run it executed on a client's
+// behalf. A caller that cannot tell either from 1 reads a busy machine as a broken
+// build: CI retries nothing, and an agent debugs a target that never ran.
 const exitUsage = 2
-
-// exitMachineBusy is the exit code for a run the MACHINE refused: a step whose
-// concurrency and declared memory do not fit alongside what every other magus on this
-// host holds (MGS3009). It extends the contract above with the case neither 1 nor 2
-// covers - the invocation was right, the work is fine, and nothing was attempted:
-//
-//	75  the machine could not seat the work; the same command will succeed later
-//
-// Distinct because the remediation is unrelated to the code. A caller that cannot tell
-// this from 1 reads a full machine as a broken build: CI retries nothing, and an agent
-// starts debugging a target that never ran. 75 is EX_TEMPFAIL from sysexits.h, the
-// long-standing Unix code for "failed, try again later", the same kind of borrowed
-// convention as exitUsage taking 2 from flag.ExitOnError.
-//
-// Aliased rather than restated: the refusal is built in the cache and states this code
-// ON ITSELF, because a step the daemon runs for an adopted client loses its Go type
-// over the socket and the daemon reads the code off the error. Two spellings of one
-// number would let the local and forwarded paths disagree about what a busy machine
-// exits with.
-const exitMachineBusy = cache.ExitCodeMachineBusy
 
 // errUsage marks a command-line misuse so it exits exitUsage rather than the generic
 // 1. Wrap the message a user needs to fix their invocation; the usage text itself is

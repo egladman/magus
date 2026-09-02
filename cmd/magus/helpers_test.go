@@ -196,21 +196,26 @@ func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
 	assert.False(t, ok, "an ordinary failure names no code and stays the daemon's default 1")
 }
 
-// TestMachineBusyAgreesAcrossTheSocket pins the two halves of the 75 contract against
-// each other. exitCodeOf matches the diagnostic code on the LOCAL path; the daemon
-// reads ExitCode() off the error on the FORWARDED one, and a run refused by the
-// machine must exit the same either way.
-func TestMachineBusyAgreesAcrossTheSocket(t *testing.T) {
-	assert.Equal(t, exitMachineBusy, cache.ExitCodeMachineBusy,
-		"one number, or the local and forwarded paths disagree")
-
-	// The refusal itself is built inside the cache, so stand in for it with an error
-	// carrying the same two properties the real one does.
+// TestMachineBusyRidesTheExitCodeSeam pins that a machine-budget refusal needs no
+// branch of its own in exitCodeOf. The local path and the daemon now ask the error the
+// same question, so the refusal must answer it rather than be recognised by type or by
+// diagnostic code - which is what lets one seam serve both this and a contended lock.
+func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
+	// The refusal is built inside the cache, so stand in for it with an error carrying
+	// the same two properties the real one does (machine_test.go pins that it does).
 	busy := machineBusyStub{types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")}
+
 	code, ok := proc.ExitCode(busy)
 	require.True(t, ok, "the daemon must be able to read the code off a forwarded refusal")
-	assert.Equal(t, exitMachineBusy, code)
-	assert.Equal(t, exitMachineBusy, exitCodeOf(busy), "and the local path must agree")
+	assert.Equal(t, cache.ExitCodeMachineBusy, code)
+	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(busy), "and the local path must agree")
+	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(fmt.Errorf("run: %w", busy)),
+		"through every layer between the step and main")
+
+	// A run where real targets ALSO failed is a broken build, not a scheduling problem:
+	// errSilent is matched first and keeps 1, so a peer being busy cannot rewrite the
+	// verdict on work that actually ran.
+	assert.Equal(t, 1, exitCodeOf(errors.Join(errSilent{exitCode: 1}, busy)))
 }
 
 type machineBusyStub struct{ error }

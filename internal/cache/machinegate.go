@@ -36,7 +36,10 @@ const (
 // EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
 // error is built here and has to state its own code - the daemon runs an adopted step
 // in its own process and reads the code off the error, having lost the Go type.
-// cmd/magus names it exitMachineBusy and documents the contract it joins.
+//
+// The workspace lock's own contention error picks the same number for the same reason
+// (lockContendedExit). Two independent decisions that agree, not one shared setting:
+// coupling them would make a change to either silently move the other.
 const ExitCodeMachineBusy = 75
 
 // machineGate is the client half of admission: it polls the budget, reports the wait,

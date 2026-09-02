@@ -291,23 +291,19 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 }
 
 // The exit-code contract: 0 for success, 2 for a misuse the invocation never got
-// past, 1 for work that ran and failed, and 75 for work the MACHINE would not seat.
-// The last one is what lets a harness retry instead of debugging a target that never
-// ran, so its ordering against the others is part of the contract.
+// past, and 1 for work that ran and failed. 75 is not in this table: it is never
+// recognised here by type or code, only read off an error that states it.
 func TestExitCodeOf(t *testing.T) {
 	assert.Equal(t, 0, exitCodeOf(nil))
 	assert.Equal(t, 1, exitCodeOf(errors.New("go exited 1")))
 	assert.Equal(t, 1, exitCodeOf(errors.Join(errors.New("go exited 1"), nil)))
 	assert.Equal(t, exitUsage, exitCodeOf(usagef("no such target")))
 
-	busy := types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting (root) ci: the machine is full")
-	assert.Equal(t, exitMachineBusy, exitCodeOf(busy))
-	assert.Equal(t, exitMachineBusy, exitCodeOf(fmt.Errorf("run: %w", busy)),
-		"the refusal reaches exitCodeOf wrapped by every layer between the step and main")
-	// A run where real targets ALSO failed is a broken build, not a scheduling problem:
-	// errSilent is checked first and keeps 1, so a peer being busy cannot rewrite the
-	// verdict on work that actually ran.
-	assert.Equal(t, 1, exitCodeOf(errors.Join(errSilent{exitCode: 1}, busy)))
+	// A diagnostic that names no exit code is ordinary work that failed. 75 is carried
+	// by the error's own ExitCode(), never by its diagnostic code, so the two errors
+	// that claim it are pinned where they are built: TestMachineBusyRidesTheExitCodeSeam
+	// and lock_test.go's contention case.
+	assert.Equal(t, 1, exitCodeOf(types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")))
 }
 
 // TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do

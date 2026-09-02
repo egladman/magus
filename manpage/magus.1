@@ -255,6 +255,9 @@ When 1 or true, confine every subprocess and in\-process spell to the workspace 
 .TP
 \fBMAGUS_UPDATE_URL\fR
 Env\-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self\-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)
+.TP
+\fBMAGUS_NO_WAIT\fR
+Env\-only, no magus.yaml equivalent: when 1, true or yes, a run that finds a project's workspace lock held by another magus process fails immediately instead of queuing behind it, naming the holder and exiting 75 (EX_TEMPFAIL) so a caller can tell a busy machine from a broken build (default: false)
 .RE
 .SH FILES
 .TP
