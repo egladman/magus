@@ -243,6 +243,8 @@ const (
 	FlagManInstallDryRun = "dry-run"
 	// memory put: --body
 	FlagMemoryPutBody = "body"
+	// memory put: --excerpt
+	FlagMemoryPutExcerpt = "excerpt"
 	// memory put: --ref
 	FlagMemoryPutRef = "ref"
 	// memory put: --reference
@@ -389,6 +391,8 @@ const (
 	FlagStatusWatch = "watch"
 	// status: --workspace
 	FlagStatusWorkspace = "workspace"
+	// vcs add: --reason
+	FlagVCSAddReason = "reason"
 	// vcs add: --untracked
 	FlagVCSAddUntracked = "untracked"
 	// vcs resolve: --against
@@ -884,13 +888,15 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 
 // VCSAddFlags are the flags declared for `magus vcs add`.
 type VCSAddFlags struct {
-	Untracked bool // --untracked
+	Untracked bool   // --untracked
+	Reason    string // --reason
 }
 
 // BindVCSAdd registers `magus vcs add`'s flags on fs and returns the destination.
 func BindVCSAdd(fs *flag.FlagSet) *VCSAddFlags {
 	var f VCSAddFlags
-	fs.BoolVar(&f.Untracked, FlagVCSAddUntracked, false, "Also stage undeclared files")
+	fs.BoolVar(&f.Untracked, FlagVCSAddUntracked, false, "Also stage undeclared files; requires --reason")
+	fs.StringVar(&f.Reason, FlagVCSAddReason, "", "Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict")
 	return &f
 }
 
@@ -1117,17 +1123,19 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 
 // MemoryPutFlags are the flags declared for `magus memory put`.
 type MemoryPutFlags struct {
-	Type   string // --type
-	Status string // --status
-	Body   string // --body
+	Type    string // --type
+	Status  string // --status
+	Body    string // --body
+	Excerpt string // --excerpt
 }
 
 // BindMemoryPut registers `magus memory put`'s flags on fs and returns the destination.
 func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	var f MemoryPutFlags
-	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, or plan")
+	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, plan, or elimination")
 	fs.StringVar(&f.Status, FlagMemoryPutStatus, "", "Lifecycle label, e.g. accepted, active, done, stale")
-	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision and plan only")
+	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision, plan and elimination only")
+	fs.StringVar(&f.Excerpt, FlagMemoryPutExcerpt, "", "The evidence that ruled a hypothesis out, copied inline; elimination only and required there")
 	return &f
 }
 
@@ -1178,7 +1186,7 @@ type DiffFlags struct {
 func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	var f DiffFlags
 	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
-	fs.BoolVar(&f.Impact, FlagDiffImpact, false, "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
+	fs.BoolVar(&f.Impact, FlagDiffImpact, false, "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted")
 	fs.BoolVar(&f.NoTui, FlagDiffNoTui, false, "Print the report instead of opening the interactive viewer")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")

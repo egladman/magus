@@ -140,10 +140,12 @@ func recordToProto(r store.Record) *memoryv1.Memory {
 		typ = memoryv1.MemoryType_MEMORY_TYPE_DECISION
 	case store.TypePlan:
 		typ = memoryv1.MemoryType_MEMORY_TYPE_PLAN
+	case store.TypeElimination:
+		typ = memoryv1.MemoryType_MEMORY_TYPE_ELIMINATION
 	}
 	m := &memoryv1.Memory{
 		Name: r.Name, Type: typ, Refs: refs,
-		Status: r.Status, Body: r.Body, References: r.References,
+		Status: r.Status, Body: r.Body, References: r.References, Excerpt: r.Excerpt,
 	}
 	if r.Created > 0 {
 		m.CreateTime = timestamppb.New(time.Unix(r.Created, 0))
@@ -183,9 +185,11 @@ func recordFromProto(m *memoryv1.Memory) store.Record {
 		typ = store.TypeDecision
 	case memoryv1.MemoryType_MEMORY_TYPE_PLAN:
 		typ = store.TypePlan
+	case memoryv1.MemoryType_MEMORY_TYPE_ELIMINATION:
+		typ = store.TypeElimination
 	}
 	return store.Record{
 		Name: m.GetName(), Type: typ, Status: m.GetStatus(),
-		Body: m.GetBody(), Refs: refs, References: m.GetReferences(),
+		Body: m.GetBody(), Refs: refs, References: m.GetReferences(), Excerpt: m.GetExcerpt(),
 	}
 }

@@ -1198,6 +1198,11 @@ add stages what the workspace declares: sources, and the generated outputs a
 source change in the same commit accounts for. Anything undeclared is reported
 rather than swept in, which is the difference between it and git add -A.
 
+--untracked says yes to every undeclared path at once, so it needs --reason: it
+drops the one report that separates this command from git add -A, and the files
+it sweeps in land in a commit everybody pulls. The reason is kept with the
+staging verdict. Naming a path stages one file without the flag.
+
 resolve settles an in-progress merge, rebase, or cherry-pick. It classifies
 every conflicted path at once, regenerates once instead of once per file,
 settles the files one side deleted (which no VCS invokes a merge driver for),
@@ -1233,7 +1238,8 @@ base in yourself on the others, then run resolve.`,
 			Name:  "add",
 			Short: "Stage a change the way this workspace's declarations say it should be staged",
 			Flags: []Flag{
-				{Name: "untracked", Kind: FlagBool, Doc: "Also stage undeclared files"},
+				{Name: "untracked", Kind: FlagBool, Doc: "Also stage undeclared files; requires --reason"},
+				{Name: "reason", Kind: FlagString, Doc: "Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict"},
 			},
 		},
 		{
@@ -1252,6 +1258,7 @@ base in yourself on the others, then run resolve.`,
 	Examples: []Example{
 		{"Stage a change without sweeping in build residue", "magus vcs add"},
 		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
+		{"Sweep in the undeclared files, on the record", "magus vcs add --untracked --reason \"new fixtures the go spell does not claim\""},
 		{"Settle a conflicted merge", "magus vcs resolve"},
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
 		{"Record what a lease was handed", "magus vcs checkpoint"},
@@ -1440,10 +1447,16 @@ implicitly. An entry earns its place when a later reader needs to reopen the
 evidence behind a decision - the run, the query, the output reference, the
 document - rather than to be told a conclusion.
 
+An elimination entry records what an investigation ruled OUT: the hypothesis,
+why it is dead, and an excerpt of the evidence that killed it. The excerpt is
+required because an output reference resolves only from the checkout that
+produced it, which leaves the ref beside it a best-effort handle.
+
 verify is the maintenance verb: it reports entries that are malformed, stale,
-or that link to something no longer there. The same entries are reachable
-through the magus_memory MCP tool and the console, so a journal written from
-the CLI is readable by an agent without either side learning a new format.`,
+that link to something no longer there, or whose evidence no longer resolves.
+The same entries are reachable through the magus_memory MCP tool and the
+console, so a journal written from the CLI is readable by an agent without
+either side learning a new format.`,
 	Usage: "magus memory <ls|get|put|delete|verify> [flags]",
 	Children: []Command{
 		{Name: "ls", Short: "Show entries and any repair warnings"},
@@ -1452,9 +1465,10 @@ the CLI is readable by an agent without either side learning a new format.`,
 			Name:  "put",
 			Short: "Create or replace a named entry",
 			Flags: []Flag{
-				{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, or plan"},
+				{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, plan, or elimination"},
 				{Name: "status", Kind: FlagString, Doc: "Lifecycle label, e.g. accepted, active, done, stale"},
-				{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision and plan only"},
+				{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision, plan and elimination only"},
+				{Name: "excerpt", Kind: FlagString, Doc: "The evidence that ruled a hypothesis out, copied inline; elimination only and required there"},
 				// Repeatable, so bound by the command itself; declared here only so
 				// they reach the man page, which never listed them.
 				{Name: "ref", Kind: FlagCustom, Doc: "Entry ref in 'kind: target' form; repeat for multiple refs"},
@@ -1462,11 +1476,12 @@ the CLI is readable by an agent without either side learning a new format.`,
 			},
 		},
 		{Name: "delete", Short: "Remove one entry"},
-		{Name: "verify", Short: "Check malformed, stale, and broken-linked entries"},
+		{Name: "verify", Short: "Check malformed, stale, broken-linked, and unresolvable-evidence entries"},
 	},
 	Examples: []Example{
 		{"List entries and warnings", "magus memory ls"},
 		{"Read one entry", "magus memory get release-checklist"},
+		{"Record what an investigation ruled out", "magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'"},
 		{"Check the journal's health", "magus memory verify"},
 	},
 }
@@ -1532,14 +1547,15 @@ and an agent can join that session through the magus_diff MCP tool.
 
 --impact appends the blast radius of landing the change: which projects rebuild
 and which were merely edited, who has been changing them, an estimate of the
-rebuild from recorded run durations, what the workspace's advisors say, and
-which human-authored notes anchor a file or symbol you touched. It is the same
-question magus affected --impact answers, asked of a changeset instead of a
-target. It is context and never a verdict - nothing is gated on it and the exit
-code is unchanged; neither the flag nor the section it prints says "preflight",
-because in this workspace's magusfiles a preflight target IS a gate and this
-must never read as one. Each section says when it could not measure something,
-so an empty one reads as "nobody looked" rather than as a clean bill of health.
+rebuild from recorded run durations, what the workspace's advisors say, which
+human-authored notes anchor a file or symbol you touched, and what the authors
+asked magus while writing it. It is the same question magus affected --impact
+answers, asked of a changeset instead of a target. It is context and never a
+verdict - nothing is gated on it and the exit code is unchanged; neither the
+flag nor the section it prints says "preflight", because in this workspace's
+magusfiles a preflight target IS a gate and this must never read as one. Each
+section says when it could not measure something, so an empty one reads as
+"nobody looked" rather than as a clean bill of health.
 
 --impact also carries a REVIEW section, which is a bookmark rather than a
 score. It reports the two things a reader cannot produce without reading:
@@ -1570,7 +1586,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
-		{Name: "impact", Kind: FlagBool, Doc: "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors"},
+		{Name: "impact", Kind: FlagBool, Doc: "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted"},
 		{Name: "no-tui", Kind: FlagBool, Doc: "Print the report instead of opening the interactive viewer"},
 		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
 		{Name: "ack", Kind: FlagBool, Doc: "Record that you have read the changed files at their current content; --impact reports what carries no such record"},

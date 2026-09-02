@@ -1165,8 +1165,9 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "                on its own, so a script needs no flag.")
 	fmt.Fprintln(w, "  --impact      append the blast radius of landing this: which projects")
 	fmt.Fprintln(w, "                rebuild, who owns them, an estimate from recorded run times,")
-	fmt.Fprintln(w, "                what the advisors say, and which notes anchor what you")
-	fmt.Fprintln(w, "                changed. It gates nothing and changes no exit code.")
+	fmt.Fprintln(w, "                what the advisors say, which notes anchor what you changed,")
+	fmt.Fprintln(w, "                and what the authors asked magus while writing it. It gates")
+	fmt.Fprintln(w, "                nothing and changes no exit code.")
 	fmt.Fprintln(w, "  --ack         record that you have read the named changed files, or all of")
 	fmt.Fprintln(w, "                them when you name none. Needs a terminal.")
 	fmt.Fprintln(w, "  --reason      an optional note kept with an --ack")
@@ -1470,7 +1471,14 @@ type diffImpact struct {
 	AdvisorBase *impactAdvisorBase `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
 	Anchors     []anchorHit        `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
 	Rationale   []rationaleHit     `json:"rationale,omitempty"    yaml:"rationale,omitempty"`
-	Review      *impactReview      `json:"review,omitempty"       yaml:"review,omitempty"`
+	// Evidence is what this changeset's authors asked magus before writing it. It is the
+	// reasoning half of the record types.DiffTouch carries: that one names the files an agent
+	// had READ, this one the questions it put to the graph.
+	Evidence []trail.Consultation `json:"evidence,omitempty" yaml:"evidence,omitempty"`
+	// EvidenceGap says which silence an empty Evidence is, so a consumer of the document can
+	// tell an unresearched change from a record kept in another checkout.
+	EvidenceGap trail.ConsultGap `json:"evidence_gap,omitempty" yaml:"evidence_gap,omitempty"`
+	Review      *impactReview    `json:"review,omitempty"       yaml:"review,omitempty"`
 }
 
 // impactAdvisorBase is the revision the advisors compared against, and how current this
@@ -1582,6 +1590,9 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	// exactly as diffCmd's own load did.
 	p.Anchors = impactAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
 	p.Rationale = collectRationale(m.Root(), rev)
+	// The trail and window AttachReplay walks for the per-file story, read here for the questions
+	// the authors asked rather than the files they opened.
+	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), diffPaths(rev), diffReplayEvents)
 	var requiredIn func(string) bool
 	if ws, werr := inspectWorkspace(ctx, rootOverride); werr == nil {
 		requiredIn = reviewRequiredMatcher(ws)
@@ -1726,6 +1737,7 @@ func impactLines(p diffImpact) []string {
 		impactAdvisorLines(p.Advisors, p.AdvisorNotes, p.AdvisorBase),
 		impactAnchorLines(p.Anchors),
 		impactRationaleLines(p.Rationale),
+		impactEvidenceLines(p.Evidence, p.EvidenceGap),
 		impactReviewLines(p.Review),
 	}
 	for _, s := range sections {
@@ -2317,6 +2329,56 @@ func impactRationaleLines(hits []rationaleHit) []string {
 		out = append(out, fmt.Sprintf("      and %d more", len(hits)-len(shown)))
 	}
 	return out
+}
+
+// impactEvidenceLines names the questions this changeset's authors put to magus, so a reviewer
+// can audit the reasoning behind it and not just its result.
+//
+// One line per distinct subject, carrying no answer text. The section sits beside a diff someone
+// is in the middle of reading, and a transcript of what each answer said would cost more
+// attention than the whole report repays. A reader who wants an answer back re-asks the question.
+func impactEvidenceLines(hits []trail.Consultation, gap trail.ConsultGap) []string {
+	if len(hits) == 0 {
+		return impactEvidenceGapLines(gap)
+	}
+	out := []string{fmt.Sprintf("EVIDENCE: %d question%s the authors asked magus while writing this",
+		len(hits), pluralSuffix(len(hits), "", "s"))}
+	for _, h := range impactCap(hits) {
+		// A trailing space on a subjectless verb reads as a truncated line.
+		line := "      " + h.Verb
+		if h.Subject != "" {
+			line += " " + h.Subject
+		}
+		if h.Count > 1 {
+			line += fmt.Sprintf(" (x%d)", h.Count)
+		}
+		out = append(out, line)
+	}
+	return append(out, impactMoreLine(len(hits))...)
+}
+
+// impactEvidenceGapLines says which silence an empty section is. [trail.ConsultGap] carries why
+// the four have to read differently; this is the sentence each one earns.
+func impactEvidenceGapLines(gap trail.ConsultGap) []string {
+	switch gap {
+	case trail.ConsultGapNoQuestions:
+		return []string{"EVIDENCE: the authors of this changeset ran no magus read verb"}
+	case trail.ConsultGapUnleased:
+		return []string{
+			"EVIDENCE: the agent activity recorded here carries no lease, so no question joins this change",
+			"      Set BAGGAGE magus.lease on the agent and its questions join its writes.",
+		}
+	case trail.ConsultGapUnmatched:
+		return []string{
+			"EVIDENCE: no lease recorded here wrote these files, so their questions sit elsewhere",
+			"      The work was done in another checkout, or it has aged out of the trail.",
+		}
+	default:
+		return []string{
+			"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
+			"      This record is per checkout, and wiring it is `" + hint.AgentInstall.String() + "`.",
+		}
+	}
 }
 
 // adviceSection is one advisor's finding: the section it owns in the pull-request

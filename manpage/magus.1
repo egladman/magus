@@ -146,7 +146,10 @@ When true, the host architecture keys every cache entry; off by default because 
 Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBcache.size_mb\fR.
 .TP
 \fBMAGUS_CACHE_REMOTE_INSECURE\fR
-Disable remote\-cache signature verification (accept/produce unsigned artifacts); for trusted single\-repo CI only (default: false). Equivalent magus.yaml key: \fBcache.remote.insecure\fR.
+Disable remote\-cache signature verification (accept/produce unsigned artifacts); for trusted single\-repo CI only. Requires cache.remote.insecure_reason (default: false). Equivalent magus.yaml key: \fBcache.remote.insecure\fR.
+.TP
+\fBMAGUS_CACHE_REMOTE_INSECURE_REASON\fR
+Why this cache runs unverified; required whenever cache.remote.insecure is true. Equivalent magus.yaml key: \fBcache.remote.insecure_reason\fR.
 .TP
 \fBMAGUS_LOG_FORMAT\fR
 Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: \fBlog.format\fR.

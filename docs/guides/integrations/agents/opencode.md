@@ -73,7 +73,7 @@ other templates.
 // context-injection arm. That is what the two declarations below record, and
 // they are machine-read by the host-parity gate - see the longer note in
 // magus-guard-command.sh.
-// magus-guard-template: 9
+// magus-guard-template: 10
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=human pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=human pass=none
 //
@@ -158,6 +158,13 @@ export const MagusGuard: Plugin = async () => {
   // fails to recognize the config key that arms the rule and returns pass.
   const magus = process.env.GUARD_MAGUS_BIN ?? workspaceMagus() ?? "magus";
 
+  // Said once per session. This plugin instance lives as long as the session does, so a
+  // flag here IS the session and needs no marker on disk, unlike the sh templates whose
+  // process ends with each tool call. The notice reports a broken installation: a fact
+  // for the person, with nothing in it a model can act on, so a repeat is noise.
+  // Measured over recent sessions: 99% of these firings were same-session repeats.
+  let saidUnguarded = false;
+
   /**
    * Runs one `magus session hook` invocation and returns its raw stdout, or null when the
    * binary could not be run at all (missing, not executable). An older binary that
@@ -208,11 +215,14 @@ export const MagusGuard: Plugin = async () => {
    * the same way.
    */
   const judge = async (args: readonly string[], input: string): Promise<Verdict | null> => {
-    const unguarded = () =>
+    const unguarded = () => {
+      if (saidUnguarded) return;
+      saidUnguarded = true;
       console.warn(
         `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
           "Install magus, or set GUARD_MAGUS_BIN to its path.",
       );
+    };
 
     let stdout = await runOnce(args, input);
     if (stdout === null) {

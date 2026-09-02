@@ -61,6 +61,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are imported and produced with no trust set.",
 	},
 	{
+		GoPath:   "Cache.Remote.InsecureReason",
+		YamlPath: "cache.remote.insecure_reason",
+		EnvVar:   "MAGUS_CACHE_REMOTE_INSECURE_REASON",
+		Flag:     fieldtype.FlagNames{Long: "cache-remote-insecure-reason"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_CACHE_REMOTE_INSECURE_REASON: InsecureReason is the prose behind Insecure, required whenever it is true.",
+	},
+	{
 		GoPath:   "CI.MaxShards",
 		YamlPath: "ci.max_shards",
 		EnvVar:   "MAGUS_CI_MAX_SHARDS",

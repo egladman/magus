@@ -1,6 +1,8 @@
 package types
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -53,6 +55,34 @@ import (
 // source markdown has not changed, so only a version mismatch forces the rebuild that adds
 // the sections.
 const KnowledgeSchemaVersion = 10
+
+// schemaStampRe matches the knowledge-schema version magus embeds in the output it
+// generates. Four renderers write one of these spellings: the target-graph index
+// ("schema v10" in internal/render/targetgraph.go), the knowledge-graph markdown
+// ("schema v10" in internal/render/knowledgegraph.go), the graph export's
+// schema_version field, and the installed agent skills
+// ("knowledge-schema-version: 10" in internal/agent).
+var schemaStampRe = regexp.MustCompile(`(?:schema v|"schema_version":\s*|knowledge-schema-version:\s*)(\d+)`)
+
+// StampedSchemaVersion reports the knowledge-schema version stamped into generated
+// output, and whether one was found. The first stamp wins, so a document quoting a
+// version later in its prose cannot move the answer.
+//
+// It reads a stamp rather than trusting a filename because the question a caller
+// asks is what BUILT these bytes. A binary that regenerates output stamped newer
+// than KnowledgeSchemaVersion is downgrading it, which is silent data loss when the
+// generator runs as a composed target where no drift gate compares the result.
+func StampedSchemaVersion(b []byte) (int, bool) {
+	m := schemaStampRe.FindSubmatch(b)
+	if m == nil {
+		return 0, false
+	}
+	v, err := strconv.Atoi(string(m[1]))
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".

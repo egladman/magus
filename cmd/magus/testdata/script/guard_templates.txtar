@@ -214,6 +214,10 @@ stdout '"permission":"allow"'
 env GUARD_MAGUS_BIN=$WORK/stale-magus
 chmod 0755 $WORK/stale-magus
 
+# One notice directory per case below, because the notice is now held to one firing per
+# session and every fixture here carries the same session id. Sharing one directory would
+# make each case assert on whether the case above it had already spoken.
+env TMPDIR=$WORK/n-stale-command
 stdin deny-command.json
 exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 stdout 'magus guard is NOT running'
@@ -226,6 +230,7 @@ stdout 'unknown subcommand'
 ! stdout 'WARN'
 
 # Cursor's template is self-contained, so it carries the same evidence or none at all.
+env TMPDIR=$WORK/n-stale-cursor
 stdin cursor-shell-deny.json
 exec sh $GUARD_TEMPLATES/cursor-guard.sh
 stdout '"permission":"allow"'
@@ -235,12 +240,82 @@ stderr 'unknown subcommand'
 
 # A host that set its own response still gets exactly that: the evidence is the DEFAULT,
 # not something the template forces on a host that made another choice.
+env TMPDIR=$WORK/n-stale-host
 env GUARD_FAILED_RESPONSE=host-chose-this
 stdin deny-command.json
 exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 stdout 'host-chose-this'
 ! stdout 'stale-magus'
 env GUARD_FAILED_RESPONSE=
+
+# --- the notice is said once per session -------------------------------------
+#
+# These notices report a broken installation. That is a fact for the person and carries
+# nothing an agent can act on, so a repeat is noise: measured at 2,741 unavailable and 653
+# could-not-judge firings over recent sessions, 99% of them same-session repeats.
+
+# A second call in the SAME session says nothing at all, and the verdict still fails open.
+env TMPDIR=$WORK/n-once
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout 'magus guard is NOT running'
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+! stdout .
+
+# A DIFFERENT session is owed the fact once, or the first session of the day would
+# silence every session after it.
+stdin deny-command-s2.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout 'magus guard is NOT running'
+
+# The families are independent: a spent could-not-judge marker must not silence the
+# missing-binary notice, which reports a different broken installation.
+env GUARD_MAGUS_BIN=$WORK/does-not-exist
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout 'magus is not on PATH'
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+! stdout .
+env GUARD_MAGUS_BIN=$WORK/stale-magus
+
+# Cursor holds its own notices the same way, on the stderr channel it uses.
+env TMPDIR=$WORK/n-once-cursor
+stdin cursor-shell-deny.json
+exec sh $GUARD_TEMPLATES/cursor-guard.sh
+stderr 'magus guard is NOT running'
+stdin cursor-shell-deny.json
+exec sh $GUARD_TEMPLATES/cursor-guard.sh
+! stderr 'magus guard is NOT running'
+
+# --- a DENY never goes quiet, whatever any marker says -----------------------
+#
+# The safety property under the fire-once rules: an advisory may degrade because the
+# reader already declined it, but a refusal is the one verdict the caller cannot see
+# past, so it carries its whole reason every time. Asserted after the advisory family
+# for this session has already been spent, which is the state a delegated worker
+# arrives in - a Claude Code subagent shares its orchestrator's session id.
+env GUARD_MAGUS_BIN=
+env TMPDIR=$WORK/n-deny
+
+stdin advise-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"additionalContext":"'
+
+stdin advise-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"additionalContext":"'
+
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'whole-tree git stash'
+
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'whole-tree git stash'
 
 -- stale-magus --
 #!/bin/sh
@@ -252,6 +327,8 @@ echo 'magus: unknown subcommand "session"' >&2
 exit 2
 -- deny-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
+-- deny-command-s2.json --
+{"session_id": "s2", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
 -- advise-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git push"}}
 -- pass-command.json --

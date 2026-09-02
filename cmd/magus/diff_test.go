@@ -25,6 +25,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -270,6 +271,10 @@ func impactFixture() diffImpact {
 		Rationale: []rationaleHit{
 			{Path: "internal/cache/signing.go", Line: 32, Until: "no store still serves ed25519 envelopes"},
 		},
+		Evidence: []trail.Consultation{
+			{Verb: "explain", Subject: "internal/cache", Count: 2},
+			{Verb: "refs", Subject: "m types/Secret#", Count: 1},
+		},
 		Review: &impactReview{
 			Files: 8, Read: 5,
 			Stale:  []string{"internal/cache/cache.go"},
@@ -278,7 +283,7 @@ func impactFixture() diffImpact {
 	}
 }
 
-// TestImpactRendersEverySection pins the five sections a disposer reads before landing.
+// TestImpactRendersEverySection pins the sections a disposer reads before landing.
 //
 // Asserted line by line rather than by substring: these sentences are the whole product of
 // this surface, and a section that silently stopped rendering its list would still pass a
@@ -314,6 +319,10 @@ func TestImpactRendersEverySection(t *testing.T) {
 		"RATIONALE: 1 compat(until:) marker in files you changed - each names why the code stays",
 		"      internal/cache/signing.go:32 until no store still serves ed25519 envelopes",
 		"",
+		"EVIDENCE: 2 questions the authors asked magus while writing this",
+		"      explain internal/cache (x2)",
+		"      refs m types/Secret#",
+		"",
 		"REVIEW: 1 file(s) changed after you read them",
 		"      internal/cache/cache.go",
 		"      2 file(s) you have not opened, widest blast radius first",
@@ -347,6 +356,9 @@ func TestImpactEmptyFormsSayNobodyLooked(t *testing.T) {
 		"ANCHORS: no note anchors a changed file or symbol",
 		"",
 		"RATIONALE: no compat(until:) marker in the files you changed",
+		"",
+		"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
+		"      This record is per checkout, and wiring it is `magus agent install`.",
 		"",
 		"REVIEW: read receipts unavailable; step a file through in `magus diff` to earn one",
 	}, lines)
@@ -1062,6 +1074,61 @@ func TestImpactRationaleLines(t *testing.T) {
 		lines := impactRationaleLines(hits)
 		assert.Contains(t, lines[rationaleShown+1], "and 3 more")
 	})
+}
+
+func TestImpactEvidenceLines(t *testing.T) {
+	t.Run("one line per subject, and no answers", func(t *testing.T) {
+		lines := impactEvidenceLines([]trail.Consultation{
+			{Verb: "explain", Subject: "internal/trail", Count: 2},
+			{Verb: "refs", Subject: "AppendAgentCommand", Count: 1},
+		}, trail.ConsultGapNone)
+		assert.Contains(t, lines[0], "2 questions the authors asked magus")
+		assert.Equal(t, "      explain internal/trail (x2)", lines[1])
+		// A count of one is the common case, and printing "(x1)" on every line is noise.
+		assert.Equal(t, "      refs AppendAgentCommand", lines[2])
+	})
+
+	t.Run("a verb asked with no subject leaves no trailing space", func(t *testing.T) {
+		lines := impactEvidenceLines([]trail.Consultation{{Verb: "query", Count: 1}}, trail.ConsultGapNone)
+		assert.Equal(t, "      query", lines[1])
+	})
+
+	t.Run("the list is capped", func(t *testing.T) {
+		var hits []trail.Consultation
+		for i := range impactListCap + 4 {
+			hits = append(hits, trail.Consultation{Verb: "query", Subject: fmt.Sprintf("kind=op %d", i), Count: 1})
+		}
+		lines := impactEvidenceLines(hits, trail.ConsultGapNone)
+		assert.Equal(t, "      and 4 more", lines[len(lines)-1])
+	})
+}
+
+// TestImpactEvidenceGapsReadDifferently is the half that matters, for the reason the whole
+// empty-forms test exists: three of these four silences are facts about the RECORD, and one
+// sentence covering all four reports a fresh clone as work nobody researched.
+func TestImpactEvidenceGapsReadDifferently(t *testing.T) {
+	seen := map[string]trail.ConsultGap{}
+	for _, gap := range []trail.ConsultGap{
+		trail.ConsultGapUnobserved,
+		trail.ConsultGapUnleased,
+		trail.ConsultGapUnmatched,
+		trail.ConsultGapNoQuestions,
+	} {
+		lines := impactEvidenceLines(nil, gap)
+		require.NotEmpty(t, lines, gap)
+		assert.True(t, strings.HasPrefix(lines[0], "EVIDENCE: "), gap)
+		prior, dup := seen[lines[0]]
+		assert.False(t, dup, "%s and %s render the same headline", gap, prior)
+		seen[lines[0]] = gap
+	}
+
+	// The distinctions each headline has to carry, named rather than left to the count above.
+	assert.Contains(t, impactEvidenceLines(nil, trail.ConsultGapUnobserved)[1], "per checkout")
+	assert.Contains(t, impactEvidenceLines(nil, trail.ConsultGapUnleased)[1], "magus.lease")
+	assert.Contains(t, impactEvidenceLines(nil, trail.ConsultGapUnmatched)[1], "another checkout")
+	// The one gap that is a fact about the change says so without hedging it.
+	assert.Equal(t, []string{"EVIDENCE: the authors of this changeset ran no magus read verb"},
+		impactEvidenceLines(nil, trail.ConsultGapNoQuestions))
 }
 
 // The scanner used to report its own constant - `const compatMarker = "compat(until: "` -
