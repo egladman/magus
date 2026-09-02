@@ -114,7 +114,7 @@ jobs:
     # the right trigger.
     #
     # The other half - a generator the diff destabilised - lives in ci.yaml's `plan` job,
-    # which replays the project set its drift gate covers. Do not fold them back together:
+    # which replays every generate-declaring project except docs. Do not fold them back together:
     # this job ran red for two days in its first outing with nobody assigned, which is what a
     # check on the wrong side of that line looks like.
     name: generator determinism

@@ -147,7 +147,6 @@ magus\project({
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
         "test": {"memory_mb": 10240},
-        "coverage-badge": {"skip_cache": "rewrites assets/coverage.svg; a hit would restore a cached badge over the committed one"},
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
@@ -1847,6 +1846,18 @@ fun coverage_percent() > str !> any {
 export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(test);
     ctx.writesFiles("assets/coverage.svg");
+    // The three things the verdict is a function of, so this target caches honestly
+    // instead of opting out. coverage.hand.out carries the percentage and is a
+    // declared output of `test`, so a replayed suite still leaves it on disk;
+    // assets/coverage.svg is the committed file the check below compares against, so
+    // hand-editing it has to invalidate the pass; badge.buzz renders the bytes both
+    // branches produce. The charms are already in the key, which covers the two
+    // branches this body takes.
+    //
+    // A footprint REPLACES the project baseline rather than adding to it (see the note
+    // on `test`), and that is the point here: the Go tree reaches this target only
+    // through the profile that ctx.needs(test) refreshes.
+    ctx.readsFiles("coverage.hand.out", "assets/coverage.svg", "badge.buzz");
     // Only the CI runner writes or judges it. 105 non-test files carry a //go:build
     // constraint, so the ratio is a property of the machine: 67.6% on macOS against
     // 66.9% on Linux for one commit. A laptop that wrote it replaced CI's number.
