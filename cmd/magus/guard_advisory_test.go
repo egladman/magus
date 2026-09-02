@@ -232,3 +232,75 @@ func TestHookCmdRoutesAnAgentSurfaceWrite(t *testing.T) {
 	assert.Equal(t, "pass\n", run(),
 		"the repeat is silence, not the new-directory advisory stepping into the gap this rule left")
 }
+
+// A Claude Code subagent shares its orchestrator's session id, so a worker reaches an
+// already-spent family and is owed the brief. Measured against this checkout's live
+// marker directory: one session key covered an 11-hour session in which both an
+// orchestrator and a subagent ran tool calls, and no second key ever appeared.
+//
+// The worker is a SEPARATE PROCESS, so this builds a second gate over the same base
+// rather than reusing the first.
+func TestAdvisoryGateGivesAWorkerTheBrief(t *testing.T) {
+	base := t.TempDir()
+	const full, brief = "the whole routing table", "run this instead"
+
+	assert.Equal(t, full, newAdvisoryGate(base, "shared").onceOrBrief(advisoryCodeSearch, full, brief),
+		"the orchestrator meets the family first and is owed the full text")
+	assert.Equal(t, brief, newAdvisoryGate(base, "shared").onceOrBrief(advisoryCodeSearch, full, brief),
+		"a worker in the same session gets the brief, which has to carry a command on its own")
+}
+
+// Concurrent first-firings must degrade to duplicate text, never to silence. A lost
+// advisory is a verdict the reader never gets; a duplicated one costs bytes, and the
+// check-then-write below cannot produce the first.
+func TestAdvisoryGateRaceCostsBytesNotVerdicts(t *testing.T) {
+	base := t.TempDir()
+	const full, brief = "full", "brief"
+
+	const workers = 16
+	results := make(chan string, workers)
+	start := make(chan struct{})
+	for range workers {
+		go func() {
+			<-start
+			results <- newAdvisoryGate(base, "shared").onceOrBrief(advisoryCodeSearch, full, brief)
+		}()
+	}
+	close(start)
+
+	fulls := 0
+	for range workers {
+		got := <-results
+		require.NotEmpty(t, got, "a raced firing must never come back silent")
+		if got == full {
+			fulls++
+		}
+	}
+	assert.GreaterOrEqual(t, fulls, 1, "somebody has to be first")
+	assert.LessOrEqual(t, fulls, workers, "the race can duplicate the full text, which is the safe direction")
+}
+
+// The property nothing may erode: a DENY carries its whole reason on every invocation,
+// whatever the marker directory says. The gate is not consulted on that arm at all, and
+// this asserts it against a spent marker for every enrolled kind at once.
+func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
+	base := t.TempDir()
+	gate := newAdvisoryGate(base, "shared")
+	for _, kind := range []advisoryKind{
+		advisoryStaleBinary, advisoryCodeSearch, advisoryDocSearch, advisoryPrecedent,
+		advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource, advisoryRegenSource,
+		advisoryGraphStale,
+	} {
+		require.NotEmpty(t, gate.once(kind, "x"), "fixture: spend every family")
+		require.Empty(t, gate.once(kind, "x"), "fixture: the family is now spent")
+	}
+
+	// The deny arm reads Deny, which no gate call touches; a Kind on a deny would be a
+	// contradiction, so this also asserts the verdict carries none.
+	for _, command := range []string{"git stash", "go build ./...", "magus ls | head -5"} {
+		v := evaluateBashGuard(command)
+		require.NotEmpty(t, v.Deny, "fixture %q must deny", command)
+		assert.Empty(t, v.Kind, "a deny carries no advisory kind, so nothing can hold it to one firing")
+		assert.Empty(t, v.Brief, "a deny has no degraded form: the caller cannot see past a refusal")
+	}
+}

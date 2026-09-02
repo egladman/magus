@@ -289,6 +289,34 @@ stdin cursor-shell-deny.json
 exec sh $GUARD_TEMPLATES/cursor-guard.sh
 ! stderr 'magus guard is NOT running'
 
+# --- a DENY never goes quiet, whatever any marker says -----------------------
+#
+# The safety property under the fire-once rules: an advisory may degrade because the
+# reader already declined it, but a refusal is the one verdict the caller cannot see
+# past, so it carries its whole reason every time. Asserted after the advisory family
+# for this session has already been spent, which is the state a delegated worker
+# arrives in - a Claude Code subagent shares its orchestrator's session id.
+env GUARD_MAGUS_BIN=
+env TMPDIR=$WORK/n-deny
+
+stdin advise-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"additionalContext":"'
+
+stdin advise-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"additionalContext":"'
+
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'whole-tree git stash'
+
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'whole-tree git stash'
+
 -- stale-magus --
 #!/bin/sh
 # Stands in for the binary a month behind the workspace: it answers `version` and knows

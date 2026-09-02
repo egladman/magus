@@ -972,7 +972,10 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 		return bashGuardVerdict{
 			Context: searchAdvisoryLead(cmds, hints) + searchGuardReason,
 			Kind:    advisoryCodeSearch,
-			Brief:   "magus workspace: try the graph first. `" + hint.Refs.With("<symbol>") + "` / `" + hint.Query.String() + "`",
+			// Carries the ROUTING, not just the verbs. A worker meets this having never
+			// seen the full text, and picking query for a code symbol returns 0, which is
+			// how a reader concludes the graph is useless.
+			Brief: "magus workspace: `" + hint.Refs.With("<sym>") + "` for code, `" + hint.Query.String() + "` for entities.",
 		}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
