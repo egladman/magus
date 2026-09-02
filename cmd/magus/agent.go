@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
 )
 
@@ -50,42 +51,42 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus agent <install|sample|adoption> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  install            render the embedded skills and write or stream them")
-	fmt.Fprintln(w, "                     into named destinations (.claude/skills, .agents/skills,")
-	fmt.Fprintln(w, "                     .opencode/skills, ...)")
-	fmt.Fprintln(w, "  sample             print a starter AGENTS.md to stdout to own and tweak;")
-	fmt.Fprintln(w, "                     never writes a file")
-	fmt.Fprintln(w, "  adoption           report how often agents used the graph versus grep,")
-	fmt.Fprintln(w, "                     over shell commands piped in (stdin or --commands)")
+	tty.ProseItem(w, tty.SystemProbe, "  install            ",
+		"render the embedded skills and write or stream them into named destinations",
+		"(.claude/skills, .agents/skills, .opencode/skills, ...)")
+	tty.ProseItem(w, tty.SystemProbe, "  sample             ",
+		"print a starter AGENTS.md to stdout to own and tweak; never writes a file")
+	tty.ProseItem(w, tty.SystemProbe, "  adoption           ",
+		"report how often agents used the graph versus grep, over shell commands",
+		"piped in (stdin or --commands)")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "magus never writes your AGENTS.md. That file is yours, and an installer")
-	fmt.Fprintln(w, "that edits a file you own leaves bytes you did not write and cannot audit.")
-	fmt.Fprintln(w, "So `install` PRINTS the managed magus block for you to paste, and only")
-	fmt.Fprintln(w, "when your AGENTS.md is missing it or carrying a stale one.")
+	tty.Prose(w, tty.SystemProbe,
+		"magus never writes your AGENTS.md.",
+		"That file is yours, and an installer that edits a file you own leaves bytes you did not write and cannot audit.",
+		"So `install` PRINTS the managed magus block for you to paste, and only when your AGENTS.md is missing it or carrying a stale one.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Stdout philosophy: `magus agent` is a pure data generator. To install")
-	fmt.Fprintln(w, "skills anywhere your shell can reach, use --tar and pipe to tar:")
+	tty.Prose(w, tty.SystemProbe,
+		"Stdout philosophy: `magus agent` is a pure data generator.",
+		"To install skills anywhere your shell can reach, use --tar and pipe to tar:")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C .claude/skills")
 	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C ~/.config/opencode/skills")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "The write-to-disk form is only for the in-repo, paths-relative-to-<dir>")
-	fmt.Fprintln(w, "case, where it preserves the previous one-line ergonomics. Absolute")
-	fmt.Fprintln(w, "destinations are refused unless --global is set, to keep magus from")
-	fmt.Fprintln(w, "silently writing outside the working tree.")
+	tty.Prose(w, tty.SystemProbe,
+		"The write-to-disk form is only for the in-repo, paths-relative-to-<dir> case, where it preserves the previous one-line ergonomics.",
+		"Absolute destinations are refused unless --global is set, to keep magus from silently writing outside the working tree.")
 	fmt.Fprintln(w, "")
 	// Listed here because this Usage replaces the FlagSet's own: without it the
 	// flags are reachable but undiscoverable, and an agent told to "defer to -h"
 	// would conclude they do not exist.
 	fmt.Fprintln(w, "install flags:")
-	fmt.Fprintln(w, "  --dir <path>   repo directory to install into (default .)")
-	fmt.Fprintln(w, "  --force        overwrite existing installed skill files")
-	fmt.Fprintln(w, "  --prune        also remove installed skills this binary no longer ships;")
-	fmt.Fprintln(w, "                 without it they are reported and left in place. Only skills")
-	fmt.Fprintln(w, "                 magus wrote are candidates - a hand-authored one beside them")
-	fmt.Fprintln(w, "                 is never touched")
-	fmt.Fprintln(w, "  --tar          stream a tar archive to stdout instead of writing files")
-	fmt.Fprintln(w, "  --global       allow absolute destination paths in write mode")
+	tty.ProseItem(w, tty.SystemProbe, "  --dir <path>   ", "repo directory to install into (default .)")
+	tty.ProseItem(w, tty.SystemProbe, "  --force        ", "overwrite existing installed skill files")
+	tty.ProseItem(w, tty.SystemProbe, "  --prune        ",
+		"also remove installed skills this binary no longer ships; without it they are reported and left in place.",
+		"Only skills magus wrote are candidates - a hand-authored one beside them is never touched")
+	tty.ProseItem(w, tty.SystemProbe, "  --tar          ", "stream a tar archive to stdout instead of writing files")
+	tty.ProseItem(w, tty.SystemProbe, "  --global       ", "allow absolute destination paths in write mode")
 }
 
 func agentUsageErr() error {

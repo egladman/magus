@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
 )
 
@@ -87,12 +88,13 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus where [flags] [filter...]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Print the absolute path of a project to stdout.")
-			fmt.Fprintln(os.Stderr, "Filters are AND-combined substrings; leaf-anchored longest match wins.")
-			fmt.Fprintln(os.Stderr, "Prints the path and exits 0 on a unique match; exits 2 on ambiguity.")
+			tty.Prose(os.Stderr, tty.SystemProbe, "Print the absolute path of a project to stdout.")
+			tty.Prose(os.Stderr, tty.SystemProbe, "Filters are AND-combined substrings; leaf-anchored longest match wins.")
+			tty.Prose(os.Stderr, tty.SystemProbe, "Prints the path and exits 0 on a unique match; exits 2 on ambiguity.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "When no project matches, falls back to fuzzy file search across the")
-			fmt.Fprintln(os.Stderr, "workspace (well-known build/vendor dirs are skipped).")
+			tty.Prose(os.Stderr, tty.SystemProbe,
+				"When no project matches, falls back to fuzzy file search across the workspace",
+				"(well-known build/vendor dirs are skipped).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Examples:")
 			fmt.Fprintln(os.Stderr, "  cd \"$(magus where api)\"")

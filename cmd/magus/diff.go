@@ -1125,58 +1125,62 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "       magus diff --ack [<changed-path>...]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
-	fmt.Fprintln(w, "The uncommitted tree is the default subject; --rev reviews a committed range")
-	fmt.Fprintln(w, "and --patch reviews a patch somebody handed you.")
+	tty.Prose(w, tty.SystemProbe,
+		"The uncommitted tree is the default subject;",
+		"--rev reviews a committed range and --patch reviews a patch somebody handed you.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Generated files - declared target outputs - are folded away: reading one is")
-	fmt.Fprintln(w, "reading a machine's restatement of a change made elsewhere, so the source edit")
-	fmt.Fprintln(w, "is what to read.")
+	tty.Prose(w, tty.SystemProbe,
+		"Generated files - declared target outputs - are folded away:",
+		"reading one is reading a machine's restatement of a change made elsewhere, so the source edit is what to read.")
 	fmt.Fprintln(w, "")
 	// Name the ranking key exactly, and name what is NOT one. Only reach ranks; listing public
 	// surface and coverage as "the evidence behind its rank" has a reader who sees a hot file
 	// sitting eighth conclude the ranking weighed churn and dismissed it. Printing a number
 	// beside a rank it did not earn teaches the wrong model.
-	fmt.Fprintln(w, "The order is: declared outputs last, then the widest reach first - how many")
-	fmt.Fprintln(w, "files reference the most-referenced symbol the file changed. Reach needs a")
-	fmt.Fprintln(w, "symbol index; without one there is no ranking key at all, and diff says so")
-	fmt.Fprintln(w, "at the top and falls back to path order rather than implying a ranking.")
-	fmt.Fprintln(w, "Build the index with `"+hint.GraphBuild.String()+"`.")
+	tty.Prose(w, tty.SystemProbe,
+		"The order is: declared outputs last, then the widest reach first - how many files reference the most-referenced symbol the file changed.",
+		"Reach needs a symbol index; without one there is no ranking key at all, and diff says so at the top and falls back to path order rather than implying a ranking.",
+		"Build the index with `"+hint.GraphBuild.String()+"`.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Public surface, coverage, churn, and the agent trail are CONTEXT printed")
-	fmt.Fprintln(w, "beside each file. None of them is a sort key.")
+	tty.Prose(w, tty.SystemProbe,
+		"Public surface, coverage, churn, and the agent trail are CONTEXT printed beside each file.",
+		"None of them is a sort key.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "--ack records that you have read files, at the content they hold now, so")
-	fmt.Fprintln(w, "--impact can tell you what changed after you read it. Name the paths you read")
-	fmt.Fprintln(w, "to record just those - read them in whatever editor or pager you already")
-	fmt.Fprintln(w, "use - or pass none to cover the whole changeset. Stepping a file through in")
-	fmt.Fprintln(w, "the viewer records it too. Editing a file afterwards voids its receipt.")
+	tty.Prose(w, tty.SystemProbe,
+		"--ack records that you have read files, at the content they hold now, so --impact can tell you what changed after you read it.",
+		"Name the paths you read to record just those - read them in whatever editor or pager you already use - or pass none to cover the whole changeset.",
+		"Stepping a file through in the viewer records it too.",
+		"Editing a file afterwards voids its receipt.")
 	fmt.Fprintln(w, "")
 	// State the cutoff rather than leaving a missing rank ambiguous.
-	fmt.Fprintf(w, "A hotspot rank is shown only inside the workspace's top %d. A file that reports\n", types.NotableRankCutoff)
-	fmt.Fprintln(w, "a commit count and no rank was measured and sits outside that cutoff; a file with")
-	fmt.Fprintln(w, "no history line at all is one magus has never seen change.")
+	tty.Prose(w, tty.SystemProbe,
+		fmt.Sprintf("A hotspot rank is shown only inside the workspace's top %d.", types.NotableRankCutoff),
+		"A file that reports a commit count and no rank was measured and sits outside that cutoff;",
+		"a file with no history line at all is one magus has never seen change.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --generated   include the folded declared outputs")
-	fmt.Fprintln(w, "  --no-tui      print the report instead of opening the viewer. At a")
-	fmt.Fprintln(w, "                terminal the viewer opens by default, joined to the session")
-	fmt.Fprintln(w, "                the console and an agent share: ] and [ walk hunks, v marks")
-	fmt.Fprintln(w, "                one read, q leaves. Anywhere it cannot draw it stands aside")
-	fmt.Fprintln(w, "                on its own, so a script needs no flag.")
-	fmt.Fprintln(w, "  --impact      append the blast radius of landing this: which projects")
-	fmt.Fprintln(w, "                rebuild, who owns them, an estimate from recorded run times,")
-	fmt.Fprintln(w, "                what the advisors say, which notes anchor what you changed,")
-	fmt.Fprintln(w, "                and what the authors asked magus while writing it. It gates")
-	fmt.Fprintln(w, "                nothing and changes no exit code.")
-	fmt.Fprintln(w, "  --ack         record that you have read the named changed files, or all of")
-	fmt.Fprintln(w, "                them when you name none. Needs a terminal.")
-	fmt.Fprintln(w, "  --reason      an optional note kept with an --ack")
-	fmt.Fprintln(w, "  --watch       re-read and re-render whenever the working tree changes")
-	fmt.Fprintln(w, "  --rev         review a committed range instead of the working tree, as")
-	fmt.Fprintln(w, "                base...head: a colleague's branch, or an agent's finished work")
-	fmt.Fprintln(w, "  --patch       review a patch file instead of the working tree; - reads stdin")
-	fmt.Fprintln(w, "  --prompt      print a review prompt to paste into your own LLM: the context")
-	fmt.Fprintln(w, "                magus has, never a drafted review")
+	tty.ProseItem(w, tty.SystemProbe, "  --generated   ", "include the folded declared outputs")
+	tty.ProseItem(w, tty.SystemProbe, "  --no-tui      ",
+		"print the report instead of opening the viewer.",
+		"At a terminal the viewer opens by default, joined to the session the console and an agent share:",
+		"] and [ walk hunks, v marks one read, q leaves.",
+		"Anywhere it cannot draw it stands aside on its own, so a script needs no flag.")
+	tty.ProseItem(w, tty.SystemProbe, "  --impact      ",
+		"append the blast radius of landing this: which projects rebuild, who owns them,",
+		"an estimate from recorded run times, what the advisors say, which notes anchor what you changed,",
+		"and what the authors asked magus while writing it.",
+		"It gates nothing and changes no exit code.")
+	tty.ProseItem(w, tty.SystemProbe, "  --ack         ",
+		"record that you have read the named changed files, or all of them when you name none.",
+		"Needs a terminal.")
+	tty.ProseItem(w, tty.SystemProbe, "  --reason      ", "an optional note kept with an --ack")
+	tty.ProseItem(w, tty.SystemProbe, "  --watch       ", "re-read and re-render whenever the working tree changes")
+	tty.ProseItem(w, tty.SystemProbe, "  --rev         ",
+		"review a committed range instead of the working tree, as base...head:",
+		"a colleague's branch, or an agent's finished work")
+	tty.ProseItem(w, tty.SystemProbe, "  --patch       ", "review a patch file instead of the working tree; - reads stdin")
+	tty.ProseItem(w, tty.SystemProbe, "  --prompt      ",
+		"print a review prompt to paste into your own LLM: the context magus has, never a drafted review")
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
