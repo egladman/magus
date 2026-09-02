@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service/console"
 	sysPID "github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
@@ -215,14 +216,24 @@ func servingSuffix(st *proc.StatusReply) string {
 	return ", serving " + strings.Join(roots, ", ")
 }
 
-// daemonChildEnv returns this process's environment with MAGUS_DAEMON_SOCKET removed. A
-// child inheriting it believes it is already adopted, binds no socket, and reports the
-// parent's - leaving a daemon `server stop` cannot find.
+// daemonChildEnv returns this process's environment with the variables a daemon must not
+// inherit removed.
+//
+// MAGUS_DAEMON_SOCKET: a child inheriting it believes it is already adopted, binds no
+// socket, and reports the parent's - leaving a daemon `server stop` cannot find.
+//
+// The invocation ancestry and recursion depth, because THE DAEMON DESCENDS FROM NOBODY -
+// the same rule submitJob already applies to a job's context. A run starts the daemon,
+// so without this the daemon's process environment permanently records that one run's
+// ancestry, and every workspace it serves would read those refs as its own: claims
+// belonging to an invocation that ended hours ago would be excused from the budget, and
+// a run with no ancestry of its own would be judged a nested magus that had lost it.
 func daemonChildEnv() []string {
+	drop := []string{"MAGUS_DAEMON_SOCKET=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
-		if strings.HasPrefix(kv, "MAGUS_DAEMON_SOCKET=") {
+		if slices.ContainsFunc(drop, func(p string) bool { return strings.HasPrefix(kv, p) }) {
 			continue
 		}
 		out = append(out, kv)

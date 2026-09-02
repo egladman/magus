@@ -52,6 +52,49 @@ func TestBudgetRoundTrip(t *testing.T) {
 	assert.True(t, third.Granted)
 }
 
+// TestBudgetExcusesAnAncestorAcrossTheSocket is the path the CI break took. An SDK
+// consumer inside a magus process tree gets the DaemonAdmitter, not the local one - its
+// workspace was never handed a budget, so it dials the daemon the parent run started.
+// The excusal therefore happens server-side, keyed on the Ancestors the claim carries,
+// and it only works if that field survives the wire.
+func TestBudgetExcusesAnAncestorAcrossTheSocket(t *testing.T) {
+	budget := cache.NewMachineBudget(10_000, 8)
+	srv, err := New(Options{
+		Handler:       func(context.Context, []string) error { return nil },
+		MachineBudget: budget,
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	client := DaemonAdmitter{Addr: srv.Addr()}
+	self := os.Getpid()
+
+	// The parent run fills the machine, exactly as the shard's own ci step did.
+	parent, err := client.Request(t.Context(), "parent", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 10_000, Slots: 1, PID: self, Invocation: "3217:inv-parent",
+	})
+	require.NoError(t, err)
+	require.True(t, parent.Granted)
+
+	// A stranger is correctly refused: the machine really is full.
+	stranger, err := client.Request(t.Context(), "stranger", types.MachineClaim{
+		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: self,
+	})
+	require.NoError(t, err)
+	assert.False(t, stranger.Granted, "the budget is genuinely spent")
+
+	// The parent's own descendant is not. Without this the pair deadlocks: the parent
+	// cannot release until the run it is waiting for finishes.
+	child, err := client.Request(t.Context(), "child", types.MachineClaim{
+		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: self,
+		Ancestors: []string{"3217:inv-parent"},
+	})
+	require.NoError(t, err)
+	assert.True(t, child.Granted, "the ancestry must cross the socket and excuse the parent's claim")
+	assert.Empty(t, child.Holders, "and the parent is not reported to its own descendant as a peer")
+}
+
 // TestBudgetOnAServerWithNoBudget pins the answer a per-process proc server gives. Read
 // as a grant it would let a run go unarbitrated while the daemon arbitrates its peers,
 // so it must be an error the client can see.

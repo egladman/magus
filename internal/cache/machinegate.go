@@ -108,13 +108,16 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 	return g.wait(ctx, waiter, c, v)
 }
 
-// blindToOwnAncestry reports a nested magus whose invocation ancestry did not survive
-// into it. MAGUS_LEVEL says a magus started this one; an empty ancestry says we cannot
-// tell which claims are our parent's. Ordinarily both travel together (run.SelfVars
-// rewrites the ancestry for every child magus spawns), so this is the shape a magusfile
-// that clears the environment produces.
+// blindToOwnAncestry reports a run that is inside a magus process tree and cannot say
+// which invocations it is under. MAGUS_LEVEL says a magus started this one; an empty
+// ancestry says we cannot tell which claims are our parent's.
+//
+// It asks ancestorInvocations rather than the context, so the two agree on what this run
+// knows. Reading ctx alone made every library consumer blind by construction - the
+// variable was in the process the whole time - and refused an in-process SDK run against
+// its own parent's claim.
 func blindToOwnAncestry(ctx context.Context) bool {
-	return runPkg.CurrentLevel() > 0 && len(types.InvocationAncestorsFromContext(ctx)) == 0
+	return runPkg.CurrentLevel() > 0 && len(ancestorInvocations(ctx)) == 0
 }
 
 // wait polls until the budget admits the step. The notice names the holders up front
@@ -197,9 +200,21 @@ func machineWaiterID(c types.MachineClaim) string {
 // The pid check is what makes the tail trustworthy as ours: an invocation that appends
 // nothing leaves its PARENT's ref last, and dropping that would put the parent back in
 // the competing set.
+//
+// The CLI and the daemon stamp ancestry onto ctx at their own entry points; a LIBRARY
+// caller does not, and admission is the THIRD entry point to need this - the project
+// lock hit it first and fixed it the same way (see acquireLocks). Without the fallback
+// a Go test driving magus in-process reads an empty ancestry however deep inside a
+// magus process tree it is running, so it cannot be excused from the claim its own
+// parent is holding and gets refused by a budget its parent filled.
 func ancestorInvocations(ctx context.Context) []string {
 	refs := types.InvocationAncestorsFromContext(ctx)
-	if len(refs) > 0 && mintedHere(refs[len(refs)-1]) {
+	if len(refs) == 0 {
+		// Nothing upstream stamped one, so the environment is the only carrier left.
+		// childEnv puts it on every op subprocess, magus or not.
+		return runPkg.AncestorsFromEnv()
+	}
+	if mintedHere(refs[len(refs)-1]) {
 		return refs[:len(refs)-1]
 	}
 	return refs

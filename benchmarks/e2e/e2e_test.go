@@ -278,3 +278,26 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 	require.NoError(t, err, "ci-order log not written")
 	assert.Equal(t, "build\ntest\n", string(got), "CI step order")
 }
+
+// TestNestedSDKRunKnowsItsAncestry is the regression for the CI break this package
+// found: shard 0 refused svc-a alpha with MGS3009 because the SDK consumer could not
+// name the invocation whose claim had filled the machine budget.
+//
+// The chain: the shard's own `magus` run claims the machine's memory, then execs `go
+// test`, which runs THIS process, which drives magus in-process. Only the CLI and the
+// daemon stamp invocation ancestry onto a context, so a library caller has none - and
+// admission read the context alone, judged this process a nested magus that had lost
+// its ancestry, and refused it against its own parent's claim.
+//
+// magus puts the ancestry on every op subprocess it starts (run.childEnv), so the
+// variable is right here in the environment. This asserts the two travel TOGETHER,
+// which is the invariant admission now relies on. It skips when run outside magus,
+// where neither is set and there is nothing to be a descendant of.
+func TestNestedSDKRunKnowsItsAncestry(t *testing.T) {
+	if os.Getenv("MAGUS_LEVEL") == "" {
+		t.Skip("not running under magus; there is no ancestry to inherit")
+	}
+	assert.NotEmpty(t, os.Getenv("MAGUS_INVOCATION_ANCESTORS"),
+		"a magus-spawned process inherits MAGUS_LEVEL, so it must inherit the ancestry too;"+
+			" without it every in-process SDK run is refused against its own parent's claim")
+}

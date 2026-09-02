@@ -450,7 +450,11 @@ func TestMachineWaiterIDsAreUniqueAcrossCaches(t *testing.T) {
 // that cannot name its ancestors cannot be excused from its parent's claim, so queueing
 // is queueing behind a step that is blocked waiting for this very process.
 func TestMachineGateRefusesRatherThanQueueWhenBlindToItsAncestry(t *testing.T) {
+	// Nested, and the ancestry did not survive: a magusfile that cleared the
+	// environment. Both variables are set explicitly because the fallback reads the
+	// environment, so a test that named only one would be judging the harness's.
 	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "")
 	b, _, _ := testBudget(t, 10_000, 8)
 	g, adm, _ := testGate(t, b, false)
 
@@ -458,10 +462,14 @@ func TestMachineGateRefusesRatherThanQueueWhenBlindToItsAncestry(t *testing.T) {
 	require.NoError(t, err)
 	defer held()
 
-	// No Ancestors on the claim and no ancestry on the context: the environment was
-	// cleared between the parent and this process.
-	_, err = g.acquire(t.Context(), types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	// Bounded, so a regression that queues fails in a second instead of hanging the
+	// package until the go test timeout - which is how this test first went wrong.
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	// No Ancestors on the claim, none on the context, none in the environment.
+	_, err = g.acquire(ctx, types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.Error(t, err, "queueing here would hang forever while the heartbeat says otherwise")
+	require.NotErrorIs(t, err, context.DeadlineExceeded, "it must REFUSE, not queue until the caller gives up")
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
 	assert.Contains(t, err.Error(), "MAGUS_INVOCATION_ANCESTORS")
 	assert.NotEmpty(t, adm.dropped)
@@ -470,6 +478,52 @@ func TestMachineGateRefusesRatherThanQueueWhenBlindToItsAncestry(t *testing.T) {
 func TestMachineGateQueuesNormallyWhenNotNested(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	assert.False(t, blindToOwnAncestry(t.Context()), "a top-level run has no ancestry to lose")
+}
+
+// TestAncestryFallsBackToTheEnvironmentForALibraryCaller is the SDK case, and the one
+// that broke CI. A Go test driving magus in-process passes a plain context.Background():
+// only the CLI and the daemon stamp ancestry onto ctx, so reading ctx alone made every
+// library consumer inside a magus process tree look like a nested run that had lost its
+// ancestry - refused against the very claim its own parent was holding, with the
+// variable sitting in the process environment the whole time.
+func TestAncestryFallsBackToTheEnvironmentForALibraryCaller(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
+
+	assert.Equal(t, []string{"3217:inv-parent"}, ancestorInvocations(context.Background()),
+		"the environment is the only carrier an SDK consumer has")
+	assert.False(t, blindToOwnAncestry(context.Background()),
+		"a consumer that CAN name its ancestors is not blind, whatever stamped ctx")
+
+	// ctx still wins when something upstream stamped it: under the daemon the process
+	// environment belongs to no invocation, and the ancestry on ctx is the run's own.
+	ctx := types.WithInvocationAncestors(context.Background(), []string{"55:inv-adopted"})
+	assert.Equal(t, []string{"55:inv-adopted"}, ancestorInvocations(ctx),
+		"a stamped ctx is authoritative; the environment is the fallback, not an override")
+}
+
+// TestLibraryCallerIsExcusedFromItsParentsClaim is the same case end to end through the
+// budget: the parent's claim filled the machine, and the in-process run has to be
+// excused from it or the pair deadlocks - the parent cannot release until this run ends.
+func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
+
+	b, _, _ := testBudget(t, 10_000, 8)
+	parent := b.Request("parent", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 10_000, Slots: 1, PID: 3217, Invocation: "3217:inv-parent",
+	})
+	require.True(t, parent.Granted, "the shard's own run fills the machine")
+
+	// What RunAll builds for an SDK consumer: no ancestry on ctx, resolved from the env.
+	g, _, _ := testGate(t, b, false)
+	release, err := g.acquire(context.Background(), types.MachineClaim{
+		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: 4000,
+		Ancestors: ancestorInvocations(context.Background()),
+	})
+	require.NoError(t, err, "an in-process run must be excused from the claim its own parent holds")
+	require.NotNil(t, release)
+	release()
 }
 
 func TestFormatMB(t *testing.T) {

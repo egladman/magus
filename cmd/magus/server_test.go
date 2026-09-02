@@ -130,6 +130,30 @@ func trapAdmissionSpawn(t *testing.T) *int {
 	return &calls
 }
 
+// TestDaemonChildEnvDropsInheritedInvocationState pins that THE DAEMON DESCENDS FROM
+// NOBODY. A run is what starts it, so without the scrub the daemon's process
+// environment permanently records that one run's ancestry - and every workspace it
+// serves would then read those refs as its own, excusing claims from an invocation that
+// ended hours ago and judging an unstamped run to be a nested magus that lost its
+// ancestry. The same rule submitJob already applies to a job's context.
+func TestDaemonChildEnvDropsInheritedInvocationState(t *testing.T) {
+	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/parent.sock")
+	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("MAGUS_KEEP_ME", "yes")
+
+	got := map[string]string{}
+	for _, kv := range daemonChildEnv() {
+		if name, value, ok := strings.Cut(kv, "="); ok {
+			got[name] = value
+		}
+	}
+	assert.NotContains(t, got, "MAGUS_DAEMON_SOCKET", "a child inheriting it binds no socket of its own")
+	assert.NotContains(t, got, "MAGUS_INVOCATION_ANCESTORS", "the daemon is nobody's descendant")
+	assert.NotContains(t, got, "MAGUS_LEVEL", "nor is it nested inside the run that happened to start it")
+	assert.Equal(t, "yes", got["MAGUS_KEEP_ME"], "everything else is inherited as before")
+}
+
 // TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon pins the bound the doctrine amendment
 // promises, and its limit: a daemon a person started stays up until they stop it.
 func TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon(t *testing.T) {
