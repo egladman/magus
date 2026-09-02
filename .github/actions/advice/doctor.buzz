@@ -5,8 +5,19 @@
 // A consumer who never wired doctor into their own CI still gets the finding here, which
 // is the point: the advice arrives without them having to build the pipeline for it.
 //
-// Advice-level findings are listed separately from failures and never framed as errors:
-// magus's own vocabulary is that advice is worth knowing and never a gate.
+// ONLY FAILURES REACH THE PULL REQUEST, and that is the whole threshold.
+//
+// A doctor advisory describes the WORKSPACE, not the change. Measured 2026-09-02: a clean
+// checkout of main with no edits at all reproduces the advisory list this section posted
+// on pull requests 120 through 125, and every one of those runs reported 0 failing. Six
+// consecutive pull requests, six near-identical bodies, nothing in any of them caused by
+// the change under review. A finding the author did not cause and cannot land a fix for
+// inside this pull request is backlog, and a backlog reprinted on every pull request is
+// how a reader learns to skip the section that one day says `fail`.
+//
+// A FAILING check earns the interruption: it passed for somebody, so a change broke it.
+// The advisory tier keeps its home at the keyboard, where `magus doctor` shows all of it
+// with the detail this comment never had room for.
 //
 // Reads REPO and PR_NUMBER.
 import "advice";
@@ -15,21 +26,19 @@ import "std";
 
 final section = "doctor";
 
-// summarize renders the failing and advisory checks. Pure over plain lists so the
-// wording is testable: the magus namespace's types annotate but do not construct.
-export fun summarize(fails: [str], advisories: [str]) > str {
-    final parts = mut [<str>];
-    if (fails.len() != 0) {
-        parts.append("**`magus doctor` reports " + "{fails.len()}" + " failing check(s):**\n\n");
-        foreach (f in fails) { parts.append("- " + f + "\n"); }
-    }
-    if (advisories.len() != 0) {
-        if (parts.len() != 0) { parts.append("\n"); }
-        parts.append("**Advice** (worth knowing, never a gate):\n\n");
-        foreach (a in advisories) { parts.append("- " + a + "\n"); }
-    }
-    if (parts.len() == 0) { return ""; }
-    return parts.join("") + "\nRun `magus doctor` locally for the detail behind each one.\n";
+// reportable is the threshold, named so it is one testable fact rather than a condition
+// buried in a loop. See the header for why `advice` is not on this list.
+export fun reportable(status: str) > bool { return status == "fail"; }
+
+// summarize renders the failing checks. Pure over a plain list so the wording is
+// testable: the magus namespace's types annotate but do not construct.
+export fun summarize(fails: [str]) > str {
+    if (fails.len() == 0) { return ""; }
+    final parts = mut ["**`magus doctor` reports " + "{fails.len()}" + " failing check(s):**\n\n"];
+    foreach (f in fails) { parts.append("- " + f + "\n"); }
+    return parts.join("")
+        + "\nRun `magus doctor` locally for the detail behind each one, and for the "
+        + "advice-level checks this comment leaves out.\n";
 }
 
 fun main() > void !> any {
@@ -48,27 +57,32 @@ fun main() > void !> any {
     }
 
     var fails = mut [];
-    var advisories = mut [];
     foreach (c in magus\doctor([]).checks) {
-        final line = "`" + c.name + "` - " + c.message;
-        if (c.status == "fail") { fails.append(line); }
-        if (c.status == "advice") { advisories.append(line); }
+        if (!reportable(c.status)) { continue; }
+        fails.append("`" + c.name + "` - " + c.message);
     }
-    final body = summarize(fails, advisories: advisories);
+    final body = summarize(fails);
     advice\publish(repo, pr: pr, name: section,
-        title: "Workspace health ({fails.len()} failing, {advisories.len()} advisory)", body: body);
-    if (body == "") { std\print("doctor: workspace is clean"); return; }
-    std\print("doctor: advised on {fails.len()} failure(s), {advisories.len()} advisory");
+        title: "Workspace health ({fails.len()} failing)", body: body);
+    if (body == "") { std\print("doctor: no failing check"); return; }
+    std\print("doctor: advised on {fails.len()} failure(s)");
 }
 
 
-test "summarize separates failures from advice" {
-    final body = summarize(["`sockets` - no daemon"], advisories: ["`naming` - bespoke name"]);
+test "summarize lists the failing checks" {
+    final body = summarize(["`sockets` - no daemon"]);
     std\assert(body.indexOf("failing check") != null, message: "names the failures");
     std\assert(body.indexOf("no daemon") != null, message: "carries the message");
-    std\assert(body.indexOf("never a gate") != null, message: "frames advice as non-blocking");
+    std\assert(body.indexOf("magus doctor` locally") != null, message: "says where the rest is");
 }
 
-test "summarize is empty for a clean workspace, so the section retracts" {
-    std\assert(summarize([], advisories: []) == "", message: "nothing to say");
+test "summarize is empty with no failing check, so the section retracts" {
+    std\assert(summarize([]) == "", message: "nothing to say");
+}
+
+test "only a failing check reaches a pull request" {
+    std\assert(reportable("fail"), message: "a check that broke is worth the interruption");
+    std\assert(!reportable("advice"), message: "the tier a clean main produces too");
+    std\assert(!reportable("ok"), message: "nothing to say about a check that passed");
+    std\assert(!reportable("skip"), message: "a check that did not run found nothing");
 }

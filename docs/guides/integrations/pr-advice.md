@@ -114,7 +114,7 @@ which is not a question a working tree can answer.
 | `target-outputs`        | a new target declares no outputs, which means it never replays from cache                                           |
 | `skip-cache`            | a target opts out of the cache, quoting the reason magus requires for it                                            |
 | `blast-radius`          | the change reaches a large share of the workspace, with the chain that pulled each project in                       |
-| `doctor`                | `magus doctor` reports a failing or advisory check                                                                  |
+| `doctor`                | `magus doctor` reports a failing check; the advice tier stays local, where the detail is                            |
 | `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                     |
 | `conformance`           | a new target's name diverges from what the rest of the workspace already calls the same work                        |
 | `missing-target`        | a changed project lacks a target that projects of the same kind overwhelmingly have                                 |
@@ -136,6 +136,22 @@ rather than what was true three pushes ago.
 
 Each section is collapsed, and its summary line carries the count, so the comment
 stays a table of contents until you open something.
+
+## When it says nothing
+
+A pull request with no findings gets **no comment at all**. The comment is created by
+the first advisor that has something to say, so a clean change carries no trace that
+magus looked - there is no "nothing found" placeholder, because a reader who opens one
+five times for nothing stops opening the sixth, taking the finding that mattered along
+with it. The checks list already reports that the run happened.
+
+When the last finding on a pull request is resolved, the comment is not deleted. It is
+rewritten to say everything is settled, which keeps the thread and its replies and
+records the transition a later reader of the merged pull request needs.
+
+Every advisor is held to the same line: it speaks about what **this** pull request did.
+A finding true of the base branch is backlog rather than review, and belongs to
+`magus doctor` at the keyboard.
 
 ## What it costs
 
