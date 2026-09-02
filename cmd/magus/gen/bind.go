@@ -19,6 +19,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.Cache.Dir, "cache-dir", cfg.Cache.Dir, "MAGUS_CACHE_DIR")
 	fs.IntVar(&cfg.Cache.SizeMB, "cache-size-mb", cfg.Cache.SizeMB, "MAGUS_CACHE_SIZE_MB")
 	fs.BoolVar(&cfg.Cache.Remote.Insecure, "cache-remote-insecure", cfg.Cache.Remote.Insecure, "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are imported and produced with no trust set.")
+	fs.StringVar(&cfg.Cache.Remote.InsecureReason, "cache-remote-insecure-reason", cfg.Cache.Remote.InsecureReason, "MAGUS_CACHE_REMOTE_INSECURE_REASON: InsecureReason is the prose behind Insecure, required whenever it is true.")
 	fs.IntVar(&cfg.CI.MaxShards, "ci-max-shards", cfg.CI.MaxShards, "MAGUS_CI_MAX_SHARDS")
 	fs.IntVar(&cfg.CI.RunnerPoolBudget, "ci-runner-pool-budget", cfg.CI.RunnerPoolBudget, "MAGUS_CI_RUNNER_POOL_BUDGET")
 	fs.BoolVar(&cfg.CI.RecordRuns, "ci-record-runs", cfg.CI.RecordRuns, "MAGUS_CI_RECORD_RUNS: RecordRuns keeps the per-branch run log (forecast.Run) in the history file: which commit a branch passed or failed a ...")

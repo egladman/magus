@@ -710,18 +710,31 @@ func b64Pub(t *testing.T) (pub string, seed string) {
 // TestRemoteCacheRequiresTrustSet is the paranoid root: a wired remote backend
 // with no declared trust set must be a hard error, not a silent unverified cache.
 func TestRemoteCacheRequiresTrustSet(t *testing.T) {
-	_, err := remoteCacheSigningOpts(nil, false)
+	_, err := remoteCacheSigningOpts(nil, false, "")
 	assert.Error(t, err, "empty trust set was accepted; a remote cache must require trusted_keys")
-	_, err = remoteCacheSigningOpts([]string{}, false)
+	_, err = remoteCacheSigningOpts([]string{}, false, "")
 	assert.Error(t, err, "empty trust-set slice was accepted")
 }
 
 // TestRemoteCacheInsecureSkipsTrustSet: the explicit opt-out accepts a wired
 // backend with no trust set and no signing key, yielding the insecure option.
 func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
-	opts, err := remoteCacheSigningOpts(nil, true)
+	opts, err := remoteCacheSigningOpts(nil, true, "single-repo CI cache; nothing outside this repo can write it")
 	require.NoError(t, err, "insecure mode rejected empty trust set")
 	assert.Len(t, opts, 1, "insecure: want 1 opt (WithInsecureRemote)")
+}
+
+// TestRemoteCacheInsecureNeedsAReason pins the articulated-decision rule at the config
+// site: a bare `insecure: true` is refused, and the refusal names the sibling key that
+// satisfies it, because an existing config it breaks has to be repairable from the
+// message alone.
+func TestRemoteCacheInsecureNeedsAReason(t *testing.T) {
+	_, err := remoteCacheSigningOpts(nil, true, "")
+	require.Error(t, err, "a bare cache.remote.insecure switched off signature verification with nothing recorded")
+	assert.Contains(t, err.Error(), "cache.remote.insecure_reason", "the refusal must name the exact key that satisfies it")
+
+	_, err = remoteCacheSigningOpts(nil, true, "   ")
+	assert.Error(t, err, "whitespace is not prose")
 }
 
 // TestRemoteCacheTrustSetDecodes: a valid trust set yields verification options;
@@ -738,12 +751,12 @@ func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 		t.Cleanup(func() { _ = os.Setenv(signingKeyEnv, prev) })
 	}
 
-	opts, err := remoteCacheSigningOpts([]string{pub}, false)
+	opts, err := remoteCacheSigningOpts([]string{pub}, false, "")
 	require.NoError(t, err, "valid trust set rejected")
 	assert.Len(t, opts, 1, "verify-only: want 1 opt (trusted keys only)")
 
 	t.Setenv(signingKeyEnv, seed)
-	opts, err = remoteCacheSigningOpts([]string{pub}, false)
+	opts, err = remoteCacheSigningOpts([]string{pub}, false, "")
 	require.NoError(t, err, "valid trust set + signing key rejected")
 	assert.Len(t, opts, 2, "signing: want 2 opts (trusted keys + signing key)")
 }
@@ -751,11 +764,11 @@ func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 // TestRemoteCacheRejectsMalformedKeys: bad base64 in either the trust set or the
 // signing-key env var is a clear configuration error, not a silent fallback.
 func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
-	_, err := remoteCacheSigningOpts([]string{"not!base64!"}, false)
+	_, err := remoteCacheSigningOpts([]string{"not!base64!"}, false, "")
 	assert.Error(t, err, "malformed trusted key was accepted")
 	pub, _ := b64Pub(t)
 	t.Setenv(signingKeyEnv, "not!base64!")
-	_, err = remoteCacheSigningOpts([]string{pub}, false)
+	_, err = remoteCacheSigningOpts([]string{pub}, false, "")
 	assert.Error(t, err, "malformed signing key was accepted")
 }
 
