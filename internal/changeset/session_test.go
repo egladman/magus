@@ -90,6 +90,28 @@ func TestViewedStatePersistsAcrossStores(t *testing.T) {
 		"a reader who is interrupted must not lose what they had already read")
 }
 
+// A second magus in the same checkout writes these same three files, and on a fixed temp name
+// the two savers interleave their bytes into it and both rename it. The saves are best-effort
+// and swallow every error, so the property is pinned by occupying the old fixed temp path:
+// a save that still wanted it silently writes nothing and the progress is lost.
+func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review"), 0o755))
+	for _, name := range []string{"viewed.json", "drafts.json", "seen-threads.json"} {
+		require.NoError(t, os.Mkdir(filepath.Join(dir, "review", name+".tmp"), 0o755))
+	}
+
+	s := NewStore(dir)
+	s.Attach("/w", "working", types.Diff{}, "")
+	s.MarkViewed("/w", "d1", true)
+	s.MarkThreadsSeen("/w", []string{"t1"})
+
+	assert.ElementsMatch(t, []string{"d1"}, NewStore(dir).Attach("/w", "working", types.Diff{}, "").Viewed,
+		"progress was lost because the save wanted one fixed temp path")
+	assert.ElementsMatch(t, []string{"t1"}, NewStore(dir).LoadSeenThreads(),
+		"the watermark was lost because the save wanted one fixed temp path")
+}
+
 func TestCorruptViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, mkdirAllWrite(filepath.Join(dir, "review", "viewed.json"), "{not json"))

@@ -1241,3 +1241,30 @@ func TestRotateRunsKeepsTheNewestEvenWhenItAloneBustsTheBudget(t *testing.T) {
 	require.Len(t, got, 1, "the newest is kept whatever it weighs")
 	require.Equal(t, "inv2.jsonl", got[0].Name())
 }
+
+// The outputs store is shared machine-wide, so two adopters of one imported key run
+// concurrently. The write is best-effort and reports only a bool, so the property is
+// pinned by occupying the old fixed temp path: an adopter that still wanted it fails
+// to write the blob and reports the import uncompletable.
+func TestAdoptImportedDoesNotDependOnAFixedTempName(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	const key = "aabbccddeeff00112233445566778899aabbccddeeff001122334455"
+
+	// An imported step is a descriptor with no blob beside it, which is what
+	// AdoptImported completes.
+	keyDir := filepath.Join(dir, "outputs", key)
+	require.NoError(t, os.MkdirAll(keyDir, 0o755))
+	desc, err := json.Marshal(OutputDescriptor{Ref: PortableRef(key), Key: key, Project: "svc/api", Target: "test"})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(keyDir, "attempt1"+descExt), desc, 0o644))
+	require.NoError(t, os.Mkdir(filepath.Join(keyDir, "attempt1"+outExt+".adopt.tmp"), 0o755))
+
+	ref, ok := s.AdoptImported(key, []byte("imported log\n"))
+	require.True(t, ok, "the import was reported uncompletable because one fixed temp path was taken")
+	assert.Equal(t, PortableRef(key), ref)
+
+	got, _, err := s.ByRef(ref)
+	require.NoError(t, err)
+	assert.Equal(t, "imported log\n", string(got))
+}

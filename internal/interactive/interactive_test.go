@@ -1,8 +1,10 @@
 package interactive
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
@@ -104,13 +106,51 @@ func (s *StateSuite) TestLoadStateMissingFile() {
 }
 
 func (s *StateSuite) TestSaveStateIsAtomic() {
-	// Confirm no .tmp file is left behind after a successful save.
+	// The temp name is generated, so glob rather than stat one fixed path.
 	require.NoError(s.T(), SaveState(State{}))
 	path, err := StatePath()
 	require.NoError(s.T(), err)
-	tmp := path + ".tmp"
-	_, err = os.Stat(tmp)
-	assert.Error(s.T(), err, "temp file %s still exists after SaveState", tmp)
+	leftover, err := filepath.Glob(path + ".tmp*")
+	require.NoError(s.T(), err)
+	assert.Empty(s.T(), leftover, "temp files still exist after SaveState")
+}
+
+// Concurrent savers are the real case: the file is machine-wide, so every magus x
+// writes it and two of them overlap routinely. On a fixed temp name they interleave
+// their bytes into one file and both rename it, leaving truncated JSON behind.
+func (s *StateSuite) TestConcurrentSavesNeverLeaveTruncatedJSON() {
+	// Payloads of very different lengths, so a torn write reads as invalid JSON
+	// rather than as one saver's bytes overwritten by an equally long set.
+	states := make([]State, 8)
+	for i := range states {
+		states[i] = State{LastTarget: map[string]string{}}
+		for j := 0; j <= i*32; j++ {
+			states[i].LastTarget[fmt.Sprintf("/proj/%d/%d", i, j)] = "build"
+		}
+	}
+
+	for range 20 {
+		var wg sync.WaitGroup
+		for _, st := range states {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				assert.NoError(s.T(), SaveState(st))
+			}()
+		}
+		wg.Wait()
+
+		got, err := LoadState()
+		require.NoError(s.T(), err, "a concurrent save left the state file unparseable")
+		assert.Contains(s.T(), []int{1, 33, 65, 97, 129, 161, 193, 225}, len(got.LastTarget),
+			"state file holds a blend of two savers rather than one whole payload")
+	}
+
+	path, err := StatePath()
+	require.NoError(s.T(), err)
+	leftover, err := filepath.Glob(path + ".tmp*")
+	require.NoError(s.T(), err)
+	assert.Empty(s.T(), leftover, "concurrent saves leaked temp files")
 }
 
 func (s *StateSuite) TestSaveStateValidJSON() {

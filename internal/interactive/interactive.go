@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -100,22 +101,17 @@ func LoadState() (State, error) {
 	return s, nil
 }
 
-// SaveState atomically writes s to the State file.
+// SaveState atomically writes s to the State file. Every magus x on the machine writes
+// that one file, so the temp name must be unique: two savers sharing a fixed one
+// interleave their bytes into it and then both rename it into place.
 func SaveState(s State) error {
 	path, err := StatePath()
 	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return file.WriteFileAtomic(path, b, 0o644)
 }
