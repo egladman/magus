@@ -10,8 +10,8 @@
 // records under the user's XDG state directory - never a second store of its own.
 //
 // Memory is a set of discrete records, each a typed POINTER into the magus domain (a
-// saved query, a graph node, an output ref, a command, a doc); only a decision/plan
-// carries a prose caption. Its reason to exist as an editable surface: an agent can
+// saved query, a graph node, an output ref, a command, a doc); a decision, plan or
+// elimination also carries a prose caption. Its reason to exist as an editable surface: an agent can
 // accumulate stale or bloated records, and a human read/edit/delete surface is the
 // safety valve. Every record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: a
 // client must render them as text, never as trusted HTML.
@@ -47,6 +47,8 @@ const (
 
 // MemoryType is the subject axis of a record (stable, closed). pointer carries refs only;
 // decision and plan additionally carry a prose caption (the why the graph cannot derive).
+// elimination is a hypothesis an investigation falsified: it carries the caption plus the
+// excerpt of evidence that killed it.
 type MemoryType int32
 
 const (
@@ -54,6 +56,7 @@ const (
 	MemoryType_MEMORY_TYPE_POINTER     MemoryType = 1
 	MemoryType_MEMORY_TYPE_DECISION    MemoryType = 2
 	MemoryType_MEMORY_TYPE_PLAN        MemoryType = 3
+	MemoryType_MEMORY_TYPE_ELIMINATION MemoryType = 4
 )
 
 // Enum value maps for MemoryType.
@@ -63,12 +66,14 @@ var (
 		1: "MEMORY_TYPE_POINTER",
 		2: "MEMORY_TYPE_DECISION",
 		3: "MEMORY_TYPE_PLAN",
+		4: "MEMORY_TYPE_ELIMINATION",
 	}
 	MemoryType_value = map[string]int32{
 		"MEMORY_TYPE_UNSPECIFIED": 0,
 		"MEMORY_TYPE_POINTER":     1,
 		"MEMORY_TYPE_DECISION":    2,
 		"MEMORY_TYPE_PLAN":        3,
+		"MEMORY_TYPE_ELIMINATION": 4,
 	}
 )
 
@@ -213,18 +218,22 @@ func (x *MemoryRef) GetTarget() string {
 }
 
 // Memory is one record. name is the kebab-slug identity; refs are the required payload;
-// body is the caption (decision/plan only); status is the optional lifecycle field;
+// body is the caption (every type but pointer); status is the optional lifecycle field;
 // references links to other records by name. create_time/update_time are output-only.
 type Memory struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type          MemoryType             `protobuf:"varint,2,opt,name=type,proto3,enum=magus.memory.v1alpha1.MemoryType" json:"type,omitempty"`
-	Refs          []*MemoryRef           `protobuf:"bytes,3,rep,name=refs,proto3" json:"refs,omitempty"`
-	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`                           // free lifecycle string (accepted, superseded, done, stale, ...)
-	Body          string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`                               // UNTRUSTED prose caption; empty for a pointer
-	References    []string               `protobuf:"bytes,6,rep,name=references,proto3" json:"references,omitempty"`                   // other record names (memory -> memory)
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"` // output only
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"` // output only
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Name       string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type       MemoryType             `protobuf:"varint,2,opt,name=type,proto3,enum=magus.memory.v1alpha1.MemoryType" json:"type,omitempty"`
+	Refs       []*MemoryRef           `protobuf:"bytes,3,rep,name=refs,proto3" json:"refs,omitempty"`
+	Status     string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`                           // free lifecycle string (accepted, superseded, done, stale, ...)
+	Body       string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`                               // UNTRUSTED prose caption; empty for a pointer
+	References []string               `protobuf:"bytes,6,rep,name=references,proto3" json:"references,omitempty"`                   // other record names (memory -> memory)
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"` // output only
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"` // output only
+	// UNTRUSTED captured evidence, required on an elimination and rejected on every other
+	// type. It is copied in because an output ref resolves only from the checkout that
+	// produced it, and agent worktrees get deleted.
+	Excerpt       string `protobuf:"bytes,9,opt,name=excerpt,proto3" json:"excerpt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -313,6 +322,13 @@ func (x *Memory) GetUpdateTime() *timestamppb.Timestamp {
 		return x.UpdateTime
 	}
 	return nil
+}
+
+func (x *Memory) GetExcerpt() string {
+	if x != nil {
+		return x.Excerpt
+	}
+	return ""
 }
 
 type ListMemoriesRequest struct {
@@ -709,7 +725,7 @@ const file_magus_memory_v1alpha1_memory_proto_rawDesc = "" +
 	"\"magus/memory/v1alpha1/memory.proto\x12\x15magus.memory.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"]\n" +
 	"\tMemoryRef\x128\n" +
 	"\x04kind\x18\x01 \x01(\x0e2$.magus.memory.v1alpha1.MemoryRefKindR\x04kind\x12\x16\n" +
-	"\x06target\x18\x02 \x01(\tR\x06target\"\xcf\x02\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\"\xe9\x02\n" +
 	"\x06Memory\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x125\n" +
 	"\x04type\x18\x02 \x01(\x0e2!.magus.memory.v1alpha1.MemoryTypeR\x04type\x124\n" +
@@ -722,7 +738,8 @@ const file_magus_memory_v1alpha1_memory_proto_rawDesc = "" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"]\n" +
+	"updateTime\x12\x18\n" +
+	"\aexcerpt\x18\t \x01(\tR\aexcerpt\"]\n" +
 	"\x13ListMemoriesRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
@@ -744,13 +761,14 @@ const file_magus_memory_v1alpha1_memory_proto_rawDesc = "" +
 	"\x06Cursor\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\"/\n" +
 	"\x13UpdateCursorRequest\x12\x18\n" +
-	"\acontent\x18\x01 \x01(\tR\acontent*r\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent*\x8f\x01\n" +
 	"\n" +
 	"MemoryType\x12\x1b\n" +
 	"\x17MEMORY_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13MEMORY_TYPE_POINTER\x10\x01\x12\x18\n" +
 	"\x14MEMORY_TYPE_DECISION\x10\x02\x12\x14\n" +
-	"\x10MEMORY_TYPE_PLAN\x10\x03*\xb7\x01\n" +
+	"\x10MEMORY_TYPE_PLAN\x10\x03\x12\x1b\n" +
+	"\x17MEMORY_TYPE_ELIMINATION\x10\x04*\xb7\x01\n" +
 	"\rMemoryRefKind\x12\x1f\n" +
 	"\x1bMEMORY_REF_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15MEMORY_REF_KIND_QUERY\x10\x01\x12\x18\n" +

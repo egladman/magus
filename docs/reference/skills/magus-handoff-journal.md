@@ -1,17 +1,17 @@
 ---
 title: magus-handoff-journal
 generated_from: internal/agent/skills/magus-handoff-journal/SKILL.md
-description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions."
+description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions."
 tags: [agents, skills, magus-handoff-journal]
 aliases:
   - reference/skills/magus-memory
-skill_full_bytes: 4178
-skill_simple_bytes: 3506
+skill_full_bytes: 4938
+skill_simple_bytes: 4086
 ---
 
 # magus-handoff-journal
 
-Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.
+Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions. Use when a debugging session eliminates a possibility a later session would otherwise re-propose. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, broken-linked, and unresolvable-evidence entries before relying on them.
 
 Install it, rather than copying from this page:
 
@@ -30,9 +30,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `49` |
+| `agent-skill-version` | `50` |
 | `knowledge-schema-version` | `10` |
-| `skill-content` | `366dd99137c4` |
+| `skill-content` | `76227a759502` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -69,6 +69,7 @@ Record types (the subject axis):
 | `pointer`  | refs only, the saved lens onto graphed knowledge    | no     |
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
+| `elimination` | a hypothesis an investigation killed, the why, and an `excerpt` of the evidence | yes, plus the excerpt |
 
 Every type is ref-anchored; none of them is free prose. A claim that is true about
 the code is a `pointer` of kind `query` (fetch it live) or `output`, never stored prose.
@@ -96,16 +97,23 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Use `delete` for entries that no longer earn their keep. Run `magus memory
   verify` (or MCP `{op: "verify"}`) after editing entries or when list reports
   an issue. It gives a path and repair step for malformed, stale, or broken
-  linked entries.
+  linked entries, and warns when an entry's evidence ref no longer resolves.
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, status?} upserts a record
+- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} upserts a record
   by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
   `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`. A bare "we chose X" helps
   nobody; the `body` carries the why, and the refs anchor it to the code.
+- Ruled a hypothesis OUT: record an `elimination`. `body` says why it is dead and
+  `excerpt` carries the lines that killed it, because an output ref resolves
+  only from the checkout that minted it and agent worktrees get deleted, which decays a
+  ref-only record into a dangling pointer with a confident tone. The ref stays beside the excerpt
+  as a best-effort handle. Record what an investigation ELIMINATED as well as what it
+  concluded, so the next session reopens the reasoning; a conclusion on its own leaves it
+  re-proposing a branch that is already dead.
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
   it, not a sentence that rots.
 - Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.
@@ -155,6 +163,7 @@ Record types (the subject axis):
 | `pointer`  | refs only, the saved lens onto graphed knowledge    | no     |
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
+| `elimination` | a hypothesis an investigation killed, the why, and an `excerpt` of the evidence | yes, plus the excerpt |
 
 Every type is ref-anchored; none of them is free prose.
 A claim true about the code is a `query` or `output` pointer, never stored prose.
@@ -185,12 +194,18 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, status?} upserts a record
+- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} upserts a record
   by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
   `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`. Put the why
   in `body` and anchor it with refs.
+- Ruled a hypothesis OUT: record an `elimination`. `body` says why it is dead and
+  `excerpt` carries the lines that killed it, because an
+  output ref dies with the checkout that minted it. The ref stays beside the excerpt
+  as a best-effort handle. Record what an investigation ELIMINATED as well as what it
+  concluded, so the next session reopens the reasoning; a conclusion on its own leaves it
+  re-proposing a branch that is already dead.
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
   it.
 - Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.

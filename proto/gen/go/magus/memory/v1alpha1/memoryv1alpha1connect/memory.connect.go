@@ -8,8 +8,8 @@
 // records under the user's XDG state directory - never a second store of its own.
 //
 // Memory is a set of discrete records, each a typed POINTER into the magus domain (a
-// saved query, a graph node, an output ref, a command, a doc); only a decision/plan
-// carries a prose caption. Its reason to exist as an editable surface: an agent can
+// saved query, a graph node, an output ref, a command, a doc); a decision, plan or
+// elimination also carries a prose caption. Its reason to exist as an editable surface: an agent can
 // accumulate stale or bloated records, and a human read/edit/delete surface is the
 // safety valve. Every record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: a
 // client must render them as text, never as trusted HTML.

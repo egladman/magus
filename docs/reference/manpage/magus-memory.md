@@ -24,15 +24,24 @@ implicitly. An entry earns its place when a later reader needs to reopen the
 evidence behind a decision - the run, the query, the output reference, the
 document - rather than to be told a conclusion.
 
+An elimination entry records what an investigation ruled OUT: the hypothesis,
+why it is dead, and an excerpt of the evidence that killed it. The excerpt is
+required because an output reference resolves only from the checkout that
+produced it, which leaves the ref beside it a best-effort handle.
+
 verify is the maintenance verb: it reports entries that are malformed, stale,
-or that link to something no longer there. The same entries are reachable
-through the magus_memory MCP tool and the console, so a journal written from
-the CLI is readable by an agent without either side learning a new format.
+that link to something no longer there, or whose evidence no longer resolves.
+The same entries are reachable through the magus_memory MCP tool and the
+console, so a journal written from the CLI is readable by an agent without
+either side learning a new format.
 
 ### memory put options
 
 **--body** *string*
-: Short why/caption, decision and plan only
+: Short why/caption, decision, plan and elimination only
+
+**--excerpt** *string*
+: The evidence that ruled a hypothesis out, copied inline; elimination only and required there
 
 **--ref** *string*
 : Entry ref in 'kind: target' form; repeat for multiple refs
@@ -44,7 +53,7 @@ the CLI is readable by an agent without either side learning a new format.
 : Lifecycle label, e.g. accepted, active, done, stale
 
 **--type** *string*
-: Entry type: pointer, decision, or plan
+: Entry type: pointer, decision, plan, or elimination
 
 ## Subcommands
 
@@ -61,7 +70,7 @@ the CLI is readable by an agent without either side learning a new format.
 : Remove one entry
 
 **verify**
-: Check malformed, stale, and broken-linked entries
+: Check malformed, stale, broken-linked, and unresolvable-evidence entries
 
 ## Examples
 
@@ -75,6 +84,12 @@ magus memory ls
 
 ```sh
 magus memory get release-checklist
+```
+
+*Record what an investigation ruled out*
+
+```sh
+magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'
 ```
 
 *Check the journal's health*
