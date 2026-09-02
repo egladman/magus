@@ -30,10 +30,14 @@ import (
 // is always empty on a deny: a refusal explains itself every time it refuses.
 //
 // Rule is Kind's counterpart on the deny arm: set on every deny, empty otherwise.
+// Brief is what Kind ships on a repeat firing, and it is empty for a kind that
+// should go quiet instead. It names the command and nothing else, because a repeat
+// is read by someone who already declined the full text once.
 type bashGuardVerdict struct {
 	Deny    string
 	Context string
 	Kind    advisoryKind
+	Brief   string
 	Rule    denyRule
 }
 
@@ -577,7 +581,22 @@ var (
 		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  " + hint.Query.With("\"<terms>\"") + "  with kind=<k> project=<p> relation=<r> matchers, kind!=<k> to exclude, id=~<re> for a regex\n" +
 		"  ONE node's edges, provenance, blast radius:  " + hint.Explain.With("<node>") + "\n" +
 		"  HOW two things connect:  " + hint.Path.With("<a>", "<b>") + "\n" +
-		"`" + hint.Query.With("<symbol>") + "` returns 0 for a code symbol, which is refs's job. If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `" + hint.GraphBuild.String() + "` and ask again rather than falling back to a text match. Searching raw text in CODE (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Markdown PROSE does now: `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the section that covers it. Load the magus-query skill for the full grammar."
+		"`" + hint.Query.With("<symbol>") + "` returns 0 for a code symbol, which is refs's job. " + searchColdIndexRouting + " Searching raw text in CODE (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Markdown PROSE does now: `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the section that covers it. Load the magus-query skill for the full grammar."
+
+	// Shared by every advisory that routes to refs. A not-indexed verdict is the one
+	// answer a reader can misread as "absent" and fall back to grep on, so whichever
+	// advisory sent them to refs owes them this sentence.
+	searchColdIndexRouting = "If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `" + hint.GraphBuild.String() + "` and ask again rather than falling back to a text match."
+
+	// A precedent hunt is a search for one distinctive name, and it is the search the
+	// graph answers best: refs lists verified sites, so the reader lands on working code
+	// instead of assembling it from grep hits. Measured over 1,499 sessions: 42% of new
+	// files were preceded by one of these, 71% in subagent sessions, where only 12.9%
+	// reached for a magus verb at all.
+	precedentSearchAdvice = "this workspace has a knowledge graph, and it answers \"what already does this\" directly:\n" +
+		"  EVERY VERIFIED SITE, checked against the tree:  " + hint.Refs.With("%s", "--occurrences") + "\n" +
+		"  DOES IT EXIST, and what kind of thing is it:  " + hint.Query.With("%s") + "\n" +
+		"A text match finds the name. refs finds the USES, generated and cross-language ones included, which is what a precedent hunt is actually asking for. An empty result means it was text rather than a symbol, and grep is right after all. " + searchColdIndexRouting
 
 	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project=<p>` to scope it and `" + hint.Explain.With("<section>") + "` to see what it links to.\n" +
 		"Reading one specific file you already know the path of? Read it. This is for when you are LOOKING for where something is explained: the section query lands you on the passage instead of the page. Load the magus-query skill for the grammar."
@@ -741,6 +760,44 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 // suggestions can carry project= scoping.
 var searchHints = hint.NewTranslator()
 
+// precedentIdentRe is the identifier shape the transcript mining classified as a
+// precedent hunt: CamelCase, or snake_case with a real separator. A run of lowercase
+// letters is as likely to be prose, and routing that to refs spends the session's one
+// firing on a miss.
+var precedentIdentRe = regexp.MustCompile(`^(?:[A-Za-z0-9]*[a-z0-9][A-Z][A-Za-z0-9]*|[a-z0-9]+(?:_[a-z0-9]+)+)$`)
+
+// precedentIdentMin is the length floor from the same classifier. Short names collide
+// with ordinary words often enough that the graph answer would be wrong as often as it
+// was useful.
+const precedentIdentMin = 6
+
+// precedentIdent returns the identifier a line is hunting for, or empty when the line is
+// not a precedent hunt.
+//
+// hint.Classify draws the line that matters: a grep reading a pipeline's output is
+// ClassRead, and 26% of grep invocations in the mining were that shape (`go test | grep
+// FAIL`). Routing those to the graph would fire on every test run and teach the reader to
+// skip the whole family.
+func precedentIdent(cmds []guardCommand) string {
+	for _, c := range cmds {
+		if !hint.IsSearchTool(c.Name) {
+			continue
+		}
+		if hint.Classify(hint.Invocation{Name: c.Name, Args: c.Args}) != hint.ClassSearchSource {
+			continue
+		}
+		for _, a := range c.Args {
+			if strings.HasPrefix(a, "-") || len(a) < precedentIdentMin {
+				continue
+			}
+			if precedentIdentRe.MatchString(a) {
+				return a
+			}
+		}
+	}
+	return ""
+}
+
 // searchAdvisoryLead renders hint's suggestions for one command on the line,
 // preferring a search-family command's over a file-find's, as the paragraph
 // prepended to searchGuardReason. The lead hands back something to TRY rather
@@ -899,9 +956,27 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case guardDocSearchRe.MatchString(command):
-		return bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch}
+		return bashGuardVerdict{
+			Context: docSearchAdvice,
+			Kind:    advisoryDocSearch,
+			Brief:   "magus workspace: prose is queryable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "`",
+		}
+	case precedentIdent(cmds) != "":
+		ident := precedentIdent(cmds)
+		return bashGuardVerdict{
+			Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
+			Kind:    advisoryPrecedent,
+			Brief:   "magus workspace: `" + hint.Refs.With(ident, "--occurrences") + "` finds every use.",
+		}
 	case guardCodeSearchRe.MatchString(command), guardFileFindRe.MatchString(command):
-		return bashGuardVerdict{Context: searchAdvisoryLead(cmds, hints) + searchGuardReason, Kind: advisoryCodeSearch}
+		return bashGuardVerdict{
+			Context: searchAdvisoryLead(cmds, hints) + searchGuardReason,
+			Kind:    advisoryCodeSearch,
+			// Carries the ROUTING, not just the verbs. A worker meets this having never
+			// seen the full text, and picking query for a code symbol returns 0, which is
+			// how a reader concludes the graph is useless.
+			Brief: "magus workspace: `" + hint.Refs.With("<sym>") + "` for code, `" + hint.Query.String() + "` for entities.",
+		}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -653,6 +654,19 @@ func vcsAddUsage(w io.Writer) {
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --dry-run    classify and report; touch nothing (global flag)")
 	fmt.Fprintln(w, "  --untracked  also stage undeclared files (the ones add -A would sweep in)")
+	fmt.Fprintln(w, "  --reason     why they belong in this change; required with --untracked")
+}
+
+// untrackedOverride phrases the refusal a bare --untracked earns.
+//
+// The flag clears the one report that separates this command from `git add -A`, and
+// what it sweeps in lands in a commit everybody pulls. Naming a path stays free of the
+// requirement: that says yes to one file the caller looked at.
+var untrackedOverride = ward.Override{
+	Name:     "magus vcs add --untracked",
+	Silences: "stages every undeclared file at once, dropping the report that is the difference between this and git add -A",
+	Spelling: `magus vcs add --untracked --reason "<why>"`,
+	Records:  "is kept with the staging verdict, in the report and in -o json",
 }
 
 // vcsAddCmd classifies the paths, stages what is declared, and reports the rest.
@@ -667,6 +681,11 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+	// Before the workspace loads: a refusal about the flags must not need a resolvable
+	// tree, and must not land after anything is staged.
+	if err := ward.RequireReason(untrackedOverride, af.Untracked, af.Reason); err != nil {
+		return usagef("%s", err)
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
@@ -745,6 +764,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 		Undeclared:  unclaimed,
 		Maintained:  maintained,
 		Staged:      []string{},
+		Reason:      strings.TrimSpace(af.Reason),
 	}
 	if len(unexplained) > 0 {
 		// inputDirty is false by construction: an output is only unexplained BECAUSE no
@@ -863,18 +883,19 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 			slices.Sort(all)
 			fmt.Printf("%s %d undeclared file(s) (--untracked):\n", verb, len(all))
 			printPaths(all)
+			fmt.Printf("  reason: %s\n", v.Reason)
 		}
 	} else {
 		if len(v.Undeclared) > 0 {
 			fmt.Printf("skipped %d undeclared file(s); no target claims them:\n", len(v.Undeclared))
 			printPaths(v.Undeclared)
-			fmt.Println("  if one is a new source file, name it explicitly or pass --untracked;")
+			fmt.Println("  if one is a new source file, name it explicitly or pass --untracked --reason \"<why>\";")
 			fmt.Println("  if it is build residue, add it to your VCS ignore rules")
 		}
 		if len(v.Maintained) > 0 {
 			fmt.Printf("skipped %d file(s) magus itself maintains outside any target's declared outputs:\n", len(v.Maintained))
 			printPaths(v.Maintained)
-			fmt.Println("  these are not residue - name them explicitly or pass --untracked to stage them")
+			fmt.Println("  these are not residue; name them explicitly or pass --untracked --reason \"<why>\" to stage them")
 		}
 	}
 	if len(v.Staged) > 0 {

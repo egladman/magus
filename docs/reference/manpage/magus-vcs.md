@@ -22,6 +22,11 @@ add stages what the workspace declares: sources, and the generated outputs a
 source change in the same commit accounts for. Anything undeclared is reported
 rather than swept in, which is the difference between it and git add -A.
 
+--untracked says yes to every undeclared path at once, so it needs --reason: it
+drops the one report that separates this command from git add -A, and the files
+it sweeps in land in a commit everybody pulls. The reason is kept with the
+staging verdict. Naming a path stages one file without the flag.
+
 resolve settles an in-progress merge, rebase, or cherry-pick. It classifies
 every conflicted path at once, regenerates once instead of once per file,
 settles the files one side deleted (which no VCS invokes a merge driver for),
@@ -49,8 +54,11 @@ base in yourself on the others, then run resolve.
 
 ### vcs add options
 
+**--reason** *string*
+: Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict
+
 **--untracked**
-: Also stage undeclared files
+: Also stage undeclared files; requires --reason
 
 ### vcs resolve options
 
@@ -83,6 +91,12 @@ magus vcs add
 
 ```sh
 magus vcs add --dry-run
+```
+
+*Sweep in the undeclared files, on the record*
+
+```sh
+magus vcs add --untracked --reason "new fixtures the go spell does not claim"
 ```
 
 *Settle a conflicted merge*

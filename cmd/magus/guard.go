@@ -280,7 +280,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
 		case v.Context != "":
-			if held := gate.once(v.Kind, v.Context); held != "" {
+			if held := gate.onceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
 				verdict.Context = held
 			}

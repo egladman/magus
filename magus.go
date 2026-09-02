@@ -490,20 +490,35 @@ func (m *Magus) autobindMagusfileSpell() {
 // a secret, set only in trusted CI.
 const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 
+// insecureRemoteOverride phrases the refusal a bare cache.remote.insecure earns.
+//
+// Every other machine that reads this cache inherits the decision from the committed
+// config, and the check it drops is the one that says whether an artifact came from
+// who it claims. A bare true leaves the next reader nothing to weigh.
+var insecureRemoteOverride = ward.Override{
+	Name:     "cache.remote.insecure",
+	Silences: "turns off remote-cache signature verification, so unsigned artifacts are imported and produced",
+	Spelling: `cache.remote.insecure_reason: "<why>" beside it in magus.yaml`,
+	Records:  "stays in the committed config, where every machine that trusts this cache reads it",
+}
+
 // remoteCacheSigningOpts turns the declared trust set (base64 public keys) plus the
 // signing-key env var into cache options, enforcing that a wired remote backend
 // declares a non-empty trust set so a shared cache never comes up unverified —
 // unless insecure is set, the explicit opt-out that accepts and produces unsigned
 // artifacts (no trust set, no signing key) for trusted single-repo CI or backend
-// validation.
-func remoteCacheSigningOpts(trustedB64 []string, insecure bool) ([]cache.Option, error) {
+// validation. That opt-out has to say why; see [ward.RequireReason].
+func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason string) ([]cache.Option, error) {
 	if insecure {
+		if err := ward.RequireReason(insecureRemoteOverride, true, insecureReason); err != nil {
+			return nil, fmt.Errorf("magus: %w", err)
+		}
 		return []cache.Option{cache.WithInsecureRemote()}, nil
 	}
 	if len(trustedB64) == 0 {
 		return nil, fmt.Errorf("magus: a remote cache backend is wired (magus.cache.remote) but no trust set is declared; " +
 			"set cache.remote.trusted_keys in magus.yaml to the Ed25519 public key(s) that sign artifacts (or set " +
-			"cache.remote.insecure / MAGUS_CACHE_REMOTE_INSECURE to accept unsigned artifacts) — " +
+			"cache.remote.insecure with cache.remote.insecure_reason to accept unsigned artifacts) - " +
 			"a shared cache with no signature verification is a supply-chain hazard and is not allowed by default")
 	}
 	pubkeys := make([][]byte, 0, len(trustedB64))
@@ -585,7 +600,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// REQUIRES a trust set (cache.remote.trusted_keys in magus.yaml), enforced at load on
 	// every machine so the misconfiguration can't silently go live.
 	if name := m.wsReg.RemoteBackend(); name != "" {
-		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure)
+		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure, m.cfg.Cache.Remote.InsecureReason)
 		if sErr != nil {
 			shutdownTel()
 			return nil, sErr

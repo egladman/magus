@@ -71,14 +71,15 @@ and an agent can join that session through the magus_diff MCP tool.
 
 --impact appends the blast radius of landing the change: which projects rebuild
 and which were merely edited, who has been changing them, an estimate of the
-rebuild from recorded run durations, what the workspace's advisors say, and
-which human-authored notes anchor a file or symbol you touched. It is the same
-question magus affected --impact answers, asked of a changeset instead of a
-target. It is context and never a verdict - nothing is gated on it and the exit
-code is unchanged; neither the flag nor the section it prints says "preflight",
-because in this workspace's magusfiles a preflight target IS a gate and this
-must never read as one. Each section says when it could not measure something,
-so an empty one reads as "nobody looked" rather than as a clean bill of health.
+rebuild from recorded run durations, what the workspace's advisors say, which
+human-authored notes anchor a file or symbol you touched, and what the authors
+asked magus while writing it. It is the same question magus affected --impact
+answers, asked of a changeset instead of a target. It is context and never a
+verdict - nothing is gated on it and the exit code is unchanged; neither the
+flag nor the section it prints says "preflight", because in this workspace's
+magusfiles a preflight target IS a gate and this must never read as one. Each
+section says when it could not measure something, so an empty one reads as
+"nobody looked" rather than as a clean bill of health.
 
 --impact also carries a REVIEW section, which is a bookmark rather than a
 score. It reports the two things a reader cannot produce without reading:
@@ -116,7 +117,7 @@ performance metric, and a performance metric gets gamed rather than met.
 : Include declared target outputs, which are folded away by default
 
 **--impact**
-: Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, and note anchors
+: Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted
 
 **--no-tui**
 : Print the report instead of opening the interactive viewer

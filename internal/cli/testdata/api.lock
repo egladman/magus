@@ -2,6 +2,7 @@ config cache.dir
 config cache.include.arch.enabled
 config cache.include.os.enabled
 config cache.remote.insecure
+config cache.remote.insecure_reason
 config cache.remote.trusted_keys
 config cache.size_mb
 config cache.write.enabled

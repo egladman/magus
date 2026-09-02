@@ -59,7 +59,7 @@ Takes [UpdateCursorRequest](#updatecursorrequest), returns [Cursor](#cursor).
 
 Cursor is the singleton "where did I leave off" snapshot. A singleton per AIP-156: read with GetCursor, overwritten with UpdateCursor, never listed and never created.
 
-Source: [memory.proto:123](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L123).
+Source: [memory.proto:130](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L130).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -69,7 +69,7 @@ Used by: [GetCursor (response)](memory.md#getcursor), [UpdateCursor (response)](
 
 ### DeleteMemoryRequest
 
-Source: [memory.proto:110](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L110).
+Source: [memory.proto:117](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L117).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -80,7 +80,7 @@ Used by: [DeleteMemory (request)](memory.md#deletememory).
 
 ### DeleteMemoryResponse
 
-Source: [memory.proto:117](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L117).
+Source: [memory.proto:124](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L124).
 
 No fields.
 
@@ -88,7 +88,7 @@ Used by: [DeleteMemory (response)](memory.md#deletememory).
 
 ### GetCursorRequest
 
-Source: [memory.proto:119](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L119).
+Source: [memory.proto:126](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L126).
 
 No fields.
 
@@ -96,7 +96,7 @@ Used by: [GetCursor (request)](memory.md#getcursor).
 
 ### ListMemoriesRequest
 
-Source: [memory.proto:87](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L87).
+Source: [memory.proto:94](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L94).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -107,7 +107,7 @@ Used by: [ListMemories (request)](memory.md#listmemories).
 
 ### ListMemoriesResponse
 
-Source: [memory.proto:97](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L97).
+Source: [memory.proto:104](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L104).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -118,9 +118,9 @@ Used by: [ListMemories (response)](memory.md#listmemories).
 
 ### Memory
 
-Memory is one record. name is the kebab-slug identity; refs are the required payload; body is the caption (decision/plan only); status is the optional lifecycle field; references links to other records by name. create\_time/update\_time are output-only.
+Memory is one record. name is the kebab-slug identity; refs are the required payload; body is the caption (every type but pointer); status is the optional lifecycle field; references links to other records by name. create\_time/update\_time are output-only.
 
-Source: [memory.proto:76](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L76).
+Source: [memory.proto:79](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L79).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -132,6 +132,7 @@ Source: [memory.proto:76](https://github.com/egladman/magus/blob/main/proto/magu
 | `references` | repeated string | 6 | other record names (memory -> memory) |
 | `create_time` | Timestamp | 7 | output only |
 | `update_time` | Timestamp | 8 | output only |
+| `excerpt` | string | 9 | UNTRUSTED captured evidence, required on an elimination and rejected on every other type. It is copied in because an output ref resolves only from the checkout that produced it, and agent worktrees get deleted. |
 
 Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (request)](memory.md#updatememory), [UpdateMemory (response)](memory.md#updatememory).
 
@@ -139,7 +140,7 @@ Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (reque
 
 MemoryRef is one typed pointer: the payload of a record.
 
-Source: [memory.proto:68](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L68).
+Source: [memory.proto:71](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L71).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -150,7 +151,7 @@ Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (reque
 
 ### UpdateCursorRequest
 
-Source: [memory.proto:127](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L127).
+Source: [memory.proto:134](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L134).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -160,7 +161,7 @@ Used by: [UpdateCursor (request)](memory.md#updatecursor).
 
 ### UpdateMemoryRequest
 
-Source: [memory.proto:102](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L102).
+Source: [memory.proto:109](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L109).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -176,7 +177,7 @@ Used by: [UpdateMemory (request)](memory.md#updatememory).
 
 MemoryRefKind is the closed set a ref points at. node/doc/output name a magus-domain node; query/command are re-runnable strings. Every kind resolves or dangles.
 
-Source: [memory.proto:58](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L58).
+Source: [memory.proto:61](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L61).
 
 | Value | # | Description |
 |-------|---|-------------|
@@ -191,9 +192,9 @@ Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (reque
 
 ### MemoryType
 
-MemoryType is the subject axis of a record (stable, closed). pointer carries refs only; decision and plan additionally carry a prose caption (the why the graph cannot derive).
+MemoryType is the subject axis of a record (stable, closed). pointer carries refs only; decision and plan additionally carry a prose caption (the why the graph cannot derive). elimination is a hypothesis an investigation falsified: it carries the caption plus the excerpt of evidence that killed it.
 
-Source: [memory.proto:49](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L49).
+Source: [memory.proto:51](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L51).
 
 | Value | # | Description |
 |-------|---|-------------|
@@ -201,6 +202,7 @@ Source: [memory.proto:49](https://github.com/egladman/magus/blob/main/proto/magu
 | `MEMORY_TYPE_POINTER` | 1 |  |
 | `MEMORY_TYPE_DECISION` | 2 |  |
 | `MEMORY_TYPE_PLAN` | 3 |  |
+| `MEMORY_TYPE_ELIMINATION` | 4 |  |
 
 Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (request)](memory.md#updatememory), [UpdateMemory (response)](memory.md#updatememory).
 
