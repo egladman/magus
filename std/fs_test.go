@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -382,4 +383,53 @@ func TestRecordModeSkipsNewFilesystemWrites(t *testing.T) {
 		_, err := os.Stat(p)
 		assert.NoError(t, err, "record mode must not delete the file")
 	})
+}
+
+// The bootstrap trap this guards: `magus run go-build .` is driven by the magus on
+// PATH, so an installed binary older than the checkout regenerates with its own
+// renderer. Measured 2026-09-01: a PATH magus at schema v9 rewrote a committed v10
+// MAGUS.md down to v9 during a go-build.
+func TestFsWriteFileRefusesASchemaDowngrade(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "MAGUS.md")
+
+	newer := fmt.Sprintf("This workspace has a knowledge graph (schema v%d).\n", types.KnowledgeSchemaVersion+1)
+	require.NoError(t, os.WriteFile(p, []byte(newer), 0o644))
+
+	err := FsWriteFile(ctx, p, "rendered by an older build")
+	require.Error(t, err, "a write over newer-stamped output must be refused")
+	assert.Contains(t, err.Error(), "would downgrade committed output")
+
+	got, err := os.ReadFile(p)
+	require.NoError(t, err)
+	assert.Equal(t, newer, string(got), "the refused write must leave the file untouched")
+
+	assert.Error(t, FsWriteFileAtomic(ctx, p, "rendered by an older build"),
+		"the atomic spelling shares the precondition")
+}
+
+func TestFsWriteFileAllowsEqualOrOlderStamps(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	cases := map[string]string{
+		"equal":     fmt.Sprintf("knowledge graph (schema v%d)\n", types.KnowledgeSchemaVersion),
+		"older":     fmt.Sprintf("knowledge graph (schema v%d)\n", types.KnowledgeSchemaVersion-1),
+		"export":    fmt.Sprintf("{\"schema_version\": %d}\n", types.KnowledgeSchemaVersion),
+		"unstamped": "ordinary prose with no version in it\n",
+	}
+	for name, existing := range cases {
+		t.Run(name, func(t *testing.T) {
+			p := filepath.Join(dir, name+".txt")
+			require.NoError(t, os.WriteFile(p, []byte(existing), 0o644))
+			require.NoError(t, FsWriteFile(ctx, p, "fresh"))
+			got, err := os.ReadFile(p)
+			require.NoError(t, err)
+			assert.Equal(t, "fresh", string(got))
+		})
+	}
+
+	absent := filepath.Join(dir, "new.txt")
+	require.NoError(t, FsWriteFile(ctx, absent, "fresh"), "a file that does not exist yet carries no stamp")
 }

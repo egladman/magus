@@ -93,7 +93,13 @@ var guardSurfaces = []string{"command", "path"}
 // deny rules need no workspace, so a reader who took the sentence at its word went looking
 // for a workspace problem that was never there. A copy that predates this keeps sending
 // them, which is why this bumps even though enforcement is unchanged.
-const GuardTemplateVersion = 9
+// 10: the two notices a template prints when the guard is not enforcing are held to one
+// firing per session, keyed on a TMPDIR marker rather than on magus, which is the thing
+// that is missing when they fire. Measured over recent sessions: 2,741 unavailable and 653
+// could-not-judge firings, 99% of them same-session repeats, and one session took 913. A
+// copy that predates this keeps sending all of them, and a reader who has learned to skip
+// the notice skips the one that mattered too.
+const GuardTemplateVersion = 10
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

@@ -4,6 +4,7 @@ package std
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -378,6 +379,9 @@ func FsWriteFile(ctx context.Context, path string, content string) error {
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
+	if err := checkSchemaDowngrade(path); err != nil {
+		return err
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("fs.write_file %q: %w", path, err)
 	}
@@ -501,6 +505,9 @@ func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
 	}
 	path = resolvePath(ctx, path)
 	if err := checkWrite(ctx, path); err != nil {
+		return err
+	}
+	if err := checkSchemaDowngrade(path); err != nil {
 		return err
 	}
 	// The temporary file has to live in the SAME directory as the destination:
@@ -727,6 +734,55 @@ func checkWrite(ctx context.Context, path string) error {
 		return types.DiagnosticErrorf(types.PathWriteDenied, "fs write denied: %s", path)
 	}
 	return nil
+}
+
+// schemaStampWindow bounds the read the downgrade guard makes. Every stamp the
+// renderers write lands in a document's opening prose or an export's leading
+// fields, so a window keeps the check off the size of a 2MB graph export.
+const schemaStampWindow = 64 << 10
+
+// checkSchemaDowngrade refuses a write that would replace generated output carrying a
+// NEWER knowledge-schema stamp than this build renders.
+//
+// Bootstrapping is what makes this reachable: `magus run go-build .` is orchestrated
+// by whatever magus is on PATH, so an installed binary older than the checkout drives
+// the run and its in-process renderer answers magus\describe. Measured 2026-09-01: a
+// PATH magus at schema v9 rewrote a committed v10 MAGUS.md down to v9 during a
+// go-build, and nothing reported it, because a generator reached through ctx.needs
+// runs inside its parent's body where no drift gate compares the result.
+//
+// It sits beside checkWrite because both answer whether a write may proceed, and
+// every magusfile generator reaches the filesystem through this seam. The renderers
+// that embed the stamp build strings and never learn a destination, so the
+// precondition cannot live with them.
+//
+// A file with no stamp, an unreadable file, and an absent file all pass. The guard
+// speaks only when it can read a version and that version is ahead of this build.
+func checkSchemaDowngrade(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+
+	head := make([]byte, schemaStampWindow)
+	n, err := f.Read(head)
+	if n == 0 || (err != nil && !errors.Is(err, io.EOF)) {
+		return nil
+	}
+	stamped, ok := types.StampedSchemaVersion(head[:n])
+	if !ok || stamped <= types.KnowledgeSchemaVersion {
+		return nil
+	}
+	self, err := os.Executable()
+	if err != nil {
+		self = "the running magus"
+	}
+	return types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus,
+		"refusing to overwrite %s: it carries knowledge-schema v%d and this build renders v%d, "+
+			"so regenerating it here would downgrade committed output. The running binary is %s. "+
+			"Build one from this checkout with `magus run go-build .` and re-run the target with `./magus`.",
+		path, stamped, types.KnowledgeSchemaVersion, self)
 }
 
 // FsWatch is BLOCKING: it watches paths (directories, recursively) and invokes
