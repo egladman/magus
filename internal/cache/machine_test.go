@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -299,6 +300,31 @@ func TestMachineGateIsInertWithoutAnAdmitter(t *testing.T) {
 	release, err := g.acquire(t.Context(), MachineClaim{Project: ".", Target: "test", MemoryMB: 9000})
 	require.NoError(t, err)
 	assert.NotNil(t, release, "a library caller with no host to arbitrate behaves as before")
+}
+
+// TestMachineRefusalStatesItsExitCode pins the method the DAEMON reads. exitCodeOf
+// sees the concrete error and could go on matching the diagnostic code; a run the
+// daemon executes for an adopted client cannot, because the type does not survive the
+// socket. Without the method the refusal exits 75 alone and 1 under a daemon, which is
+// the exact split proc.ExitCode exists to close.
+func TestMachineRefusalStatesItsExitCode(t *testing.T) {
+	b, _, _ := testBudget(t, 10_000, 8)
+	g, _, _ := testGate(t, b, true)
+
+	_, err := g.acquire(t.Context(), MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, Pid: 100})
+	require.NoError(t, err)
+	_, busy := g.acquire(t.Context(), MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, Pid: 200})
+	require.Error(t, busy)
+
+	_, tooBig := g.acquire(t.Context(), MachineClaim{Project: ".", Target: "ci", MemoryMB: 64_000, Pid: 300})
+	require.Error(t, tooBig)
+
+	for _, err := range []error{busy, tooBig, fmt.Errorf("run: %w", busy)} {
+		var stated interface{ ExitCode() int }
+		require.ErrorAs(t, err, &stated, "%v must state its exit code across the socket", err)
+		assert.Equal(t, ExitCodeMachineBusy, stated.ExitCode())
+		assert.True(t, errors.Is(err, types.MachineBudgetExhausted), "and stay matchable by its code")
+	}
 }
 
 func TestFormatMB(t *testing.T) {

@@ -32,6 +32,13 @@ const (
 	machineWaitHeartbeat = 15 * time.Second
 )
 
+// ExitCodeMachineBusy is the process status a machine-budget refusal asks for: 75,
+// EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
+// error is built here and has to state its own code - the daemon runs an adopted step
+// in its own process and reads the code off the error, having lost the Go type.
+// cmd/magus names it exitMachineBusy and documents the contract it joins.
+const ExitCodeMachineBusy = 75
+
 // machineGate is the client half of admission: it polls the budget, reports the wait,
 // and hands back the release.
 type machineGate struct {
@@ -195,22 +202,36 @@ func machineWaitingMessage(c MachineClaim, v MachineVerdict) string {
 		displayProject(c.Project), c.Target, ahead, describeMachineHolders(v.Holders))
 }
 
+// machineRefusal is a refusal that states the process status it asks for. The
+// diagnostic alone cannot: a step the daemon runs for an adopted client crosses a
+// socket that erases the Go type, and the daemon reads the code off the error rather
+// than naming a CLI package it must not import (see proc.ExitCode). Without this the
+// same refusal exited 75 locally and 1 under a daemon.
+//
+// It wraps rather than replaces, so errors.Is against the diagnostic code keeps
+// matching everywhere it already did.
+type machineRefusal struct{ error }
+
+func (machineRefusal) ExitCode() int { return ExitCodeMachineBusy }
+
+func (e machineRefusal) Unwrap() error { return e.error }
+
 // machineBusyError is the fail-fast answer: the machine is full right now, the same
 // command will succeed later, and the caller asked not to queue.
 func machineBusyError(c MachineClaim, v MachineVerdict) error {
-	return types.DiagnosticErrorf(types.MachineBudgetExhausted,
+	return machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this machine's build budget is full and MAGUS_NO_WAIT is set; %s, and %s. %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		describeMachineRemaining(v), describeMachineHolders(v.Holders))
+		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
 }
 
 // machineTooBigError is the refusal no wait can fix: the declaration does not fit in
 // the whole budget, so an empty machine would refuse it too.
 func machineTooBigError(c MachineClaim, v MachineVerdict) error {
-	return types.DiagnosticErrorf(types.MachineBudgetExhausted,
+	return machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; correct the declaration if it is wrong, or run this on a bigger machine.",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		FormatMB(v.BudgetMB), v.BudgetSlots)
+		FormatMB(v.BudgetMB), v.BudgetSlots)}
 }
 
 // describeMachineDeclaration says where the figure came from. A composed target is

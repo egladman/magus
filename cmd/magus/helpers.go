@@ -229,7 +229,13 @@ const exitUsage = 2
 // starts debugging a target that never ran. 75 is EX_TEMPFAIL from sysexits.h, the
 // long-standing Unix code for "failed, try again later", the same kind of borrowed
 // convention as exitUsage taking 2 from flag.ExitOnError.
-const exitMachineBusy = 75
+//
+// Aliased rather than restated: the refusal is built in the cache and states this code
+// ON ITSELF, because a step the daemon runs for an adopted client loses its Go type
+// over the socket and the daemon reads the code off the error. Two spellings of one
+// number would let the local and forwarded paths disagree about what a busy machine
+// exits with.
+const exitMachineBusy = cache.ExitCodeMachineBusy
 
 // errUsage marks a command-line misuse so it exits exitUsage rather than the generic
 // 1. Wrap the message a user needs to fix their invocation; the usage text itself is

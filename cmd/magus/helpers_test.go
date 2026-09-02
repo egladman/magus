@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/cache"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -194,6 +195,29 @@ func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
 	_, ok := proc.ExitCode(errors.New("the work failed"))
 	assert.False(t, ok, "an ordinary failure names no code and stays the daemon's default 1")
 }
+
+// TestMachineBusyAgreesAcrossTheSocket pins the two halves of the 75 contract against
+// each other. exitCodeOf matches the diagnostic code on the LOCAL path; the daemon
+// reads ExitCode() off the error on the FORWARDED one, and a run refused by the
+// machine must exit the same either way.
+func TestMachineBusyAgreesAcrossTheSocket(t *testing.T) {
+	assert.Equal(t, exitMachineBusy, cache.ExitCodeMachineBusy,
+		"one number, or the local and forwarded paths disagree")
+
+	// The refusal itself is built inside the cache, so stand in for it with an error
+	// carrying the same two properties the real one does.
+	busy := machineBusyStub{types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")}
+	code, ok := proc.ExitCode(busy)
+	require.True(t, ok, "the daemon must be able to read the code off a forwarded refusal")
+	assert.Equal(t, exitMachineBusy, code)
+	assert.Equal(t, exitMachineBusy, exitCodeOf(busy), "and the local path must agree")
+}
+
+type machineBusyStub struct{ error }
+
+func (machineBusyStub) ExitCode() int { return cache.ExitCodeMachineBusy }
+
+func (e machineBusyStub) Unwrap() error { return e.error }
 
 func TestUsagefCarriesTheMisuseMessage(t *testing.T) {
 	err := usagef("magus diff: %d is too many", 3)
