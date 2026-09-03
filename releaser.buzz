@@ -175,6 +175,33 @@ test "a glob star stays inside one path segment" {
     std\assert(!matchesGlob("exact", "exactly"), message: "a starless pattern is not a prefix test");
 }
 
+// toSlash rewrites a path's separators to "/", as Go's filepath.ToSlash does.
+//
+// An asset glob is workflow vocabulary: actions/upload-artifact and the publish shell
+// speak "/" on every runner, and the uploader normalizes separators before matching.
+// fs\join speaks the OS. Anything checked against one of those globs goes through here
+// first. A backslash then reads as a separator on every platform, stricter than Linux
+// alone requires and intended: an asset name carrying one is unbuildable on the Windows
+// runner. A version carrying "/" still fails, so this cannot mask what the glob catches.
+export fun toSlash(path: str) > str {
+    return path.replace("\\", with: "/");
+}
+
+test "a windows-joined asset path matches the upload glob" {
+    // The v0.4.1 windows job, which refused this exact name.
+    std\assert(matchesGlob("dist/magus_*.tar.gz",
+        toSlash("dist\\magus_v0.4.1_windows_amd64_static.tar.gz")),
+        message: "a backslash-joined asset is what the uploader collects");
+    std\assert(matchesGlob("dist/magus_*.tar.gz",
+        toSlash("dist/magus_v0.4.1_linux_amd64_static.tar.gz")),
+        message: "a slash-joined asset is unchanged");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz",
+        toSlash("dist\\magus_libs/diagnostics/v0.1.0_windows_amd64_static.tar.gz")),
+        message: "normalizing the join still refuses a version carrying a separator");
+    std\assert(toSlash("a\\b\\c") == "a/b/c", message: "every separator, not the first");
+    std\assert(toSlash("") == "", message: "the empty path");
+}
+
 // unreleasedBody returns the trimmed body of CHANGELOG.md's [Unreleased] section, or ""
 // when the section is absent or holds nothing.
 //

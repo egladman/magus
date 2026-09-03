@@ -154,6 +154,49 @@ func TestDaemonChildEnvDropsInheritedInvocationState(t *testing.T) {
 	assert.Equal(t, "yes", got["MAGUS_KEEP_ME"], "everything else is inherited as before")
 }
 
+// TestDaemonCmdReExecsTheGivenPathWithoutResolvingIt pins the fix for the v0.4.1 windows
+// release, where auto-starting the admission daemon failed with
+//
+//	exec: "C:\hostedtoolcache\windows\magus\bin\magus": executable file not found in %PATH%
+//
+// exec.Command resolves an absolute path on Windows through lookExtensions, which needs a
+// PATHEXT sibling; setup-magus installs an extensionless `magus`, so the running binary
+// could not re-exec itself. Nothing here should consult PATH: the caller passes
+// os.Executable().
+//
+// The assertion is contract-shaped rather than reproducing the failure, which needs a
+// Windows runtime. exec.Command sets Err on exactly this input there and nowhere else, so
+// the case is stated on every platform and enforced where it bites.
+func TestDaemonCmdReExecsTheGivenPathWithoutResolvingIt(t *testing.T) {
+	for _, tc := range []struct{ name, exe string }{
+		{"extensionless, as setup-magus installs it", filepath.Join(t.TempDir(), "magus")},
+		{"with the windows extension", filepath.Join(t.TempDir(), "magus.exe")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := daemonCmd(tc.exe, []string{"server", "start", "--foreground"})
+
+			require.NoError(t, cmd.Err, "re-execing a known absolute path performs no lookup that could fail")
+			assert.Equal(t, tc.exe, cmd.Path, "the path is used verbatim, never a PATHEXT sibling")
+			assert.Equal(t, []string{tc.exe, "server", "start", "--foreground"}, cmd.Args,
+				"argv[0] is the executable, with the caller's arguments after it")
+		})
+	}
+}
+
+// TestDaemonCmdIgnoresPATH proves the resolution is absent rather than merely succeeding: a
+// name that also exists on PATH must not be picked up in place of the path given.
+func TestDaemonCmdIgnoresPATH(t *testing.T) {
+	decoy := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(decoy, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	t.Setenv("PATH", decoy)
+
+	want := filepath.Join(t.TempDir(), "magus")
+	cmd := daemonCmd(want, nil)
+
+	assert.Equal(t, want, cmd.Path, "the decoy on PATH is not consulted")
+	assert.NotEqual(t, filepath.Join(decoy, "magus"), cmd.Path)
+}
+
 // TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon pins the bound the doctrine amendment
 // promises, and its limit: a daemon a person started stays up until they stop it.
 func TestAdmissionIdleExitIsOnlyForAnUnaskedDaemon(t *testing.T) {

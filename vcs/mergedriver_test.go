@@ -171,6 +171,58 @@ func TestEnsureMergeDriverIdempotent(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(string(attrs), gitAttrsBegin), "still exactly one section")
 }
 
+// TestEnsureMergeDriverLeavesACRLFWorktreeClean pins the fix for the v0.4.1 windows release,
+// which stamped every artifact `v0.4.1-dirty` while the other four platforms were clean.
+//
+// .gitattributes is the one TRACKED file magus rewrites on every workspace load. Git for
+// Windows ships core.autocrlf=true and this repository declares no eol attribute, so
+// checkout smudges the LF blob to CRLF on disk; writing the managed section back as LF then
+// makes git report the file modified, and `git describe --dirty` says so.
+//
+// core.autocrlf is set on the fixture rather than mocked, so this runs the real smudge on
+// any host: the checkout below produces CRLF everywhere, which is what makes the case
+// reproducible off Windows. The final describe is the assertion that matters, because it is
+// the exact call version() makes.
+func TestEnsureMergeDriverLeavesACRLFWorktreeClean(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("GIT_DIR", filepath.Join(repo, ".git"))
+	t.Setenv("GIT_WORK_TREE", repo)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	outputGlobs := []string{"gen/**", "docs/gen/**"}
+
+	// Commit the section as an LF blob, the way every non-Windows contributor does.
+	_, wanted := gitVCS{}.gitAttrsState(repo, outputGlobs)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n", ".gitattributes": wanted})
+	gitRun(t, repo, "config", "core.autocrlf", "true")
+	gitRun(t, repo, "tag", "v0.4.1")
+
+	// Re-checkout under autocrlf: this is the Windows runner's starting state.
+	require.NoError(t, os.Remove(filepath.Join(repo, ".gitattributes")))
+	gitRun(t, repo, "checkout", "--", ".gitattributes")
+	onDisk, err := os.ReadFile(filepath.Join(repo, ".gitattributes"))
+	require.NoError(t, err)
+	require.Contains(t, string(onDisk), "\r\n", "the fixture reproduces the CRLF smudge")
+
+	// changed is true here for a reason unrelated to the tracked file: a fresh clone has no
+	// merge.magus.driver registered, and that write lands in .git/config.
+	_, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
+	require.NoError(t, err)
+
+	after, err := os.ReadFile(filepath.Join(repo, ".gitattributes"))
+	require.NoError(t, err)
+	assert.Equal(t, string(onDisk), string(after),
+		"the section is rewritten with the line ending the file already uses, so the bytes do not move")
+
+	described, err := gitVCS{}.Describe(t.Context(), repo)
+	require.NoError(t, err)
+	assert.Equal(t, "v0.4.1", described, "a CRLF worktree is not dirt; v0.4.1 shipped as v0.4.1-dirty because it was")
+
+	changed, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
+	require.NoError(t, err)
+	assert.False(t, changed, "and the steady state stays quiet rather than rewriting every load")
+}
+
 // TestEnsureMergeDriverIgnoresAmbientGitDir pins the escape gitEnviron exists to stop.
 //
 // GIT_DIR overrides both -C and cmd.Dir, and git exports it into every hook and

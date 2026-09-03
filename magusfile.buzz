@@ -1424,11 +1424,14 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // shipped as v0.4.0. The glob also catches what a basename check cannot, a rename of the
     // `magus_` prefix or `.tar.gz` suffix on one side alone.
     //
+    // Compared through toSlash: the glob is the uploader's vocabulary and fs\join is the
+    // runner's, and upload-artifact normalizes separators before matching.
+    //
     // Nothing re-checks the written files after the upload step, because there is nothing
     // left to find: every name in a job shares one version, so the glob selects all of them
     // or none, and release_preflight pins RELEASE_ASSET_GLOB to the workflow's own text
     // before the tag exists.
-    if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, asset)) {
+    if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, releaser\toSlash(asset))) {
         throw "release-build: the asset would be `" + asset + "`, which `"
             + RELEASE_ASSET_GLOB + "` does not match, so the release upload would not find "
             + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
@@ -1762,8 +1765,13 @@ fun release_preflight(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
         foreach (p in [["linux", "amd64"], ["linux", "arm64"], ["darwin", "amd64"],
                        ["darwin", "arm64"], ["windows", "amd64"], ["windows", "arm64"]]) {
             foreach (suffix in ["_static", ""]) {
+                // toSlash for the same reason build_release_variant needs it: fs\join gives
+                // the separator of the machine REHEARSING, so without it every asset reads
+                // as an offender on a Windows developer's tree.
                 final asset = fs\join("dist", release_asset_name(root, p[0], p[1], suffix));
-                if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, asset)) { offenders.append(asset); }
+                if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, releaser\toSlash(asset))) {
+                    offenders.append(asset);
+                }
             }
         }
         if (offenders.len() > 0) {
