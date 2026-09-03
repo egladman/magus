@@ -639,13 +639,9 @@ func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
 	}
 }
 
-// TestTagsNamesATagSharedWithABranch pins %(refname:lstrip=2) over %(refname:short).
-//
-// :short abbreviates a ref only as far as it stays unambiguous, so a branch named for the
-// release it was cut from renders refs/tags/v1.0.0 as "tags/v1.0.0". That name matches no
-// "v*" pattern and splits into prefix "tags/", so the tag vanished from every caller asking
-// whether HEAD carries a release - which is how v0.4.0 was released by a build that could
-// not see its own tag.
+// TestTagsNamesATagSharedWithABranch pins %(refname:lstrip=2) over %(refname:short), which
+// abbreviates refs/tags/v1.0.0 to "tags/v1.0.0" when a branch shares the name and so hides
+// the tag from every caller asking whether HEAD carries a release.
 func TestTagsNamesATagSharedWithABranch(t *testing.T) {
 	repo := t.TempDir()
 	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
@@ -656,12 +652,12 @@ func TestTagsNamesATagSharedWithABranch(t *testing.T) {
 	require.NoError(t, err, "Tags")
 	require.Len(t, tags, 1)
 	assert.Equal(t, "v1.0.0", tags[0].Name)
-	assert.Empty(t, tags[0].Prefix, "the tag is at the root, not under a tags/ module prefix")
+	assert.Empty(t, tags[0].Prefix, "a root tag carries no module prefix")
 }
 
-// TestTagsSeesLooseAndPackedRefs covers both ref storages in one repository, since a
-// release cut today is a loose file while the repository's history is packed - and pins
-// that pattern filtering still keeps wildcards from crossing "/".
+// TestTagsSeesLooseAndPackedRefs covers both ref storages in one repository, since a release
+// cut today is a loose file while the repository's history is packed, and pins that a
+// wildcard still stops at "/".
 func TestTagsSeesLooseAndPackedRefs(t *testing.T) {
 	repo := t.TempDir()
 	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})

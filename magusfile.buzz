@@ -162,19 +162,14 @@ magus\project({
     },
 });
 
-// The ROOT release tag HEAD sits EXACTLY on, or "" when HEAD carries none.
+// The ROOT release tag HEAD sits EXACTLY on, or "" when HEAD carries none. Compares revision
+// ids, so it cannot read distance past a tag as the prerelease a version string would show.
 //
 // The shape check is releaser\rootReleaseTag, which the release preflight also asks, so a
 // rehearsal and a build cannot disagree about which tag names the version. It rejects both
 // lookalikes a `v*` refspec admits: this repository's `verified-refinements` tag, and the
 // per-module tag a release commit also carries, which would let the root adopt
 // libs/gopherbuzz/v0.1.0 as its own version.
-//
-// Comparing revision ids rather than reading a version string is what makes this exact.
-// describe() renders an untagged commit as v0.4.0-3-gabc123, whose prerelease component is
-// `3-gabc123`, so a version string alone cannot tell a genuine prerelease (`rc.1`) from mere
-// distance past a stable tag - and reading it as the former would file an ordinary
-// mid-development commit under a published channel.
 fun exact_release_tag() > str !> any {
     return releaser\rootReleaseTag(tag_names_on_head());
 }
@@ -196,31 +191,20 @@ fun tag_names_on_head() > [str] !> any {
 
 // The version stamped into the binary, into BUILDINFO, and into every release asset name.
 //
-// A root release tag on HEAD wins over describe(), because `git describe --tags` picks
-// ARBITRARILY among the tags on one commit and a release commit carries several. Cutting
-// v0.4.0 tagged the three libs modules on the same commit, describe chose
-// libs/diagnostics/v0.1.0, and every asset was named
-// magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz - a path, not a filename. fs\join wrote
-// the archives into dist/magus_libs/diagnostics/, where the release workflow's
-// dist/magus_*.tar.gz glob never looked, and the release published zero assets while
-// reporting success.
+// A root release tag on HEAD beats describe(), because `git describe --tags` has no rule for
+// choosing among the tags on one commit and a release commit carries one per
+// independently-versioned module. Cutting v0.4.0 it chose libs/diagnostics/v0.1.0, so every
+// asset was named magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz, a path rather than a
+// filename, and the release uploaded nothing.
 //
-// A dirty tree keeps describe's `-dirty` suffix rather than falling back to describe
-// outright. That suffix is the single signal that a build is not the tagged commit, so
-// dropping it would stamp uncommitted work with a released version - but falling back
-// re-enters the arbitrary choice above, which is how a dirty local release-build in this
-// very repository still reported `libs/diagnostics/v0.1.0-dirty`. Naming the tag and
-// appending the suffix keeps both facts.
+// A dirty tree appends describe's `-dirty` instead of falling back to describe, which would
+// re-enter that choice. The suffix is the only signal that a build is not the tagged commit.
 //
 // An untagged HEAD falls to describe, constrained to root release tags. `v[0-9]*` is
 // isReleaseTag as an fnmatch pattern: the digit excludes `verified-refinements` and the
-// leading `v` excludes every `libs/<name>/v0.1.0`, so the base is a root release or
-// nothing.
-//
-// Unconstrained, describe answered `libs/diagnostics/v0.1.0-1-gf9b575121` here, where the
-// four v0.4.0-era tags share one commit. That version carries a "/", so `release-build`
-// refused on every untagged commit on main, and the release path could not be exercised
-// between releases.
+// leading `v` excludes every `libs/<name>/v0.1.0`, so the base is a root release or nothing.
+// Unconstrained it picked a namespaced tag here too, and the "/" in that version made
+// `release-build` refuse on every untagged commit on main.
 //
 // vcs\cmd rather than vcs\describe because the descriptor takes no match argument; the args
 // are git's own, as release()'s `vcs\cmd(["tag", ...])` already is. build_release_variant's
@@ -1424,16 +1408,15 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     final v = version();
     final name = release_asset_name(v, goos, goarch, suffix);
     final asset = fs\join("dist", name);
-    // Checked HERE, beside goarm_level and before the first write, for the same reason: a
-    // request that cannot produce a usable asset should leave no trace and should not pay
-    // for a cross-compile first.
+    // Before the first write, beside goarm_level: a request that cannot produce a usable
+    // asset should leave no trace and pay for no cross-compile.
     //
     // Against the UPLOAD GLOB rather than fs\basename. A version carrying a "/" turns the
-    // asset name into a path: fs\join writes
-    // dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz, the archive is real, the
-    // build is green, and dist/magus_*.tar.gz matches nothing because a glob star does not
-    // cross a separator. That shipped as v0.4.0. The glob also catches what a basename check
-    // cannot, a rename of the `magus_` prefix or `.tar.gz` suffix on one side alone.
+    // asset NAME into a PATH, so fs\join writes
+    // dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz and the build is green
+    // while dist/magus_*.tar.gz matches nothing, a glob star not crossing a separator. That
+    // shipped as v0.4.0. The glob also catches what a basename check cannot, a rename of the
+    // `magus_` prefix or `.tar.gz` suffix on one side alone.
     if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, asset)) {
         throw "release-build: the asset would be `" + asset + "`, which `"
             + RELEASE_ASSET_GLOB + "` does not match, so the release upload would not find "
