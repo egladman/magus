@@ -329,10 +329,9 @@ func TestDriverUsablePreservesAWrapperAndRejectsAStaleVerb(t *testing.T) {
 	assert.False(t, driverUsable(t.Context(), ""), "an empty registration is not usable")
 }
 
-// TestDriverProbeSilenceIsNotAnAnswer pins the disposition of a probe that never reported.
-// The budget can expire on a machine busy enough to make the first execution of a new file
-// slow, and that silence says nothing about the driver, so the two callers read it opposite
-// ways: keeping an unproven registration is undone by the next Ensure, rewriting one is not.
+// TestDriverProbeSilenceIsNotAnAnswer pins how the two callers read a probe that never
+// reported: the registration is kept, the binary is refused. Only the keep is undone by the
+// next Ensure.
 func TestDriverProbeSilenceIsNotAnAnswer(t *testing.T) {
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "magus")
@@ -341,8 +340,7 @@ func TestDriverProbeSilenceIsNotAnAnswer(t *testing.T) {
 	env, err := exec.LookPath("env")
 	require.NoError(t, err)
 
-	// A context already past its deadline reaches the same branch driverProbeBudget does,
-	// without spending the budget to get there.
+	// Reaches the branch driverProbeBudget reaches, without spending 30s to get there.
 	silent, cancel := context.WithCancel(t.Context())
 	cancel()
 
@@ -351,9 +349,9 @@ func TestDriverProbeSilenceIsNotAnAnswer(t *testing.T) {
 	assert.False(t, answered, "a probe that was killed reported no exit status")
 
 	assert.True(t, driverUsable(silent, env+" FOO=1 "+fake+" vcs merge-driver %O %A %B %L %P"),
-		"an unproven registration is left alone; rewriting it would drop the wrapper for good")
+		"an unproven registration is kept; rewriting would drop the wrapper for good")
 	assert.False(t, driverExeAnswers(silent, fake),
-		"an unproven binary is never the one registered; the os.Executable fallback dispatches by construction")
+		"an unproven binary is never registered; os.Executable dispatches by construction")
 }
 
 // TestDriverUsableOnAnOlderBinarysSpelling is the direction a suffix comparison gets wrong, and

@@ -1026,10 +1026,8 @@ func driverUsableFor(ctx context.Context, registered, wanted string) bool {
 // driverRegistrationAnswers asks the registered command whether it still dispatches the verb
 // it was registered with.
 //
-// A probe that does not answer leaves the registration alone. The two mistakes are not
-// symmetric: rewriting drops a wrapper someone added on purpose and nothing puts it back,
-// while keeping a stale verb costs one workspace load, because a verb a binary cannot
-// dispatch stays undispatchable and the next Ensure asks again.
+// Silence keeps the registration: rewriting drops a deliberate wrapper for good, while
+// keeping a stale verb costs one workspace load, since the next Ensure asks again.
 func driverRegistrationAnswers(ctx context.Context, registered string) bool {
 	exe, args := splitDriver(registered)
 	if exe == "" {
@@ -1044,21 +1042,16 @@ func driverRegistrationAnswers(ctx context.Context, registered string) bool {
 	return dispatches || !answered
 }
 
-// driverProbeBudget bounds a probe that never returns; it is not a latency target. The
-// probe's own work is a flag parse, single-digit milliseconds measured. Everything above
-// that is the operating system evaluating the code signature of a file it has not executed
-// before, a check serialized machine-wide, so its latency is set by how many other processes
-// are launching new binaries rather than by anything this one does. Measured on a 10-core
-// macOS workstation: 90ms to 136ms idle, ~640ms against six concurrent first-execution
-// loops, 2.5s to 3.2s cold. The 5s this replaced sat inside that spread, and three or four
-// concurrent gates, each linking and running hundreds of fresh test binaries, pushed the
-// probe past it repeatedly.
+// driverProbeBudget bounds a probe that never returns; it is not a latency target. The first
+// execution of a newly written file pays a code-signature check serialized across the
+// machine, so the probe's latency tracks how many other processes are launching new binaries:
+// 3.2s worst measured locally, and past the 5s this replaced under concurrent gates.
 const driverProbeBudget = 30 * time.Second
 
 // driverProbe runs `exe <verb> -h` and reports whether it exited zero, and separately whether
-// it answered at all. A command that cannot dispatch the verb exits non-zero; a command
-// killed at driverProbeBudget said nothing, and silence is a property of the machine rather
-// than of the driver, so callers pick which way to read it and say why.
+// it answered at all. A command that cannot dispatch the verb exits non-zero; one killed at
+// driverProbeBudget reported nothing, which is a fact about the machine and not about the
+// driver.
 //
 // The git placeholders are dropped rather than substituted. `-h` returns before the child
 // opens a workspace or touches an index, so this cannot mutate anything, and it works in a
@@ -1162,10 +1155,8 @@ func quoteDriverExe(exe string) string {
 // `-h` returns before the child opens a workspace, so it also works in a tree no released
 // magus can load, which is when the answer matters most.
 //
-// A probe that does not answer reads as NO, the opposite of driverRegistrationAnswers. This
-// caller is choosing what to WRITE, and declining PATH falls back to os.Executable(), which
-// dispatches the spelling by construction; nothing is lost by refusing to prefer a binary
-// that did not prove itself.
+// Silence reads as no here, the opposite of driverRegistrationAnswers: this caller picks what
+// to write, and declining PATH falls back to os.Executable(), which dispatches by construction.
 func driverExeAnswers(ctx context.Context, exe string) bool {
 	verb, _, _ := strings.Cut(strings.TrimSpace(gitDriverArgs), " %")
 	dispatches, _ := driverProbe(ctx, exe, strings.Fields(verb))
