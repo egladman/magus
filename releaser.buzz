@@ -228,6 +228,28 @@ test "immutable refuses only an existing path" {
     std\assert(msg.indexOf("immutable") != null, message: "the refusal names the charm");
 }
 
+// manifestWithVersion returns the SHA256SUMS content with the leading `version: <v>` line
+// selfupdate's ParseManifest requires: the header binds the signed manifest to one
+// release, and every shipped parser refuses a manifest without it. Idempotent - a
+// manifest already carrying a version line comes back unchanged. sha256sum(1) warns on
+// the line and still verifies the rest, and the install script's own filter reads only
+// 64-hex-digit lines, so the file stays consumable everywhere it is documented.
+export fun manifestWithVersion(manifest: str, version: str) > str {
+    if (manifest.startsWith("version:") or manifest.indexOf("\nversion:") != null) {
+        return manifest;
+    }
+    return "version: " + version + "\n" + manifest;
+}
+
+test "the manifest gains its version header exactly once" {
+    final sums = "abc123  magus_v0.4.2_linux_amd64_static.tar.gz\n";
+    final headed = manifestWithVersion(sums, version: "v0.4.2");
+    std\assert(headed.startsWith("version: v0.4.2\n"), message: "the header leads");
+    std\assert(headed.endsWith(sums), message: "the entries are untouched");
+    std\assert(manifestWithVersion(headed, version: "v0.4.2") == headed,
+        message: "a headed manifest is unchanged");
+}
+
 // unreleasedBody returns the trimmed body of CHANGELOG.md's [Unreleased] section, or ""
 // when the section is absent or holds nothing.
 //

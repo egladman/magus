@@ -1636,6 +1636,10 @@ export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
 // magus source tree since it's reused by arbitrary external repos).
 export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
     refuse_overwrite(ctx, fs\join("dist", "SHA256SUMS.sig"));
+    // The version header selfupdate's ParseManifest requires; no release had ever
+    // emitted it. Added here, the last touch before the bytes are signed.
+    final manifest = fs\join("dist", "SHA256SUMS");
+    fs\writeFile(manifest, releaser\manifestWithVersion(fs\readFile(manifest), version: version()));
     proc\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
     proc\exec("go", ["run", "./cmd/magus-utils", "verify",
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);

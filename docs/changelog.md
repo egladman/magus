@@ -114,11 +114,20 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Fixed
 
-- **`SHA256SUMS` is hex.** The per-asset sidecar hashed with the stdlib `crypto.hash`,
-  which returns the raw digest bytes, so the manifest v0.4.2 shipped is unreadable by
-  `sha256sum -c`. The sidecar now writes `crypto\sha256File`'s lowercase hex. The signed
-  release index always carried correct hex digests, so `magus self update` verification
-  was never affected.
+- **`SHA256SUMS` is hex again.** Releases v0.1.0 through v0.3.0 shipped hex; an
+  upstream-parity change then made Buzz's `crypto.hash` return raw digest bytes, and the
+  sidecar writer, unchanged since v0.1.0, shipped v0.4.2's manifest as those bytes. That
+  broke every consumer at once: `sha256sum -c` per the verify docs, the install script's
+  64-hex-digit gate (so a `setup-magus` `prebuilt` pin fails its checksum and audit's
+  compat job goes red), and `magus self update`'s manifest parser. The sidecar now
+  writes `crypto\sha256File`'s lowercase hex, and the `describe module` hint claiming
+  `crypto.hash` covers `sha256_hex` is gone - that claimed equivalence is what wrote
+  the bug.
+- **The signed manifest carries the `version:` header self-update requires.**
+  `ParseManifest` refuses a manifest without one, and no release had ever emitted it,
+  so `magus self update` could not verify any published release, independent of the
+  hex defect. `release-sign` now prepends `version: <tag>` before signing; sha256sum(1)
+  skips the line, so the documented verify procedure is unaffected.
 - **The publish job survives being unable to open the release-index pull request.** The
   branch push is the deliverable and container images gate on the job, so a refused
   `gh pr create` (repository Actions settings can forbid it, and did for v0.4.2) now
