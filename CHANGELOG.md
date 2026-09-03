@@ -107,6 +107,29 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Fixed
 
+- **The release asset guard no longer refuses a Windows build.** `fs\join` gives the
+  runner's separator, so the windows job compared
+  `dist\magus_v0.4.1_windows_amd64_static.tar.gz` against `dist/magus_*.tar.gz`, found
+  no match, and failed the v0.4.1 release on a path actions/upload-artifact normalizes
+  and collects. An asset glob is workflow vocabulary, so both the guard and the release
+  preflight now compare through `releaser\toSlash`. The preflight had the same defect
+  and would have called every asset an offender when rehearsed on Windows.
+- **A Windows worktree is no longer dirty the moment magus loads it.** `.gitattributes`
+  is the one tracked file the merge-driver refresh rewrites on every workspace load, and
+  it wrote a hard-coded `\n`. Git for Windows ships `core.autocrlf=true` and this
+  repository declares no `eol` attribute, so checkout smudges the LF blob to CRLF on
+  disk; rewriting it as LF makes git report the file modified, and `git describe --dirty`
+  then answers `<tag>-dirty`. Every v0.4.1 Windows artifact was stamped `v0.4.1-dirty`
+  while the other four platforms were clean. The section is now emitted with the line
+  ending the file already uses. Only this writer needed it: the sibling managed sections
+  land in `.git/config`, `.hg/hgrc` and hook scripts, none of them tracked.
+- **The admission daemon starts on Windows.** `exec.Command` resolves an absolute path
+  there through `lookExtensions`, which requires a PATHEXT sibling to exist, and
+  setup-magus installs an extensionless `magus`, so the running binary could not re-exec
+  itself: `exec: "C:\hostedtoolcache\windows\magus\bin\magus": executable file not found
+  in %PATH%`. Machine-wide admission failed open, so the release still built. The spawn
+  now sets the command's path verbatim, which is what re-execing `os.Executable()` wanted
+  in the first place; PATH and PATHEXT have no say in which binary this process is.
 - **`release-build` works on an untagged commit again.** When HEAD carries no root
   release tag, `version()` falls back to `git describe`, and describe picked among
   every tag in the repository - so with four v0.4.0-era tags on one commit it

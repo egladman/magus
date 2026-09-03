@@ -241,6 +241,16 @@ func daemonChildEnv() []string {
 	return out
 }
 
+// daemonCmd builds the re-exec command with Path set to exe verbatim, skipping
+// exec.Command's resolution. exe is the running binary's own path, so PATH and PATHEXT have
+// no say in which binary it is. On Windows their say is fatal: given an absolute path with
+// no extension, exec.Command demands a PATHEXT sibling on disk, and setup-magus installs an
+// extensionless magus, so the binary could not re-exec itself ("executable file not found
+// in %PATH%") and machine-wide admission failed open.
+func daemonCmd(exe string, args []string) *exec.Cmd {
+	return &exec.Cmd{Path: exe, Args: append([]string{exe}, args...)}
+}
+
 // spawnDetachedDaemon re-execs this binary as a detached foreground daemon and returns its
 // pid and the log file its stdio is redirected to. It marks the child via daemonDetachEnv so
 // it runs the daemon rather than backgrounding again, and the child is fully detached (its
@@ -253,7 +263,12 @@ func daemonChildEnv() []string {
 func spawnDetachedDaemon(args []string, extraEnv ...string) (pid int, logPath string, err error) {
 	exe, err := os.Executable()
 	if err != nil {
+		// argv[0] may be a bare name, which daemonCmd will not search for; resolve it the
+		// way exec.Command used to.
 		exe = os.Args[0]
+		if lp, lerr := exec.LookPath(exe); lerr == nil {
+			exe = lp
+		}
 	}
 	logPath = filepath.Join(proc.SockDir(), "magus-daemon.log")
 	logf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -262,7 +277,7 @@ func spawnDetachedDaemon(args []string, extraEnv ...string) (pid int, logPath st
 	}
 	defer func() { _ = logf.Close() }()
 
-	cmd := exec.Command(exe, args...) //nolint:gosec // G702: re-execs this same magus binary to detach the daemon
+	cmd := daemonCmd(exe, args)
 	cmd.Env = append(append(daemonChildEnv(), daemonDetachEnv+"=1"), extraEnv...)
 	cmd.Stdin = nil
 	cmd.Stdout = logf

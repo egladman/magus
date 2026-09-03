@@ -1103,15 +1103,35 @@ func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error)
 
 // gitAttrsState returns .gitattributes as it is now and as the declared globs say it
 // should be, so callers can compare the two without writing.
+//
+// The section keeps the line ending the file already uses. .gitattributes is the one
+// tracked file magus rewrites on every workspace load, and under core.autocrlf=true (the
+// Git for Windows default) checkout smudges it to CRLF on disk; writing it back as LF
+// marks the file modified and turns `git describe --dirty` into `<tag>-dirty`. The
+// sibling managed sections land in untracked files (.git/config, .hg/hgrc, hook scripts),
+// so only this writer needs it.
 func (v gitVCS) gitAttrsState(root string, outputGlobs []string) (current, wanted string) {
-	var section strings.Builder
-	section.WriteString(gitAttrsBeginLine + "\n")
-	for _, glob := range outputGlobs {
-		fmt.Fprintf(&section, "%s merge=magus linguist-generated\n", glob)
-	}
-	section.WriteString(gitAttrsEnd + "\n")
 	existing, _ := os.ReadFile(filepath.Join(root, ".gitattributes"))
-	return string(existing), replaceManagedSection(string(existing), section.String(), gitAttrsBegin, gitAttrsEnd)
+	nl := "\n"
+	if bytes.Contains(existing, []byte("\r\n")) {
+		nl = "\r\n"
+	}
+
+	var section strings.Builder
+	section.WriteString(gitAttrsBeginLine + nl)
+	for _, glob := range outputGlobs {
+		fmt.Fprintf(&section, "%s merge=magus linguist-generated%s", glob, nl)
+	}
+	section.WriteString(gitAttrsEnd + nl)
+
+	wanted = replaceManagedSection(string(existing), section.String(), gitAttrsBegin, gitAttrsEnd)
+	if nl == "\r\n" {
+		// replaceManagedSection joins head and body with bare "\n", so the whole result is
+		// normalized rather than the section alone. The LF path is left byte-for-byte as it
+		// was, so no non-Windows tree sees a different file.
+		wanted = strings.ReplaceAll(strings.ReplaceAll(wanted, "\r\n", "\n"), "\n", "\r\n")
+	}
+	return string(existing), wanted
 }
 
 func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
