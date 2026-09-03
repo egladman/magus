@@ -111,6 +111,109 @@ test "isReleaseTag accepts root release tags and rejects the lookalikes" {
     std\assert(!isReleaseTag(""), message: "the empty name");
 }
 
+// rootReleaseTag returns the first ROOT release tag in names, or "" when none is there.
+// isReleaseTag rejects a "/", so no separate prefix filter is needed.
+//
+// Shared by the magusfile's exact_release_tag and by the release preflight, which asks
+// what version a commit would stamp once tags exist that do not yet. A second
+// implementation of the rule could drift from this one.
+export fun rootReleaseTag(names: [str]) > str {
+    foreach (n in names) {
+        if (isReleaseTag(n)) { return n; }
+    }
+    return "";
+}
+
+test "the root release tag is picked out of a mixed tag set" {
+    std\assert(rootReleaseTag(["libs/diagnostics/v0.1.0", "v0.4.0"]) == "v0.4.0",
+        message: "the root tag wins over a namespaced one at any position");
+    std\assert(rootReleaseTag(["libs/diagnostics/v0.1.0"]) == "",
+        message: "a library-only release stamps no root version");
+    std\assert(rootReleaseTag(["verified-refinements", "v1.0.0"]) == "v1.0.0",
+        message: "a `v*` lookalike is not a release tag");
+    std\assert(rootReleaseTag([<str>]) == "", message: "an untagged commit");
+}
+
+// matchesGlob reports whether name matches pattern, where a single "*" stands for any run
+// of characters that does not cross "/".
+//
+// The "/" restriction is the semantics of both the shell glob release.yaml's upload step
+// expands and the ref filter its `v*` tag trigger applies, and it is what a version
+// carrying a "/" violates: the v0.4.0 assets were named
+// magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz, real files under
+// dist/magus_libs/diagnostics/ that dist/magus_*.tar.gz could not see. A prefix/suffix
+// test calls that a match.
+//
+// One star, because both patterns this checks have one. A starless pattern is an equality
+// test; a second star raises rather than being read as a literal.
+export fun matchesGlob(pattern: str, name: str) > bool !> any {
+    final star = pattern.indexOf("*");
+    if (star == null) { return pattern == name; }
+    final head = pattern.sub(0, star);
+    final tail = pattern.sub(star + 1);
+    if (tail.indexOf("*") != null) {
+        throw "matchesGlob: `" + pattern + "` has more than one `*`, which this matcher does not model";
+    }
+    if (name.len() < head.len() + tail.len()) { return false; }
+    if (!name.startsWith(head)) { return false; }
+    if (!name.endsWith(tail)) { return false; }
+    return name.sub(head.len(), len: name.len() - head.len() - tail.len()).indexOf("/") == null;
+}
+
+test "a glob star stays inside one path segment" {
+    std\assert(matchesGlob("dist/magus_*.tar.gz", "dist/magus_v0.4.0_linux_amd64_static.tar.gz"),
+        message: "the name a healthy release writes");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz",
+        "dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz"),
+        message: "the name the v0.4.0 release wrote, which the upload never found");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz", "dist/SHA256SUMS"), message: "a different asset");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz", "dist/magus_.tar.gz.other"), message: "trailing text");
+    std\assert(matchesGlob("dist/magus_*.tar.gz", "dist/magus_.tar.gz"), message: "an empty star");
+    std\assert(matchesGlob("v*", "v0.4.0"), message: "the workflow's tag trigger");
+    std\assert(!matchesGlob("v*", "libs/gopherbuzz/v0.1.0"), message: "a nested tag starts no release run");
+    std\assert(matchesGlob("exact", "exact"), message: "a starless pattern is equality");
+    std\assert(!matchesGlob("exact", "exactly"), message: "a starless pattern is not a prefix test");
+}
+
+// unreleasedBody returns the trimmed body of CHANGELOG.md's [Unreleased] section, or ""
+// when the section is absent or holds nothing.
+//
+// A mirror of parseUnreleased in cmd/magus-utils/release.go rather than a call to it:
+// `cut` exposes no read-only mode, and adding one would be a subcommand with this as its
+// only caller. The two need agree on one question, whether the section is empty, so this
+// reproduces the heading match (case-insensitive label), the section boundary (the next
+// `## `), and the trim.
+export fun unreleasedBody(changelog: str) > str {
+    var body = mut [<str>];
+    var inside = false;
+    foreach (line in changelog.split("\n")) {
+        if (line.startsWith("## ")) {
+            if (inside) { break; }
+            final rest = line.sub(3);
+            if (rest.startsWith("[")) {
+                final close = rest.indexOf("]");
+                if (close != null and rest.sub(1, len: close - 1).lower() == "unreleased") {
+                    inside = true;
+                }
+            }
+        } else if (inside) {
+            body.append(line);
+        }
+    }
+    return body.join("\n").trim();
+}
+
+test "the unreleased section is read the way cut reads it" {
+    final full = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- a thing\n\n## [v0.3.0]\n\n- old\n";
+    std\assert(unreleasedBody(full) == "### Added\n\n- a thing", message: "content, trimmed, section-bounded");
+    std\assert(unreleasedBody("# Changelog\n\n## [Unreleased]\n\n## [v0.3.0]\n\n- old\n") == "",
+        message: "an emptied section is what cut refuses on");
+    std\assert(unreleasedBody("# Changelog\n\n## [v0.3.0]\n\n- old\n") == "",
+        message: "no section at all");
+    std\assert(unreleasedBody("## [unreleased]\n\n- a thing\n") == "- a thing",
+        message: "the label match is case-insensitive, as cut's is");
+}
+
 // currentVersion returns a module's highest STABLE released version, or "" when
 // it has never had one. Compared on the PARSED major/minor/patch, not the tag
 // text, because string order puts v0.10.0 before v0.9.0.

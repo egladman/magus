@@ -155,6 +155,65 @@ jobs:
       - name: Replay every generator and compare declared outputs
         run: magus run generate:rw --race=replay
 
+  release-smoke:
+    # Does the release path still produce an asset the release upload would collect?
+    #
+    # v0.3.0 to v0.4.0 saw ZERO release.yaml runs, so the combined library+root flow had
+    # never executed end to end when it was asked to publish, and it published nothing.
+    # Every other layer here checks the path; this runs it, on a cadence.
+    #
+    # Not on the PR path, which is the real choice. release-build is a full cross-compile
+    # plus a THIRD-PARTY-NOTICES pass reading every dependency's license out of the module
+    # cache, so it costs minutes per run to answer a question almost no diff moves. What it
+    # protects against is STALENESS, and a weekly run bounds that to seven days against the
+    # six months this went unrun.
+    #
+    # Its own job rather than folded into `determinism` despite sharing a trigger: that
+    # job's charter is generator byte-stability, and a release build is not a generator, so
+    # a red X there would misname what broke.
+    #
+    # The cost, stated: audit is non-blocking by trigger, so a regression merges and is
+    # caught up to a week later. The blocking half is the release preflight, which runs
+    # before the tag exists. That stops a bad release; this finds a rotting build path.
+    name: release build smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history and tags, because version() names the asset and resolving it is
+          # half of what this job checks.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # The host platform only. The invariant does not vary by platform: the version names
+      # the asset, and goos and goarch are fixed tokens. One archive covers the build, the
+      # notices pass, and the naming.
+      #
+      # No assertion step follows, because the target is the assertion: release-build refuses
+      # a name RELEASE_ASSET_GLOB does not match before it writes anything, and that constant
+      # is the string release_preflight pins to release.yaml's own upload glob.
+      #
+      # --no-default-charms because magus.yaml sets `default_charms: [rw]`, and this is a
+      # read-only question.
+      - name: Build one release asset
+        run: magus run release-build --no-default-charms
+
   toolchain:
     # Has anything this workspace runs been superseded upstream? Squarely this
     # workflow's shape: it changes when a THIRD PARTY cuts a tag, never when a diff
