@@ -447,15 +447,9 @@ var (
 	// unparsable-line fallback for notesWriteFires below, the way gitGuardFallback is for
 	// gitGuard: anchoring the verb to the program misses every global flag in between.
 	//
-	// The path rule already refuses an agent write into a notes store, but it only ever
-	// sees file writes, and every verb here writes through magus instead: `edit` reads
-	// piped prose, `capture` renders a review transcript, `promote` signs a memory record.
-	// All three would sail past a boundary that is supposed to be about WHO is writing
-	// rather than which surface they used. This closes that, so the rule holds however the
-	// write is spelled.
-	//
-	// The path rule also resolves the SHARED store alone, so `capture`, which defaults to
-	// the private one, has no other rule that can see it at all.
+	// The path rule refuses an agent write into a notes store, but it sees file writes
+	// only, and these verbs write through magus. It also resolves the SHARED store alone,
+	// so `capture`, which defaults to the private one, has no other rule that sees it.
 	guardNotesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
 
 	// guardReadAckRe matches an invocation that would mint a read receipt.
@@ -759,17 +753,15 @@ func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *
 	return fallback.MatchString(command)
 }
 
-// notesWriteVerbs are the `magus notes` subcommands that AUTHOR a note. `ls`, `get` and
-// `verify` read, and reading is what an agent should be doing with a note.
+// notesWriteVerbs are the `magus notes` subcommands that AUTHOR a note; `ls`, `get` and
+// `verify` read and stay allowed.
 //
-// `promote` is the one that reaches the shared store unconditionally: it writes an agent's
-// own memory record there for a person to sign. Its refusal of an unmodified body is what
-// makes the signature mean anything, and an agent editing the draft it wrote satisfies that
-// check while leaving nobody behind the prose.
+// `promote` is listed even though it already refuses an unmodified body: an agent editing
+// the draft it wrote satisfies that check, so the refusal cannot stand in for this rule.
 var notesWriteVerbs = []string{"edit", "capture", "promote"}
 
-// notesWriteFires is magusRuleFires over a SET of verbs. magusInvokes requires every word
-// it is handed, and these verbs are alternatives rather than a conjunction.
+// notesWriteFires is magusRuleFires over a set of verbs, which it cannot reuse because
+// magusInvokes requires every word it is handed and these verbs are alternatives.
 func notesWriteFires(cmds []guardCommand, parsed bool, command string) bool {
 	if !parsed {
 		return guardNotesWriteRe.MatchString(command)
@@ -915,7 +907,7 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	cmds, parsed := parseGuardCommands(command)
 	// Authoring a note is refused before anything else, because it is the one rule whose
 	// whole point is that it holds on EVERY surface: the path rule sees file writes, and
-	// every verb that authors a note is a command, so only this catches them.
+	// these verbs are commands.
 	if notesWriteFires(cmds, parsed, command) {
 		return bashGuardVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}
 	}
