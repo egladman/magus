@@ -257,15 +257,6 @@ one version, and `<goos>`, `<goarch>` and the variant suffix are fixed tokens wi
 no separator in them, so the glob selects all of a job's archives or none of them.
 A partial match is not reachable.
 
-`audit.yaml` builds one real asset weekly on the host platform, and the build
-succeeding is the assertion. That job exists because the release path went from
-v0.3.0 to v0.4.0 with zero `release.yaml` runs between them, so the combined
-library-plus-root flow had never executed end to end when it was first asked to
-publish. It is on the weekly audit rather than on every pull request because what
-it protects against is staleness rather than any particular diff, and a full
-cross-compile plus a license-notices pass on every push would be a poor trade for
-that.
-
 One gap is left open on purpose. Tagging by hand skips the preflight, so it also
 skips the check that `RELEASE_ASSET_GLOB` still matches the workflow. Tagging by
 hand equally skips the version-legality, existing-tag, changelog and manifest

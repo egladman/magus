@@ -207,12 +207,6 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
   before the first byte is written, so no workflow step re-checks the built files: every
   asset in a job shares one version and the remaining name parts are fixed tokens, so the
   glob selects all of a job's archives or none.
-- **`audit.yaml` builds one real release asset weekly.** The release path
-  went from v0.3.0 to v0.4.0 with no `release.yaml` runs between them, so the combined
-  library-plus-root flow had never run end to end when it was first asked to publish.
-  Its own job rather than a fold into `determinism`, whose charter is generator
-  byte-stability, and on the weekly audit rather than on every pull request because it
-  guards against staleness rather than against any particular diff.
 - `buzz-test` now runs `releaser.buzz`. Its test blocks had never been executed by any
   target - the root list named `badge.buzz` and `coverage.buzz` and nothing else - so
   the rules deciding what a release may be versioned as were covered by tests nobody
