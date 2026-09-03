@@ -205,16 +205,14 @@ jobs:
       # the asset, and goos and goarch are fixed tokens. One archive covers the build, the
       # notices pass, and the naming.
       #
+      # No assertion step follows, because the target is the assertion: release-build refuses
+      # a name RELEASE_ASSET_GLOB does not match before it writes anything, and that constant
+      # is the string release_preflight pins to release.yaml's own upload glob.
+      #
       # --no-default-charms because magus.yaml sets `default_charms: [rw]`, and this is a
       # read-only question.
       - name: Build one release asset
         run: magus run release-build --no-default-charms
-
-      # The same glob release.yaml uploads with, asserted against the names magus computed.
-      # A green build writing an archive the upload cannot see is what shipped as v0.4.0.
-      - uses: ./.github/actions/assert-release-assets
-        with:
-          assets-glob: dist/magus_*.tar.gz
 
   toolchain:
     # Has anything this workspace runs been superseded upstream? Squarely this

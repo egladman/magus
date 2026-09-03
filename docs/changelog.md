@@ -188,16 +188,14 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
   `magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz`, and a glob star does not cross a
   `/`, so `dist/magus_*.tar.gz` matched nothing and the release published zero assets
   while every build job passed.
-- **`release-build` writes `dist/ASSETS` and every build job asserts it before
-  uploading.** One line per archive the build named, checked against the same glob the
-  upload step is about to expand, through the new
-  `.github/actions/assert-release-assets`. A naming regression now fails the build job
-  with the computed asset named, rather than the uploader finding nothing - and a glob
-  that selects nothing is not an error in any shell, which is how the failing upload
-  reported success. `release-build`'s own guard now asks the upload glob instead of
-  `fs\basename`, so it also catches a rename of the `magus_` prefix on one side of the
-  handoff alone.
-- **`audit.yaml` builds and checks one real release asset weekly.** The release path
+- **`release-build` refuses an asset name the release upload could not collect.** The
+  guard asks `RELEASE_ASSET_GLOB`, the same string the preflight pins to
+  `release.yaml`'s upload step, instead of `fs\basename`, so it also catches a rename of
+  the `magus_` prefix or the `.tar.gz` suffix on one side of the handoff alone. It runs
+  before the first byte is written, so no workflow step re-checks the built files: every
+  asset in a job shares one version and the remaining name parts are fixed tokens, so the
+  glob selects all of a job's archives or none.
+- **`audit.yaml` builds one real release asset weekly.** The release path
   went from v0.3.0 to v0.4.0 with no `release.yaml` runs between them, so the combined
   library-plus-root flow had never run end to end when it was first asked to publish.
   Its own job rather than a fold into `determinism`, whose charter is generator

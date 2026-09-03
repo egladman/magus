@@ -1417,6 +1417,11 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // while dist/magus_*.tar.gz matches nothing, a glob star not crossing a separator. That
     // shipped as v0.4.0. The glob also catches what a basename check cannot, a rename of the
     // `magus_` prefix or `.tar.gz` suffix on one side alone.
+    //
+    // Nothing re-checks the written files after the upload step, because there is nothing
+    // left to find: every name in a job shares one version, so the glob selects all of them
+    // or none, and release_preflight pins RELEASE_ASSET_GLOB to the workflow's own text
+    // before the tag exists.
     if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, asset)) {
         throw "release-build: the asset would be `" + asset + "`, which `"
             + RELEASE_ASSET_GLOB + "` does not match, so the release upload would not find "
@@ -1516,17 +1521,6 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
 
     final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset));
     fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
-
-    // The manifest release.yaml checks before it uploads: one line per asset this build
-    // computed. A glob that matches nothing is not an error in any shell, which is how the
-    // failing v0.4.0 upload reported success; a list of names cannot be satisfied by an
-    // empty dist/.
-    //
-    // Appended: the windows job builds two platforms and the dynamic charm adds a second
-    // variant, each a separate process, and the assertion covers all of them. A stale line
-    // from an earlier local run names a file still on disk, so it costs a redundant check
-    // rather than a false failure.
-    fs\appendFile(fs\join("dist", "ASSETS"), name + "\n");
 }
 
 // Resolves which platform to build: the explicit (goos, goarch) args when given, else

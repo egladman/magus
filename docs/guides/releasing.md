@@ -229,21 +229,32 @@ release.
 
 ### What CI checks about the assets
 
-`release-build` writes `dist/ASSETS`, one line per archive it named. Every build
-job in `release.yaml` asserts that list against the same glob its upload step is
-about to expand, immediately before uploading. A naming regression then fails the
-build job with the computed asset named, rather than the uploader reporting "no
-files found" - or, as in v0.4.0, reporting nothing at all, because a glob that
-selects nothing is not an error in any shell.
+Nothing in `release.yaml` checks the asset names, and that is deliberate: the
+target already refuses to write one the upload could not collect. `release-build`
+matches every name it is about to write against `RELEASE_ASSET_GLOB` and throws
+before the first byte, and the preflight checks that same constant still appears in
+`release.yaml`. The two links compose, so a step re-checking the built files
+against the glob would restate a conclusion already reached twice.
 
-`audit.yaml` runs the same pair weekly against the host platform: build one real
-asset, assert it lands where the upload looks. That job exists because the release
-path went from v0.3.0 to v0.4.0 with zero `release.yaml` runs between them, so the
-combined library-plus-root flow had never executed end to end when it was first
-asked to publish. It is on the weekly audit rather than on every pull request
-because what it protects against is staleness rather than any particular diff, and
-a full cross-compile plus a license-notices pass on every push would be a poor
-trade for that.
+There is also nothing left for such a step to find. Every asset in one job shares
+one version, and `<goos>`, `<goarch>` and the variant suffix are fixed tokens with
+no separator in them, so the glob selects all of a job's archives or none of them.
+A partial match is not reachable.
+
+`audit.yaml` builds one real asset weekly on the host platform, and the build
+succeeding is the assertion. That job exists because the release path went from
+v0.3.0 to v0.4.0 with zero `release.yaml` runs between them, so the combined
+library-plus-root flow had never executed end to end when it was first asked to
+publish. It is on the weekly audit rather than on every pull request because what
+it protects against is staleness rather than any particular diff, and a full
+cross-compile plus a license-notices pass on every push would be a poor trade for
+that.
+
+One gap is left open on purpose. Tagging by hand skips the preflight, so it also
+skips the check that `RELEASE_ASSET_GLOB` still matches the workflow. Tagging by
+hand equally skips the version-legality, existing-tag, changelog and manifest
+checks, so the answer is to cut releases with `magus run release` rather than to
+reproduce one of its checks somewhere else.
 
 ### Which tags the workflow reacts to
 

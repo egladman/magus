@@ -105,12 +105,6 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      # Asserts the names magus computed against the glob the next step expands, so a naming
-      # regression fails HERE with the asset named, instead of downstream with "no files
-      # found" or, as in v0.4.0, with nothing at all.
-      - uses: ./.github/actions/assert-release-assets
-        with:
-          assets-glob: dist/magus_*.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-linux-amd64
@@ -148,9 +142,6 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      - uses: ./.github/actions/assert-release-assets
-        with:
-          assets-glob: dist/magus_*.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-linux-arm64
@@ -185,9 +176,6 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      - uses: ./.github/actions/assert-release-assets
-        with:
-          assets-glob: dist/magus_*.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-darwin-arm64
@@ -232,9 +220,6 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      - uses: ./.github/actions/assert-release-assets
-        with:
-          assets-glob: dist/magus_*.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-darwin-amd64
@@ -303,12 +288,6 @@ jobs:
         if: ${{ inputs.include_dynamic_builds }}
         shell: msys2 {0}
         run: magus run release-build:dynamic --no-default-charms
-
-      # Covers BOTH platforms this job builds: each release-build appends its own line to
-      # dist/ASSETS, so the windows/arm64 cross-build is asserted alongside the native one.
-      - uses: ./.github/actions/assert-release-assets
-        with:
-          assets-glob: dist/magus_*.tar.gz
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
