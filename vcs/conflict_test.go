@@ -329,6 +329,31 @@ func TestDriverUsablePreservesAWrapperAndRejectsAStaleVerb(t *testing.T) {
 	assert.False(t, driverUsable(t.Context(), ""), "an empty registration is not usable")
 }
 
+// TestDriverProbeSilenceIsNotAnAnswer pins how the two callers read a probe that never
+// reported: the registration is kept, the binary is refused. Only the keep is undone by the
+// next Ensure.
+func TestDriverProbeSilenceIsNotAnAnswer(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "magus")
+	require.NoError(t, os.WriteFile(fake, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
+	env, err := exec.LookPath("env")
+	require.NoError(t, err)
+
+	// Reaches the branch driverProbeBudget reaches, without spending 30s to get there.
+	silent, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	dispatches, answered := driverProbe(silent, fake, []string{"vcs", "merge-driver"})
+	assert.False(t, dispatches)
+	assert.False(t, answered, "a probe that was killed reported no exit status")
+
+	assert.True(t, driverUsable(silent, env+" FOO=1 "+fake+" vcs merge-driver %O %A %B %L %P"),
+		"an unproven registration is kept; rewriting would drop the wrapper for good")
+	assert.False(t, driverExeAnswers(silent, fake),
+		"an unproven binary is never registered; os.Executable dispatches by construction")
+}
+
 // TestDriverUsableOnAnOlderBinarysSpelling is the direction a suffix comparison gets wrong, and
 // the reason driverArgsMatch takes `wanted` as a parameter: posing as a magus whose verb is the
 // bare `merge-driver`, a registration carrying the newer `vcs merge-driver` must read as NOT

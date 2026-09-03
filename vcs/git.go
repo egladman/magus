@@ -1029,12 +1029,11 @@ func driverUsableFor(ctx context.Context, registered, wanted string) bool {
 	return driverRegistrationAnswers(ctx, registered)
 }
 
-// driverRegistrationAnswers runs the registered command's own verb with -h and reads the exit
-// status: a command that cannot dispatch what it was registered with exits non-zero.
+// driverRegistrationAnswers asks the registered command whether it still dispatches the verb
+// it was registered with.
 //
-// The git placeholders are dropped rather than substituted. `-h` returns before the child
-// opens a workspace or touches an index, so this cannot mutate anything, and it works in a
-// tree no released magus can load.
+// Silence keeps the registration: rewriting drops a deliberate wrapper for good, while
+// keeping a stale verb costs one workspace load, since the next Ensure asks again.
 func driverRegistrationAnswers(ctx context.Context, registered string) bool {
 	exe, args := splitDriver(registered)
 	if exe == "" {
@@ -1045,10 +1044,33 @@ func driverRegistrationAnswers(ctx context.Context, registered string) bool {
 	if len(fields) == 0 {
 		return false
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	dispatches, answered := driverProbe(ctx, exe, fields)
+	return dispatches || !answered
+}
+
+// driverProbeBudget bounds a probe that never returns; it is not a latency target. The first
+// execution of a newly written file pays a code-signature check serialized across the
+// machine, so the probe's latency tracks how many other processes are launching new binaries:
+// 3.2s worst measured locally, and past the 5s this replaced under concurrent gates.
+const driverProbeBudget = 30 * time.Second
+
+// driverProbe runs `exe <verb> -h` and reports whether it exited zero, and separately whether
+// it answered at all. A command that cannot dispatch the verb exits non-zero; one killed at
+// driverProbeBudget reported nothing, which is a fact about the machine and not about the
+// driver.
+//
+// The git placeholders are dropped rather than substituted. `-h` returns before the child
+// opens a workspace or touches an index, so this cannot mutate anything, and it works in a
+// tree no released magus can load.
+func driverProbe(ctx context.Context, exe string, verb []string) (dispatches, answered bool) {
+	ctx, cancel := context.WithTimeout(ctx, driverProbeBudget)
 	defer cancel()
 	// nil Stdout/Stderr: usage text goes to /dev/null, not to whoever loaded the workspace.
-	return exec.CommandContext(ctx, exe, append(fields, "-h")...).Run() == nil
+	err := exec.CommandContext(ctx, exe, append(verb, "-h")...).Run()
+	if ctx.Err() != nil {
+		return false, false
+	}
+	return err == nil, true
 }
 
 // splitDriver splits a registered driver command into its executable and everything after
@@ -1138,13 +1160,13 @@ func quoteDriverExe(exe string) string {
 // early in the steady state and reaches InstallMergeDriver when something is already wrong.
 // `-h` returns before the child opens a workspace, so it also works in a tree no released
 // magus can load, which is when the answer matters most.
+//
+// Silence reads as no here, the opposite of driverRegistrationAnswers: this caller picks what
+// to write, and declining PATH falls back to os.Executable(), which dispatches by construction.
 func driverExeAnswers(ctx context.Context, exe string) bool {
 	verb, _, _ := strings.Cut(strings.TrimSpace(gitDriverArgs), " %")
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	// nil Stdout/Stderr: the child's usage text goes to /dev/null, not to whoever happened
-	// to load the workspace.
-	return exec.CommandContext(ctx, exe, append(strings.Fields(verb), "-h")...).Run() == nil
+	dispatches, _ := driverProbe(ctx, exe, strings.Fields(verb))
+	return dispatches
 }
 
 // driverExeExists reports whether the command currently registered still resolves to a

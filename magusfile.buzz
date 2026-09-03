@@ -147,6 +147,12 @@ magus\project({
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
         "test": {"memory_mb": 10240},
+        // Measured like its sibling: a 3331MB peak on 2026-09-02 under three concurrent
+        // gates against a 550MB to 1023MB quiet baseline, rounded up because types.PeakRSS
+        // samples a floor.
+        // Drop it when go-test stops appending its package list instead of replacing it,
+        // which is what makes this compile every test binary in the module under CGO_ENABLED=1.
+        "compress-cgo-test": {"memory_mb": 4096},
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
