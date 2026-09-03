@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.2] - 2026-09-03
+
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
