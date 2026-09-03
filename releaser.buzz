@@ -83,20 +83,15 @@ export fun releasableModules(projects: [any]) > [{str: str}] {
 // isReleaseTag reports whether name is a ROOT release tag: "v" followed by a
 // digit, with no module prefix.
 //
-// A `v*` refspec is NOT a version filter, and reading it as one has already
-// shipped a bug twice. This repository carries a tag called
-// "verified-refinements": it matches the glob, sorts newest by creation date, and
-// once became the version the published install instructions told people to
-// download. The "/" check is what makes the answer ROOT-specific, so a caller
-// handed the unfiltered tag list cannot mistake libs/gopherbuzz/v0.1.0 for the
-// magus release it sits beside.
+// A `v*` refspec is not a version filter: this repository's `verified-refinements`
+// tag matches the glob and has been read once as the current release. The "/" check
+// makes the answer root-specific, so a caller handed the unfiltered tag list cannot
+// take libs/gopherbuzz/v0.1.0 for the magus release beside it.
 //
-// A shape check on the NAME, not a semver parse, because the two answer different
-// questions: parsing says what a tag means, and this says which tags are eligible
-// to be asked. docs/site/release.buzz keeps its own isVersionTag rather than
-// importing this one: that module is self-contained on lib/text so it unit-tests
-// inside the docs project, and it wants the stricter three-numeric-parts shape
-// for rendering a download URL.
+// A name shape rather than a semver parse, because parsing says what a tag means
+// and this says which tags are eligible to be asked. docs/site/release.buzz keeps
+// its own isVersionTag: self-contained on lib/text, it unit-tests inside the docs
+// project.
 export fun isReleaseTag(name: str) > bool {
     if (!name.startsWith("v")) { return false; }
     if (name.indexOf("/") != null) { return false; }
