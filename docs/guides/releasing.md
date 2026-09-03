@@ -143,13 +143,13 @@ so a release that fails in CI burns the version number.
 
 ```text
 release: FAIL branch collision - a BRANCH named `v0.5.0` already exists, so the tag of
-that name would be ambiguous to every tool that resolves a short ref - `git describe`,
+that name would be ambiguous to every tool that resolves a short ref: `git describe`,
 `git checkout v0.5.0`, anything reading %(refname:short).
 ```
 
-magus reads tags by their written name and is not fooled by this, which is
-exactly why nothing else reports it. Everything else that reads the repository
-still is. Rename the branch (`git branch -m v0.5.0 <name>`) or delete it.
+magus reads tags by their written name, so nothing else reports this. Everything
+else that reads the repository is still affected. Rename the branch
+(`git branch -m v0.5.0 <name>`) or delete it.
 
 The survey says the same thing earlier, beside the candidate it affects, because
 the cheapest moment to learn a name is taken is before you type it.

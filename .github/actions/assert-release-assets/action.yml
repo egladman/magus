@@ -5,13 +5,12 @@ description: >
 
   release-build writes dist/ASSETS, one line per archive it named. This expands the
   same glob the upload step is about to expand and requires every one of those names
-  to be in it. The failure then names the computed asset, in the job that produced it.
+  to be in it, so the failure names the computed asset in the job that produced it.
 
-  The alternative it replaces is a blind handoff: the build reports success, the
-  uploader expands a glob, and a glob that selects nothing is not an error in any
-  shell. That is how v0.4.0 published zero assets while every build job passed -
-  version() had resolved to a namespaced tag, so the archives were written to
-  dist/magus_libs/diagnostics/ and dist/magus_*.tar.gz never looked there.
+  It replaces a blind handoff: the build reports success, the uploader expands a glob,
+  and a glob that selects nothing is not an error in any shell. That is how v0.4.0
+  published zero assets while every build job passed, version() having resolved to a
+  namespaced tag that wrote the archives under dist/magus_libs/diagnostics/.
   `if-no-files-found: error` on the upload catches only the case where NOTHING
   matches; this catches the one where the wrong thing does.
 
@@ -21,9 +20,9 @@ description: >
 inputs:
   assets-glob:
     description: >
-      The glob the upload step collects archives with. Required and deliberately
-      undefaulted: a default here would be a third copy of the pattern, silently
-      applied, which is the drift this action exists to catch.
+      The glob the upload step collects archives with. Required and undefaulted: a
+      default would be a third copy of the pattern, applied without being read, which
+      is the drift this action exists to catch.
     required: true
 
 runs:
@@ -37,15 +36,14 @@ runs:
         set -euo pipefail
 
         # An absent or empty manifest means release-build named nothing, which for a job
-        # whose whole purpose is producing an archive is a failure rather than a no-op.
+        # that exists to produce an archive is a failure rather than a no-op.
         if [ ! -s dist/ASSETS ]; then
           echo "::error::release-build wrote no dist/ASSETS manifest, so it computed no release archives" >&2
           exit 1
         fi
 
-        # Expanded by the shell, which is what the publish job does with the same pattern
-        # when it builds the `gh release` argument list. An unmatched glob stays literal
-        # and simply matches no name below.
+        # Expanded by the shell, as the publish job expands the same pattern into its `gh
+        # release` argument list. An unmatched glob stays literal and matches no name below.
         # shellcheck disable=SC2206
         collected=($ASSETS_GLOB)
 

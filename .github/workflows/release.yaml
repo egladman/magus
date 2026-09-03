@@ -105,9 +105,9 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      # Asserts the names magus computed against the glob the next step expands, so a
-      # naming regression fails HERE with the asset named, instead of downstream with
-      # "no files found" or - the v0.4.0 case - with nothing at all.
+      # Asserts the names magus computed against the glob the next step expands, so a naming
+      # regression fails HERE with the asset named, instead of downstream with "no files
+      # found" or, as in v0.4.0, with nothing at all.
       - uses: ./.github/actions/assert-release-assets
         with:
           assets-glob: dist/magus_*.tar.gz
