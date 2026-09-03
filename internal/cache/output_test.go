@@ -1243,9 +1243,8 @@ func TestRotateRunsKeepsTheNewestEvenWhenItAloneBustsTheBudget(t *testing.T) {
 }
 
 // The outputs store is shared machine-wide, so two adopters of one imported key run
-// concurrently. The write is best-effort and reports only a bool, so the property is
-// pinned by occupying the old fixed temp path: an adopter that still wanted it fails
-// to write the blob and reports the import uncompletable.
+// concurrently. AdoptImported reports only a bool, so the property is pinned by
+// occupying the fixed temp path a contended adopter would have wanted.
 func TestAdoptImportedDoesNotDependOnAFixedTempName(t *testing.T) {
 	dir := t.TempDir()
 	s := NewOutputStore(dir)

@@ -90,10 +90,9 @@ func TestViewedStatePersistsAcrossStores(t *testing.T) {
 		"a reader who is interrupted must not lose what they had already read")
 }
 
-// A second magus in the same checkout writes these same three files, and on a fixed temp name
-// the two savers interleave their bytes into it and both rename it. The saves are best-effort
-// and swallow every error, so the property is pinned by occupying the old fixed temp path:
-// a save that still wanted it silently writes nothing and the progress is lost.
+// A second magus in the same checkout writes these same three files. The saves swallow every
+// error, so the property is pinned by occupying the fixed temp path a contended save would
+// have wanted: one that still needed it writes nothing and the progress is lost.
 func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review"), 0o755))

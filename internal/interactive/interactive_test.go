@@ -102,8 +102,7 @@ func (s *StateSuite) TestSaveLastTargetReplacesTheEarlierPick() {
 	assert.Equal(s.T(), "test", LastTarget("/path/to/proj"))
 }
 
-// One file per project is what makes a project's entry independent. Two projects
-// sharing one document is the shape this replaced.
+// One file per project is what makes a project's entry independent of every other.
 func (s *StateSuite) TestProjectsGetSeparateFiles() {
 	require.NoError(s.T(), SaveLastTarget("/proj/a", "build"))
 	require.NoError(s.T(), SaveLastTarget("/proj/b", "lint"))
@@ -127,9 +126,8 @@ func (s *StateSuite) TestFilenameDoesNotEmbedTheProjectPath() {
 	assert.Regexp(s.T(), `^[0-9a-f]{16}$`, entries[0].Name())
 }
 
-// Saves in DIFFERENT projects touch different files, so this cannot corrupt anything
-// by construction. It is kept as the regression pin on that shape: the moment these
-// share one document again, one of these reads comes back wrong.
+// Parallel saves in different projects each survive whole. The moment they share one
+// document again, one of these reads comes back wrong.
 func (s *StateSuite) TestConcurrentSavesInDifferentProjectsAllSurvive() {
 	var wg sync.WaitGroup
 	for i := range 16 {
@@ -146,13 +144,11 @@ func (s *StateSuite) TestConcurrentSavesInDifferentProjectsAllSurvive() {
 	}
 }
 
-// The race that survives the reshape: two pickers finishing in the SAME project. One
-// of the two values must win whole. A plain write truncates before it fills, so a
-// reader landing in that window would see "" or a prefix of a target name.
+// Two pickers finishing in one project still race for its file, and one of the two
+// values must win whole.
 func (s *StateSuite) TestConcurrentSavesInOneProjectLeaveOneValueIntact() {
 	const dir = "/proj/contended"
-	// Names of very different lengths, so a torn write reads as neither rather than
-	// as one name overwritten by an equally long one.
+	// Lengths far enough apart that a torn write reads as neither name.
 	names := []string{"ci", "coverage-badge-and-then-some-much-longer-target-name"}
 
 	for range 50 {

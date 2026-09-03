@@ -842,9 +842,9 @@ func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, boo
 	if d, err := readDescriptor(filepath.Join(dir, orphans[0]+descExt)); err != nil || (d.Ref != "" && d.Ref != ref) {
 		return "", false
 	}
-	// Atomic, so a concurrent reader never sees a half-written blob. The temp name has
-	// to be unique too: the store is shared machine-wide, and two adopters of this stem
-	// on one fixed temp path would interleave their bytes and both rename it.
+	// Atomic, so a concurrent reader never sees a half-written blob, and uniquely named:
+	// the store is shared machine-wide, so two adopters of this stem can be mid-write at
+	// once.
 	if file.WriteFileAtomic(filepath.Join(dir, orphans[0]+outExt), output, 0o644) != nil {
 		return "", false
 	}

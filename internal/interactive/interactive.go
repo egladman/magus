@@ -62,21 +62,13 @@ func ScoreProjects(all []*types.Project, filters []string) []ScoredProject {
 	return out
 }
 
-// stateDir is <XDG state>/magus/x, holding one file per project: the target last
-// run there.
+// stateDir is <XDG state>/magus/x, holding one file per project: the target last run
+// there. One file per project because nothing ever reads another project's entry, so
+// concurrent picks never touch the same file and a corrupt one costs a single re-pick.
 //
-// A DIRECTORY rather than the single x-state.json it replaces, for the reason
-// connectors.d next to it is one. A map in one document made every pick a
-// read-modify-write of every other project's entry, so two pickers finishing at once
-// interleaved into it and both renamed it into place - and the read only ever wanted
-// the current project's entry anyway. Nothing here reads another project's file, so
-// there is nothing left to serialize, and a corrupt file costs one re-pick in one
-// project instead of the whole map.
-//
-// Nothing prunes it. The entries are one small file per project the user has ever
-// picked in, which is bounded by how many projects a person works in; an age-based
-// sweep would delete exactly the long-tail entry - the project returned to after
-// months - that remembering is for.
+// Nothing prunes it. The entries are one small file per project the user has picked in,
+// bounded by how many projects a person works in, and an age-based sweep would delete
+// the long-tail entry that remembering is for.
 func stateDir() (string, error) {
 	dir, err := config.UserStateDir()
 	if err != nil {
@@ -85,15 +77,10 @@ func stateDir() (string, error) {
 	return filepath.Join(dir, "magus", "x"), nil
 }
 
-// targetPath is the file recording the last target for the project rooted at dir.
-//
-// The absolute dir is hashed rather than embedded, the same construction and width
-// workspaceLockKey and symbols.IndexPath use to name a directory after an absolute
-// path: it is the identity that matters, a path is not a legal single filename, and a
-// digest keeps a listing of this directory from reproducing the user's disk layout.
-// Not canonicalized through EvalSymlinks the way the symbols index is, because both
-// sides of this one are the same Project.Dir in one process rather than two producers
-// deriving a dir independently.
+// targetPath is the file recording the last target for the project rooted at dir. The
+// absolute dir is hashed to name the file, the construction and width workspaceLockKey
+// uses: a path is not a legal single filename, and a digest keeps a listing of this
+// directory from reproducing the user's disk layout.
 func targetPath(dir string) (string, error) {
 	root, err := stateDir()
 	if err != nil {
@@ -109,7 +96,7 @@ func targetPath(dir string) (string, error) {
 
 // LastTarget returns the target last run for the project rooted at dir, "" when there
 // is none. Every failure yields "" rather than an error: the value only pre-highlights
-// a picker row, so a missing, unreadable, or truncated file must not stop x opening.
+// a picker row, so an unreadable file must not stop x opening.
 func LastTarget(dir string) string {
 	path, err := targetPath(dir)
 	if err != nil {
@@ -123,11 +110,9 @@ func LastTarget(dir string) string {
 }
 
 // SaveLastTarget records target as the last one run for the project rooted at dir.
-//
-// Atomic even though the file holds one short line: two pickers finishing in the SAME
-// project still race for it, and a plain write truncates before it fills, so the
-// shorter name lands inside the longer one ("ci\nerage-badge-...", measured) and the
-// next pick pre-highlights that.
+// Atomic despite the file holding one short line: two pickers finishing in the same
+// project race for it, and a plain write truncates before it fills, so the shorter
+// name lands inside the longer one ("ci\nerage-badge-...", measured).
 func SaveLastTarget(dir, target string) error {
 	path, err := targetPath(dir)
 	if err != nil {
