@@ -202,6 +202,32 @@ test "a windows-joined asset path matches the upload glob" {
     std\assert(toSlash("") == "", message: "the empty path");
 }
 
+// overwriteRefusal is the write-once rule for release artifacts: with immutable set, a
+// path that already exists is refused rather than replaced. Returns the refusal message,
+// or "" when the write may proceed.
+//
+// Pure like everything here: the caller supplies exists (fs\exists at the call site), so
+// the rule tests without a filesystem. The default stays overwrite - the publish job
+// re-uploads on a re-run by design - and immutable is the opt-in for runs where an
+// existing artifact means a published file is about to be replaced.
+export fun overwriteRefusal(path: str, immutable: bool, exists: bool) > str {
+    if (!immutable or !exists) { return ""; }
+    return "release: `" + path + "` already exists and this run is immutable; refusing to "
+        + "overwrite a release artifact. Delete it deliberately, or run without the "
+        + "`immutable` charm to allow replacement.";
+}
+
+test "immutable refuses only an existing path" {
+    std\assert(overwriteRefusal("dist/a.tar.gz", immutable: false, exists: true) == "",
+        message: "the default overwrites");
+    std\assert(overwriteRefusal("dist/a.tar.gz", immutable: true, exists: false) == "",
+        message: "a fresh path writes");
+    final msg = overwriteRefusal("dist/a.tar.gz", immutable: true, exists: true);
+    std\assert(msg != "", message: "an existing path under immutable is refused");
+    std\assert(msg.indexOf("dist/a.tar.gz") != null, message: "the refusal names the path");
+    std\assert(msg.indexOf("immutable") != null, message: "the refusal names the charm");
+}
+
 // unreleasedBody returns the trimmed body of CHANGELOG.md's [Unreleased] section, or ""
 // when the section is absent or holds nothing.
 //

@@ -1291,6 +1291,15 @@ fun release_asset_name(v: str, goos: str, goarch: str, suffix: str) > str {
     return "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz";
 }
 
+// The `immutable` charm makes release writes write-once: an existing archive, sidecar, or
+// signature refuses instead of being replaced. The rule is releaser\overwriteRefusal;
+// this binds it to the filesystem and the charm.
+fun refuse_overwrite(ctx: magus\Context, path: str) > void !> any {
+    final msg = releaser\overwriteRefusal(path,
+        immutable: ctx.hasCharm("immutable"), exists: fs\exists(path));
+    if (msg != "") { throw msg; }
+}
+
 // Builds one (goos, goarch) release binary and archives it into dist/, writing a
 // standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format).
 // No cross-job aggregation needed: CD's publish job later does
@@ -1438,6 +1447,10 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
             + "resolves.";
     }
 
+    // Before the compile, so an immutable re-run refuses in milliseconds, not after a build.
+    refuse_overwrite(ctx, asset);
+    refuse_overwrite(ctx, asset + ".sha256");
+
     fs\mkdirAll("dist");
     var binary = "magus";
     if (goos == "windows") { binary = "magus.exe"; }
@@ -1528,7 +1541,9 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     archive\compress(stage, asset, {});
     fs\removeAll(stage);
 
-    final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset));
+    // sha256File returns hex; the stdlib crypto.hash returns the raw digest bytes, and
+    // v0.4.2 shipped a SHA256SUMS of those - unreadable by `sha256sum -c`.
+    final digest = crypto\sha256File(asset);
     fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
 }
 
@@ -1620,6 +1635,7 @@ export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
 // regression guard, safe to run here (unlike setup-magus, which can't depend on the
 // magus source tree since it's reused by arbitrary external repos).
 export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
+    refuse_overwrite(ctx, fs\join("dist", "SHA256SUMS.sig"));
     proc\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
     proc\exec("go", ["run", "./cmd/magus-utils", "verify",
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);

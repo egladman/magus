@@ -107,6 +107,16 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Fixed
 
+- **`SHA256SUMS` is hex.** The per-asset sidecar hashed with the stdlib `crypto.hash`,
+  which returns the raw digest bytes, so the manifest v0.4.2 shipped is unreadable by
+  `sha256sum -c`. The sidecar now writes `crypto\sha256File`'s lowercase hex. The signed
+  release index always carried correct hex digests, so `magus self update` verification
+  was never affected.
+- **The publish job survives being unable to open the release-index pull request.** The
+  branch push is the deliverable and container images gate on the job, so a refused
+  `gh pr create` (repository Actions settings can forbid it, and did for v0.4.2) now
+  warns with the branch URL instead of failing; the branch push is forced so a re-run
+  survives its own earlier push.
 - **The release asset guard no longer refuses a Windows build.** `fs\join` gives the
   runner's separator, so the windows job compared
   `dist\magus_v0.4.1_windows_amd64_static.tar.gz` against `dist/magus_*.tar.gz`, found
@@ -203,6 +213,11 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Added
 
+- **An `immutable` charm makes release writes write-once.** `release-build:immutable`
+  and `release-sign:immutable` refuse to replace an existing archive, checksum sidecar,
+  or manifest signature instead of overwriting it, so a re-run of the release process
+  cannot silently replace a published artifact. The default stays overwrite, which the
+  publish job's re-run path relies on; the rule is `releaser\overwriteRefusal`.
 - **`magus run release` preflights the release before it creates a tag.** Every
   named module's would-be tag now goes through checks that used to fire hours later
   in CI, on a tag that a pushed version number makes unreusable: the version
