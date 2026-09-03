@@ -65,18 +65,41 @@ func TestUpdateMissingWithoutAllowMissingIsNotFound(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
-// TestUpdateRejectsPartialMask proves a non-empty update_mask is refused rather than
-// silently full-replacing (which would wipe the fields the mask omits).
-func TestUpdateRejectsPartialMask(t *testing.T) {
+// TestUpdateHonorsAPartialMask proves a named field is the only one written, and that a
+// field the mask omits keeps what is stored.
+func TestUpdateHonorsAPartialMask(t *testing.T) {
 	s := newTestService(t)
-	req := &memoryv1.UpdateMemoryRequest{
-		Memory:       pointer("cache-op-surface", "project:magus"),
-		AllowMissing: true,
-		UpdateMask:   &fieldmaskpb.FieldMask{Paths: []string{"status"}},
-	}
-	_, err := s.UpdateMemory(context.Background(), connect.NewRequest(req))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	ctx := context.Background()
+	full := pointer("cache-op-surface", "project:magus")
+	full.Status = "active"
+	_, err := s.UpdateMemory(ctx, req(&memoryv1.UpdateMemoryRequest{Memory: full, AllowMissing: true}))
+	require.NoError(t, err)
+
+	patch := &memoryv1.Memory{Name: "cache-op-surface", Status: "done"}
+	got, err := s.UpdateMemory(ctx, req(&memoryv1.UpdateMemoryRequest{
+		Memory:     patch,
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"status"}},
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "done", got.Msg.GetStatus())
+	require.Len(t, got.Msg.GetRefs(), 1, "a field outside the mask keeps what is stored")
+	assert.Equal(t, "project:magus", got.Msg.GetRefs()[0].GetTarget())
+}
+
+// TestUpdateWithNoMaskIsAFullReplace pins the console's stated decision: its caller is a
+// person editing a form that submits every box, so an emptied one clears the field.
+func TestUpdateWithNoMaskIsAFullReplace(t *testing.T) {
+	s := newTestService(t)
+	ctx := context.Background()
+	full := pointer("cache-op-surface", "project:magus")
+	full.Status = "active"
+	_, err := s.UpdateMemory(ctx, req(&memoryv1.UpdateMemoryRequest{Memory: full, AllowMissing: true}))
+	require.NoError(t, err)
+
+	cleared := pointer("cache-op-surface", "project:magus")
+	got, err := s.UpdateMemory(ctx, req(&memoryv1.UpdateMemoryRequest{Memory: cleared, AllowMissing: true}))
+	require.NoError(t, err)
+	assert.Empty(t, got.Msg.GetStatus(), "the form submitted an empty status, so the status is cleared")
 }
 
 // TestUpdateRejectsInvalidRecord proves the store's schema validation surfaces as

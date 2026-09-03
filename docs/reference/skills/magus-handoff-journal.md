@@ -5,8 +5,8 @@ description: "Maintain a user-owned handoff journal through magus_memory or `mag
 tags: [agents, skills, magus-handoff-journal]
 aliases:
   - reference/skills/magus-memory
-skill_full_bytes: 4938
-skill_simple_bytes: 4086
+skill_full_bytes: 5590
+skill_simple_bytes: 4625
 ---
 
 # magus-handoff-journal
@@ -30,9 +30,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `50` |
+| `agent-skill-version` | `51` |
 | `knowledge-schema-version` | `10` |
-| `skill-content` | `76227a759502` |
+| `skill-content` | `2e9cc352b1cd` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -86,12 +86,16 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to
-  rediscover. The CLI is often clearer for a human:
+  rediscover. It writes only the fields you send, so refreshing a status keeps the
+  body and refs beside it. Send the fields you mean to change rather than
+  the whole record from memory: the store keeps no history, so a field you drop has
+  nothing to restore it from. Clearing a field or changing a type is a delete and a create. The CLI is often clearer for a human:
 
   ```sh
   magus memory put release-gate --type plan \
     --ref 'command: magus affected ci' --status active \
     --body 'Run after the documentation render is committed.'
+  magus memory put release-gate --amend --status done
   ```
 
 - Use `delete` for entries that no longer earn their keep. Run `magus memory
@@ -101,9 +105,13 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} upserts a record
-  by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
-  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
+- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} creates a record
+  by `name` (a kebab slug), and on a name that exists writes the fields you send and
+  keeps the rest. Pass `refs` as one per line, `kind: target` (e.g.
+  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`); sending
+  `refs` replaces the whole list.
+- Pass `allow_missing: false` (CLI `--amend`) when you mean to land on an entry that
+  already exists, so a mistyped name is an error rather than a second entry.
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`. A bare "we chose X" helps
   nobody; the `body` carries the why, and the refs anchor it to the code.
@@ -180,12 +188,15 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to
-  rediscover.
+  rediscover. It writes only the fields you send, so refreshing a status keeps the
+  body and refs beside it, and a dropped field has no history behind
+  it. Clearing a field or changing a type is a delete and a create.
 
   ```sh
   magus memory put release-gate --type plan \
     --ref 'command: magus affected ci' --status active \
     --body 'Run after the documentation render is committed.'
+  magus memory put release-gate --amend --status done
   ```
 
 - Use `delete` for entries that no longer earn their keep. Run `magus memory
@@ -194,9 +205,13 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} upserts a record
-  by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
-  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
+- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} creates a record
+  by `name` (a kebab slug), and on a name that exists writes the fields you send and
+  keeps the rest. Pass `refs` as one per line, `kind: target` (e.g.
+  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`); sending
+  `refs` replaces the whole list.
+- Pass `allow_missing: false` (CLI `--amend`) when you mean to land on an entry that
+  already exists, so a mistyped name is an error rather than a second entry.
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`. Put the why
   in `body` and anchor it with refs.

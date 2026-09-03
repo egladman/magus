@@ -49,6 +49,23 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Changed
 
+- **Writing a handoff entry that already exists now writes only the fields you sent.**
+  `magus memory put`, the `magus_memory` tool's `op=put`, and the console's
+  `UpdateMemory` used to replace the whole record, so refreshing a plan's status
+  silently dropped the body, the refs and the excerpt beside it. The store keeps no
+  history, and the result was indistinguishable from a first write. All three now
+  follow AIP-134: an absent update mask means the fields the caller populated, and
+  everything else keeps what is stored. The cost is the one AIP-134 names, and it is
+  the reason a mask exists at all: an omitted field can no longer CLEAR a stored
+  value, so delete the entry and create it again for that, or name the field in an
+  explicit `update_mask`. Two contract points come with it. A record cannot be
+  updated into another type, because the type is the axis a listing reports and it
+  decides which fields the entry may carry; delete and recreate instead. And
+  `allow_missing` now decides whether an absent name is created or refused, spelled
+  `--amend` on the CLI, so a mistyped name is an error rather than a stray second
+  entry. `MemoryService.UpdateMemory` accepts a partial `update_mask` where it used
+  to reject one; an absent mask stays a full replace THERE, because its caller is a
+  person editing a form that shows every field and an emptied box has to clear one.
 - **One unreadable handoff entry no longer takes the readable ones down with it.**
   `magus memory` used to fail a whole listing when any single record failed to parse or
   validate, which disabled the surface a person would use to find and delete that record.

@@ -51,6 +51,11 @@ func testRoot(t *testing.T) string {
 	return t.TempDir()
 }
 
+// upsert is the CLI's and the MCP tool's default mode.
+func upsert(root string, r Record) (Record, error) {
+	return Update(root, r, UpdateOptions{AllowMissing: true})
+}
+
 func TestPutGetRoundTrip(t *testing.T) {
 	root := testRoot(t)
 	in := Record{
@@ -61,7 +66,7 @@ func TestPutGetRoundTrip(t *testing.T) {
 		References: []string{"cache-key-derivation"},
 		Body:       "Keep stdlib SHA256. BLAKE3 ~3.3x slower on arm64 and hashing is off the hot path.",
 	}
-	stored, err := Put(root, in)
+	stored, err := upsert(root, in)
 	require.NoError(t, err)
 	assert.NotZero(t, stored.Created)
 	assert.GreaterOrEqual(t, stored.Updated, stored.Created)
@@ -74,7 +79,7 @@ func TestPutGetRoundTrip(t *testing.T) {
 // TestEliminationRoundTripsItsExcerpt pins the serialization the feature rests on. Captured
 // tool output arrives with interior newlines, indented lines, and can hold a line that is
 // exactly the frontmatter delimiter; a YAML block scalar indents every line it carries, so
-// all three survive. It cannot carry the trailing newline, which Put trims to keep the
+// all three survive. It cannot carry the trailing newline, which Update trims to keep the
 // stored record and the returned one equal.
 func TestEliminationRoundTripsItsExcerpt(t *testing.T) {
 	root := testRoot(t)
@@ -85,7 +90,7 @@ func TestEliminationRoundTripsItsExcerpt(t *testing.T) {
 		Body:    "Not the BIOS: the aperture is reported at its real size.",
 		Excerpt: "BAR0: 256M\n---\n  aperture matches lspci\n",
 	}
-	stored, err := Put(root, in)
+	stored, err := upsert(root, in)
 	require.NoError(t, err)
 	assert.Equal(t, "BAR0: 256M\n---\n  aperture matches lspci", stored.Excerpt)
 
@@ -97,20 +102,165 @@ func TestEliminationRoundTripsItsExcerpt(t *testing.T) {
 func TestPutPreservesCreatedOnUpdate(t *testing.T) {
 	root := testRoot(t)
 	rec := Record{Name: "cache-op-surface", Type: TypePointer, Refs: []Ref{{Kind: RefKindQuery, Target: "kind:op depends cache"}}}
-	first, err := Put(root, rec)
+	first, err := upsert(root, rec)
 	require.NoError(t, err)
 
 	rec.Refs = []Ref{{Kind: RefKindQuery, Target: "kind:op depends hasher"}}
-	second, err := Put(root, rec)
+	second, err := upsert(root, rec)
 	require.NoError(t, err)
 	assert.Equal(t, first.Created, second.Created, "created time is preserved across an update")
 	assert.GreaterOrEqual(t, second.Updated, first.Updated)
 }
 
+// TestUpdateKeepsFieldsTheCallerDidNotSend is the property this store exists to guarantee:
+// there is no history behind an entry, so an update that says nothing about a field must
+// leave it alone.
+func TestUpdateKeepsFieldsTheCallerDidNotSend(t *testing.T) {
+	root := testRoot(t)
+	first, err := upsert(root, Record{
+		Name: "cache-key-drift", Type: TypeElimination, Status: "open",
+		Refs:    []Ref{{Kind: RefKindOutput, Target: "out1a2b3c"}},
+		Body:    "Not the cache key: both runs hashed the same inputs.",
+		Excerpt: "key inputs identical, 0 differing lines",
+	})
+	require.NoError(t, err)
+
+	second, err := upsert(root, Record{Name: "cache-key-drift", Status: "done"})
+	require.NoError(t, err)
+
+	want := first
+	want.Status = "done"
+	want.Updated = second.Updated
+	assert.Equal(t, want, second) // whole-struct: only status moved
+	got, err := Get(root, "cache-key-drift")
+	require.NoError(t, err)
+	assert.Equal(t, second, got)
+}
+
+// TestUpdateReplacesTheFieldsItIsSent covers the other half. A repeated field is replaced
+// rather than appended to, so correcting a ref list does not end up with both.
+func TestUpdateReplacesTheFieldsItIsSent(t *testing.T) {
+	root := testRoot(t)
+	_, err := upsert(root, Record{
+		Name: "release-gate", Type: TypePlan,
+		Refs: []Ref{{Kind: RefKindCommand, Target: "magus ci"}, {Kind: RefKindDoc, Target: "docs/setup.md"}},
+		Body: "Run the gate before tagging.",
+	})
+	require.NoError(t, err)
+
+	got, err := upsert(root, Record{
+		Name: "release-gate",
+		Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}},
+		Body: "Run the affected gate before tagging.",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, got.Refs)
+	assert.Equal(t, "Run the affected gate before tagging.", got.Body)
+}
+
+// TestUpdateWithoutAllowMissingRefusesAnAbsentName is the update-only mode, reached from
+// the CLI as --amend. It turns a mistyped name into an error rather than a second entry.
+func TestUpdateWithoutAllowMissingRefusesAnAbsentName(t *testing.T) {
+	root := testRoot(t)
+	_, err := Update(root, Record{Name: "ghost", Status: "done"}, UpdateOptions{})
+	assert.ErrorIs(t, err, os.ErrNotExist)
+
+	recs, err := List(root)
+	require.NoError(t, err)
+	assert.Empty(t, recs, "a refused update writes nothing")
+}
+
+// TestUpdateRefusesATypeChange pins the one field an update will not merge: the type is the
+// subject axis a listing reports, and it decides which fields the entry may carry.
+func TestUpdateRefusesATypeChange(t *testing.T) {
+	root := testRoot(t)
+	first, err := upsert(root, Record{
+		Name: "hasher-choice", Type: TypeDecision,
+		Refs: []Ref{{Kind: RefKindNode, Target: "file:internal/hash/hasher.go"}},
+		Body: "Keep stdlib SHA256.",
+	})
+	require.NoError(t, err)
+
+	_, err = upsert(root, Record{Name: "hasher-choice", Type: TypePointer})
+	assert.ErrorIs(t, err, ErrInvalid)
+	got, err := Get(root, "hasher-choice")
+	require.NoError(t, err)
+	assert.Equal(t, first, got, "the refused update left the entry untouched")
+
+	// Sending the type it already has is a no-op.
+	_, err = upsert(root, Record{Name: "hasher-choice", Type: TypeDecision, Status: "accepted"})
+	assert.NoError(t, err)
+}
+
+// TestUpdateValidatesTheMergedRecord proves the invariants hold across a partial write: an
+// elimination keeps its excerpt through a body rewrite, and a merge that would break an
+// invariant is refused whole rather than half-written.
+func TestUpdateValidatesTheMergedRecord(t *testing.T) {
+	root := testRoot(t)
+	_, err := upsert(root, Record{
+		Name: "bios-aperture", Type: TypeElimination,
+		Refs:    []Ref{{Kind: RefKindOutput, Target: "out1a2b3c"}},
+		Body:    "Not the BIOS.",
+		Excerpt: "BAR0: 256M",
+	})
+	require.NoError(t, err)
+
+	got, err := upsert(root, Record{Name: "bios-aperture", Body: "Not the BIOS: the aperture is reported at its real size."})
+	require.NoError(t, err)
+	assert.Equal(t, "BAR0: 256M", got.Excerpt, "an elimination keeps the evidence it was created with")
+
+	_, err = Update(root, Record{Name: "bios-aperture"}, UpdateOptions{Mask: []string{"excerpt"}})
+	assert.ErrorIs(t, err, ErrInvalid, "clearing the excerpt would leave a verdict nobody can check")
+	kept, err := Get(root, "bios-aperture")
+	require.NoError(t, err)
+	assert.Equal(t, "BAR0: 256M", kept.Excerpt)
+}
+
+// TestUpdateWithAnExplicitMaskClears is why the mask exists at all. Without one an empty
+// value reads as unchanged, so a caller that means to clear a field names it.
+func TestUpdateWithAnExplicitMaskClears(t *testing.T) {
+	root := testRoot(t)
+	_, err := upsert(root, Record{
+		Name: "release-gate", Type: TypePlan, Status: "active",
+		Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}},
+		Body: "Run the gate before tagging.",
+	})
+	require.NoError(t, err)
+
+	got, err := Update(root, Record{Name: "release-gate"}, UpdateOptions{Mask: []string{"status"}})
+	require.NoError(t, err)
+	assert.Empty(t, got.Status, "a named field takes the value sent, empty included")
+	assert.Equal(t, "Run the gate before tagging.", got.Body, "a field outside the mask is untouched")
+
+	_, err = Update(root, Record{Name: "release-gate"}, UpdateOptions{Mask: []string{"caption"}})
+	assert.ErrorIs(t, err, ErrInvalid, "a mask naming a field that does not exist is a request error")
+}
+
+// TestUpdateRepairsAnUnreadableEntryOnlyWithEveryField keeps the console's safety valve
+// working: a full replace needs nothing from disk, which is how a person fixes an entry
+// nothing here can parse.
+func TestUpdateRepairsAnUnreadableEntryOnlyWithEveryField(t *testing.T) {
+	root := testRoot(t)
+	_, err := upsert(root, Record{Name: "broken", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
+	require.NoError(t, err)
+	path := filepath.Join(mustDir(t, root), recordsSubdir, "broken.md")
+	require.NoError(t, os.WriteFile(path, []byte("not frontmatter"), 0o644))
+
+	_, err = upsert(root, Record{Name: "broken", Status: "stale"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nothing to merge into")
+
+	fixed, err := Update(root, Record{
+		Name: "broken", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}},
+	}, UpdateOptions{Mask: MutableFields(), AllowMissing: true})
+	require.NoError(t, err)
+	assert.Equal(t, TypePointer, fixed.Type)
+}
+
 func TestListIsNameOrdered(t *testing.T) {
 	root := testRoot(t)
 	for _, n := range []string{"zebra", "alpha", "mid"} {
-		_, err := Put(root, Record{Name: n, Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
+		_, err := upsert(root, Record{Name: n, Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
 		require.NoError(t, err)
 	}
 	got, err := List(root)
@@ -146,8 +296,8 @@ func TestValidateRejections(t *testing.T) {
 	for name, rec := range cases {
 		t.Run(name, func(t *testing.T) {
 			assert.Error(t, Validate(rec))
-			_, err := Put(root, rec)
-			assert.Error(t, err, "Put must reject an invalid record")
+			_, err := upsert(root, rec)
+			assert.ErrorIs(t, err, ErrInvalid, "Update must reject an invalid record as a request error, not a storage one")
 		})
 	}
 }
@@ -157,7 +307,7 @@ func TestDeleteAllowMissing(t *testing.T) {
 	assert.NoError(t, Delete(root, "ghost", true), "idempotent delete of an absent record is a no-op")
 	assert.Error(t, Delete(root, "ghost", false), "strict delete of an absent record errors")
 
-	_, err := Put(root, Record{Name: "real", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
+	_, err := upsert(root, Record{Name: "real", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
 	require.NoError(t, err)
 	require.NoError(t, Delete(root, "real", false))
 	_, err = Get(root, "real")
@@ -181,9 +331,9 @@ func TestReadCursor(t *testing.T) {
 
 func TestVerifyReportsMalformedAndStaleEntries(t *testing.T) {
 	root := testRoot(t)
-	good, err := Put(root, Record{Name: "active-plan", Type: TypePlan, Status: "active", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, Body: "Finish the release gate."})
+	good, err := upsert(root, Record{Name: "active-plan", Type: TypePlan, Status: "active", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, Body: "Finish the release gate."})
 	require.NoError(t, err)
-	_, err = Put(root, Record{Name: "old-plan", Type: TypePlan, Status: "stale", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, References: []string{good.Name}, Body: "Replace this."})
+	_, err = upsert(root, Record{Name: "old-plan", Type: TypePlan, Status: "stale", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, References: []string{good.Name}, Body: "Replace this."})
 	require.NoError(t, err)
 	dir, err := Dir(root)
 	require.NoError(t, err)
@@ -211,7 +361,7 @@ func TestVerifyReportsMalformedAndStaleEntries(t *testing.T) {
 // so it is a warning and verify stays green.
 func TestListSkipsAnEntryWrittenByANewerMagus(t *testing.T) {
 	root := testRoot(t)
-	_, err := Put(root, Record{Name: "readable", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
+	_, err := upsert(root, Record{Name: "readable", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
 	require.NoError(t, err)
 	dir := mustDir(t, root)
 	future := filepath.Join(dir, recordsSubdir, "from-the-future.md")
@@ -231,7 +381,7 @@ func TestListSkipsAnEntryWrittenByANewerMagus(t *testing.T) {
 	}}}, report)
 
 	// Writing one is still refused: tolerance is for the read path alone.
-	_, err = Put(root, Record{Name: "x", Type: "zzz-future", Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
+	_, err = upsert(root, Record{Name: "x", Type: "zzz-future", Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})
 	assert.ErrorIs(t, err, ErrUnknownType)
 }
 
@@ -249,7 +399,7 @@ func recordNames(recs []Record) []string {
 // (nil, nil) instead of the one well-formed record.
 func TestListReturnsRecordsWithOnlyWarnings(t *testing.T) {
 	root := testRoot(t)
-	_, err := Put(root, Record{Name: "old-plan", Type: TypePlan, Status: "stale", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, Body: "Replace this."})
+	_, err := upsert(root, Record{Name: "old-plan", Type: TypePlan, Status: "stale", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, Body: "Replace this."})
 	require.NoError(t, err)
 
 	got, err := List(root)
@@ -260,7 +410,7 @@ func TestListReturnsRecordsWithOnlyWarnings(t *testing.T) {
 
 func TestVerifyReportsBrokenEntryReference(t *testing.T) {
 	root := testRoot(t)
-	_, err := Put(root, Record{Name: "release-plan", Type: TypePlan, Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, References: []string{"missing-decision"}, Body: "Ship after CI."})
+	_, err := upsert(root, Record{Name: "release-plan", Type: TypePlan, Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, References: []string{"missing-decision"}, Body: "Ship after CI."})
 	require.NoError(t, err)
 
 	report, err := Verify(root, allRefsResolve)
@@ -285,7 +435,7 @@ func allRefsResolve(Ref) error { return nil }
 // warning could be unconditional and the assertion above would still pass.
 func TestVerifyWarnsOnDecayedEvidenceAndKeepsTheExcerpt(t *testing.T) {
 	root := testRoot(t)
-	rec, err := Put(root, Record{
+	rec, err := upsert(root, Record{
 		Name:    "cache-key-drift",
 		Type:    TypeElimination,
 		Refs:    []Ref{{Kind: RefKindOutput, Target: "out1a2b3c"}, {Kind: RefKindCommand, Target: "magus affected ci"}},

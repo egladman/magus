@@ -78,7 +78,11 @@ import (
 // investigation killed, carrying the why plus an `excerpt` of the evidence that
 // killed it. The excerpt is required because an output ref resolves only from the
 // checkout that minted it, which leaves the ref beside it a best-effort handle.
-const SkillVersion = 50
+// 51: magus-handoff-journal teaches what `put` writes: the fields the caller
+// sends, keeping the rest, so refreshing a status does not drop the body. Clearing
+// a field or changing a type is a delete and a create, and `allow_missing: false`
+// (CLI `--amend`) says the entry is meant to exist.
+const SkillVersion = 51
 
 const skillLicense = "GPL-3.0-or-later"
 

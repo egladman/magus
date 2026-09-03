@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -91,8 +92,15 @@ func (t *memoryTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 			Refs:       refs,
 			References: splitCommaList(paramString(req.Params, "references", "")),
 		}
-		stored, err := memory.Put(root, rec) // validates the schema, rejects at the door
+		// No mask: the params the caller sent are the fields to write. allow_missing keeps
+		// the wire spelling here, where every other param is the wire name.
+		stored, err := memory.Update(root, rec, memory.UpdateOptions{
+			AllowMissing: paramBool(req.Params, "allow_missing", true),
+		})
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return spells.InvokeResponse{}, fmt.Errorf("mcp: the journal holds no entry named %q; drop allow_missing=false to create it, or find it with op=list", rec.Name)
+			}
 			return spells.InvokeResponse{}, err
 		}
 		return spells.InvokeResponse{Data: toRecordView(stored)}, nil
