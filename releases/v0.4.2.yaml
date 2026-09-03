@@ -1470,8 +1470,8 @@ notes:
           too broad, and `magus tail` has since been removed outright (see above). Nothing
           replaces it; if you set it in `magus.yaml` it is now inert.
 body: |-
-    See the unreleased changes at
-    https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
+    See the full changelog at
+    https://github.com/egladman/magus/compare/v0.3.0...v0.4.2
 
     ### Breaking
 
