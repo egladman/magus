@@ -705,7 +705,8 @@
           "declared": "release_build",
           "doc": "Builds one release binary for one platform.",
           "charms": [
-            "dynamic"
+            "dynamic",
+            "immutable"
           ],
           "spells": [
             {
@@ -726,6 +727,9 @@
           "name": "release-sign",
           "declared": "release_sign",
           "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
+          "charms": [
+            "immutable"
+          ],
           "reads_secrets": false
         },
         {
