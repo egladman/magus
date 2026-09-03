@@ -83,21 +83,14 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		return err
 	}
 
-	state, _ := interactive.LoadState()
-	last := state.LastTarget[chosen.Dir]
-	targetName, err := pickTarget(ctx, last)
+	targetName, err := pickTarget(ctx, interactive.LastTarget(chosen.Dir))
 	if err != nil {
 		if errors.Is(err, tty.ErrAborted) {
 			return nil
 		}
 		return err
 	}
-
-	if state.LastTarget == nil {
-		state.LastTarget = make(map[string]string)
-	}
-	state.LastTarget[chosen.Dir] = targetName
-	_ = interactive.SaveState(state)
+	_ = interactive.SaveLastTarget(chosen.Dir, targetName)
 
 	m.LogScope(ctx, chosen.Path, "")
 

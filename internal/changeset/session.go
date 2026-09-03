@@ -36,6 +36,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -525,24 +526,17 @@ func (s *Store) loadDrafts() []types.DiffComment {
 	return out
 }
 
-// saveDrafts persists the drafts, best-effort, via the same temp-and-rename saveViewed uses so
+// saveDrafts persists the drafts, best-effort, via the same atomic write saveViewed uses so
 // a crash mid-write cannot leave a half-file where the drafts were.
 func (s *Store) saveDrafts(drafts []types.DiffComment) {
 	if s.draftsPath == "" {
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(s.draftsPath), 0o755); err != nil {
 		return
 	}
 	b, err := json.Marshal(drafts)
 	if err != nil {
 		return
 	}
-	tmp := s.draftsPath + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, s.draftsPath)
+	_ = file.WriteFileAtomic(s.draftsPath, b, 0o644)
 }
 
 // loadViewed reads the persisted digest set. Every failure yields an empty set rather than an
@@ -568,18 +562,11 @@ func (s *Store) saveViewed(digests []string) {
 	if s.viewedPath == "" {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(s.viewedPath), 0o755); err != nil {
-		return
-	}
 	b, err := json.Marshal(digests)
 	if err != nil {
 		return
 	}
-	tmp := s.viewedPath + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, s.viewedPath)
+	_ = file.WriteFileAtomic(s.viewedPath, b, 0o644)
 }
 
 // LoadDrafts reads the persisted unsent remarks WITHOUT a session, for the same reason
@@ -619,16 +606,9 @@ func (s *Store) saveSeen(ids []string) {
 	if s.seenPath == "" {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(s.seenPath), 0o755); err != nil {
-		return
-	}
 	b, err := json.Marshal(ids)
 	if err != nil {
 		return
 	}
-	tmp := s.seenPath + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, s.seenPath)
+	_ = file.WriteFileAtomic(s.seenPath, b, 0o644)
 }

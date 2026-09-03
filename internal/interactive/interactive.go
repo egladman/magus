@@ -4,12 +4,15 @@ package interactive
 
 import (
 	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -59,63 +62,61 @@ func ScoreProjects(all []*types.Project, filters []string) []ScoredProject {
 	return out
 }
 
-// State is the persisted interactive-session state.
-// LastTarget is keyed by absolute project Dir.
-type State struct {
-	LastTarget map[string]string `json:"lastTarget,omitempty"`
-}
-
-// StatePath returns the path to the State file under XDG_STATE_HOME.
-func StatePath() (string, error) {
-	dir := os.Getenv("XDG_STATE_HOME")
-	if dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		dir = filepath.Join(home, ".local", "state")
-	}
-	return filepath.Join(dir, "magus", "x-state.json"), nil
-}
-
-// LoadState reads the persisted State. A missing file is not an error.
-// A corrupt file returns a parse error; callers that want reset-on-corrupt
-// behavior should treat a non-nil error as an empty State.
-func LoadState() (State, error) {
-	var s State
-	path, err := StatePath()
+// stateDir is <XDG state>/magus/x, holding one file per project: the target last run
+// there. One file per project because nothing ever reads another project's entry, so
+// concurrent picks never touch the same file and a corrupt one costs a single re-pick.
+//
+// Nothing prunes it. The entries are one small file per project the user has picked in,
+// bounded by how many projects a person works in, and an age-based sweep would delete
+// the long-tail entry that remembering is for.
+func stateDir() (string, error) {
+	dir, err := config.UserStateDir()
 	if err != nil {
-		return s, err
+		return "", err
+	}
+	return filepath.Join(dir, "magus", "x"), nil
+}
+
+// targetPath is the file recording the last target for the project rooted at dir. The
+// absolute dir is hashed to name the file, the construction and width workspaceLockKey
+// uses: a path is not a legal single filename, and a digest keeps a listing of this
+// directory from reproducing the user's disk layout.
+func targetPath(dir string) (string, error) {
+	root, err := stateDir()
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(abs)))
+	return filepath.Join(root, hex.EncodeToString(sum[:8])), nil
+}
+
+// LastTarget returns the target last run for the project rooted at dir, "" when there
+// is none. Every failure yields "" rather than an error: the value only pre-highlights
+// a picker row, so an unreadable file must not stop x opening.
+func LastTarget(dir string) string {
+	path, err := targetPath(dir)
+	if err != nil {
+		return ""
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return s, nil
-		}
-		return s, err
+		return ""
 	}
-	if err := json.Unmarshal(b, &s); err != nil {
-		return s, err
-	}
-	return s, nil
+	return strings.TrimSpace(string(b))
 }
 
-// SaveState atomically writes s to the State file.
-func SaveState(s State) error {
-	path, err := StatePath()
+// SaveLastTarget records target as the last one run for the project rooted at dir.
+// Atomic despite the file holding one short line: two pickers finishing in the same
+// project race for it, and a plain write truncates before it fills, so the shorter
+// name lands inside the longer one ("ci\nerage-badge-...", measured).
+func SaveLastTarget(dir, target string) error {
+	path, err := targetPath(dir)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return file.WriteFileAtomic(path, []byte(target+"\n"), 0o644)
 }

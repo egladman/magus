@@ -38,8 +38,8 @@ When the filtered set is unique, the project picker is skipped. Otherwise
 a TTY picker opens, seeded with the survivors, sorted by score. After a
 project is chosen, a second picker offers the target set
 (build/test/lint/format/clean/generate/ci); the last target used for that
-project (persisted in $XDG_STATE_HOME/magus/x-state.json, defaulting to
-$HOME/.local/state/magus/) is pre-highlighted.
+project (persisted one file per project under $XDG_STATE_HOME/magus/x/,
+defaulting to $HOME/.local/state/magus/) is pre-highlighted.
 
 x refuses to run when stdin or stderr is not a terminal: shorthand is for
 humans. Scripts should call magus run directly.
