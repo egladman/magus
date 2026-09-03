@@ -14,16 +14,15 @@ package std
 // Only genuine duplicates are listed. Entries whose magus behavior the stdlib
 // can't reproduce are deliberately absent: os.exit raises a lifecycle ExitError
 // (Buzz's os.exit hard-exits the process), os.sleep is cancellable (Buzz's
-// blocks), and crypto.*_file hashes a file (Buzz's hash only takes a string).
+// blocks), crypto.*_file hashes a file (Buzz's hash only takes a string), and
+// crypto.*_hex returns hex where Buzz's crypto.hash returns the RAW digest
+// bytes - the equivalence once claimed here is what shipped v0.4.2's
+// SHA256SUMS as raw digests.
 var buzzStdlibEquiv = map[string]string{
 	"fs.exists":              "fs.exists",
 	"fs.mkdir_all":           "fs.makeDirectory",
 	"fs.remove_all":          "fs.delete",
 	"fs.list_dir":            "fs.list",
-	"crypto.sha256_hex":      "crypto.hash(HashAlgorithm.Sha256, ...)",
-	"crypto.sha512_hex":      "crypto.hash(HashAlgorithm.Sha512, ...)",
-	"crypto.sha1_hex":        "crypto.hash(HashAlgorithm.Sha1, ...)",
-	"crypto.md5_hex":         "crypto.hash(HashAlgorithm.Md5, ...)",
 	"json.parse":             "serialize.jsonDecode",
 	"json.stringify":         "serialize.jsonEncode",
 	"env.get":                "os.env",
