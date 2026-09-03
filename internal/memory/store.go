@@ -178,6 +178,18 @@ func repoIdentity(root string) string {
 // warning, leaving the rest of the journal readable by the older binary that met it.
 var ErrUnknownType = errors.New("memory: unknown record type")
 
+// ErrInvalid marks a write the caller got wrong rather than one that failed to store, so a
+// frontend can answer InvalidArgument without re-deriving why.
+var ErrInvalid = errors.New("memory: invalid record")
+
+// invalidError matches ErrInvalid without prefixing its text onto the message.
+type invalidError struct{ err error }
+
+func (e invalidError) Error() string   { return e.err.Error() }
+func (e invalidError) Unwrap() []error { return []error{ErrInvalid, e.err} }
+
+func invalidf(format string, a ...any) error { return invalidError{fmt.Errorf(format, a...)} }
+
 // Validate enforces the record schema on the way IN (the rules the whole feature rests
 // on): a known type, at least one ref, a known kind on every ref, and prose only where
 // it is allowed. Rejecting a bad record at the door keeps the store, the graph, and the
@@ -397,37 +409,152 @@ func Get(root, name string) (Record, error) {
 	return readRecordFile(filepath.Join(dir, recordsSubdir, name+".md"))
 }
 
-// Put upserts a record: it validates, stamps Created (first write) / Updated (every
-// write), and writes the file atomically. The name is the identity, so writing an
-// existing name overwrites it. It returns the stored record (with timestamps) so a
-// caller can echo the server-set fields back.
-func Put(root string, r Record) (Record, error) {
-	if err := Validate(r); err != nil {
+// mutableFields is the closed set a mask may name, spelled as the proto's fields so a
+// console mask needs no translation. Name is the identity and the timestamps are server-set.
+var mutableFields = []string{"type", "status", "refs", "references", "body", "excerpt"}
+
+// MutableFields returns every field path a mask may name. A caller that means a full
+// replace passes all of them.
+func MutableFields() []string { return slices.Clone(mutableFields) }
+
+// UpdateOptions carries Update's AIP-134 contract: the field mask, and whether an absent
+// name is created.
+type UpdateOptions struct {
+	// Mask names the fields to write, from MutableFields. Empty means the fields the
+	// caller populated, which cannot unset one: an empty value there reads as unchanged,
+	// so a caller that means to clear a field names it.
+	Mask []string
+	// AllowMissing creates the record when the name is absent; without it an absent name
+	// is os.ErrNotExist, so a mistyped name is an error rather than a second entry.
+	AllowMissing bool
+}
+
+// Update writes the fields opts.Mask names and keeps every other field the journal holds.
+// The store has no history, so a field the caller does not name has nothing to restore it
+// from. Created is preserved, Updated stamped, the file written atomically, and the stored
+// record returned so a caller can echo the server-set fields back.
+//
+// Type is refused rather than merged: it is the subject axis a listing reports and it
+// decides which fields the entry may carry, so changing it is a delete and a create.
+// Naming the type already stored is a no-op. Validate runs on the MERGED record, so an
+// invariant an update would break is refused whole.
+func Update(root string, r Record, opts UpdateOptions) (Record, error) {
+	if !nameRE.MatchString(r.Name) {
+		return Record{}, invalidf("memory: name %q must be a kebab slug (lowercase alphanumerics and hyphens)", r.Name)
+	}
+	fields, err := maskFields(r, opts.Mask)
+	if err != nil {
 		return Record{}, err
 	}
-	// Captured output ends in a newline and a YAML block scalar drops it. Trimming on the
-	// way in keeps the returned record equal to what a later Get reads.
-	r.Excerpt = strings.TrimRight(r.Excerpt, "\n")
 	dir, err := Dir(root)
 	if err != nil {
 		return Record{}, err
 	}
 	rdir := filepath.Join(dir, recordsSubdir)
-	if err := os.MkdirAll(rdir, 0o755); err != nil {
-		return Record{}, fmt.Errorf("memory: put: %w", err)
-	}
-	now := time.Now().Unix()
-	if prev, err := readRecordFile(filepath.Join(rdir, r.Name+".md")); err == nil {
-		r.Created = prev.Created // preserve the original creation time on update
-	}
-	if r.Created == 0 {
-		r.Created = now
-	}
-	r.Updated = now
-	if err := writeAtomic(filepath.Join(rdir, r.Name+".md"), marshalRecord(r)); err != nil {
+	path := filepath.Join(rdir, r.Name+".md")
+	prev, exists, err := mergeBase(path, fields)
+	if err != nil {
 		return Record{}, err
 	}
-	return r, nil
+	if !exists && !opts.AllowMissing {
+		return Record{}, fmt.Errorf("memory: no entry named %q: %w", r.Name, os.ErrNotExist)
+	}
+	merged, err := applyFields(prev, r, fields)
+	if err != nil {
+		return Record{}, err
+	}
+	if err := Validate(merged); err != nil {
+		return Record{}, invalidError{err}
+	}
+	// Captured output ends in a newline and a YAML block scalar drops it. Trimming on the
+	// way in keeps the returned record equal to what a later Get reads.
+	merged.Excerpt = strings.TrimRight(merged.Excerpt, "\n")
+	if err := os.MkdirAll(rdir, 0o755); err != nil {
+		return Record{}, fmt.Errorf("memory: update: %w", err)
+	}
+	now := time.Now().Unix()
+	merged.Created = prev.Created
+	if merged.Created == 0 {
+		merged.Created = now
+	}
+	merged.Updated = now
+	if err := writeAtomic(path, marshalRecord(merged)); err != nil {
+		return Record{}, err
+	}
+	return merged, nil
+}
+
+// maskFields resolves an update's fields. A whitespace-only body or excerpt counts as
+// unpopulated: marshalRecord trims both, so the stored record would not carry it anyway.
+func maskFields(r Record, mask []string) (map[string]bool, error) {
+	if len(mask) > 0 {
+		out := make(map[string]bool, len(mask))
+		for _, f := range mask {
+			if !slices.Contains(mutableFields, f) {
+				return nil, invalidf("memory: update mask names unknown field %q (want %s)", f, strings.Join(mutableFields, ", "))
+			}
+			out[f] = true
+		}
+		return out, nil
+	}
+	return map[string]bool{
+		"type":       r.Type != "",
+		"status":     r.Status != "",
+		"refs":       len(r.Refs) > 0,
+		"references": len(r.References) > 0,
+		"body":       strings.TrimSpace(r.Body) != "",
+		"excerpt":    strings.TrimSpace(r.Excerpt) != "",
+	}, nil
+}
+
+// mergeBase reads the record an update merges into and reports whether the name is taken.
+// An unparseable entry is fatal to a partial update and harmless to one naming every field,
+// which is what keeps the console able to repair an entry nothing here can read.
+func mergeBase(path string, fields map[string]bool) (Record, bool, error) {
+	_, statErr := os.Stat(path)
+	switch {
+	case errors.Is(statErr, os.ErrNotExist):
+		return Record{}, false, nil
+	case statErr != nil:
+		return Record{}, false, fmt.Errorf("memory: %s: %w", filepath.Base(path), statErr)
+	}
+	prev, err := readRecordFile(path)
+	if err == nil {
+		return prev, true, nil
+	}
+	for _, f := range mutableFields {
+		if !fields[f] {
+			return Record{}, true, fmt.Errorf("memory: %s cannot be read, so an update has nothing to merge into: %w", filepath.Base(path), err)
+		}
+	}
+	return Record{}, true, nil
+}
+
+func applyFields(prev, in Record, fields map[string]bool) (Record, error) {
+	out := prev
+	out.Name = in.Name
+	if fields["type"] {
+		if prev.Type != "" && in.Type != prev.Type {
+			return Record{}, invalidf("memory: %q is a %s and an update cannot make it a %s: the type is the subject axis a listing reports, and it decides which fields the entry may carry. Delete it and create the entry you want.", in.Name, prev.Type, in.Type)
+		}
+		out.Type = in.Type
+	}
+	if fields["status"] {
+		out.Status = in.Status
+	}
+	if fields["refs"] {
+		out.Refs = in.Refs
+	}
+	if fields["references"] {
+		out.References = in.References
+	}
+	if fields["body"] {
+		out.Body = in.Body
+	}
+	if fields["excerpt"] {
+		out.Excerpt = in.Excerpt
+	}
+	return out, nil
 }
 
 // Delete removes a record. allowMissing decides whether deleting an absent record is a

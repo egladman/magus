@@ -241,6 +241,8 @@ const (
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
 	FlagManInstallDryRun = "dry-run"
+	// memory put: --amend
+	FlagMemoryPutAmend = "amend"
 	// memory put: --body
 	FlagMemoryPutBody = "body"
 	// memory put: --excerpt
@@ -1123,6 +1125,7 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 
 // MemoryPutFlags are the flags declared for `magus memory put`.
 type MemoryPutFlags struct {
+	Amend   bool   // --amend
 	Type    string // --type
 	Status  string // --status
 	Body    string // --body
@@ -1132,7 +1135,8 @@ type MemoryPutFlags struct {
 // BindMemoryPut registers `magus memory put`'s flags on fs and returns the destination.
 func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	var f MemoryPutFlags
-	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, plan, or elimination")
+	fs.BoolVar(&f.Amend, FlagMemoryPutAmend, false, "Require the entry to exist: refuse a name the journal does not hold instead of creating it")
+	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, plan, or elimination. Required to create; on an existing entry it must match the type already stored")
 	fs.StringVar(&f.Status, FlagMemoryPutStatus, "", "Lifecycle label, e.g. accepted, active, done, stale")
 	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision, plan and elimination only")
 	fs.StringVar(&f.Excerpt, FlagMemoryPutExcerpt, "", "The evidence that ruled a hypothesis out, copied inline; elimination only and required there")

@@ -110,7 +110,10 @@ message UpdateMemoryRequest {
   // Required: the payload IS the request. An upsert with no memory names nothing to
   // create and carries nothing to write, so it can only be a client bug.
   Memory memory = 1 [(buf.validate.field).required = true];
-  google.protobuf.FieldMask update_mask = 2;  // empty = full replace (the only mode today)
+  // Names the fields to write; the rest keep what the record holds. Empty is a full
+  // replace HERE, because this caller is a person editing a form that submits every box,
+  // so an emptied one has to clear the field.
+  google.protobuf.FieldMask update_mask = 2;
   bool allow_missing = 3;                     // true => create when absent (AIP-134 upsert)
 }
 

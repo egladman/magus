@@ -1,11 +1,12 @@
 package interactive
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
-	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,7 +72,7 @@ func TestScoreProjectsCaseInsensitive(t *testing.T) {
 }
 
 // StateSuite groups tests that share the XDG_STATE_HOME setup: each needs a
-// fresh temp dir pointed at by the env var before the State helpers run.
+// fresh temp dir pointed at by the env var before the state helpers run.
 type StateSuite struct {
 	suite.Suite
 	dir string
@@ -86,48 +87,94 @@ func TestStateSuite(t *testing.T) {
 	suite.Run(t, new(StateSuite))
 }
 
-func (s *StateSuite) TestSaveAndLoadState() {
-	want := State{
-		LastTarget: map[string]string{"/path/to/proj": "build"},
+func (s *StateSuite) TestSaveAndLoadLastTarget() {
+	require.NoError(s.T(), SaveLastTarget("/path/to/proj", "build"))
+	assert.Equal(s.T(), "build", LastTarget("/path/to/proj"))
+}
+
+func (s *StateSuite) TestLastTargetIsEmptyForAnUnseenProject() {
+	assert.Empty(s.T(), LastTarget("/never/picked"))
+}
+
+func (s *StateSuite) TestSaveLastTargetReplacesTheEarlierPick() {
+	require.NoError(s.T(), SaveLastTarget("/path/to/proj", "build"))
+	require.NoError(s.T(), SaveLastTarget("/path/to/proj", "test"))
+	assert.Equal(s.T(), "test", LastTarget("/path/to/proj"))
+}
+
+// One file per project is what makes a project's entry independent of every other.
+func (s *StateSuite) TestProjectsGetSeparateFiles() {
+	require.NoError(s.T(), SaveLastTarget("/proj/a", "build"))
+	require.NoError(s.T(), SaveLastTarget("/proj/b", "lint"))
+
+	assert.Equal(s.T(), "build", LastTarget("/proj/a"))
+	assert.Equal(s.T(), "lint", LastTarget("/proj/b"))
+
+	entries, err := os.ReadDir(filepath.Join(s.dir, "magus", "x"))
+	require.NoError(s.T(), err)
+	assert.Len(s.T(), entries, 2, "each project owns one file")
+}
+
+// The filename is a digest, so a listing of the state dir cannot reproduce which
+// directories on this machine the user works in.
+func (s *StateSuite) TestFilenameDoesNotEmbedTheProjectPath() {
+	require.NoError(s.T(), SaveLastTarget("/home/someone/secret-client/api", "build"))
+
+	entries, err := os.ReadDir(filepath.Join(s.dir, "magus", "x"))
+	require.NoError(s.T(), err)
+	require.Len(s.T(), entries, 1)
+	assert.Regexp(s.T(), `^[0-9a-f]{16}$`, entries[0].Name())
+}
+
+// Parallel saves in different projects each survive whole. The moment they share one
+// document again, one of these reads comes back wrong.
+func (s *StateSuite) TestConcurrentSavesInDifferentProjectsAllSurvive() {
+	var wg sync.WaitGroup
+	for i := range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.NoError(s.T(), SaveLastTarget(fmt.Sprintf("/proj/%d", i), fmt.Sprintf("target%d", i)))
+		}()
 	}
-	require.NoError(s.T(), SaveState(want))
+	wg.Wait()
 
-	got, err := LoadState()
-	require.NoError(s.T(), err)
-	assert.Equal(s.T(), want, got)
+	for i := range 16 {
+		assert.Equal(s.T(), fmt.Sprintf("target%d", i), LastTarget(fmt.Sprintf("/proj/%d", i)))
+	}
 }
 
-func (s *StateSuite) TestLoadStateMissingFile() {
-	// No file written — a missing file is documented as not an error.
-	_, err := LoadState()
-	assert.NoError(s.T(), err)
+// Two pickers finishing in one project still race for its file, and one of the two
+// values must win whole.
+func (s *StateSuite) TestConcurrentSavesInOneProjectLeaveOneValueIntact() {
+	const dir = "/proj/contended"
+	// Lengths far enough apart that a torn write reads as neither name.
+	names := []string{"ci", "coverage-badge-and-then-some-much-longer-target-name"}
+
+	for range 50 {
+		var wg sync.WaitGroup
+		for _, n := range names {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				assert.NoError(s.T(), SaveLastTarget(dir, n))
+			}()
+		}
+		wg.Wait()
+
+		assert.Contains(s.T(), names, LastTarget(dir),
+			"the file holds a fragment rather than one saver's whole value")
+	}
+
+	entries, err := os.ReadDir(filepath.Join(s.dir, "magus", "x"))
+	require.NoError(s.T(), err)
+	assert.Len(s.T(), entries, 1, "concurrent saves leaked temp files")
 }
 
-func (s *StateSuite) TestSaveStateIsAtomic() {
-	// Confirm no .tmp file is left behind after a successful save.
-	require.NoError(s.T(), SaveState(State{}))
-	path, err := StatePath()
+func (s *StateSuite) TestStateDirIsUnderXDGStateHome() {
+	p, err := targetPath("/proj/a")
 	require.NoError(s.T(), err)
-	tmp := path + ".tmp"
-	_, err = os.Stat(tmp)
-	assert.Error(s.T(), err, "temp file %s still exists after SaveState", tmp)
-}
-
-func (s *StateSuite) TestSaveStateValidJSON() {
-	require.NoError(s.T(), SaveState(State{LastTarget: map[string]string{"proj": "test"}}))
-	path, err := StatePath()
-	require.NoError(s.T(), err)
-	b, err := os.ReadFile(path)
-	require.NoError(s.T(), err)
-	var check State
-	assert.NoError(s.T(), json.Unmarshal(b, &check), "saved file is not valid JSON")
-}
-
-func (s *StateSuite) TestStatePathUsesXDGStateHome() {
-	p, err := StatePath()
-	require.NoError(s.T(), err)
-	assert.True(s.T(), filepath.IsAbs(p), "StatePath returned relative path %q", p)
-	// Must be under our custom dir.
+	assert.True(s.T(), filepath.IsAbs(p), "targetPath returned relative path %q", p)
 	rel, err := filepath.Rel(s.dir, p)
 	require.NoError(s.T(), err)
 	assert.NotEmpty(s.T(), rel, "path %q is not under XDG_STATE_HOME %q", p, s.dir)

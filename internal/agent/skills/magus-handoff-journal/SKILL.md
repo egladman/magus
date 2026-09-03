@@ -43,12 +43,17 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to
-  rediscover.{{if .Full}} The CLI is often clearer for a human:{{end}}
+  rediscover. It writes only the fields you send, so refreshing a status keeps the
+  body and refs beside it{{if .Full}}. Send the fields you mean to change rather than
+  the whole record from memory: the store keeps no history, so a field you drop has
+  nothing to restore it from{{else}}, and a dropped field has no history behind
+  it{{end}}. Clearing a field or changing a type is a delete and a create.{{if .Full}} The CLI is often clearer for a human:{{end}}
 
   ```sh
   magus memory put release-gate --type plan \
     --ref 'command: magus affected ci' --status active \
     --body 'Run after the documentation render is committed.'
+  magus memory put release-gate --amend --status done
   ```
 
 - Use `delete` for entries that no longer earn their keep. Run `magus memory
@@ -58,9 +63,13 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} upserts a record
-  by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
-  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`).
+- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} creates a record
+  by `name` (a kebab slug), and on a name that exists writes the fields you send and
+  keeps the rest. Pass `refs` as one per line, `kind: target` (e.g.
+  `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`); sending
+  `refs` replaces the whole list.
+- Pass `allow_missing: false` (CLI `--amend`) when you mean to land on an entry that
+  already exists, so a mistyped name is an error rather than a second entry.
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`.{{if .Full}} A bare "we chose X" helps
   nobody; the `body` carries the why, and the refs anchor it to the code.{{else}} Put the why

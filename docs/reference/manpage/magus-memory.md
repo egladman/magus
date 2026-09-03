@@ -29,6 +29,13 @@ why it is dead, and an excerpt of the evidence that killed it. The excerpt is
 required because an output reference resolves only from the checkout that
 produced it, which leaves the ref beside it a best-effort handle.
 
+put creates an entry, and on one that already exists it writes only the fields
+you pass. Omitting a flag keeps what is stored, so refreshing a status cannot
+drop the body beside it - the store keeps no history and there would be nothing
+to restore it from. The cost is that an omitted flag cannot CLEAR a field
+either; delete the entry and create it again for that. Pass --amend to require
+the name to exist, and change a record's type by deleting and recreating it.
+
 verify is the maintenance verb: it reports entries that are malformed, stale,
 that link to something no longer there, or whose evidence no longer resolves.
 The same entries are reachable through the magus_memory MCP tool and the
@@ -36,6 +43,9 @@ console, so a journal written from the CLI is readable by an agent without
 either side learning a new format.
 
 ### memory put options
+
+**--amend**
+: Require the entry to exist: refuse a name the journal does not hold instead of creating it
 
 **--body** *string*
 : Short why/caption, decision, plan and elimination only
@@ -53,7 +63,7 @@ either side learning a new format.
 : Lifecycle label, e.g. accepted, active, done, stale
 
 **--type** *string*
-: Entry type: pointer, decision, plan, or elimination
+: Entry type: pointer, decision, plan, or elimination. Required to create; on an existing entry it must match the type already stored
 
 ## Subcommands
 
@@ -64,7 +74,7 @@ either side learning a new format.
 : Show one entry
 
 **put**
-: Create or replace a named entry
+: Create a named entry, or update the fields you name on one
 
 **delete**
 : Remove one entry
@@ -90,6 +100,12 @@ magus memory get release-checklist
 
 ```sh
 magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'
+```
+
+*Refresh one field and keep the rest*
+
+```sh
+magus memory put release-checklist --amend --status done
 ```
 
 *Check the journal's health*

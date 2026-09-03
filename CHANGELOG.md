@@ -42,6 +42,23 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Changed
 
+- **Writing a handoff entry that already exists now writes only the fields you sent.**
+  `magus memory put`, the `magus_memory` tool's `op=put`, and the console's
+  `UpdateMemory` used to replace the whole record, so refreshing a plan's status
+  silently dropped the body, the refs and the excerpt beside it. The store keeps no
+  history, and the result was indistinguishable from a first write. All three now
+  follow AIP-134: an absent update mask means the fields the caller populated, and
+  everything else keeps what is stored. The cost is the one AIP-134 names, and it is
+  the reason a mask exists at all: an omitted field can no longer CLEAR a stored
+  value, so delete the entry and create it again for that, or name the field in an
+  explicit `update_mask`. Two contract points come with it. A record cannot be
+  updated into another type, because the type is the axis a listing reports and it
+  decides which fields the entry may carry; delete and recreate instead. And
+  `allow_missing` now decides whether an absent name is created or refused, spelled
+  `--amend` on the CLI, so a mistyped name is an error rather than a stray second
+  entry. `MemoryService.UpdateMemory` accepts a partial `update_mask` where it used
+  to reject one; an absent mask stays a full replace THERE, because its caller is a
+  person editing a form that shows every field and an emptied box has to clear one.
 - **One unreadable handoff entry no longer takes the readable ones down with it.**
   `magus memory` used to fail a whole listing when any single record failed to parse or
   validate, which disabled the surface a person would use to find and delete that record.
@@ -90,6 +107,26 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.0
 
 ### Fixed
 
+- **`vcs\tags` no longer renames a tag that shares its name with a branch.** The
+  git backend asked for `%(refname:short)`, which abbreviates a ref only as far as
+  it stays unambiguous - so a repository holding both a `v0.4.0` branch and a
+  `v0.4.0` tag got the tag back as `tags/v0.4.0`. That name matches no `v*`
+  pattern and splits into the module prefix `tags/`, so the tag was invisible to
+  every caller asking whether a release exists: the `tagged` charm declared a
+  tagged HEAD untagged, and `magus run release` surveyed the repository as still
+  sitting on the previous version. The v0.4.0 release ran against a repository
+  whose own release tag it could not see. The name is now the tag as written.
+- **A release commit carrying several tags no longer names its assets after the
+  wrong one.** magus's own build read its version from `git describe`, which picks
+  arbitrarily among the tags on one commit; cutting v0.4.0 tagged three nested
+  library modules on the same commit and describe chose one of those. Every
+  archive was then named `magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz` - a
+  path, not a filename - so the builds landed in a nested directory the release
+  workflow's upload glob never looked in, and the release published no downloadable
+  assets while reporting success. The version is now the root release tag on HEAD
+  when there is one, and `release-build` refuses outright, before it compiles
+  anything, if the version it resolved would put a directory separator in an asset
+  name.
 - `magus describe file` no longer classifies a path that is not in the workspace.
   It is pure glob matching, and `**/*.go` matches an absolute path from another
   checkout as happily as a relative one - so a fabricated or mistyped path came

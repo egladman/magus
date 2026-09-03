@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
@@ -841,13 +842,10 @@ func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, boo
 	if d, err := readDescriptor(filepath.Join(dir, orphans[0]+descExt)); err != nil || (d.Ref != "" && d.Ref != ref) {
 		return "", false
 	}
-	// Temp + rename, so a concurrent reader never sees a half-written blob.
-	tmp := filepath.Join(dir, orphans[0]+outExt+".adopt.tmp")
-	if os.WriteFile(tmp, output, 0o644) != nil {
-		return "", false
-	}
-	if os.Rename(tmp, filepath.Join(dir, orphans[0]+outExt)) != nil {
-		_ = os.Remove(tmp)
+	// Atomic, so a concurrent reader never sees a half-written blob, and uniquely named:
+	// the store is shared machine-wide, so two adopters of this stem can be mid-write at
+	// once.
+	if file.WriteFileAtomic(filepath.Join(dir, orphans[0]+outExt), output, 0o644) != nil {
 		return "", false
 	}
 	return ref, true

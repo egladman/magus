@@ -168,8 +168,44 @@ magus\project({
     },
 });
 
+// The ROOT release tag HEAD sits EXACTLY on, or "" when HEAD carries none. Compares revision
+// ids, so it cannot read distance past a tag as the prerelease a version string would show.
+//
+// Both filters earn their place on a release commit. `v*` is a refspec rather than a version
+// filter and also selects this repository's `verified-refinements` tag; and a release commit
+// carries a tag per independently-versioned module, so an empty `t.prefix` is what keeps the
+// root from adopting libs/gopherbuzz/v0.1.0.
+fun exact_release_tag() > str !> any {
+    final head = vcs\commit().id;
+    final tags = vcs\tags("v*");
+    foreach (t in tags) {
+        if (t.prefix != "") { continue; }
+        if (!releaser\isReleaseTag(t.name)) { continue; }
+        if (t.id == head) { return t.name; }
+    }
+    return "";
+}
+
+// The version stamped into the binary, into BUILDINFO, and into every release asset name.
+//
+// A root release tag on HEAD beats describe(), because `git describe --tags` has no rule for
+// choosing among the tags on one commit and a release commit carries one per
+// independently-versioned module. Cutting v0.4.0 it chose libs/diagnostics/v0.1.0, so every
+// asset was named magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz, a path rather than a
+// filename, and the release uploaded nothing.
+//
+// A dirty tree appends describe's `-dirty` instead of falling back to describe, which would
+// re-enter that choice. The suffix is the only signal that a build is not the tagged commit.
+//
+// describe() still answers for an untagged HEAD, where it can pick a namespaced tag as the
+// base; build_release_variant's separator guard is what catches that.
 fun version() > str !> any {
     try {
+        final tag = exact_release_tag();
+        if (tag != "") {
+            if (vcs\isDirty()) { return tag + "-dirty"; }
+            return tag;
+        }
         final v = vcs\describe();
         if (v == "") { return "unknown"; }
         return v;
@@ -526,21 +562,6 @@ fun publish_registries(ctx: magus\Context) > [Registry] !> any {
     if (!ctx.hasCharm("cd")) { return []; }
     if (channel(ctx) == "commit") { return [GHCR]; }
     return REGISTRIES;
-}
-
-// The release tag HEAD sits EXACTLY on, or "" when HEAD is not itself tagged.
-//
-// version() cannot answer this and must not be asked to. describe() renders an untagged
-// commit as v0.4.0-3-gabc123, whose prerelease component is `3-gabc123`, so a version
-// string alone cannot tell a genuine prerelease (`rc.1`) from mere distance past a stable
-// tag - and reading it as the former would file an ordinary mid-development commit under a
-// published channel. Comparing revision ids is exact and says nothing it cannot know.
-fun exact_release_tag() > str !> any {
-    final head = vcs\commit().id;
-    foreach (t in vcs\tags("v*")) {
-        if (t.id == head) { return t.name; }
-    }
-    return "";
 }
 
 // The active channel: "commit", "unstable", or "stable".
@@ -1345,8 +1366,22 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // armv6/armv7 are asset names, not GOARCHes: fold them back to GOARCH=arm + GOARM.
     final goarm = goarm_level(goos, goarch);
 
-    fs\mkdirAll("dist");
     final v = version();
+    final name = "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz";
+    // Before the first write, beside goarm_level: a request that cannot produce a usable
+    // asset should leave no trace and pay for no cross-compile.
+    //
+    // A version carrying a "/" turns the asset NAME into a PATH, so fs\join writes
+    // dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz and the build is green
+    // while the release workflow's dist/magus_*.tar.gz glob matches nothing. That shipped.
+    if (fs\basename(name) != name) {
+        throw "release-build: version `" + v + "` contains a path separator, so the asset "
+            + "would be written to `" + fs\join("dist", name) + "` instead of a file in "
+            + "dist/ that the release upload can find. Check that HEAD's root release tag "
+            + "resolves.";
+    }
+
+    fs\mkdirAll("dist");
     var binary = "magus";
     if (goos == "windows") { binary = "magus.exe"; }
 
@@ -1433,7 +1468,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
         + "variant:  " + variant + "\n"
         + "\nRun `go version -m magus` for the full module list and build settings.\n");
 
-    final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
+    final asset = fs\join("dist", name);
     archive\compress(stage, asset, {});
     fs\removeAll(stage);
 

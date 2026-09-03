@@ -19,6 +19,13 @@ why it is dead, and an excerpt of the evidence that killed it. The excerpt is
 required because an output reference resolves only from the checkout that
 produced it, which leaves the ref beside it a best\-effort handle.
 .PP
+put creates an entry, and on one that already exists it writes only the fields
+you pass. Omitting a flag keeps what is stored, so refreshing a status cannot
+drop the body beside it \- the store keeps no history and there would be nothing
+to restore it from. The cost is that an omitted flag cannot CLEAR a field
+either; delete the entry and create it again for that. Pass \-\-amend to require
+the name to exist, and change a record's type by deleting and recreating it.
+.PP
 verify is the maintenance verb: it reports entries that are malformed, stale,
 that link to something no longer there, or whose evidence no longer resolves.
 The same entries are reachable through the magus_memory MCP tool and the
@@ -26,6 +33,9 @@ console, so a journal written from the CLI is readable by an agent without
 either side learning a new format.
 .SS memory put options
 .RS
+.TP
+\fB\-\-amend\fR
+Require the entry to exist: refuse a name the journal does not hold instead of creating it
 .TP
 \fB\-\-body\fR \fIstring\fR
 Short why/caption, decision, plan and elimination only
@@ -43,7 +53,7 @@ Name of another entry this one relates to; repeat as needed
 Lifecycle label, e.g. accepted, active, done, stale
 .TP
 \fB\-\-type\fR \fIstring\fR
-Entry type: pointer, decision, plan, or elimination
+Entry type: pointer, decision, plan, or elimination. Required to create; on an existing entry it must match the type already stored
 .RE
 .SH SUBCOMMANDS
 .RS
@@ -55,7 +65,7 @@ Show entries and any repair warnings
 Show one entry
 .TP
 \fBput\fR
-Create or replace a named entry
+Create a named entry, or update the fields you name on one
 .TP
 \fBdelete\fR
 Remove one entry
@@ -80,6 +90,12 @@ magus memory get release-checklist
 .PP
 .EX
 magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'
+.EE
+.PP
+\fIRefresh one field and keep the rest\fR
+.PP
+.EX
+magus memory put release-checklist --amend --status done
 .EE
 .PP
 \fICheck the journal's health\fR
