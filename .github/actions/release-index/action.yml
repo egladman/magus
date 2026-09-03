@@ -61,7 +61,18 @@ runs:
         git switch -c "$branch"
         git add -- "${paths[@]}"
         git commit -m "Publish the release index signed for $REASON"
-        git push origin "$branch"
+        # Force, so a re-run of a failed publish job survives its own earlier push: the
+        # branch name is derived from HEAD and owned by this action alone, and a re-run
+        # regenerates the same content under a fresh commit.
+        git push --force origin "$branch"
+        if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+          echo "a pull request for $branch is already open"
+          exit 0
+        fi
+        # A refused creation (repository Actions settings can forbid workflows from
+        # opening pull requests) must not fail the job: the pushed branch is the
+        # deliverable, later jobs gate on this one, and the warning carries the one
+        # manual step left.
         gh pr create --base main --head "$branch" \
           --title "Publish the release index signed for $REASON" \
           --body "$(cat <<'BODY'
@@ -73,4 +84,4 @@ runs:
         main renders the docs site, which copies the tracked pair out verbatim
         rather than regenerating it.
         BODY
-        )"
+        )" || echo "::warning title=release-index::could not open the pull request; the signed branch is pushed - open it at https://github.com/$GITHUB_REPOSITORY/pull/new/$branch"
