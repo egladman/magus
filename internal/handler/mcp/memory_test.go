@@ -29,10 +29,9 @@ func TestParseMemoryRefs(t *testing.T) {
 	assert.Error(t, err, "a ref without a kind: prefix is rejected")
 }
 
-// TestMemoryPutMatchesTheCLIContract pins MCP parity with `magus memory put`. This is the
-// blindest of the three write surfaces - an agent sends a few params and sees nothing of
-// what the name already holds - so the fields it omits have to survive, and allow_missing
-// has to be the way it says it means to land on something that exists.
+// TestMemoryPutMatchesTheCLIContract pins MCP parity with `magus memory put`. An agent
+// sends a few params and sees nothing of what the name already holds, so the fields it
+// omits have to survive.
 func TestMemoryPutMatchesTheCLIContract(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	tool := &memoryTool{opts: Options{Magus: fixtureMagus(t)}}

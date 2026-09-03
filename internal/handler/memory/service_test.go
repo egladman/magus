@@ -86,9 +86,8 @@ func TestUpdateHonorsAPartialMask(t *testing.T) {
 	assert.Equal(t, "project:magus", got.Msg.GetRefs()[0].GetTarget())
 }
 
-// TestUpdateWithNoMaskIsAFullReplace pins the console's stated decision. Its caller is a
-// person editing a form that shows every field, so an emptied box has to clear the field
-// rather than read as "unchanged" - the opposite default from the agent-facing surfaces.
+// TestUpdateWithNoMaskIsAFullReplace pins the console's stated decision: its caller is a
+// person editing a form that submits every box, so an emptied one clears the field.
 func TestUpdateWithNoMaskIsAFullReplace(t *testing.T) {
 	s := newTestService(t)
 	ctx := context.Background()

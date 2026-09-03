@@ -92,9 +92,8 @@ func (t *memoryTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 			Refs:       refs,
 			References: splitCommaList(paramString(req.Params, "references", "")),
 		}
-		// No mask: the params the caller sent ARE the mask, mirroring the CLI. allow_missing
-		// keeps the proto's spelling here rather than the CLI's --amend, because every other
-		// param on this tool is the wire name.
+		// No mask: the params the caller sent are the fields to write. allow_missing keeps
+		// the wire spelling here, where every other param is the wire name.
 		stored, err := memory.Update(root, rec, memory.UpdateOptions{
 			AllowMissing: paramBool(req.Params, "allow_missing", true),
 		})

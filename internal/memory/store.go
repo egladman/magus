@@ -178,12 +178,11 @@ func repoIdentity(root string) string {
 // warning, leaving the rest of the journal readable by the older binary that met it.
 var ErrUnknownType = errors.New("memory: unknown record type")
 
-// ErrInvalid marks a write whose request is wrong rather than whose storage failed: a bad
-// name, an unknown field path, a type change, or a merged record the schema rejects. A
-// frontend matches it to answer InvalidArgument without re-deriving why.
+// ErrInvalid marks a write the caller got wrong rather than one that failed to store, so a
+// frontend can answer InvalidArgument without re-deriving why.
 var ErrInvalid = errors.New("memory: invalid record")
 
-// invalidError carries a specific message while matching ErrInvalid.
+// invalidError matches ErrInvalid without prefixing its text onto the message.
 type invalidError struct{ err error }
 
 func (e invalidError) Error() string   { return e.err.Error() }
@@ -410,44 +409,35 @@ func Get(root, name string) (Record, error) {
 	return readRecordFile(filepath.Join(dir, recordsSubdir, name+".md"))
 }
 
-// mutableFields is the closed set of field paths an update may write, spelled as the proto
-// field names the console sends in an update mask. Name is the identity that selects the
-// record and the timestamps are server-set, so neither is here.
+// mutableFields is the closed set a mask may name, spelled as the proto's fields so a
+// console mask needs no translation. Name is the identity and the timestamps are server-set.
 var mutableFields = []string{"type", "status", "refs", "references", "body", "excerpt"}
 
-// MutableFields returns the field paths an UpdateOptions mask may name. A caller that means
-// a full replace passes all of them.
+// MutableFields returns every field path a mask may name. A caller that means a full
+// replace passes all of them.
 func MutableFields() []string { return slices.Clone(mutableFields) }
 
-// UpdateOptions is the AIP-134 update contract: which fields the write touches, and whether
-// a name the journal does not hold is created or refused.
+// UpdateOptions carries Update's AIP-134 contract: the field mask, and whether an absent
+// name is created.
 type UpdateOptions struct {
-	// Mask names the fields to write, from MutableFields. Empty means the implied mask:
-	// every field the caller populated. An implied mask cannot unset a field, because an
-	// empty value in it reads as "unchanged"; a caller that means to clear one names it
-	// explicitly.
+	// Mask names the fields to write, from MutableFields. Empty means the fields the
+	// caller populated, which cannot unset one: an empty value there reads as unchanged,
+	// so a caller that means to clear a field names it.
 	Mask []string
-	// AllowMissing creates the record when the name is absent. Without it an absent name
-	// is os.ErrNotExist, so a mistyped name is an error instead of a stray second entry.
+	// AllowMissing creates the record when the name is absent; without it an absent name
+	// is os.ErrNotExist, so a mistyped name is an error rather than a second entry.
 	AllowMissing bool
 }
 
-// Update writes a record under AIP-134 update semantics: the fields the caller names are
-// written and every other field keeps what the journal already holds. This is what makes an
-// amend safe. The store keeps no history, so under a full replace an update that said
-// nothing about a decision's body dropped it, read exactly like a first write, and left
-// nothing to restore it from.
+// Update writes the fields opts.Mask names and keeps every other field the journal holds.
+// The store has no history, so a field the caller does not name has nothing to restore it
+// from. Created is preserved, Updated stamped, the file written atomically, and the stored
+// record returned so a caller can echo the server-set fields back.
 //
-// Type is refused rather than merged. It is the closed subject axis a listing reports, and
-// it decides which fields an entry may carry, so a decision that became a pointer would
-// both misreport itself and lose its caption to Validate. Naming the type already stored is
-// a no-op, so a caller that always sends every field keeps working; changing what a record
-// IS is a delete and a create.
-//
-// Validate runs on the MERGED record, so an elimination keeps its excerpt across an update
-// that only rewrites the body, and an update that would break an invariant is refused
-// whole. Created is preserved and Updated stamped, and the file is written atomically. It
-// returns the stored record so a caller can echo the server-set fields back.
+// Type is refused rather than merged: it is the subject axis a listing reports and it
+// decides which fields the entry may carry, so changing it is a delete and a create.
+// Naming the type already stored is a no-op. Validate runs on the MERGED record, so an
+// invariant an update would break is refused whole.
 func Update(root string, r Record, opts UpdateOptions) (Record, error) {
 	if !nameRE.MatchString(r.Name) {
 		return Record{}, invalidf("memory: name %q must be a kebab slug (lowercase alphanumerics and hyphens)", r.Name)
@@ -494,9 +484,8 @@ func Update(root string, r Record, opts UpdateOptions) (Record, error) {
 	return merged, nil
 }
 
-// maskFields resolves the fields an update writes: the mask the caller sent, or every field
-// it populated. A whitespace-only body or excerpt counts as unpopulated, because
-// marshalRecord trims both and the stored record would not carry it either way.
+// maskFields resolves an update's fields. A whitespace-only body or excerpt counts as
+// unpopulated: marshalRecord trims both, so the stored record would not carry it anyway.
 func maskFields(r Record, mask []string) (map[string]bool, error) {
 	if len(mask) > 0 {
 		out := make(map[string]bool, len(mask))
@@ -518,10 +507,9 @@ func maskFields(r Record, mask []string) (map[string]bool, error) {
 	}, nil
 }
 
-// mergeBase reads the record an update merges into, reporting whether the name is taken at
-// all. An entry too malformed to parse is fatal to a partial update and harmless to one
-// that names every field: replacing all of them needs nothing from disk, which is what
-// keeps the console able to repair an entry no binary here can read.
+// mergeBase reads the record an update merges into and reports whether the name is taken.
+// An unparseable entry is fatal to a partial update and harmless to one naming every field,
+// which is what keeps the console able to repair an entry nothing here can read.
 func mergeBase(path string, fields map[string]bool) (Record, bool, error) {
 	_, statErr := os.Stat(path)
 	switch {
@@ -542,7 +530,6 @@ func mergeBase(path string, fields map[string]bool) (Record, bool, error) {
 	return Record{}, true, nil
 }
 
-// applyFields writes the masked fields of in over prev.
 func applyFields(prev, in Record, fields map[string]bool) (Record, error) {
 	out := prev
 	out.Name = in.Name

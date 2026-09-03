@@ -44,11 +44,10 @@ than a ref you can anchor, it is theirs to record, not yours.
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to
   rediscover. It writes only the fields you send, so refreshing a status keeps the
-  body and refs beside it{{if .Full}}. Rely on that rather than re-sending the whole
-  record from memory: the store keeps no history, so a field you drop is gone with
-  nothing to restore it from{{else}}, and a dropped field has no history to restore
-  it from{{end}}. Clearing a field means deleting the entry and creating it again,
-  and a record cannot be updated into another type.{{if .Full}} The CLI is often clearer for a human:{{end}}
+  body and refs beside it{{if .Full}}. Send the fields you mean to change rather than
+  the whole record from memory: the store keeps no history, so a field you drop has
+  nothing to restore it from{{else}}, and a dropped field has no history behind
+  it{{end}}. Clearing a field or changing a type is a delete and a create.{{if .Full}} The CLI is often clearer for a human:{{end}}
 
   ```sh
   magus memory put release-gate --type plan \
@@ -70,8 +69,7 @@ than a ref you can anchor, it is theirs to record, not yours.
   `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`); sending
   `refs` replaces the whole list.
 - Pass `allow_missing: false` (CLI `--amend`) when you mean to land on an entry that
-  already exists{{if .Full}}, so a mistyped name is an error rather than a second entry
-  nobody goes looking for{{else}}, so a mistyped name is an error{{end}}.
+  already exists, so a mistyped name is an error rather than a second entry.
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`.{{if .Full}} A bare "we chose X" helps
   nobody; the `body` carries the why, and the refs anchor it to the code.{{else}} Put the why

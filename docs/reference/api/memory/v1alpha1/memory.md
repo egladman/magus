@@ -166,7 +166,7 @@ Source: [memory.proto:109](https://github.com/egladman/magus/blob/main/proto/mag
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `memory` | [Memory](#memory) | 1 | _required_ Required: the payload IS the request. An upsert with no memory names nothing to create and carries nothing to write, so it can only be a client bug. |
-| `update_mask` | FieldMask | 2 | Names the fields to write; every field the record already holds is kept. Empty is a full replace on THIS service, because its caller is a person editing a form that shows every field, so an emptied box has to clear the field rather than read as "unchanged". |
+| `update_mask` | FieldMask | 2 | Names the fields to write; the rest keep what the record holds. Empty is a full replace HERE, because this caller is a person editing a form that submits every box, so an emptied one has to clear the field. |
 | `allow_missing` | bool | 3 | true => create when absent (AIP-134 upsert) |
 
 Used by: [UpdateMemory (request)](memory.md#updatememory).

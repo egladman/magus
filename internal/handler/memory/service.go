@@ -54,17 +54,12 @@ func (s *Service) ListMemories(_ context.Context, _ *connect.Request[memoryv1.Li
 	return connect.NewResponse(&memoryv1.ListMemoriesResponse{Memories: out}), nil
 }
 
-// UpdateMemory writes a record keyed by memory.name under AIP-134 semantics: update_mask
-// names the fields to write, and allow_missing decides whether an absent name is created or
-// answered NotFound.
+// UpdateMemory writes a record keyed by memory.name: update_mask names the fields to write,
+// allow_missing decides whether an absent name is created or answered NotFound.
 //
-// An ABSENT mask means every field here, not the fields the request populated. This surface
-// is a person editing a record they can see in full, and a form submits every field it
-// shows: reading an emptied box as "unchanged" would make clearing a body silently fail on
-// the one surface that exists to repair agent-written entries. It also keeps a full replace
-// available for a record too malformed for the store to merge into. The agent-facing
-// surfaces take the opposite default, where the caller sends a few fields and means only
-// those.
+// An ABSENT mask means every field here rather than the fields the request populated,
+// because this caller is a person editing a form that submits every box it shows, so an
+// emptied one has to clear the field instead of reading as unchanged.
 func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.UpdateMemoryRequest]) (*connect.Response[memoryv1.Memory], error) {
 	mask := req.Msg.GetUpdateMask().GetPaths()
 	if len(mask) == 0 {

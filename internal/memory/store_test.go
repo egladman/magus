@@ -51,8 +51,7 @@ func testRoot(t *testing.T) string {
 	return t.TempDir()
 }
 
-// upsert is the CLI's and the MCP tool's default mode: create when absent, and write the
-// populated fields when the name is taken.
+// upsert is the CLI's and the MCP tool's default mode.
 func upsert(root string, r Record) (Record, error) {
 	return Update(root, r, UpdateOptions{AllowMissing: true})
 }
@@ -115,8 +114,7 @@ func TestPutPreservesCreatedOnUpdate(t *testing.T) {
 
 // TestUpdateKeepsFieldsTheCallerDidNotSend is the property this store exists to guarantee:
 // there is no history behind an entry, so an update that says nothing about a field must
-// leave it alone. Refreshing a status used to drop the body, the refs and the excerpt beside
-// it, and the result read exactly like a first write.
+// leave it alone.
 func TestUpdateKeepsFieldsTheCallerDidNotSend(t *testing.T) {
 	root := testRoot(t)
 	first, err := upsert(root, Record{
@@ -139,9 +137,8 @@ func TestUpdateKeepsFieldsTheCallerDidNotSend(t *testing.T) {
 	assert.Equal(t, second, got)
 }
 
-// TestUpdateReplacesTheFieldsItIsSent covers the other half: a field the caller sends wins,
-// and a repeated field is replaced rather than appended to, so a caller correcting a ref
-// list does not end up with both.
+// TestUpdateReplacesTheFieldsItIsSent covers the other half. A repeated field is replaced
+// rather than appended to, so correcting a ref list does not end up with both.
 func TestUpdateReplacesTheFieldsItIsSent(t *testing.T) {
 	root := testRoot(t)
 	_, err := upsert(root, Record{
@@ -161,9 +158,8 @@ func TestUpdateReplacesTheFieldsItIsSent(t *testing.T) {
 	assert.Equal(t, "Run the affected gate before tagging.", got.Body)
 }
 
-// TestUpdateWithoutAllowMissingRefusesAnAbsentName is AIP-134's update-only mode, reached
-// from the CLI as --amend and from the console as allow_missing=false. It turns a mistyped
-// name into an error rather than a second entry nobody goes looking for.
+// TestUpdateWithoutAllowMissingRefusesAnAbsentName is the update-only mode, reached from
+// the CLI as --amend. It turns a mistyped name into an error rather than a second entry.
 func TestUpdateWithoutAllowMissingRefusesAnAbsentName(t *testing.T) {
 	root := testRoot(t)
 	_, err := Update(root, Record{Name: "ghost", Status: "done"}, UpdateOptions{})
@@ -174,9 +170,8 @@ func TestUpdateWithoutAllowMissingRefusesAnAbsentName(t *testing.T) {
 	assert.Empty(t, recs, "a refused update writes nothing")
 }
 
-// TestUpdateRefusesATypeChange pins the one field an update will not merge. The type is the
-// subject axis a listing reports, and it decides which fields the entry may carry, so a
-// decision quietly becoming a pointer would misreport itself and lose its caption.
+// TestUpdateRefusesATypeChange pins the one field an update will not merge: the type is the
+// subject axis a listing reports, and it decides which fields the entry may carry.
 func TestUpdateRefusesATypeChange(t *testing.T) {
 	root := testRoot(t)
 	first, err := upsert(root, Record{
@@ -192,15 +187,14 @@ func TestUpdateRefusesATypeChange(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, first, got, "the refused update left the entry untouched")
 
-	// Sending the type it already has is a no-op, so a caller that always passes every
-	// field keeps working.
+	// Sending the type it already has is a no-op.
 	_, err = upsert(root, Record{Name: "hasher-choice", Type: TypeDecision, Status: "accepted"})
 	assert.NoError(t, err)
 }
 
 // TestUpdateValidatesTheMergedRecord proves the invariants hold across a partial write: an
-// elimination that keeps its excerpt through a body rewrite stays valid, and a merge that
-// would break an invariant is refused whole rather than half-written.
+// elimination keeps its excerpt through a body rewrite, and a merge that would break an
+// invariant is refused whole rather than half-written.
 func TestUpdateValidatesTheMergedRecord(t *testing.T) {
 	root := testRoot(t)
 	_, err := upsert(root, Record{
@@ -222,9 +216,8 @@ func TestUpdateValidatesTheMergedRecord(t *testing.T) {
 	assert.Equal(t, "BAR0: 256M", kept.Excerpt)
 }
 
-// TestUpdateWithAnExplicitMaskClears is why the mask exists at all. An implied mask reads an
-// empty value as "unchanged", so the console - a person editing a form that shows every
-// field - names the fields it writes and an emptied box clears one.
+// TestUpdateWithAnExplicitMaskClears is why the mask exists at all. Without one an empty
+// value reads as unchanged, so a caller that means to clear a field names it.
 func TestUpdateWithAnExplicitMaskClears(t *testing.T) {
 	root := testRoot(t)
 	_, err := upsert(root, Record{
@@ -244,8 +237,8 @@ func TestUpdateWithAnExplicitMaskClears(t *testing.T) {
 }
 
 // TestUpdateRepairsAnUnreadableEntryOnlyWithEveryField keeps the console's safety valve
-// working. A partial write has nothing to merge into and says so; a full replace needs
-// nothing from disk, which is how a person fixes an entry no binary here can parse.
+// working: a full replace needs nothing from disk, which is how a person fixes an entry
+// nothing here can parse.
 func TestUpdateRepairsAnUnreadableEntryOnlyWithEveryField(t *testing.T) {
 	root := testRoot(t)
 	_, err := upsert(root, Record{Name: "broken", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}})

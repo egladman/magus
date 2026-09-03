@@ -174,8 +174,8 @@ func memoryPut(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "a pointer carries no prose, and every other type takes a short why in --body.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "On an entry that already exists this writes only the flags you pass; the rest")
-			fmt.Fprintln(os.Stderr, "keep what is stored. An omitted flag therefore cannot clear a field, and a type")
-			fmt.Fprintln(os.Stderr, "change is refused: delete the entry and create it again for either.")
+			fmt.Fprintln(os.Stderr, "keep what is stored. An omitted flag cannot clear a field, and a type change is")
+			fmt.Fprintln(os.Stderr, "refused: delete the entry and create it again for either.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "An elimination records a hypothesis an investigation killed, and needs --excerpt.")
 			fmt.Fprintln(os.Stderr, "An output ref resolves only from the checkout that minted it, so copy the evidence")
@@ -199,9 +199,8 @@ func memoryPut(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	// No mask: the flags the caller typed ARE the mask, which is the reading AIP-134 gives
-	// an absent one. --amend is the CLI's spelling of allow_missing=false, because a
-	// negated boolean flag does not read as a sentence.
+	// No mask: the flags the caller typed are the fields to write. --amend is this
+	// surface's spelling of allow_missing=false.
 	rec, err := store.Update(root, store.Record{
 		Name: pos[0], Type: store.RecordType(pf.Type), Status: pf.Status, Body: pf.Body,
 		Excerpt: pf.Excerpt, Refs: parsed, References: references,
