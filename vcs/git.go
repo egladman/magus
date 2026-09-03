@@ -726,8 +726,14 @@ func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 // got no match for exactly the tags a release process creates. %(*objectname) is the
 // dereferenced commit, and is EMPTY for a lightweight tag, so the %(if) picks whichever of
 // the two is the commit.
+//
+// The name atom is %(refname:lstrip=2). %(refname:short) abbreviates only as far as the ref
+// stays unambiguous, so under it a branch sharing a tag's name renders that tag as
+// "tags/v0.4.0", which matches no "v*" pattern and carries "tags/" into VCSTag.Prefix. The
+// v0.4.0 release ran against a repository whose own tag it could not see. lstrip=2 drops the
+// two refs/tags/ components this query already restricts itself to.
 func (v gitVCS) Tags(ctx context.Context, dir, pattern string) ([]types.VCSTag, error) {
-	const format = "%(refname:short)\t%(creatordate:iso-strict)\t" +
+	const format = "%(refname:lstrip=2)\t%(creatordate:iso-strict)\t" +
 		"%(if)%(*objectname)%(then)%(*objectname)%(else)%(objectname)%(end)"
 	out, err := vcsOutput(ctx, dir, "git", "for-each-ref", "--sort=-creatordate", "--format="+format, "refs/tags")
 	if err != nil {

@@ -639,6 +639,51 @@ func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
 	}
 }
 
+// TestTagsNamesATagSharedWithABranch pins %(refname:lstrip=2) over %(refname:short), which
+// abbreviates refs/tags/v1.0.0 to "tags/v1.0.0" when a branch shares the name and so hides
+// the tag from every caller asking whether HEAD carries a release.
+func TestTagsNamesATagSharedWithABranch(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	gitRun(t, repo, "tag", "v1.0.0")
+	gitRun(t, repo, "branch", "v1.0.0")
+
+	tags, err := gitVCS{}.Tags(t.Context(), repo, "v*")
+	require.NoError(t, err, "Tags")
+	require.Len(t, tags, 1)
+	assert.Equal(t, "v1.0.0", tags[0].Name)
+	assert.Empty(t, tags[0].Prefix, "a root tag carries no module prefix")
+}
+
+// TestTagsSeesLooseAndPackedRefs covers both ref storages in one repository, since a release
+// cut today is a loose file while the repository's history is packed, and pins that a
+// wildcard still stops at "/".
+func TestTagsSeesLooseAndPackedRefs(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	gitRun(t, repo, "tag", "v1.0.0")
+	gitRun(t, repo, "tag", "libs/diagnostics/v0.1.0")
+	gitRun(t, repo, "pack-refs", "--all")
+	gitRun(t, repo, "tag", "v1.1.0")
+
+	all, err := gitVCS{}.Tags(t.Context(), repo, "")
+	require.NoError(t, err, "Tags")
+	names := make([]string, 0, len(all))
+	for _, tag := range all {
+		names = append(names, tag.Name)
+	}
+	assert.ElementsMatch(t, []string{"v1.0.0", "libs/diagnostics/v0.1.0", "v1.1.0"}, names)
+
+	roots, err := gitVCS{}.Tags(t.Context(), repo, "v*")
+	require.NoError(t, err, "Tags")
+	rootNames := make([]string, 0, len(roots))
+	for _, tag := range roots {
+		rootNames = append(rootNames, tag.Name)
+	}
+	assert.ElementsMatch(t, []string{"v1.0.0", "v1.1.0"}, rootNames,
+		"a wildcard stops at / so the namespaced tag stays out")
+}
+
 // TestChangedFilesKeepsNonASCIIPathsRaw pins core.quotePath=false on BOTH of ChangedFiles'
 // probes. git otherwise renders a path outside ASCII as a C-quoted, backslash-escaped
 // literal ("uni/caf\303\251.md"), and project.normalizeFiles only trims and slash-converts -
