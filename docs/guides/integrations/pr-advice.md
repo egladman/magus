@@ -117,7 +117,7 @@ which is not a question a working tree can answer.
 | `doctor`                | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                           |
 | `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                     |
 | `conformance`           | a new target's name diverges from what the rest of the workspace already calls the same work                        |
-| `missing-target`        | the change declares a project, or drops a target, leaving it short of one its kind overwhelmingly has               |
+| `missing-target`        | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                   |
 | `api-surface`           | the change touches symbols reachable outside the project that defines them, which is what a version bump is about   |
 | `first-contribution`    | the author has no merged pull request here yet                                                                      |
 | `fix-generated-drift`   | off by default; regenerates drifted files and pushes them, and only with a label                                    |
