@@ -22,14 +22,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// rootOnlyWS is a WorkspaceRepository that answers only Root(); the file resolver
-// reads nothing else off the workspace, so the embedded nil interface is never called.
+// rootOnlyWS is a WorkspaceRepository that answers Root() and an empty project
+// inventory; everything else is the embedded nil interface, so a reader this double
+// has not thought about panics rather than getting a plausible zero value.
+//
+// All() is here because running a target now asks the workspace whether that target
+// declares a timeout (types.Target.Timeout), which is a second consumer this file's
+// "the file resolver reads nothing else" note no longer covers. Empty is the right
+// answer: no project means no policy means no ceiling.
 type rootOnlyWS struct {
 	types.WorkspaceRepository
 	root string
 }
 
-func (w rootOnlyWS) Root() string { return w.root }
+func (w rootOnlyWS) Root() string          { return w.root }
+func (w rootOnlyWS) All() []*types.Project { return nil }
 
 func TestLoadLocalBuzzLibraryUsesProjectRootImports(t *testing.T) {
 	root := t.TempDir()

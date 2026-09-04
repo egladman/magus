@@ -153,7 +153,21 @@ magus\project({
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
-        "security": {"skip_cache": "depends on trivy's license classifier version, which no cache key can see"},
+        // timeout because this target is the one that reaches the network: govulncheck
+        // pulls the vulnerability database and trivy its license data, and neither has an
+        // output-capturing failure mode when the far end stops answering. On 2026-09-04 a
+        // gate sat for 65 minutes holding three project locks with zero slots in use and
+        // nothing running, and the scanners were the only candidates. 15m against a worst
+        // recorded run of 44s over 14 runs: a guard, not a budget.
+        "security": {
+            "skip_cache": "depends on trivy's license classifier version, which no cache key can see",
+            "timeout": "15m",
+        },
+        // The unit `magus affected ci` actually schedules, so this is the ceiling that
+        // ends a hang wherever in the chain it starts - the deadline rides the context, so
+        // it bounds every target ci composes. 45m against a worst recorded run of 6m8s
+        // over 100 runs, which leaves room for a cold cache on the slowest machine here.
+        "ci": {"timeout": "45m"},
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
