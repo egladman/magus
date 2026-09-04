@@ -1,6 +1,7 @@
 // releaser is the version-selection machinery behind the root magusfile's
-// `release` target: which modules version independently, what each is at now,
-// what it may legally move to next, and the one manifest edit a Go release needs.
+// `release` and `release-index` targets: which modules version independently,
+// what each is at now, what it may legally move to next, the one manifest edit
+// a Go release needs, and the names a release-index publish commits under.
 //
 // A sibling module rather than part of magusfile.buzz because none of this is
 // magus's build - it is a body of rules about semantic versioning that the build
@@ -398,6 +399,77 @@ test "reads the module path and ignores a require of a similar name" {
     // Same case coverage.buzz pins: a bare sub() kept the extra space here, so the two
     // parsers disagreed on a legal go.mod.
     std\assert(modulePath("module  example.com/root\n") == "example.com/root", message: "two spaces after the keyword");
+}
+
+// releaseIndexPaths lists every tracked path a release-index publish commit may
+// carry: the manifests, the signed pair, and the three files regenerated from the
+// changelog the cut rewrote. The commit stages exactly this list, so a stray dirty
+// file elsewhere in the tree can never be swept into the automation's commit.
+// docs/gen/public/release names the directory, not the two files: .gitignore
+// re-includes exactly index.json and index.json.sig under it.
+export fun releaseIndexPaths() > [str] {
+    return ["releases", "docs/gen/public/release", "CHANGELOG.md",
+        "gen/knowledge-graph.json", "docs/changelog.md"];
+}
+
+test "the publish paths carry the index pair and the changelog derivatives" {
+    final paths = releaseIndexPaths();
+    std\assert(paths.indexOf("docs/gen/public/release") != null, message: "the signed pair's directory");
+    std\assert(paths.indexOf("releases") != null, message: "the manifests the index derives from");
+    std\assert(paths.indexOf("CHANGELOG.md") != null, message: "the file the cut rewrote");
+    std\assert(paths.indexOf("gen/knowledge-graph.json") != null, message: "derived from the changelog");
+    std\assert(paths.indexOf("docs/changelog.md") != null, message: "derived from the changelog");
+}
+
+// releaseIndexBranch names the branch a publish rides. Derived from the commit the
+// index was built at, so a re-run of a failed publish converges on the same branch
+// and its force-push replaces the earlier attempt instead of littering.
+export fun releaseIndexBranch(short: str) > str {
+    return "release-index/" + short;
+}
+
+test "the publish branch is derived from the commit" {
+    std\assert(releaseIndexBranch("abc1234") == "release-index/abc1234",
+        message: "the short id names the branch");
+}
+
+// releaseIndexSubject is the commit subject and the pull request title. reason is a
+// sentence fragment naming what produced the index: "the v0.4.0 release", "a manual
+// refresh".
+export fun releaseIndexSubject(reason: str) > str {
+    return "Publish the release index signed for " + reason;
+}
+
+test "the subject folds the reason in" {
+    final s = releaseIndexSubject("the v0.4.0 release");
+    std\assert(s == "Publish the release index signed for the v0.4.0 release",
+        message: "subject shape");
+}
+
+// releaseIndexPrBody is the pull request description: why merging is the publish step,
+// for the reviewer standing furthest from this code.
+export fun releaseIndexPrBody() > str {
+    return "Opened by `magus run release-index`.\n\n"
+        + "`magus self update` fetches `public/release/index.json` and refuses to run\n"
+        + "without a matching `index.json.sig`, so the signed pair has to reach main\n"
+        + "before the site redeploys. Merging is what publishes it: the next push to\n"
+        + "main renders the docs site, which copies the tracked pair out verbatim\n"
+        + "rather than regenerating it.";
+}
+
+// releaseIndexPrFallback is the warning for a refused pull request creation. It names
+// the one manual step left, because the pushed branch is already the deliverable and
+// the job must not fail over the missing courtesy of opening it.
+export fun releaseIndexPrFallback(repository: str, branch: str) > str {
+    return "release-index: could not open the pull request; the signed branch is pushed"
+        + " - open it at https://github.com/" + repository + "/pull/new/" + branch;
+}
+
+test "the fallback names the branch URL" {
+    final msg = releaseIndexPrFallback("egladman/magus", branch: "release-index/abc1234");
+    std\assert(msg.indexOf("https://github.com/egladman/magus/pull/new/release-index/abc1234") != null,
+        message: "the manual step is a clickable URL");
+    std\assert(msg.indexOf("pushed") != null, message: "says the branch already made it");
 }
 
 export fun rewriteRequire(gomod: str, module: str, version: str) > str {

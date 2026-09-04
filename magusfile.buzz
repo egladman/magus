@@ -132,6 +132,9 @@ magus\project({
         // per invocation.
         "release-build": {"skip_cache": "a release must never replay a cached artifact; each invocation produces the bytes that ship"},
         "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
+        // exclusive: under cd it switches branches and commits, so nothing else should
+        // be touching the tree while it runs.
+        "release-index": {"skip_cache": "signs the index per invocation and, with cd, pushes a branch; a replay would publish nothing", "exclusive": true},
         // Mutates go.mod and creates VCS tags (with the cd charm) - a real,
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
@@ -1643,6 +1646,113 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
     proc\exec("go", ["run", "./cmd/magus-utils", "verify",
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
+}
+
+// Builds docs/gen/public/release/index.json from releases/*.yaml, signs it into
+// index.json.sig, regenerates the files derived from the changelog the cut rewrote,
+// and, under the cd charm, publishes whatever changed as a pull request. args[0] is
+// what produced the index, as a sentence fragment ("the v0.4.0 release", "a manual
+// refresh"); it names the commit and the pull request.
+//
+// The pull request is the whole point. index.json only changes when a release is cut,
+// and only a job holding MAGUS_SIGNING_KEY can sign it, which is why the file is
+// tracked rather than rendered on every push to main. main's ruleset requires a pull
+// request and bypasses only for the admin role, so a workflow cannot push the pair
+// straight to the default branch. A pull request opened with GITHUB_TOKEN triggers no
+// workflow runs, so no CI runs against the branch; nothing on it needs review anyway,
+// since the bytes are derived from committed manifests by a tool whose tests DID run.
+//
+// cd is the deliver switch, meaning what it means on release above: without it this
+// signs, regenerates, and reports whether a publish would carry anything, touching no
+// branch, so the whole computation rehearses safely on a developer machine. A clean
+// tree is a success in either mode: an index that already matches releases/ has
+// nothing to publish, and the tail of release.yaml reaches this state on every re-run.
+export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
+    if (args.len() == 0 or args[0].trim() == "") {
+        throw "release-index: pass what produced this index as a sentence fragment,"
+            + " e.g. -- \"the v0.4.0 release\"; it names the commit and the pull request";
+    }
+    // rw is refused, not required. The index pair lives in the docs project, so this
+    // target legitimately writes across the project boundary - and the boundary audit
+    // (MGS3001) arms exactly when the dispatch carries rw. The regeneration below
+    // needs no charm either: the *-generate targets always write; rw on `generate`
+    // only skips its drift gate, and this target judges dirtiness itself.
+    if (ctx.hasCharm("rw")) {
+        throw "release-index: drop the rw charm (locally: magus run release-index"
+            + " --no-default-charms . -- <reason>) - rw arms the cross-project write"
+            + " audit against the docs files this target must touch";
+    }
+    final reason = args[0];
+    // An unsigned index must never be published, and a signed one cannot be built
+    // without the key - so cd demands it, and a keyless run downgrades to an unsigned
+    // local rehearsal instead of dying before the part worth rehearsing.
+    var buildArgs = mut ["run", "./cmd/magus-utils", "release-index",
+        "-releases", "./releases", "-out", "./docs/gen/public/release"];
+    final key = os\env("MAGUS_SIGNING_KEY");
+    if (key == null or key == "") {
+        if (ctx.hasCharm("cd")) {
+            throw "release-index: cd publishes the signed pair and MAGUS_SIGNING_KEY is not set";
+        }
+        magus\log.info("release-index: MAGUS_SIGNING_KEY is not set; building unsigned (-no-sign) for this rehearsal");
+        buildArgs.append("-no-sign");
+    }
+    proc\exec("go", buildArgs);
+    // The cut rewrote CHANGELOG.md, and the knowledge graph and the docs changelog are
+    // derived from it, so publish them regenerated or the pull request is born failing
+    // its own drift gate (the v0.4.2 index PR was). Two compositions, deliberately
+    // different. The root's regeneration is `generate`'s *-generate fan-out rather
+    // than ctx.needs(generate), because the gate half of generate would throw at
+    // exactly the drift this target exists to publish; and rather than a nested
+    // `magus run generate:rw .`, because a nested run against the project this run
+    // holds deadlocks and is refused (MGS3007). generate's go.mod replacement pass is
+    // not repeated here: go.mod is not among the published paths, and its spell ops
+    // take no explicit args, so this run's reason argument would flow through to
+    // `go mod edit`. The docs project gets the nested run its unlocked project
+    // permits: a cross-project handle on docs would close a root->docs->root
+    // dependency cycle, since docs already imports the workspace.
+    ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
+    magus\run(["generate:rw", "docs"]);
+
+    final paths = releaser\releaseIndexPaths();
+    if (!vcs\isDirty(paths)) {
+        magus\log.info("release-index: the signed index already matches releases/; nothing to publish");
+        return;
+    }
+    if (!ctx.hasCharm("cd")) {
+        magus\log.info("release-index: DRY RUN - the regenerated index differs; add the cd charm to branch, push, and open the pull request");
+        return;
+    }
+
+    final branch = releaser\releaseIndexBranch(vcs\commit().short);
+    final subject = releaser\releaseIndexSubject(reason);
+    vcs\cmd(["switch", "-c", branch]);
+    vcs\cmd(["add", "--"] + paths);
+    // The bot identity rides -c on this one commit rather than git config, so a local
+    // run that gets this far leaves the developer's configuration untouched.
+    vcs\cmd(["-c", "user.name=github-actions[bot]",
+        "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+        "commit", "-m", subject]);
+    // Force, so a re-run of a failed publish job survives its own earlier push: the
+    // branch name is derived from HEAD and owned by this target alone, and a re-run
+    // regenerates the same content under a fresh commit.
+    vcs\cmd(["push", "--force", "origin", branch]);
+
+    final open = proc\exec("gh", args: ["pr", "list", "--head", branch, "--state", "open",
+        "--json", "number", "--jq", ".[].number"], dir: ".", opts: {"quiet": true}).stdout.trim();
+    if (open != "") {
+        magus\log.info("release-index: a pull request for " + branch + " is already open");
+        return;
+    }
+    // A refused creation (repository Actions settings can forbid workflows from opening
+    // pull requests) must not fail the run: the pushed branch is the deliverable, later
+    // jobs gate on this one, and the warning carries the one manual step left.
+    final created = proc\exec("gh", args: ["pr", "create", "--base", "main", "--head", branch,
+        "--title", subject, "--body", releaser\releaseIndexPrBody()],
+        dir: ".", opts: {"allow_failure": true});
+    if (!created.ok) {
+        magus\log.warn(releaser\releaseIndexPrFallback(os\env("GITHUB_REPOSITORY") ?? "",
+            branch: branch));
+    }
 }
 
 // One preflight verdict. `ok` is the gate; `detail` is the line the rehearsal prints on a

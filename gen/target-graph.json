@@ -733,6 +733,76 @@
           "reads_secrets": false
         },
         {
+          "name": "release-index",
+          "declared": "release_index",
+          "doc": "Builds docs/gen/public/release/index.json from releases/*.yaml, signs it into index.json.sig, regenerates the files derived from the changelog the cut rewrote, and, under the cd charm, publishes whatever changed as a pull request.",
+          "dependencies": [
+            "bindings-generate",
+            "changelog-generate",
+            "config-generate",
+            "graph-generate",
+            "index-generate",
+            "langservice-generate",
+            "magusfile-api-generate",
+            "man-generate",
+            "mocks-generate",
+            "skills-generate",
+            "spells-generate",
+            "termcast-generate",
+            "termshots-generate",
+            "types-generate"
+          ],
+          "charms": [
+            "cd",
+            "rw"
+          ],
+          "chain": [
+            {
+              "target": "bindings-generate"
+            },
+            {
+              "target": "changelog-generate"
+            },
+            {
+              "target": "config-generate"
+            },
+            {
+              "target": "graph-generate"
+            },
+            {
+              "target": "index-generate"
+            },
+            {
+              "target": "langservice-generate"
+            },
+            {
+              "target": "magusfile-api-generate"
+            },
+            {
+              "target": "man-generate"
+            },
+            {
+              "target": "mocks-generate"
+            },
+            {
+              "target": "skills-generate"
+            },
+            {
+              "target": "spells-generate"
+            },
+            {
+              "target": "termcast-generate"
+            },
+            {
+              "target": "termshots-generate"
+            },
+            {
+              "target": "types-generate"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
           "name": "release",
           "charms": [
             "cd"
