@@ -52,12 +52,8 @@ runs:
         set -euo pipefail
         # The cut rewrote CHANGELOG.md, and the knowledge graph and the docs changelog are
         # derived from it, so commit them regenerated or the pull request is born failing
-        # its own drift gate (the v0.4.2 index PR was). changelog-generate runs standalone
-        # first because it modifies CHANGELOG.md, which the generate composite treats as a
-        # source (MGS4007).
-        magus run changelog-generate:rw .
-        magus run generate:rw .
-        magus run generate:rw docs
+        # its own drift gate (the v0.4.2 index PR was).
+        magus run generate:rw . docs
         paths=(releases docs/gen/public/release CHANGELOG.md gen/knowledge-graph.json docs/changelog.md)
         if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then
           echo "the signed index already matches releases/; nothing to publish"

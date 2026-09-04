@@ -430,6 +430,29 @@ func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *
 	return out
 }
 
+// ChainUpdates is the ctx.modifiesExistingFiles declaration of every target a target
+// composes with ctx.needs, transitively, as workspace-rooted globs.
+//
+// A composed target's in-place edit lands inside the composing step's run window, so
+// without these globs in the parent's Step.Updates the mutation check (MGS4007) blames
+// the parent for a write a constituent declared.
+func ChainUpdates(p *Project, target string, lookup func(path string) *Project) []string {
+	var out []string
+	walkChain(p, target, lookup, func(proj *Project, name string) bool {
+		for _, ref := range proj.TargetUpdates[name] {
+			owner := ref.Project
+			if owner == "" {
+				owner = proj.Path
+			}
+			if g := RootGlob(owner, ref.Glob); !slices.Contains(out, g) {
+				out = append(out, g)
+			}
+		}
+		return true
+	})
+	return out
+}
+
 // chainReaches is every target reachable from name through ctx.needs, keyed the way
 // walkChain keys a visit.
 func chainReaches(p *Project, name string, lookup func(path string) *Project) map[string]bool {
