@@ -80,8 +80,8 @@ func (b *depBarrier) markDone(key string, err error) {
 	})
 }
 
-// waitForDeps blocks until all in-scope DependsOn (same-target) upstreams have
-// markDone'd, or ctx is cancelled - and fails a dependent whose upstream itself
+// waitForDeps blocks until all in-scope DependsOn (same-target) and RunAfter
+// (exact-key) upstreams have markDone'd, or ctx is cancelled - and fails a dependent whose upstream itself
 // failed, even if ctx has not observed that cancellation yet.
 //
 // Checking e.err rather than only ctx.Done() closes a real race: markDone runs as a
@@ -124,10 +124,15 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 			return err
 		}
 	}
+	for _, k := range s.RunAfter {
+		if err := wait(k); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// checkAcyclic reports an error if in-scope DependsOn edges form a cycle, using
+// checkAcyclic reports an error if in-scope DependsOn or RunAfter edges form a cycle, using
 // three-color DFS. A batch that passes this check cannot deadlock the barrier.
 func checkAcyclic(steps []Step) error {
 	inScope := make(map[string]bool, len(steps))
@@ -145,6 +150,9 @@ func checkAcyclic(steps []Step) error {
 		}
 		for _, d := range s.DependsOn {
 			add(DepKey(d, s.Target))
+		}
+		for _, k := range s.RunAfter {
+			add(k)
 		}
 	}
 

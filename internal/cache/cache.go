@@ -158,8 +158,13 @@ type Step struct {
 	// target does the same across projects.
 	OwnedOutputs []string
 
-	Deps          []string // upstream project hashes folded into the key
-	DependsOn     []string // upstream project paths for scheduling (not hashed)
+	Deps      []string // upstream project hashes folded into the key
+	DependsOn []string // upstream project paths for scheduling (not hashed)
+	// RunAfter holds node keys (DepKey) of batch steps this one must wait for,
+	// derived from declared writer-before-reader footprints (DeriveTargetOrder).
+	// Unlike DependsOn it crosses target names and is exact. Scheduling only:
+	// never hashed, never folded into Deps, never part of the affected set.
+	RunAfter      []string
 	WorkspaceRoot string
 	Target        string   // mixed into key to distinguish targets on the same sources
 	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
@@ -808,8 +813,9 @@ func reproTarget(s Step) string {
 }
 
 // RunAll schedules steps concurrently (bounded by WithLimiter, or DefaultConcurrency).
-// Step.DependsOn imposes scheduling order for in-scope steps only; out-of-scope
-// deps are ignored. A cyclic DependsOn graph is rejected before any goroutine
+// Step.DependsOn (same-target) and Step.RunAfter (exact node keys) impose
+// scheduling order for in-scope steps only; out-of-scope deps are ignored. A
+// cyclic graph over either edge kind is rejected before any goroutine
 // launches. Upstream cache keys fold into dependent Step.Deps transitively
 // (happens-before: markDone writes the key before waitForDeps returns in
 // dependents). Every goroutine launches immediately and blocks on deps without

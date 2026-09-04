@@ -1184,6 +1184,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		return nil
 	}
 
+	// Target-granular scheduling: order steps writer-before-reader from declared
+	// footprints, and remember pre-run bytes for the edges no step order can honor
+	// (settled after the batch).
+	settle := m.prepareOrderSettle(m.deriveBatchOrder(ctx, steps))
+
 	// Soft typo guard: warn for an active charm no selected target declares. A
 	// function target may read an undeclared charm, hence a warning, not an error.
 	for _, c := range undeclaredCharms(charmKey, declaredCharms) {
@@ -1346,7 +1351,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err
 	}
-	_, runErr := m.cache.RunAll(ctx, steps, func(ctx context.Context, s cache.Step) error {
+	results, runErr := m.cache.RunAll(ctx, steps, func(ctx context.Context, s cache.Step) error {
 		// Each step invocation gets a fresh TargetMemo so depends_on diamonds
 		// within one target's inline dispatch run shared deps exactly once.
 		ctx = buzz.WithTargetMemo(ctx, buzz.NewTargetMemo())
@@ -1382,6 +1387,12 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		if err := volatilityRT.Save(ctx); err != nil {
 			slog.WarnContext(ctx, "magus: failed to save volatility history", "err", err)
 		}
+	}
+
+	if runErr == nil {
+		// After the batch so it holds every step's finished bytes, before the race
+		// replay so what that verifies is the settled tree.
+		runErr = m.settleDerivedOrder(ctx, settle, steps, results)
 	}
 
 	if opts.RaceReplay && runErr == nil {
