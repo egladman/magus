@@ -139,12 +139,10 @@ func Exclusive() TargetOption { return workspace.Exclusive() }
 func IncludeOS(v bool) TargetOption   { return workspace.IncludeOS(v) }
 func IncludeArch(v bool) TargetOption { return workspace.IncludeArch(v) }
 
-// platform, overriding what its spells would answer. Pass types.PlatformIndependent
-// to let one cache entry serve every platform; types.PlatformDependent to force the
-// opposite when a spell claims independence the target cannot honor.
-
-// RetryOnVolatile enables volatility detection and auto-retry for this target.
-func RetryOnVolatile() TargetOption { return workspace.RetryOnVolatile() }
+// RetryOnVolatile routes this target through volatility detection, so a failure magus
+// predicts is volatile is rerun once. reason states why this target fails without the
+// code being wrong. The opt-in binds to this target alone.
+func RetryOnVolatile(reason string) TargetOption { return workspace.RetryOnVolatile(reason) }
 
 // WithTarget attaches a behavioral policy to the named target; multiple calls are merged.
 func WithTarget(name string, opts ...TargetOption) ProjectOption {

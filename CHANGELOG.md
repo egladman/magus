@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and one sitting a hundred times above every run on record would hold a hung target's
   locks for most of a day. This workspace declares two: `security` at 15m against a
   worst recorded run of 44s, and `ci` at 45m against 6m8s.
+- **A target can declare that its failures are volatile, and say why.** `magus.project`'s
+  target policies take a `retry_on_volatile` reason string -
+  `"integration": {"retry_on_volatile": "talks to a shared broker that drops a connection under load"}` -
+  which routes that target's failures through volatility detection, so one magus predicts
+  is volatile is rerun once instead of failing the run. Previously this could only be set
+  through the Go registration API, so no magusfile could reach it. A bare `true` is a load
+  error, for the reason `skip_cache`'s and `drift_reason`'s are: asking magus to rerun a red
+  target until it goes green claims the target fails without the code being wrong, and a
+  bare bool cannot tell a suite somebody measured from a bug they stopped chasing. The
+  policy is visible wherever target policy already is - `magus describe target`, the Buzz
+  `Target` object, and the JSON record.
 - **A redundant ci gate defers to the pull request when the machine is loaded.** When a
   green gate is already recorded for this branch and everything changed since falls in
   a low-risk class - generated output, prose (magus ships markdown globs;

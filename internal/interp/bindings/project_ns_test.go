@@ -194,6 +194,46 @@ func TestParseBuzzProjectOpts_SkipCacheReason(t *testing.T) {
 	}
 }
 
+// retry_on_volatile asks magus to rerun a red target until it goes green, so it sets the
+// same bar skip_cache does one step further out: the claim is that this target fails
+// without the code being wrong. A bare true cannot tell a suite somebody measured from a
+// bug they stopped chasing, and both read green in CI.
+func TestParseBuzzProjectOpts_RetryOnVolatileReason(t *testing.T) {
+	t.Run("a reason is recorded", func(t *testing.T) {
+		pol := vm.NewMap()
+		pol.MapSet("retry_on_volatile", vm.StrValue("talks to a shared broker that drops a connection under load"))
+		p := applyOpts(t, targetsOpts("integration", pol))
+		got := p.TargetPolicies["integration"]
+		assert.True(t, got.RetryOnVolatile)
+		assert.Equal(t, "talks to a shared broker that drops a connection under load", got.RetryOnVolatileReason)
+	})
+
+	t.Run("an undeclared target is not retryable", func(t *testing.T) {
+		pol := vm.NewMap()
+		pol.MapSet("slots", vm.IntValue(4))
+		p := applyOpts(t, targetsOpts("lint", pol))
+		assert.False(t, p.TargetPolicies["lint"].RetryOnVolatile)
+	})
+
+	for _, tc := range []struct {
+		name string
+		val  vm.Value
+	}{
+		{"a bare true is not a reason", vm.BoolValue(true)},
+		{"empty is not a reason", vm.StrValue("")},
+		{"whitespace is not a reason", vm.StrValue("  ")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pol := vm.NewMap()
+			pol.MapSet("retry_on_volatile", tc.val)
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("test", pol))
+			assert.ErrorContains(t, err, "needs a reason string")
+			assert.ErrorContains(t, err, "leave the policy off",
+				"the error must say what to do when a failure means the code IS wrong")
+		})
+	}
+}
+
 func TestParseBuzzProjectOpts_UnknownTopLevelKeyErrors(t *testing.T) {
 	opts := vm.NewMap()
 	opts.MapSet("depend_on", vm.ListValue([]vm.Value{vm.StrValue("api")}))

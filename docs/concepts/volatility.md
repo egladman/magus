@@ -15,7 +15,7 @@ the decision it makes and the tools for the cases it hands back to you.
 ## How magus decides a failure is volatile
 
 Volatility detection is on by default (`volatility.enabled`) and applies to targets
-that opt in with the `RetryOnVolatile` policy. On a failure, magus looks at that
+that opt in with the `retry_on_volatile` policy. On a failure, magus looks at that
 target's history:
 
 - **Bootstrap phase.** Below `volatility.bootstrap_samples` outcomes (default 20),
@@ -66,8 +66,23 @@ When a failure is real but only sometimes, narrow the cause:
 ## Configuration
 
 The `volatility.*` keys tune detection; see the [config reference](../reference/config.md#volatility).
-`RetryOnVolatile` is a per-target policy, so a workspace opts specific targets
-(usually `test`) into retry rather than the whole tree. `volatility.annotate_gha`
+`retry_on_volatile` is a per-target policy declared in `magus.project` (see
+[workspace.md](workspace.md)), so a workspace opts specific targets (usually `test`)
+into retry rather than the whole tree, and a sibling target in the same run is
+unaffected by a neighbor's opt-in:
+
+```buzz
+magus\project({
+    "targets": {
+        "integration": { "retry_on_volatile": "talks to a shared broker that drops a connection under load" },
+    },
+});
+```
+
+The value is a reason string, and a bare `true` is a load error: a retry policy claims
+this target fails without the code being wrong, which is not something the next reader
+can infer from a bool. Every retry is logged as a warning naming the project, target,
+status, reason and score, whatever the host; `volatility.annotate_gha` additionally
 surfaces retried and regression outcomes as GitHub Actions annotations.
 
 ## See also

@@ -55,7 +55,7 @@ var knownToolBoundKeys = []string{"min", "below"}
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
 // magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "memory_mb", "timeout", "cache", "drift", "drift_reason"}
+var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "memory_mb", "timeout", "cache", "drift", "drift_reason", "retry_on_volatile"}
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently
@@ -385,6 +385,23 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 							"If you only want a fresh run, use `--no-cache` instead; if the target simply produces no files, it caches correctly with no policy at all", name)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache(reason)))
+			}
+			// Same bar skip_cache sets, one step further out: this one asks magus to
+			// rerun a red target until it goes green, so the claim is that the target
+			// fails without the code being wrong. A bare `true` cannot tell a suite
+			// whose volatility somebody measured from a bug they stopped chasing, and
+			// the second reads green in CI either way.
+			if rv, ok := pv.MapGet("retry_on_volatile"); ok {
+				var reason string
+				if rv.IsStr() {
+					reason = strings.TrimSpace(rv.AsString())
+				}
+				if reason == "" {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].retry_on_volatile needs a reason string saying why this target fails without the code being wrong, e.g. \"integration suite talks to a shared broker that drops a connection under load\". "+
+							"If a failure means the code IS wrong, leave the policy off so the run reports it", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.RetryOnVolatile(reason)))
 			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))

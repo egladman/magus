@@ -81,10 +81,11 @@ func TestWithTarget_Drift(t *testing.T) {
 
 func TestWithTarget_TrackVolatile(t *testing.T) {
 	p := &types.Project{Path: "."}
-	opt := WithTarget("build", RetryOnVolatile())
+	opt := WithTarget("build", RetryOnVolatile("hits a shared broker that drops a connection under load"))
 	require.NoError(t, opt(p))
 	pol := p.TargetPolicies["build"]
 	assert.True(t, pol.RetryOnVolatile)
+	assert.Equal(t, "hits a shared broker that drops a connection under load", pol.RetryOnVolatileReason)
 }
 
 func TestWithTarget_Slots(t *testing.T) {

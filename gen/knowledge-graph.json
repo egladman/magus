@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5240,
-  "edge_count": 9323,
+  "edge_count": 9325,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -59847,6 +59847,14 @@
     },
     {
       "source": "doc:docs/concepts/volatility.md",
+      "target": "doc:docs/concepts/workspace.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/volatility.md"
+    },
+    {
+      "source": "doc:docs/concepts/volatility.md",
       "target": "doc:docs/concepts/workspace/affected.md",
       "relation": "references",
       "confidence": "extracted",
@@ -60032,6 +60040,14 @@
     {
       "source": "doc:docs/concepts/workspace.md",
       "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace.md",
+      "target": "doc:docs/concepts/volatility.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,

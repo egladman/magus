@@ -544,7 +544,7 @@ func TestEvaluateTarget_WithSpellAndPolicy(t *testing.T) {
 	reg.RegisterProject(
 		".",
 		WithSpell(spellName),
-		WithTarget("my-target", RetryOnVolatile()),
+		WithTarget("my-target", RetryOnVolatile("a fixture that races its own teardown")),
 	)
 	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 

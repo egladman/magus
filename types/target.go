@@ -125,9 +125,7 @@ type Target struct {
 	Declared       string   `json:"declared,omitempty"`
 	DeclaredCharms []string `json:"declared_charms,omitempty"`
 
-	// Per-target execution policy. SkipCache, Exclusive, Slots, and Drift are
-	// author-facing, serialized into the Buzz object Target. RetryOnVolatile is a CI-only
-	// hook set via the Go registration API, excluded from the Buzz object (buzz:"-").
+	// Per-target execution policy: author-facing, serialized into the Buzz object Target.
 	SkipCache bool `json:"skip_cache,omitempty" buzz:"skip_cache"` // opt out of the cache: always run, never replay/snapshot
 	// SkipCacheReason is the prose the magusfile gave for SkipCache. It is required
 	// (a bare `true` is a load error) because opting out is a claim that REPLAYING
@@ -183,8 +181,21 @@ type Target struct {
 	// protects everyone downstream is a claim, not a preference, and a bare "off" leaves
 	// the next reader no way to tell a considered exemption from a workaround somebody
 	// never came back to.
-	DriftReason     string `json:"drift_reason,omitempty" buzz:"drift_reason"`
-	RetryOnVolatile bool   `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
+	DriftReason string `json:"drift_reason,omitempty" buzz:"drift_reason"`
+	// RetryOnVolatile routes this target through volatility detection, so a failure
+	// magus predicts is volatile is rerun once instead of failing the run.
+	//
+	// It is scoped to the (project, target) pair that declared it and to no other.
+	// A run-wide collapse looked equivalent and was not: opting `test` in also made
+	// `lint` and `build` retryable under a composed `ci`, which is how a real
+	// regression gets a second attempt nobody asked to give it.
+	RetryOnVolatile bool `json:"retryOnVolatile,omitempty" buzz:"retry_on_volatile"`
+	// RetryOnVolatileReason is the prose the magusfile gave for RetryOnVolatile, and it
+	// is required for the reason SkipCacheReason and DriftReason are: asking magus to
+	// rerun a target until it goes green is a claim that THIS TARGET FAILS WITHOUT THE
+	// CODE BEING WRONG, not a preference, and a bare `true` leaves the next reader no
+	// way to tell a known-volatile suite from a bug somebody stopped chasing.
+	RetryOnVolatileReason string `json:"retry_on_volatile_reason,omitempty" buzz:"retry_on_volatile_reason"`
 	// IncludeOS and IncludeArch override cache.include.*.enabled for this target.
 	// nil inherits the workspace answer, which is what an undeclared target gets.
 	//

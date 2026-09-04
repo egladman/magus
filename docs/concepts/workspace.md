@@ -156,11 +156,17 @@ magus\project({
 
 The `targets` sub-map keys a target name to a policy table:
 
-| Policy       | Effect                                                                                                                                                                                                                                                   |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skip_cache` | a reason string stating why REPLAYING this target would be wrong; magus then always runs it and never replays or snapshots it. A bare `true` is a load error - for a merely fresh run use `--no-cache` (see [cache.md](cache.md#opting-out-and-busting)) |
-| `exclusive`  | runs the target alone - no peer target runs concurrently while it does                                                                                                                                                                                   |
-| `slots`      | the target holds N concurrency slots while it runs, throttling parallel work                                                                                                                                                                             |
+| Policy              | Effect                                                                                                                                                                                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skip_cache`        | a reason string stating why REPLAYING this target would be wrong; magus then always runs it and never replays or snapshots it. A bare `true` is a load error - for a merely fresh run use `--no-cache` (see [cache.md](cache.md#opting-out-and-busting))                                        |
+| `exclusive`         | runs the target alone - no peer target runs concurrently while it does                                                                                                                                                                                                                          |
+| `slots`             | the target holds N concurrency slots while it runs, throttling parallel work                                                                                                                                                                                                                    |
+| `memory_mb`         | the peak memory this target needs, in megabytes; magus converts it to slots against the host's memory-per-slot share, so one declaration throttles correctly on a 16GB runner and a 64GB workstation. A composed target inherits the largest declaration in its chain                           |
+| `timeout`           | a duration string (`"15m"`) bounding one run of this target, subprocesses included. Undeclared is unbounded. A runaway guard, not a budget: declare a multiple of the worst run on record. The deadline rides the context, so it also bounds every target this one composes                     |
+| `drift`             | what happens when this target's declared outputs move under a read-only run: `"fail"` (the default for a target that declares outputs), `"warn"` to report without failing, or `"off"`. An unrecognized value is a load error                                                                   |
+| `drift_reason`      | prose for turning the drift gate off; required when `drift` is `"off"`, for the reason `skip_cache`'s is                                                                                                                                                                                        |
+| `retry_on_volatile` | a reason string stating why this target fails without the code being wrong; magus then routes its failures through volatility detection and reruns a predicted-volatile one once (see [volatility.md](volatility.md)). A bare `true` is a load error, and the opt-in binds to this target alone |
+| `cache.include`     | overrides the workspace's `cache.include.os/arch.enabled` for this target, for an artifact that varies along one axis but not the other. Nested to mirror `magus.yaml` exactly; a misspelled nesting level is a load error rather than a silent inherit                                         |
 
 ```buzz
 magus\project({
@@ -169,8 +175,11 @@ magus\project({
     "outputs": ["dist/**"],
     "watch_ignore": { "glob": ["**/*.snap"] },
     "targets": {
-        "test": { "slots": 4 },
+        "test": { "slots": 4, "memory_mb": 8192 },
         "build": { "skip_cache": "signs a fresh artifact per invocation" },
+        "security": { "timeout": "15m" },
+        "integration": { "retry_on_volatile": "talks to a shared broker that drops a connection under load" },
+        "image": { "cache": { "include": { "arch": { "enabled": false } } } },
     },
 });
 ```
