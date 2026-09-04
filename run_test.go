@@ -530,16 +530,28 @@ func TestWithTargetDeadlineIsOffByDefault(t *testing.T) {
 	assert.NoError(t, ctx.Err())
 }
 
+// assertDeadlineBudget asserts ctx's deadline encodes exactly want, given instants
+// taken either side of the call that produced it. The deadline is stamped now+want
+// for a now somewhere in [before, after], so the pair brackets it whatever the
+// scheduler does; comparing against a single time.Now() would instead be asserting
+// how promptly this goroutine got scheduled.
+func assertDeadlineBudget(t *testing.T, ctx context.Context, before, after time.Time, want time.Duration) {
+	t.Helper()
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok, "a configured timeout must set a deadline")
+	assert.WithinRange(t, deadline, before.Add(want), after.Add(want))
+}
+
 func TestWithTargetDeadlineBoundsATarget(t *testing.T) {
 	t.Parallel()
 	m := &Magus{cfg: config.Config{TargetTimeout: 50 * time.Millisecond}}
 
+	before := time.Now()
 	ctx, cancel := m.withTargetDeadline(t.Context(), types.Target{})
+	after := time.Now()
 	defer cancel()
 
-	deadline, ok := ctx.Deadline()
-	require.True(t, ok, "a configured timeout must set a deadline")
-	assert.WithinDuration(t, time.Now().Add(50*time.Millisecond), deadline, 20*time.Millisecond)
+	assertDeadlineBudget(t, ctx, before, after, 50*time.Millisecond)
 
 	<-ctx.Done()
 	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded,
@@ -567,12 +579,12 @@ func TestWithTargetDeadlineHonorsTheTargetsOwnCeiling(t *testing.T) {
 	t.Parallel()
 	m := &Magus{}
 
+	before := time.Now()
 	ctx, cancel := m.withTargetDeadline(t.Context(), types.Target{Timeout: "50ms"})
+	after := time.Now()
 	defer cancel()
 
-	deadline, ok := ctx.Deadline()
-	require.True(t, ok, "a declared ceiling must set a deadline")
-	assert.WithinDuration(t, time.Now().Add(50*time.Millisecond), deadline, 20*time.Millisecond)
+	assertDeadlineBudget(t, ctx, before, after, 50*time.Millisecond)
 }
 
 // The TIGHTER of the two wins in both directions. A workspace-wide runaway guard and
@@ -591,12 +603,12 @@ func TestWithTargetDeadlineTakesTheTighterOfTheTwo(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := &Magus{cfg: config.Config{TargetTimeout: tc.workspace}}
+			before := time.Now()
 			ctx, cancel := m.withTargetDeadline(t.Context(), types.Target{Timeout: tc.declared})
+			after := time.Now()
 			defer cancel()
 
-			deadline, ok := ctx.Deadline()
-			require.True(t, ok)
-			assert.WithinDuration(t, time.Now().Add(tc.want), deadline, 20*time.Millisecond)
+			assertDeadlineBudget(t, ctx, before, after, tc.want)
 		})
 	}
 }
