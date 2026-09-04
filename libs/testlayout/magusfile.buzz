@@ -32,9 +32,10 @@ magus\project({
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
         // index-generate renders `magus describe graph -o markdown`, so its output is a
-        // function of the WHOLE knowledge graph. Its declared inputs are the magusfiles,
-        // which is the only part of that a glob can name, so any other change leaves the
-        // key unmoved: a cache hit then replays a MAGUS.md built before it and REVERTS the
+        // function of the WHOLE knowledge graph. Its declared inputs (the magusfiles and
+        // the sibling indexes) are the only part of that a glob can name, so any other
+        // change leaves the key unmoved: a cache hit then replays a MAGUS.md built
+        // before it and REVERTS the
         // committed one, which the drift gate above correctly reports as drift. Every other
         // library carries the same opt-out; this project landed after the merge that added
         // them and missed it.
@@ -59,6 +60,14 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Declared so `magus vcs resolve` can find the target that settles a conflict here:
     // it matches per-TARGET outputs, and the project-level outputs list is not enough.
     ctx.writesFiles("MAGUS.md");
+    // Every MAGUS.md embeds the same graph-derived routing tables, so a graph change
+    // anywhere can invalidate this file with nothing in this tree moving. The graph is
+    // unkeyable (see skip_cache above), but a routing change always rewrites the
+    // originating project's own index, so a sibling MAGUS.md moving in the diff is the
+    // keyable signal, and declaring them seeds this project into `magus affected`.
+    // Relative, not <alias>\file(): the cross form also unions a depends_on edge, which
+    // would put this project in EVERY owner change's affected set, not just index moves.
+    ctx.readsFiles("../../**/MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
