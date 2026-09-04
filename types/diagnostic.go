@@ -261,7 +261,18 @@ const (
 	// continue is a log line, and the incident this exists for was an invocation that
 	// held three project locks for over an hour with nothing running - the shape a
 	// build tool must not report as success.
-	TargetCeilingExceeded     DiagnosticCode = "MGS3011"
+	TargetCeilingExceeded DiagnosticCode = "MGS3011"
+	// InvocationStalled is a run magus aborted because nothing moved: no target started,
+	// finished, or wrote a line of output for the stall window, while every selected
+	// project's lock stayed held. It joins MGS3007/MGS3009/MGS3010 in the environment
+	// family - the workspace is fine, the process is what stopped making progress.
+	//
+	// The other half of MGS3011, not a duplicate of it. A ceiling bounds a target that
+	// runs LONG, and only one whose author declared a bound; this bounds an invocation
+	// making no progress AT ALL, in any of its work. The shape it exists for is a
+	// post-batch pass wedged on a network read while every observer reported an idle
+	// machine, which no target's ceiling covers because no target was running.
+	InvocationStalled         DiagnosticCode = "MGS3012"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -341,7 +352,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
-	TargetCeilingExceeded,
+	TargetCeilingExceeded, InvocationStalled,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,

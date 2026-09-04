@@ -954,7 +954,11 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 }
 
 // executeStages schedules every (project,target) pair via dependency-ordered RunAll.
-func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) error {
+//
+// The named return is for the stall watchdog: once armed it can abort from any of the
+// paths below, and a deferred swap is the only way to make every one of them report the
+// abort rather than the cancellation it surfaced as.
+func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) (err error) {
 	// Ahead of the dry-run branch, not after it: a dry run evaluates the same
 	// target bodies under a tracing context, so without the forwarded args here
 	// it printed the op's own command and silently omitted them - under-reporting
@@ -1107,6 +1111,17 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		return err
 	}
 	defer releaseLocks()
+
+	// Armed once the locks are held, which is the condition that makes a stall costly:
+	// from here a wedged invocation blocks every other magus on these projects. Every
+	// accounting edge below beats the heartbeat, so the watchdog sees batch steps, the
+	// composed gates and the settle tail alike. See watchdog.go for the window and why
+	// it is not a target ceiling.
+	prog := cache.NewProgress()
+	ctx = cache.ContextWithProgress(ctx, prog)
+	ctx, stall := m.watchForStall(ctx, prog)
+	defer stall.close()
+	defer func() { err = stall.verdict(err) }()
 
 	// The probe pass doubles as the toolchain gate. Enforcement follows the
 	// DECLARATION, stated per project, not the dispatch mechanism: hanging it off
@@ -1392,7 +1407,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if runErr == nil {
 		// After the batch so it holds every step's finished bytes, before the race
 		// replay so what that verifies is the settled tree.
-		runErr = m.settleDerivedOrder(ctx, settle, steps, results)
+		runErr = m.settleDerivedOrder(ctx, settle, steps, results, newStep, cacheOpts)
 	}
 
 	if opts.RaceReplay && runErr == nil {
@@ -1513,6 +1528,12 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 	}
 
 	for _, p := range replayable {
+		// The one executor deliberately left outside cache.RunAside's accounting: this
+		// pass exists to bypass the cache so spells re-execute, and routing it through
+		// Run would mint a second output ref for a run whose product is a comparison,
+		// not a result. Marking the heartbeat is what it can honestly do, so a long
+		// replay reads as slow rather than stalled (MGS3012).
+		cache.ProgressFromContext(ctx).Record(cache.Mark{Project: p.Path, Target: target, What: "race replay"})
 		if err := handler(ctx, byPath[p.Path]); err != nil {
 			slog.WarnContext(ctx, "magus: race-replay handler failed", "project", p.Path, "err", err)
 		}
