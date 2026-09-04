@@ -1641,6 +1641,10 @@
             {
               "project": ".",
               "glob": "**/magusfile.buzz"
+            },
+            {
+              "project": "docs",
+              "glob": "../**/MAGUS.md"
             }
           ],
           "reads_secrets": false,
@@ -2337,6 +2341,12 @@
           "name": "index-generate",
           "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+          "reads_files": [
+            {
+              "project": "libs/diagnostics",
+              "glob": "../../**/MAGUS.md"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -2508,6 +2518,12 @@
           "name": "index-generate",
           "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+          "reads_files": [
+            {
+              "project": "libs/gopherbuzz",
+              "glob": "../../**/MAGUS.md"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -2697,6 +2713,12 @@
           "name": "index-generate",
           "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+          "reads_files": [
+            {
+              "project": "libs/testlayout",
+              "glob": "../../**/MAGUS.md"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -2851,6 +2873,12 @@
           "name": "index-generate",
           "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+          "reads_files": [
+            {
+              "project": "libs/textsearch",
+              "glob": "../../**/MAGUS.md"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
