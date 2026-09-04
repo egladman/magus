@@ -330,3 +330,38 @@ func rewriteTarMember(t *testing.T, path string, sel func(name string) bool, bod
 	require.NoError(t, gzw.Close())
 	return out.Bytes()
 }
+
+// The cache is shared machine-wide, so two importers of one entry can stage
+// concurrently: a fixed staging name lets one clobber the other's temp file - and
+// swap bytes under a commit the other already verified. Pinned by occupying the
+// fixed paths a predictable-name importer would have wanted.
+func TestImportDoesNotDependOnFixedStagingNames(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err, "NewFSRemoteBackend")
+	pub, seed := genKeypair(t)
+	trusted := [][]byte{pub}
+
+	rootA, cA := openSigned(t, remote, seed, trusted)
+	rA, _ := buildCanonical(t, rootA, cA)
+	require.NotEmpty(t, rA.Hash)
+	raw, err := os.ReadFile(findBackendArtifact(t, remote, "test__pkg"))
+	require.NoError(t, err)
+
+	_, cB := openSigned(t, remote, nil, trusted)
+	// The paths the pre-fix code staged through: <manifest>.import.tmp, and
+	// <first extra>.import-0.tmp (the build log is the first extra exported).
+	occupied := []string{
+		cB.manifestPath("test/pkg", rA.Hash) + ".import.tmp",
+		cB.logPath("test/pkg", rA.Hash) + ".import-0.tmp",
+	}
+	for _, p := range occupied {
+		require.NoError(t, os.MkdirAll(p, 0o755))
+	}
+
+	require.NoError(t, cB.importArtifact(context.Background(), bytes.NewReader(raw), "test/pkg", rA.Hash),
+		"the import failed because a fixed staging path was taken")
+	_, err = cB.readManifest("test/pkg", rA.Hash)
+	require.NoError(t, err, "the imported manifest must be committed")
+	_, err = os.Stat(cB.logPath("test/pkg", rA.Hash))
+	require.NoError(t, err, "the signed log must be committed")
+}
