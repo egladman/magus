@@ -484,6 +484,15 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Updates = append(step.Updates, g)
 		}
 	}
+	// A composed target's declared in-place edit lands inside this step's window, the
+	// same way OwnedOutputs already covers a chained target's outputs. Updates only,
+	// not Sources: the constituent's own step keys the file, and the check just needs
+	// to know the edit was declared.
+	for _, g := range types.ChainUpdates(p, target, m.Get) {
+		if !slices.Contains(step.Updates, g) {
+			step.Updates = append(step.Updates, g)
+		}
+	}
 	for _, ref := range p.TargetOutputs[target] {
 		owner := ref.Project
 		if owner == "" {
