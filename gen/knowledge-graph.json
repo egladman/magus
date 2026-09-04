@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5208,
-  "edge_count": 9239,
+  "node_count": 5215,
+  "edge_count": 9258,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -492,6 +492,14 @@
       }
     },
     {
+      "id": "diagnostic:MGS3010",
+      "kind": "diagnostic",
+      "label": "MGS3010",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3010/"
+      }
+    },
+    {
       "id": "diagnostic:MGS4001",
       "kind": "diagnostic",
       "label": "MGS4001",
@@ -949,7 +957,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1520",
+        "dir_files": "1526",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1219,7 +1227,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "463",
+        "dir_files": "469",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -1299,8 +1307,8 @@
       "label": "docs/reference/codes/sandbox",
       "source": "docs/reference/codes/sandbox",
       "attrs": {
-        "dir_files": "103",
-        "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#extending-the-allowlist,md#fix,md#mgs2001-path-read-denied-by-sandbox,md#mgs2002-path-write-denied-by-sandbox,md#mgs2003"
+        "dir_files": "109",
+        "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#configuring-the-prose-class,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#extending-the-allowlist,md#fix,md#mgs2001-path-read-denied-by-sandbox,md#mgs2002-path-wri"
       }
     },
     {
@@ -4753,6 +4761,18 @@
         "section": "reference",
         "tags": "MGS3009,memory,memory_mb,concurrency,worktrees,admission,daemon,MAGUS_NO_WAIT",
         "title": "MGS3009: machine budget exhausted"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS3010.md",
+      "source": "docs/reference/codes/sandbox/MGS3010.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS3010,ci,gate,redundancy,admission,daemon,worktrees,exit 75,no-redundancy-check,gate_low_risk",
+        "title": "MGS3010: redundant gate deferred under load"
       }
     },
     {
@@ -27091,6 +27111,56 @@
       "kind": "docsection",
       "label": "Why",
       "source": "docs/reference/codes/sandbox/MGS3009.md#why",
+      "attrs": {
+        "anchor": "why",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#configuring-the-prose-class",
+      "kind": "docsection",
+      "label": "Configuring the prose class",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#configuring-the-prose-class",
+      "attrs": {
+        "anchor": "configuring-the-prose-class",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "kind": "docsection",
+      "label": "MGS3010: redundant gate deferred under load",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "attrs": {
+        "anchor": "mgs3010-redundant-gate-deferred-under-load",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#resolution",
+      "kind": "docsection",
+      "label": "Resolution",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#resolution",
+      "attrs": {
+        "anchor": "resolution",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#why",
+      "kind": "docsection",
+      "label": "Why",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#why",
       "attrs": {
         "anchor": "why",
         "level": "2"
@@ -52587,6 +52657,14 @@
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
       "target": "doc:docs/reference/codes/sandbox/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -59539,6 +59617,14 @@
     },
     {
       "source": "doc:docs/concepts/workspace.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace.md",
       "target": "doc:docs/concepts/cache.md",
       "relation": "references",
       "confidence": "extracted",
@@ -59604,6 +59690,14 @@
     {
       "source": "doc:docs/concepts/workspace.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3006.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -67698,6 +67792,70 @@
       "provenance": "docs/reference/codes/sandbox/MGS3009.md"
     },
     {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/concepts/concurrency.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/concepts/workspace.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -67779,6 +67937,14 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -67852,6 +68018,14 @@
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -68392,6 +68566,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/logging.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-affected.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/manpage/magus-affected.md"
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
@@ -73792,6 +73974,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/manpage/magus-refs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-run.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/manpage/magus-run.md"
     },
     {
       "source": "doc:docs/reference/manpage/magus-run.md",
@@ -93576,6 +93766,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS3009.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#configuring-the-prose-class",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#resolution",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#why",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
     },
     {
       "source": "docsection:docs/reference/codes/sandbox/README.md#the-sandbox",

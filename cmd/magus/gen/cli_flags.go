@@ -39,6 +39,8 @@ const (
 	FlagAffectedNoCache = "no-cache"
 	// affected: --no-default-charms
 	FlagAffectedNoDefaultCharms = "no-default-charms"
+	// affected: --no-redundancy-check
+	FlagAffectedNoRedundancyCheck = "no-redundancy-check"
 	// affected: --null
 	FlagAffectedNull = "null"
 	// affected: --open
@@ -309,6 +311,8 @@ const (
 	FlagRunNoCache = "no-cache"
 	// run: --no-default-charms
 	FlagRunNoDefaultCharms = "no-default-charms"
+	// run: --no-redundancy-check
+	FlagRunNoRedundancyCheck = "no-redundancy-check"
 	// run: --no-volatility-retry
 	FlagRunNoVolatilityRetry = "no-volatility-retry"
 	// run: --open
@@ -487,6 +491,7 @@ type RunFlags struct {
 	Shard             string        // --shard
 	NShards           int           // --n-shards
 	NoVolatilityRetry bool          // --no-volatility-retry
+	NoRedundancyCheck bool          // --no-redundancy-check
 }
 
 // BindRun registers `magus run`'s flags on fs and returns the destination.
@@ -506,6 +511,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.StringVar(&f.Shard, FlagRunShard, "", "This run's shard index within a CI matrix; paired with --n-shards")
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Total shard count for this CI matrix run; paired with --shard")
 	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
+	fs.BoolVar(&f.NoRedundancyCheck, FlagRunNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
 	return &f
 }
 
@@ -532,20 +538,21 @@ func BindWhere(fs *flag.FlagSet) *WhereFlags {
 
 // AffectedFlags are the flags declared for `magus affected`.
 type AffectedFlags struct {
-	Base            string        // --base, -b
-	Stdin           bool          // --stdin
-	Null            bool          // --null
-	NoCache         bool          // --no-cache
-	NoDefaultCharms bool          // --no-default-charms
-	Detach          bool          // --detach
-	Wait            bool          // --wait
-	Open            bool          // --open
-	Step            bool          // --step
-	Race            string        // --race
-	Timeout         time.Duration // --timeout
-	Graph           bool          // --graph
-	Upstream        bool          // --upstream
-	Depth           int           // --depth
+	Base              string        // --base, -b
+	Stdin             bool          // --stdin
+	Null              bool          // --null
+	NoCache           bool          // --no-cache
+	NoDefaultCharms   bool          // --no-default-charms
+	NoRedundancyCheck bool          // --no-redundancy-check
+	Detach            bool          // --detach
+	Wait              bool          // --wait
+	Open              bool          // --open
+	Step              bool          // --step
+	Race              string        // --race
+	Timeout           time.Duration // --timeout
+	Graph             bool          // --graph
+	Upstream          bool          // --upstream
+	Depth             int           // --depth
 }
 
 // BindAffected registers `magus affected`'s flags on fs and returns the destination.
@@ -557,6 +564,7 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
 	fs.BoolVar(&f.NoCache, FlagAffectedNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
 	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run")
+	fs.BoolVar(&f.NoRedundancyCheck, FlagAffectedNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
 	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
 	fs.BoolVar(&f.Wait, FlagAffectedWait, false, "With --detach, block until the run finishes and exit with its status")
 	fs.BoolVar(&f.Open, FlagAffectedOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")

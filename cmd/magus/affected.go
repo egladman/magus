@@ -257,6 +257,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return nil
 	}
 
+	// Same check as `magus run ci`: a redundant gate refuses under load and
+	// advises when the machine is idle. See prepareGateRedundancy.
+	gate := prepareGateRedundancy(ctx, m, target, targets, charms, false)
+	if gateErr := gate.evaluate(ctx, af.NoRedundancyCheck); gateErr != nil {
+		return gateErr
+	}
+
 	opts, optsErr := outputOptionsOrDefault()
 	if optsErr != nil {
 		return optsErr
@@ -342,6 +349,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	} else {
 		err = m.Run(invCtx, targets, runOpts...)
 	}
+	gate.record(invCtx, err)
 	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
 	}
