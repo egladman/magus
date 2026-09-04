@@ -644,6 +644,7 @@ func (p EvaluatedProject) BuzzObject() BuzzObject {
 			"exclusive": t.Exclusive,
 			"slots":     t.Slots,
 			"memory_mb": t.MemoryMB,
+			"timeout":   t.Timeout,
 		}
 	}
 	m["resolvedSpells"] = spells

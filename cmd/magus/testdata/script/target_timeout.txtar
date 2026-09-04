@@ -1,0 +1,86 @@
+[windows] skip 'the fixture sleeps with sh, and the reaping assertion is what this script is for'
+
+# A per-target `timeout` is the runaway guard for a target that can stop making
+# progress without failing. The incident it exists for: a gate held three project
+# locks for 65 minutes with zero slots in use and nothing running, and no target ever
+# failed, so the invocation had to be killed by hand and blamed nothing.
+#
+# The declaration is opt-in and per target. An undeclared target is unbounded, exactly
+# as before, which the `unbounded` case below pins.
+
+# A target that outruns its ceiling FAILS. The message carries everything needed to
+# reconstruct the decision without reading code: which target, the ceiling it was held
+# to, how long it actually ran, and the log its output was captured to.
+! exec magus run slow:rw -s
+stderr 'MGS3011'
+stderr 'target "slow" exceeded its declared timeout of 2s'
+stderr 'its process tree was killed'
+stderr 'captured output: .*\.magus/logs/'
+
+# ...and the elapsed figure is what proves the process tree was actually reaped rather
+# than merely abandoned. The fixture sleeps 30s; if the SIGTERM to the process group
+# had not landed, magus would have waited for it and reported an elapsed near 30s.
+# One digit of seconds is the assertion.
+stderr 'after [0-9]s'
+
+# A target that finishes inside its ceiling is untouched. Stated out loud because a
+# guard that also fails the runs it was meant to protect is worse than no guard, and
+# nothing else here would notice.
+exec magus run quick:rw -s
+
+# An undeclared target keeps today's behavior: no deadline, however long it takes. It
+# sleeps longer than `slow`'s ceiling and still passes.
+exec magus run unbounded:rw -s
+
+# The ceiling is declared per target, so `describe` shows it where the author wrote it
+# and nowhere else.
+exec magus describe target slow .
+stdout 'timeout=2s'
+exec magus describe target unbounded .
+! stdout 'timeout='
+
+# A ceiling that is not a duration is a LOAD error, not a silently unbounded target.
+# The quiet failure is the dangerous one: a typo'd guard looks exactly like a working
+# guard right up to the hang it was supposed to end.
+cp malformed.buzz magusfile.buzz
+! exec magus ls
+stderr 'timeout'
+stderr 'is not a duration'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+export fun slow(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "sleep 30"]);
+}
+
+export fun quick(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "true"]);
+}
+
+export fun unbounded(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "sleep 3"]);
+}
+
+magus\project({
+    "targets": {
+        "slow": {"timeout": "2s"},
+        "quick": {"timeout": "5m"},
+    },
+});
+-- malformed.buzz --
+import "magus";
+import "proc";
+
+export fun slow(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "true"]);
+}
+
+magus\project({
+    "targets": {
+        "slow": {"timeout": "2 seconds"},
+    },
+});

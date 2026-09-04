@@ -1117,6 +1117,9 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				if pol.MemoryMB > 0 {
 					fmt.Printf("  memory_mb=%d", pol.MemoryMB)
 				}
+				if pol.Timeout != "" {
+					fmt.Printf("  timeout=%s", pol.Timeout)
+				}
 				fmt.Println()
 			}
 			fmt.Println()
@@ -1324,6 +1327,9 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			}
 			if e.Policy.MemoryMB > 0 {
 				fmt.Printf("  memory_mb=%d", e.Policy.MemoryMB)
+			}
+			if e.Policy.Timeout != "" {
+				fmt.Printf("  timeout=%s", e.Policy.Timeout)
 			}
 			fmt.Println()
 		}

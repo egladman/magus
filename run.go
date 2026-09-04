@@ -1946,10 +1946,18 @@ func driftDetail(ctx context.Context, res types.VCSResolution, dir string, paths
 // way to gate it.
 func (m *Magus) targetHandler(name string) TargetHandler {
 	return func(ctx context.Context, p *types.Project) error {
-		ctx, cancel := m.withTargetDeadline(ctx)
-		defer cancel()
-		run := func() error { return runTarget(ctx, p, name) }
 		pol := p.TargetPolicies[name]
+		ctx, cancel := m.withTargetDeadline(ctx, pol)
+		defer cancel()
+		started := time.Now()
+		// The ceiling is annotated here as well as one layer down, because the layer
+		// down only sees a MAGUSFILE body: a spell-backed target reaches neither that
+		// closure nor its message. CeilingExceededError leaves an already-coded error
+		// alone, so a target covered by both is still reported once.
+		run := func() error {
+			return types.CeilingExceededError(ctx, runTarget(ctx, p, name), name,
+				pol.TimeoutDuration(), time.Since(started))
+		}
 		// rw is the charm that says "keep what you wrote", so there is nothing to gate:
 		// the write was the point.
 		if types.HasCharm(ctx, types.CharmReadWrite) {
@@ -1965,21 +1973,32 @@ func (m *Magus) targetHandler(name string) TargetHandler {
 	}
 }
 
-// withTargetDeadline bounds one target's execution when config.TargetTimeout
-// is set, and is a pass-through otherwise.
+// withTargetDeadline bounds one target's execution by the tighter of the target's own
+// declared timeout and config.TargetTimeout, and is a pass-through when neither is set.
 //
 // The runaway guard: a magusfile is code, so a non-terminating loop is writable by
 // accident and nothing else reclaims a CI runner that hit one. The Buzz VM samples
 // cancellation on loop back edges (vm.checkCancel), so a spinning target notices
 // without a check per instruction.
 //
-// The deadline covers the whole target, subprocesses included, which is why it is off
-// by default - a value near a legitimate target's runtime fails builds that were fine.
-func (m *Magus) withTargetDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
-	if m.cfg.TargetTimeout <= 0 {
+// The deadline covers the whole target, subprocesses included, which is why the
+// workspace-wide setting is off by default - a value near a legitimate target's
+// runtime fails builds that were fine. A per-target ceiling is opted into one target
+// at a time, so it may be tight where the workspace-wide one cannot.
+//
+// A magusfile target is also bounded one layer down, where a ctx.needs-composed body
+// can carry its own ceiling (internal/interp.withDeclaredCeiling). This site is what
+// covers a SPELL-backed target, which never reaches that closure; both are the same
+// context deadline, so a target covered twice is simply bounded twice.
+func (m *Magus) withTargetDeadline(ctx context.Context, pol types.Target) (context.Context, context.CancelFunc) {
+	d := m.cfg.TargetTimeout
+	if own := pol.TimeoutDuration(); own > 0 && (d <= 0 || own < d) {
+		d = own
+	}
+	if d <= 0 {
 		return ctx, func() {}
 	}
-	return context.WithTimeout(ctx, m.cfg.TargetTimeout)
+	return context.WithTimeout(ctx, d)
 }
 
 // makeSpellFilteredHandler returns a handler that runs name on a single named spell.

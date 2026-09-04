@@ -289,7 +289,7 @@ automatically accounted for.
 | --- | --- | --- |
 | Concurrency slot | every `proc\exec`, so parallel work respects `-j` | on |
 | Own process group | subprocesses, so Ctrl+C reaches magus and not them | on |
-| Target deadline | a whole target, subprocesses included | **off** (`target_timeout`) |
+| Target deadline | a whole target, subprocesses included | **off** (`target_timeout`, and per target `timeout`) |
 | Filesystem sandbox | the magus process, where the platform supports it | per [sandbox](sandbox.md) config |
 | CI provider op deadline | each provider spell op | 5s, fixed |
 
@@ -312,6 +312,31 @@ subprocesses included - cancelling the context kills what the target spawned - s
 a value set near a legitimate target's runtime turns a slow compile into a failed
 build. Set it well above your slowest target, as a runaway guard rather than a
 performance budget.
+
+That is also why one workspace-wide figure is often the wrong tool: it has to clear
+the slowest target in the workspace, which leaves every other target unguarded up to
+that figure. A ceiling can be declared per target instead, which is opted into one
+target at a time and so may be tight where the workspace-wide one cannot:
+
+```buzz
+magus\project({
+    "targets": {
+        // The network-bound one. A scanner whose far end stops answering has no
+        // failure mode of its own; waiting forever is what a socket does.
+        "security": {"timeout": "15m"},
+    },
+});
+```
+
+The two compose by taking whichever is tighter, and an undeclared target is unbounded
+exactly as before - nothing is inferred. The value is a Go duration string, matching
+`target_timeout` above rather than inventing a second spelling for a time.
+
+Exceeding a ceiling **fails** the target with
+[MGS3011](../reference/codes/sandbox/MGS3011.md), naming the target, the ceiling, how
+long it ran, and the log its output was captured to. `magus doctor` keeps the
+declaration honest against the durations magus recorded
+([MGS1032](../reference/codes/magusfile/MGS1032.md)).
 
 ### A gap worth knowing
 

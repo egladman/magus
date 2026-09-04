@@ -292,6 +292,13 @@ func MemoryMB(n int) TargetOption {
 	return func(t *types.Target) { t.MemoryMB = n }
 }
 
+// Timeout returns a TargetOption setting the target's wall-clock ceiling, as a Go
+// duration string. See types.Target.Timeout; validate with types.ParseTimeout before
+// calling, since this stores the spelling verbatim.
+func Timeout(d string) TargetOption {
+	return func(t *types.Target) { t.Timeout = d }
+}
+
 // IncludeOS overrides whether the host OS keys this target's cache entry.
 func IncludeOS(v bool) TargetOption {
 	return func(t *types.Target) { t.IncludeOS = &v }

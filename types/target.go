@@ -1,10 +1,13 @@
 package types
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 )
 
 // ContextParamAnnotation is the exact parameter type annotation that marks a target: an
@@ -150,6 +153,27 @@ type Target struct {
 	// A COMPOSED target inherits the largest declaration in its chain; see
 	// ChainMemoryMB, which is the figure both halves of admission actually read.
 	MemoryMB int `json:"memory_mb,omitempty" buzz:"memory_mb"`
+	// Timeout is the wall-clock ceiling for one run of this target, as a Go duration
+	// string ("15m", "90s"). Empty means undeclared, which is unbounded - the behavior
+	// every target had before this field existed.
+	//
+	// A duration STRING rather than memory_mb's unit-in-the-key integer, because the
+	// same concept already exists at workspace scope: magus.yaml's target_timeout is a
+	// duration, and two spellings of one quantity is how a reader learns to distrust
+	// both. memory_mb carries its unit in the key only because there is no literal for
+	// megabytes; time has one.
+	//
+	// A runaway guard, not a performance budget. It bounds the whole target,
+	// subprocesses included, so a value near a legitimate run's duration fails builds
+	// that were fine. Declare a multiple of the worst run on record, not its p75.
+	//
+	// NOT folded across a chain, which is where this parts company with ChainMemoryMB.
+	// The fold there takes a MAXIMUM because sequential steps do not add their peaks;
+	// durations do add, so neither the max nor the sum of a chain's ceilings is a figure
+	// anyone declared. It needs no fold anyway: the deadline rides the context, so a
+	// scheduled target's ceiling already bounds every target it composes, and a chain
+	// member's own ceiling fires inside that as the tighter bound.
+	Timeout string `json:"timeout,omitempty" buzz:"timeout"`
 	// Drift is what happens when this target's declared outputs move under a read-only
 	// run. Empty is the DEFAULT, which gates any target that declares outputs - see
 	// DriftPolicy for why that is on rather than off.
@@ -231,6 +255,74 @@ func ValidDriftPolicy(s DriftPolicy) bool {
 		return true
 	}
 	return false
+}
+
+// ParseTimeout parses a declared target ceiling. An empty string is the undeclared
+// case and yields 0 with no error; anything else must be a positive Go duration.
+//
+// Zero and negative are rejected rather than read as "no limit": a magusfile that
+// went to the trouble of writing "0s" meant something, and silently unbounding it is
+// the reading least likely to be it.
+func ParseTimeout(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("%q is not a duration (want a Go duration string such as \"15m\" or \"90s\")", s)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("%q is not positive; omit the key to leave the target unbounded", s)
+	}
+	return d, nil
+}
+
+// TimeoutDuration is this policy's ceiling, or 0 when it declares none. A malformed
+// value reads as undeclared because load already rejected it (see ParseTimeout);
+// nothing downstream is in a position to report it a second time.
+func (t Target) TimeoutDuration() time.Duration {
+	d, err := ParseTimeout(t.Timeout)
+	if err != nil {
+		return 0
+	}
+	return d
+}
+
+// CeilingExceededError converts the cancellation a declared timeout caused into
+// MGS3011, and leaves every other outcome alone. It lives here because two layers
+// enforce the same ceiling - the magusfile target body and the scheduled target,
+// which is a spell for some targets - and one message is the point.
+//
+// The reading is narrow on purpose: only a DeadlineExceeded counts. A Ctrl+C and a
+// caller's own deadline cancel the same body, and blaming this target's declaration
+// for either would send the reader to edit a number that was not the reason.
+//
+// A timeout is a FAILURE. The body may well have returned nil - a Buzz loop notices
+// cancellation on a back edge and a killed subprocess reports its own error, but
+// neither is guaranteed - so the error is synthesized rather than trusted to arrive
+// from below. The body's own error is kept underneath when there is one: the last
+// thing a dying subprocess said is usually the most useful line in the report.
+//
+// An error already carrying this code passes through untouched, so a target bounded
+// at both layers is reported once.
+func CeilingExceededError(ctx context.Context, err error, target string, ceiling, elapsed time.Duration) error {
+	if ceiling <= 0 || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return err
+	}
+	var d *DiagnosticError
+	if errors.As(err, &d) && d.Code == TargetCeilingExceeded {
+		return err
+	}
+	msg := fmt.Sprintf("target %q exceeded its declared timeout of %s after %s; its process tree was killed",
+		target, ceiling, elapsed.Round(time.Second))
+	if log := CaptureLog(ctx); log != "" {
+		msg += "; captured output: " + log
+	}
+	if err != nil {
+		return WrapDiagnostic(TargetCeilingExceeded, err, "%s", msg)
+	}
+	return DiagnosticErrorf(TargetCeilingExceeded, "%s", msg)
 }
 
 // String returns the canonical "path:target" form.
