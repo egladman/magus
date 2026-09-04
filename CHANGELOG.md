@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A rejected archive import no longer destroys the cache file it named.**
+  `magus config cache import` extracted each tar member directly at its final cache
+  path, so a concurrent process could replay a torn blob or manifest mid-import, and
+  a corrupt archive first truncated an existing valid CAS blob and then deleted it on
+  the hash mismatch, destroying a blob other manifests still referenced. Members now
+  stage through a unique same-directory temp file and rename into place only after
+  the size cap and content-hash check pass.
 - **A daemon no longer adopts runs from a binary built from different sources.** Every
   modified-tree build of one commit stamps the same `-dirty` version string, so the
   adoption identity gate matched byte-different binaries and a warm daemon executed
