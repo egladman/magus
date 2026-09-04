@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	internalci "github.com/egladman/magus/internal/ci"
+	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	runPkg "github.com/egladman/magus/internal/proc/run"
@@ -302,6 +303,57 @@ func (g *gateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 		slog.DebugContext(ctx, "gate redundancy: record not written",
 			slog.String("store", dir), slog.String("error", err.Error()))
 	}
+}
+
+// planInheritance is the CI-shaped entry of the verdict-inheritance decision
+// for `magus affected ci --plan`. It fires only when the wired CI provider is
+// active (the github spell answers only under Actions) and names a green run
+// whose delta classifies entirely low-risk; every other path - no provider,
+// no green run, a merge in the range, code in the delta, gate_inherit false -
+// returns nil, and the plan proceeds with no output from this feature.
+//
+// The classification runs HEAD's tree against the GREEN run's commit, through
+// the same classifier the local redundancy check uses, so both features share
+// one definition of low-risk. The annotation emitted on a hit is the run-page
+// half of the explicitness contract; the summary rides the plan output to the
+// workflow's report job.
+func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFinding {
+	if internalci.InheritOff(m.All()) {
+		return nil
+	}
+	ann := annotate.Detect()
+	src, ok := ann.(annotate.RunSource)
+	if !ok {
+		return nil
+	}
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.VCS == nil || res.Source == types.VCSSourceDisabled {
+		return nil
+	}
+	g := &gateRedundancy{m: m, root: m.Root(), drv: res.VCS}
+	probe := internalci.InheritProbe{
+		LastGreenRun: func(context.Context) (string, string, bool) {
+			green, ok := src.LastGreenRun()
+			return green.Run, green.Commit, ok
+		},
+		History: func(ctx context.Context) ([]types.Commit, error) {
+			return g.drv.History(ctx, g.root, gateMergeScanLimit)
+		},
+		Changed: func(ctx context.Context, green string) ([]string, error) {
+			return g.drv.ChangedFiles(ctx, g.root, green)
+		},
+		Classifier: g.classifier(),
+	}
+	finding, ok := probe.Evaluate(ctx)
+	if !ok {
+		return nil
+	}
+	_ = ann.Annotate(annotate.Annotation{
+		Level:   annotate.LevelNotice,
+		Title:   "magus: CI verdict inherited",
+		Message: finding.AnnotationText(),
+	})
+	return &finding
 }
 
 // gatePoolProbe is swappable so a test can decide saturation without a

@@ -476,3 +476,31 @@ func TestParseBuzzProjectOpts_GateLowRisk(t *testing.T) {
 		assert.ErrorContains(t, err, `"gate_low_risk" entries must be non-empty glob strings`)
 	})
 }
+
+// gate_inherit is the CI verdict-inheritance off-switch, and only false
+// declares anything: true restates the default, which a workspace may spell
+// out without failing to load.
+func TestParseBuzzProjectOpts_GateInherit(t *testing.T) {
+	t.Run("false turns inheritance off", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("gate_inherit", vm.False)
+		assert.True(t, applyOpts(t, opts).GateInheritOff)
+	})
+
+	t.Run("true is the default spelled out", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("gate_inherit", vm.True)
+		assert.False(t, applyOpts(t, opts).GateInheritOff)
+	})
+
+	t.Run("undeclared leaves inheritance on", func(t *testing.T) {
+		assert.False(t, applyOpts(t, vm.NewMap()).GateInheritOff)
+	})
+
+	t.Run("a non-bool is a load error", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("gate_inherit", vm.StrValue("false"))
+		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		assert.ErrorContains(t, err, `"gate_inherit" takes a bool`)
+	})
+}
