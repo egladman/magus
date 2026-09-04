@@ -261,6 +261,57 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
     return true;
 }
 
+// last_green_run answers the verdict-inheritance question behind the same CI
+// provider contract: the newest green run of THIS workflow for the pull
+// request's branch, as {run, commit}. magus asks a generic verb (see
+// internal/ci/annotate.RunSource) and everything GitHub-shaped - the runs
+// API, the event and workflow environment - stays here.
+//
+// null, never an error, whenever the question has no answer: outside Actions,
+// on a non-PR event, without a token (the workflow must export GITHUB_TOKEN
+// and grant actions: read), or when no green run of this workflow exists for
+// the branch. The plan then fans out normally.
+export fun last_green_run(target: Target, cb: fun(any)) > any !> any {
+    if (!in_actions()) { return null; }
+    if (getenv("GITHUB_EVENT_NAME") != "pull_request") { return null; }
+    final branch = getenv("GITHUB_HEAD_REF");
+    final api = getenv("GITHUB_API_URL");
+    final repo = getenv("GITHUB_REPOSITORY");
+    final wf = workflow_path(getenv("GITHUB_WORKFLOW_REF"), repo);
+    if (branch == "" or api == "" or repo == "" or wf == "") { return null; }
+    if (getenv("GITHUB_TOKEN") == "") { return null; }
+    // The runs API names each run's workflow by file path, which is how the
+    // answer stays scoped to THIS pipeline: a green run of some other workflow
+    // vouches for nothing this one checks.
+    final res = http\get(api + "/repos/" + repo
+            + "/actions/runs?event=pull_request&status=success&per_page=20&branch=" + url\encode(branch),
+        mut {"Authorization": "Bearer " + magus\secret.read("GITHUB_TOKEN"),
+             "Accept": "application/vnd.github+json"});
+    if (res["status"] != 200) { return null; }
+    foreach (r in serialize\jsonDecode(res["body"]).q("workflow_runs").listValue()) {
+        if (r.q("path").stringValue() == wf) {
+            final run = r.q("html_url").stringValue();
+            final commit = r.q("head_sha").stringValue();
+            if (run != "" and commit != "") {
+                return {"run": run, "commit": commit};
+            }
+        }
+    }
+    return null;
+}
+
+// workflow_path extracts the workflow file path from GITHUB_WORKFLOW_REF
+// ("owner/repo/.github/workflows/ci.yaml@refs/pull/1/merge"), the form the
+// runs API's `path` field uses. "" for any other shape, which callers read
+// as "cannot scope the question; do not answer it".
+fun workflow_path(ref: str, repo: str) > str {
+    if (repo == "" or !ref.startsWith(repo + "/")) { return ""; }
+    final rest = ref.sub(repo.len() + 1);
+    final at = rest.indexOf("@");
+    if (at == null) { return ""; }
+    return rest.sub(0, len: at ?? 0);
+}
+
 // quote_prefixes declares the line prefixes that introduce a workflow command.
 // magus captures subprocess output and replays it, so a dependency printing
 // "::error::" would otherwise have the runner execute it and forge annotations.
@@ -448,6 +499,16 @@ test "tokenURL appends the audience to whatever query the endpoint already carri
     assert\equal(tokenURL("https://run.example.com/token?api-version=2.0", "https://github.com/egladman"),
         "https://run.example.com/token?api-version=2.0&audience=https%3A%2F%2Fgithub.com%2Fegladman",
         "an audience that is itself a URL is percent-encoded");
+}
+
+test "workflow_path takes the file path between the repo and the ref, and nothing else" {
+    assert\equal(workflow_path("egladman/magus/.github/workflows/ci.yaml@refs/pull/7/merge", "egladman/magus"),
+        ".github/workflows/ci.yaml", "the file path, without repo or ref");
+    assert\equal(workflow_path("other/repo/.github/workflows/ci.yaml@refs/heads/main", "egladman/magus"),
+        "", "a ref for another repository answers nothing");
+    assert\equal(workflow_path("egladman/magus/.github/workflows/ci.yaml", "egladman/magus"),
+        "", "a ref with no @ is not the documented shape");
+    assert\equal(workflow_path("", "egladman/magus"), "", "an unset ref answers nothing");
 }
 
 test "escapeProp encodes every separator, not just the first" {

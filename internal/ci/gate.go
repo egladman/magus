@@ -519,6 +519,129 @@ func isDirective(body string, directives []string) bool {
 	return false
 }
 
+// InheritOff reports whether any project declared gate_inherit false, the
+// workspace's off-switch for CI verdict inheritance. One declaration turns it
+// off workspace-wide, the same reach a gate_low_risk declaration has.
+func InheritOff(projects []*types.Project) bool {
+	return slices.ContainsFunc(projects, func(p *types.Project) bool { return p.GateInheritOff })
+}
+
+// PRMergeFreeRange is MergeFreeRange with the head commit exempt from the
+// merge rule. A CI provider tests a pull request as a synthetic merge of the
+// branch into its base (GitHub's refs/pull/N/merge), so under a PR checkout
+// the head is ALWAYS a merge, and it is the harness's rather than the
+// delta's: the classification diffs the tree it produced against green, so
+// everything it folded in is accounted for. A merge anyone pushed sits below
+// the synthetic head and still refuses.
+func PRMergeFreeRange(history []types.Commit, green string) bool {
+	if len(history) == 0 {
+		return false
+	}
+	if history[0].ID == green {
+		return true
+	}
+	return MergeFreeRange(history[1:], green)
+}
+
+// InheritFinding is a fired verdict-inheritance decision: the green run being
+// inherited, its head commit, and the classified delta a reader disputes it by.
+type InheritFinding struct {
+	Run    string
+	Commit string
+	Delta  GateDelta
+}
+
+// InheritProbe gathers the CI verdict-inheritance inputs. Dependencies are
+// functions for ChangeClassifier's reason: the decision is testable with a
+// stubbed provider and no repository.
+type InheritProbe struct {
+	// Disabled: the workspace declared gate_inherit false; nothing is probed.
+	Disabled bool
+	// LastGreenRun asks the CI provider for the branch/PR's newest green run
+	// of this same pipeline. ok=false is the ordinary no-answer case.
+	LastGreenRun func(ctx context.Context) (run, commit string, ok bool)
+	// History lists commits from HEAD, newest first, deep enough to reach a
+	// green run worth inheriting.
+	History func(ctx context.Context) ([]types.Commit, error)
+	// Changed lists the paths whose content differs between the working tree
+	// and the green commit.
+	Changed    func(ctx context.Context, green string) ([]string, error)
+	Classifier ChangeClassifier
+}
+
+// Evaluate decides. ok=false means the plan proceeds exactly as it would
+// have before this feature existed, with no output at all; ok=true carries
+// the full finding, because an inherited verdict is never a silent skip.
+func (p InheritProbe) Evaluate(ctx context.Context) (InheritFinding, bool) {
+	if p.Disabled || p.LastGreenRun == nil || p.History == nil || p.Changed == nil {
+		return InheritFinding{}, false
+	}
+	run, commit, ok := p.LastGreenRun(ctx)
+	if !ok || commit == "" {
+		return InheritFinding{}, false
+	}
+	history, err := p.History(ctx)
+	if err != nil || !PRMergeFreeRange(history, commit) {
+		return InheritFinding{}, false
+	}
+	changed, err := p.Changed(ctx, commit)
+	if err != nil {
+		return InheritFinding{}, false
+	}
+	delta := p.Classifier.Classify(ctx, changed, commit)
+	if !delta.LowRiskOnly() {
+		return InheritFinding{}, false
+	}
+	return InheritFinding{Run: run, Commit: commit, Delta: delta}, true
+}
+
+// AnnotationText renders the finding for a CI annotation: the inherited run,
+// its commit, and every changed path with its class, so the annotation alone
+// lets a reader reconstruct and dispute the decision.
+func (f InheritFinding) AnnotationText() string {
+	var b strings.Builder
+	b.WriteString("verdict inherited from run " + f.Run + " (commit " + shortRev(f.Commit) +
+		"): every path changed since that green run classifies low-risk")
+	if len(f.Delta.Paths) == 0 {
+		b.WriteString("\nno paths changed since that run")
+		return b.String()
+	}
+	for _, line := range f.Delta.Lines() {
+		b.WriteString("\n" + line)
+	}
+	return b.String()
+}
+
+// SummaryMarkdown renders the finding for the workflow's job summary, under
+// the same explicitness contract: every file, its class, and what classified
+// it - never a count.
+func (f InheritFinding) SummaryMarkdown() string {
+	var b strings.Builder
+	b.WriteString("### Inherited verdict\n\n")
+	b.WriteString("The shard fan-out was short-circuited: every path changed since this " +
+		"branch's last green CI run classifies low-risk, so that run's verdict stands.\n\n")
+	b.WriteString("Inherited run: " + f.Run + " at commit `" + shortRev(f.Commit) + "`.\n\n")
+	if len(f.Delta.Paths) == 0 {
+		b.WriteString("No paths changed since that run.\n")
+		return b.String()
+	}
+	b.WriteString("| Changed path | Class | Classified by |\n| --- | --- | --- |\n")
+	for _, p := range f.Delta.Paths {
+		b.WriteString("| `" + p.Path + "` | " + p.Class.String() + " | " + p.Why + " |\n")
+	}
+	b.WriteString("\nTo dispute a row, its last column names the declaration or mechanism " +
+		"that classified it; to turn inheritance off, declare `gate_inherit = false` in magus.project.\n")
+	return b.String()
+}
+
+// shortRev abbreviates a commit id for the inheritance report.
+func shortRev(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
 // dropTrailingIndent removes the horizontal whitespace already written just
 // before a stripped comment, so `x = 1  # note` strips to `x = 1`.
 func dropTrailingIndent(out *strings.Builder) {

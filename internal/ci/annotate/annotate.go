@@ -132,6 +132,23 @@ type Annotator interface {
 	Defang(text string) string
 }
 
+// GreenRun names a green CI run the provider has on record: the provider's
+// own reference for the run (a URL or id a person can open) and the head
+// commit it verified.
+type GreenRun struct {
+	Run    string
+	Commit string
+}
+
+// RunSource is the optional provider capability behind CI verdict
+// inheritance: the newest green run of this same pipeline for the current
+// branch or pull request. A provider that cannot answer - not a PR context,
+// no API access, no green run yet - reports ok=false, and the caller
+// proceeds as if the capability did not exist.
+type RunSource interface {
+	LastGreenRun() (GreenRun, bool)
+}
+
 // Nop is the Annotator used when no provider is detected. Every method
 // succeeds and does nothing, so core needs no nil checks.
 type Nop struct{}

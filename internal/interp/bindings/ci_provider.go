@@ -158,6 +158,34 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 	})
 }
 
+// runQueryTimeout bounds last_green_run alone. Unlike the formatting ops
+// under opTimeout, answering it means a round trip to the provider's API,
+// so it gets API headroom - and it runs once per plan, never per line.
+const runQueryTimeout = 15 * time.Second
+
+// LastGreenRun implements [annotate.RunSource] over the spell's optional
+// last_green_run op, which answers {run, commit} or null. Any failure -
+// an undeclared op, a null answer, a malformed record, a timeout - reads
+// as "no green run": inheritance is an optimization, never a capability.
+func (a *spellAnnotator) LastGreenRun() (annotate.GreenRun, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), runQueryTimeout)
+	defer cancel()
+	resp, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: "last_green_run"})
+	if err != nil || resp.Data == nil {
+		return annotate.GreenRun{}, false
+	}
+	m, ok := resp.Data.(map[string]any)
+	if !ok {
+		return annotate.GreenRun{}, false
+	}
+	run, _ := m["run"].(string)
+	commit, _ := m["commit"].(string)
+	if run == "" || commit == "" {
+		return annotate.GreenRun{}, false
+	}
+	return annotate.GreenRun{Run: run, Commit: commit}, true
+}
+
 // Defang neutralizes the provider's own command syntax in replayed output.
 //
 // The spell declares its command prefixes once, via quote_prefixes, and

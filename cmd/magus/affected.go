@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
+	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -415,6 +416,9 @@ type planOutput struct {
 	MaxParallel int         `json:"max_parallel"`
 	Source      string      `json:"source"`
 	Matrix      []planShard `json:"matrix"`
+	// Inherit is present only when the plan inherited a green run's verdict;
+	// see planInherit. The matrix beside it is then empty on purpose.
+	Inherit *planInherit `json:"inherit,omitempty"`
 	// Detail is keyed by shard id and present only under --detail.
 	//
 	// A SIBLING of Matrix rather than fields on its entries, and that is a hard
@@ -429,6 +433,24 @@ type planOutput struct {
 type planShard struct {
 	Shard    string `json:"shard"    yaml:"shard"`
 	Projects string `json:"projects" yaml:"projects"`
+}
+
+// planInherit is the --plan inheritance block: the delta since the branch's
+// last green CI run classified entirely low-risk, so that run's verdict
+// stands, the emitted matrix is empty, and the workflow's report publishes
+// Summary. Never a silent skip: every changed path rides along with its class
+// and the fact that classified it.
+type planInherit struct {
+	Run     string            `json:"run"`
+	Commit  string            `json:"commit"`
+	Paths   []planInheritPath `json:"paths"`
+	Summary string            `json:"summary"`
+}
+
+type planInheritPath struct {
+	Path  string `json:"path"`
+	Class string `json:"class"`
+	Why   string `json:"why"`
 }
 
 // shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
@@ -572,6 +594,20 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 	}
 
+	// Verdict inheritance, only for a full ci plan: a filtered or hypothetical
+	// (--stdin) plan describes a subset no green run vouches for. On a hit the
+	// shards are emptied, so the workflow's count>0 guard skips the fan-out, and
+	// the finding rides the output for the report job to publish.
+	var inherit *internalci.InheritFinding
+	if target == types.TargetCI && !pf.Stdin && len(only) == 0 {
+		if inherit = planInheritance(ctx, m); inherit != nil {
+			plan.Shards = nil
+			plan.MaxParallel = 0
+			slog.InfoContext(ctx, "ci plan inherits a green run's verdict",
+				slog.String("run", inherit.Run), slog.String("commit", inherit.Commit))
+		}
+	}
+
 	totalProjects := 0
 	for _, s := range plan.Shards {
 		totalProjects += len(s.ProjectPaths)
@@ -591,6 +627,13 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	for i, s := range plan.Shards {
 		out.Matrix[i] = planShard{Shard: s.ID, Projects: strings.Join(s.ProjectPaths, " ")}
+	}
+	if inherit != nil {
+		pi := &planInherit{Run: inherit.Run, Commit: inherit.Commit, Summary: inherit.SummaryMarkdown()}
+		for _, p := range inherit.Delta.Paths {
+			pi.Paths = append(pi.Paths, planInheritPath{Path: p.Path, Class: p.Class.String(), Why: p.Why})
+		}
+		out.Inherit = pi
 	}
 	if pf.Detail {
 		out.Detail, err = planDetail(ctx, m, target, plan.Shards)

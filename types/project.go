@@ -233,8 +233,14 @@ type Project struct {
 	// comparison), because a glob cannot assert either honestly.
 	GateLowRisk         []string
 	GateLowRiskDeclared bool
-	WatchIgnores        []IgnorePattern
-	TargetPolicies      map[string]Target // per-target execution policy; values carry only the policy fields of Target
+	// GateInheritOff is magus.project's "gate_inherit" key declared false: this
+	// workspace's CI plan never inherits a green run's verdict, however the
+	// delta classifies. One declaration turns it off workspace-wide - the same
+	// reach a gate_low_risk declaration has - because inheritance is one
+	// decision over the whole plan, not a per-project one.
+	GateInheritOff bool
+	WatchIgnores   []IgnorePattern
+	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via
 	// ctx.readsFiles(...), keyed by normalized target name (DefaultTargetNameNormalizer,
 	// matching the TargetPolicies key space buildStep looks up). ONE representation
