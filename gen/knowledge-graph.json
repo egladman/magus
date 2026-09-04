@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5215,
-  "edge_count": 9258,
+  "edge_count": 9260,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -55593,6 +55593,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS4003",
       "relation": "documents",
       "confidence": "inferred",
@@ -56626,6 +56634,14 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS3007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS3010",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
