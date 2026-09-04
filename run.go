@@ -753,14 +753,23 @@ func servesTarget(spells []*spells.Spell, target string) bool {
 	return false
 }
 
-// firstTargetPolicy returns the policy for target from the first project that declares one.
-func firstTargetPolicy(projects []*types.Project, target string) types.Target {
+// anyRetryOnVolatile reports whether any of projects opted target into retries.
+//
+// An upper bound, and only ever used as one: it decides whether the run pays for the
+// affected pass a retry decision needs, never whether a given target may retry. That
+// question is answered per (project, target) at the invocation, because a run that
+// selects one opted-in target and twenty others must retry exactly the one.
+//
+// It scans every project rather than stopping at the first that declares ANY policy
+// for the target, which is what the helper it replaced did: a project declaring
+// `test: {slots: 4}` shadowed a sibling's retry opt-in and switched the pass off.
+func anyRetryOnVolatile(projects []*types.Project, target string) bool {
 	for _, p := range projects {
-		if pol, ok := p.TargetPolicies[target]; ok {
-			return pol
+		if p.TargetPolicies[target].RetryOnVolatile {
+			return true
 		}
 	}
-	return types.Target{}
+	return false
 }
 
 // toolVersionMode resolves the cache tool-version policy from MAGUS_CACHE_TOOL_VERSION.
@@ -1150,7 +1159,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	trackVolatile := false
 	for _, st := range stages {
 		handlerOf[st.target] = st.handler
-		if firstTargetPolicy(st.projects, st.target).RetryOnVolatile {
+		if anyRetryOnVolatile(st.projects, st.target) {
 			trackVolatile = true
 		}
 		for _, p := range st.projects {
@@ -1273,9 +1282,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// retries. The history this writes is the same store the shard forecaster
 	// reads, so gating installation on RetryOnVolatile meant a workspace where no
 	// target opts in - which is this one - recorded nothing at all, and the
-	// forecaster predicted DefaultDurationMs for every project forever. Retrying
-	// stays gated: the flag rides on the runtime and Decide honors it, so a
-	// target that never asked for a retry still never gets one.
+	// forecaster predicted DefaultDurationMs for every project forever.
+	//
+	// trackVolatile is the run-wide switch, and it buys one thing: a run where
+	// nothing opted in skips the affected pass buildVolatilityRuntime would
+	// otherwise make. It does NOT decide which target retries - invokeSpell reads
+	// that pair's own policy - so a run that selects one opted-in target alongside
+	// twenty others still retries exactly the one.
 	var volatilityRT *volatility.Runtime
 	if m.cfg.Volatility.Enabled {
 		retry := trackVolatile && !opts.NoVolatilityRetry
@@ -1695,6 +1708,10 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	}
 
 	volatileTarget := s.Name() + "/" + name
+	// This pair's own opt-in. Read here because here is the only place that holds
+	// both halves of the (project, target) the decision is about; the Runtime holds
+	// one answer for the whole run, which is not the same question.
+	eligible := p.TargetPolicies[name].RetryOnVolatile
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
 	// Collect the peak resident memory of every process this target runs, so the
@@ -1715,7 +1732,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	decision := volatility.Decision{}
 
 	if err != nil {
-		decision = rt.Decide(p.Path, volatileTarget, affected)
+		decision = rt.Decide(p.Path, volatileTarget, affected, eligible)
 		if decision.Retry {
 			resp2, err2 := s.Invoke(ctx, req)
 			if err2 == nil {
@@ -1754,6 +1771,19 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		} else if rt.IsRegression(p.Path, volatileTarget) {
 			status = "suspected_regression"
 		}
+		// Said out loud on every host, because the two surfaces below reach almost
+		// nobody: the annotation needs a live CI annotator (Nop everywhere else) and
+		// the report record needs --report. Without this a target failed, silently
+		// reran, passed, and the run came back green with the first attempt's output
+		// collapsed - which is precisely the unnoticed volatile target annotateVolatility
+		// exists to prevent, going unnoticed anyway.
+		slog.WarnContext(ctx, "magus: volatile target retried",
+			slog.String("project", p.Path),
+			slog.String("target", volatileTarget),
+			slog.String("status", status),
+			slog.String("reason", string(decision.Reason)),
+			slog.Float64("score", rt.Score(p.Path, volatileTarget)))
+
 		annotateVolatility(p.Path, volatileTarget, status, rt)
 
 		if rw := report.WriterFromContext(ctx); rw != nil {

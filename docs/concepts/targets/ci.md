@@ -212,7 +212,8 @@ regression looks the same as a volatile failure from the outside.
 
 **magus:** [volatility](../volatility.md) detection decides statistically from
 per-target history rather than by rerunning blindly, and only targets that opt in
-with `RetryOnVolatile` are eligible.
+with `retry_on_volatile` - naming the reason they are volatile - are eligible. A
+sibling under the same `ci` never inherits that opt-in, and every retry is logged.
 
 ### A maintenance branch silently upgrades magus
 

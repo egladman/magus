@@ -20,4 +20,6 @@ export object Target {
     timeout: str = "",
     drift: str = "",
     drift_reason: str = "",
+    retry_on_volatile: bool = false,
+    retry_on_volatile_reason: str = "",
 }

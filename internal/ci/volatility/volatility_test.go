@@ -46,7 +46,7 @@ func buildRuntime(results []string, affected bool) *Runtime {
 func TestShouldRetry_Bootstrap(t *testing.T) {
 	t.Parallel()
 	rt := buildRuntime([]string{"pass", "pass"}, true) // only 2 outcomes < 5
-	d := rt.Decide(testProject, testTarget, true)
+	d := rt.Decide(testProject, testTarget, true, true /*eligible*/)
 	assert.True(t, d.Retry)
 	assert.Equal(t, ReasonBootstrap, d.Reason)
 }
@@ -57,7 +57,7 @@ func TestShouldRetry_UnaffectedFailure(t *testing.T) {
 	t.Parallel()
 	// 10 clean passes → score = 0 (no volatile outcomes), well past bootstrap.
 	rt := buildRuntime([]string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass"}, true)
-	d := rt.Decide(testProject, testTarget, false /*not affected*/)
+	d := rt.Decide(testProject, testTarget, false /*not affected*/, true /*eligible*/)
 	assert.True(t, d.Retry)
 	assert.Equal(t, ReasonUnaffectedFailure, d.Reason)
 }
@@ -68,7 +68,7 @@ func TestShouldRetry_PredictedVolatile(t *testing.T) {
 	t.Parallel()
 	// 3 volatile, 7 passes → volatility rate 30%; Wilson LB should be well above 5%.
 	rt := buildRuntime([]string{"pass", "volatile", "pass", "volatile", "pass", "volatile", "pass", "pass", "pass", "pass"}, true)
-	d := rt.Decide(testProject, testTarget, true /*affected*/)
+	d := rt.Decide(testProject, testTarget, true /*affected*/, true /*eligible*/)
 	assert.True(t, d.Retry)
 	assert.Equal(t, ReasonPredictedVolatile, d.Reason)
 }
@@ -79,7 +79,7 @@ func TestShouldRetry_Skip(t *testing.T) {
 	t.Parallel()
 	// 10 clean passes, no volatile outcomes → score = 0.
 	rt := buildRuntime([]string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass"}, true)
-	d := rt.Decide(testProject, testTarget, true /*affected*/)
+	d := rt.Decide(testProject, testTarget, true /*affected*/, true /*eligible*/)
 	assert.False(t, d.Retry, "no volatility history, likely real failure")
 }
 
@@ -261,7 +261,7 @@ func TestRuntimeRecordsWithoutRetryingWhenNotOptedIn(t *testing.T) {
 
 	// Bootstrap conditions: with no history at all, shouldRetry would return
 	// Retry=true for an opted-in target. This one did not opt in.
-	d := rt.Decide("svc/api", "go/test", true)
+	d := rt.Decide("svc/api", "go/test", true, false /*not eligible*/)
 	assert.False(t, d.Retry, "a target that never opted into RetryOnVolatile must never be retried")
 	assert.Equal(t, ReasonDisabled, d.Reason)
 
@@ -273,9 +273,18 @@ func TestRuntimeRecordsWithoutRetryingWhenNotOptedIn(t *testing.T) {
 	require.Len(t, got.RecentOutcomes, 1, "recording must not depend on the retry policy")
 	assert.Equal(t, int64(512<<20), got.RecentOutcomes[0].MaxRSSBytes)
 
-	// The same runtime WITH the opt-in does retry, so the gate is the flag and
+	// The same runtime WITH the opt-in does retry, so the gate is the policy and
 	// nothing else.
-	assert.True(t, NewRuntime(h, "", testCfg, nil, true).Decide("svc/api", "go/test", true).Retry)
+	assert.True(t, NewRuntime(h, "", testCfg, nil, true).Decide("svc/api", "go/test", true, true).Retry)
+
+	// Both halves of the gate are required, and each one alone refuses. The run-wide
+	// half carries --no-volatility-retry; the per-pair half is the target's own
+	// policy, and it is passed in because the Runtime holds one answer for a run that
+	// selects many targets with different ones.
+	assert.False(t, NewRuntime(h, "", testCfg, nil, false).Decide("svc/api", "go/test", true, true).Retry,
+		"--no-volatility-retry must refuse an opted-in target")
+	assert.False(t, NewRuntime(h, "", testCfg, nil, true).Decide("svc/api", "go/test", true, false).Retry,
+		"a run where some other target opted in must not make this one retryable")
 }
 
 // Recording an outcome must feed the DURATION model as well as the volatility counters.
