@@ -208,8 +208,9 @@ ways:
 ci also runs on a main push, and that is not a publish step: the push run is what
 populates the shared cache and the run history a pull request may only read.
 
-release-index.yaml and release.yaml's tail both call `.github/actions/release-index`,
-and they are the only two things that read `MAGUS_SIGNING_KEY` besides `release-sign`.
+release-index.yaml and release.yaml's tail both run the `release-index` magusfile
+target (`magus run release-index:cd`; there is no composite action any more), and
+they are the only two things that read `MAGUS_SIGNING_KEY` besides `release-sign`.
 registry.yaml signs too, with a SEPARATE `MAGUS_REGISTRY_KEY`: its input is several
 hundred third-party HTTP responses, which is the last place the key that signs magus
 binaries should be reachable from.
@@ -220,7 +221,7 @@ admin role - so each opens one instead, and merging it is what publishes the ind
 
 - `source-path: .` - nearly everything: ci's `plan`, `ci`, `advice` and
   `report`, both cd jobs, audit's `determinism` and `toolchain`,
-  regenerate's `fix`, and registry's `build`. Builds the magus
+  regenerate's `fix`, registry's `build`, and release-index's `publish`. Builds the magus
   THIS commit defines and runs it against this commit's magusfile, so a change that
   `magusfile.buzz` needs is exercised by the very run that introduces it - there is
   no "release first" chicken-and-egg.
