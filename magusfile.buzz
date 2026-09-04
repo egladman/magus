@@ -63,6 +63,11 @@ final cache_insecure = os\env("MAGUS_CACHE_REMOTE_INSECURE");
 if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" or cache_insecure == "1") {
     magus\cache.remote(github);
 }
+// Unconditional, unlike the cache above: the spell's enabled() gates every op
+// on GITHUB_ACTIONS, so this costs nothing on a laptop. Under Actions it
+// supplies the job-log structure AND answers last_green_run, which is what
+// lets `affected ci --plan` inherit a green run's verdict on a low-risk push.
+magus\ci.provider(github);
 
 // Outputs are declared per-target with ctx.writesFiles (in each *-generate body
 // below) rather than project-wide: each generated tree belongs to exactly one
@@ -2721,9 +2726,15 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
     foreach (row in plan.q("matrix").listValue()) {
         include.append({"shard": row.q("shard").stringValue(), "projects": row.q("projects").stringValue()});
     }
+    // The plan decides inheritance; this only forwards the verdict. An absent
+    // block queries to "", which is every ordinary run.
+    final inheritRun = plan.q("inherit").q("run").stringValue();
+    var inherited = "false";
+    if (inheritRun != "") { inherited = "true"; }
     final block = "matrix=" + serialize\jsonEncode({"include": include}) + "\n"
         + "count=" + plan.q("count").integerValue() + "\n"
-        + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
+        + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n"
+        + "inherit=" + inherited + "\n";
 
     if (!ctx.hasCharm("gha")) {
         magus\log.info("ci-shard preview (add the gha charm - `magus run ci-shard:gha` - to write $GITHUB_OUTPUT):\n" + block);
@@ -2743,6 +2754,15 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
     final summaryPath = os\env("GITHUB_STEP_SUMMARY");
     if (summaryPath != null and ("{summaryPath}") != "") {
         final sp = "{summaryPath}";
+        // An inherited verdict publishes its own report - the run it inherits, its
+        // commit, and every changed path with the class that let it ride along -
+        // in place of a shard table describing shards that will not run.
+        if (inheritRun != "") {
+            var existingInherit = "";
+            if (fs\exists(sp)) { existingInherit = fs\readFile(sp); }
+            fs\writeFile(sp, existingInherit + plan.q("inherit").q("summary").stringValue());
+            return;
+        }
         var md = "## Affected CI plan\n\n"
             + plan.q("count").integerValue() + " shard(s), max parallel "
             + plan.q("max_parallel").integerValue() + "\n\n"

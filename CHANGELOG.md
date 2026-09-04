@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A pull request inherits its last green run's verdict when the delta is low-risk.**
+  `magus affected ci --plan` asks the wired CI provider for the newest green run of the
+  same workflow on this branch - `magus\ci.provider(github)` wires it, and the github
+  spell's `last_green_run` answers under Actions and null everywhere else, so a laptop
+  plan is unchanged - then classifies every path changed since that run's head commit
+  through the same classifier the local redundancy check uses: generated output, prose,
+  comment-only edits. When nothing classifies as code the plan emits an empty shard
+  matrix and an `inherit` block, and ci.yaml's shard fan-out and advisor short-circuit
+  on that one plan output; plan and report always run. The verdict is GREEN and never a
+  silent skip: the run page carries a notice annotation, and the job summary a table
+  naming the inherited run, its head commit, and every changed path with the
+  declaration or mechanism that classified it. A merge anyone pushed into the range
+  re-runs the fan-out - the provider's own synthetic pull-request head merge does not,
+  since the classification already diffs the tree it produced - and every other
+  unanswerable case (no provider, no green run, an unreadable range) plans exactly as
+  it did before. `gate_inherit = false` in `magus.project` turns it off workspace-wide.
 - **A redundant ci gate defers to the pull request when the machine is loaded.** When a
   green gate is already recorded for this branch and everything changed since falls in
   a low-risk class - generated output, prose (magus ships markdown globs;
