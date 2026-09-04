@@ -163,6 +163,98 @@ func TestRunAllDependencyDiamond(t *testing.T) {
 	require.NoError(t, err, "RunAll")
 }
 
+// TestRunAllRunAfterOrdersAcrossTargets verifies a derived RunAfter edge orders
+// two steps that DependsOn cannot: they carry different target names, so the
+// same-target coarse wait never applies.
+func TestRunAllRunAfterOrdersAcrossTargets(t *testing.T) {
+	root, c := openCache(t)
+	rec := newOrderRecorder()
+
+	steps := []Step{
+		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []string{DepKey(".", "gen")}},
+		{ProjectPath: ".", Target: "gen", WorkspaceRoot: root},
+	}
+
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
+		if s.ProjectPath == "docs" {
+			assert.True(t, rec.doneBefore("."), "reader started before its derived writer finished")
+		}
+		rec.start(s.ProjectPath)
+		rec.finish(s.ProjectPath)
+		return nil
+	}, WithLimiter(NewLimiter(8)))
+	require.NoError(t, err, "RunAll")
+	assert.Len(t, rec.started, 2)
+}
+
+// TestRunAllRunAfterUpstreamFailureReleasesWaiter verifies a RunAfter waiter is
+// released - and failed - when its writer step fails, not left blocked: markDone
+// runs on every exit path, and the waiter reads the writer's real verdict.
+func TestRunAllRunAfterUpstreamFailureReleasesWaiter(t *testing.T) {
+	root, c := openCache(t)
+	steps := []Step{
+		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []string{DepKey(".", "gen")}},
+		{ProjectPath: ".", Target: "gen", WorkspaceRoot: root},
+	}
+	ran := make(map[string]bool)
+	var mu sync.Mutex
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
+			mu.Lock()
+			ran[s.ProjectPath] = true
+			mu.Unlock()
+			if s.ProjectPath == "." {
+				return errors.New("boom")
+			}
+			return nil
+		}, WithLimiter(NewLimiter(8)))
+		assert.ErrorContains(t, err, "boom")
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("RunAll deadlocked: RunAfter waiter never released after its writer failed")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	assert.True(t, ran["."], "writer ran")
+	assert.False(t, ran["docs"], "reader must not run after its RunAfter writer failed")
+}
+
+// TestRunAllRunAfterOutOfScope verifies a RunAfter key naming a step outside
+// the batch is skipped, not blocked on forever.
+func TestRunAllRunAfterOutOfScope(t *testing.T) {
+	root, c := openCache(t)
+	steps := []Step{
+		{ProjectPath: "docs", Target: "check", WorkspaceRoot: root, RunAfter: []string{DepKey("elsewhere", "gen")}},
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, err := c.RunAll(context.Background(), steps, func(_ context.Context, _ Step) error { return nil })
+		assert.NoError(t, err)
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("RunAll deadlocked on an out-of-scope RunAfter key")
+	}
+}
+
+// TestRunAllRunAfterCycleRejected verifies RunAfter edges join the pre-launch
+// acyclicity check, so a bad derivation fails loudly instead of deadlocking.
+func TestRunAllRunAfterCycleRejected(t *testing.T) {
+	root, c := openCache(t)
+	steps := []Step{
+		{ProjectPath: "a", Target: "gen", WorkspaceRoot: root, RunAfter: []string{DepKey("b", "check")}},
+		{ProjectPath: "b", Target: "check", WorkspaceRoot: root, RunAfter: []string{DepKey("a", "gen")}},
+	}
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, _ Step) error { return nil })
+	require.ErrorContains(t, err, "dependency cycle")
+}
+
 // TestRunAllDependencyOutOfScope verifies that a dependency on a project not
 // present in the steps slice does not deadlock: the dependent runs anyway.
 func TestRunAllDependencyOutOfScope(t *testing.T) {
