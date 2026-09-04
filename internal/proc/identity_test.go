@@ -15,11 +15,22 @@ func TestDevVersionSentinelMatchesWard(t *testing.T) {
 	assert.Equal(t, ward.DevVersion, devVersionSentinel)
 }
 
+// pinBuildVCS forces the build state adoptionIdentity reads, restoring the real
+// reader on cleanup, so these tests do not inherit the VCS state of whatever tree
+// built the test binary.
+func pinBuildVCS(t *testing.T, rev string, modified, ok bool) {
+	t.Helper()
+	restore := buildVCS
+	buildVCS = func() (string, bool, bool) { return rev, modified, ok }
+	t.Cleanup(func() { buildVCS = restore })
+}
+
 // adoptionIdentity is symmetric and total: "" and stamped releases pass through, only the
-// dev sentinel is rewritten to a fingerprint. These cases pin the pass-through halves; the
-// fingerprint half depends on this test binary's own VCS stamp, so it is asserted by
-// property (see TestAdoptionIdentityDevIsFingerprinted) rather than exact value.
+// dev sentinel is rewritten to a fingerprint. These cases pin the pass-through halves for
+// a CLEAN build; a modified build never passes through (see
+// TestAdoptionIdentityStampedDirtyIsNotShared).
 func TestAdoptionIdentityPassThrough(t *testing.T) {
+	pinBuildVCS(t, "abc123", false, true)
 	cases := map[string]string{
 		"":                 "",       // the check-disabled / test-injection escape hatch
 		"v0.4.2":           "v0.4.2", // a stamped release version
@@ -31,6 +42,34 @@ func TestAdoptionIdentityPassThrough(t *testing.T) {
 	}
 }
 
+// A stamped dirty build's display version is `git describe --dirty`, which every dirty
+// build of one commit shares - the daemon built at one dirty state and a client rebuilt
+// at another carry the SAME string while running different code. Passing it through let
+// the stale daemon adopt the newer client and execute the run with old code. The
+// identity must therefore be the executable file's, never the shared string.
+func TestAdoptionIdentityStampedDirtyIsNotShared(t *testing.T) {
+	pinBuildVCS(t, "6bfd32710", true, true)
+	const stamped = "v0.4.2-2-g6bfd32710-dirty"
+	got := adoptionIdentity(stamped)
+	assert.NotEqual(t, stamped, got, "a dirty build must not gate adoption on its shared describe string")
+	assert.Equal(t, binaryIdentity, got, "a dirty build identifies as the executable file it runs from")
+	assert.NotEmpty(t, got)
+
+	// The escape hatch outranks the dirty rule: "" still disables the gate.
+	assert.Equal(t, "", adoptionIdentity(""))
+}
+
+// binaryIdentity is never empty (an empty identity would disable the version gate) and
+// maps the same executable file to the same value, so a process and the children it
+// forks from that file keep adopting each other.
+func TestBinaryIdentityStableAndNonEmpty(t *testing.T) {
+	assert.NotEmpty(t, binaryIdentity)
+	if binaryIdentity != devUnverifiable {
+		assert.Contains(t, binaryIdentity, "dev-bin-")
+		assert.Equal(t, binaryIdentity, computeBinaryIdentity(), "the same executable file must map to the same identity")
+	}
+}
+
 // A dev build's identity is never the raw sentinel: it is either "dev-<revision>" (clean)
 // or the per-process devUnverifiable token (dirty / no VCS). Whichever this test binary is,
 // the result must differ from "unknown" so two dev builds cannot match on the placeholder.
@@ -39,14 +78,17 @@ func TestAdoptionIdentityDevIsFingerprinted(t *testing.T) {
 	assert.NotEqual(t, devVersionSentinel, got, "a dev build must not keep the shared placeholder as its identity")
 	assert.NotEmpty(t, got, "a dev build's identity is never empty (that would disable the gate)")
 
-	// Mirror adoptionIdentity's own decision: a build is unverifiable when it has no build
-	// info, a dirty tree, or no embedded revision (go test binaries typically carry no
-	// vcs.revision, so this branch is the common one under `go test`).
+	// Mirror adoptionIdentity's own decision (go test binaries typically carry no
+	// vcs.revision, so the unverifiable branch is the common one under `go test`).
 	rev, modified, ok := buildVCS()
-	if !ok || modified || rev == "" {
+	switch {
+	case ok && modified:
+		// Dirty build: the identity is the executable file's, per-file not per-process.
+		assert.Equal(t, binaryIdentity, got)
+	case !ok || rev == "":
 		// Unprovable build: identity is the per-process token, which never matches anything.
 		assert.Equal(t, devUnverifiable, got)
-	} else {
+	default:
 		// Clean build with an embedded revision: identity encodes it and is stable per build.
 		assert.Equal(t, "dev-"+rev, got)
 		assert.NotEqual(t, devUnverifiable, got, "a clean build has a revision-derived, not per-process, identity")

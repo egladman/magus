@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
@@ -622,8 +623,23 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 			}
 			manifestBytes = buf
 			manifestFinal = clean
-			manifestTmp = clean + ".import.tmp"
-			if err := os.WriteFile(manifestTmp, buf, 0o644); err != nil {
+			// Uniquely named: the cache is shared machine-wide, so two importers of
+			// this entry can be staging at once, and a fixed temp path would let one
+			// swap its bytes under the other's already-verified commit.
+			tmpf, err := os.CreateTemp(filepath.Dir(clean), filepath.Base(clean)+".import-*.tmp")
+			if err != nil {
+				return fmt.Errorf("importArtifact: stage manifest: %w", err)
+			}
+			manifestTmp = tmpf.Name()
+			if _, err := tmpf.Write(buf); err != nil {
+				_ = tmpf.Close()
+				return fmt.Errorf("importArtifact: stage manifest: %w", err)
+			}
+			if err := tmpf.Close(); err != nil {
+				return fmt.Errorf("importArtifact: stage manifest: %w", err)
+			}
+			// CreateTemp makes the file 0600; the committed manifest was always 0644.
+			if err := file.Chmod(manifestTmp, 0o644); err != nil {
 				return fmt.Errorf("importArtifact: stage manifest: %w", err)
 			}
 		case rel == path.Join("logs", flattenPath(wantProject), wantHash+".log") ||
@@ -632,10 +648,10 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 			// being imported so an artifact cannot write over another key's records.
 			// Staged beside their final path and committed only after the signature
 			// covers them, so an unsigned or tampered extra never lands where a later
-			// run would read it. The staging suffix carries the member index, so two
-			// members can never contend for one temp path.
-			tmp := fmt.Sprintf("%s.import-%d.tmp", clean, len(extras))
-			sum, err := c.writeCacheFile(tr, tmp, "", &budget)
+			// run would read it. The temp name is unique per call, not derived from
+			// the member: the cache is shared machine-wide, and a fixed name would
+			// let a concurrent importer swap its bytes under this one's signature.
+			tmp, sum, err := c.stageCacheFile(tr, clean, "", &budget)
 			if err != nil {
 				return err
 			}
@@ -665,12 +681,14 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 			// manifest, so its log is unauthenticated: keep the entry (it still
 			// replays) and drop the extras rather than reject an artifact every
 			// released magus produces. Delete this branch with sigAlg.
+			dropStagedExtras(extras)
 			extras = nil
 		}
 	} else {
 		// No trust set (an explicitly insecure remote): nothing authenticates the
 		// extras, so drop them rather than write unverified bytes where a later run
 		// would replay them as this machine's own output.
+		dropStagedExtras(extras)
 		extras = nil
 	}
 	var m Manifest
@@ -729,6 +747,15 @@ type stagedMember struct {
 	final string // where it belongs once authenticated
 }
 
+// dropStagedExtras removes the staged temp files of extras that will never be
+// committed. The temp names are unique per import, so an uncollected drop would
+// accumulate rather than be overwritten.
+func dropStagedExtras(extras []stagedMember) {
+	for _, e := range extras {
+		_ = os.Remove(e.tmp)
+	}
+}
+
 // maxImportMembers caps the number of files in a single remote artifact, so a flood
 // of tiny members can't exhaust inodes. Far above any legitimate artifact (manifest +
 // signature + one blob per output + log).
@@ -762,12 +789,27 @@ func readCapped(r io.Reader, budget *int64) ([]byte, error) {
 // cannot destroy the valid CAS blob other manifests still reference. The temp file is
 // uniquely named, so two imports of the same entry cannot contend for it.
 func (c *Cache) writeCacheFile(r io.Reader, dst, wantSum string, budget *int64) (string, error) {
+	tmp, sum, err := c.stageCacheFile(r, dst, wantSum, budget)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	return sum, nil
+}
+
+// stageCacheFile is writeCacheFile without the commit: it streams r to a uniquely
+// named temp file beside dst and returns that path for the caller to rename (or
+// remove) once dst's bytes are authenticated.
+func (c *Cache) stageCacheFile(r io.Reader, dst, wantSum string, budget *int64) (string, string, error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return "", fmt.Errorf("importArtifact: mkdir: %w", err)
+		return "", "", fmt.Errorf("importArtifact: mkdir: %w", err)
 	}
 	f, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".import-*.tmp")
 	if err != nil {
-		return "", fmt.Errorf("importArtifact: create: %w", err)
+		return "", "", fmt.Errorf("importArtifact: create: %w", err)
 	}
 	tmp := f.Name()
 	h := sha256.New()
@@ -775,26 +817,22 @@ func (c *Cache) writeCacheFile(r io.Reader, dst, wantSum string, budget *int64) 
 	if err != nil {
 		_ = f.Close()
 		_ = os.Remove(tmp)
-		return "", fmt.Errorf("importArtifact: write: %w", err)
+		return "", "", fmt.Errorf("importArtifact: write: %w", err)
 	}
 	if n > *budget {
 		_ = f.Close()
 		_ = os.Remove(tmp)
-		return "", errImportTooLarge
+		return "", "", errImportTooLarge
 	}
 	*budget -= n
 	if err := f.Close(); err != nil {
 		_ = os.Remove(tmp)
-		return "", err
+		return "", "", err
 	}
 	sum := hex.EncodeToString(h.Sum(nil))
 	if wantSum != "" && sum != wantSum {
 		_ = os.Remove(tmp)
-		return "", fmt.Errorf("importArtifact: blob %s content hashes to %s", wantSum, sum)
+		return "", "", fmt.Errorf("importArtifact: blob %s content hashes to %s", wantSum, sum)
 	}
-	if err := os.Rename(tmp, dst); err != nil {
-		_ = os.Remove(tmp)
-		return "", err
-	}
-	return sum, nil
+	return tmp, sum, nil
 }
