@@ -1,16 +1,18 @@
 name: Release index
 
 # Rebuilds public/release/index.json from releases/*.yaml, signs it, and opens a pull
-# request with the pair. release.yaml runs the same action at the end of a tag build;
-# this file is the entry point for the cases that are not a release - a manifest
-# corrected, a release yanked, a key rotated - where the served index has to change
-# without a version being cut.
+# request with the pair. release.yaml runs the same magusfile target at the end of a
+# tag build; this file is the entry point for the cases that are not a release - a
+# manifest corrected, a release yanked, a key rotated - where the served index has to
+# change without a version being cut.
 #
 # Manual only, and that is the whole risk budget: this is the one workflow outside
 # release.yaml that reads MAGUS_SIGNING_KEY, so it is reachable by nothing automatic.
 #
-# Nothing here builds magus. The index is derived from committed YAML by a Go program,
-# so the job needs a toolchain and no workspace.
+# The whole flow (build, sign, regenerate the changelog's derived files, branch, push,
+# open the pull request) is the magusfile's release-index target; see release_index()
+# in magusfile.buzz. That target regenerates through magus, so this job builds the
+# magus this commit defines rather than getting by on a bare Go toolchain.
 
 on:
   workflow_dispatch:
@@ -28,12 +30,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: ./.github/actions/setup-magus
         with:
-          go-version-file: go.mod
+          installation-strategy: source
+          source-path: .
 
-      - uses: ./.github/actions/release-index
-        with:
-          signing-key: ${{ secrets.MAGUS_SIGNING_KEY }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          reason: a manual refresh
+      - name: Publish the release index
+        env:
+          MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REASON: a manual refresh
+        run: magus run release-index:cd --no-default-charms -- "$REASON"
