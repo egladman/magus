@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Concurrent cache imports can no longer swap staged files under each other's
+  signatures.** The remote-artifact import staged its manifest and extras through fixed
+  temp names inside the machine-shared cache, so two processes importing the same entry
+  contended for one path: an importer could overwrite bytes a peer had already verified,
+  and the peer's rename then committed unverified content. Staging now goes through
+  unique temp names with same-directory renames, and extras dropped by a trust decision
+  are removed instead of accumulating.
 - **The release-index pull request arrives with its derived files regenerated.** The cut
   rewrites `CHANGELOG.md`, but the bot's commit carried neither the knowledge graph nor
   the docs changelog derived from it, so every index pull request opened failing its own
