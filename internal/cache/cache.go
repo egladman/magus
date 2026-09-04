@@ -1474,6 +1474,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// Tag the step so subprocesses run under fn emit exec events labeled with this
 	// project/target (the run primitive reads this from ctx; see internal/proc/run).
 	captureCtx = journal.WithStep(captureCtx, projectPath, target)
+	// So an error raised below can name the log a reader should open. Nothing in the
+	// engine can construct this path: it is the store's own layout.
+	captureCtx = types.WithCaptureLog(captureCtx, logPath)
 
 	runErr := fn(captureCtx)
 	// Emit any trailing partial lines before the records are read.

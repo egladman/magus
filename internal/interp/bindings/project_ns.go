@@ -50,12 +50,14 @@ func magusfileNotASpellErr(what string) error {
 var knownProjectOptionKeys = types.ProjectOptionKeys()
 
 // knownToolBoundKeys are the recognized keys inside one entry of magus.project's
-// "tools" map.
-var knownToolBoundKeys = []string{"min", "below"}
+// "tools" map, from the one shared table in types so the engine and the dry-run host
+// cannot drift.
+var knownToolBoundKeys = types.ToolBoundKeys
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
-// magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "memory_mb", "cache", "drift", "drift_reason"}
+// magus.project's "targets" map, from the one shared table in types so the engine and
+// the dry-run host cannot drift.
+var knownTargetPolicyKeys = types.TargetPolicyKeys
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently
@@ -490,6 +492,23 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 						"magus.project: targets[%q].memory_mb must be >= 1, got %d", name, n)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.MemoryMB(n)))
+			}
+			// timeout is a DURATION STRING, not memory_mb's integer: magus.yaml already
+			// spells the workspace-wide ceiling that way (target_timeout: 30m), and one
+			// quantity written two ways teaches a reader to check both. Malformed is a
+			// load error for the same reason slots is - a ceiling that silently decoded
+			// to "unbounded" would look exactly like the guard working.
+			if tv, ok := pv.MapGet("timeout"); ok {
+				if !tv.IsStr() {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].timeout must be a duration string such as \"15m\", got a %s",
+						name, tv.Kind())
+				}
+				raw := strings.TrimSpace(tv.AsString())
+				if _, err := types.ParseTimeout(raw); err != nil {
+					return nil, fmt.Errorf("magus.project: targets[%q].timeout: %w", name, err)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Timeout(raw)))
 			}
 		}
 	}

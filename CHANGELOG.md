@@ -24,6 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   since the classification already diffs the tree it produced - and every other
   unanswerable case (no provider, no green run, an unreadable range) plans exactly as
   it did before. `gate_inherit = false` in `magus.project` turns it off workspace-wide.
+- **A target can declare how long it may run.** `magus.project`'s target policies take
+  a `timeout`, a Go duration string spelled the way `magus.yaml`'s workspace-wide
+  `target_timeout` already is - `"security": {"timeout": "15m"}`. A target that outruns
+  its ceiling has its process tree killed and FAILS with MGS3011, naming the target,
+  the ceiling, how long it ran, and the log its output was captured to; a timeout is
+  never a skip and never a pass. The deadline rides the context, so it also bounds
+  every target reached through `ctx.needs`, and a composed target that declares its own
+  tighter ceiling is bounded by that one first - so the failure names the target that
+  hung rather than the gate that ran it. Nothing is inherited implicitly and nothing is
+  inferred: an undeclared target is unbounded exactly as before, and where both a
+  workspace-wide and a per-target figure exist the tighter one wins. `magus doctor`
+  keeps the declaration honest against the durations magus recorded (MGS1032), in both
+  directions: a ceiling a real run has crowded is about to fail a build that was fine,
+  and one sitting a hundred times above every run on record would hold a hung target's
+  locks for most of a day. This workspace declares two: `security` at 15m against a
+  worst recorded run of 44s, and `ci` at 45m against 6m8s.
 - **A redundant ci gate defers to the pull request when the machine is loaded.** When a
   green gate is already recorded for this branch and everything changed since falls in
   a low-risk class - generated output, prose (magus ships markdown globs;
@@ -56,6 +72,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A per-target policy the engine accepts no longer fails its own dry-run preview.**
+  The dry-run host validated `magus.project`'s `targets` policy against a hand-copied
+  list of recognized keys that had drifted to `skip_cache`, `exclusive` and `slots`,
+  so a magusfile setting `memory_mb`, `cache`, `drift` or `drift_reason` loaded fine
+  under `magus run` and was rejected as an unknown option by the Playground, the
+  editor diagnostics, and every other dry-run surface. Both the engine binding and the
+  dry-run host now reject against one shared table, `types.TargetPolicyKeys`, beside
+  the `magus.project` option table that got this treatment when the same drift bit the
+  project-level keys. A key added to the table reaches both consumers at once, and a
+  test per consumer reads the table and fails if either stops accepting a key in it.
+- **A typo inside a `tools` version window no longer passes the dry-run preview.** The
+  same divergence in the other direction: the dry-run host walked `magus.project`'s
+  `tools` map not at all, so `{"go": {"minn": "1.21"}}` was green in the Playground and
+  the dry-run preview and then failed the real run, where the engine has always
+  rejected an unrecognized bound key. The recognized keys are now one shared table,
+  `types.ToolBoundKeys`, and the dry-run host rejects against it entry by entry the way
+  the engine does, naming the bin and the two valid keys.
 - **One generate invocation settles a cross-project derivation chain.** The scheduler
   now derives target-granular ordering from the declarations it already holds: when
   one target's `ctx.writesFiles` globs intersect another's `ctx.readsFiles` or

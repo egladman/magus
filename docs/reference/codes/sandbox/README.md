@@ -113,3 +113,4 @@ Two layers run together:
 - [MGS2010](MGS2010.md): sandbox policy mismatch (undeclared / fingerprint).
 - [MGS3009](MGS3009.md): machine budget exhausted.
 - [MGS3010](MGS3010.md): redundant gate deferred under load.
+- [MGS3011](MGS3011.md): target exceeded its declared timeout.

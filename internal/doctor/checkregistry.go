@@ -98,6 +98,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkMemoryDeclarations,
 	},
 	{
+		Name:           "timeout-declarations",
+		Doc:            "a target's declared timeout against the durations magus has recorded for it",
+		Code:           types.TimeoutDeclarationDrift,
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            (*runner).checkTimeoutDeclarations,
+	},
+	{
 		Name:           "unexplained-hotspots",
 		Doc:            "whether the files this workspace edits hardest are explained by any note",
 		Evidence:       types.EvidenceInferred,

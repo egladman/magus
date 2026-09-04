@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
+	"time"
 )
 
 // applyOpts runs the parsed project options against a fresh root project so tests can
@@ -40,6 +41,33 @@ func targetsOpts(name string, policy vm.Value) vm.Value {
 	return opts
 }
 
+// TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted reads the shared table and
+// asserts this consumer accepts every key in it. Its twin over the dry-run host is
+// TestLoadMagusfile_everyTargetPolicyKeyAccepted; together they are the pin, because a
+// key reaching only one side is exactly how memory_mb, cache, drift and drift_reason
+// came to pass a real run and fail their own preview.
+//
+// Driven off types.TargetPolicyKeys rather than a hand-written list: a list here would
+// be a third copy free to drift the same way, and a key added to the table is covered
+// the moment it lands, with nothing to add.
+//
+// A malformed VALUE is fine and expected; only the unknown-key verdict is under test,
+// so one bogus string serves every key and no per-key fixture has to be maintained.
+func TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted(t *testing.T) {
+	require.NotEmpty(t, types.TargetPolicyKeys)
+	for _, key := range types.TargetPolicyKeys {
+		t.Run(key, func(t *testing.T) {
+			pol := vm.NewMap()
+			pol.MapSet(key, vm.StrValue("x"))
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+			if err != nil {
+				assert.NotContains(t, err.Error(), "unknown option",
+					"the engine rejects %q, which types.TargetPolicyKeys declares recognized", key)
+			}
+		})
+	}
+}
+
 func TestParseBuzzProjectOpts_TargetSlots(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("slots", vm.IntValue(4))
@@ -62,6 +90,45 @@ func TestParseBuzzProjectOpts_TargetSlotsNonIntErrors(t *testing.T) {
 	pol.MapSet("slots", vm.FloatValue(2.5))
 	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
 	assert.ErrorContains(t, err, `targets["lint"].slots must be a whole number`)
+}
+
+func TestParseBuzzProjectOpts_TargetTimeout(t *testing.T) {
+	pol := vm.NewMap()
+	pol.MapSet("timeout", vm.StrValue("15m"))
+	p := applyOpts(t, targetsOpts("security", pol))
+	assert.Equal(t, "15m", p.TargetPolicies["security"].Timeout)
+	assert.Equal(t, 15*time.Minute, p.TargetPolicies["security"].TimeoutDuration())
+}
+
+// An absent timeout leaves the target unbounded, which is the behavior every target
+// had before the key existed. Pinned rather than assumed: the whole design rests on
+// declaring nothing changing nothing.
+func TestParseBuzzProjectOpts_TargetTimeoutAbsentIsUnbounded(t *testing.T) {
+	pol := vm.NewMap()
+	pol.MapSet("slots", vm.IntValue(2))
+	p := applyOpts(t, targetsOpts("security", pol))
+	assert.Empty(t, p.TargetPolicies["security"].Timeout)
+	assert.Zero(t, p.TargetPolicies["security"].TimeoutDuration())
+}
+
+func TestParseBuzzProjectOpts_TargetTimeoutMalformedErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value vm.Value
+		want  string
+	}{
+		{"not a duration", vm.StrValue("15 minutes"), `targets["security"].timeout: "15 minutes" is not a duration`},
+		{"zero", vm.StrValue("0s"), `targets["security"].timeout: "0s" is not positive`},
+		{"negative", vm.StrValue("-1m"), `targets["security"].timeout: "-1m" is not positive`},
+		{"an integer of unstated unit", vm.IntValue(900), `targets["security"].timeout must be a duration string`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pol := vm.NewMap()
+			pol.MapSet("timeout", tc.value)
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("security", pol))
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
 }
 
 // TestParseBuzzProjectOpts_Sources pins the CLEANED stored form and, with it, the truth
@@ -229,6 +296,20 @@ func toolsOpts(bin string, kv map[string]string) vm.Value {
 	opts := vm.NewMap()
 	opts.MapSet("tools", tools)
 	return opts
+}
+
+// TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted reads types.ToolBoundKeys and
+// asserts this consumer accepts every key in it, the shape
+// TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted uses and for the same reason.
+// Its twin over the dry-run host is TestLoadMagusfile_everyToolBoundKeyAccepted.
+func TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted(t *testing.T) {
+	require.NotEmpty(t, types.ToolBoundKeys)
+	for _, key := range types.ToolBoundKeys {
+		t.Run(key, func(t *testing.T) {
+			_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{key: "22"}))
+			require.NoError(t, err, "the engine rejects %q, which types.ToolBoundKeys declares recognized", key)
+		})
+	}
 }
 
 func TestParseBuzzProjectOpts_Tools(t *testing.T) {
