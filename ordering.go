@@ -24,15 +24,11 @@ import (
 // ordering from them. The DerivedOrder's RunAfter entries are applied onto the
 // steps in place; unordered edges are left for settleDerivedOrder after the
 // batch. A single-step batch derives an empty order: nothing to cross-order.
-func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cache.DerivedOrder, error) {
+func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) *cache.DerivedOrder {
 	if len(steps) < 2 {
-		return &cache.DerivedOrder{}, nil
+		return &cache.DerivedOrder{}
 	}
-	nodes := m.collectOrderNodes(steps)
-	order, err := cache.DeriveTargetOrder(steps, nodes)
-	if err != nil {
-		return nil, err
-	}
+	order := cache.DeriveTargetOrder(steps, m.collectOrderNodes(steps))
 	for i := range steps {
 		key := cache.DepKey(steps[i].ProjectPath, steps[i].Target)
 		for _, up := range order.RunAfter[key] {
@@ -43,13 +39,19 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 	}
 	// Answers "why did these steps serialize" / "why did that target re-run" at -vv
 	// without a debugger, like the barrier's schedule.wait trace.
-	for _, e := range order.Edges {
+	trace := func(e cache.DerivedEdge, dropped string) {
 		slog.DebugContext(ctx, "schedule.derived",
 			slog.String("writer", order.Nodes[e.Writer].Project+":"+order.Nodes[e.Writer].Target),
 			slog.String("reader", order.Nodes[e.Reader].Project+":"+order.Nodes[e.Reader].Target),
-			slog.Bool("ordered", e.Ordered))
+			slog.Bool("ordered", e.Ordered), slog.String("dropped", dropped))
 	}
-	return order, nil
+	for _, e := range order.Edges {
+		trace(e, "")
+	}
+	for _, e := range order.Dropped {
+		trace(e.DerivedEdge, e.Reason)
+	}
+	return order
 }
 
 // collectOrderNodes builds one TargetNode per distinct (project, target) the
@@ -164,16 +166,23 @@ type orderSettle struct {
 
 // prepareOrderSettle hashes every cross-edge writer's declared writes before the
 // batch runs, so settling can tell a writer that produced new bytes from one
-// that rewrote what was already there. Nil when no edge can need settling.
+// that rewrote what was already there. Dropped edges count: their readers are
+// exactly the ones no schedule could serve. Nil when no edge can need settling.
 func (m *Magus) prepareOrderSettle(order *cache.DerivedOrder) *orderSettle {
-	if order == nil || len(order.Edges) == 0 {
+	if order == nil || len(order.Edges)+len(order.Dropped) == 0 {
 		return nil
 	}
 	s := &orderSettle{order: order, before: map[int]string{}}
-	for _, e := range order.Edges {
-		if _, ok := s.before[e.Writer]; !ok {
-			s.before[e.Writer] = m.hashNodeWrites(order.Nodes[e.Writer])
+	hash := func(w int) {
+		if _, ok := s.before[w]; !ok {
+			s.before[w] = m.hashNodeWrites(order.Nodes[w])
 		}
+	}
+	for _, e := range order.Edges {
+		hash(e.Writer)
+	}
+	for _, e := range order.Dropped {
+		hash(e.Writer)
 	}
 	return s
 }
@@ -183,7 +192,8 @@ func (m *Magus) prepareOrderSettle(order *cache.DerivedOrder) *orderSettle {
 // later-running target's writes overlapped. This is the entangled shape where
 // two steps' chains write into each other's read sets, so no step order can put
 // every writer first (at project granularity it is a cycle; the chain is only
-// acyclic target by target). A reader re-runs only when a violated writer
+// acyclic target by target). It is also where a genuine cycle lands, each sibling
+// routing index reading what the others write. A reader re-runs only when a violated writer
 // actually changed bytes, so a settled tree settles to a no-op and a second
 // identical invocation re-runs nothing.
 //
@@ -228,6 +238,11 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 	inEdges := map[int][]cache.DerivedEdge{}
 	for _, e := range order.Edges {
 		inEdges[e.Reader] = append(inEdges[e.Reader], e)
+	}
+	// A dropped edge is permanently unordered: cycle resolution removed it from the
+	// schedule precisely because no step order can honor it.
+	for _, e := range order.Dropped {
+		inEdges[e.Reader] = append(inEdges[e.Reader], e.DerivedEdge)
 	}
 
 	for _, r := range order.TopoNodes() {

@@ -1,0 +1,87 @@
+# The genuine-cycle oracle for derived target ordering. Both projects declare
+# that they write their own INDEX.md and read every INDEX.md in the tree, which
+# is how each project in this repo declares its routing index: a sibling index
+# moving is the keyable signal that the shared table changed. Read as a graph
+# that is a cycle, and it used to fail the run before anything executed. Now the
+# tie-break drops the hop whose writer key sorts after its reader key ("b" writes
+# what "a" reads), so the batch runs a then b, and the dropped hop is settled
+# afterwards: a's index really is derived from b's, so it re-runs once b's bytes
+# move.
+
+# The committed state is settled for seed "one". Move the seed.
+cp seed2.txt b/seed.txt
+
+# ONE invocation must settle the cycle.
+exec magus run assemble a b
+cmp b/INDEX.md want-b-index
+cmp a/INDEX.md want-a-index
+
+# a ran twice: once in the batch against b's stale index, once on the settle
+# tail. Ordering alone cannot do this: one of the two directions has to yield.
+cmp runs.log want-runs-once
+
+# A second identical invocation settles nothing: no writer's bytes moved.
+exec magus run assemble a b
+cmp a/INDEX.md want-a-index
+cmp runs.log want-runs-twice
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+magus.project({"sources": ["*.md"]});
+-- want-b-index --
+two
+-- want-a-index --
+a: two
+-- seed2.txt --
+two
+-- want-runs-once --
+a
+a
+-- want-runs-twice --
+a
+a
+a
+-- a/INDEX.md --
+a: one
+-- a/magusfile.buzz --
+import "magus";
+import "proc";
+magus.project({
+    "sources": ["*.md"],
+    "targets": {
+        "index-generate": {"skip_cache": "derives from every index in the tree; no input glob can key it"},
+        "assemble": {"skip_cache": "composes a skip-cache generator"},
+    },
+});
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("INDEX.md");
+    ctx.readsFiles("../**/INDEX.md");
+    proc\exec("sh", ["-c", "echo a >> ../runs.log; sed 's/^/a: /' ../b/INDEX.md > INDEX.md"]);
+}
+export fun assemble(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(index_generate);
+}
+-- b/seed.txt --
+one
+-- b/INDEX.md --
+one
+-- b/magusfile.buzz --
+import "magus";
+import "proc";
+magus.project({
+    "sources": ["*.md", "seed.txt"],
+    "targets": {
+        "index-generate": {"skip_cache": "derives from every index in the tree; no input glob can key it"},
+        "assemble": {"skip_cache": "composes a skip-cache generator"},
+    },
+});
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("INDEX.md");
+    ctx.readsFiles("../**/INDEX.md");
+    proc\exec("sh", ["-c", "cp seed.txt INDEX.md"]);
+}
+export fun assemble(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(index_generate);
+}

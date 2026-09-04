@@ -1186,13 +1186,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// Target-granular scheduling: order steps writer-before-reader from declared
 	// footprints, and remember pre-run bytes for the edges no step order can honor
-	// (settled after the batch). A declared read/write cycle is a plan error here,
-	// before anything runs.
-	order, err := m.deriveBatchOrder(ctx, steps)
-	if err != nil {
-		return err
-	}
-	settle := m.prepareOrderSettle(order)
+	// (settled after the batch).
+	settle := m.prepareOrderSettle(m.deriveBatchOrder(ctx, steps))
 
 	// Soft typo guard: warn for an active charm no selected target declares. A
 	// function target may read an undeclared charm, hence a warning, not an error.

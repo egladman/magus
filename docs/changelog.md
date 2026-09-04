@@ -58,8 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   moved, so a settled tree re-runs nothing. Only targets that declare writes are
   re-run this way, verifiers such as a security scan are not, and the settle pass
   as a whole is time-bounded, so a stalled re-run fails the invocation loudly
-  instead of holding the project locks in silence. A cycle among explicitly declared
-  footprints fails the run up front, naming both targets. Before this, a changelog
+  instead of holding the project locks in silence. A cycle among declared footprints
+  is not an error either: every project's routing index declares that it writes its
+  own `MAGUS.md` and reads its siblings', so the direction no schedule can honor is
+  dropped and settled afterwards like any other unorderable edge. Before this, a changelog
   edit that was graph-visible needed a second `magus run generate` to land the edge
   in the committed graph, and the release-index publish opened a born-red PR from
   the gap.

@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
@@ -55,12 +54,25 @@ type DerivedEdge struct {
 	Ordered bool
 }
 
+// DroppedEdge is a derived edge removed to break a cycle. The dependency is
+// real, so it stays a settling candidate; only the schedule cannot express it.
+type DroppedEdge struct {
+	DerivedEdge
+	// Reason is "weak" for a baseline-fallback side that yielded, "cycle" for the
+	// tie-break that breaks a cycle of explicit declarations.
+	Reason string
+}
+
 // DerivedOrder is the result of DeriveTargetOrder: the target-granular
 // writer-before-reader edges a batch implies, and the step-level ordering that
 // enforces the enforceable subset.
 type DerivedOrder struct {
 	Nodes []TargetNode
 	Edges []DerivedEdge
+	// Dropped holds the edges cycle resolution removed from Edges. Kept out of the
+	// schedule and out of TopoNodes, but the caller folds them back in as
+	// permanently unordered edges so their readers can still settle.
+	Dropped []DroppedEdge
 	// RunAfter maps a step's node key to the step node keys it must wait for,
 	// beyond its coarse DependsOn. RunAll's barrier waits these exactly.
 	RunAfter map[string][]string
@@ -75,13 +87,15 @@ type DerivedOrder struct {
 // target (a target reading what it writes is not an edge). Glob intersection is
 // conservative: uncertainty derives the edge, which can only over-order.
 //
-// A cycle among edges that are all explicitly declared is an authoring error and
-// is returned, naming the targets. A cycle through a weak (baseline-fallback)
-// edge drops the weak edges instead. Edges whose direction the step schedule can
-// honor become RunAfter entries; the rest are marked unordered for the caller to
-// settle after the batch. Coarse DependsOn edges always win over derived ones:
-// project-level ordering (and the affected set) is never widened or narrowed here.
-func DeriveTargetOrder(steps []Step, nodes []TargetNode) (*DerivedOrder, error) {
+// No cycle is fatal: a cycle is legitimate authoring (every sibling routing index
+// declares it writes its own MAGUS.md and reads the others'), and the answer is
+// the same one the entangled shape already gets. Cycle resolution drops edges
+// into Dropped until the rest is acyclic; the drops are still settled after the
+// batch. Edges whose direction the step schedule can honor become RunAfter
+// entries; the rest are marked unordered for the caller to settle. Coarse
+// DependsOn edges always win over derived ones: project-level ordering (and the
+// affected set) is never widened or narrowed here.
+func DeriveTargetOrder(steps []Step, nodes []TargetNode) *DerivedOrder {
 	d := &DerivedOrder{Nodes: nodes, RunAfter: map[string][]string{}}
 
 	sharesStep := func(a, b TargetNode) bool {
@@ -107,16 +121,14 @@ func DeriveTargetOrder(steps []Step, nodes []TargetNode) (*DerivedOrder, error) 
 		}
 	}
 
-	if err := d.resolveFineCycles(); err != nil {
-		return nil, err
-	}
+	d.resolveFineCycles()
 	d.projectOntoSteps(steps)
-	return d, nil
+	return d
 }
 
 // TopoNodes returns every node index in dependency order: each edge's writer
-// before its reader. Valid once DeriveTargetOrder returned, whose cycle
-// resolution guarantees the edge set is acyclic. Deterministic.
+// before its reader. Dropped edges are excluded, which is what makes the walk
+// well defined. Deterministic.
 func (d *DerivedOrder) TopoNodes() []int {
 	indeg := make([]int, len(d.Nodes))
 	for _, e := range d.Edges {
@@ -228,37 +240,53 @@ func literalSuffix(seg string) string {
 	return seg
 }
 
-// resolveFineCycles removes weak edges that close cycles and reports a cycle
-// whose every edge is declared, naming the targets in order.
-func (d *DerivedOrder) resolveFineCycles() error {
+// resolveFineCycles moves edges out of Edges until no cycle remains. A weak
+// (baseline-fallback) edge yields first, since it may not describe a real
+// dependency at all; a cycle of explicit declarations yields to the tie-break.
+func (d *DerivedOrder) resolveFineCycles() {
 	for {
 		cycle := d.findCycle()
 		if cycle == nil {
-			return nil
+			return
 		}
-		weak := false
+		reason := "weak"
+		drop := make([]int, 0, len(cycle))
 		for _, ei := range cycle {
 			if d.Edges[ei].weak {
-				weak = true
+				drop = append(drop, ei)
 			}
 		}
-		if !weak {
-			hops := make([]string, 0, len(cycle)+1)
-			for _, ei := range cycle {
-				hops = append(hops, displayKey(d.Nodes[d.Edges[ei].Writer].Key()))
-			}
-			hops = append(hops, displayKey(d.Nodes[d.Edges[cycle[0]].Writer].Key()))
-			return fmt.Errorf("cache: derived target ordering: declared writes and reads form a cycle: %s; every target both writes what another reads and reads what it writes, so no order can run writers first", strings.Join(hops, " -> "))
+		if len(drop) == 0 {
+			reason = "cycle"
+			drop = append(drop, d.cycleBackEdge(cycle))
 		}
 		// Descending index order: deleting shifts everything after the hole.
-		drop := slices.Clone(cycle)
 		slices.Sort(drop)
 		for _, ei := range slices.Backward(drop) {
-			if d.Edges[ei].weak {
-				d.Edges = slices.Delete(d.Edges, ei, ei+1)
-			}
+			d.Dropped = append(d.Dropped, DroppedEdge{DerivedEdge: d.Edges[ei], Reason: reason})
+			d.Edges = slices.Delete(d.Edges, ei, ei+1)
 		}
 	}
+}
+
+// cycleBackEdge picks the edge that breaks a cycle of explicit declarations: the
+// one whose writer key sorts after its reader key, greatest (writer, reader)
+// pair when several qualify. Walking a cycle the keys must both rise and fall,
+// so one always qualifies and the loop always shrinks. The choice reads keys
+// rather than node indices, which shift with the batch's composition.
+func (d *DerivedOrder) cycleBackEdge(cycle []int) int {
+	best, bestPair := cycle[0], ""
+	for _, ei := range cycle {
+		w := d.Nodes[d.Edges[ei].Writer].Key()
+		r := d.Nodes[d.Edges[ei].Reader].Key()
+		if w < r {
+			continue
+		}
+		if pair := w + "\x00" + r; pair > bestPair {
+			best, bestPair = ei, pair
+		}
+	}
+	return best
 }
 
 // findCycle returns the edge indices of one cycle, in walk order, or nil.
