@@ -266,6 +266,37 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 		"a target composing nothing must not inherit another target's artifact")
 }
 
+// A composed target's ctx.modifiesExistingFiles must reach the composer's
+// Step.Updates, or MGS4007 blames the composer for the constituent's declared
+// write: `generate` accused of modifying the CHANGELOG.md that changelog-generate
+// declares and maintains.
+func TestComposerInheritsAComposedTargetsUpdates(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("CHANGELOG.md");
+}
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-generate"));
+}
+export fun test(ctx: magus\Context, args: [str]) > void {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	assert.Contains(t, m.buildStep(p, "generate").Updates, "CHANGELOG.md",
+		"the composer runs the edit inside its own window, so the declaration covers it")
+	assert.Contains(t, m.buildStep(p, "changelog-generate").Updates, "CHANGELOG.md",
+		"the declaring target keeps its own declaration")
+	assert.NotContains(t, m.buildStep(p, "test").Updates, "CHANGELOG.md",
+		"a target composing nothing must not inherit another target's declared write")
+}
+
 // Cross-project rooting and cycle termination, which the same-project fixture
 // above cannot reach.
 func TestChainSkipCacheOutputsCrossProjectAndCycle(t *testing.T) {

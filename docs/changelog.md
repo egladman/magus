@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A composed target's declared in-place edit no longer trips its composer.** A target
+  run through `ctx.needs` executes inside the composing step's fingerprint window, and
+  the window carried only the composer's own `ctx.modifiesExistingFiles` declarations,
+  so `generate` failed MGS4007 whenever `changelog-generate` actually changed
+  `CHANGELOG.md` and the workaround was to run the constituent standalone first. The
+  composer now inherits chained update declarations the way it already inherits chained
+  outputs.
 - **The release-index pull request arrives with its derived files regenerated.** The cut
   rewrites `CHANGELOG.md`, but the bot's commit carried neither the knowledge graph nor
   the docs changelog derived from it, so every index pull request opened failing its own
