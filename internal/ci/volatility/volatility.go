@@ -173,6 +173,12 @@ type Runtime struct {
 //
 // Fusing them meant history only ever filled for targets that wanted retries -
 // in a workspace where none do, the forecaster had no data at all.
+//
+// retry is the RUN-WIDE half of the retry gate and nothing finer: it carries
+// --no-volatility-retry, plus whether any selected pair opted in at all, which is
+// what lets the caller skip the affected pass no other run needs. Which PAIR may
+// retry is Decide's eligible argument, because only the call site holds the policy
+// of the pair it is deciding for.
 func NewRuntime(history *forecast.History, path string, cfg Config, affectedProjects []string, retry bool) *Runtime {
 	af := make(map[string]bool, len(affectedProjects))
 	for _, p := range affectedProjects {
@@ -196,8 +202,13 @@ func (rt *Runtime) IsAffected(projectPath string) bool {
 }
 
 // Decide returns a retry Decision for a just-failed (projectPath, target).
-func (rt *Runtime) Decide(projectPath, target string, affected bool) Decision {
-	if !rt.cfg.Enabled || !rt.retry {
+//
+// eligible is that pair's own RetryOnVolatile policy, passed in rather than read
+// from the Runtime because the Runtime holds one answer for the whole run and the
+// policy is per target. Storing it here collapsed the two: opting `test` in made
+// every sibling under a composed `ci` retryable as well.
+func (rt *Runtime) Decide(projectPath, target string, affected, eligible bool) Decision {
+	if !rt.cfg.Enabled || !rt.retry || !eligible {
 		return Decision{Retry: false, Reason: ReasonDisabled}
 	}
 	rt.mu.Lock()

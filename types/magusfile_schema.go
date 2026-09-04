@@ -62,6 +62,7 @@ var TargetPolicyKeys = []string{
 	"cache",
 	"drift",
 	"drift_reason",
+	"retry_on_volatile",
 }
 
 // ToolBoundKeys is the ONE list of recognized keys inside one entry of magus.project's

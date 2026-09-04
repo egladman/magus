@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1315,4 +1317,127 @@ export fun ci(ctx: magus\Context, args: [str]) > void {}
 
 	assert.Contains(t, step.OwnedOutputs, "leaf/INDEX.md",
 		"the root step must exempt a nested project's declared output, or running its generate reports MGS4007")
+}
+
+// TestRun_RetryOnVolatileIsPerTargetNotPerRun is the regression this policy was
+// promoted to fix, and the reason it needed fixing before it could be declared.
+//
+// The run used to collapse every selected target's policy to one bool - the first
+// project that declared ANY policy for a target won - and store it on the volatility
+// Runtime, which then short-circuited on it without ever asking which pair it was
+// deciding for. Opting `flaky` in therefore made `steady` retryable too, so a real
+// regression in a sibling got a second attempt nobody asked to give it and the run
+// came back green. Both targets fail here; exactly one may run twice.
+func TestRun_RetryOnVolatileIsPerTargetNotPerRun(t *testing.T) {
+	const spellName = "zzz-retry-granularity-spell"
+	var flaky, steady atomic.Int32
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("flaky", "steady"),
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case "flaky":
+				flaky.Add(1)
+			case "steady":
+				steady.Add(1)
+			}
+			return nil, errors.New("boom")
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".",
+		WithSpell(spellName),
+		WithTarget("flaky", RetryOnVolatile("a fixture that races its own teardown")),
+	)
+	// An empty history means every eligible failure retries on the bootstrap rule,
+	// so the Wilson score plays no part and the only thing under test is the gate.
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(root, "history.json")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	err = m.Run(context.Background(), []types.Target{
+		{Path: ".", Name: "flaky"},
+		{Path: ".", Name: "steady"},
+	})
+	require.Error(t, err, "both targets fail, so the run must fail whatever the retries did")
+
+	assert.Equal(t, int32(2), flaky.Load(), "the opted-in target retries once")
+	assert.Equal(t, int32(1), steady.Load(),
+		"a sibling that never opted in must not inherit the retry from a target that did")
+}
+
+// syncBuffer collects log output from the worker goroutines a run fans out over.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// TestRun_RetryIsAudibleOffCI pins the retry saying so on every host.
+//
+// Its only two reports used to be a CI annotation, which needs a live annotator and is
+// Nop everywhere else, and a report record, which needs --report. So locally a target
+// failed, silently reran, passed, and the run went green with the first attempt's output
+// collapsed - the unnoticed volatile target the annotation exists to prevent, unnoticed.
+func TestRun_RetryIsAudibleOffCI(t *testing.T) {
+	const spellName = "zzz-retry-audible-spell"
+	var calls atomic.Int32
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("flaky"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			if calls.Add(1) == 1 {
+				return nil, errors.New("boom")
+			}
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	var logged syncBuffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".",
+		WithSpell(spellName),
+		WithTarget("flaky", RetryOnVolatile("a fixture that races its own teardown")),
+	)
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(root, "history.json")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "flaky"}}),
+		"the retry passes, so the run is green - which is exactly why it has to be said out loud")
+	require.Equal(t, int32(2), calls.Load(), "the target ran twice")
+
+	got := logged.String()
+	assert.Contains(t, got, "volatile target retried")
+	assert.Contains(t, got, "target="+spellName+"/flaky", "the line must name the pair, not just the project")
+	assert.Contains(t, got, "status=retried_volatile")
+	assert.Contains(t, got, "reason=bootstrap")
 }

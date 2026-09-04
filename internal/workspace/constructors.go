@@ -268,9 +268,12 @@ func Drift(policy types.DriftPolicy, reason string) TargetOption {
 	}
 }
 
-// RetryOnVolatile returns a TargetOption that enables volatility detection and auto-retry.
-func RetryOnVolatile() TargetOption {
-	return func(t *types.Target) { t.RetryOnVolatile = true }
+// RetryOnVolatile returns a TargetOption that routes the target through volatility
+// detection, so a failure magus predicts is volatile is rerun once. reason states why
+// this target fails without the code being wrong; it is required for the same reason
+// SkipCache's is, and the opt-in binds to this target alone.
+func RetryOnVolatile(reason string) TargetOption {
+	return func(t *types.Target) { t.RetryOnVolatile = true; t.RetryOnVolatileReason = reason }
 }
 
 // SkipCache returns a TargetOption that opts the target out of the cache, so magus
