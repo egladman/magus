@@ -1841,6 +1841,10 @@
             {
               "project": ".",
               "target": "changelog-generate"
+            },
+            {
+              "project": ".",
+              "target": "graph-generate"
             }
           ],
           "chain": [
@@ -1859,6 +1863,10 @@
             },
             {
               "target": "diagrams-generate"
+            },
+            {
+              "project": ".",
+              "target": "graph-generate"
             }
           ],
           "reads_secrets": false,

@@ -1102,6 +1102,58 @@ func TestWholeTreeTargetsKeyOnTheGoTree(t *testing.T) {
 	}
 }
 
+// TestDocsGenerateReexportsGraphAfterContent pins the ordering that makes one
+// `magus run generate:rw . docs` invocation settle when a CHANGELOG.md change is
+// graph-visible. The data flow is circular across projects: root changelog-generate
+// writes CHANGELOG.md, docs content-generate derives docs/changelog.md from it, and
+// root graph-generate indexes BOTH. The scheduler runs the root's generate step
+// before the docs step (docs depends_on ".."), so the root's export reads the
+// pre-rewrite page and the committed graph came out one edge behind; a second,
+// byte-identical pass is the settledness oracle that failed. The docs chain closes
+// the loop by re-dispatching graph-generate after its content stage; the reverse
+// declaration (graph-generate needing content-generate) is unschedulable, because a
+// cross-project ctx.needs unions into the root's depends_on and any batch holding
+// both projects becomes a dependency cycle.
+//
+// Structural rather than a two-pass regeneration run: it reads the same static
+// extraction the scheduler orders by, so the chain reworded or moved still gets
+// graded, at unit-test cost.
+func TestDocsGenerateReexportsGraphAfterContent(t *testing.T) {
+	const docsMagusfile = "docs/magusfile.buzz"
+	body, err := os.ReadFile(docsMagusfile)
+	require.NoError(t, err, "read %s", docsMagusfile)
+
+	nodes := describe.Extract(string(body))
+	require.NotEmpty(t, nodes, "%s yielded no target nodes; the parse failed", docsMagusfile)
+
+	var chain []types.ChainStep
+	for _, n := range nodes {
+		if n.Name == "generate" {
+			chain = n.Chain
+			break
+		}
+	}
+	require.NotEmpty(t, chain, "%s declares no composed %q target", docsMagusfile, "generate")
+
+	content, graph := -1, -1
+	for i, step := range chain {
+		if step.Project == "" && step.Target == "content-generate" {
+			content = i
+		}
+		if step.Project == ".." && step.Target == "graph-generate" {
+			graph = i
+		}
+	}
+	require.NotEqual(t, -1, content, "docs generate no longer composes content-generate")
+	require.NotEqual(t, -1, graph,
+		"docs generate does not re-dispatch the root's graph-generate, so the graph is\n"+
+			"exported before content-generate rewrites the pages it indexes and one\n"+
+			"invocation leaves the committed graph an edge behind its own tree.")
+	assert.Greater(t, graph, content,
+		"docs generate dispatches the root's graph-generate before content-generate,\n"+
+			"so the export still reads the pre-rewrite pages; it must come after.")
+}
+
 // magus is agent-host agnostic, and this test is the only thing that enforces it.
 // The rule was written down twice - in docs/guides/integrations/agents.md ("magus
 // owns the guard rules and the verdict, not integration code for each host") and

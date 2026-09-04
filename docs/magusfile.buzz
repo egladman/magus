@@ -338,7 +338,10 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // declarations rather than ctx.writesFiles. A check keyed on outputs cannot see them
     // however correct it is. MAGUS.md and CONTENT are covered twice over; those two are
     // covered only here.
-    final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "assets/gen"] + CONTENT;
+    // ROOT/gen joins them because this chain ends by re-running graph-generate
+    // (below): a write this target performs is a write this gate checks.
+    final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "assets/gen",
+        ROOT + "/gen/knowledge-graph.json", ROOT + "/gen/target-graph.json"] + CONTENT;
     // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
     // of these was already dirty, which is the state you are in while editing a generator.
     // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
@@ -359,6 +362,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // unchanged tree replays it and the 3s render is paid on a renderer or diagram edit
     // rather than on every docs build.
     ctx.needs(content_generate, index_generate, diagrams_generate);
+    // content-generate rewrites pages the workspace knowledge graph indexes, and the
+    // root's graph-generate ran BEFORE this step (this project depends_on ".."), so
+    // its export read the pre-rewrite bytes: one invocation left the committed graph
+    // an edge behind whenever the changelog gained a reference the page pipeline
+    // copies in. Re-export after the content settles. The reverse declaration cannot
+    // be written: graph-generate needing content-generate would union docs into the
+    // root's depends_on, and a batch holding both projects becomes a scheduling cycle.
+    ctx.needs(workspace\graph_generate);
     if (ctx.hasCharm("rw")) { return; }
     // Name the files, not the set. "MAGUS.md or CHANGELOG.md or generated docs Markdown
     // drifted" tells a reader only that one of nine things moved, and this gate fires

@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **One `generate` invocation now settles a graph-visible changelog change.** The data
+  flow is circular across projects: the root's changelog generator writes CHANGELOG.md,
+  the docs project derives docs/changelog.md from it, and the root's graph export
+  indexes both. The export ran before the docs step rewrote its page, so a changelog
+  entry naming a previously-unreferenced diagnostic left the committed graph one edge
+  behind until a second run, and a release cut opened a pull request that failed its
+  own drift gate. The docs generate chain now ends by re-dispatching the root's graph
+  export, after the content it indexes has settled, and gates the exported bytes.
 - **A daemon no longer adopts runs from a binary built from different sources.** Every
   modified-tree build of one commit stamps the same `-dirty` version string, so the
   adoption identity gate matched byte-different binaries and a warm daemon executed
