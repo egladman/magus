@@ -146,6 +146,17 @@ func WithGateLowRisk(globs ...string) ProjectOption {
 	}
 }
 
+// WithGateInheritOff declares that this workspace's CI plan never inherits a
+// green run's verdict (magus.project's "gate_inherit": false). Off is the only
+// declaration that exists: on is the default, and a switch that restates it
+// would invite per-project toggling of a decision that is workspace-wide.
+func WithGateInheritOff() ProjectOption {
+	return func(p *types.Project) error {
+		p.GateInheritOff = true
+		return nil
+	}
+}
+
 // WithWatchIgnore appends patterns to the project's watch ignore list.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return func(p *types.Project) error {

@@ -88,6 +88,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 | `watch_ignore`  | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
 | `no_language`   | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                           |
 | `gate_low_risk` | project-relative globs the ci-gate redundancy check ([MGS3010](../reference/codes/sandbox/MGS3010.md)) classifies as prose; magus ships markdown defaults, any declaration replaces them workspace-wide, and `[]` turns the prose class off           |
+| `gate_inherit`  | `false` stops `magus affected ci --plan` inheriting a green CI run's verdict, however the delta classifies; one declaration turns it off workspace-wide, and `true` restates the default (see below)                                                  |
 | `tools`         | the version window this project requires of each binary its spells drive, keyed by bin name (see below)                                                                                                                                               |
 | `targets`       | a per-target policy table (see below)                                                                                                                                                                                                                 |
 
@@ -151,6 +152,24 @@ declaration is always code.
 ```buzz
 magus\project({
     "gate_low_risk": ["**/*.md", "**/*.markdown", "notes/**"],
+});
+```
+
+`gate_inherit` governs the same classification one layer out, in CI rather than
+on a laptop. When a CI provider is wired (`magus\ci.provider(...)`) and answers
+which run of this pipeline last passed on this branch, `magus affected ci --plan`
+classifies everything changed since that run's head commit with the classifier
+above; if nothing classifies as code, the plan emits no shards and an `inherit`
+block instead, and the workflow reads that one output to skip its fan-out. The
+verdict is green with a report - the inherited run, its commit, and every changed
+path with what classified it - never a silent skip. A merge pushed into the range
+re-runs the fan-out regardless. Declaring `false` on any project turns the whole
+mechanism off workspace-wide, the same reach a `gate_low_risk` declaration has,
+because inheritance is one decision over the plan rather than a per-project one.
+
+```buzz
+magus\project({
+    "gate_inherit": false,
 });
 ```
 

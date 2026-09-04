@@ -243,6 +243,16 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 		opts = append(opts, workspace.WithGateLowRisk(globs...))
 	}
+	// Only false declares anything: true is the default, and accepting it keeps a
+	// workspace that spells the default out from failing to load.
+	if iv, ok := v.MapGet("gate_inherit"); ok {
+		if !iv.IsBool() {
+			return nil, fmt.Errorf(`magus.project: "gate_inherit" takes a bool; false turns CI verdict inheritance off workspace-wide`)
+		}
+		if !iv.AsBool() {
+			opts = append(opts, workspace.WithGateInheritOff())
+		}
+	}
 	if sv, ok := v.MapGet("spells"); ok && sv.IsList() {
 		// Each item is a spell handle. A local spell (.load) is registered by value
 		// here, at bind time, from the resolved spec its handle carries; built-ins

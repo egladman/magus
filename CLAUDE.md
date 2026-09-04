@@ -254,6 +254,19 @@ DESCENDANT of main, which the action's reachable-from-main gate rejects every
 time (it reads as "Refusing to build unreviewed source", which is a misdirect).
 `source-path` is the input for building a checkout you already have.
 
+Checking CI on a pull request: BATCH-POLL, do not watch. One call answers the
+whole board, mergeability included:
+
+```sh
+gh pr list --state open --json number,mergeable,statusCheckRollup
+```
+
+The `--watch` subprocess costs no tokens, but every completion wakes the agent
+for a turn, and a third of them race CI startup, report no checks, and need
+relaunching (measured 2026-09-04: ~15 watchers in one session). Green changes
+nothing anyway - the human merges - so poll when the answer is needed, and
+reserve `--watch` for a red result you are iterating on, once checks exist.
+
 ## Running the daemon locally
 
 The daemon is the long-lived process that serves MCP, keeps the knowledge graph

@@ -77,10 +77,17 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      # The runs API behind last_green_run, and the only reason this job holds a
+      # scope the others do not. Read-only: it looks up run history, never writes.
+      actions: read
     outputs:
       matrix:        ${{ steps.plan.outputs.matrix }}
       count:         ${{ steps.plan.outputs.count }}
       max_parallel:  ${{ steps.plan.outputs.max_parallel }}
+      # 'true' when the plan inherited the verdict of this branch's last green run
+      # because every path changed since it classifies low-risk. magus decides that
+      # and publishes the report; the two `if:` guards below only consume the answer.
+      inherit:       ${{ steps.plan.outputs.inherit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -174,12 +181,15 @@ jobs:
         name: Compute shard matrix
         env:
           MAGUS_VCS_BASE_REF: ${{ github.event_name == 'push' && 'last-passed' || '' }}
+          # Read by the github spell's last_green_run alone. Unset, it answers null
+          # and the plan fans out as it always has.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
 
   ci:
     name: magus shard ${{ matrix.shard }}
     needs: plan
-    if: fromJSON(needs.plan.outputs.count) > 0
+    if: fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -341,8 +351,11 @@ jobs:
     # something to say. Named for doctor's [advice] level so the CI surface and the tool
     # share one word for "worth knowing, never a gate". Opt out with the repository
     # variable MAGUS_PR_COMMENTS=false.
+    #
+    # Skipped on an inherited verdict: the advisors describe the delta against main,
+    # which the last green run already commented on, and re-posting it says nothing new.
     name: magus advisor
-    if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false'
+    if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false' && needs.plan.outputs.inherit != 'true'
     needs: [plan]
     runs-on: ubuntu-latest
     timeout-minutes: 10

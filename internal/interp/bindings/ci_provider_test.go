@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/ci/annotate"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,5 +38,36 @@ func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 	} {
 		require.ErrorIsf(t, err, boom, "%s must surface the provider's failure", name)
 		assert.ErrorContains(t, err, name, "the error names the op that failed")
+	}
+}
+
+// The last_green_run contract, decoded. Inheritance is an optimization, so
+// every shape but a complete {run, commit} record reads as "no green run" -
+// including the raised error, which the annotate ops above must NOT swallow.
+func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
+	drv := &stubDriver{resp: spells.InvokeResponse{Data: map[string]any{
+		"run":    "https://example/run/7",
+		"commit": "green0123456789",
+	}}}
+	got, ok := (&spellAnnotator{drv: drv}).LastGreenRun()
+	require.True(t, ok)
+	assert.Equal(t, annotate.GreenRun{Run: "https://example/run/7", Commit: "green0123456789"}, got)
+	assert.Equal(t, "last_green_run", drv.got.Target)
+
+	declines := map[string]*stubDriver{
+		"undeclared op":    {},
+		"a null answer":    {resp: spells.InvokeResponse{Data: nil}},
+		"a raised handler": {err: errors.New("handler raised")},
+		"not a record":     {resp: spells.InvokeResponse{Data: "green0123456789"}},
+		"no run":           {resp: spells.InvokeResponse{Data: map[string]any{"commit": "green0123456789"}}},
+		"no commit":        {resp: spells.InvokeResponse{Data: map[string]any{"run": "https://example/run/7"}}},
+		"wrong types":      {resp: spells.InvokeResponse{Data: map[string]any{"run": 7, "commit": 9}}},
+	}
+	for name, d := range declines {
+		t.Run(name, func(t *testing.T) {
+			got, ok := (&spellAnnotator{drv: d}).LastGreenRun()
+			assert.False(t, ok)
+			assert.Equal(t, annotate.GreenRun{}, got)
+		})
 	}
 }
