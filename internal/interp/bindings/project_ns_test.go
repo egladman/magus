@@ -258,6 +258,20 @@ func toolsOpts(bin string, kv map[string]string) vm.Value {
 	return opts
 }
 
+// TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted reads types.ToolBoundKeys and
+// asserts this consumer accepts every key in it, the shape
+// TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted uses and for the same reason.
+// Its twin over the dry-run host is TestLoadMagusfile_everyToolBoundKeyAccepted.
+func TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted(t *testing.T) {
+	require.NotEmpty(t, types.ToolBoundKeys)
+	for _, key := range types.ToolBoundKeys {
+		t.Run(key, func(t *testing.T) {
+			_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{key: "22"}))
+			require.NoError(t, err, "the engine rejects %q, which types.ToolBoundKeys declares recognized", key)
+		})
+	}
+}
+
 func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	t.Run("both bounds decode", func(t *testing.T) {
 		p := applyOpts(t, toolsOpts("node", map[string]string{"min": "22", "below": "25"}))

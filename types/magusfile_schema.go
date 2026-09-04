@@ -62,6 +62,22 @@ var TargetPolicyKeys = []string{
 	"drift_reason",
 }
 
+// ToolBoundKeys is the ONE list of recognized keys inside one entry of magus.project's
+// "tools" map, the version window a project requires of a bin.
+//
+// The third dimension of the same divergence, found permissive rather than strict: the
+// engine rejected an unknown bound key and the dry-run host walked "tools" not at all,
+// so `{"go": {"minn": "1.21"}}` passed the Playground and every other preview surface
+// and then failed the real run. A shared table makes both sides answer alike.
+//
+// No Since column, for the reason TargetPolicyKeys has none. A closed vocabulary
+// besides: min/below describes a half-open interval and gains no third member, which is
+// why both consumers reject against it plainly instead of hinting at an upgrade.
+var ToolBoundKeys = []string{
+	"min",
+	"below",
+}
+
 // ProjectOptionKeys returns just the key names, for the unknown-key rejection both the
 // engine and the dry-run host perform.
 func ProjectOptionKeys() []string {

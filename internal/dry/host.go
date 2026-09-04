@@ -570,16 +570,17 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 	return path, opts
 }
 
-// dryKnownProjectOptionKeys / dryKnownTargetPolicyKeys are the SAME tables the real
-// binding (internal/interp/bindings/project_ns.go) rejects against, so the
-// playground/dry path rejects the same typos the real engine does instead of silently
-// dropping them.
+// dryKnownProjectOptionKeys / dryKnownTargetPolicyKeys / dryKnownToolBoundKeys are the
+// SAME tables the real binding (internal/interp/bindings/project_ns.go) rejects
+// against, so the playground/dry path rejects the same typos the real engine does
+// instead of silently dropping them.
 //
-// Not mirrors: each was once a hand-maintained slice claiming to mirror the engine's,
-// and each had drifted by the time it was found.
+// Not mirrors: the first two were hand-maintained slices claiming to mirror the
+// engine's and each had drifted, and there was no third one at all.
 var (
 	dryKnownProjectOptionKeys = types.ProjectOptionKeys()
 	dryKnownTargetPolicyKeys  = types.TargetPolicyKeys
+	dryKnownToolBoundKeys     = types.ToolBoundKeys
 )
 
 // rejectUnknownKeys errors on the first key in m absent from known. context
@@ -632,6 +633,21 @@ func (r *Tracer) traceProject(path string, opts vm.Value) error {
 					if nv, ok := item.MapGet("name"); ok && nv.IsStr() {
 						p.Spells = append(p.Spells, nv.AsString())
 					}
+				}
+			}
+		}
+		// tools is bin -> {min, below}, the same nesting the real binding walks. Only
+		// the bound keys are checked here: the preview reports no version window, so
+		// decoding the values would store something nothing reads.
+		if v, ok := opts.MapGet("tools"); ok && v.IsMap() {
+			for _, bin := range v.MapKeys() {
+				bv, ok := v.MapGet(bin)
+				if !ok || !bv.IsMap() {
+					continue
+				}
+				if err := rejectUnknownKeys(bv, dryKnownToolBoundKeys,
+					fmt.Sprintf("magus.project: tools[%q]", bin)); err != nil {
+					return err
 				}
 			}
 		}

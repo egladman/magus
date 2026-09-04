@@ -50,8 +50,9 @@ func magusfileNotASpellErr(what string) error {
 var knownProjectOptionKeys = types.ProjectOptionKeys()
 
 // knownToolBoundKeys are the recognized keys inside one entry of magus.project's
-// "tools" map.
-var knownToolBoundKeys = []string{"min", "below"}
+// "tools" map, from the one shared table in types so the engine and the dry-run host
+// cannot drift.
+var knownToolBoundKeys = types.ToolBoundKeys
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
 // magus.project's "targets" map, from the one shared table in types so the engine and
