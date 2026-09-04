@@ -39,11 +39,23 @@ How to use magus is not this file's job: `MAGUS.md` routes every question, and
 `magus ls` / `magus ls targets <project>` list what exists. Two repo policies
 that are not derivable from either:
 
-- Final gate before committing (and especially before pushing): `magus affected ci
---no-default-charms`. `magus.yaml` sets `default_charms: [rw]`, so a plain
-  `affected ci` runs as `ci:rw` and `generate` auto-writes its output locally,
-  hiding uncommitted-gen drift; `--no-default-charms` strips that so `generate`
-  acts as the pure drift gate exactly as CI runs it.
+- The gate is `magus affected ci --no-default-charms`. `magus.yaml` sets
+  `default_charms: [rw]`, so a plain `affected ci` runs as `ci:rw` and `generate`
+  auto-writes its output locally, hiding uncommitted-gen drift;
+  `--no-default-charms` strips that so `generate` acts as the pure drift gate
+  exactly as CI runs it.
+- Gate CADENCE: once per branch, when the substantive change is complete, before
+  the first push. After a green gate, a small delta - a comment or changelog
+  edit, regenerated output, a clean merge of main - needs only the regeneration
+  it touches (`magus run generate:rw <projects>` plus a settledness pass, and it
+  is one invocation for many projects); push and let the PR's CI be the gate,
+  since it runs the identical command on the identical tree. Re-gate locally only
+  when the delta is engine code or crosses projects. The failure this rule
+  answers: three agents re-gating changelog-entry deltas serialized twenty
+  minutes apiece on the machine budget and bought nothing a PR run would not
+  have (2026-09-04, Eli's call). Regeneration stays local and mandatory: a
+  born-red PR wastes a full CI round; a red PR from a risk you knowingly
+  deferred is the system working.
 
 ## Which magus binary
 
