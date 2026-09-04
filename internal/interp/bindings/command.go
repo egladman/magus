@@ -30,8 +30,9 @@ import (
 //   - args: raw tokens appended after the base command, so a build the op's bare base
 //     cannot express is reachable through the spell rather than proc.exec.
 //   - env: overlays the subprocess environment; later entries win.
-//   - hasArgs: distinguishes "no args key" (fall back to project.ExtraArgs) from an
-//     explicit empty list. Buzz path only.
+//   - hasArgs: distinguishes "no args key" (fall back to project.ExtraArgs, keep the
+//     op's DefaultArgs) from an explicit args list (which also replaces DefaultArgs).
+//     Set on the Buzz path only.
 //   - ignoreDirs: the issuing spell's own mgs_listIgnoreDirs, so a Command.Sources
 //     expansion inherits them instead of the op re-declaring them.
 //   - refs: op-specific runner-computed values a $NAME token may resolve to, alongside
@@ -79,6 +80,12 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// Warn on the real execution path only (not the describe/render path, which
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
+	// Explicit call-site args replace the declared defaults; anything else -
+	// including `magus run <t> -- <extra>` forwarding, which arrives with
+	// hasArgs unset - keeps them. See spells.Command.DefaultArgs.
+	if !opts.hasArgs {
+		args = append(args, tgt.DefaultArgs...)
+	}
 	args = append(args, opts.args...)
 	// A static op is resolved to {bin, args} ONCE, with no Target (see recordOp in
 	// internal/spellruntime/resolve.go), so it cannot compute a value only the

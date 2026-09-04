@@ -20,6 +20,7 @@
 package ward
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/service/identity"
@@ -58,7 +59,9 @@ func detachFlag(cmd spells.Command) (string, bool) {
 	if !identity.IsContainerRuntime(cmd.Bin) {
 		return "", false
 	}
-	for _, a := range cmd.Args {
+	// DefaultArgs are argv on every no-args invocation, so a flag there is the
+	// same self-contradiction as one in Args.
+	for _, a := range slices.Concat(cmd.Args, cmd.DefaultArgs) {
 		switch {
 		case a == "-d", a == "--detach", a == "--detach=true":
 			return a, true
@@ -84,7 +87,8 @@ func watchFlag(cmd spells.Command) (string, bool) {
 	if !invokesWatchTool(cmd) {
 		return "", false
 	}
-	for _, a := range cmd.Args {
+	// Same reach as detachFlag: a watch flag in the defaults hangs the no-args run.
+	for _, a := range slices.Concat(cmd.Args, cmd.DefaultArgs) {
 		if a == "--watch" || strings.HasPrefix(a, "--watch=") || a == "-w" {
 			return a, true
 		}

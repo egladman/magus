@@ -148,6 +148,37 @@ func TestDecode_CommandOp(t *testing.T) {
 	assert.Equal(t, []string{"build", "./..."}, tgt.Args)
 }
 
+// TestDecode_CommandDefaultArgs verifies `defaultArgs` decodes onto Op.DefaultArgs,
+// distinct from Args, and that an absent key decodes to nil.
+func TestDecode_CommandDefaultArgs(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"test": map[string]any{
+				"bin":         "go",
+				"args":        []string{"test"},
+				"defaultArgs": []string{"./..."},
+			},
+		},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+	tgt, ok := m.Ops["test"]
+	require.True(t, ok, `Ops["test"] missing`)
+	assert.Equal(t, []string{"test"}, tgt.Args)
+	assert.Equal(t, []string{"./..."}, tgt.DefaultArgs)
+
+	absent := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"test": map[string]any{"bin": "go", "args": []string{"test"}},
+		},
+	}
+	m, err = Decode(absent)
+	require.NoError(t, err)
+	assert.Nil(t, m.Ops["test"].DefaultArgs)
+}
+
 // TestDecode_CommandSecrets verifies a record op's `secrets` map (env var name ->
 // provider reference) decodes onto Op.Secrets untouched  -  no resolution happens at
 // decode time, only at spawn.

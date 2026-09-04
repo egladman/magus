@@ -396,11 +396,16 @@ jobs:
           go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases
           go run ./cmd/magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
 
-      - uses: ./.github/actions/release-index
-        with:
-          signing-key: ${{ secrets.MAGUS_SIGNING_KEY }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          reason: the ${{ github.ref_name }} release
+      # The whole build-sign-regenerate-branch-PR flow lives in the magusfile's
+      # release-index target (see release_index() in magusfile.buzz); cd is what lets
+      # it push the branch and open the pull request. The tag rides the environment,
+      # never interpolated into the command, like TAG above.
+      - name: Publish the release index
+        env:
+          MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REASON: the ${{ github.ref_name }} release
+        run: magus run release-index:cd --no-default-charms -- "$REASON"
 
   image:
     name: Publish container images

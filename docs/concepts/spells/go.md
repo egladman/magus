@@ -23,7 +23,7 @@ Every op is invoked as `go["<op>"](ctx, opts?)`. The first argument is the targe
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `go["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L168) |
+| `args` | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `go["<op>"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L168) |
 | `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L172) |
 
 
@@ -221,6 +221,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 
 ## go-test
 
+`./...` is a default, not a fixed arg: a magusfile that passes args replaces it, so one package's tests need not compile every test binary in the module. A bare go.test() (and `magus run <t> -- <extra>` forwarding) still runs the whole tree.
+
 **Command:** `go test ./...`
 
 ### cd
@@ -270,8 +272,9 @@ Appends `-v`.
 
 <!-- magus-run-recorder -->
 ```buzz
-// go-test runs the suite; here with the race detector, so `magus run test` forks
-// `go test ./... -race`. The cd charm (`magus run test:cd`) adds the atomic
+// go-test runs the suite; here with the race detector. Explicit args replace the
+// op's `./...` default, so the scope rides along with the flags and `magus run test`
+// forks `go test -race ./...`. The cd charm (`magus run test:cd`) adds the atomic
 // coverage profile a CD pipeline ships.
 import "magus";
 import "magus/spell/go";
@@ -279,7 +282,7 @@ import "magus/spell/go";
 magus\project({ "spells": [go] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
-    go["go-test"](ctx, { "args": ["-race"] });
+    go["go-test"](ctx, { "args": ["-race", "./..."] });
 }
 ```
 

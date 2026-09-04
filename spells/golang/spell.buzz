@@ -133,8 +133,11 @@ fun golangCILint(target: Target) > Command {
         "rw": after(args, "run", ["--fix"]),
     }};
 }
+// `./...` is a default, not a fixed arg: a magusfile that passes args replaces it,
+// so one package's tests need not compile every test binary in the module. A bare
+// go.test() (and `magus run <t> -- <extra>` forwarding) still runs the whole tree.
 fun goTest(target: Target) > Command {
-    return Command{bin = "go", args = ["test", "./..."], hints = GO_MOD_HINTS, charms = {
+    return Command{bin = "go", args = ["test"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, charms = {
         "debug": append(["-v"]),
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};

@@ -351,7 +351,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
-			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test", "./..."}, Hints: goldenGoModHints, Charms: map[string]spells.Charm{
+			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}, Hints: goldenGoModHints, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"cd": {Ops: []spells.PatchOp{
 					{Op: "add", Path: "/-", Value: "-covermode=atomic"},
