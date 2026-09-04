@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A daemon no longer adopts runs from a binary built from different sources.** Every
+  modified-tree build of one commit stamps the same `-dirty` version string, so the
+  adoption identity gate matched byte-different binaries and a warm daemon executed
+  adopted runs with the code it loaded at start rather than the code just built:
+  generators then emitted stale output that the local drift gate blessed and CI
+  rejected. A modified-tree build's identity is now its executable file (resolved
+  path, size, mtime), captured at process start; a mismatch falls back to the
+  caller's own fresh binary, and a pre-fix daemon refuses fixed clients rather than
+  trusting them.
 - **The release-index pull request arrives with its derived files regenerated.** The cut
   rewrites `CHANGELOG.md`, but the bot's commit carried neither the knowledge graph nor
   the docs changelog derived from it, so every index pull request opened failing its own
