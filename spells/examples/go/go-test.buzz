@@ -1,5 +1,6 @@
-// go-test runs the suite; here with the race detector, so `magus run test` forks
-// `go test ./... -race`. The cd charm (`magus run test:cd`) adds the atomic
+// go-test runs the suite; here with the race detector. Explicit args replace the
+// op's `./...` default, so the scope rides along with the flags and `magus run test`
+// forks `go test -race ./...`. The cd charm (`magus run test:cd`) adds the atomic
 // coverage profile a CD pipeline ships.
 import "magus";
 import "magus/spell/go";
@@ -7,5 +8,5 @@ import "magus/spell/go";
 magus\project({ "spells": [go] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
-    go["go-test"](ctx, { "args": ["-race"] });
+    go["go-test"](ctx, { "args": ["-race", "./..."] });
 }

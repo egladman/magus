@@ -265,6 +265,14 @@
           "dependencies": [
             "bindings-generate"
           ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
           "chain": [
             {
               "target": "bindings-generate"
@@ -275,6 +283,10 @@
             {
               "glob": "internal/interp/bindings/testdata/magus-api.lock"
             }
+          ],
+          "exec_overrides": [
+            "env:UPDATE_MAGUS_API_LOCK=1",
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -1382,7 +1394,8 @@
           ],
           "reads_secrets": false,
           "exec_overrides": [
-            "env:CGO_ENABLED=1"
+            "env:CGO_ENABLED=1",
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {

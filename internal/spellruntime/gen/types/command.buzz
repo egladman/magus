@@ -8,6 +8,7 @@
 export object Command {
     bin: str = "",
     args: [str] = [],
+    defaultArgs: [str] = [],
     charms: {str: Charm} = {},
     sources: [str] = [],
     sourcesEach: bool = false,
