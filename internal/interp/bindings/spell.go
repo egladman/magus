@@ -141,6 +141,9 @@ func newCommandRenderer(targets map[string]spells.Op) func(string, []string) (st
 		if err != nil {
 			return "", nil, false, err
 		}
+		// The preview is the no-args invocation, so the declared defaults show
+		// exactly where execution appends them: after the charm-patched base.
+		args = append(args, op.DefaultArgs...)
 		// A declared Sources is appended as its placeholder token: this renderer
 		// takes no project dir (magus describe has none per-target either), so it
 		// cannot run the runner's real per-project expansion - see
@@ -173,11 +176,16 @@ func newCommandExplainer(targets map[string]spells.Op) func(string, []string) ([
 			return nil, false, err
 		}
 		// Prepend the base step, then prefix every step's argv with the bin so each
-		// line is the full command a reader can compare top to bottom.
+		// line is the full command a reader can compare top to bottom. Defaults
+		// trail every step: charms patch Args only, and execution appends the
+		// defaults after the patched base, so this is each step's real argv.
+		full := func(args []string) []string {
+			return append(append([]string{op.Bin}, args...), op.DefaultArgs...)
+		}
 		steps := make([]spells.CharmTraceStep, 0, len(charmSteps)+1)
-		steps = append(steps, spells.CharmTraceStep{Command: append([]string{op.Bin}, op.Args...)})
+		steps = append(steps, spells.CharmTraceStep{Command: full(op.Args)})
 		for _, s := range charmSteps {
-			steps = append(steps, spells.CharmTraceStep{Charm: s.Charm, Command: append([]string{op.Bin}, s.Command...)})
+			steps = append(steps, spells.CharmTraceStep{Charm: s.Charm, Command: full(s.Command)})
 		}
 		return steps, true, nil
 	}

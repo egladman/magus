@@ -184,13 +184,16 @@ func main() {
 }
 
 // resolvedArgv joins an op's command and arguments into the shell-free argv a
-// target forks (`go tool golangci-lint run ./...`). Empty for a marker op with no
-// command (an opaque spell's aggregate target).
+// target forks (`go tool golangci-lint run ./...`). The declared defaults trail the
+// fixed args, as the runner appends them on a no-args invocation - the invocation
+// this page documents. Empty for a marker op with no command (an opaque spell's
+// aggregate target).
 func resolvedArgv(op spells.Op) string {
 	if op.Bin == "" {
 		return ""
 	}
-	return strings.TrimSpace(op.Bin + " " + strings.Join(op.Args, " "))
+	argv := slices.Concat([]string{op.Bin}, op.Args, op.DefaultArgs)
+	return strings.TrimSpace(strings.Join(argv, " "))
 }
 
 // pruneUnregistered removes page files in dir that no spell in keep claims, so a
@@ -324,7 +327,7 @@ func writeArgsSection(b *strings.Builder, invoker string) {
 	fmt.Fprintf(b, "Every op is invoked as `%s[\"<op>\"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:\n\n", invoker)
 	fmt.Fprintln(b, "| Key | Type | Description | Source |")
 	fmt.Fprintln(b, "|-----|------|-------------|--------|")
-	fmt.Fprintf(b, "| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `%s[\"<op>\"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | %s |\n", invoker, src("args"))
+	fmt.Fprintf(b, "| `args` | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `%s[\"<op>\"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | %s |\n", invoker, src("args"))
 	fmt.Fprintf(b, "| `stdin` | `str` | Data written to the command's standard input. | %s |\n", src("stdin"))
 	fmt.Fprintln(b)
 	fmt.Fprintln(b)

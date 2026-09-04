@@ -44,9 +44,21 @@ type Charm struct {
 // expand a variable magus itself set. See internal/interp/bindings' resolveRunnerRefs
 // for the resolution rule and its scope: it is NOT the process environment.
 type Command struct {
-	Bin    string           `json:"bin,omitempty"`
-	Args   []string         `json:"args,omitempty"`
-	Charms map[string]Charm `json:"charms,omitempty"`
+	Bin  string   `json:"bin,omitempty"`
+	Args []string `json:"args,omitempty"`
+	// DefaultArgs are trailing argv tokens the RUNNER appends only when the
+	// invocation passes no explicit args of its own; explicit call-site args
+	// replace them. `magus run <t> -- <extra>` forwarding is not explicit args:
+	// the extras land after the defaults, so a bare `-run X` still scopes to the
+	// default package list.
+	//
+	// This is what lets an op declare a whole-tree default (`go test ./...`)
+	// that a magusfile can narrow (`go["go-test"](ctx, {"args": [...,
+	// "./internal/compress/"]})`) without the default package list riding along
+	// and recompiling the module. Charms patch Args only, never DefaultArgs;
+	// defaults are appended after the patched base.
+	DefaultArgs []string         `json:"default_args,omitempty"`
+	Charms      map[string]Charm `json:"charms,omitempty"`
 	// Sources, when non-empty, are doublestar globs (relative to the project
 	// directory this command runs in) that the RUNNER expands into a file list
 	// at EXECUTION time, via the same walk that builds the cache key
@@ -242,10 +254,16 @@ func (o Op) Key() []string {
 	if o.IsService() || o.Bin == "" {
 		return nil
 	}
-	key := make([]string, 0, len(o.Args)+1)
+	key := make([]string, 0, len(o.Args)+len(o.DefaultArgs)+1)
 	key = append(key, "bin:"+o.Bin)
 	for _, a := range o.Args {
 		key = append(key, "arg:"+a)
+	}
+	// A distinct prefix: an op whose "./..." is a replaceable default is not the
+	// same work as one that always runs it, and moving a token between the two
+	// lists must change the key.
+	for _, a := range o.DefaultArgs {
+		key = append(key, "default_arg:"+a)
 	}
 	return key
 }

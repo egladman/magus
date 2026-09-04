@@ -265,6 +265,14 @@
           "dependencies": [
             "bindings-generate"
           ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
           "chain": [
             {
               "target": "bindings-generate"
@@ -275,6 +283,10 @@
             {
               "glob": "internal/interp/bindings/testdata/magus-api.lock"
             }
+          ],
+          "exec_overrides": [
+            "env:UPDATE_MAGUS_API_LOCK=1",
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -1296,13 +1308,25 @@
           "name": "compress-cgo-test",
           "declared": "compress_cgo_test",
           "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
           "reads_files": [
             {
               "project": ".",
               "glob": "internal/compress/*.go"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "exec_overrides": [
+            "env:CGO_ENABLED=1",
+            "env:GOEXPERIMENT=jsonv2"
+          ]
         },
         {
           "name": "ci-shard",

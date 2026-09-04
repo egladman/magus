@@ -116,6 +116,9 @@ func (o spellOp) renderCommand(activeNames []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// The no-args invocation is the one this preview shows, so the declared
+	// defaults follow the charm-patched base exactly as execution appends them.
+	args = append(args, o.cmd.DefaultArgs...)
 	args = append(args, o.cmd.SourcesPlaceholder()...)
 	parts := make([]string, 0, len(args)+1)
 	if o.cmd.Bin != "" {

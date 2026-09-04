@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,6 +67,25 @@ func TestSpellOptionsApplied(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestSpellHandleRoundTripKeepsDefaultArgs pins the by-value handle round trip for
+// Command.DefaultArgs: targetsToMap must write back every field Decode reads, or a
+// workspace-local spell's declaration is silently dropped at bind time and its ops run
+// without their default scope (see the warning on targetsToMap's secrets write-back).
+func TestSpellHandleRoundTripKeepsDefaultArgs(t *testing.T) {
+	h := spellHandleFromMeta(spells.Descriptor{
+		Name: "myspell",
+		Ops: map[string]spells.Op{
+			"test": {Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}},
+		},
+	})
+	got, err := spellruntime.DecodeHandle(h)
+	require.NoError(t, err)
+	op, ok := got.Ops["test"]
+	require.True(t, ok)
+	assert.Equal(t, []string{"test"}, op.Args)
+	assert.Equal(t, []string{"./..."}, op.DefaultArgs, "defaultArgs must survive the bind-time handle round trip")
 }
 
 // execCtxValue builds what ctx.withEnv/withCwd produce: a marked map carrying only

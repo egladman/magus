@@ -216,6 +216,8 @@ func TestSortedCharmNames(t *testing.T) {
 
 func TestResolvedArgv(t *testing.T) {
 	assert.Equal(t, "go build ./...", resolvedArgv(spells.Op{Command: spells.Command{Bin: "go", Args: []string{"build", "./..."}}}))
+	assert.Equal(t, "go test ./...", resolvedArgv(spells.Op{Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}}),
+		"the page documents the no-args invocation, so the declared defaults trail the fixed args")
 	assert.Equal(t, "go", resolvedArgv(spells.Op{Command: spells.Command{Bin: "go"}}))
 	assert.Equal(t, "", resolvedArgv(spells.Op{}), "a marker op with no command composes others")
 }
