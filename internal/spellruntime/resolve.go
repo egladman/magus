@@ -210,6 +210,13 @@ func validateCmdFields(m vm.Value) error {
 			}
 		}
 	}
+	if args, ok := m.MapGet("defaultArgs"); ok && args.IsList() {
+		for _, a := range args.ListItems() {
+			if !a.IsStr() {
+				return fmt.Errorf("command defaultArgs must all be strings")
+			}
+		}
+	}
 	if sources, ok := m.MapGet("sources"); ok && sources.IsList() {
 		for _, s := range sources.ListItems() {
 			if !s.IsStr() {

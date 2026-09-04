@@ -244,6 +244,48 @@ func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 	})
 }
 
+// TestRunCommandDefaultArgs pins the argv assembly around Command.DefaultArgs: the
+// defaults ride every invocation that passes no explicit args (including
+// `magus run <t> -- <extra>` forwarding, which arrives with hasArgs unset), and
+// explicit call-site args replace them. This is what lets go-test declare `./...`
+// as scope a magusfile can narrow to one package instead of a fixed arg it can
+// only append to.
+func TestRunCommandDefaultArgs(t *testing.T) {
+	runWith := func(t *testing.T, opts commandOpts) []string {
+		t.Helper()
+		dir := t.TempDir()
+		logFile := filepath.Join(dir, "calls.log")
+		op := spells.Op{Command: spells.Command{
+			Bin:         "sh",
+			Args:        []string{"-c", `echo "$@" >> "$LOGFILE"`, "sh", "base"},
+			DefaultArgs: []string{"DEFAULT"},
+		}}
+		opts.env = map[string]string{"LOGFILE": logFile}
+		_, err := runCommand(std.WithCwd(context.Background(), dir), op, opts)
+		require.NoError(t, err)
+		lines := logLines(t, logFile)
+		require.Len(t, lines, 1)
+		return strings.Fields(lines[0])
+	}
+
+	t.Run("no args appends the defaults", func(t *testing.T) {
+		assert.Equal(t, []string{"base", "DEFAULT"}, runWith(t, commandOpts{}))
+	})
+
+	t.Run("explicit args replace the defaults", func(t *testing.T) {
+		assert.Equal(t, []string{"base", "narrow"},
+			runWith(t, commandOpts{args: []string{"narrow"}, hasArgs: true}),
+			"a call-site args list must displace the declared defaults, not follow them")
+	})
+
+	t.Run("forwarded extras keep the defaults", func(t *testing.T) {
+		// The dispatchOp/ExtraArgs shape: args present, hasArgs unset. A forwarded
+		// `-run X` must still scope to the default package list.
+		assert.Equal(t, []string{"base", "DEFAULT", "extra"},
+			runWith(t, commandOpts{args: []string{"extra"}}))
+	})
+}
+
 // logInvocationOp is a Command that appends one line per invocation to a log
 // file - every arg of that invocation, space-separated - so a test can tell
 // how many times it ran and with what argv, without a real tool on PATH.

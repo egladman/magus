@@ -187,6 +187,9 @@ func targetsToMap(targets map[string]spells.Op) vm.Value {
 		if len(t.Args) > 0 {
 			op.MapSet("args", strSliceToBuzzList(t.Args))
 		}
+		if len(t.DefaultArgs) > 0 {
+			op.MapSet("defaultArgs", strSliceToBuzzList(t.DefaultArgs))
+		}
 		if len(t.Charms) > 0 {
 			charms := vm.NewMap()
 			for cn, c := range t.Charms {

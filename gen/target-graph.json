@@ -265,6 +265,14 @@
           "dependencies": [
             "bindings-generate"
           ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
           "chain": [
             {
               "target": "bindings-generate"
@@ -275,6 +283,10 @@
             {
               "glob": "internal/interp/bindings/testdata/magus-api.lock"
             }
+          ],
+          "exec_overrides": [
+            "env:UPDATE_MAGUS_API_LOCK=1",
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -729,6 +741,76 @@
           "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
           "charms": [
             "immutable"
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "release-index",
+          "declared": "release_index",
+          "doc": "Builds docs/gen/public/release/index.json from releases/*.yaml, signs it into index.json.sig, regenerates the files derived from the changelog the cut rewrote, and, under the cd charm, publishes whatever changed as a pull request.",
+          "dependencies": [
+            "bindings-generate",
+            "changelog-generate",
+            "config-generate",
+            "graph-generate",
+            "index-generate",
+            "langservice-generate",
+            "magusfile-api-generate",
+            "man-generate",
+            "mocks-generate",
+            "skills-generate",
+            "spells-generate",
+            "termcast-generate",
+            "termshots-generate",
+            "types-generate"
+          ],
+          "charms": [
+            "cd",
+            "rw"
+          ],
+          "chain": [
+            {
+              "target": "bindings-generate"
+            },
+            {
+              "target": "changelog-generate"
+            },
+            {
+              "target": "config-generate"
+            },
+            {
+              "target": "graph-generate"
+            },
+            {
+              "target": "index-generate"
+            },
+            {
+              "target": "langservice-generate"
+            },
+            {
+              "target": "magusfile-api-generate"
+            },
+            {
+              "target": "man-generate"
+            },
+            {
+              "target": "mocks-generate"
+            },
+            {
+              "target": "skills-generate"
+            },
+            {
+              "target": "spells-generate"
+            },
+            {
+              "target": "termcast-generate"
+            },
+            {
+              "target": "termshots-generate"
+            },
+            {
+              "target": "types-generate"
+            }
           ],
           "reads_secrets": false
         },
@@ -1312,7 +1394,8 @@
           ],
           "reads_secrets": false,
           "exec_overrides": [
-            "env:CGO_ENABLED=1"
+            "env:CGO_ENABLED=1",
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
