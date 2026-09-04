@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The release-index pull request arrives with its derived files regenerated.** The cut
+  rewrites `CHANGELOG.md`, but the bot's commit carried neither the knowledge graph nor
+  the docs changelog derived from it, so every index pull request opened failing its own
+  drift gate; the action now regenerates and commits them alongside.
 - **`SHA256SUMS` is hex again.** Releases v0.1.0 through v0.3.0 shipped hex; an
   upstream-parity change then made Buzz's `crypto.hash` return raw digest bytes, and the
   sidecar writer, unchanged since v0.1.0, shipped v0.4.2's manifest as those bytes. That
