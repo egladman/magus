@@ -2,8 +2,12 @@ package proc
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
+	"os"
+	"path/filepath"
 	"runtime/debug"
+	"strconv"
 )
 
 // This file computes the ADOPTION IDENTITY: the version string a magus build sends over
@@ -34,6 +38,35 @@ const devVersionSentinel = "unknown"
 // code, so we decline rather than risk executing stale logic.
 var devUnverifiable = "dev-unverifiable-" + randomToken()
 
+// binaryIdentity identifies a MODIFIED-tree build by the executable file it runs from:
+// its resolved path plus size and mtime, hashed. Same file, same identity - so a daemon
+// and the nested magus it forked still adopt each other in a dirty tree - while a
+// rebuilt, replaced, or borrowed binary mismatches and the caller runs locally instead.
+//
+// Captured at process start, not lazily: a daemon whose executable is rebuilt underneath
+// it must keep the identity of the file it actually loaded, or it would stat the NEW
+// file, match the new client, and execute the run with the old code - the exact stale
+// adoption this identity exists to refuse.
+var binaryIdentity = computeBinaryIdentity()
+
+func computeBinaryIdentity() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return devUnverifiable // cannot prove which file runs: fail closed per process
+	}
+	if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil {
+		exe = resolved
+	}
+	fi, err := os.Stat(exe)
+	if err != nil {
+		return devUnverifiable
+	}
+	h := sha256.Sum256([]byte(exe + "\x00" +
+		strconv.FormatInt(fi.Size(), 10) + "\x00" +
+		strconv.FormatInt(fi.ModTime().UnixNano(), 10)))
+	return "dev-bin-" + hex.EncodeToString(h[:8])
+}
+
 func randomToken() string {
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
@@ -52,13 +85,17 @@ func randomToken() string {
 //
 //   - "" passes through unchanged. An empty identity on either side disables the gate; it
 //     is the test-injection / pre-versioning escape hatch (see service.versionAdmits).
+//   - A MODIFIED-tree build maps to binaryIdentity whatever its display version says. A
+//     stamped `git describe --dirty` string is shared by every dirty build of one commit,
+//     so trusting it let a stale daemon adopt a since-rebuilt client and execute the run
+//     with old code; the executable-file identity admits only the byte-identical binary.
 //   - A stamped release version (anything but devVersionSentinel) passes through unchanged,
 //     so releases keep matching on their exact version.
 //   - The dev sentinel is replaced by a build fingerprint: "dev-<revision>" for a CLEAN
 //     build carrying VCS info (two clean builds of one commit are provably the same code
 //     and DO adopt each other, preserving the run-a-daemon-then-adopt-into-it workflow),
-//     or the per-process devUnverifiable token for a dirty or VCS-less build (never
-//     matches - adoption refused).
+//     or the per-process devUnverifiable token for a VCS-less build (never matches -
+//     adoption refused).
 //
 // Embedding the fingerprint IN the version string (rather than adding a new wire field) is
 // deliberate and load-bearing: a stale PRE-FIX daemon compares the string it receives
@@ -66,11 +103,17 @@ func randomToken() string {
 // field would be silently ignored by that old daemon and fail OPEN - the very failure mode
 // this fix exists to close.
 func adoptionIdentity(displayVersion string) string {
+	if displayVersion == "" {
+		return "" // the check-disabled / test-injection escape hatch stays open
+	}
+	rev, modified, ok := buildVCS()
+	if ok && modified {
+		return binaryIdentity
+	}
 	if displayVersion != devVersionSentinel {
 		return displayVersion
 	}
-	rev, modified, ok := buildVCS()
-	if !ok || modified || rev == "" {
+	if !ok || rev == "" {
 		return devUnverifiable
 	}
 	return "dev-" + rev
@@ -80,8 +123,9 @@ func adoptionIdentity(displayVersion string) string {
 // 1.18+). ok is false only when no build info is available at all (e.g. a binary built
 // with -ldflags that strips it in an unusual way); rev and modified are the vcs.revision
 // and vcs.modified settings, which are absent ("" / false) when the build carried no VCS
-// info at all - built with -buildvcs=false, or outside a VCS work tree.
-func buildVCS() (rev string, modified bool, ok bool) {
+// info at all - built with -buildvcs=false, or outside a VCS work tree. A var so tests
+// can pin the build state instead of inheriting whatever tree built the test binary.
+var buildVCS = func() (rev string, modified bool, ok bool) {
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "", false, false
