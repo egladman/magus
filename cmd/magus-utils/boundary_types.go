@@ -32,6 +32,12 @@ var boundaryTypes = []boundaryType{
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
 	{Name: "VersionBounds", Type: reflect.TypeFor[spells.VersionBounds]()},
 	{Name: "Tool", Type: reflect.TypeFor[spells.Tool]()},
+	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], and
+	// Language carries a CommentSyntax.
+	{Name: "CommentBlock", Type: reflect.TypeFor[spells.CommentBlock]()},
+	{Name: "Quote", Type: reflect.TypeFor[spells.Quote]()},
+	{Name: "CommentSyntax", Type: reflect.TypeFor[spells.CommentSyntax]()},
+	{Name: "Language", Type: reflect.TypeFor[spells.Language]()},
 	// A provider spell WRITES this one, like Project below: resolve_secret constructs it
 	// and returns it, so it needs the mirror but no Go-to-Buzz encoder.
 	{Name: "Secret", Type: reflect.TypeFor[spells.Secret]()},

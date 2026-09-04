@@ -143,26 +143,31 @@ func Greet(name string) string {
 `
 
 func TestCommentOnlyGo(t *testing.T) {
-	assert.True(t, CommentOnlyGo(goCode, goCode), "identical")
-	assert.True(t, CommentOnlyGo(goCode, goCommentEdit), "comments added and reworded")
-	assert.True(t, CommentOnlyGo(goCommentEdit, goCode), "comments removed")
-	assert.False(t, CommentOnlyGo(goCode, goCodeEdit), "a string literal changed")
-	assert.False(t, CommentOnlyGo(goCode, goCommentEdit+"\nfunc Extra() {}\n"), "code added alongside comments")
-	assert.False(t, CommentOnlyGo(goCode, `package p; var s = "unterminated`), "a file that does not lex re-gates")
-	assert.False(t, CommentOnlyGo(`package p; var s = "unterminated`, `package p; var s = "unterminated`), "even two identically unlexable files re-gate")
+	syn := syntaxFor(t, ".go")
+	assert.True(t, CommentOnlyDeclared(goCode, goCode, syn), "identical")
+	assert.True(t, CommentOnlyDeclared(goCode, goCommentEdit, syn), "comments added and reworded")
+	assert.True(t, CommentOnlyDeclared(goCommentEdit, goCode, syn), "comments removed")
+	assert.False(t, CommentOnlyDeclared(goCode, goCodeEdit, syn), "a string literal changed")
+	assert.False(t, CommentOnlyDeclared(goCode, goCommentEdit+"\nfunc Extra() {}\n", syn), "code added alongside comments")
+	// An unterminated string swallows the rest of the file as string content,
+	// so a change inside it is a content change: re-gates.
+	assert.False(t, CommentOnlyDeclared(`package p; var s = "untermin`, `package p; var s = "unterminated`, syn))
 	// "//" inside a string is content, not a comment.
-	assert.False(t, CommentOnlyGo(`package p; var u = "http://a"`, `package p; var u = "http://b"`))
+	assert.False(t, CommentOnlyDeclared(`package p; var u = "http://a"`, `package p; var u = "http://b"`, syn))
+	// "//" inside a raw string is content too, and raw strings ignore escapes.
+	assert.False(t, CommentOnlyDeclared("package p; var u = `http://a\\`", "package p; var u = `http://b\\`", syn))
 }
 
 // TestCommentOnlyGoDirectives: a directive comment is code. Editing one can
 // change what compiles, embeds, generates, or lints, so it never defers.
 func TestCommentOnlyGoDirectives(t *testing.T) {
+	syn := syntaxFor(t, ".go")
 	build := "//go:build linux\n\npackage p\n"
-	assert.False(t, CommentOnlyGo(build, "//go:build darwin\n\npackage p\n"), "a build constraint edit is a code edit")
-	assert.False(t, CommentOnlyGo("package p\n", "package p\n\n//go:generate stringer -type=T\n"), "adding a generate directive is a code edit")
-	assert.False(t, CommentOnlyGo("//go:embed a.txt\npackage p\n", "package p\n"), "removing an embed directive is a code edit")
-	assert.False(t, CommentOnlyGo("package p\nvar x = 1 //nolint\n", "package p\nvar x = 1\n"), "removing a nolint is a code edit")
-	assert.True(t, CommentOnlyGo("//go:build linux\n\npackage p\n// old note\n", "//go:build linux\n\npackage p\n// new note\n"),
+	assert.False(t, CommentOnlyDeclared(build, "//go:build darwin\n\npackage p\n", syn), "a build constraint edit is a code edit")
+	assert.False(t, CommentOnlyDeclared("package p\n", "package p\n\n//go:generate stringer -type=T\n", syn), "adding a generate directive is a code edit")
+	assert.False(t, CommentOnlyDeclared("//go:embed a.txt\npackage p\n", "package p\n", syn), "removing an embed directive is a code edit")
+	assert.False(t, CommentOnlyDeclared("package p\nvar x = 1 //nolint\n", "package p\nvar x = 1\n", syn), "removing a nolint is a code edit")
+	assert.True(t, CommentOnlyDeclared("//go:build linux\n\npackage p\n// old note\n", "//go:build linux\n\npackage p\n// new note\n", syn),
 		"an untouched directive does not stop ordinary comment edits from deferring")
 }
 
@@ -187,12 +192,13 @@ fun greet(name: str) > str {
 `
 
 func TestCommentOnlyBuzz(t *testing.T) {
-	assert.True(t, CommentOnlyBuzz(buzzCode, buzzCode), "identical")
-	assert.True(t, CommentOnlyBuzz(buzzCode, buzzCommentEdit), "comments added and reworded")
-	assert.True(t, CommentOnlyBuzz(buzzCommentEdit, buzzCode), "comments removed")
-	assert.False(t, CommentOnlyBuzz(buzzCode, buzzCodeEdit), "a string literal changed")
-	assert.False(t, CommentOnlyBuzz(buzzCode, buzzCode+"\nfun extra() > void {}\n"), "code added alongside comments")
-	assert.False(t, CommentOnlyBuzz(buzzCode, "fun broken( {"+"\x00"), "a file that does not lex re-gates")
+	syn := syntaxFor(t, ".buzz")
+	assert.True(t, CommentOnlyDeclared(buzzCode, buzzCode, syn), "identical")
+	assert.True(t, CommentOnlyDeclared(buzzCode, buzzCommentEdit, syn), "comments added and reworded")
+	assert.True(t, CommentOnlyDeclared(buzzCommentEdit, buzzCode, syn), "comments removed")
+	assert.False(t, CommentOnlyDeclared(buzzCode, buzzCodeEdit, syn), "a string literal changed")
+	assert.False(t, CommentOnlyDeclared(buzzCode, buzzCode+"\nfun extra() > void {}\n", syn), "code added alongside comments")
+	assert.False(t, CommentOnlyDeclared(buzzCode, "fun broken( {"+"\x00", syn), "garbage differs beyond comments and re-gates")
 }
 
 // TestProseScopes pins the three configuration states: no declaration anywhere
@@ -231,6 +237,7 @@ func classifierWith(scopes []ProseScope) ChangeClassifier {
 		"tool.py":   "# a longer comment\nX = 1\n",
 	}
 	return ChangeClassifier{
+		Syntax: testSyntax,
 		Role: func(_ context.Context, paths []string) (map[string]string, error) {
 			return map[string]string{
 				"gen/index.html": "output",
@@ -332,10 +339,65 @@ func TestClassifyWithoutReaders(t *testing.T) {
 	assert.Equal(t, ClassProse, got.Paths[2].Class)
 }
 
+// testSyntax mirrors the mgs_getCommentSyntax declarations in the built-in
+// spells (spells/golang, spells/buzz, spells/python) - the spells are the
+// source of truth, and TestBuiltinCommentSyntax in internal/spellruntime pins
+// the decoded declarations, so drift between the two is caught there.
+var testSyntax = map[string]spells.CommentSyntax{
+	".go": {
+		LineComments:  []string{"//"},
+		BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+		Quotes: []spells.Quote{
+			{Open: "`", Close: "`", IgnoreEscape: true},
+			{Open: `"`, Close: `"`},
+			{Open: "'", Close: "'"},
+		},
+		Directives: []string{"go:", "nolint", "export", "line ", "+build", "sys", "extern"},
+	},
+	".buzz": {
+		LineComments:  []string{"//"},
+		BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+		Quotes: []spells.Quote{
+			{Open: "`", Close: "`", IgnoreEscape: true},
+			{Open: `"`, Close: `"`},
+		},
+	},
+	".py": {
+		LineComments: []string{"#"},
+		Quotes: []spells.Quote{
+			{Open: `"""`, Close: `"""`},
+			{Open: "'''", Close: "'''"},
+			{Open: `"`, Close: `"`},
+			{Open: "'", Close: "'"},
+		},
+		Directives: []string{"type:", "noqa"},
+	},
+	".ts": {
+		LineComments:  []string{"//"},
+		BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+		Quotes: []spells.Quote{
+			{Open: "`", Close: "`"},
+			{Open: `"`, Close: `"`},
+			{Open: "'", Close: "'"},
+		},
+		Directives: []string{"@ts-", "eslint-", "<reference"},
+	},
+	".rs": {
+		LineComments:  []string{"//"},
+		BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+		Nested:        true,
+		Quotes: []spells.Quote{
+			{Open: `r#"`, Close: `"#`, IgnoreEscape: true},
+			{Open: `r"`, Close: `"`, IgnoreEscape: true},
+			{Open: `"`, Close: `"`},
+		},
+	},
+}
+
 func syntaxFor(t *testing.T, ext string) spells.CommentSyntax {
 	t.Helper()
-	syn, ok := spells.CommentSyntaxForExtension(ext)
-	require.True(t, ok, "expected a shipped declaration for %s", ext)
+	syn, ok := testSyntax[ext]
+	require.True(t, ok, "expected a test declaration for %s", ext)
 	return syn
 }
 

@@ -102,6 +102,23 @@ var VersionBoundsSource string
 //go:embed gen/types/tool.buzz
 var ToolSource string
 
+// CommentBlockSource / QuoteSource / CommentSyntaxSource are the generated mirrors of
+// the comment/string syntax a spell declares via mgs_getCommentSyntax. The two leaves
+// must PRECEDE CommentSyntaxSource in the bundle (its fields are [CommentBlock] and
+// [Quote]); nothing else references them.
+//
+//go:embed gen/types/commentblock.buzz
+var CommentBlockSource string
+
+//go:embed gen/types/quote.buzz
+var QuoteSource string
+
+//go:embed gen/types/commentsyntax.buzz
+var CommentSyntaxSource string
+
+//go:embed gen/types/language.buzz
+var LanguageSource string
+
 // ServiceSource is the generated Buzz `object Service` mirror of spells.Service: the
 // {command, readiness, stop} a service op returns, each field a Command (command is the
 // process; readiness/stop are optional). It ships in the magus/spell bundle so a spell
@@ -138,7 +155,7 @@ var CharmModuleSource string
 // Service, each referencing the prior; Target and Project have no cross-references
 // so their position is free). Shared by the runtime registration (modules.go) and
 // the built-in inliner (builtinModuleSources) below, so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, ManifestSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, ProjectSource, SecretSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, ManifestSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, LanguageSource, ProjectSource, SecretSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

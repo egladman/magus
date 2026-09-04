@@ -61,6 +61,12 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		if spec.Language != "" {
 			opts = append(opts, spells.WithLanguage(spec.Language))
 		}
+		if len(spec.LanguageExtensions) > 0 {
+			opts = append(opts, spells.WithLanguageExtensions(spec.LanguageExtensions))
+		}
+		if spec.Comments != nil {
+			opts = append(opts, spells.WithComments(spec.Comments))
+		}
 		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spec.Name, opts...))
 	}
 })
@@ -568,6 +574,12 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	}
 	if m.Language != "" {
 		opts = append(opts, spells.WithLanguage(m.Language))
+	}
+	if len(m.LanguageExtensions) > 0 {
+		opts = append(opts, spells.WithLanguageExtensions(m.LanguageExtensions))
+	}
+	if m.Comments != nil {
+		opts = append(opts, spells.WithComments(m.Comments))
 	}
 	opts = append(opts, spells.WithTools(m.Tools), spells.WithVersionProber(versionProber))
 	return opts

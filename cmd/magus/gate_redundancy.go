@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -224,7 +225,8 @@ func (g *gateRedundancy) classifier() internalci.ChangeClassifier {
 			}
 			return roles, nil
 		},
-		Prose: internalci.ProseScopes(g.m.All()),
+		Prose:  internalci.ProseScopes(g.m.All()),
+		Syntax: spells.CommentSyntaxIndex(resolvedSpells(g.m.All())),
 		Working: func(p string) (string, error) {
 			b, err := os.ReadFile(filepath.Join(g.root, filepath.FromSlash(p)))
 			return string(b), err
@@ -244,6 +246,16 @@ func (g *gateRedundancy) classifier() internalci.ChangeClassifier {
 // interrupted or timed-out run records nothing: neither is a verdict on the
 // inputs. Store errors are logged, never returned - a store that can fail a
 // build is worse than none.
+// resolvedSpells flattens every project's resolved spells so the syntax index
+// covers workspace spells alongside the built-ins.
+func resolvedSpells(projects []*types.Project) []*spells.Spell {
+	var out []*spells.Spell
+	for _, p := range projects {
+		out = append(out, p.ResolvedSpells...)
+	}
+	return out
+}
+
 func (g *gateRedundancy) record(ctx context.Context, runErr error) {
 	if g == nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 		return

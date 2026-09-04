@@ -32,14 +32,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"go/scanner"
-	"go/token"
 	"path"
 	"slices"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	buzztoken "github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -279,6 +276,10 @@ type ChangeClassifier struct {
 	// Prose is the effective glob set, from ProseScopes. Empty means the prose
 	// class is off.
 	Prose []ProseScope
+	// Syntax routes a file extension (lowercase, with dot) to the comment
+	// syntax a spell DECLARED for it (spells.CommentSyntaxIndex over the
+	// projects' resolved spells). An unclaimed extension classifies as code.
+	Syntax map[string]spells.CommentSyntax
 	// At returns a file's content at the green gate's revision. An error means
 	// the path did not exist there or cannot be read; the path reads as code.
 	At func(ctx context.Context, rev, path string) (string, error)
@@ -315,20 +316,14 @@ func (c ChangeClassifier) classify(ctx context.Context, p, role, green string) (
 	if glob, origin, ok := matchProse(c.Prose, p); ok {
 		return ClassProse, "matches " + quoteGlob(glob) + " (" + origin + ")"
 	}
-	// Comment-only detection needs the language's comment and string syntax.
-	// Go and Buzz use the real lexers magus owns; every other language is
-	// covered only by a DECLARED syntax (spells.CommentSyntaxForExtension),
-	// consumed by one string-aware stripper. A language that declared nothing
-	// classifies as code - guessing delimiters would trade one false
-	// comment-only for trust in every refusal after it.
+	// Comment-only detection needs the language's comment and string syntax,
+	// and every language gets it the same way: a syntax the language's SPELL
+	// declared (mgs_getCommentSyntax), consumed by one string-aware stripper -
+	// Go and Buzz included, so "comment-only" means one thing. A language
+	// whose spell declared nothing classifies as code - guessing delimiters
+	// would trade one false comment-only for trust in every refusal after it.
 	ext := strings.ToLower(path.Ext(p))
-	switch ext {
-	case ".go":
-		return c.commentOnly(ctx, p, green, CommentOnlyGo)
-	case ".buzz":
-		return c.commentOnly(ctx, p, green, CommentOnlyBuzz)
-	}
-	if syn, ok := spells.CommentSyntaxForExtension(ext); ok {
+	if syn, ok := c.Syntax[ext]; ok {
 		return c.commentOnly(ctx, p, green, func(old, cur string) bool {
 			return CommentOnlyDeclared(old, cur, syn)
 		})
@@ -360,103 +355,12 @@ func (c ChangeClassifier) commentOnly(ctx context.Context, p, green string, equa
 // quoteGlob quotes a glob for the attribution line.
 func quoteGlob(glob string) string { return `"` + glob + `"` }
 
-// CommentOnlyGo reports whether two Go sources differ only in comments (and
-// whitespace, which carries no meaning once tokenized). Both sides are lexed
-// with the standard scanner; equal token streams mean equal programs. A
-// DIRECTIVE comment (//go:build, //go:generate, //go:embed, //nolint, and the
-// rest of the no-space-then-colon convention) is code, not comment: it stays
-// in the stream, so editing one is never comment-only. A source that does not
-// lex cleanly reports false, so a broken file always re-gates.
-func CommentOnlyGo(old, cur string) bool {
-	a, ok := goTokens(old)
-	if !ok {
-		return false
-	}
-	b, ok := goTokens(cur)
-	if !ok {
-		return false
-	}
-	return slices.Equal(a, b)
-}
-
-func goTokens(src string) ([]string, bool) {
-	fset := token.NewFileSet()
-	file := fset.AddFile("", fset.Base(), len(src))
-	var s scanner.Scanner
-	broken := false
-	s.Init(file, []byte(src), func(token.Position, string) { broken = true }, scanner.ScanComments)
-	var out []string
-	for {
-		_, tok, lit := s.Scan()
-		if tok == token.EOF {
-			break
-		}
-		if tok == token.COMMENT && !goDirective(lit) {
-			continue
-		}
-		out = append(out, tok.String()+"\x00"+lit)
-	}
-	return out, !broken
-}
-
-// goDirective reports whether a Go comment is a compiler or tool directive.
-// The convention (gofmt preserves these verbatim) is a line comment whose text
-// starts immediately after the slashes - no space - with a word carrying a
-// colon; //nolint and cgo's //export lack the colon and are named explicitly.
-func goDirective(lit string) bool {
-	rest, ok := strings.CutPrefix(lit, "//")
-	if !ok {
-		return false
-	}
-	if rest == "" || rest[0] == ' ' || rest[0] == '\t' {
-		return false
-	}
-	word, _, _ := strings.Cut(rest, " ")
-	return strings.Contains(word, ":") || word == "nolint" || word == "export"
-}
-
-// CommentOnlyBuzz is CommentOnlyGo for Buzz. The gopherbuzz lexer never emits
-// a comment token; a leading block only annotates the next token's Doc field,
-// which the comparison ignores along with positions. A comment inside a string
-// interpolation is part of the interpolated expression's source and compares
-// as content, which errs toward re-gating.
-func CommentOnlyBuzz(old, cur string) bool {
-	a, err := buzztoken.Tokenize(old)
-	if err != nil {
-		return false
-	}
-	b, err := buzztoken.Tokenize(cur)
-	if err != nil {
-		return false
-	}
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if !buzzTokenEqual(a[i], b[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func buzzTokenEqual(a, b buzztoken.Token) bool {
-	if a.Kind != b.Kind || a.Val != b.Val || a.Raw != b.Raw || len(a.Parts) != len(b.Parts) {
-		return false
-	}
-	for i := range a.Parts {
-		if a.Parts[i] != b.Parts[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // CommentOnlyDeclared reports whether two sources of a declared language
 // differ only in comments: both strip to byte-identical text. No token-stream
-// normalization happens here, unlike the Go and Buzz comparators - a declared
-// language's whitespace may be semantics (Python indentation), so the only
-// thing removed is the comment spans themselves.
+// normalization happens - whitespace may be semantics (Python indentation),
+// so the only thing removed is the comment spans themselves. Reformatting a
+// code line therefore re-gates even in languages where it is inert, which is
+// the safe direction.
 func CommentOnlyDeclared(old, cur string, syn spells.CommentSyntax) bool {
 	return StripComments(old, syn) == StripComments(cur, syn)
 }
@@ -547,10 +451,10 @@ func openingToken(src string, i int, tokens []string) (string, bool) {
 	return "", false
 }
 
-func openingBlock(src string, i int, blocks [][2]string) (open, closer string, ok bool) {
+func openingBlock(src string, i int, blocks []spells.CommentBlock) (open, closer string, ok bool) {
 	for _, b := range blocks {
-		if strings.HasPrefix(src[i:], b[0]) {
-			return b[0], b[1], true
+		if strings.HasPrefix(src[i:], b.Open) {
+			return b.Open, b.Close, true
 		}
 	}
 	return "", "", false

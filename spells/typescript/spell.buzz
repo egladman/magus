@@ -38,9 +38,6 @@ export fun mgs_isOpaque() > bool { return true; }
 export fun mgs_listProvidedGlobs() > [Path] { return [<Path>]; }
 
 
-// mgs_getLanguage names the source language this spell adapts, canonical and lowercase
-// so it matches the language attr on the TypeScript files and symbols SCIP ingests. It
-// lets `magus query language:typescript` reach this adapter alongside the code it builds.
 // The three binaries this spell's ops actually depend on, not just the runtime.
 //
 // tsc is the one that matters most and was missing longest: every op here runs it through
@@ -68,7 +65,23 @@ export fun mgs_getTools() > {str: Tool} {
     };
 }
 
-export fun mgs_getLanguage() > str { return "typescript"; }
+// The JavaScript flavors are claimed here too: one toolchain, one syntax.
+export fun mgs_getLanguage() > Language {
+    return Language{
+        name = "typescript",
+        extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+        comments = CommentSyntax{
+            lineComments = ["//"],
+            blockComments = [CommentBlock{open = "/*", close = "*/"}],
+            quotes = [
+                Quote{open = "`", close = "`"},
+                Quote{open = "\"", close = "\""},
+                Quote{open = "'", close = "'"},
+            ],
+            directives = ["@ts-", "eslint-", "<reference"],
+        },
+    };
+}
 
 // mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned from the
 // input-hashing walk. dist is already excluded as a declared output.

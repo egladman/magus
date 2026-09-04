@@ -54,7 +54,7 @@ export fun mgs_getName() > str { return "acme"; }
 export fun mgs_getTools() > {str: Tool} {
     return {"acme": Tool{probe = Command{bin = "echo", args = ["acme-probe-ok"]}}};
 }
-export fun mgs_getLanguage() > str { return "acme-lang"; }
+export fun mgs_getLanguage() > Language { return Language{name = "acme-lang"}; }
 export fun mgs_isOpaque() > bool { return true; }
 
 fun lint(target: Target) > Command {

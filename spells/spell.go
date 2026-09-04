@@ -39,6 +39,8 @@ type Spell struct {
 	outputs             []string
 	targets             []string
 	language            string          // canonical source language the spell adapts; "" when it adapts none
+	languageExtensions  []string        // file extensions that ARE the language, from the Language record
+	comments            *CommentSyntax  // declared comment/string syntax; nil when the spell declares none
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
 	internal            bool
@@ -96,6 +98,13 @@ func (s *Spell) IgnoreDirs() []string { return s.ignoreDirs }
 // "typescript"), or "" when it adapts no single language. It tags the spell node so a
 // `language:` query groups the adapter with that language's files and symbols.
 func (s *Spell) Language() string { return s.language }
+
+// LanguageExtensions returns the file extensions that are the language, from
+// the Language record's extensions field.
+func (s *Spell) LanguageExtensions() []string { return s.languageExtensions }
+
+// Comments returns the declared comment and string syntax, or nil.
+func (s *Spell) Comments() *CommentSyntax { return s.comments }
 
 // IsServiceTarget reports whether target name is backed by a service op (a
 // long-running process). The runner forces such targets uncacheable.
@@ -284,6 +293,18 @@ func WithServiceTargets(names ...string) Option {
 // spell node so a `language:` query reaches the adapter alongside that language's code.
 func WithLanguage(language string) Option {
 	return func(s *Spell) { s.language = language }
+}
+
+// WithLanguageExtensions sets the file extensions that are the spell's
+// language, from the Language record.
+func WithLanguageExtensions(exts []string) Option {
+	return func(s *Spell) { s.languageExtensions = exts }
+}
+
+// WithComments sets the comment and string syntax the spell declares for its
+// language, consumed by the gate's comment-only classifier.
+func WithComments(syn *CommentSyntax) Option {
+	return func(s *Spell) { s.comments = syn }
 }
 
 // WithOpaque marks the spell as opaque: it delegates to a foreign process that
