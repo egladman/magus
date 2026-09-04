@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/dry/gen/mocks"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,6 +90,75 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 	require.True(t, g.OK, "dry path rejected no_language: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
+}
+
+// TestLoadMagusfile_everyTargetPolicyKeyAccepted is the dry-run half of the pin on
+// types.TargetPolicyKeys; see its twin over the engine,
+// TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted, for why the shape is a table
+// read rather than a list of keys written out here.
+//
+// This is the half that was red: the hand-copied list on this side had drifted to three
+// keys, so memory_mb, cache, drift and drift_reason failed the preview of a magusfile
+// `magus run` loads happily.
+func TestLoadMagusfile_everyTargetPolicyKeyAccepted(t *testing.T) {
+	require.NotEmpty(t, types.TargetPolicyKeys)
+	for _, key := range types.TargetPolicyKeys {
+		t.Run(key, func(t *testing.T) {
+			g := LoadMagusfile(context.Background(), `
+import "magus";
+magus\project({
+    "name": "pinned",
+    "targets": {"build": {"`+key+`": "x"}},
+});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+			if g.Diag != nil {
+				assert.NotContains(t, g.Diag.Msg, "unknown option",
+					"the dry host rejects %q, which types.TargetPolicyKeys declares recognized", key)
+			}
+		})
+	}
+}
+
+// TestLoadMagusfile_everyToolBoundKeyAccepted is the dry-run half of the pin on
+// types.ToolBoundKeys; its twin over the engine is
+// TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted.
+func TestLoadMagusfile_everyToolBoundKeyAccepted(t *testing.T) {
+	require.NotEmpty(t, types.ToolBoundKeys)
+	for _, key := range types.ToolBoundKeys {
+		t.Run(key, func(t *testing.T) {
+			g := LoadMagusfile(context.Background(), `
+import "magus";
+magus\project({
+    "name": "pinned",
+    "tools": {"go": {"`+key+`": "1.21"}},
+});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+			require.True(t, g.OK, "the dry host rejects %q, which types.ToolBoundKeys declares recognized: %+v", key, g.Diag)
+		})
+	}
+}
+
+// TestLoadMagusfile_unknownToolBoundKeyRejected is the half that was red: this path
+// never walked `tools` at all, so a typo inside a tool entry stayed green in the
+// Playground and the dry-run preview and then failed the real run.
+//
+// The permissive direction of the same divergence targets[] had: nothing was falsely
+// rejected, but the preview blessed a magusfile the engine refuses to load.
+func TestLoadMagusfile_unknownToolBoundKeyRejected(t *testing.T) {
+	g := LoadMagusfile(context.Background(), `
+import "magus";
+magus\project({
+    "name": "pinned",
+    "tools": {"go": {"minn": "1.21"}},
+});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+	require.False(t, g.OK, "the dry host accepted a tool bound the engine rejects")
+	require.NotNil(t, g.Diag)
+	assert.Contains(t, g.Diag.Msg, `tools["go"]: unknown option "minn"`)
+	assert.Contains(t, g.Diag.Msg, "known options: below, min")
 }
 
 func TestRun_orderAndTrace(t *testing.T) {

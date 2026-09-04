@@ -40,6 +40,46 @@ var ProjectOptions = []ProjectOption{
 	{Key: "gate_low_risk", Since: "0.5.0"},
 }
 
+// TargetPolicyKeys is the ONE list of recognized keys inside magus.project's "targets"
+// map, for the reason ProjectOptions above is one list.
+//
+// The dimension the project-option fix did not cover, so it recurred here: the dry-run
+// host carried a hand-copied second list that had drifted to three keys, and a
+// magusfile setting memory_mb, cache, drift or drift_reason passed a real run and was
+// rejected by its own preview.
+//
+// Plain names, no Since column: a floor is only worth declaring where doctor can DETECT
+// the key in use, and it detects from decoded Project state (internal/doctor/
+// schemafloor.go), which carries no target policy. Grow this into a record when that
+// detection exists, not before.
+var TargetPolicyKeys = []string{
+	"skip_cache",
+	"exclusive",
+	"slots",
+	"memory_mb",
+	"timeout",
+	"cache",
+	"drift",
+	"drift_reason",
+	"retry_on_volatile",
+}
+
+// ToolBoundKeys is the ONE list of recognized keys inside one entry of magus.project's
+// "tools" map, the version window a project requires of a bin.
+//
+// The third dimension of the same divergence, found permissive rather than strict: the
+// engine rejected an unknown bound key and the dry-run host walked "tools" not at all,
+// so `{"go": {"minn": "1.21"}}` passed the Playground and every other preview surface
+// and then failed the real run. A shared table makes both sides answer alike.
+//
+// No Since column, for the reason TargetPolicyKeys has none. A closed vocabulary
+// besides: min/below describes a half-open interval and gains no third member, which is
+// why both consumers reject against it plainly instead of hinting at an upgrade.
+var ToolBoundKeys = []string{
+	"min",
+	"below",
+}
+
 // ProjectOptionKeys returns just the key names, for the unknown-key rejection both the
 // engine and the dry-run host perform.
 func ProjectOptionKeys() []string {

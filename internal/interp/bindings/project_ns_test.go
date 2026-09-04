@@ -41,6 +41,33 @@ func targetsOpts(name string, policy vm.Value) vm.Value {
 	return opts
 }
 
+// TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted reads the shared table and
+// asserts this consumer accepts every key in it. Its twin over the dry-run host is
+// TestLoadMagusfile_everyTargetPolicyKeyAccepted; together they are the pin, because a
+// key reaching only one side is exactly how memory_mb, cache, drift and drift_reason
+// came to pass a real run and fail their own preview.
+//
+// Driven off types.TargetPolicyKeys rather than a hand-written list: a list here would
+// be a third copy free to drift the same way, and a key added to the table is covered
+// the moment it lands, with nothing to add.
+//
+// A malformed VALUE is fine and expected; only the unknown-key verdict is under test,
+// so one bogus string serves every key and no per-key fixture has to be maintained.
+func TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted(t *testing.T) {
+	require.NotEmpty(t, types.TargetPolicyKeys)
+	for _, key := range types.TargetPolicyKeys {
+		t.Run(key, func(t *testing.T) {
+			pol := vm.NewMap()
+			pol.MapSet(key, vm.StrValue("x"))
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+			if err != nil {
+				assert.NotContains(t, err.Error(), "unknown option",
+					"the engine rejects %q, which types.TargetPolicyKeys declares recognized", key)
+			}
+		})
+	}
+}
+
 func TestParseBuzzProjectOpts_TargetSlots(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("slots", vm.IntValue(4))
@@ -309,6 +336,20 @@ func toolsOpts(bin string, kv map[string]string) vm.Value {
 	opts := vm.NewMap()
 	opts.MapSet("tools", tools)
 	return opts
+}
+
+// TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted reads types.ToolBoundKeys and
+// asserts this consumer accepts every key in it, the shape
+// TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted uses and for the same reason.
+// Its twin over the dry-run host is TestLoadMagusfile_everyToolBoundKeyAccepted.
+func TestParseBuzzProjectOpts_EveryToolBoundKeyAccepted(t *testing.T) {
+	require.NotEmpty(t, types.ToolBoundKeys)
+	for _, key := range types.ToolBoundKeys {
+		t.Run(key, func(t *testing.T) {
+			_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{key: "22"}))
+			require.NoError(t, err, "the engine rejects %q, which types.ToolBoundKeys declares recognized", key)
+		})
+	}
 }
 
 func TestParseBuzzProjectOpts_Tools(t *testing.T) {

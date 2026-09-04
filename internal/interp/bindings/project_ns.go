@@ -50,12 +50,14 @@ func magusfileNotASpellErr(what string) error {
 var knownProjectOptionKeys = types.ProjectOptionKeys()
 
 // knownToolBoundKeys are the recognized keys inside one entry of magus.project's
-// "tools" map.
-var knownToolBoundKeys = []string{"min", "below"}
+// "tools" map, from the one shared table in types so the engine and the dry-run host
+// cannot drift.
+var knownToolBoundKeys = types.ToolBoundKeys
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
-// magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "memory_mb", "timeout", "cache", "drift", "drift_reason", "retry_on_volatile"}
+// magus.project's "targets" map, from the one shared table in types so the engine and
+// the dry-run host cannot drift.
+var knownTargetPolicyKeys = types.TargetPolicyKeys
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently
