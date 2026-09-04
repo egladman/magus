@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   path, size, mtime), captured at process start; a mismatch falls back to the
   caller's own fresh binary, and a pre-fix daemon refuses fixed clients rather than
   trusting them.
+- **Concurrent cache imports can no longer swap staged files under each other's
+  signatures.** The remote-artifact import staged its manifest and extras through fixed
+  temp names inside the machine-shared cache, so two processes importing the same entry
+  contended for one path: an importer could overwrite bytes a peer had already verified,
+  and the peer's rename then committed unverified content. Staging now goes through
+  unique temp names with same-directory renames, and extras dropped by a trust decision
+  are removed instead of accumulating.
 - **A composed target's declared in-place edit no longer trips its composer.** A target
   run through `ctx.needs` executes inside the composing step's fingerprint window, and
   the window carried only the composer's own `ctx.modifiesExistingFiles` declarations,
