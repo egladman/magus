@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5240,
-  "edge_count": 9323,
+  "edge_count": 9325,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -56119,6 +56119,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
@@ -57168,6 +57176,14 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
