@@ -522,7 +522,7 @@ func TestWithTargetDeadlineIsOffByDefault(t *testing.T) {
 	t.Parallel()
 	m := &Magus{}
 
-	ctx, cancel := m.withTargetDeadline(t.Context())
+	ctx, cancel := m.withTargetDeadline(t.Context(), types.Target{})
 	defer cancel()
 
 	_, ok := ctx.Deadline()
@@ -534,7 +534,7 @@ func TestWithTargetDeadlineBoundsATarget(t *testing.T) {
 	t.Parallel()
 	m := &Magus{cfg: config.Config{TargetTimeout: 50 * time.Millisecond}}
 
-	ctx, cancel := m.withTargetDeadline(t.Context())
+	ctx, cancel := m.withTargetDeadline(t.Context(), types.Target{})
 	defer cancel()
 
 	deadline, ok := ctx.Deadline()
@@ -553,10 +553,51 @@ func TestWithTargetDeadlineCancelReleasesTheTimer(t *testing.T) {
 	t.Parallel()
 	for _, timeout := range []time.Duration{0, time.Minute} {
 		m := &Magus{cfg: config.Config{TargetTimeout: timeout}}
-		_, cancel := m.withTargetDeadline(t.Context())
+		_, cancel := m.withTargetDeadline(t.Context(), types.Target{})
 		require.NotNil(t, cancel)
 		assert.NotPanics(t, func() { cancel() })
 		assert.NotPanics(t, func() { cancel() }, "cancel is idempotent")
+	}
+}
+
+// A target's own ceiling bounds it with no workspace-wide timeout configured, which
+// is the ordinary case: target_timeout is off by default and a per-target ceiling is
+// opted into one target at a time.
+func TestWithTargetDeadlineHonorsTheTargetsOwnCeiling(t *testing.T) {
+	t.Parallel()
+	m := &Magus{}
+
+	ctx, cancel := m.withTargetDeadline(t.Context(), types.Target{Timeout: "50ms"})
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok, "a declared ceiling must set a deadline")
+	assert.WithinDuration(t, time.Now().Add(50*time.Millisecond), deadline, 20*time.Millisecond)
+}
+
+// The TIGHTER of the two wins in both directions. A workspace-wide runaway guard and
+// a target that declares its own budget are answering different questions, and
+// letting either override the other would silently widen one of them.
+func TestWithTargetDeadlineTakesTheTighterOfTheTwo(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		workspace time.Duration
+		declared  string
+		want      time.Duration
+	}{
+		{"target is tighter", time.Hour, "50ms", 50 * time.Millisecond},
+		{"workspace is tighter", 50 * time.Millisecond, "1h", 50 * time.Millisecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Magus{cfg: config.Config{TargetTimeout: tc.workspace}}
+			ctx, cancel := m.withTargetDeadline(t.Context(), types.Target{Timeout: tc.declared})
+			defer cancel()
+
+			deadline, ok := ctx.Deadline()
+			require.True(t, ok)
+			assert.WithinDuration(t, time.Now().Add(tc.want), deadline, 20*time.Millisecond)
+		})
 	}
 }
 

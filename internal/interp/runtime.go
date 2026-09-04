@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
@@ -624,12 +625,17 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		seen[key] = name
 		captured := val
 		exportVals[key] = val
+		dir := src.Dir
 		targetMap[key] = func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-			return TimeCall(ctx, ModeMagusfile, func() (vm.Value, error) {
+			ctx, cancel, ceiling := withDeclaredCeiling(ctx, dir, key)
+			defer cancel()
+			started := time.Now()
+			v, err := TimeCall(ctx, ModeMagusfile, func() (vm.Value, error) {
 				// Prepend the magus.Context so the body's `ctx` parameter binds it; the
 				// user args (the `[str]` second parameter) ride along after.
 				return buzzSess.CallValue(ctx, captured, append([]vm.Value{targetCtxVal}, args...))
 			})
+			return v, types.CeilingExceededError(ctx, err, key, ceiling, time.Since(started))
 		}
 	}
 

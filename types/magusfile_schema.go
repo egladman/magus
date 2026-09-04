@@ -57,6 +57,7 @@ var TargetPolicyKeys = []string{
 	"exclusive",
 	"slots",
 	"memory_mb",
+	"timeout",
 	"cache",
 	"drift",
 	"drift_reason",

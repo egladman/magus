@@ -483,6 +483,23 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.MemoryMB(n)))
 			}
+			// timeout is a DURATION STRING, not memory_mb's integer: magus.yaml already
+			// spells the workspace-wide ceiling that way (target_timeout: 30m), and one
+			// quantity written two ways teaches a reader to check both. Malformed is a
+			// load error for the same reason slots is - a ceiling that silently decoded
+			// to "unbounded" would look exactly like the guard working.
+			if tv, ok := pv.MapGet("timeout"); ok {
+				if !tv.IsStr() {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].timeout must be a duration string such as \"15m\", got a %s",
+						name, tv.Kind())
+				}
+				raw := strings.TrimSpace(tv.AsString())
+				if _, err := types.ParseTimeout(raw); err != nil {
+					return nil, fmt.Errorf("magus.project: targets[%q].timeout: %w", name, err)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Timeout(raw)))
+			}
 		}
 	}
 	return opts, nil

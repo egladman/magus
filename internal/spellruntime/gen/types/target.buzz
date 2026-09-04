@@ -17,6 +17,7 @@ export object Target {
     exclusive: bool = false,
     slots: int = 0,
     memory_mb: int = 0,
+    timeout: str = "",
     drift: str = "",
     drift_reason: str = "",
 }

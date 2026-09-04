@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
+	"time"
 )
 
 // applyOpts runs the parsed project options against a fresh root project so tests can
@@ -89,6 +90,45 @@ func TestParseBuzzProjectOpts_TargetSlotsNonIntErrors(t *testing.T) {
 	pol.MapSet("slots", vm.FloatValue(2.5))
 	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
 	assert.ErrorContains(t, err, `targets["lint"].slots must be a whole number`)
+}
+
+func TestParseBuzzProjectOpts_TargetTimeout(t *testing.T) {
+	pol := vm.NewMap()
+	pol.MapSet("timeout", vm.StrValue("15m"))
+	p := applyOpts(t, targetsOpts("security", pol))
+	assert.Equal(t, "15m", p.TargetPolicies["security"].Timeout)
+	assert.Equal(t, 15*time.Minute, p.TargetPolicies["security"].TimeoutDuration())
+}
+
+// An absent timeout leaves the target unbounded, which is the behavior every target
+// had before the key existed. Pinned rather than assumed: the whole design rests on
+// declaring nothing changing nothing.
+func TestParseBuzzProjectOpts_TargetTimeoutAbsentIsUnbounded(t *testing.T) {
+	pol := vm.NewMap()
+	pol.MapSet("slots", vm.IntValue(2))
+	p := applyOpts(t, targetsOpts("security", pol))
+	assert.Empty(t, p.TargetPolicies["security"].Timeout)
+	assert.Zero(t, p.TargetPolicies["security"].TimeoutDuration())
+}
+
+func TestParseBuzzProjectOpts_TargetTimeoutMalformedErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value vm.Value
+		want  string
+	}{
+		{"not a duration", vm.StrValue("15 minutes"), `targets["security"].timeout: "15 minutes" is not a duration`},
+		{"zero", vm.StrValue("0s"), `targets["security"].timeout: "0s" is not positive`},
+		{"negative", vm.StrValue("-1m"), `targets["security"].timeout: "-1m" is not positive`},
+		{"an integer of unstated unit", vm.IntValue(900), `targets["security"].timeout must be a duration string`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pol := vm.NewMap()
+			pol.MapSet("timeout", tc.value)
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("security", pol))
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
 }
 
 // TestParseBuzzProjectOpts_Sources pins the CLEANED stored form and, with it, the truth

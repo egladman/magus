@@ -177,7 +177,23 @@ const (
 	// figure that differs deliberately - a ceiling for a target whose peak varies with
 	// its input, say. magus reports what it measured; the number in the magusfile
 	// stays a human's to write.
-	MemoryDeclarationDrift    DiagnosticCode = "MGS1030"
+	MemoryDeclarationDrift DiagnosticCode = "MGS1030"
+	// TimeoutDeclarationDrift is a target whose declared timeout no longer describes
+	// how long it takes: recorded runs reach it (so the ceiling is about to fail a
+	// legitimate build) or fall so far below it that it would not end a hang inside
+	// any useful window.
+	//
+	// The sibling of MGS1030, and honest for the same reason: magus already records a
+	// duration per target, so the disagreement is a fact rather than a question. Advice
+	// rather than a failure - a guard is deliberately a multiple of the worst run, and
+	// how large a multiple is the author's call.
+	//
+	// There is no undeclared arm, which is where it parts from MGS1030. An undeclared
+	// memory figure is measurably harmful (machine-wide admission is blind to the
+	// target), while an undeclared ceiling is the documented default and harms only the
+	// runaway case - and a target that never terminates records no duration to argue
+	// from, so the evidence for that finding does not exist.
+	TimeoutDeclarationDrift   DiagnosticCode = "MGS1032"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -235,7 +251,17 @@ const (
 	//
 	// Exits 75 (EX_TEMPFAIL) like MGS3009: the same invocation is valid and
 	// runs once the pool frees, or immediately with the override flag.
-	RedundantGateDeferred     DiagnosticCode = "MGS3010"
+	RedundantGateDeferred DiagnosticCode = "MGS3010"
+	// TargetCeilingExceeded is a target magus cancelled because it outran the timeout
+	// its magusfile declared. It joins MGS3007/MGS3009/MGS3010 in the environment
+	// family: nothing in the workspace is wrong to read, the run took longer than the
+	// author said it may.
+	//
+	// A FAILURE, never a skip and never a pass. A ceiling that lets the invocation
+	// continue is a log line, and the incident this exists for was an invocation that
+	// held three project locks for over an hour with nothing running - the shape a
+	// build tool must not report as success.
+	TargetCeilingExceeded     DiagnosticCode = "MGS3011"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -309,11 +335,13 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
+	TimeoutDeclarationDrift,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
+	TargetCeilingExceeded,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,

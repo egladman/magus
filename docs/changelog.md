@@ -15,6 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A target can declare how long it may run.** `magus.project`'s target policies take
+  a `timeout`, a Go duration string spelled the way `magus.yaml`'s workspace-wide
+  `target_timeout` already is - `"security": {"timeout": "15m"}`. A target that outruns
+  its ceiling has its process tree killed and FAILS with MGS3011, naming the target,
+  the ceiling, how long it ran, and the log its output was captured to; a timeout is
+  never a skip and never a pass. The deadline rides the context, so it also bounds
+  every target reached through `ctx.needs`, and a composed target that declares its own
+  tighter ceiling is bounded by that one first - so the failure names the target that
+  hung rather than the gate that ran it. Nothing is inherited implicitly and nothing is
+  inferred: an undeclared target is unbounded exactly as before, and where both a
+  workspace-wide and a per-target figure exist the tighter one wins. `magus doctor`
+  keeps the declaration honest against the durations magus recorded (MGS1032), in both
+  directions: a ceiling a real run has crowded is about to fail a build that was fine,
+  and one sitting a hundred times above every run on record would hold a hung target's
+  locks for most of a day. This workspace declares two: `security` at 15m against a
+  worst recorded run of 44s, and `ci` at 45m against 6m8s.
 - **A redundant ci gate defers to the pull request when the machine is loaded.** When a
   green gate is already recorded for this branch and everything changed since falls in
   a low-risk class - generated output, prose (magus ships markdown globs;
