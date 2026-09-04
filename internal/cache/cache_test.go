@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -541,28 +542,33 @@ func TestOnResultMultiple(t *testing.T) {
 	assert.Equal(t, 1, second, "second OnResult must fire (not clobbered by the first)")
 }
 
+// casArchive builds a gzip-tar carrying one CAS member stored under name. mod
+// matters when the blob already exists on disk: an older member is skipped by
+// the mtime guard before any content check runs.
+func casArchive(t *testing.T, name string, content []byte, mod time.Time) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	require.NoError(t, tw.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeReg,
+		Name:     "cas/" + name[:2] + "/" + name,
+		Size:     int64(len(content)),
+		Mode:     0o644,
+		ModTime:  mod,
+	}))
+	_, err := tw.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	return &buf
+}
+
 // TestImportRejectsPoisonedBlob verifies Cache.Import refuses a CAS blob whose
 // content does not hash to the name it is stored under. Without this an archive
 // could seat bytes that never hash to their content-address, and replay - which
 // never re-hashes on read - would serve them as a legitimate output.
 func TestImportRejectsPoisonedBlob(t *testing.T) {
-	casArchive := func(name string, content []byte) *bytes.Buffer {
-		var buf bytes.Buffer
-		gz := gzip.NewWriter(&buf)
-		tw := tar.NewWriter(gz)
-		require.NoError(t, tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     "cas/" + name[:2] + "/" + name,
-			Size:     int64(len(content)),
-			Mode:     0o644,
-		}))
-		_, err := tw.Write(content)
-		require.NoError(t, err)
-		require.NoError(t, tw.Close())
-		require.NoError(t, gz.Close())
-		return &buf
-	}
-
 	good := []byte("authentic blob bytes")
 	sum := sha256.Sum256(good)
 	name := hex.EncodeToString(sum[:])
@@ -572,15 +578,87 @@ func TestImportRejectsPoisonedBlob(t *testing.T) {
 	// not a malformed archive or misplaced entry.
 	cGood, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
 	require.NoError(t, err)
-	require.NoError(t, cGood.Import(context.Background(), casArchive(name, good)), "control: well-formed blob must import")
+	require.NoError(t, cGood.Import(context.Background(), casArchive(t, name, good, time.Time{})), "control: well-formed blob must import")
 	require.FileExists(t, cGood.blobPath(name), "control: blob must be present after a valid import")
 
 	// Poison: the same (matching) name, tampered content.
 	cBad, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
 	require.NoError(t, err)
-	err = cBad.Import(context.Background(), casArchive(name, []byte("tampered bytes")))
+	err = cBad.Import(context.Background(), casArchive(t, name, []byte("tampered bytes"), time.Time{}))
 	require.Error(t, err, "Import must reject a blob whose content does not match its name")
 	assert.NoFileExists(t, cBad.blobPath(name), "a mismatched blob must not remain in the store")
+}
+
+// TestImportRejectedBlobKeepsTheStoredOne mirrors publish_test.go's
+// TestImportWithCorruptBlobKeepsTheStoredOne for the archive path: a CAS blob is
+// shared by every manifest whose output has those bytes, so a rejected archive
+// member naming an existing blob must leave the stored bytes untouched. Writing
+// at the final path is how one corrupt archive destroyed a valid blob other
+// manifests still replayed from.
+func TestImportRejectedBlobKeepsTheStoredOne(t *testing.T) {
+	good := []byte("authentic blob bytes")
+	sum := sha256.Sum256(good)
+	name := hex.EncodeToString(sum[:])
+
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
+	require.NoError(t, err)
+	require.NoError(t, c.Import(context.Background(), casArchive(t, name, good, time.Time{})), "seed: a valid blob must import")
+
+	err = c.Import(context.Background(), casArchive(t, name, []byte("tampered bytes"), time.Now().Add(time.Hour)))
+	require.Error(t, err, "Import must reject the mismatched blob")
+
+	after, err := os.ReadFile(c.blobPath(name))
+	require.NoError(t, err, "the valid blob must survive a rejected import")
+	assert.Equal(t, good, after, "a rejected import must not overwrite a valid CAS blob")
+
+	var leftovers []string
+	_ = filepath.WalkDir(filepath.Join(c.dir, "cas"), func(p string, d os.DirEntry, werr error) error {
+		if werr == nil && !d.IsDir() && strings.Contains(d.Name(), ".tmp") {
+			leftovers = append(leftovers, p)
+		}
+		return nil
+	})
+	assert.Empty(t, leftovers, "a rejected import must not leave staged bytes behind")
+}
+
+// TestImportSkipsEntriesOlderThanDisk pins the mtime skip: an archive entry
+// older than the file on disk is skipped, a newer one overwrites.
+func TestImportSkipsEntriesOlderThanDisk(t *testing.T) {
+	entryArchive := func(mod time.Time, content []byte) *bytes.Buffer {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gz)
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeReg,
+			Name:     "manifests/test/entry",
+			Size:     int64(len(content)),
+			Mode:     0o644,
+			ModTime:  mod,
+		}))
+		_, err := tw.Write(content)
+		require.NoError(t, err)
+		require.NoError(t, tw.Close())
+		require.NoError(t, gz.Close())
+		return &buf
+	}
+
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
+	require.NoError(t, err)
+	dest := filepath.Join(c.dir, "manifests", "test", "entry")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dest), 0o755))
+	require.NoError(t, os.WriteFile(dest, []byte("on disk"), 0o644))
+	now := time.Now()
+	require.NoError(t, os.Chtimes(dest, now, now))
+
+	require.NoError(t, c.Import(context.Background(), entryArchive(now.Add(-time.Hour), []byte("older"))))
+	got, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	assert.Equal(t, "on disk", string(got), "an entry older than the file on disk must be skipped")
+
+	require.NoError(t, c.Import(context.Background(), entryArchive(now.Add(time.Hour), []byte("newer"))))
+	got, err = os.ReadFile(dest)
+	require.NoError(t, err)
+	assert.Equal(t, "newer", string(got), "an entry newer than the file on disk must overwrite it")
 }
 
 // TestExportImportUnsafePath verifies that Import rejects tar entries

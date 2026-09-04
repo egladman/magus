@@ -15,7 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **An `immutable` charm makes release writes write-once.** `release-build:immutable`
+- **A redundant ci gate defers to the pull request when the machine is loaded.** When a
+  green gate is already recorded for this branch and everything changed since falls in
+  a low-risk class - generated output, prose (magus ships markdown globs;
+  `magus.project`'s `gate_low_risk` replaces or empties them), or comment-only edits
+  (every language the same way: `mgs_getLanguage` returns a typed `Language` whose
+  `extensions` and `comments` declare the syntax, one string-aware stripper consumes
+  it, directive comments are always code) - a saturated machine refuses the run with
+  MGS3010
+  and exit 75, and an idle one prints the same finding and runs anyway. A deferral is
+  never a success: the refusal names the green gate's run ref, classifies every changed
+  path with the declaration that classified it, shows the pool state, and persists as a
+  record; `--no-redundancy-check` forces the run. A merge commit in the range always
+  re-gates, and a language without a declaration is always code. The per-repository
+  gate history lives in the sessions store, shared across worktrees. `release-build:immutable`
   and `release-sign:immutable` refuse to replace an existing archive, checksum sidecar,
   or manifest signature instead of overwriting it, so a re-run of the release process
   cannot silently replace a published artifact. The default stays overwrite, which the
@@ -42,6 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   behind until a second run, and a release cut opened a pull request that failed its
   own drift gate. The docs generate chain now ends by re-dispatching the root's graph
   export, after the content it indexes has settled, and gates the exported bytes.
+- **A rejected archive import no longer destroys the cache file it named.**
+  `magus config cache import` extracted each tar member directly at its final cache
+  path, so a concurrent process could replay a torn blob or manifest mid-import, and
+  a corrupt archive first truncated an existing valid CAS blob and then deleted it on
+  the hash mismatch, destroying a blob other manifests still referenced. Members now
+  stage through a unique same-directory temp file and rename into place only after
+  the size cap and content-hash check pass.
 - **A daemon no longer adopts runs from a binary built from different sources.** Every
   modified-tree build of one commit stamps the same `-dirty` version string, so the
   adoption identity gate matched byte-different binaries and a warm daemon executed

@@ -248,6 +248,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return fmt.Errorf("run: workspace %s has no projects to run target %q", m.Root(), targetName)
 	}
 
+	// The redundancy check: a ci gate this branch already passed with equivalent
+	// inputs refuses under load (MGS3010, exit 75) and advises when the machine
+	// is idle. Inert off the ci target and when nothing is on record.
+	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, rf.Shard != "" || rf.NShards > 0)
+	if gateErr := gate.evaluate(ctx, rf.NoRedundancyCheck); gateErr != nil {
+		return gateErr
+	}
+
 	opts, optsErr := outputOptionsOrDefault()
 	if optsErr != nil {
 		return optsErr
@@ -331,6 +339,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		err = m.Run(invCtx, targets, runOpts...)
 	}
+	gate.record(invCtx, err)
 	if rf.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("run %s: timed out after %s", targetName, rf.Timeout)
 	}

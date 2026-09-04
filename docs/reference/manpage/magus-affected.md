@@ -81,6 +81,9 @@ history to find the commit that introduced a regression.
 **--no-default-charms**
 : Ignore magus.yaml default_charms for this run
 
+**--no-redundancy-check**
+: Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only
+
 **--null**
 : With --stdin: expect NUL-separated paths and double-NUL between batches
 
@@ -149,7 +152,7 @@ history to find the commit that introduced a regression.
 : Misuse: no target named, or --step without an interactive terminal.
 
 **75**
-: MAGUS_NO_WAIT only: another magus process holds a selected project's workspace lock, so nothing ran. 75 is EX_TEMPFAIL, the transient-failure convention; the error names the holding pid, command and directory, and the same invocation succeeds once that process finishes.
+: Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. Either MAGUS_NO_WAIT found a selected project's workspace lock held by another magus process (the error names the holding pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides).
 
 ## Examples
 

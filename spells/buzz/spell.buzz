@@ -21,6 +21,21 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "buzz"; }
 
+export fun mgs_getLanguage() > Language {
+    return Language{
+        name = "buzz",
+        extensions = [".buzz"],
+        comments = CommentSyntax{
+            lineComments = ["//"],
+            blockComments = [CommentBlock{open = "/*", close = "*/"}],
+            quotes = [
+                Quote{open = "`", close = "`", ignoreEscape = true},
+                Quote{open = "\"", close = "\""},
+            ],
+        },
+    };
+}
+
 export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.buzz"}];
 }

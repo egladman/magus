@@ -349,3 +349,49 @@ func TestParseBuzzProjectOpts_ReviewRequired(t *testing.T) {
 		})
 	}
 }
+
+// gate_low_risk feeds the ci-gate redundancy check's prose class. Unlike
+// review_required an EMPTY list is a legal declaration - it is the spelling
+// that turns the prose class off - so this pins that [] parses and sets the
+// declared flag, while a non-list or a blank entry stays a load error.
+func TestParseBuzzProjectOpts_GateLowRisk(t *testing.T) {
+	t.Run("globs are recorded and the declaration is marked", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("gate_low_risk", vm.ListValue([]vm.Value{
+			vm.StrValue("**/*.md"), vm.StrValue("notes/**"),
+		}))
+
+		p := applyOpts(t, opts)
+		assert.Equal(t, []string{"**/*.md", "notes/**"}, p.GateLowRisk)
+		assert.True(t, p.GateLowRiskDeclared)
+	})
+
+	t.Run("an empty list declares the prose class off", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("gate_low_risk", vm.ListValue(nil))
+
+		p := applyOpts(t, opts)
+		assert.Empty(t, p.GateLowRisk)
+		assert.True(t, p.GateLowRiskDeclared)
+	})
+
+	t.Run("undeclared leaves the built-in defaults in force", func(t *testing.T) {
+		p := applyOpts(t, vm.NewMap())
+		assert.Empty(t, p.GateLowRisk)
+		assert.False(t, p.GateLowRiskDeclared)
+	})
+
+	t.Run("a non-list is a load error", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("gate_low_risk", vm.StrValue("**/*.md"))
+		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		assert.ErrorContains(t, err, `"gate_low_risk" takes a list of globs`)
+	})
+
+	t.Run("a blank entry is a load error", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("gate_low_risk", vm.ListValue([]vm.Value{vm.StrValue("  ")}))
+		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		assert.ErrorContains(t, err, `"gate_low_risk" entries must be non-empty glob strings`)
+	})
+}

@@ -32,6 +32,33 @@ func TestBuiltins_KeyedByName(t *testing.T) {
 	assert.NotContains(t, m, "golang", `Builtins()["golang"] present — registry is keyed by name, not source dir`)
 }
 
+// TestBuiltinCommentSyntax pins the decoded mgs_getCommentSyntax declarations
+// internal/ci's gate tests mirror as literals; a drift between a spell's
+// declaration and those literals fails here, where the declaration decodes.
+func TestBuiltinCommentSyntax(t *testing.T) {
+	m := Builtins()
+	goSyn := m["go"].Comments
+	require.NotNil(t, goSyn, "the go spell declares its comment syntax")
+	assert.Equal(t, []string{".go"}, m["go"].LanguageExtensions, "only .go: the spell's other claims (.s, .c, .h, .txtar) are not Go")
+	assert.Equal(t, []string{"//"}, goSyn.LineComments)
+	assert.Equal(t, []spells.CommentBlock{{Open: "/*", Close: "*/"}}, goSyn.BlockComments)
+	assert.Equal(t, []spells.Quote{
+		{Open: "`", Close: "`", IgnoreEscape: true},
+		{Open: `"`, Close: `"`},
+		{Open: "'", Close: "'"},
+	}, goSyn.Quotes)
+	assert.Equal(t, []string{"go:", "nolint", "export", "line ", "+build", "sys", "extern"}, goSyn.Directives)
+
+	buzzSyn := m["buzz"].Comments
+	require.NotNil(t, buzzSyn, "the buzz spell declares its comment syntax")
+	assert.Equal(t, []string{".buzz"}, m["buzz"].LanguageExtensions)
+
+	pySyn := m["python"].Comments
+	require.NotNil(t, pySyn, "the python spell declares its comment syntax")
+	assert.Equal(t, []string{"type:", "noqa"}, pySyn.Directives)
+	assert.Nil(t, m["bash"].Comments, "bash declares none on purpose: heredocs defeat the declaration shape")
+}
+
 func TestBuiltinsHash_Format(t *testing.T) {
 	h := BuiltinsHash()
 	assert.Len(t, h, 64, "BuiltinsHash() should be 64 chars (SHA-256 hex)")

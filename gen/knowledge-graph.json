@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5217,
-  "edge_count": 9267,
+  "node_count": 5226,
+  "edge_count": 9290,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -492,6 +492,14 @@
       }
     },
     {
+      "id": "diagnostic:MGS3010",
+      "kind": "diagnostic",
+      "label": "MGS3010",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3010/"
+      }
+    },
+    {
       "id": "diagnostic:MGS4001",
       "kind": "diagnostic",
       "label": "MGS4001",
@@ -949,7 +957,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1520",
+        "dir_files": "1526",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1219,7 +1227,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "463",
+        "dir_files": "469",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -1299,8 +1307,8 @@
       "label": "docs/reference/codes/sandbox",
       "source": "docs/reference/codes/sandbox",
       "attrs": {
-        "dir_files": "103",
-        "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#extending-the-allowlist,md#fix,md#mgs2001-path-read-denied-by-sandbox,md#mgs2002-path-write-denied-by-sandbox,md#mgs2003"
+        "dir_files": "109",
+        "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#configuring-the-prose-class,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#extending-the-allowlist,md#fix,md#mgs2001-path-read-denied-by-sandbox,md#mgs2002-path-wri"
       }
     },
     {
@@ -4753,6 +4761,18 @@
         "section": "reference",
         "tags": "MGS3009,memory,memory_mb,concurrency,worktrees,admission,daemon,MAGUS_NO_WAIT",
         "title": "MGS3009: machine budget exhausted"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS3010.md",
+      "source": "docs/reference/codes/sandbox/MGS3010.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS3010,ci,gate,redundancy,admission,daemon,worktrees,exit 75,no-redundancy-check,gate_low_risk",
+        "title": "MGS3010: redundant gate deferred under load"
       }
     },
     {
@@ -27117,6 +27137,56 @@
       }
     },
     {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#configuring-the-prose-class",
+      "kind": "docsection",
+      "label": "Configuring the prose class",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#configuring-the-prose-class",
+      "attrs": {
+        "anchor": "configuring-the-prose-class",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "kind": "docsection",
+      "label": "MGS3010: redundant gate deferred under load",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "attrs": {
+        "anchor": "mgs3010-redundant-gate-deferred-under-load",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#resolution",
+      "kind": "docsection",
+      "label": "Resolution",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#resolution",
+      "attrs": {
+        "anchor": "resolution",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#why",
+      "kind": "docsection",
+      "label": "Why",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#why",
+      "attrs": {
+        "anchor": "why",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/reference/codes/sandbox/README.md#codes",
       "kind": "docsection",
       "label": "Codes",
@@ -41728,32 +41798,41 @@
       "kind": "function",
       "label": "bufBreaking",
       "doc": "breaking checks the current schema against a baseline for backward-incompatible changes (wire and JSON compatibility). It defaults to comparing against the main branch, buf's standard CI pattern; point it elsewhere with a function target when a repo uses a different default branch or an image baseline. This is the protobuf analogue of an API-contract gate: compose it into `lint` so a breaking .proto change fails the same read-only stage as go-vet and golangci-lint. The gha charm swaps buf's reporter to GitH",
-      "source": "spells/buf/spell.buzz:64"
+      "source": "spells/buf/spell.buzz:79"
     },
     {
       "id": "function:spells/buf/spell.buzz:bufBuild",
       "kind": "function",
       "label": "bufBuild",
-      "source": "spells/buf/spell.buzz:40"
+      "source": "spells/buf/spell.buzz:55"
     },
     {
       "id": "function:spells/buf/spell.buzz:bufFormat",
       "kind": "function",
       "label": "bufFormat",
       "doc": "format checks by default (--exit-code fails CI when files would change; the write charm applies the formatting in place.",
-      "source": "spells/buf/spell.buzz:50"
+      "source": "spells/buf/spell.buzz:65"
     },
     {
       "id": "function:spells/buf/spell.buzz:bufGenerate",
       "kind": "function",
       "label": "bufGenerate",
-      "source": "spells/buf/spell.buzz:41"
+      "source": "spells/buf/spell.buzz:56"
     },
     {
       "id": "function:spells/buf/spell.buzz:bufLint",
       "kind": "function",
       "label": "bufLint",
-      "source": "spells/buf/spell.buzz:42"
+      "source": "spells/buf/spell.buzz:57"
+    },
+    {
+      "id": "function:spells/buf/spell.buzz:mgs_getLanguage",
+      "kind": "function",
+      "label": "mgs_getLanguage",
+      "source": "spells/buf/spell.buzz:19",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:spells/buf/spell.buzz:mgs_getName",
@@ -41768,7 +41847,7 @@
       "id": "function:spells/buf/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "source": "spells/buf/spell.buzz:81",
+      "source": "spells/buf/spell.buzz:96",
       "attrs": {
         "exported": "true"
       }
@@ -41778,7 +41857,7 @@
       "kind": "function",
       "label": "mgs_listProvidedGlobs",
       "doc": "Generated code buf writes. Adjust to match the `out:` directories in your buf.gen.yaml; \"gen/**\" is the buf convention.",
-      "source": "spells/buf/spell.buzz:25",
+      "source": "spells/buf/spell.buzz:40",
       "attrs": {
         "exported": "true"
       }
@@ -41787,7 +41866,7 @@
       "id": "function:spells/buf/spell.buzz:mgs_listRequiredGlobs",
       "kind": "function",
       "label": "mgs_listRequiredGlobs",
-      "source": "spells/buf/spell.buzz:19",
+      "source": "spells/buf/spell.buzz:34",
       "attrs": {
         "exported": "true"
       }
@@ -41796,7 +41875,7 @@
       "id": "function:spells/buf/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/buf/spell.buzz:71",
+      "source": "spells/buf/spell.buzz:86",
       "attrs": {
         "exported": "true"
       }
@@ -41806,21 +41885,30 @@
       "kind": "function",
       "label": "buzzCheck",
       "doc": "check type-checks every Buzz source without running it (buzz --check). buzz takes one script per invocation, so `sources` runs it once PER matched file (sourcesEach = true - the engine-side replacement for the `find | xargs -n1` this op used to shell out to; see Command.sources/sourcesEach in spells/op.go). A glob set that matches nothing runs buzz zero times rather than failing.",
-      "source": "spells/buzz/spell.buzz:40"
+      "source": "spells/buzz/spell.buzz:55"
     },
     {
       "id": "function:spells/buzz/spell.buzz:buzzTest",
       "kind": "function",
       "label": "buzzTest",
       "doc": "test runs each source's Buzz `test {}` blocks (buzz --test), one file per invocation - see buzzCheck above.",
-      "source": "spells/buzz/spell.buzz:46"
+      "source": "spells/buzz/spell.buzz:61"
     },
     {
       "id": "function:spells/buzz/spell.buzz:magusBuzz",
       "kind": "function",
       "label": "magusBuzz",
       "doc": "magus-buzz executes each source through `magus buzz`, magus's own embedded Buzz engine, one file per invocation (see buzzCheck above). It has no check-only mode - executing a file compiles, type-checks, and runs it - so this is the runtime sibling of `buzz-check`.  bin is the literal string \"$MAGUS\", not a shell variable reference: the runner resolves a bare $NAME token in Bin/Args against the values it controls for this invocation (see resolveRunnerRefs in internal/interp/bindings) - the same resolution th",
-      "source": "spells/buzz/spell.buzz:64"
+      "source": "spells/buzz/spell.buzz:79"
+    },
+    {
+      "id": "function:spells/buzz/spell.buzz:mgs_getLanguage",
+      "kind": "function",
+      "label": "mgs_getLanguage",
+      "source": "spells/buzz/spell.buzz:24",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:spells/buzz/spell.buzz:mgs_getName",
@@ -41835,7 +41923,7 @@
       "id": "function:spells/buzz/spell.buzz:mgs_listRequiredGlobs",
       "kind": "function",
       "label": "mgs_listRequiredGlobs",
-      "source": "spells/buzz/spell.buzz:24",
+      "source": "spells/buzz/spell.buzz:39",
       "attrs": {
         "exported": "true"
       }
@@ -41844,7 +41932,7 @@
       "id": "function:spells/buzz/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/buzz/spell.buzz:68",
+      "source": "spells/buzz/spell.buzz:83",
       "attrs": {
         "exported": "true"
       }
@@ -42933,85 +43021,86 @@
       "id": "function:spells/golang/spell.buzz:goBuild",
       "kind": "function",
       "label": "goBuild",
-      "source": "spells/golang/spell.buzz:93"
+      "source": "spells/golang/spell.buzz:112"
     },
     {
       "id": "function:spells/golang/spell.buzz:goClean",
       "kind": "function",
       "label": "goClean",
-      "source": "spells/golang/spell.buzz:94"
+      "source": "spells/golang/spell.buzz:113"
     },
     {
       "id": "function:spells/golang/spell.buzz:goFmt",
       "kind": "function",
       "label": "goFmt",
-      "source": "spells/golang/spell.buzz:98"
+      "source": "spells/golang/spell.buzz:117"
     },
     {
       "id": "function:spells/golang/spell.buzz:goGenerate",
       "kind": "function",
       "label": "goGenerate",
-      "source": "spells/golang/spell.buzz:95"
+      "source": "spells/golang/spell.buzz:114"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModEdit",
       "kind": "function",
       "label": "goModEdit",
       "doc": "Edit is offline: it \"reads only go.mod; it does not look up information about the modules involved\" (go help mod edit), so the same tree always yields the same bytes. The write charm is therefore rw, not relock.",
-      "source": "spells/golang/spell.buzz:138"
+      "source": "spells/golang/spell.buzz:157"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModJSON",
       "kind": "function",
       "label": "goModJSON",
       "doc": "Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.",
-      "source": "spells/golang/spell.buzz:147"
+      "source": "spells/golang/spell.buzz:166"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModTidy",
       "kind": "function",
       "label": "goModTidy",
       "doc": "Tidy resolves against the module proxy, and an import go.mod does not require yet arrives at latest, so its result turns on what upstream serves today rather than on this tree alone. The write charm is therefore relock, not rw.",
-      "source": "spells/golang/spell.buzz:129"
+      "source": "spells/golang/spell.buzz:148"
     },
     {
       "id": "function:spells/golang/spell.buzz:goRun",
       "kind": "function",
       "label": "goRun",
-      "source": "spells/golang/spell.buzz:96"
+      "source": "spells/golang/spell.buzz:115"
     },
     {
       "id": "function:spells/golang/spell.buzz:goTest",
       "kind": "function",
       "label": "goTest",
       "doc": "`./...` is a default, not a fixed arg: a magusfile that passes args replaces it, so one package's tests need not compile every test binary in the module. A bare go.test() (and `magus run <t> -- <extra>` forwarding) still runs the whole tree.",
-      "source": "spells/golang/spell.buzz:120"
+      "source": "spells/golang/spell.buzz:139"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVet",
       "kind": "function",
       "label": "goVet",
-      "source": "spells/golang/spell.buzz:150"
+      "source": "spells/golang/spell.buzz:169"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVulncheck",
       "kind": "function",
       "label": "goVulncheck",
       "doc": "Invoked directly rather than through `go tool`, for the same reason as golangCILint above: `go tool govulncheck` requires the binary in the module's tool block, and a workspace that had not put it there got \"no such tool\" - so the op could not run at all. On PATH it is pinned by whatever the workspace uses, and mgs_getVersionProbes records which.",
-      "source": "spells/golang/spell.buzz:155"
+      "source": "spells/golang/spell.buzz:174"
     },
     {
       "id": "function:spells/golang/spell.buzz:golangCILint",
       "kind": "function",
       "label": "golangCILint",
       "doc": "Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got \"no such tool\" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.",
-      "source": "spells/golang/spell.buzz:110"
+      "source": "spells/golang/spell.buzz:129"
     },
     {
       "id": "function:spells/golang/spell.buzz:mgs_getLanguage",
       "kind": "function",
       "label": "mgs_getLanguage",
-      "source": "spells/golang/spell.buzz:60",
+      "doc": "Comment syntax covers .go alone: this spell also claims .s, .c, .h and .txtar, none of which speak Go's comment syntax. Directives are the no-space-then-word forms gofmt preserves verbatim; editing one changes what compiles, embeds, generates, or lints, so it is never a comment-only change.",
+      "source": "spells/golang/spell.buzz:64",
       "attrs": {
         "exported": "true"
       }
@@ -43039,7 +43128,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listIgnoreDirs",
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
-      "source": "spells/golang/spell.buzz:62",
+      "source": "spells/golang/spell.buzz:81",
       "attrs": {
         "exported": "true"
       }
@@ -43049,7 +43138,7 @@
       "kind": "function",
       "label": "mgs_listManifests",
       "doc": "mgs_listManifests names the file this project's dependencies are declared in - not the toolchain's version (that's mgs_getVersionProbe) and not a cache input (go.mod and go.sum are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). A Go module has exactly one candidate.  go.mod is the ecosystem where manifest and lockfile answer nearly the same question: its require lines are EXACT versions, never ranges, so it already names what gets compiled. go.sum holds hashes for m",
-      "source": "spells/golang/spell.buzz:74",
+      "source": "spells/golang/spell.buzz:93",
       "attrs": {
         "exported": "true"
       }
@@ -43068,7 +43157,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/golang/spell.buzz:160",
+      "source": "spells/golang/spell.buzz:179",
       "attrs": {
         "exported": "true"
       }
@@ -43077,7 +43166,7 @@
       "id": "function:spells/golang/spell.buzz:scipGo",
       "kind": "function",
       "label": "scipGo",
-      "source": "spells/golang/spell.buzz:156"
+      "source": "spells/golang/spell.buzz:175"
     },
     {
       "id": "function:spells/markdown/spell.buzz:dprint",
@@ -43235,7 +43324,8 @@
       "id": "function:spells/python/spell.buzz:mgs_getLanguage",
       "kind": "function",
       "label": "mgs_getLanguage",
-      "source": "spells/python/spell.buzz:20",
+      "doc": "The name is canonical and lowercase so it matches the language attr on the files and symbols SCIP ingests, letting `magus query language:python` reach this adapter alongside the code it builds. Triple-quoted docstrings are STRINGS - runtime-visible values - so they are declared as quotes, which is what makes a \"#\" inside one read as content and an edit to one a code edit.",
+      "source": "spells/python/spell.buzz:22",
       "attrs": {
         "exported": "true"
       }
@@ -43253,8 +43343,7 @@
       "id": "function:spells/python/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "doc": "mgs_getLanguage names the source language this spell adapts, canonical and lowercase so it matches the language attr on the Python files and symbols SCIP ingests. It lets `magus query language:python` reach this adapter alongside the code it builds.",
-      "source": "spells/python/spell.buzz:16",
+      "source": "spells/python/spell.buzz:13",
       "attrs": {
         "exported": "true"
       }
@@ -43264,7 +43353,7 @@
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
       "doc": "mgs_listIgnoreDirs names non-source dirs the python toolchain generates, pruned from the input-hashing walk. The cache dirs (.pytest_cache, .mypy_cache) are dot-dirs skipped structurally, so only __pycache__ belongs here.",
-      "source": "spells/python/spell.buzz:25",
+      "source": "spells/python/spell.buzz:42",
       "attrs": {
         "exported": "true"
       }
@@ -43274,7 +43363,7 @@
       "kind": "function",
       "label": "mgs_listManifests",
       "doc": "mgs_listManifests names the files this project's dependencies are declared in - not the toolchain's version (that's mgs_getTools) and not a cache input (these three are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). Python genuinely has alternatives, unlike the other built-ins: a pyproject.toml-managed project may still ship a legacy setup.py or setup.cfg, so this is ORDERED and the first candidate present in a project directory wins.  Only pyproject.toml carries lo",
-      "source": "spells/python/spell.buzz:41",
+      "source": "spells/python/spell.buzz:58",
       "attrs": {
         "exported": "true"
       }
@@ -43292,7 +43381,7 @@
       "id": "function:spells/python/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/python/spell.buzz:80",
+      "source": "spells/python/spell.buzz:97",
       "attrs": {
         "exported": "true"
       }
@@ -43301,75 +43390,75 @@
       "id": "function:spells/python/spell.buzz:pytest",
       "kind": "function",
       "label": "pytest",
-      "source": "spells/python/spell.buzz:51"
+      "source": "spells/python/spell.buzz:68"
     },
     {
       "id": "function:spells/python/spell.buzz:ruffCheck",
       "kind": "function",
       "label": "ruffCheck",
-      "source": "spells/python/spell.buzz:56"
+      "source": "spells/python/spell.buzz:73"
     },
     {
       "id": "function:spells/python/spell.buzz:ruffFormat",
       "kind": "function",
       "label": "ruffFormat",
-      "source": "spells/python/spell.buzz:64"
+      "source": "spells/python/spell.buzz:81"
     },
     {
       "id": "function:spells/python/spell.buzz:scip",
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the Python SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-python writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/python/spell.buzz:76"
+      "source": "spells/python/spell.buzz:93"
     },
     {
       "id": "function:spells/python/spell.buzz:uvBuild",
       "kind": "function",
       "label": "uvBuild",
       "doc": "build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs, so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.",
-      "source": "spells/python/spell.buzz:49"
+      "source": "spells/python/spell.buzz:66"
     },
     {
       "id": "function:spells/python/spell.buzz:uvClean",
       "kind": "function",
       "label": "uvClean",
-      "source": "spells/python/spell.buzz:50"
+      "source": "spells/python/spell.buzz:67"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoBuild",
       "kind": "function",
       "label": "cargoBuild",
-      "source": "spells/rust/spell.buzz:41"
+      "source": "spells/rust/spell.buzz:53"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoClean",
       "kind": "function",
       "label": "cargoClean",
-      "source": "spells/rust/spell.buzz:42"
+      "source": "spells/rust/spell.buzz:54"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoClippy",
       "kind": "function",
       "label": "cargoClippy",
-      "source": "spells/rust/spell.buzz:51"
+      "source": "spells/rust/spell.buzz:63"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoFmt",
       "kind": "function",
       "label": "cargoFmt",
-      "source": "spells/rust/spell.buzz:52"
+      "source": "spells/rust/spell.buzz:64"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoTest",
       "kind": "function",
       "label": "cargoTest",
-      "source": "spells/rust/spell.buzz:62"
+      "source": "spells/rust/spell.buzz:74"
     },
     {
       "id": "function:spells/rust/spell.buzz:mgs_getLanguage",
       "kind": "function",
       "label": "mgs_getLanguage",
-      "source": "spells/rust/spell.buzz:22",
+      "source": "spells/rust/spell.buzz:19",
       "attrs": {
         "exported": "true"
       }
@@ -43387,8 +43476,8 @@
       "id": "function:spells/rust/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "doc": "mgs_getLanguage names the source language this spell adapts, canonical and lowercase so it matches the language attr on the Rust files and symbols SCIP ingests. It lets `magus query language:rust` reach this adapter alongside the code it builds. `rustc --version` carries the commit hash and its date (`1.94.1 (e408947bf 2026-03-25)`), neither of which distinguishes two installs of the same release.",
-      "source": "spells/rust/spell.buzz:18",
+      "doc": "`rustc --version` carries the commit hash and its date (`1.94.1 (e408947bf 2026-03-25)`), neither of which distinguishes two installs of the same release.",
+      "source": "spells/rust/spell.buzz:15",
       "attrs": {
         "exported": "true"
       }
@@ -43398,7 +43487,7 @@
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
       "doc": "mgs_listIgnoreDirs names non-source dirs cargo generates, pruned from the input-hashing walk. Dot-dirs are skipped structurally, so only target belongs here.",
-      "source": "spells/rust/spell.buzz:26",
+      "source": "spells/rust/spell.buzz:38",
       "attrs": {
         "exported": "true"
       }
@@ -43408,7 +43497,7 @@
       "kind": "function",
       "label": "mgs_listManifests",
       "doc": "mgs_listManifests names the file this project's dependencies are declared in - not the toolchain's version (that's mgs_getVersionProbe) and not a cache input (Cargo.toml and Cargo.lock are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). A cargo crate has exactly one of each.  In a cargo WORKSPACE only the workspace root holds a Cargo.lock; member crates have a Cargo.toml and no lock of their own. That is why the lock is declared as a bare filename and located by walk",
-      "source": "spells/rust/spell.buzz:37",
+      "source": "spells/rust/spell.buzz:49",
       "attrs": {
         "exported": "true"
       }
@@ -43426,7 +43515,7 @@
       "id": "function:spells/rust/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/rust/spell.buzz:72",
+      "source": "spells/rust/spell.buzz:84",
       "attrs": {
         "exported": "true"
       }
@@ -43436,41 +43525,42 @@
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the Rust SCIP indexer for the knowledge graph. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; rust-analyzer's scip subcommand writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/rust/spell.buzz:68"
+      "source": "spells/rust/spell.buzz:80"
     },
     {
       "id": "function:spells/typescript/spell.buzz:biomeCheck",
       "kind": "function",
       "label": "biomeCheck",
       "doc": "biome-check is biome's lint/analyze pass (eslint's role, if your project chose Biome over eslint+prettier - the magusfile decides which composes into lint, not this spell). --write and --reporter=github verified against the current Biome CLI docs (biomejs.dev/reference/cli).",
-      "source": "spells/typescript/spell.buzz:156"
+      "source": "spells/typescript/spell.buzz:169"
     },
     {
       "id": "function:spells/typescript/spell.buzz:biomeFormat",
       "kind": "function",
       "label": "biomeFormat",
       "doc": "biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat, `biome format` has no --check flag to drop: it is read-only by default (reports differences, writes nothing) and --write applies them, so rw ADDS a flag instead of removing one.",
-      "source": "spells/typescript/spell.buzz:167"
+      "source": "spells/typescript/spell.buzz:180"
     },
     {
       "id": "function:spells/typescript/spell.buzz:devServer",
       "kind": "function",
       "label": "devServer",
       "doc": "dev-server runs the project's package.json \"dev\" script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.",
-      "source": "spells/typescript/spell.buzz:210"
+      "source": "spells/typescript/spell.buzz:223"
     },
     {
       "id": "function:spells/typescript/spell.buzz:eslint",
       "kind": "function",
       "label": "eslint",
       "doc": "eslint has no built-in \"github\" formatter (unlike ruff's --output-format=github); \"unix\" is the built-in, no-extra-devDependency formatter closest to a CI-friendly, one-line-per-problem shape for annotation/regex parsing.",
-      "source": "spells/typescript/spell.buzz:176"
+      "source": "spells/typescript/spell.buzz:189"
     },
     {
       "id": "function:spells/typescript/spell.buzz:mgs_getLanguage",
       "kind": "function",
       "label": "mgs_getLanguage",
-      "source": "spells/typescript/spell.buzz:71",
+      "doc": "The JavaScript flavors are claimed here too: one toolchain, one syntax.",
+      "source": "spells/typescript/spell.buzz:69",
       "attrs": {
         "exported": "true"
       }
@@ -43488,8 +43578,8 @@
       "id": "function:spells/typescript/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "doc": "mgs_getLanguage names the source language this spell adapts, canonical and lowercase so it matches the language attr on the TypeScript files and symbols SCIP ingests. It lets `magus query language:typescript` reach this adapter alongside the code it builds. The three binaries this spell's ops actually depend on, not just the runtime.  tsc is the one that matters most and was missing longest: every op here runs it through `pnpm exec`, and a probe result is a CACHE-KEY INPUT, so while it went undeclared magus",
-      "source": "spells/typescript/spell.buzz:61",
+      "doc": "The three binaries this spell's ops actually depend on, not just the runtime.  tsc is the one that matters most and was missing longest: every op here runs it through `pnpm exec`, and a probe result is a CACHE-KEY INPUT, so while it went undeclared magus would replay a cached typecheck produced by a different compiler. A TypeScript major is exactly the kind of upgrade that changes what `tsc` accepts, which is the case the key exists to catch. Its probe forks pnpm rather than tsc directly because tsc is a lo",
+      "source": "spells/typescript/spell.buzz:58",
       "attrs": {
         "exported": "true"
       }
@@ -43508,7 +43598,7 @@
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
       "doc": "mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned from the input-hashing walk. dist is already excluded as a declared output.  The dot-dirs are NOT optional, whatever their leading dot suggests. Two ignore predicates exist and they disagree: project.IsIgnoreDir skips every dot-dir, but that one governs DISCOVERY and watch, and it cannot be reused here - .claude/skills/** and .github/** are declared sources in this workspace. The hashing walk uses cache.isIgnoreDir, which skips",
-      "source": "spells/typescript/spell.buzz:84",
+      "source": "spells/typescript/spell.buzz:97",
       "attrs": {
         "exported": "true"
       }
@@ -43518,7 +43608,7 @@
       "kind": "function",
       "label": "mgs_listManifests",
       "doc": "mgs_listManifests names the file this project's dependencies are declared in - not the toolchain's version (that's mgs_getTools) and not a cache input (package.json and every lockfile below are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). A node project has exactly one manifest candidate and five LOCK candidates.  The five are alternatives, not a set: whichever package manager the project uses writes one of them and the others are absent. package.json alone cannot",
-      "source": "spells/typescript/spell.buzz:106",
+      "source": "spells/typescript/spell.buzz:119",
       "attrs": {
         "exported": "true"
       }
@@ -43547,7 +43637,7 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because dev-server mixes in a Service-returning op alongside the Command-returning ones.",
-      "source": "spells/typescript/spell.buzz:225",
+      "source": "spells/typescript/spell.buzz:238",
       "attrs": {
         "exported": "true"
       }
@@ -43557,46 +43647,46 @@
       "kind": "function",
       "label": "preflight",
       "doc": "preflight is a no-op marker op (no command).",
-      "source": "spells/typescript/spell.buzz:184"
+      "source": "spells/typescript/spell.buzz:197"
     },
     {
       "id": "function:spells/typescript/spell.buzz:prettier",
       "kind": "function",
       "label": "prettier",
-      "source": "spells/typescript/spell.buzz:185"
+      "source": "spells/typescript/spell.buzz:198"
     },
     {
       "id": "function:spells/typescript/spell.buzz:scip",
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/typescript/spell.buzz:219"
+      "source": "spells/typescript/spell.buzz:232"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tsc",
       "kind": "function",
       "label": "tsc",
-      "source": "spells/typescript/spell.buzz:191"
+      "source": "spells/typescript/spell.buzz:204"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscBuild",
       "kind": "function",
       "label": "tscBuild",
       "doc": "tsc-build uses TypeScript's project-references incremental build mode (works even without declared references, via its own .tsbuildinfo cache), emitting per tsconfig outDir - see mgs_listProvidedGlobs.",
-      "source": "spells/typescript/spell.buzz:195"
+      "source": "spells/typescript/spell.buzz:208"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscClean",
       "kind": "function",
       "label": "tscClean",
       "doc": "tsc-clean mirrors tsc-build's project-references mode: --clean removes the declared outputs and the incremental .tsbuildinfo cache.",
-      "source": "spells/typescript/spell.buzz:198"
+      "source": "spells/typescript/spell.buzz:211"
     },
     {
       "id": "function:spells/typescript/spell.buzz:vitest",
       "kind": "function",
       "label": "vitest",
-      "source": "spells/typescript/spell.buzz:199"
+      "source": "spells/typescript/spell.buzz:212"
     },
     {
       "id": "function:std/examples/term/pick.buzz:choose",
@@ -48693,7 +48783,8 @@
       "kind": "spell",
       "label": "buf",
       "attrs": {
-        "declared": "true"
+        "declared": "true",
+        "language": "protobuf"
       }
     },
     {
@@ -48701,7 +48792,8 @@
       "kind": "spell",
       "label": "buzz",
       "attrs": {
-        "declared": "true"
+        "declared": "true",
+        "language": "buzz"
       }
     },
     {
@@ -52695,6 +52787,14 @@
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
       "target": "doc:docs/reference/codes/sandbox/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -55623,6 +55723,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS4003",
       "relation": "documents",
       "confidence": "inferred",
@@ -56656,6 +56764,14 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS3007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS3010",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -59647,6 +59763,14 @@
     },
     {
       "source": "doc:docs/concepts/workspace.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace.md",
       "target": "doc:docs/concepts/cache.md",
       "relation": "references",
       "confidence": "extracted",
@@ -59712,6 +59836,14 @@
     {
       "source": "doc:docs/concepts/workspace.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3006.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -67806,6 +67938,70 @@
       "provenance": "docs/reference/codes/sandbox/MGS3009.md"
     },
     {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/concepts/concurrency.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/concepts/workspace.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -67887,6 +68083,14 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -67960,6 +68164,14 @@
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -68500,6 +68712,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/logging.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-affected.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/manpage/magus-affected.md"
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
@@ -73900,6 +74120,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/manpage/magus-refs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-run.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/manpage/magus-run.md"
     },
     {
       "source": "doc:docs/reference/manpage/magus-run.md",
@@ -93702,6 +93930,38 @@
       "provenance": "docs/reference/codes/sandbox/MGS3009.md"
     },
     {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#configuring-the-prose-class",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#resolution",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#why",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
+    },
+    {
       "source": "docsection:docs/reference/codes/sandbox/README.md#the-sandbox",
       "target": "docsection:docs/reference/codes/sandbox/README.md#codes",
       "relation": "contains",
@@ -107231,6 +107491,14 @@
     },
     {
       "source": "file:spells/buf/spell.buzz",
+      "target": "function:spells/buf/spell.buzz:mgs_getLanguage",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/buf/spell.buzz"
+    },
+    {
+      "source": "file:spells/buf/spell.buzz",
       "target": "function:spells/buf/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
@@ -107304,6 +107572,14 @@
     {
       "source": "file:spells/buzz/spell.buzz",
       "target": "function:spells/buzz/spell.buzz:magusBuzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/buzz/spell.buzz"
+    },
+    {
+      "source": "file:spells/buzz/spell.buzz",
+      "target": "function:spells/buzz/spell.buzz:mgs_getLanguage",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

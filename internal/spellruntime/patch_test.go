@@ -230,10 +230,17 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"buf": {
-		Name:     "buf",
-		Needs:    []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
-		Provides: []string{"gen/**"},
-		Tools:    map[string]spells.Tool{"buf": {Probe: spells.Command{Bin: "buf", Args: []string{"--version"}}}},
+		Name:               "buf",
+		Needs:              []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
+		Provides:           []string{"gen/**"},
+		Language:           "protobuf",
+		LanguageExtensions: []string{".proto"},
+		Comments: &spells.CommentSyntax{
+			LineComments:  []string{"//"},
+			BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+			Quotes:        []spells.Quote{{Open: `"`, Close: `"`}, {Open: "'", Close: "'"}},
+		},
+		Tools: map[string]spells.Tool{"buf": {Probe: spells.Command{Bin: "buf", Args: []string{"--version"}}}},
 		Ops: map[string]spells.Op{
 			"buf-build":    {Command: spells.Command{Bin: "buf", Args: []string{"build"}}},
 			"buf-generate": {Command: spells.Command{Bin: "buf", Args: []string{"generate"}}},
@@ -249,8 +256,18 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"buzz": {
-		Name:  "buzz",
-		Needs: []string{"**/*.buzz"},
+		Name:               "buzz",
+		Needs:              []string{"**/*.buzz"},
+		Language:           "buzz",
+		LanguageExtensions: []string{".buzz"},
+		Comments: &spells.CommentSyntax{
+			LineComments:  []string{"//"},
+			BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+			Quotes: []spells.Quote{
+				{Open: "`", Close: "`", IgnoreEscape: true},
+				{Open: `"`, Close: `"`},
+			},
+		},
 		Ops: map[string]spells.Op{
 			"buzz-check": {Command: spells.Command{Bin: "buzz", Args: []string{"--check"}, Sources: []string{"**/*.buzz"}, SourcesEach: true}},
 			"buzz-test":  {Command: spells.Command{Bin: "buzz", Args: []string{"--test"}, Sources: []string{"**/*.buzz"}, SourcesEach: true}},
@@ -301,7 +318,18 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"golangci-lint": {Probe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			"govulncheck":   {Probe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
 		},
-		Language:   "go",
+		Language:           "go",
+		LanguageExtensions: []string{".go"},
+		Comments: &spells.CommentSyntax{
+			LineComments:  []string{"//"},
+			BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+			Quotes: []spells.Quote{
+				{Open: "`", Close: "`", IgnoreEscape: true},
+				{Open: `"`, Close: `"`},
+				{Open: "'", Close: "'"},
+			},
+			Directives: []string{"go:", "nolint", "export", "line ", "+build", "sys", "extern"},
+		},
 		IgnoreDirs: []string{"vendor"},
 		Manifests:  []spells.Manifest{{Value: "go.mod", LockCandidates: []string{"go.sum"}}},
 		Ops: map[string]spells.Op{
@@ -379,10 +407,21 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"python": {
-		Name:       "python",
-		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
-		Tools:      map[string]spells.Tool{"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}}},
-		Language:   "python",
+		Name:               "python",
+		Needs:              []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
+		Tools:              map[string]spells.Tool{"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}}},
+		Language:           "python",
+		LanguageExtensions: []string{".py"},
+		Comments: &spells.CommentSyntax{
+			LineComments: []string{"#"},
+			Quotes: []spells.Quote{
+				{Open: `"""`, Close: `"""`},
+				{Open: "'''", Close: "'''"},
+				{Open: `"`, Close: `"`},
+				{Open: "'", Close: "'"},
+			},
+			Directives: []string{"type:", "noqa"},
+		},
 		IgnoreDirs: []string{"__pycache__"},
 		Manifests: []spells.Manifest{
 			{Value: "pyproject.toml", LockCandidates: []string{"uv.lock", "poetry.lock", "pdm.lock", "Pipfile.lock"}},
@@ -407,10 +446,21 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"rust": {
-		Name:       "rust",
-		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
-		Tools:      map[string]spells.Tool{"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}}},
-		Language:   "rust",
+		Name:               "rust",
+		Needs:              []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
+		Tools:              map[string]spells.Tool{"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}}},
+		Language:           "rust",
+		LanguageExtensions: []string{".rs"},
+		Comments: &spells.CommentSyntax{
+			LineComments:  []string{"//"},
+			BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+			Nested:        true,
+			Quotes: []spells.Quote{
+				{Open: `r#"`, Close: `"#`, IgnoreEscape: true},
+				{Open: `r"`, Close: `"`, IgnoreEscape: true},
+				{Open: `"`, Close: `"`},
+			},
+		},
 		IgnoreDirs: []string{"target"},
 		Manifests:  []spells.Manifest{{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"}}},
 		Ops: map[string]spells.Op{
@@ -437,7 +487,18 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"tsc": {Probe: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--version"}},
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 		},
-		Language:   "typescript",
+		Language:           "typescript",
+		LanguageExtensions: []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"},
+		Comments: &spells.CommentSyntax{
+			LineComments:  []string{"//"},
+			BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+			Quotes: []spells.Quote{
+				{Open: "`", Close: "`"},
+				{Open: `"`, Close: `"`},
+				{Open: "'", Close: "'"},
+			},
+			Directives: []string{"@ts-", "eslint-", "<reference"},
+		},
 		IgnoreDirs: []string{"node_modules", ".testcache", ".turbo", ".pnpm-store"},
 		Manifests: []spells.Manifest{
 			{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"}},

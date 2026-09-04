@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/ci/annotate"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
@@ -1287,10 +1288,16 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 				return fmt.Errorf("magus/cache: import rel %q: %w", clean, err)
 			}
 			isBlob := strings.HasPrefix(filepath.ToSlash(rel), "cas/")
-			f, err := os.Create(clean)
+			// Stage to a uniquely named temp beside the final path; rename in
+			// only after the size cap and hash check pass. The cache is shared
+			// machine-wide: a write at the final path would let a concurrent
+			// replay read a torn blob, and a rejected member would first
+			// truncate the valid CAS blob other manifests still reference.
+			f, err := os.CreateTemp(filepath.Dir(clean), filepath.Base(clean)+".import-*.tmp")
 			if err != nil {
 				return fmt.Errorf("magus/cache: import create %q: %w", clean, err)
 			}
+			tmp := f.Name()
 			// Read limit+1 to detect an oversized entry rather than silently
 			// truncating: io.LimitReader alone stops at the cap and io.Copy
 			// returns nil, which would commit a corrupt/truncated blob.
@@ -1303,21 +1310,32 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			n, err := io.Copy(w, io.LimitReader(tr, limit+1))
 			if err != nil {
 				_ = f.Close()
+				_ = os.Remove(tmp)
 				return fmt.Errorf("magus/cache: import write %q: %w", clean, err)
 			}
 			if n > limit {
 				_ = f.Close()
-				_ = os.Remove(clean)
+				_ = os.Remove(tmp)
 				return fmt.Errorf("magus/cache: import %q: %w", clean, errImportTooLarge)
 			}
 			if err := f.Close(); err != nil {
+				_ = os.Remove(tmp)
 				return fmt.Errorf("magus/cache: import close %q: %w", clean, err)
 			}
 			if isBlob {
 				if want, got := path.Base(filepath.ToSlash(rel)), hex.EncodeToString(h.Sum(nil)); got != want {
-					_ = os.Remove(clean)
+					_ = os.Remove(tmp)
 					return fmt.Errorf("magus/cache: import blob %s content hashes to %s", want, got)
 				}
+			}
+			// CreateTemp makes the file 0600; the committed file was always 0644.
+			if err := file.Chmod(tmp, 0o644); err != nil {
+				_ = os.Remove(tmp)
+				return fmt.Errorf("magus/cache: import chmod %q: %w", clean, err)
+			}
+			if err := os.Rename(tmp, clean); err != nil {
+				_ = os.Remove(tmp)
+				return fmt.Errorf("magus/cache: import commit %q: %w", clean, err)
 			}
 		}
 	}

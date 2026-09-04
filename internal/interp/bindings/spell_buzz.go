@@ -73,6 +73,12 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	if spec.Language != "" {
 		extra = append(extra, spells.WithLanguage(spec.Language))
 	}
+	if len(spec.LanguageExtensions) > 0 {
+		extra = append(extra, spells.WithLanguageExtensions(spec.LanguageExtensions))
+	}
+	if spec.Comments != nil {
+		extra = append(extra, spells.WithComments(spec.Comments))
+	}
 	if spec.Opaque {
 		extra = append(extra, spells.WithOpaque())
 	}

@@ -16,6 +16,21 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "buf"; }
 
+export fun mgs_getLanguage() > Language {
+    return Language{
+        name = "protobuf",
+        extensions = [".proto"],
+        comments = CommentSyntax{
+            lineComments = ["//"],
+            blockComments = [CommentBlock{open = "/*", close = "*/"}],
+            quotes = [
+                Quote{open = "\"", close = "\""},
+                Quote{open = "'", close = "'"},
+            ],
+        },
+    };
+}
+
 export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.proto"}, Path{value = "buf.yaml"}, Path{value = "buf.gen.yaml"}, Path{value = "buf.work.yaml"}, Path{value = "buf.lock"}];
 }

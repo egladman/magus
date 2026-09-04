@@ -225,6 +225,22 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 		opts = append(opts, workspace.WithReviewRequired(globs...))
 	}
+	// An EMPTY list is legal here, unlike review_required: [] is the spelling that
+	// turns the prose class of the gate redundancy check off, and any declaration
+	// replaces the built-in markdown defaults rather than adding to them.
+	if gv, ok := v.MapGet("gate_low_risk"); ok {
+		if !gv.IsList() {
+			return nil, fmt.Errorf(`magus.project: "gate_low_risk" takes a list of globs the ci-gate redundancy check classifies as prose, e.g. ["**/*.md", "notes/**"]; [] disables the prose class`)
+		}
+		var globs []string
+		for _, item := range gv.ListItems() {
+			if !item.IsStr() || strings.TrimSpace(item.AsString()) == "" {
+				return nil, fmt.Errorf(`magus.project: "gate_low_risk" entries must be non-empty glob strings`)
+			}
+			globs = append(globs, strings.TrimSpace(item.AsString()))
+		}
+		opts = append(opts, workspace.WithGateLowRisk(globs...))
+	}
 	if sv, ok := v.MapGet("spells"); ok && sv.IsList() {
 		// Each item is a spell handle. A local spell (.load) is registered by value
 		// here, at bind time, from the resolved spec its handle carries; built-ins
