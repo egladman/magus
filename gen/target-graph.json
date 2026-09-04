@@ -1296,24 +1296,13 @@
           "name": "compress-cgo-test",
           "declared": "compress_cgo_test",
           "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.",
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-test"
-              ]
-            }
-          ],
           "reads_files": [
             {
               "project": ".",
               "glob": "internal/compress/*.go"
             }
           ],
-          "reads_secrets": false,
-          "exec_overrides": [
-            "env:CGO_ENABLED=1"
-          ]
+          "reads_secrets": false
         },
         {
           "name": "ci-shard",

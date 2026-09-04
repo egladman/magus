@@ -147,12 +147,6 @@ magus\project({
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
         "test": {"memory_mb": 10240},
-        // Measured like its sibling: a 3331MB peak on 2026-09-02 under three concurrent
-        // gates against a 550MB to 1023MB quiet baseline, rounded up because types.PeakRSS
-        // samples a floor.
-        // Drop it when go-test stops appending its package list instead of replacing it,
-        // which is what makes this compile every test binary in the module under CGO_ENABLED=1.
-        "compress-cgo-test": {"memory_mb": 4096},
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
@@ -2596,8 +2590,14 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
     foreach (lib in ["libzstd", "liblzma"]) {
         proc\exec("pkg-config", ["--exists", lib], ".", {});
     }
-    go["go-test"](ctx.withEnv({"CGO_ENABLED": "1"}),
-        {"args": ["-tags", "liblzma,libzstd", "./internal/compress/"]});
+    // proc\exec rather than the go-test op, for magusfile_api_generate's reason: the op
+    // hardcodes `./...` and appends these args after it, so the op form compiled and ran
+    // every test binary in the module to cover one package (1m59s, and the memory_mb
+    // declaration this target used to need). -race and GOEXPERIMENT match the test
+    // target so the dependency compiles share its build fingerprint.
+    os\withEnv({"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"}, fun () > void !> any {
+        proc\exec("go", ["test", "-race", "-tags", "liblzma,libzstd", "./internal/compress/"]);
+    });
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix
