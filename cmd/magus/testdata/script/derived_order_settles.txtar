@@ -1,0 +1,99 @@
+# The settledness oracle for derived target ordering. The fixture is the
+# entangled shape hand-wiring used to be the only answer for: root's
+# first-generate writes SEED.md, site's page-generate derives page.md from it,
+# and root's index-generate derives index.txt from every .md in the tree -
+# page.md included. site depends_on "..", so the steps must run root first, and
+# no step order can put page-generate before index-generate: at project
+# granularity the data flow is a cycle. Target by target it is acyclic
+# (first-generate -> page-generate -> index-generate), which is what the
+# scheduler derives from the declarations; the against-the-grain hop is settled
+# by re-running index-generate once its input actually moved.
+
+# The committed state is settled for seed "one". Move the seed.
+cp seed2.txt src/seed.txt
+
+# ONE invocation must settle the whole chain.
+exec magus run assemble . site
+cmp SEED.md want-seed.md
+cmp site/page.md want-page.md
+cmp index.txt want-index.txt
+
+# audit is a skip-cache VERIFIER: its fallback reads overlap page-generate's
+# writes exactly as index-generate's do, but it declares no writes, so settling
+# must leave it alone - it ran once in the batch and that is all. Re-running
+# verifiers on the post-batch tail is how a stalled scanner once wedged a green
+# gate for an hour.
+cmp audit.log want-audit-once
+
+# A second identical invocation changes nothing: the settle step re-runs a
+# reader only when a writer's bytes moved, and nothing moves on a settled tree.
+cp index.txt index.settled
+exec magus run assemble . site
+cmp index.txt index.settled
+cmp audit.log want-audit-twice
+
+-- magus.yaml --
+concurrency: 2
+-- src/seed.txt --
+one
+-- SEED.md --
+one
+-- index.txt --
+one
+page: one
+-- want-seed.md --
+two
+-- want-page.md --
+page: two
+-- want-index.txt --
+two
+page: two
+-- seed2.txt --
+two
+-- magusfile.buzz --
+import "magus";
+import "proc";
+magus.project({
+    "sources": ["src/*.txt", "**/*.md"],
+    "targets": {
+        "index-generate": {"skip_cache": "derives from the whole tree; no input glob can key it"},
+        "audit": {"skip_cache": "a verdict about the current tree; a replay would skip the check"},
+    },
+});
+export fun first_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("src/seed.txt");
+    ctx.writesFiles("SEED.md");
+    proc\exec("sh", ["-c", "cp src/seed.txt SEED.md"]);
+}
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("index.txt");
+    proc\exec("sh", ["-c", "cat SEED.md site/page.md > index.txt"]);
+}
+export fun audit(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "echo ran >> audit.log"]);
+}
+export fun assemble(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(first_generate);
+    ctx.needs(index_generate);
+    ctx.needs(audit);
+}
+-- want-audit-once --
+ran
+-- want-audit-twice --
+ran
+ran
+-- site/page.md --
+page: one
+-- site/magusfile.buzz --
+import "magus";
+import "proc";
+import "project/.." as ws;
+magus.project({ "depends_on": [".."], "sources": ["*.md"] });
+export fun page_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(ws\file("SEED.md"));
+    ctx.writesFiles("page.md");
+    proc\exec("sh", ["-c", "sed 's/^/page: /' ../SEED.md > page.md"]);
+}
+export fun assemble(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(page_generate);
+}

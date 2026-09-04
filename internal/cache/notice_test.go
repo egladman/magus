@@ -98,7 +98,7 @@ func TestFailureExcerptPinsRealTestFailureAgainstLaterNoise(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
 	b.WriteString("--- FAIL: TestRunAllDependencyFailureCancelsDependents (0.00s)\n")
-	b.WriteString("    dep_barrier_test.go:283: Error Trace: B's fn ran even though its dependency A failed\n")
+	b.WriteString("    barrier_test.go:283: Error Trace: B's fn ran even though its dependency A failed\n")
 	for i := 0; i < 40; i++ {
 		fmt.Fprintf(&b, "[fail] fixture%d (ran, 1ms)\n  cause: fixture%d boom\n", i, i)
 	}

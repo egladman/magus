@@ -40,6 +40,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **One generate invocation settles a cross-project derivation chain.** The scheduler
+  now derives target-granular ordering from the declarations it already holds: when
+  one target's `ctx.writesFiles` globs intersect another's `ctx.readsFiles` or
+  sources and both run in one batch, the writer runs first, across projects and
+  across target names, which project-level `depends_on` cannot express. Where no step
+  order can honor an edge (two projects' generate chains writing into each other's
+  read sets, previously fixable only by hand-wiring a `ctx.needs`), the stale reader
+  re-runs once at the end of the batch, and only when its input's bytes actually
+  moved, so a settled tree re-runs nothing. Only targets that declare writes are
+  re-run this way, verifiers such as a security scan are not, and the settle pass
+  as a whole is time-bounded, so a stalled re-run fails the invocation loudly
+  instead of holding the project locks in silence. A cycle among declared footprints
+  is not an error either: every project's routing index declares that it writes its
+  own `MAGUS.md` and reads its siblings', so the direction no schedule can honor is
+  dropped and settled afterwards like any other unorderable edge. Before this, a changelog
+  edit that was graph-visible needed a second `magus run generate` to land the edge
+  in the committed graph, and the release-index publish opened a born-red PR from
+  the gap.
+- **A rejected archive import no longer destroys the cache file it named.**
+  `magus config cache import` extracted each tar member directly at its final cache
+  path, so a concurrent process could replay a torn blob or manifest mid-import, and
+  a corrupt archive first truncated an existing valid CAS blob and then deleted it on
+  the hash mismatch, destroying a blob other manifests still referenced. Members now
+  stage through a unique same-directory temp file and rename into place only after
+  the size cap and content-hash check pass.
 - **A daemon no longer adopts runs from a binary built from different sources.** Every
   modified-tree build of one commit stamps the same `-dirty` version string, so the
   adoption identity gate matched byte-different binaries and a warm daemon executed
