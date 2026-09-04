@@ -92,6 +92,13 @@ func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 	}
 	run := func(args ...string) { gitRun(t, dir, args...) }
 	run("init", "-q")
+	// Nearly every mutating git command spawns `git maintenance run --auto --quiet
+	// --detach`, which outlives its parent by design and races t.TempDir cleanup into
+	// "unlinkat .git: directory not empty" under load. Repo config is the only lever that
+	// also reaches the git subprocesses production code spawns with its own environment.
+	// gitCloneShallow sets the same pair, because a clone does not inherit these.
+	run("config", "maintenance.auto", "false")
+	run("config", "gc.auto", "0")
 	for name, content := range files {
 		p := filepath.Join(dir, filepath.FromSlash(name))
 		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
@@ -321,7 +328,10 @@ func gitDivergedOrigin(t *testing.T, trunk int) (string, int) {
 func gitCloneShallow(t *testing.T, origin string, depth int) string {
 	t.Helper()
 	clone := filepath.Join(t.TempDir(), "checkout")
-	args := []string{"clone", "--quiet", "--single-branch", "--branch", "feat"}
+	// The detached-maintenance kill switch from gitInitRepo, set at birth: the deepen
+	// fetches the tests trigger would otherwise each leave one behind in the checkout.
+	args := []string{"clone", "--quiet", "--single-branch", "--branch", "feat",
+		"--config", "maintenance.auto=false", "--config", "gc.auto=0"}
 	if depth > 0 {
 		args = append(args, fmt.Sprintf("--depth=%d", depth))
 	}
