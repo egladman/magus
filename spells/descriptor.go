@@ -133,6 +133,13 @@ type Descriptor struct {
 	// `language:` query groups the adapter with the files and symbols of that language;
 	// empty for a spell that adapts no single source language (docker, cosign).
 	Language string `json:"language,omitempty"`
+	// LanguageExtensions are the file extensions that ARE the language, from
+	// the Language record's extensions field. See spells.Language.
+	LanguageExtensions []string `json:"language_extensions,omitempty"`
+	// Comments is the language's comment and string syntax, from the Language
+	// record; nil for a spell that declares none. The gate's comment-only
+	// classifier is the consumer.
+	Comments *CommentSyntax `json:"comments,omitempty"`
 	// DocOps names the ops authored as function handlers (sorted) — as opposed to
 	// plain {cmd,args} record ops. `magus doctor` requires a doc comment on each of
 	// these for a workspace-local Buzz spell. Not serialized: it is a resolution-path

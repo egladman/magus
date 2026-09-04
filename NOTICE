@@ -19,3 +19,10 @@ along with this program. If not, see
 
 The full license text is in LICENSE, verbatim from
 <https://www.gnu.org/licenses/gpl-3.0.txt>.
+
+Third-party data:
+
+The per-language comment and string syntax declarations in spells/comments.go
+adopt the schema of, and seed their values from, languages.json in scc
+(github.com/boyter/scc), copyright Ben Boyter, licensed under the MIT License.
+Only the entries for languages magus ships spells for are included.

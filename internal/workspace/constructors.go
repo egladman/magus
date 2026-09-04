@@ -123,6 +123,29 @@ func WithReviewRequired(globs ...string) ProjectOption {
 	}
 }
 
+// WithGateLowRisk declares the globs the ci-gate redundancy check classifies as
+// prose. Zero globs is a legal, meaningful declaration - it turns the prose
+// class off - so the DECLARED flag is set here, not inferred from length.
+// Escaping globs are refused for WithReviewRequired's reason: one would
+// silently classify nothing while the author believes it does.
+func WithGateLowRisk(globs ...string) ProjectOption {
+	return func(p *types.Project) error {
+		cleaned := make([]string, 0, len(globs))
+		for _, raw := range globs {
+			glob := path.Clean(raw)
+			rooted := types.RootGlob(p.Path, glob)
+			if rooted == ".." || strings.HasPrefix(rooted, "../") {
+				return fmt.Errorf("magus: project %q: gate_low_risk glob %q escapes the workspace root "+
+					"(it resolves to %q); it would classify nothing at all", p.Path, raw, rooted)
+			}
+			cleaned = append(cleaned, glob)
+		}
+		p.GateLowRisk = append(p.GateLowRisk, cleaned...)
+		p.GateLowRiskDeclared = true
+		return nil
+	}
+}
+
 // WithWatchIgnore appends patterns to the project's watch ignore list.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return func(p *types.Project) error {

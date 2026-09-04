@@ -10,14 +10,31 @@ export fun mgs_listRequiredGlobs() > [Path] {
 }
 
 
-// mgs_getLanguage names the source language this spell adapts, canonical and lowercase
-// so it matches the language attr on the Python files and symbols SCIP ingests. It lets
-// `magus query language:python` reach this adapter alongside the code it builds.
 export fun mgs_getTools() > {str: Tool} {
     return {"python3": Tool{probe = Command{bin = "python3", args = ["--version"]}}};
 }
 
-export fun mgs_getLanguage() > str { return "python"; }
+// The name is canonical and lowercase so it matches the language attr on the
+// files and symbols SCIP ingests, letting `magus query language:python` reach
+// this adapter alongside the code it builds. Triple-quoted docstrings are
+// STRINGS - runtime-visible values - so they are declared as quotes, which is
+// what makes a "#" inside one read as content and an edit to one a code edit.
+export fun mgs_getLanguage() > Language {
+    return Language{
+        name = "python",
+        extensions = [".py"],
+        comments = CommentSyntax{
+            lineComments = ["#"],
+            quotes = [
+                Quote{open = "\"\"\"", close = "\"\"\""},
+                Quote{open = "'''", close = "'''"},
+                Quote{open = "\"", close = "\""},
+                Quote{open = "'", close = "'"},
+            ],
+            directives = ["type:", "noqa"],
+        },
+    };
+}
 
 // mgs_listIgnoreDirs names non-source dirs the python toolchain generates, pruned
 // from the input-hashing walk. The cache dirs (.pytest_cache, .mypy_cache) are

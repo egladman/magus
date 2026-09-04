@@ -15,7 +15,7 @@ import "proc";
 import "encoding/json";
 
 export fun mgs_getName() > str { return "nx"; }
-export fun mgs_getLanguage() > str { return "typescript"; }
+export fun mgs_getLanguage() > Language { return Language{name = "typescript"}; }
 
 // For a provider spell this is read at WORKSPACE scope: the files that decide what
 // the projects ARE. It is also what invalidates the provider cache.

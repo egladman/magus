@@ -220,8 +220,21 @@ type Project struct {
 	// path, and a guess here would be magus asserting whose code is dangerous - which is
 	// the judgment this key exists to leave with the people who own it.
 	ReviewRequired []string
-	WatchIgnores   []IgnorePattern
-	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
+	// GateLowRisk are the globs whose changes the ci-gate redundancy check treats
+	// as prose - low-risk on their own - from magus.project's "gate_low_risk" key.
+	// Globs are project-relative, like ReviewRequired. GateLowRiskDeclared is what
+	// separates "not declared" (magus's built-in markdown defaults apply) from
+	// "declared empty" (the prose class is off): the moment any project declares
+	// the key, the built-in defaults stop applying workspace-wide and only
+	// declared globs classify.
+	//
+	// Only the prose class is a glob list. Generated output stays structural
+	// (declared outputs), and comment-only stays a mechanism (a token-stream
+	// comparison), because a glob cannot assert either honestly.
+	GateLowRisk         []string
+	GateLowRiskDeclared bool
+	WatchIgnores        []IgnorePattern
+	TargetPolicies      map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via
 	// ctx.readsFiles(...), keyed by normalized target name (DefaultTargetNameNormalizer,
 	// matching the TargetPolicies key space buildStep looks up). ONE representation

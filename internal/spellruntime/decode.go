@@ -86,7 +86,10 @@ func Decode(src obj) (spells.Descriptor, error) {
 	if name == "" {
 		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
 	}
-	language, _ := src.Str("language")
+	language, langExts, comments, err := decodeLanguage(src)
+	if err != nil {
+		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
 	tools, err := decodeTools(src)
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
@@ -100,12 +103,14 @@ func Decode(src obj) (spells.Descriptor, error) {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
 	m := spells.Descriptor{
-		Name:       name,
-		IgnoreDirs: ignoreDirs,
-		Manifests:  manifests,
-		Tools:      tools,
-		Language:   language,
-		Opaque:     src.Bool("opaque"),
+		Name:               name,
+		IgnoreDirs:         ignoreDirs,
+		Manifests:          manifests,
+		Tools:              tools,
+		Language:           language,
+		LanguageExtensions: langExts,
+		Comments:           comments,
+		Opaque:             src.Bool("opaque"),
 	}
 
 	needs, err := src.CallStrs("needs")
@@ -433,6 +438,63 @@ func validateTools(m spells.Descriptor) error {
 		}
 	}
 	return nil
+}
+
+// decodeLanguage reads mgs_getLanguage's typed answer: a Language record
+// carrying the canonical name, the extensions that are the language, and,
+// when the spell declares one, the comment syntax. Absent means the spell
+// adapts no single source language.
+func decodeLanguage(src obj) (string, []string, *spells.CommentSyntax, error) {
+	rec, ok := src.Obj("language")
+	if !ok {
+		return "", nil, nil, nil
+	}
+	name, _ := rec.Str("name")
+	if name == "" {
+		return "", nil, nil, fmt.Errorf("language: name is required")
+	}
+	exts, err := rec.Strs("extensions")
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("language.extensions: %w", err)
+	}
+	syn, err := decodeComments(rec)
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("language: %w", err)
+	}
+	if syn != nil && len(exts) == 0 {
+		return "", nil, nil, fmt.Errorf("language: comments without extensions covers no files; declare the extensions that are this language")
+	}
+	return name, exts, syn, nil
+}
+
+// decodeComments reads the comment/string syntax inside a Language record,
+// nil when the spell declares none. The covering extensions live on the
+// Language record itself; decodeLanguage requires them when a syntax is here.
+func decodeComments(lang obj) (*spells.CommentSyntax, error) {
+	rec, ok := lang.Obj("comments")
+	if !ok {
+		//nolint:nilnil // declaring no syntax is not an error, and nil is the correct empty value: the classifier treats an unclaimed extension as code.
+		return nil, nil
+	}
+	syn := &spells.CommentSyntax{Nested: rec.Bool("nested")}
+	var err error
+	if syn.LineComments, err = rec.Strs("lineComments"); err != nil {
+		return nil, fmt.Errorf("comments.lineComments: %w", err)
+	}
+	if syn.Directives, err = rec.Strs("directives"); err != nil {
+		return nil, fmt.Errorf("comments.directives: %w", err)
+	}
+	for _, b := range rec.Objs("blockComments") {
+		open, _ := b.Str("open")
+		cl, _ := b.Str("close")
+		syn.BlockComments = append(syn.BlockComments, spells.CommentBlock{Open: open, Close: cl})
+	}
+	for _, q := range rec.Objs("quotes") {
+		open, _ := q.Str("open")
+		cl, _ := q.Str("close")
+		syn.Quotes = append(syn.Quotes, spells.Quote{Open: open, Close: cl, IgnoreEscape: q.Bool("ignoreEscape")})
+	}
+	return syn, nil
 }
 
 // decodeTools reads the per-binary declarations: what prints its version, what part of

@@ -112,3 +112,4 @@ Two layers run together:
 - [MGS2008](MGS2008.md): daemon socket withheld from sandboxed children.
 - [MGS2010](MGS2010.md): sandbox policy mismatch (undeclared / fingerprint).
 - [MGS3009](MGS3009.md): machine budget exhausted.
+- [MGS3010](MGS3010.md): redundant gate deferred under load.

@@ -25,6 +25,10 @@ import (
 //go:generate go run ../../cmd/magus-utils types -type VersionKey -out gen/types/versionkey.buzz
 //go:generate go run ../../cmd/magus-utils types -type VersionBounds -out gen/types/versionbounds.buzz
 //go:generate go run ../../cmd/magus-utils types -type Tool -out gen/types/tool.buzz
+//go:generate go run ../../cmd/magus-utils types -type CommentBlock -out gen/types/commentblock.buzz
+//go:generate go run ../../cmd/magus-utils types -type Quote -out gen/types/quote.buzz
+//go:generate go run ../../cmd/magus-utils types -type CommentSyntax -out gen/types/commentsyntax.buzz
+//go:generate go run ../../cmd/magus-utils types -type Language -out gen/types/language.buzz
 //go:generate go run ../../cmd/magus-utils types -type Secret -out gen/types/secret.buzz
 //go:generate go run ../../cmd/magus-utils types -type Hint -out gen/types/hint.buzz
 //go:generate go run ../../cmd/magus-utils types -type Command -out gen/types/command.buzz

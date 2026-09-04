@@ -57,7 +57,26 @@ export fun mgs_getTools() > {str: Tool} {
     };
 }
 
-export fun mgs_getLanguage() > str { return "go"; }
+// Comment syntax covers .go alone: this spell also claims .s, .c, .h and
+// .txtar, none of which speak Go's comment syntax. Directives are the
+// no-space-then-word forms gofmt preserves verbatim; editing one changes what
+// compiles, embeds, generates, or lints, so it is never a comment-only change.
+export fun mgs_getLanguage() > Language {
+    return Language{
+        name = "go",
+        extensions = [".go"],
+        comments = CommentSyntax{
+            lineComments = ["//"],
+            blockComments = [CommentBlock{open = "/*", close = "*/"}],
+            quotes = [
+                Quote{open = "`", close = "`", ignoreEscape = true},
+                Quote{open = "\"", close = "\""},
+                Quote{open = "'", close = "'"},
+            ],
+            directives = ["go:", "nolint", "export", "line ", "+build", "sys", "extern"],
+        },
+    };
+}
 
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir = true}]; }
 

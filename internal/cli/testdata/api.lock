@@ -82,6 +82,7 @@ flag affected/max-parallel-budget
 flag affected/max-shards
 flag affected/no-cache
 flag affected/no-default-charms
+flag affected/no-redundancy-check
 flag affected/null
 flag affected/open
 flag affected/plan
@@ -150,6 +151,7 @@ flag run/graph
 flag run/n-shards
 flag run/no-cache
 flag run/no-default-charms
+flag run/no-redundancy-check
 flag run/no-volatility-retry
 flag run/open
 flag run/race
