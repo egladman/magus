@@ -47,6 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A per-target policy the engine accepts no longer fails its own dry-run preview.**
+  The dry-run host validated `magus.project`'s `targets` policy against a hand-copied
+  list of recognized keys that had drifted to `skip_cache`, `exclusive` and `slots`,
+  so a magusfile setting `memory_mb`, `cache`, `drift` or `drift_reason` loaded fine
+  under `magus run` and was rejected as an unknown option by the Playground, the
+  editor diagnostics, and every other dry-run surface. Both the engine binding and the
+  dry-run host now reject against one shared table, `types.TargetPolicyKeys`, beside
+  the `magus.project` option table that got this treatment when the same drift bit the
+  project-level keys. A key added to the table reaches both consumers at once, and a
+  test per consumer reads the table and fails if either stops accepting a key in it.
 - **One generate invocation settles a cross-project derivation chain.** The scheduler
   now derives target-granular ordering from the declarations it already holds: when
   one target's `ctx.writesFiles` globs intersect another's `ctx.readsFiles` or

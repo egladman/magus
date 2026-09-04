@@ -40,6 +40,28 @@ var ProjectOptions = []ProjectOption{
 	{Key: "gate_low_risk", Since: "0.5.0"},
 }
 
+// TargetPolicyKeys is the ONE list of recognized keys inside magus.project's "targets"
+// map, for the reason ProjectOptions above is one list.
+//
+// The dimension the project-option fix did not cover, so it recurred here: the dry-run
+// host carried a hand-copied second list that had drifted to three keys, and a
+// magusfile setting memory_mb, cache, drift or drift_reason passed a real run and was
+// rejected by its own preview.
+//
+// Plain names, no Since column: a floor is only worth declaring where doctor can DETECT
+// the key in use, and it detects from decoded Project state (internal/doctor/
+// schemafloor.go), which carries no target policy. Grow this into a record when that
+// detection exists, not before.
+var TargetPolicyKeys = []string{
+	"skip_cache",
+	"exclusive",
+	"slots",
+	"memory_mb",
+	"cache",
+	"drift",
+	"drift_reason",
+}
+
 // ProjectOptionKeys returns just the key names, for the unknown-key rejection both the
 // engine and the dry-run host perform.
 func ProjectOptionKeys() []string {

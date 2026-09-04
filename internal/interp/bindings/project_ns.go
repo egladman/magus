@@ -54,8 +54,9 @@ var knownProjectOptionKeys = types.ProjectOptionKeys()
 var knownToolBoundKeys = []string{"min", "below"}
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
-// magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "memory_mb", "cache", "drift", "drift_reason"}
+// magus.project's "targets" map, from the one shared table in types so the engine and
+// the dry-run host cannot drift.
+var knownTargetPolicyKeys = types.TargetPolicyKeys
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently

@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/dry/gen/mocks"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,6 +90,34 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 	require.True(t, g.OK, "dry path rejected no_language: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
+}
+
+// TestLoadMagusfile_everyTargetPolicyKeyAccepted is the dry-run half of the pin on
+// types.TargetPolicyKeys; see its twin over the engine,
+// TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted, for why the shape is a table
+// read rather than a list of keys written out here.
+//
+// This is the half that was red: the hand-copied list on this side had drifted to three
+// keys, so memory_mb, cache, drift and drift_reason failed the preview of a magusfile
+// `magus run` loads happily.
+func TestLoadMagusfile_everyTargetPolicyKeyAccepted(t *testing.T) {
+	require.NotEmpty(t, types.TargetPolicyKeys)
+	for _, key := range types.TargetPolicyKeys {
+		t.Run(key, func(t *testing.T) {
+			g := LoadMagusfile(context.Background(), `
+import "magus";
+magus\project({
+    "name": "pinned",
+    "targets": {"build": {"`+key+`": "x"}},
+});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+			if g.Diag != nil {
+				assert.NotContains(t, g.Diag.Msg, "unknown option",
+					"the dry host rejects %q, which types.TargetPolicyKeys declares recognized", key)
+			}
+		})
+	}
 }
 
 func TestRun_orderAndTrace(t *testing.T) {

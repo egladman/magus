@@ -570,15 +570,16 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 	return path, opts
 }
 
-// dryKnownProjectOptionKeys / dryKnownTargetPolicyKeys mirror
-// knownProjectOptionKeys / knownTargetPolicyKeys in the real binding
-// (internal/interp/bindings/project_ns.go), so the playground/dry path rejects
-// the same typos the real engine does instead of silently dropping them.
+// dryKnownProjectOptionKeys / dryKnownTargetPolicyKeys are the SAME tables the real
+// binding (internal/interp/bindings/project_ns.go) rejects against, so the
+// playground/dry path rejects the same typos the real engine does instead of silently
+// dropping them.
+//
+// Not mirrors: each was once a hand-maintained slice claiming to mirror the engine's,
+// and each had drifted by the time it was found.
 var (
-	// The SAME list the engine rejects against (types.ProjectOptions), not a copy.
-	// These were two hand-maintained slices and they had already drifted.
 	dryKnownProjectOptionKeys = types.ProjectOptionKeys()
-	dryKnownTargetPolicyKeys  = []string{"skip_cache", "exclusive", "slots"}
+	dryKnownTargetPolicyKeys  = types.TargetPolicyKeys
 )
 
 // rejectUnknownKeys errors on the first key in m absent from known. context
