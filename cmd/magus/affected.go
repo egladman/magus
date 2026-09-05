@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -428,11 +430,36 @@ type planOutput struct {
 	// job count or fail the workflow outright, so the detail hangs beside it and
 	// the matrix keeps the exact two keys the workflow dereferences.
 	Detail map[string]shardDetail `json:"detail,omitempty"`
+	// Outputs is the complete set of name/value pairs a CI provider publishes as
+	// job outputs, in a stable order. A provider target forwards the list; it does
+	// not decide the membership.
+	//
+	// The membership is the part that has to live here. It used to live in this
+	// repo's magusfile, which hand-listed three names and so silently dropped the
+	// fourth when a bad merge reverted that function: ci.yaml went on reading an
+	// `inherit` output nothing wrote, read the empty string, and skipped a feature
+	// for every run in between. Nothing failed, because a hand-written translator
+	// agreeing with a workflow is not a thing either side can check. A plan that
+	// states its own outputs makes the next field arrive everywhere at once.
+	Outputs []planPublish `json:"outputs"`
+	// Summary is the job summary for this plan as markdown: the inheritance report
+	// when the verdict was inherited, the shard table otherwise. Rendered here so a
+	// provider target writes bytes rather than branching on which case it is in.
+	Summary string `json:"summary"`
 }
 
 type planShard struct {
 	Shard    string `json:"shard"    yaml:"shard"`
 	Projects string `json:"projects" yaml:"projects"`
+}
+
+// planPublish is one CI job output. Value is always single-line: providers write
+// these into line-oriented files ($GITHUB_OUTPUT), where an embedded newline is a
+// forged entry rather than a formatting bug. planOutputs keeps that true at the
+// source, so no provider needs escaping logic to be safe.
+type planPublish struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // planInherit is the --plan inheritance block: the delta since the branch's
@@ -451,6 +478,57 @@ type planInheritPath struct {
 	Path  string `json:"path"`
 	Class string `json:"class"`
 	Why   string `json:"why"`
+}
+
+// planOutputs renders the plan's CI job outputs. The matrix is wrapped in the
+// `include` key a job matrix expects, so a provider forwards the value verbatim
+// instead of knowing that shape.
+//
+// Adding a name here reaches every provider at once, which is the whole point of
+// the field; the workflow keys that consume these live in .github/workflows/ci.yaml
+// and TestPlanOutputsCoverWorkflowKeys pins the two together.
+func planOutputs(out planOutput) ([]planPublish, error) {
+	matrix, err := json.Marshal(map[string]any{"include": out.Matrix})
+	if err != nil {
+		return nil, fmt.Errorf("magus affected --plan: encode matrix: %w", err)
+	}
+	return []planPublish{
+		{Name: "matrix", Value: string(matrix)},
+		{Name: "count", Value: strconv.Itoa(out.Count)},
+		{Name: "max_parallel", Value: strconv.Itoa(out.MaxParallel)},
+		{Name: "inherit", Value: strconv.FormatBool(out.Inherit != nil)},
+	}, nil
+}
+
+// planSummaryMarkdown renders the job summary: the inheritance report when a green
+// run's verdict stands, otherwise the shard table.
+//
+// An inherited plan carries no shards, so the table would describe an empty fan-out
+// and bury the one thing a reader needs, which is why the run it inherited vouched
+// for the delta.
+func planSummaryMarkdown(out planOutput) string {
+	if out.Inherit != nil {
+		return out.Inherit.Summary
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "## Affected CI plan\n\n%d shard(s), max parallel %d\n\n", out.Count, out.MaxParallel)
+	b.WriteString("| Shard | Projects |\n| --- | --- |\n")
+	for _, s := range out.Matrix {
+		// The workspace root is "." on the wire and nowhere else; a reader scanning
+		// the table for the project that failed is looking for its name.
+		projects := s.Projects
+		if projects == "." {
+			projects = "magus"
+		} else if after, ok := strings.CutPrefix(projects, ". "); ok {
+			projects = "magus " + after
+		}
+		fmt.Fprintf(&b, "| %s | %s |\n", s.Shard, projects)
+	}
+	b.WriteString("\n**What this means:** each shard runs the listed projects concurrently within the declared limit. " +
+		"To inspect why a project was selected, run `magus affected ci --explain` locally. " +
+		"[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) - " +
+		"[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n")
+	return b.String()
 }
 
 // shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
@@ -641,6 +719,10 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			return err
 		}
 	}
+	if out.Outputs, err = planOutputs(out); err != nil {
+		return err
+	}
+	out.Summary = planSummaryMarkdown(out)
 
 	// --plan goes through the shared renderer like every other structured command, so -o
 	// selects the encoding. Marshaling here directly would ignore it and print JSON for

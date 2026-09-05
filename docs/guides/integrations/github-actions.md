@@ -179,9 +179,16 @@ jobs:
           n-shards: ${{ matrix.total }}
 ```
 
-`magus affected ci --plan` emits the plan; `magus run ci-shard:gha` translates it into
-matrix outputs. The `gha` charm is what writes `$GITHUB_OUTPUT` - without it the plan is
-printed and nothing else, which is what you want when running the same command locally.
+`magus affected ci --plan` emits the plan; `magus run ci-shard:gha` writes it out. The
+`gha` charm is what writes `$GITHUB_OUTPUT` - without it the plan is printed and nothing
+else, which is what you want when running the same command locally.
+
+The plan's `outputs` array is the full set of job outputs, each a `name` and a `value`,
+and `ci-shard` writes the array rather than naming its members. Copy that loop rather
+than listing the outputs you use today: a magus release that adds one reaches your
+workflow without a magusfile edit, and no output can go missing because a translator
+forgot to mention it. `summary` is the job summary as markdown, rendered by the plan for
+the same reason.
 
 `count` guards the matrix: when nothing is affected there is no job to run, and a matrix
 of zero shards is an error rather than a skip.

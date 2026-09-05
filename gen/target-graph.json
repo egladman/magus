@@ -1401,7 +1401,7 @@
         {
           "name": "ci-shard",
           "declared": "ci_shard",
-          "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
+          "doc": "Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.",
           "charms": [
             "gha"
           ],
