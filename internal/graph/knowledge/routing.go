@@ -21,6 +21,24 @@ var routingKindOrder = []string{
 // maxAnchors caps how many high-degree anchor nodes a routing row lists.
 const maxAnchors = 3
 
+// binarySuppliedKinds are the kinds magus itself populates, from Inputs.Diagnostics
+// (AllDiagnosticCodes) and Inputs.Modules (the host module registry, whose methods hang
+// off it). Nothing a workspace writes adds or removes one.
+//
+// Their counts therefore move with the BINARY. Measured 2026-09-04: libs/textsearch's
+// committed index said "70+" diagnostics while five sibling indexes said "80+", because a
+// dev build carries codes a release does not, and MGS4005 then refuses to stage the
+// convergence as environmental drift. Every index disagreeing with every other one is the
+// permanent end state.
+//
+// The kinds still route: the row, the query and the anchors are all workspace-independent
+// and useful. Only the size is dropped, by the renderer of the committed file.
+var binarySuppliedKinds = map[string]bool{
+	types.KindDiagnostic: true,
+	types.KindModule:     true,
+	types.KindMethod:     true,
+}
+
 // Routing derives the compact "query first" routing summary: per-kind counts with
 // a few highest-degree anchor nodes, and per-project target counts with key
 // targets. Degree (in + out) is the cheap "how connected / how central" proxy the
@@ -33,9 +51,13 @@ const maxAnchors = 3
 // that no source change had touched. Degree is what makes the second one subtle, since
 // authored edges also decide which nodes each row lists as anchors.
 //
-// `magus graph stats` keeps both on purpose: an interactive query wants local context, so
-// its EdgeCount and god nodes differ from these. Independence from the MACHINE is still not
-// claimed - the @docs/@buzz filesystem walks feed this table.
+// A third input varies the same way and is marked rather than dropped: the kinds magus
+// supplies itself. See binarySuppliedKinds; their rows still route, and only the size a
+// committed file would carry is withheld.
+//
+// `magus graph stats` keeps all of them on purpose: an interactive query wants local
+// context, so its EdgeCount and god nodes differ from these. Independence from the MACHINE
+// is still not claimed - the @docs/@buzz filesystem walks feed this table.
 func (g *Graph) Routing() types.KnowledgeRouting {
 	type scored struct {
 		label string
@@ -96,9 +118,10 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 			continue
 		}
 		out.Kinds = append(out.Kinds, types.KnowledgeRoutingKind{
-			Kind:    kind,
-			Count:   len(xs),
-			Anchors: topLabels(xs),
+			Kind:       kind,
+			Count:      len(xs),
+			Anchors:    topLabels(xs),
+			FromBinary: binarySuppliedKinds[kind],
 		})
 	}
 
