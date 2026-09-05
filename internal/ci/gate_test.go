@@ -486,6 +486,17 @@ func TestInheritOff(t *testing.T) {
 		"one declaration turns it off workspace-wide")
 }
 
+// A dropped option is indistinguishable from a dropped OPT-OUT, and the opt-outs here
+// all fail open: an ignored `gate_inherit = false` reads as inheritance on, which skips
+// the very CI run the author demanded. So a magusfile this binary could not fully read
+// does not get to skip CI.
+func TestInheritOffWhenAnOptionWasDropped(t *testing.T) {
+	assert.True(t, InheritOff([]*types.Project{
+		{Path: "."},
+		{Path: "docs", IgnoredOptions: []string{"gate_something_new"}},
+	}), "a binary that did not understand the whole magusfile must not inherit a verdict")
+}
+
 // inheritProbeFor builds a probe whose provider, history and delta are all
 // stubbed, so the decision is exercised with no repository and no CI provider.
 // The classifier carries no blob readers, which is the strict setting: a code

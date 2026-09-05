@@ -5,13 +5,13 @@ import "slices"
 // ProjectOption is one recognized magus.project({...}) key and the release that first
 // understood it.
 //
-// Since exists because a magusfile key is a HARD compatibility break in a way a
-// magus.yaml key is not. An unknown yaml key is a warning and the run continues; an
-// unknown magus.project key aborts workspace load, so every magus command fails at
-// once - including the one that would build a binary new enough to read the file. The
-// only thing that turns that into a sentence instead of a puzzle is the workspace
-// declaring a floor that covers the keys it actually uses, which is what doctor's
-// "required version covers schema" check asserts using this field.
+// Since is what lets a workspace say "this magusfile needs 0.5.0" before an older binary
+// meets a key it cannot act on. Load no longer aborts over such a key (hint.CheckKeys),
+// so the failure it prevents is quieter now and worth more: the key is dropped, the
+// policy it declared does not apply, and only the declared floor says why.
+//
+// doctor's "required version covers schema" check asserts the floor covers the keys in
+// use, and internal/doctor.usedSchemaKeys must be able to detect every key carrying one.
 //
 // Empty Since means the key predates the floor mechanism itself and needs no coverage.
 type ProjectOption struct {
@@ -41,28 +41,29 @@ var ProjectOptions = []ProjectOption{
 	{Key: "gate_inherit", Since: "0.5.0"},
 }
 
-// TargetPolicyKeys is the ONE list of recognized keys inside magus.project's "targets"
-// map, for the reason ProjectOptions above is one list.
+// TargetPolicyOptions is the ONE list of recognized keys inside magus.project's
+// "targets" map, for the reason ProjectOptions above is one list.
 //
 // The dimension the project-option fix did not cover, so it recurred here: the dry-run
 // host carried a hand-copied second list that had drifted to three keys, and a
 // magusfile setting memory_mb, cache, drift or drift_reason passed a real run and was
 // rejected by its own preview.
 //
-// Plain names, no Since column: a floor is only worth declaring where doctor can DETECT
-// the key in use, and it detects from decoded Project state (internal/doctor/
-// schemafloor.go), which carries no target policy. Grow this into a record when that
-// detection exists, not before.
-var TargetPolicyKeys = []string{
-	"skip_cache",
-	"exclusive",
-	"slots",
-	"memory_mb",
-	"timeout",
-	"cache",
-	"drift",
-	"drift_reason",
-	"retry_on_volatile",
+// This carried plain names and no Since column, on the reasoning that a floor is only
+// worth declaring where doctor can DETECT the key in use and nothing decoded carried
+// target policy. Both halves were wrong by the time they mattered: Project.TargetPolicies
+// carries exactly that state, and this vocabulary grew twice in three merges, with
+// `timeout` deadlocking a workspace whose binary predated it.
+var TargetPolicyOptions = []ProjectOption{
+	{Key: "skip_cache"},
+	{Key: "exclusive"},
+	{Key: "slots"},
+	{Key: "memory_mb"},
+	{Key: "cache"},
+	{Key: "drift"},
+	{Key: "drift_reason"},
+	{Key: "timeout", Since: "0.5.0"},
+	{Key: "retry_on_volatile", Since: "0.5.0"},
 }
 
 // ToolBoundKeys is the ONE list of recognized keys inside one entry of magus.project's
@@ -73,19 +74,25 @@ var TargetPolicyKeys = []string{
 // so `{"go": {"minn": "1.21"}}` passed the Playground and every other preview surface
 // and then failed the real run. A shared table makes both sides answer alike.
 //
-// No Since column, for the reason TargetPolicyKeys has none. A closed vocabulary
-// besides: min/below describes a half-open interval and gains no third member, which is
-// why both consumers reject against it plainly instead of hinting at an upgrade.
+// No Since column because both members shipped with the mechanism. Add one the moment a
+// third arrives; "min/below is closed and cannot grow" was the same claim made about
+// target policy, which grew twice.
 var ToolBoundKeys = []string{
 	"min",
 	"below",
 }
 
-// ProjectOptionKeys returns just the key names, for the unknown-key rejection both the
+// ProjectOptionKeys returns just the key names, for the unknown-key check both the
 // engine and the dry-run host perform.
-func ProjectOptionKeys() []string {
-	out := make([]string, 0, len(ProjectOptions))
-	for _, o := range ProjectOptions {
+func ProjectOptionKeys() []string { return optionKeys(ProjectOptions) }
+
+// TargetPolicyKeys returns just the key names of TargetPolicyOptions, for the same
+// check one level down.
+func TargetPolicyKeys() []string { return optionKeys(TargetPolicyOptions) }
+
+func optionKeys(opts []ProjectOption) []string {
+	out := make([]string, 0, len(opts))
+	for _, o := range opts {
 		out = append(out, o.Key)
 	}
 	return out
@@ -93,10 +100,19 @@ func ProjectOptionKeys() []string {
 
 // ProjectOptionSince returns the release that first understood key, and whether the key
 // is recognized at all. An empty version for a recognized key means it predates floors.
-func ProjectOptionSince(key string) (string, bool) {
-	i := slices.IndexFunc(ProjectOptions, func(o ProjectOption) bool { return o.Key == key })
+func ProjectOptionSince(key string) (string, bool) { return optionSince(ProjectOptions, key) }
+
+// TargetPolicySince is ProjectOptionSince for a per-target policy key.
+//
+// Separate from ProjectOptionSince rather than one merged lookup: `exclusive` is a
+// member of BOTH vocabularies, so a single table keyed by name could only answer for
+// one of them.
+func TargetPolicySince(key string) (string, bool) { return optionSince(TargetPolicyOptions, key) }
+
+func optionSince(opts []ProjectOption, key string) (string, bool) {
+	i := slices.IndexFunc(opts, func(o ProjectOption) bool { return o.Key == key })
 	if i < 0 {
 		return "", false
 	}
-	return ProjectOptions[i].Since, true
+	return opts[i].Since, true
 }
