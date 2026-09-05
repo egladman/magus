@@ -459,16 +459,11 @@ lint</code></pre>
     if (proc&#92;stdinIsTerminal()) \{ throw "ci-shard: pipe a plan in"; \}
     final plan = serialize&#92;jsonDecode(io.stdin.readAll());
 
-    var include = mut [];
-    foreach (row in plan.q("matrix").listValue()) \{
-        include.append(\{
-            "shard"    = row.q("shard").stringValue(),
-            "projects" = row.q("projects").stringValue(),
-        \});
+    // The plan names its own outputs, so this never lists them.
+    var block = "";
+    foreach (o in plan.q("outputs").listValue()) \{
+        block = block + o.q("name").stringValue() + "=" + o.q("value").stringValue() + "&#92;n";
     \}
-    final block = "matrix=" + serialize&#92;jsonEncode(\{"include" = include\}) + "&#92;n"
-        + "count=" + plan.q("count").integerValue() + "&#92;n"
-        + "max_parallel=" + plan.q("max_parallel").integerValue() + "&#92;n";
 
     // Without the charm this only previews. The charm is the whole difference.
     if (!ctx.has_charm("gha")) \{ magus&#92;info(block); return; \}
@@ -482,7 +477,8 @@ lint</code></pre>
           </div>
           <pre class="term-body"><code class="language-ini">matrix=\{"include":[\{"shard":"0","projects":". apps/api libs/schema"\},\{"shard":"1","projects":"apps/web libs/ui"\},\{"shard":"2","projects":"services/worker libs/testing"\}]\}
 count=3
-max_parallel=3</code></pre>
+max_parallel=3
+inherit=false</code></pre>
         </div>
         <p class="landing-tab-note">The workflow reads them back, and these three lines are the only ones that know whose runners these are.</p>
         <div class="term term-plain">

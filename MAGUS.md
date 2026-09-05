@@ -105,7 +105,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `lint` | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint. |
 | `format` | Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. |
 | `ci` | Runs the CI gates through their declared dependencies. |
-| `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
+| `ci-shard` | Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed. |
 | `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
 | `toolchain-report` | serve is the workspace-root dev loop for BOTH deployables. |
 | `serve` |  |

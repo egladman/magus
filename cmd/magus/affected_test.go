@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -169,4 +172,71 @@ func TestPrintImpactTextStaysPlainWhenEverythingIsDeclared(t *testing.T) {
 	})
 	assert.Contains(t, out, ". (seeded by 1 changed file)")
 	assert.NotContains(t, out, "undeclared")
+}
+
+// TestPlanOutputsCoverWorkflowKeys pins the plan's job outputs to the workflow that
+// reads them. The two halves used to agree only because a magusfile function listed
+// the same names by hand, which is not agreement anything can check: a merge reverted
+// that function, ci.yaml went on gating two jobs on an `inherit` output nothing wrote,
+// and every run in between read the empty string and skipped the feature silently.
+func TestPlanOutputsCoverWorkflowKeys(t *testing.T) {
+	t.Parallel()
+
+	body, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "ci.yaml"))
+	require.NoError(t, err)
+
+	outs, err := planOutputs(planOutput{})
+	require.NoError(t, err)
+	produced := make(map[string]bool, len(outs))
+	for _, o := range outs {
+		produced[o.Name] = true
+	}
+
+	read := regexp.MustCompile(`steps\.plan\.outputs\.([a-z_]+)`).FindAllStringSubmatch(string(body), -1)
+	require.NotEmpty(t, read, "ci.yaml no longer reads plan step outputs; repoint this test at what does")
+	for _, m := range read {
+		assert.True(t, produced[m[1]],
+			"ci.yaml publishes plan output %q that `magus affected --plan` does not emit", m[1])
+	}
+}
+
+func TestPlanOutputsStaySingleLineAndReportInheritance(t *testing.T) {
+	t.Parallel()
+
+	out := planOutput{Count: 1, MaxParallel: 1, Matrix: []planShard{{Shard: "1", Projects: ". docs"}}}
+	got, err := planOutputs(out)
+	require.NoError(t, err)
+
+	byName := make(map[string]string, len(got))
+	for _, o := range got {
+		// A newline here forges an entry in the line-oriented file a provider
+		// appends this to, rather than merely looking wrong.
+		assert.NotContains(t, o.Value, "\n", "output %q spans lines", o.Name)
+		byName[o.Name] = o.Value
+	}
+	assert.JSONEq(t, `{"include":[{"shard":"1","projects":". docs"}]}`, byName["matrix"])
+	assert.Equal(t, "false", byName["inherit"])
+
+	out.Inherit = &planInherit{Run: "42", Commit: "abc123", Summary: "## Verdict inherited\n"}
+	got, err = planOutputs(out)
+	require.NoError(t, err)
+	assert.Contains(t, got, planPublish{Name: "inherit", Value: "true"})
+}
+
+func TestPlanSummaryMarkdownPrefersTheInheritanceReport(t *testing.T) {
+	t.Parallel()
+
+	out := planOutput{Count: 2, MaxParallel: 2, Matrix: []planShard{
+		{Shard: "1", Projects: "."},
+		{Shard: "2", Projects: ". console"},
+	}}
+	table := planSummaryMarkdown(out)
+	assert.Contains(t, table, "2 shard(s), max parallel 2")
+	assert.Contains(t, table, "| 1 | magus |")
+	assert.Contains(t, table, "| 2 | magus console |")
+
+	out.Inherit = &planInherit{Run: "42", Commit: "abc123", Summary: "## Verdict inherited from run 42\n"}
+	inherited := planSummaryMarkdown(out)
+	assert.Equal(t, "## Verdict inherited from run 42\n", inherited)
+	assert.NotContains(t, inherited, "Affected CI plan")
 }
