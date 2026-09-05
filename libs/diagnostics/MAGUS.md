@@ -51,9 +51,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | op | 60+ | `magus query kind=op` | `go-build`, `go-test`, `dprint` |
 | tool | 20+ | `magus query kind=tool` | `go`, `pnpm`, `buf` |
 | charm | 10+ | `magus query kind=charm` | `rw`, `cd`, `stable` |
-| module | 30+ | `magus query kind=module` | `fs`, `magus`, `charm` |
-| method | 200+ | `magus query kind=method` | `archive.compress`, `archive.list`, `archive.read_file` |
-| diagnostic | 80+ | `magus query kind=diagnostic` | `MGS1002`, `MGS4001`, `MGS1021` |
+| module | built in | `magus query kind=module` | `fs`, `magus`, `charm` |
+| method | built in | `magus query kind=method` | `archive.compress`, `archive.list`, `archive.read_file` |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS1002`, `MGS4001`, `MGS1021` |
 | doc | 300+ | `magus query kind=doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind=dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage` |
 | file | 200+ | `magus query kind=file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
