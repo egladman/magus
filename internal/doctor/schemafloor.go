@@ -11,52 +11,84 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// usedProjectOptions reports which magus.project keys this workspace actually depends
-// on, detected from decoded project state rather than by re-scanning magusfile source.
+// gatedKey is one version-gated magusfile key this workspace uses: how a magusfile
+// spells it, and the release that first understood it.
+type gatedKey struct {
+	label string
+	since string
+}
+
+// usedSchemaKeys reports which version-gated magusfile keys this workspace actually
+// depends on, detected from decoded project state rather than by re-scanning magusfile
+// source.
 //
 // Only keys whose use is OBSERVABLE on a Project appear here, and only keys that carry
 // a Since - the rest predate floors and need no coverage. Detection by decoded state
 // means a key set through any spelling or any composition path still counts, where a
 // source scan would miss `"tools": policy.all` and every other indirection.
-func usedProjectOptions(projects []*types.Project) []string {
-	var used []string
-	add := func(key string, inUse bool) {
-		if !inUse {
+//
+// Per-target policy is walked alongside the top-level options because that is the
+// vocabulary that has actually been growing, and `timeout` there is the key that
+// deadlocked a workspace. Its labels are qualified (`targets[].timeout`) for two
+// reasons: it is how a reader finds the declaration, and `exclusive` exists in both
+// vocabularies, so a bare name would not say which floor is being reported.
+func usedSchemaKeys(projects []*types.Project) []gatedKey {
+	var used []gatedKey
+	add := func(label, since string, ok, inUse bool) {
+		if !inUse || !ok || since == "" {
 			return
 		}
-		if since, ok := types.ProjectOptionSince(key); ok && since != "" && !slices.Contains(used, key) {
-			used = append(used, key)
+		if slices.ContainsFunc(used, func(g gatedKey) bool { return g.label == label }) {
+			return
+		}
+		used = append(used, gatedKey{label: label, since: since})
+	}
+	addProject := func(key string, inUse bool) {
+		since, ok := types.ProjectOptionSince(key)
+		add(key, since, ok, inUse)
+	}
+	addPolicy := func(key string, inUse bool) {
+		since, ok := types.TargetPolicySince(key)
+		add("targets[]."+key, since, ok, inUse)
+	}
+	// Every key carrying a Since needs a line here, or the floor it declares is
+	// documentation. TestEveryGatedKeyIsDetectable is what holds that true.
+	for _, p := range projects {
+		addProject("no_language", p.NoLanguage != "")
+		addProject("tools", len(p.ToolBounds) > 0)
+		addProject("review_required", len(p.ReviewRequired) > 0)
+		addProject("gate_low_risk", p.GateLowRiskDeclared)
+		addProject("gate_inherit", p.GateInheritOff)
+		for _, policy := range p.TargetPolicies {
+			addPolicy("timeout", policy.Timeout != "")
+			addPolicy("retry_on_volatile", policy.RetryOnVolatile)
 		}
 	}
-	for _, p := range projects {
-		add("no_language", p.NoLanguage != "")
-		add("tools", len(p.ToolBounds) > 0)
-	}
-	slices.Sort(used)
+	slices.SortFunc(used, func(a, b gatedKey) int { return strings.Compare(a.label, b.label) })
 	return used
 }
 
 // checkSchemaFloor fails when the workspace uses a magus.project key that its declared
 // required_version does not cover.
 //
-// This is the check that would have caught the deadlock it exists to prevent. A
-// magusfile key an older binary does not know aborts WORKSPACE LOAD, so every magus
-// command fails at once - including `magus run go-build`, the one that would produce a
-// binary new enough to read the file. There is no way out from inside the workspace;
-// you have to hand-edit the offending key out, build, and put it back.
+// Load no longer aborts on a key an older binary does not know, so this is no longer the
+// last line against a deadlock. It is the last line against a SILENT one: the key is
+// dropped and the policy it declared stops applying, and required_version is what turns
+// that into MGS1021 ("your magus is too old, here is what this workspace needs") before
+// any magusfile is evaluated.
 //
-// required_version is what converts that into MGS1021 ("your magus is too old, here is
-// what this workspace needs") before any magusfile is evaluated. It only works if
-// somebody bumps it in the same commit that adds the key, which is exactly the kind of
-// bookkeeping nobody remembers - `no_language` shipped without it. So this asserts it
-// mechanically instead.
+// It only works if somebody bumps the floor in the same commit that adds the key, which
+// is exactly the bookkeeping nobody remembers. `no_language` shipped without it. So this
+// asserts it mechanically instead.
 //
-// It does NOT catch a binary older than required_version itself; a release that
-// predates the floor key never gets far enough to evaluate one. That gap is covered
-// separately, by the upgrade hint on an unrecognized magus.project key.
+// Two gaps it does not close. A binary older than required_version itself never gets far
+// enough to evaluate one. And ward.CheckRequiredVersion exempts dev builds, on the
+// reasoning that a source build is compiled from the workspace it runs against; that
+// holds for one checkout and not for a `./magus` carried between worktrees on different
+// branches, which is how this deadlock was actually hit.
 func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
 	const name = "required-version-covers-schema"
-	used := usedProjectOptions(projects)
+	used := usedSchemaKeys(projects)
 	if len(used) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK,
 			Message: "no version-gated magusfile keys in use"}
@@ -72,11 +104,10 @@ func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
 	// Highest Since across the keys in use is the floor the workspace actually needs.
 	var need string
 	details := make([]string, 0, len(used))
-	for _, key := range used {
-		since, _ := types.ProjectOptionSince(key)
-		details = append(details, fmt.Sprintf("%s (needs >= %s)", key, since))
-		if need == "" || compareVersions(since, need) > 0 {
-			need = since
+	for _, k := range used {
+		details = append(details, fmt.Sprintf("%s (needs >= %s)", k.label, k.since))
+		if need == "" || compareVersions(k.since, need) > 0 {
+			need = k.since
 		}
 	}
 

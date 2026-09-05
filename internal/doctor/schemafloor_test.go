@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUsedProjectOptionsDetectsFromDecodedState(t *testing.T) {
+func TestUsedSchemaKeysDetectsFromDecodedState(t *testing.T) {
 	// Detection reads decoded state, not magusfile source, so `"tools": policy.all`
 	// counts exactly like an inline literal. A source scan would miss it.
 	projects := []*types.Project{
@@ -19,14 +19,100 @@ func TestUsedProjectOptionsDetectsFromDecodedState(t *testing.T) {
 		{Path: "console", ToolBounds: map[string]spells.VersionBounds{"node": {Below: "25"}}},
 		{Path: "evals", NoLanguage: "polyglot harness"},
 	}
-	assert.Equal(t, []string{"no_language", "tools"}, usedProjectOptions(projects))
+	assert.Equal(t, []string{"no_language", "tools"}, labels(usedSchemaKeys(projects)))
 }
 
-func TestUsedProjectOptionsIgnoresUngatedKeys(t *testing.T) {
+// Per-target policy is the vocabulary that actually grew, and it went uncovered while
+// the check looked only at top-level options. `timeout` shipped with no floor and then
+// deadlocked a workspace whose binary predated it.
+func TestUsedSchemaKeysDetectsGatedTargetPolicy(t *testing.T) {
+	projects := []*types.Project{{
+		Path: ".",
+		TargetPolicies: map[string]types.Target{
+			"ci":       {Timeout: "45m"},
+			"test":     {RetryOnVolatile: true},
+			"lint":     {Exclusive: true},
+			"generate": {SkipCache: true},
+		},
+	}}
+	assert.Equal(t,
+		[]string{"targets[].retry_on_volatile", "targets[].timeout"},
+		labels(usedSchemaKeys(projects)),
+		"exclusive and skip_cache predate floors, so they need no coverage")
+}
+
+// A qualified label is what tells the two `exclusive` keys apart, and it is how a reader
+// finds the declaration the floor is being demanded for.
+func TestUsedSchemaKeysQualifiesTargetPolicyLabels(t *testing.T) {
+	projects := []*types.Project{{Path: ".", TargetPolicies: map[string]types.Target{"ci": {Timeout: "45m"}}}}
+	require.Len(t, usedSchemaKeys(projects), 1)
+	assert.Equal(t, "targets[].timeout", usedSchemaKeys(projects)[0].label)
+}
+
+func TestUsedSchemaKeysIgnoresUngatedKeys(t *testing.T) {
 	// name/sources/spells predate floors and carry no Since, so a workspace using only
 	// those needs no required_version and must not be nagged for one.
 	projects := []*types.Project{{Path: ".", Name: "magus", Sources: []string{"**/*.go"}}}
-	assert.Empty(t, usedProjectOptions(projects))
+	assert.Empty(t, usedSchemaKeys(projects))
+}
+
+func labels(keys []gatedKey) []string {
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k.label)
+	}
+	return out
+}
+
+// TestEveryGatedKeyIsDetectable is the pin that makes a Since column mean something.
+//
+// A key can carry a floor and still be invisible to the check, which is how three
+// 0.5.0-gated options sat undetected while the check reported "no version-gated keys in
+// use". Declaring the floor and detecting the key are two edits, and only one of them
+// fails loudly when it is skipped.
+func TestEveryGatedKeyIsDetectable(t *testing.T) {
+	// One project exercising every gated key at once: whatever usedSchemaKeys can see,
+	// it sees here.
+	all := []*types.Project{{
+		Path:                ".",
+		NoLanguage:          "polyglot harness",
+		ToolBounds:          map[string]spells.VersionBounds{"node": {Below: "25"}},
+		ReviewRequired:      []string{"internal/secret/**"},
+		GateLowRiskDeclared: true,
+		GateInheritOff:      true,
+		TargetPolicies:      map[string]types.Target{"ci": {Timeout: "45m", RetryOnVolatile: true}},
+	}}
+	detected := labels(usedSchemaKeys(all))
+
+	for _, o := range types.ProjectOptions {
+		if o.Since == "" {
+			continue
+		}
+		assert.Contains(t, detected, o.Key,
+			"magus.project key %q declares a floor that doctor cannot detect; add a line to usedSchemaKeys", o.Key)
+	}
+	for _, o := range types.TargetPolicyOptions {
+		if o.Since == "" {
+			continue
+		}
+		assert.Contains(t, detected, "targets[]."+o.Key,
+			"target policy key %q declares a floor that doctor cannot detect; add a line to usedSchemaKeys", o.Key)
+	}
+}
+
+func TestTargetPolicySinceCoversTheKeysThatGrew(t *testing.T) {
+	for _, key := range []string{"timeout", "retry_on_volatile"} {
+		since, ok := types.TargetPolicySince(key)
+		assert.True(t, ok)
+		assert.NotEmpty(t, since, "%q postdates the first release and must declare a floor", key)
+	}
+
+	since, ok := types.TargetPolicySince("skip_cache")
+	assert.True(t, ok)
+	assert.Empty(t, since, "a key that predates floors carries no Since")
+
+	_, ok = types.TargetPolicySince("quantum_flux")
+	assert.False(t, ok)
 }
 
 func TestProjectOptionSince(t *testing.T) {
