@@ -184,6 +184,10 @@ jobs:
           # Read by the github spell's last_green_run alone. Unset, it answers null
           # and the plan fans out as it always has.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # `shell: bash` for pipefail alone. A bare `run:` is `bash -e`, where a
+        # pipeline exits with its LAST stage, so a plan that failed handed ci-shard
+        # nothing and the step's status came from ci-shard's complaint about it.
+        shell: bash
         run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
 
   ci:

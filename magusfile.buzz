@@ -64,6 +64,12 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
     magus\cache.remote(github);
 }
 
+// Unconditional, unlike the cache above: the spell's enabled() gates every op
+// on GITHUB_ACTIONS, so this costs nothing on a laptop. Under Actions it
+// supplies the job-log structure AND answers last_green_run, which is what
+// lets `affected ci --plan` inherit a green run's verdict on a low-risk push.
+magus\ci.provider(github);
+
 // Outputs are declared per-target with ctx.writesFiles (in each *-generate body
 // below) rather than project-wide: each generated tree belongs to exactly one
 // generator, so snapshotting a generated tree under go-build (which never writes one)
@@ -2720,8 +2726,11 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
         {"args": ["-race", "-tags", "liblzma,libzstd", "./internal/compress/"]});
 }
 
-// Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix
-// outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.
+// Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and
+// a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.
+//
+// Transport only: the plan names its own outputs and renders its own summary, so porting
+// this to another provider is a rewrite of the two file formats and nothing else.
 export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
     var input = "";
     if (!proc\stdinIsTerminal()) {
@@ -2731,13 +2740,13 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
         throw "ci-shard: no shard plan on stdin - pipe one in: magus affected ci --plan | magus run ci-shard:gha";
     }
     final plan = serialize\jsonDecode(input);
-    var include = mut [];
-    foreach (row in plan.q("matrix").listValue()) {
-        include.append({"shard": row.q("shard").stringValue(), "projects": row.q("projects").stringValue()});
+    // Every name and value comes from the plan, in its order. Nothing here knows
+    // which outputs exist, so a plan that grows one reaches Actions without this
+    // function changing - and cannot lose one by failing to mention it.
+    var block = "";
+    foreach (o in plan.q("outputs").listValue()) {
+        block = block + o.q("name").stringValue() + "=" + o.q("value").stringValue() + "\n";
     }
-    final block = "matrix=" + serialize\jsonEncode({"include": include}) + "\n"
-        + "count=" + plan.q("count").integerValue() + "\n"
-        + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
 
     if (!ctx.hasCharm("gha")) {
         magus\log.info("ci-shard preview (add the gha charm - `magus run ci-shard:gha` - to write $GITHUB_OUTPUT):\n" + block);
@@ -2753,27 +2762,15 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
     if (fs\exists(p)) { existing = fs\readFile(p); }
     fs\writeFile(p, existing + block);
 
-    // Render an actionable, portable summary to the job step summary.
+    // The plan renders its own summary - a shard table, or the report explaining
+    // which green run's verdict it inherited. Appended, because a job summary is
+    // shared by every step that writes one.
     final summaryPath = os\env("GITHUB_STEP_SUMMARY");
     if (summaryPath != null and ("{summaryPath}") != "") {
         final sp = "{summaryPath}";
-        var md = "## Affected CI plan\n\n"
-            + plan.q("count").integerValue() + " shard(s), max parallel "
-            + plan.q("max_parallel").integerValue() + "\n\n"
-            + "| Shard | Projects |\n| --- | --- |\n";
-        foreach (row in plan.q("matrix").listValue()) {
-            var projects = row.q("projects").stringValue();
-            if (projects == ".") { projects = "magus"; }
-            if (projects.startsWith(". ")) { projects = "magus" + projects.sub(1, projects.len()); }
-            md = md + "| " + row.q("shard").stringValue() + " | " + projects + " |\n";
-        }
-        md = md + "\n**What this means:** each shard runs the listed projects concurrently within the declared limit. "
-            + "To inspect why a project was selected, run `magus affected ci --explain` locally. "
-            + "[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) - "
-            + "[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n";
         var existingSummary = "";
         if (fs\exists(sp)) { existingSummary = fs\readFile(sp); }
-        fs\writeFile(sp, existingSummary + md);
+        fs\writeFile(sp, existingSummary + plan.q("summary").stringValue());
     }
 }
 
