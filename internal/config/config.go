@@ -59,6 +59,18 @@ type Config struct {
 	// value here fails builds that were fine.
 	TargetTimeout time.Duration `json:"target_timeout" yaml:"target_timeout"`
 
+	// StallTimeout aborts an invocation that is making no progress at all: no target
+	// has started, finished, or written a line of output for this long while every
+	// selected project's lock is still held. Zero, the default, uses the built-in
+	// 15-minute window; a negative value turns the watchdog off.
+	//
+	// It is the complement of TargetTimeout and a target's declared timeout, not a
+	// duplicate of either. A ceiling bounds work that runs LONG, and only a target whose
+	// author declared a bound; this catches a process that has stopped doing anything,
+	// in work no target declared. It is on by default for the same reason: the case it
+	// exists for is the one where nobody is watching.
+	StallTimeout time.Duration `json:"stall_timeout" yaml:"stall_timeout"`
+
 	// HistoryPath is the path to the runtime-history JSON used by volatility detection,
 	// CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json.
 	HistoryPath string `json:"history_path" yaml:"history_path"`

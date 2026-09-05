@@ -53,6 +53,10 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 // emit builds one output event and emits it to the ctx capture logger (for the invocation
 // journal / live stream). journal.Emit is concurrency-safe, so the two taps need no extra lock.
 func (c *lineEmitter) emit(stream, text string) {
+	// A line of output is the finest-grained proof a target is alive, and the one that
+	// separates a slow target from a wedged one: the stall watchdog would otherwise fire
+	// on any target that runs longer than its threshold without finishing.
+	ProgressFromContext(c.ctx).Beat()
 	journal.Emit(c.ctx, journal.Event{
 		Ts:      time.Now().UnixMilli(),
 		Project: c.project,

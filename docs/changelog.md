@@ -76,6 +76,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   or manifest signature instead of overwriting it, so a re-run of the release process
   cannot silently replace a published artifact. The default stays overwrite, which the
   publish job's re-run path relies on; the rule is `releaser\overwriteRefusal`.
+- **A stall watchdog aborts a run that stops making progress.** An invocation holding
+  every selected project's lock is now watched from inside itself: if no target starts,
+  finishes, or writes a line of output for the stall window, the run fails with MGS3012
+  naming the last step that ran, how long it has been quiet, and its captured log. The
+  window is `stall_timeout` (`MAGUS_STALL_TIMEOUT`, `--stall-timeout`), 15 minutes by
+  default and off when negative. It is the complement of the ceilings above, not a
+  duplicate: a ceiling bounds a target that runs long and only one whose author
+  declared a bound, while this catches a process doing nothing at all, in work no
+  target declared. Output counts as progress, so a slow target that is still
+  printing never approaches the window, and the watchdog runs in-process because a
+  stall with no daemon up is exactly the case where nobody else is watching.
 
 ### Changed
 
@@ -117,14 +128,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   re-runs once at the end of the batch, and only when its input's bytes actually
   moved, so a settled tree re-runs nothing. Only targets that declare writes are
   re-run this way, verifiers such as a security scan are not, and the settle pass
-  as a whole is time-bounded, so a stalled re-run fails the invocation loudly
-  instead of holding the project locks in silence. A cycle among declared footprints
+  is accounted and watched like the batch itself, so a stalled re-run fails the
+  invocation loudly instead of holding the project locks in silence. A cycle among declared footprints
   is not an error either: every project's routing index declares that it writes its
   own `MAGUS.md` and reads its siblings', so the direction no schedule can honor is
   dropped and settled afterwards like any other unorderable edge. Before this, a changelog
   edit that was graph-visible needed a second `magus run generate` to land the edge
   in the committed graph, and the release-index publish opened a born-red PR from
   the gap.
+- **Work that runs outside the batch is accounted like a step in it.** The post-batch
+  settle pass dispatched its re-runs straight at the interpreter, so they held no
+  limiter slot, claimed nothing from the machine budget, joined no inflight set, and
+  produced no journal event: `magus status` reported 0 slots in use and nothing running
+  while the invocation still held every project lock and the run journal went stale.
+  Settle re-runs now go through the same admission a batch step passes - slots, the
+  machine claim `magus status` names by project and target, the inflight record a killed
+  run is reported from, a captured log and a journal result event with its own output
+  ref - so an off-batch re-run is visible to every observer that already watches the
+  batch, and a stalled one is legible instead of silent. The hardcoded ten-minute
+  ceiling the pass carried while it was invisible is gone with the invisibility: what
+  it still bounded was a settle making steady progress, on a figure nobody declared,
+  and a target that needs one now declares `timeout`.
 - **A rejected archive import no longer destroys the cache file it named.**
   `magus config cache import` extracted each tar member directly at its final cache
   path, so a concurrent process could replay a torn blob or manifest mid-import, and

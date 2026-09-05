@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/cache"
@@ -152,10 +151,6 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 	return nodes
 }
 
-// settleTailTimeout bounds the whole post-batch settle pass. Generous: the
-// re-runs are single skip-cache generators, seconds each.
-var settleTailTimeout = 10 * time.Minute
-
 // orderSettle carries what settling needs across the batch: the derived edges
 // and each cross-edge writer's output bytes as they stood before this
 // invocation wrote anything.
@@ -201,16 +196,19 @@ func (m *Magus) prepareOrderSettle(order *cache.DerivedOrder) *orderSettle {
 // is its own gate (it hashes drift across its body's window) and re-running it
 // would re-run its whole chain. Members of a step that replayed from cache are
 // skipped too, since their outputs came from the entry, not from execution.
-func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps []cache.Step, results []cache.Result) error {
+func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps []cache.Step, results []cache.Result,
+	newStep func(*types.Project, string) cache.Step, opts []cache.RunOption,
+) error {
 	if st == nil {
 		return nil
 	}
-	// The tail runs after every step reported, outside the journal and the
-	// inflight set, while every project lock is still held - a re-run that blocks
-	// here is indistinguishable from a finished run that forgot to exit. The bound
-	// turns that into a failure naming the target.
-	ctx, cancel := context.WithTimeout(ctx, settleTailTimeout)
-	defer cancel()
+	// No bound of its own. This pass carried a hardcoded ten-minute ceiling while it
+	// was invisible: dispatched outside the journal and the inflight set, a wedged
+	// re-run here read as a finished run that forgot to exit. RunAside below made it
+	// visible and the stall watchdog now fails it by name, so what a ceiling here would
+	// still add is killing a settle that is making steady progress, on a figure nobody
+	// declared. A target that needs one declares `timeout`, which reaches these re-runs
+	// through the same seam as any other body (internal/interp.withDeclaredCeiling).
 	order := st.order
 
 	replayed := map[string]bool{}
@@ -295,8 +293,15 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 			slog.String("written_by", stale.Project+":"+stale.Target))
 		types.ActiveDispatchFromContext(ctx).Mark(p.Path)
 		types.ActiveDispatchFromContext(ctx).Mark(p.Dir)
-		rctx := buzz.WithTargetMemo(ctx, buzz.NewTargetMemo())
-		if _, err := interp.RunDir(rctx, p.Dir, node.Target, nil); err != nil {
+		// Through RunAside, not straight at the interpreter: a re-run here holds every
+		// project lock, so it has to appear where the batch's steps appear - a limiter
+		// slot, a machine claim `magus status` names, the inflight set, and a journal
+		// result event with its captured log. Dispatched bare it was invisible to all
+		// four, and a stalled settle read as a finished run that forgot to exit.
+		if _, err := m.cache.RunAside(ctx, newStep(p, node.Target), func(ctx context.Context) error {
+			_, err := interp.RunDir(buzz.WithTargetMemo(ctx, buzz.NewTargetMemo()), p.Dir, node.Target, nil)
+			return err
+		}, opts...); err != nil {
 			return fmt.Errorf("magus: derived ordering: settle %s:%s: %w", node.Project, node.Target, err)
 		}
 		if before, ok := current[r]; ok {

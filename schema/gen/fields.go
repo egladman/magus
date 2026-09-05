@@ -469,6 +469,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus cancels it.",
 	},
 	{
+		GoPath:   "StallTimeout",
+		YamlPath: "stall_timeout",
+		EnvVar:   "MAGUS_STALL_TIMEOUT",
+		Flag:     fieldtype.FlagNames{Long: "stall-timeout"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_STALL_TIMEOUT: StallTimeout aborts an invocation that is making no progress at all: no target has started, finished, or written a li...",
+	},
+	{
 		GoPath:   "HistoryPath",
 		YamlPath: "history_path",
 		EnvVar:   "MAGUS_HISTORY_PATH",

@@ -11,9 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
@@ -823,10 +825,18 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 	defer func() { _ = w.Close() }()
 
 	cwd, _ := EffectiveCwd(ctx)
+	// A watch loop is legitimately idle: it is the one supported shape that blocks
+	// indefinitely while producing nothing, so the stall watchdog would abort it
+	// (MGS3012). Beating while parked says "waiting on purpose" rather than "wedged".
+	// Any other way of blocking forever is what MGS5003 already rejects.
+	alive := time.NewTicker(30 * time.Second)
+	defer alive.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-alive.C:
+			cache.ProgressFromContext(ctx).Beat()
 		case err := <-w.Errors():
 			if err != nil {
 				slog.WarnContext(ctx, "fs.watch", slog.String("error", err.Error()))

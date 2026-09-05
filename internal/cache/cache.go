@@ -812,6 +812,115 @@ func reproTarget(s Step) string {
 	return s.Target + ":" + strings.Join(s.Charms, ",")
 }
 
+// admit takes the seats a step needs before it executes and puts it on the record every
+// observer reads: the local limiter slots, the machine-wide claim `magus status` prints
+// by project and target, the inflight set a killed run is reported from, and the
+// invocation heartbeat the stall watchdog compares against. It returns the clamped slot
+// count and one release that gives them all back in the order below.
+//
+// Factored out of RunAll so that work running OUTSIDE the batch can be accounted the
+// same way rather than through a second, quietly divergent bookkeeping path - see
+// [Cache.RunAside].
+func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), error) {
+	// A heavy step can request extra slots (Step.Slots) to throttle parallel work
+	// around itself. Clamp to [1, budget]: 0 means one slot, and a request above the
+	// budget would exceed capacity and error, so cap it. A request >= the budget holds
+	// every slot, so no peer can enter fn while it runs (it does not take the isolation
+	// lock, so unlike an exclusive step it does not also serialize replays). On an
+	// unlimited limiter (budget <= 0) there is nothing to throttle against, so the
+	// request is a no-op: AcquireN returns immediately.
+	slots := s.Slots
+	if slots < 1 {
+		slots = 1
+	}
+	if budget := lim.Capacity(); budget > 0 && slots > budget {
+		slots = budget
+	}
+	if err := lim.AcquireN(ctx, slots); err != nil {
+		return 0, nil, err
+	}
+	// The machine-wide half of the same admission, taken after the local slot so
+	// in-process ordering is unchanged: a step the machine cannot seat queues here,
+	// behind peers this run does not schedule, rather than starting alongside them and
+	// taking the host down.
+	//
+	// It is taken while this step already holds the isolation lock (an exclusive step
+	// took it in RunAll) and its local slots. That ordering is deliberate but it is not
+	// free: an exclusive step queued on the machine budget blocks every replay in THIS
+	// process for as long as it waits, so one worktree's wait becomes another target's
+	// wait here. Acquiring the machine budget first would trade that for a worse one -
+	// the step would hold machine-wide memory while waiting for a local lock, which is
+	// the resource that spans every worktree rather than just this run.
+	releaseMachine, machineErr := c.machine.acquire(ctx, types.MachineClaim{
+		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
+		MemoryMB: s.MemoryMB, Slots: slots,
+		PID: os.Getpid(), Dir: workingDir(),
+		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
+	})
+	if machineErr != nil {
+		lim.ReleaseN(slots)
+		c.logPool(ctx, lim)
+		return 0, nil, machineErr
+	}
+	// Report occupancy as it changes, so an interactive run can show a live pool
+	// counter. Emitted on both edges of the slot's life: once here (this step is now
+	// running) and once after release (the slot is free again). Handlers that do not
+	// render a status line ignore the event, so piped and CI output are unchanged.
+	c.logPool(ctx, lim)
+	// Record the target as running BEFORE fn and clear it after, so a magus that is
+	// killed outright leaves the set behind for the next run to report (see inflight).
+	// This is the only edge that knows a target is actually executing rather than
+	// queued behind a dep or a slot.
+	doneInflight := c.inflight.start(s.ProjectPath, s.Target)
+	prog := ProgressFromContext(ctx)
+	prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "running"})
+	return slots, func() {
+		doneInflight()
+		// The machine claim goes back BEFORE the slot, because freeing the slot is what
+		// wakes a local waiter: releasing in the other order lets that waiter ask the
+		// budget while this step's claim is still held, and a plain sequential run then
+		// queues behind memory it has already returned.
+		releaseMachine()
+		lim.ReleaseN(slots)
+		c.logPool(ctx, lim)
+		prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "finished"})
+	}, nil
+}
+
+// RunAside runs one step OUTSIDE a batch under the same accounting a batch step gets:
+// [Cache.admit]'s limiter slots, machine claim, inflight record and heartbeat, wrapped
+// around [Cache.Run]'s captured log, output ref and journal result event.
+//
+// It exists because post-batch work is still work. A re-run dispatched straight at the
+// interpreter claims nothing, appears in no inflight set and emits no journal event, so
+// every observer reports an idle machine while the invocation still holds every project
+// lock - which is exactly how a settle pass wedged a gate for over an hour on
+// 2026-09-04 with `magus status` reporting 0 slots in use and nothing running.
+//
+// Concurrency is the caller's to arrange: unlike RunAll there is no dependency barrier
+// and no exclusive-step isolation here, because a single step has nothing to order
+// against.
+func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) error, opts ...RunOption) (Result, error) {
+	rc := &runCtx{}
+	for _, o := range opts {
+		o(rc)
+	}
+	lim := rc.limiter
+	if lim == nil {
+		lim = NewLimiter(DefaultConcurrency())
+	}
+	slots, release, err := c.admit(ctx, s, lim)
+	if err != nil {
+		return Result{ProjectPath: s.ProjectPath}, err
+	}
+	defer release()
+	return c.Run(ctx, s, func(ctx context.Context) error {
+		ctx = ContextWithLimiter(ctx, lim)
+		ctx = WithSlotsHeld(ctx, slots)
+		return fn(ctx)
+	}, opts...)
+}
+
 // RunAll schedules steps concurrently (bounded by WithLimiter, or DefaultConcurrency).
 // Step.DependsOn (same-target) and Step.RunAfter (exact node keys) impose
 // scheduling order for in-scope steps only; out-of-scope deps are ignored. A
@@ -960,75 +1069,18 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}
-			// A heavy step can request extra slots (Step.Slots) to throttle parallel
-			// work around itself. Clamp to [1, budget]: 0 means one slot, and a
-			// request above the budget would exceed capacity and error, so cap it. A
-			// request >= the budget holds every slot, so no peer can enter fn while it
-			// runs (it does not take the isolation lock, so unlike an exclusive step it
-			// does not also serialize replays). On an unlimited limiter (budget <= 0)
-			// there is nothing to throttle against, so the request is a no-op:
-			// AcquireN returns immediately.
-			slots := s.Slots
-			if slots < 1 {
-				slots = 1
+			slots, release, admitErr := c.admit(gctx, s, lim)
+			if admitErr != nil {
+				// A machine refusal is an independent finding: nothing upstream failed and
+				// the batch was not cancelled, the machine refused this step on its own
+				// account. Without this the refusal takes the never-started path, where it
+				// spends no failure budget and joins no error, and a run that did nothing
+				// reports success. A slot-acquire failure is only ever this batch's own
+				// cancellation, which fail swallows regardless.
+				ran = gctx.Err() == nil
+				return fail(admitErr)
 			}
-			if budget := lim.Capacity(); budget > 0 && slots > budget {
-				slots = budget
-			}
-			if err := lim.AcquireN(gctx, slots); err != nil {
-				return fail(err)
-			}
-			// The machine-wide half of the same admission, taken after the local slot so
-			// in-process ordering is unchanged: a step the machine cannot seat queues
-			// here, behind peers this run does not schedule, rather than starting
-			// alongside them and taking the host down.
-			//
-			// It is taken while this step already holds the isolation lock (an exclusive
-			// step took it above) and its local slots. That ordering is deliberate but it
-			// is not free: an exclusive step queued on the machine budget blocks every
-			// replay in THIS process for as long as it waits, so one worktree's wait
-			// becomes another target's wait here. Acquiring the machine budget first
-			// would trade that for a worse one - the step would hold machine-wide memory
-			// while waiting for a local lock, which is the resource that spans every
-			// worktree rather than just this run.
-			releaseMachine, machineErr := c.machine.acquire(gctx, types.MachineClaim{
-				Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
-				MemoryMB: s.MemoryMB, Slots: slots,
-				PID: os.Getpid(), Dir: workingDir(),
-				Invocation: selfInvocation(gctx), Ancestors: ancestorInvocations(gctx),
-			})
-			if machineErr != nil {
-				lim.ReleaseN(slots)
-				c.logPool(gctx, lim)
-				// An independent finding, so it is marked as one: nothing upstream failed
-				// and the batch was not cancelled, the machine refused this step on its
-				// own account. Without this the refusal takes the never-started path,
-				// where it spends no failure budget and joins no error, and a run that did
-				// nothing reports success.
-				ran = true
-				return fail(machineErr)
-			}
-			// Report occupancy as it changes, so an interactive run can show
-			// a live pool counter. Emitted on both edges of the slot's life:
-			// once here (this step is now running) and once after release
-			// (the slot is free again). Handlers that do not render a status
-			// line ignore the event, so piped and CI output are unchanged.
-			c.logPool(gctx, lim)
-			// Record the target as running BEFORE fn and clear it after, so a magus
-			// that is killed outright leaves the set behind for the next run to
-			// report (see inflight). This is the only edge that knows a target is
-			// actually executing rather than queued behind a dep or a slot.
-			doneInflight := c.inflight.start(s.ProjectPath, s.Target)
-			defer func() {
-				doneInflight()
-				// The machine claim goes back BEFORE the slot, because freeing the slot is
-				// what wakes a local waiter: releasing in the other order lets that waiter
-				// ask the budget while this step's claim is still held, and a plain
-				// sequential run then queues behind memory it has already returned.
-				releaseMachine()
-				lim.ReleaseN(slots)
-				c.logPool(gctx, lim)
-			}()
+			defer release()
 			if slog.Default().Enabled(gctx, levelTrace) {
 				slog.LogAttrs(gctx, levelTrace, "schedule.run",
 					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
@@ -1477,6 +1529,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// So an error raised below can name the log a reader should open. Nothing in the
 	// engine can construct this path: it is the store's own layout.
 	captureCtx = types.WithCaptureLog(captureCtx, logPath)
+	// Re-mark now that there is a log to point at: a stall report's most useful field is
+	// the path a reader can open, and it does not exist until here.
+	ProgressFromContext(ctx).Record(Mark{Project: projectPath, Target: target, What: "executing", Log: logPath})
 
 	runErr := fn(captureCtx)
 	// Emit any trailing partial lines before the records are read.

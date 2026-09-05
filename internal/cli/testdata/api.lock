@@ -52,6 +52,7 @@ config secret.interactive_timeout
 config secret.unattended_timeout
 config spells.allow_shadow.<name>.name
 config spells.allow_shadow.<name>.reason
+config stall_timeout
 config target_timeout
 config telemetry.enabled
 config telemetry.endpoint
