@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -868,15 +869,30 @@ func atomicStoreMax(dst *atomic.Int32, v int32) {
 	}
 }
 
+// saturationTimeout bounds the rendezvous below. Reached only when the limiter refuses
+// the concurrency the test is asserting, so it is a failure path and its cost is paid
+// only by a run that was going to fail anyway.
+const saturationTimeout = time.Second
+
 // TestRunAllSlotsThrottles verifies that a step whose Slots equals the whole
 // slot budget runs alone: while it holds every slot no other step can be in fn,
 // yet lighter steps still saturate the budget when the heavy one is idle.
+//
+// Two light steps in fn together is what releases the rendezvous, so a limiter that
+// permits saturation always demonstrates it. Sleeping and hoping two overlapped failed a
+// correct limiter on a loaded runner.
+//
+// Each light step checks the heavy step's in-flight flag rather than sampling a running
+// count, which a light step that started and finished inside the sample window hid.
 func TestRunAllSlotsThrottles(t *testing.T) {
 	root, c := openCache(t)
 
 	var running atomic.Int32
-	var duringHeavy atomic.Int32 // peak concurrency observed while the heavy step is in fn
-	var lightPeak atomic.Int32   // peak concurrency observed among the light steps
+	var lightPeak atomic.Int32       // peak concurrency observed among the light steps
+	var heavyInFlight atomic.Bool    // the heavy step is inside fn right now
+	var overlappedHeavy atomic.Bool  // some light step was in fn while it was
+	saturated := make(chan struct{}) // closed once two light steps are in fn together
+	var closeOnce sync.Once
 
 	heavy := depStep(root, "heavy")
 	heavy.NoCache = true
@@ -893,19 +909,29 @@ func TestRunAllSlotsThrottles(t *testing.T) {
 		cur := running.Add(1)
 		defer running.Add(-1)
 		if s.ProjectPath == "heavy" {
+			heavyInFlight.Store(true)
+			defer heavyInFlight.Store(false)
 			time.Sleep(30 * time.Millisecond)
-			atomicStoreMax(&duringHeavy, running.Load())
 			return nil
 		}
+		if heavyInFlight.Load() {
+			overlappedHeavy.Store(true)
+		}
 		atomicStoreMax(&lightPeak, cur)
-		time.Sleep(15 * time.Millisecond)
+		if cur >= 2 {
+			closeOnce.Do(func() { close(saturated) })
+		}
+		select {
+		case <-saturated:
+		case <-time.After(saturationTimeout):
+		}
 		return nil
 	}
 
 	_, err := c.RunAll(context.Background(), steps, fn, WithLimiter(NewLimiter(2)))
 	require.NoError(t, err, "RunAll")
 
-	assert.Equal(t, int32(1), duringHeavy.Load(), "no step may run while a slots==budget step holds every slot")
+	assert.False(t, overlappedHeavy.Load(), "no step may run while a slots==budget step holds every slot")
 	assert.Equal(t, int32(2), lightPeak.Load(), "light steps should saturate the 2-slot budget when the heavy step is idle")
 }
 
