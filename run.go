@@ -1128,7 +1128,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// it is not a target ceiling.
 	prog := cache.NewProgress()
 	ctx = cache.ContextWithProgress(ctx, prog)
-	ctx, stall := m.watchForStall(ctx, prog)
+	ctx, stall := m.watchForStall(ctx, prog, releaseLocks)
 	defer stall.close()
 	defer func() { err = stall.verdict(err) }()
 

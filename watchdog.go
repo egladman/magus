@@ -49,7 +49,13 @@ func (w *stallWatch) close() {
 
 // watchForStall arms the stall watchdog over ctx and returns the context the run should
 // use: once prog has been quiet for the configured window, the watchdog cancels it with
-// MGS3012 as the cause.
+// MGS3012 as the cause and calls release.
+//
+// release is what makes the abort true rather than hopeful. Cancelling only asks the run
+// to unwind, and the locks come back when executeStages returns, so a stall that does not
+// answer its context holds every project lock forever while the terminal says the run was
+// aborted. watchWorkspaceRoot answers the same problem the same way, and the release it
+// shares is already idempotent for exactly this second caller (see acquireProjectLocks).
 //
 // It runs entirely in this process. The daemon is an accelerant and never a capability
 // gate, and an invocation stalling with no daemon up is exactly the case where nobody
@@ -60,10 +66,13 @@ func (w *stallWatch) close() {
 // a bound. This catches an invocation making NO progress at all, in work no target
 // declared. The case it was built for is the post-batch settle pass, which holds every
 // project lock while belonging to no target.
-func (m *Magus) watchForStall(ctx context.Context, prog *cache.Progress) (context.Context, *stallWatch) {
+func (m *Magus) watchForStall(ctx context.Context, prog *cache.Progress, release func()) (context.Context, *stallWatch) {
 	window := m.cfg.StallTimeout
 	if window == 0 {
 		window = defaultStallTimeout
+	}
+	if release == nil {
+		release = func() {}
 	}
 	w := &stallWatch{done: make(chan struct{})}
 	if window < 0 {
@@ -90,6 +99,14 @@ func (m *Magus) watchForStall(ctx context.Context, prog *cache.Progress) (contex
 			case <-pollCtx.Done():
 				return
 			case <-tick.C:
+				// A pending tick and a stop can be ready together, and select picks
+				// among ready cases at random. Re-check, or a run that already
+				// returned is reported stalled and has its successor's locks freed.
+				select {
+				case <-pollCtx.Done():
+					return
+				default:
+				}
 				idle := prog.Idle()
 				if idle < window {
 					continue
@@ -101,6 +118,10 @@ func (m *Magus) watchForStall(ctx context.Context, prog *cache.Progress) (contex
 				// moment it stops, not only in the final error.
 				slog.ErrorContext(logCtx, err.Error())
 				cancel(err)
+				// After the cancel, so the run is already unwinding when its
+				// exclusivity goes: a peer that takes a lock here finds a run on its
+				// way out rather than one still working.
+				release()
 				return
 			}
 		}

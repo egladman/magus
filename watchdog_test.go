@@ -3,6 +3,8 @@ package magus
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,7 +34,7 @@ func TestStallWatchdogAbortsAQuietInvocation(t *testing.T) {
 	m := &Magus{cfg: config.Config{StallTimeout: 60 * time.Millisecond}}
 	prog := stalledProgress()
 
-	ctx, stall := m.watchForStall(t.Context(), prog)
+	ctx, stall := m.watchForStall(t.Context(), prog, nil)
 	defer stall.close()
 
 	select {
@@ -59,7 +61,7 @@ func TestStallWatchdogLeavesAProgressingRunAlone(t *testing.T) {
 	m := &Magus{cfg: config.Config{StallTimeout: window}}
 	prog := stalledProgress()
 
-	ctx, stall := m.watchForStall(t.Context(), prog)
+	ctx, stall := m.watchForStall(t.Context(), prog, nil)
 	defer stall.close()
 
 	// Three windows of a target that never finishes and never starts another, producing
@@ -85,7 +87,7 @@ func TestStallWatchdogOffDoesNotFire(t *testing.T) {
 	m := &Magus{cfg: config.Config{StallTimeout: -1}}
 	prog := stalledProgress()
 
-	ctx, stall := m.watchForStall(t.Context(), prog)
+	ctx, stall := m.watchForStall(t.Context(), prog, nil)
 	defer stall.close()
 
 	time.Sleep(300 * time.Millisecond) // five times the window the armed test trips on
@@ -97,7 +99,7 @@ func TestStallWatchdogOffDoesNotFire(t *testing.T) {
 // the built-in window, not disable the watchdog the way an unset target_timeout does.
 func TestStallWatchdogDefaultsToOn(t *testing.T) {
 	m := &Magus{}
-	ctx, stall := m.watchForStall(t.Context(), cache.NewProgress())
+	ctx, stall := m.watchForStall(t.Context(), cache.NewProgress(), nil)
 	defer stall.close()
 	assert.NoError(t, ctx.Err())
 	assert.NotEqual(t, t.Context(), ctx, "an armed watchdog hands back its own cancellable context")
@@ -108,9 +110,43 @@ func TestStallWatchdogDefaultsToOn(t *testing.T) {
 // that failed on its own account must keep reporting its own failure.
 func TestStallVerdictKeepsAnOrdinaryError(t *testing.T) {
 	m := &Magus{cfg: config.Config{StallTimeout: time.Hour}}
-	_, stall := m.watchForStall(t.Context(), cache.NewProgress())
+	_, stall := m.watchForStall(t.Context(), cache.NewProgress(), nil)
 	defer stall.close()
 
 	own := errors.New("lint failed")
 	assert.Same(t, own, stall.verdict(own))
+}
+
+// The abort has to FREE the locks, not merely ask the run to unwind. Cancelling alone
+// returns them when executeStages returns, so a stall that does not answer its context
+// holds every project lock for good while the terminal reports it aborted.
+func TestStallWatchdogReleasesTheLocksItAborts(t *testing.T) {
+	m := &Magus{cfg: config.Config{StallTimeout: 60 * time.Millisecond}}
+	released := make(chan struct{})
+	var once sync.Once
+
+	ctx, stall := m.watchForStall(t.Context(), stalledProgress(), func() {
+		once.Do(func() { close(released) })
+	})
+	defer stall.close()
+
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watchdog aborted the run without releasing its project locks")
+	}
+	assert.Error(t, ctx.Err(), "the release happens on the abort path, so the run is already cancelled")
+}
+
+// A run that finished on its own must not have its successor's locks freed by a late
+// tick, which is what a poller acting on a tick that raced its own stop would do.
+func TestStallWatchdogDoesNotReleaseAfterClose(t *testing.T) {
+	m := &Magus{cfg: config.Config{StallTimeout: 20 * time.Millisecond}}
+	var releases atomic.Int32
+
+	_, stall := m.watchForStall(t.Context(), cache.NewProgress(), func() { releases.Add(1) })
+	stall.close()
+	time.Sleep(80 * time.Millisecond)
+
+	assert.Zero(t, releases.Load(), "a stopped watchdog must never release")
 }
