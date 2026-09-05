@@ -106,6 +106,13 @@ var allChecks = []checkDef{
 		run:            (*runner).checkTimeoutDeclarations,
 	},
 	{
+		Name:           "retry-declarations",
+		Doc:            "a target's declared retry_on_volatile against whether its retries have ever rescued a run",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            (*runner).checkRetryDeclarations,
+	},
+	{
 		Name:           "unexplained-hotspots",
 		Doc:            "whether the files this workspace edits hardest are explained by any note",
 		Evidence:       types.EvidenceInferred,
