@@ -8089,7 +8089,7 @@
     {
       "id": "docsection:console/README.md#examples-ad-hoc---the-convention",
       "kind": "docsection",
-      "label": "Examples (ad-hoc -> the convention)",
+      "label": "Examples (ad-hoc -\u003e the convention)",
       "source": "console/README.md#examples-ad-hoc---the-convention",
       "attrs": {
         "anchor": "examples-ad-hoc---the-convention",
@@ -8929,7 +8929,7 @@
     {
       "id": "docsection:docs/concepts/cache/output-refs.md#retrieval-magus-query-output-ref",
       "kind": "docsection",
-      "label": "Retrieval: magus query output <ref>",
+      "label": "Retrieval: magus query output \u003cref\u003e",
       "source": "docs/concepts/cache/output-refs.md#retrieval-magus-query-output-ref",
       "attrs": {
         "anchor": "retrieval-magus-query-output-ref",
@@ -9219,7 +9219,7 @@
     {
       "id": "docsection:docs/concepts/charms.md#2-workspace-spells--magusfiles-import-charm",
       "kind": "docsection",
-      "label": "2. Workspace spells & magusfiles (import \"charm\")",
+      "label": "2. Workspace spells \u0026 magusfiles (import \"charm\")",
       "source": "docs/concepts/charms.md#2-workspace-spells--magusfiles-import-charm",
       "attrs": {
         "anchor": "2-workspace-spells--magusfiles-import-charm",
@@ -9239,7 +9239,7 @@
     {
       "id": "docsection:docs/concepts/charms.md#4-function-targets--ops-branch-in-code",
       "kind": "docsection",
-      "label": "4. Function targets & ops (branch in code)",
+      "label": "4. Function targets \u0026 ops (branch in code)",
       "source": "docs/concepts/charms.md#4-function-targets--ops-branch-in-code",
       "attrs": {
         "anchor": "4-function-targets--ops-branch-in-code",
@@ -13099,7 +13099,7 @@
     {
       "id": "docsection:docs/concepts/targets.md#name-normalization-casing--delimiters",
       "kind": "docsection",
-      "label": "Name normalization (casing & delimiters)",
+      "label": "Name normalization (casing \u0026 delimiters)",
       "source": "docs/concepts/targets.md#name-normalization-casing--delimiters",
       "attrs": {
         "anchor": "name-normalization-casing--delimiters",
@@ -15109,7 +15109,7 @@
     {
       "id": "docsection:docs/guides/debugging.md#-c-dir",
       "kind": "docsection",
-      "label": "-C <dir>",
+      "label": "-C \u003cdir\u003e",
       "source": "docs/guides/debugging.md#-c-dir",
       "attrs": {
         "anchor": "-c-dir",
@@ -36191,7 +36191,7 @@
       "id": "function:badge.buzz:whole_percent",
       "kind": "function",
       "label": "whole_percent",
-      "doc": "whole_percent reads a figure's integer part (\"56.8\" -> 56). std\\parseInt returns null on non-numeric input, which we turn into a clear error so a bad figure fails loudly instead of rendering wrong.",
+      "doc": "whole_percent reads a figure's integer part (\"56.8\" -\u003e 56). std\\parseInt returns null on non-numeric input, which we turn into a clear error so a bad figure fails loudly instead of rendering wrong.",
       "source": "badge.buzz:29"
     },
     {
@@ -36420,7 +36420,7 @@
       "id": "function:console/magusfile.buzz:security",
       "kind": "function",
       "label": "security",
-      "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
+      "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -\u003e table -\u003e ajv -\u003e fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
       "source": "console/magusfile.buzz:238",
       "attrs": {
         "exported": "true"
@@ -36480,7 +36480,7 @@
       "id": "function:docs/engine/blog.buzz:isPublishablePost",
       "kind": "function",
       "label": "isPublishablePost",
-      "doc": "isPublishablePost reports whether blog/<name> should be rendered at all: a .md file that is not the index, not an _underscored fixture, not marked `draft: true` in its frontmatter, and not dated past the build (isFuturePost).  A draft stays committed in the repo and renders NOWHERE - no post page, no blog index entry, no feed item, no announcement-bar link - so unfinished writing can be reviewed in a pull request without shipping to the site. The underscore prefix already skipped a file, but that is the fix",
+      "doc": "isPublishablePost reports whether blog/\u003cname\u003e should be rendered at all: a .md file that is not the index, not an _underscored fixture, not marked `draft: true` in its frontmatter, and not dated past the build (isFuturePost).  A draft stays committed in the repo and renders NOWHERE - no post page, no blog index entry, no feed item, no announcement-bar link - so unfinished writing can be reviewed in a pull request without shipping to the site. The underscore prefix already skipped a file, but that is the fix",
       "source": "docs/engine/blog.buzz:37",
       "attrs": {
         "exported": "true"
@@ -36490,7 +36490,7 @@
       "id": "function:docs/engine/blog.buzz:renderBlogIndex",
       "kind": "function",
       "label": "renderBlogIndex",
-      "doc": "renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain <ul> under renderPage(), so it inherits nav/breadcrumb/footer.",
+      "doc": "renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain \u003cul\u003e under renderPage(), so it inherits nav/breadcrumb/footer.",
       "source": "docs/engine/blog.buzz:222",
       "attrs": {
         "exported": "true"
@@ -36507,7 +36507,7 @@
       "id": "function:docs/engine/blog.buzz:renderBlogPost",
       "kind": "function",
       "label": "renderBlogPost",
-      "doc": "renderBlogPost renders one blog/<file>.md as its own directory-index page. base is the basename (e.g. \"2026-07-01-hello-blog.md\"); the URL is date-scoped blog/YYYY/MM/DD/slug/ (via blogURLPath), so permalinks sort by date and never collide across years. Post metadata is captured into site.blogPosts for the index page.",
+      "doc": "renderBlogPost renders one blog/\u003cfile\u003e.md as its own directory-index page. base is the basename (e.g. \"2026-07-01-hello-blog.md\"); the URL is date-scoped blog/YYYY/MM/DD/slug/ (via blogURLPath), so permalinks sort by date and never collide across years. Post metadata is captured into site.blogPosts for the index page.",
       "source": "docs/engine/blog.buzz:81",
       "attrs": {
         "exported": "true"
@@ -36517,7 +36517,7 @@
       "id": "function:docs/engine/discovery.buzz:llmsIndexBody",
       "kind": "function",
       "label": "llmsIndexBody",
-      "doc": "llmsIndexBody builds gen/llms.txt (the llms.txt convention): an H1, a one-line summary, then every docs page as \"- [title](base+url): description\", sorted by URL for a byte-stable artifact. base is the link prefix (baseURL, else \"/\"). Links point at each page's <url>index.md Markdown sibling, so an agent fetches clean content. Pure so a unit test can pin the output.",
+      "doc": "llmsIndexBody builds gen/llms.txt (the llms.txt convention): an H1, a one-line summary, then every docs page as \"- [title](base+url): description\", sorted by URL for a byte-stable artifact. base is the link prefix (baseURL, else \"/\"). Links point at each page's \u003curl\u003eindex.md Markdown sibling, so an agent fetches clean content. Pure so a unit test can pin the output.",
       "source": "docs/engine/discovery.buzz:40"
     },
     {
@@ -36544,7 +36544,7 @@
       "id": "function:docs/engine/feeds.buzz:renderBlogAtom",
       "kind": "function",
       "label": "renderBlogAtom",
-      "doc": "renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL), updated (post date), summary (description), author. Feed-level updated = newest post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.",
+      "doc": "renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of site.blogPosts, newest first. Per \u003centry\u003e: title, link (absolute), id (same URL), updated (post date), summary (description), author. Feed-level updated = newest post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.",
       "source": "docs/engine/feeds.buzz:16",
       "attrs": {
         "exported": "true"
@@ -36554,7 +36554,7 @@
       "id": "function:docs/engine/feeds.buzz:renderReleasesAtom",
       "kind": "function",
       "label": "renderReleasesAtom",
-      "doc": "renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed releases (newest first as authored). Per <entry>: title = version, link = site.config.repoURL/releases/tag/<ver>, id = same, updated = release date, summary = the section body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on having at least one released version.",
+      "doc": "renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed releases (newest first as authored). Per \u003centry\u003e: title = version, link = site.config.repoURL/releases/tag/\u003cver\u003e, id = same, updated = release date, summary = the section body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on having at least one released version.",
       "source": "docs/engine/feeds.buzz:55",
       "attrs": {
         "exported": "true"
@@ -36594,7 +36594,7 @@
       "id": "function:docs/engine/gates.buzz:buildCommits",
       "kind": "function",
       "label": "buildCommits",
-      "doc": "buildCommits parses one git-log pass: - metaCommits: path -> \"full|short|stamp\" of the FIRST (newest) sighting; drives the always-visible \"Last updated\" footer line. - metaHistory: path -> up to HISTORY_MAX \"full|short|stamp|subject\" entries, newest- first; drives the collapsed history panel. The log prints \"SUBJ:<subject>\" after each \">>>\" header so both fields ride together without a second git spawn.",
+      "doc": "buildCommits parses one git-log pass: - metaCommits: path -\u003e \"full|short|stamp\" of the FIRST (newest) sighting; drives the always-visible \"Last updated\" footer line. - metaHistory: path -\u003e up to HISTORY_MAX \"full|short|stamp|subject\" entries, newest- first; drives the collapsed history panel. The log prints \"SUBJ:\u003csubject\u003e\" after each \"\u003e\u003e\u003e\" header so both fields ride together without a second git spawn.",
       "source": "docs/engine/gates.buzz:173",
       "attrs": {
         "exported": "true"
@@ -36690,7 +36690,7 @@
       "id": "function:docs/engine/gates.buzz:pruneStaleOutputs",
       "kind": "function",
       "label": "pruneStaleOutputs",
-      "doc": "pruneStaleOutputs deletes gen/ output whose source no longer produces it - a renamed/removed page, a deleted post, a dropped alias, a release out of CHANGELOG.md. gen/ is not wiped before each render, so this keeps it from accumulating orphans: for every \"<dir>/index.html\" not in writtenPaths and not in alwaysKeep, delete the whole directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so neither trips on a stale page's dangling reference to content removed with it.",
+      "doc": "pruneStaleOutputs deletes gen/ output whose source no longer produces it - a renamed/removed page, a deleted post, a dropped alias, a release out of CHANGELOG.md. gen/ is not wiped before each render, so this keeps it from accumulating orphans: for every \"\u003cdir\u003e/index.html\" not in writtenPaths and not in alwaysKeep, delete the whole directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so neither trips on a stale page's dangling reference to content removed with it.",
       "source": "docs/engine/gates.buzz:302",
       "attrs": {
         "exported": "true"
@@ -36700,7 +36700,7 @@
       "id": "function:docs/engine/gates.buzz:readURLSet",
       "kind": "function",
       "label": "readURLSet",
-      "doc": "readURLSet reads a newline-delimited URL file into a set, skipping blanks and \"#\" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).",
+      "doc": "readURLSet reads a newline-delimited URL file into a set, skipping blanks and \"#\" comments. Missing file -\u003e empty set (the bootstrap case for URL_LOCK).",
       "source": "docs/engine/gates.buzz:389",
       "attrs": {
         "exported": "true"
@@ -36740,7 +36740,7 @@
       "id": "function:docs/engine/gates.buzz:writeSiteManifest",
       "kind": "function",
       "label": "writeSiteManifest",
-      "doc": "writeSiteManifest emits gen/site-manifest.sha256: one \"<sha256>  <path>\\n\" line (standard sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/, repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from site_render(), because generateJsBundles() writes gen/assets/hljs.js (served assets) only after site_render() returns - computing the manifest earlier would omit them. Excludes its own output path (a file cannot hash itself).",
+      "doc": "writeSiteManifest emits gen/site-manifest.sha256: one \"\u003csha256\u003e  \u003cpath\u003e\\n\" line (standard sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/, repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from site_render(), because generateJsBundles() writes gen/assets/hljs.js (served assets) only after site_render() returns - computing the manifest earlier would omit them. Excludes its own output path (a file cannot hash itself).",
       "source": "docs/engine/gates.buzz:356",
       "attrs": {
         "exported": "true"
@@ -36760,7 +36760,7 @@
       "id": "function:docs/engine/meta.buzz:deriveTitle",
       "kind": "function",
       "label": "deriveTitle",
-      "doc": "deriveTitle reads the title from the first H1, stripping backticks (a heading like `# `fs``) so it reads as plain text in <title>, breadcrumb, pager, and search index. Frontmatter titles bypass this and are used verbatim.",
+      "doc": "deriveTitle reads the title from the first H1, stripping backticks (a heading like `# `fs``) so it reads as plain text in \u003ctitle\u003e, breadcrumb, pager, and search index. Frontmatter titles bypass this and are used verbatim.",
       "source": "docs/engine/meta.buzz:15",
       "attrs": {
         "exported": "true"
@@ -36780,7 +36780,7 @@
       "id": "function:docs/engine/meta.buzz:insertSinceBadge",
       "kind": "function",
       "label": "insertSinceBadge",
-      "doc": "insertSinceBadge places an \"Added in <version>\" marker under the H1 so a reader can tell whether a feature exists in their installed magus. magus follows Go-style compatibility (no v2), so one page serves every version and just notes when a thing arrived. since is the frontmatter `since:` value; no-op without a `since:` or an H1 to anchor to.",
+      "doc": "insertSinceBadge places an \"Added in \u003cversion\u003e\" marker under the H1 so a reader can tell whether a feature exists in their installed magus. magus follows Go-style compatibility (no v2), so one page serves every version and just notes when a thing arrived. since is the frontmatter `since:` value; no-op without a `since:` or an H1 to anchor to.",
       "source": "docs/engine/meta.buzz:130",
       "attrs": {
         "exported": "true"
@@ -36790,7 +36790,7 @@
       "id": "function:docs/engine/meta.buzz:insertSizeRatio",
       "kind": "function",
       "label": "insertSizeRatio",
-      "doc": "insertSizeRatio places a size comparison under the H1 of an agent-skill page: how much smaller the `--simple` permutation is, as a number and as a bar.  The bar is a bare `<progress>`. Pico styles that element classlessly (`progress{accent-color:var(--pico-primary)}` plus a themed track in both color schemes), so the ratio gets a graphic with no custom CSS and no new markup vocabulary - which is the site's whole rule. It is also the semantically correct element: a proportion of a known whole, readable by a",
+      "doc": "insertSizeRatio places a size comparison under the H1 of an agent-skill page: how much smaller the `--simple` permutation is, as a number and as a bar.  The bar is a bare `\u003cprogress\u003e`. Pico styles that element classlessly (`progress{accent-color:var(--pico-primary)}` plus a themed track in both color schemes), so the ratio gets a graphic with no custom CSS and no new markup vocabulary - which is the site's whole rule. It is also the semantically correct element: a proportion of a known whole, readable by a",
       "source": "docs/engine/meta.buzz:168",
       "attrs": {
         "exported": "true"
@@ -36840,7 +36840,7 @@
       "id": "function:docs/engine/nav.buzz:keepConventionSections",
       "kind": "function",
       "label": "keepConventionSections",
-      "doc": "keepConventionSections is keepGlossarySections one heading level up: the conventions page is H2 sections where the glossary is H3 entries, so a section runs from its own <h2 id=\"> to the next one. Order is preserved.",
+      "doc": "keepConventionSections is keepGlossarySections one heading level up: the conventions page is H2 sections where the glossary is H3 entries, so a section runs from its own \u003ch2 id=\"\u003e to the next one. Order is preserved.",
       "source": "docs/engine/nav.buzz:310",
       "attrs": {
         "exported": "true"
@@ -36850,7 +36850,7 @@
       "id": "function:docs/engine/nav.buzz:keepGlossarySections",
       "kind": "function",
       "label": "keepGlossarySections",
-      "doc": "keepGlossarySections keeps only the <h3 id=\"...\"> term blocks whose anchor is in keep, in document order, and drops everything else. Same scan injectBacklinks uses: a term block runs from its own <h3 id=\"> to the next <h3 id=\"> or <h2>.",
+      "doc": "keepGlossarySections keeps only the \u003ch3 id=\"...\"\u003e term blocks whose anchor is in keep, in document order, and drops everything else. Same scan injectBacklinks uses: a term block runs from its own \u003ch3 id=\"\u003e to the next \u003ch3 id=\"\u003e or \u003ch2\u003e.",
       "source": "docs/engine/nav.buzz:283"
     },
     {
@@ -36936,7 +36936,7 @@
       "id": "function:docs/engine/nav.buzz:renderTocList",
       "kind": "function",
       "label": "renderTocList",
-      "doc": "renderTocList builds the \"On this page\" block from a page's h2/h3 headings (goldmark puts each on its own line with a slug id); h3s nest under their h2. Returns \"\" below three headings - too little for a sidebar. Returns just the title + list; renderPage() wraps it in the .toc <aside>, and toc.js adds scroll-spy + the collapse toggle.",
+      "doc": "renderTocList builds the \"On this page\" block from a page's h2/h3 headings (goldmark puts each on its own line with a slug id); h3s nest under their h2. Returns \"\" below three headings - too little for a sidebar. Returns just the title + list; renderPage() wraps it in the .toc \u003caside\u003e, and toc.js adds scroll-spy + the collapse toggle.",
       "source": "docs/engine/nav.buzz:90",
       "attrs": {
         "exported": "true"
@@ -36965,7 +36965,7 @@
       "id": "function:docs/engine/page.buzz:injectDemoCallout",
       "kind": "function",
       "label": "injectDemoCallout",
-      "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first </p>), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
+      "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first \u003c/p\u003e), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
       "source": "docs/engine/page.buzz:667"
     },
     {
@@ -36979,7 +36979,7 @@
       "id": "function:docs/engine/page.buzz:render404",
       "kind": "function",
       "label": "render404",
-      "doc": "render404 writes gen/404.html - the themed page GitHub Pages serves for any unmatched path. GH Pages keeps the deep 404 URL in the address bar, so ordinary relative paths would break; this page uses root-absolute paths (/<basePath>/site.css, etc.) - the one deliberate exception to the relative-link scheme. basePath comes from site.config.baseURL (https://eli.gladman.cc/magus/ -> \"/magus/\"), falling back to \"/\" when empty so the page still renders locally from the server root.",
+      "doc": "render404 writes gen/404.html - the themed page GitHub Pages serves for any unmatched path. GH Pages keeps the deep 404 URL in the address bar, so ordinary relative paths would break; this page uses root-absolute paths (/\u003cbasePath\u003e/site.css, etc.) - the one deliberate exception to the relative-link scheme. basePath comes from site.config.baseURL (https://eli.gladman.cc/magus/ -\u003e \"/magus/\"), falling back to \"/\" when empty so the page still renders locally from the server root.",
       "source": "docs/engine/page.buzz:40",
       "attrs": {
         "exported": "true"
@@ -37015,7 +37015,7 @@
       "id": "function:docs/engine/page.buzz:renderPager",
       "kind": "function",
       "label": "renderPager",
-      "doc": "renderPager builds the prev/next links among a page's siblings - the other rendered docs in the same source directory (README/index and underscore fixtures excluded). \"\" when there is no sibling on either side. rel is docs-relative (e.g. \"modules/fs.md\").  Ordered by frontmatter `order:`, falling back to filename. Filename order alone was an accident presented as a sequence: on concepts/targets.md it produced \"Previous: Spells, Next: Telemetry\" purely because s < t < t, implying a reading path that did not",
+      "doc": "renderPager builds the prev/next links among a page's siblings - the other rendered docs in the same source directory (README/index and underscore fixtures excluded). \"\" when there is no sibling on either side. rel is docs-relative (e.g. \"modules/fs.md\").  Ordered by frontmatter `order:`, falling back to filename. Filename order alone was an accident presented as a sequence: on concepts/targets.md it produced \"Previous: Spells, Next: Telemetry\" purely because s \u003c t \u003c t, implying a reading path that did not",
       "source": "docs/engine/page.buzz:196"
     },
     {
@@ -37153,7 +37153,7 @@
       "id": "function:docs/engine/route.buzz:climbFromDir",
       "kind": "function",
       "label": "climbFromDir",
-      "doc": "climbFromDir returns the \"../\" prefix from a gen-relative directory back to gen's root, one \"../\" per segment (\"console/dashboard\" -> \"../../\"). App pages derive their nav prefix from their output location so it can't drift from the write path.",
+      "doc": "climbFromDir returns the \"../\" prefix from a gen-relative directory back to gen's root, one \"../\" per segment (\"console/dashboard\" -\u003e \"../../\"). App pages derive their nav prefix from their output location so it can't drift from the write path.",
       "source": "docs/engine/route.buzz:47",
       "attrs": {
         "exported": "true"
@@ -37192,7 +37192,7 @@
       "id": "function:docs/engine/route.buzz:sitePathPrefix",
       "kind": "function",
       "label": "sitePathPrefix",
-      "doc": "sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL (\"https://host/magus/\" -> \"/magus/\"), or \"/\" when baseURL is unset. Used only where depth is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.",
+      "doc": "sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL (\"https://host/magus/\" -\u003e \"/magus/\"), or \"/\" when baseURL is unset. Used only where depth is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.",
       "source": "docs/engine/route.buzz:55",
       "attrs": {
         "exported": "true"
@@ -37315,7 +37315,7 @@
       "id": "function:docs/lib/conventions.buzz:injectConventionHints",
       "kind": "function",
       "label": "injectConventionHints",
-      "doc": "injectConventionHints adds a \"?\" hint into each rendered convention marker: an admonition title and a code-block caption. It runs after the content transforms, so it sees the final <p class=\"admonition-title\"> / <figcaption> markup. The conventions page itself is skipped by the caller (it defines these). A marker whose section is missing from the corpus is left untouched.",
+      "doc": "injectConventionHints adds a \"?\" hint into each rendered convention marker: an admonition title and a code-block caption. It runs after the content transforms, so it sees the final \u003cp class=\"admonition-title\"\u003e / \u003cfigcaption\u003e markup. The conventions page itself is skipped by the caller (it defines these). A marker whose section is missing from the corpus is left untouched.",
       "source": "docs/lib/conventions.buzz:87",
       "attrs": {
         "exported": "true"
@@ -37325,7 +37325,7 @@
       "id": "function:docs/lib/conventions.buzz:injectFirstPlaceholderHint",
       "kind": "function",
       "label": "injectFirstPlaceholderHint",
-      "doc": "injectFirstPlaceholderHint appends a \"?\" hint after the FIRST inline <code> on the page that holds an angle-bracket placeholder (&lt;...&gt;), linking to the placeholders convention. First occurrence only - like the glossary linker - so a page that uses the syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced block by having no newline, so a multi-line code block is never hinted.",
+      "doc": "injectFirstPlaceholderHint appends a \"?\" hint after the FIRST inline \u003ccode\u003e on the page that holds an angle-bracket placeholder (\u0026lt;...\u0026gt;), linking to the placeholders convention. First occurrence only - like the glossary linker - so a page that uses the syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced block by having no newline, so a multi-line code block is never hinted.",
       "source": "docs/lib/conventions.buzz:102"
     },
     {
@@ -37433,7 +37433,7 @@
       "id": "function:docs/lib/conventions.buzz:runOf",
       "kind": "function",
       "label": "runOf",
-      "doc": "runOf returns the leading run of byte `ch` in s (\"```buzz\" -> \"```\").",
+      "doc": "runOf returns the leading run of byte `ch` in s (\"```buzz\" -\u003e \"```\").",
       "source": "docs/lib/conventions.buzz:187"
     },
     {
@@ -37446,7 +37446,7 @@
       "id": "function:docs/lib/csp.buzz:computeCSP",
       "kind": "function",
       "label": "computeCSP",
-      "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspBadges for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker registration all fall back to default-src (via worker-src -> child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site n",
+      "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspBadges for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin \u003clink rel=prefetch\u003e hover-warm, and the service worker registration all fall back to default-src (via worker-src -\u003e child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site n",
       "source": "docs/lib/csp.buzz:99",
       "attrs": {
         "exported": "true"
@@ -37456,7 +37456,7 @@
       "id": "function:docs/lib/csp.buzz:cspForRedirectStub",
       "kind": "function",
       "label": "cspForRedirectStub",
-      "doc": "cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or external script; its only content is one inline <script> that differs per stub, so it cannot share the site-wide hash list. script is the exact text redirectScript(rel) (lib/html.buzz) produces, so the hash always matches what ships.",
+      "doc": "cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or external script; its only content is one inline \u003cscript\u003e that differs per stub, so it cannot share the site-wide hash list. script is the exact text redirectScript(rel) (lib/html.buzz) produces, so the hash always matches what ships.",
       "source": "docs/lib/csp.buzz:121",
       "attrs": {
         "exported": "true"
@@ -37466,7 +37466,7 @@
       "id": "function:docs/lib/csp.buzz:extractInlineScripts",
       "kind": "function",
       "label": "extractInlineScripts",
-      "doc": "extractInlineScripts pulls the text of every attribute-less `<script>...</script>` block out of html, in order. Matches only the literal \"<script>\" open tag: a `<script src=...>` is an external load already covered by script-src 'self', not a hash-source candidate.",
+      "doc": "extractInlineScripts pulls the text of every attribute-less `\u003cscript\u003e...\u003c/script\u003e` block out of html, in order. Matches only the literal \"\u003cscript\u003e\" open tag: a `\u003cscript src=...\u003e` is an external load already covered by script-src 'self', not a hash-source candidate.",
       "source": "docs/lib/csp.buzz:36",
       "attrs": {
         "exported": "true"
@@ -37486,7 +37486,7 @@
       "id": "function:docs/lib/csp.buzz:scriptHash",
       "kind": "function",
       "label": "scriptHash",
-      "doc": "scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes a browser hashes against a hash-source script-src). crypto.hash returns raw digest bytes, so .hex() renders the lowercase hex this decodes; CSP hash-sources are base64, so hexDecode back to raw digest bytes before base64-encoding.",
+      "doc": "scriptHash returns a CSP `sha256-\u003cbase64\u003e` source for js's exact text (the same bytes a browser hashes against a hash-source script-src). crypto.hash returns raw digest bytes, so .hex() renders the lowercase hex this decodes; CSP hash-sources are base64, so hexDecode back to raw digest bytes before base64-encoding.",
       "source": "docs/lib/csp.buzz:28",
       "attrs": {
         "exported": "true"
@@ -37506,7 +37506,7 @@
       "id": "function:docs/lib/date.buzz:blogDateAttr",
       "kind": "function",
       "label": "blogDateAttr",
-      "doc": "blogDateAttr is the date-only \"YYYY-MM-DD\" that pairs with blogDate() in <time datetime>.",
+      "doc": "blogDateAttr is the date-only \"YYYY-MM-DD\" that pairs with blogDate() in \u003ctime datetime\u003e.",
       "source": "docs/lib/date.buzz:31",
       "attrs": {
         "exported": "true"
@@ -37556,7 +37556,7 @@
       "id": "function:docs/lib/dom.buzz:el",
       "kind": "function",
       "label": "el",
-      "doc": "el wraps raw body in <tag attrs>...</tag>. attrs is \"\" or a run of attr() calls.",
+      "doc": "el wraps raw body in \u003ctag attrs\u003e...\u003c/tag\u003e. attrs is \"\" or a run of attr() calls.",
       "source": "docs/lib/dom.buzz:15",
       "attrs": {
         "exported": "true"
@@ -37566,7 +37566,7 @@
       "id": "function:docs/lib/dom.buzz:esc",
       "kind": "function",
       "label": "esc",
-      "doc": "esc escapes text for HTML element content (& < >).",
+      "doc": "esc escapes text for HTML element content (\u0026 \u003c \u003e).",
       "source": "docs/lib/dom.buzz:25",
       "attrs": {
         "exported": "true"
@@ -37576,7 +37576,7 @@
       "id": "function:docs/lib/dom.buzz:voidEl",
       "kind": "function",
       "label": "voidEl",
-      "doc": "voidEl is an unclosed element: <tag attrs> (meta, link, img).",
+      "doc": "voidEl is an unclosed element: \u003ctag attrs\u003e (meta, link, img).",
       "source": "docs/lib/dom.buzz:20",
       "attrs": {
         "exported": "true"
@@ -37586,7 +37586,7 @@
       "id": "function:docs/lib/feed.buzz:atomDate",
       "kind": "function",
       "label": "atomDate",
-      "doc": "atomDate normalizes a frontmatter date to RFC3339 UTC (bare date -> T00:00:00Z).",
+      "doc": "atomDate normalizes a frontmatter date to RFC3339 UTC (bare date -\u003e T00:00:00Z).",
       "source": "docs/lib/feed.buzz:32",
       "attrs": {
         "exported": "true"
@@ -37596,7 +37596,7 @@
       "id": "function:docs/lib/feed.buzz:escapeXml",
       "kind": "function",
       "label": "escapeXml",
-      "doc": "escapeXml is escapeAttr's XML form: five entities, ampersand FIRST so the & each of the other four introduces is never rescanned. (This note used to say \"& last\", which is the opposite of both the code and the correct order - replacing it last would turn \"&lt;\" into \"&amp;lt;\".)",
+      "doc": "escapeXml is escapeAttr's XML form: five entities, ampersand FIRST so the \u0026 each of the other four introduces is never rescanned. (This note used to say \"\u0026 last\", which is the opposite of both the code and the correct order - replacing it last would turn \"\u0026lt;\" into \"\u0026amp;lt;\".)",
       "source": "docs/lib/feed.buzz:11",
       "attrs": {
         "exported": "true"
@@ -37606,7 +37606,7 @@
       "id": "function:docs/lib/feed.buzz:xmlAttribute",
       "kind": "function",
       "label": "xmlAttribute",
-      "doc": "Minimal XML leaves; every body and value funnels through escapeXml. Container tags with their own namespaces (<feed>, <urlset>, <entry>, <url>) stay written inline.",
+      "doc": "Minimal XML leaves; every body and value funnels through escapeXml. Container tags with their own namespaces (\u003cfeed\u003e, \u003curlset\u003e, \u003centry\u003e, \u003curl\u003e) stay written inline.",
       "source": "docs/lib/feed.buzz:18",
       "attrs": {
         "exported": "true"
@@ -37670,7 +37670,7 @@
       "id": "function:docs/lib/glossary.buzz:glossarySlug",
       "kind": "function",
       "label": "glossarySlug",
-      "doc": "glossarySlug mirrors goldmark's heading-id slug: lowercase, spaces AND underscores to hyphens, drop any char that is not a-z, 0-9, or hyphen. \"Output reference\" -> \"output-reference\"; \"MAGUS.md\" -> \"magusmd\"; \"write_file\" -> \"write-file\".",
+      "doc": "glossarySlug mirrors goldmark's heading-id slug: lowercase, spaces AND underscores to hyphens, drop any char that is not a-z, 0-9, or hyphen. \"Output reference\" -\u003e \"output-reference\"; \"MAGUS.md\" -\u003e \"magusmd\"; \"write_file\" -\u003e \"write-file\".",
       "source": "docs/lib/glossary.buzz:31",
       "attrs": {
         "exported": "true"
@@ -37680,14 +37680,14 @@
       "id": "function:docs/lib/glossary.buzz:hasNoLinkAttr",
       "kind": "function",
       "label": "hasNoLinkAttr",
-      "doc": "Both maskers key off the tag NAME, so a <span> reads as prose no matter what it holds. That split \"magusfile.buzz\" in a code panel's title bar into two popovers, one on \"magusfile\" and one on \"buzz\", because neither linker has a term for the filename and both had a term for its halves. data-nolink marks an element whose text is a literal - a filename, a command line - rather than prose to be read.",
+      "doc": "Both maskers key off the tag NAME, so a \u003cspan\u003e reads as prose no matter what it holds. That split \"magusfile.buzz\" in a code panel's title bar into two popovers, one on \"magusfile\" and one on \"buzz\", because neither linker has a term for the filename and both had a term for its halves. data-nolink marks an element whose text is a literal - a filename, a command line - rather than prose to be read.",
       "source": "docs/lib/glossary.buzz:124"
     },
     {
       "id": "function:docs/lib/glossary.buzz:injectBacklinks",
       "kind": "function",
       "label": "injectBacklinks",
-      "doc": "injectBacklinks appends each term's \"referenced on\" fragment (byAnchor[anchor], a caller-built HTML string) at the END of that term's section on the glossary page - just before the next <h3>/<h2> heading, so it sits below the definition. The glossary is rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure string surgery; anchors with no fragment are left untouched.",
+      "doc": "injectBacklinks appends each term's \"referenced on\" fragment (byAnchor[anchor], a caller-built HTML string) at the END of that term's section on the glossary page - just before the next \u003ch3\u003e/\u003ch2\u003e heading, so it sits below the definition. The glossary is rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure string surgery; anchors with no fragment are left untouched.",
       "source": "docs/lib/glossary.buzz:408",
       "attrs": {
         "exported": "true"
@@ -37697,7 +37697,7 @@
       "id": "function:docs/lib/glossary.buzz:isSkipContainer",
       "kind": "function",
       "label": "isSkipContainer",
-      "doc": "isSkipContainer is true for tags whose text content must never be auto-linked: pre (fenced code always), a (no nested links), and headings. Inline <code> is skipped only in prose mode (glossary terms) - code entities (MGSxxxx codes, commands, mod\\method) DELIBERATELY link inside inline code, which is where those references appear.",
+      "doc": "isSkipContainer is true for tags whose text content must never be auto-linked: pre (fenced code always), a (no nested links), and headings. Inline \u003ccode\u003e is skipped only in prose mode (glossary terms) - code entities (MGSxxxx codes, commands, mod\\method) DELIBERATELY link inside inline code, which is where those references appear.",
       "source": "docs/lib/glossary.buzz:112"
     },
     {
@@ -37710,7 +37710,7 @@
       "id": "function:docs/lib/glossary.buzz:linkCodeEntities",
       "kind": "function",
       "label": "linkCodeEntities",
-      "doc": "linkCodeEntities links the first occurrence of each entity's match string (inside inline code or prose, never a fenced <pre> block) to its reference page, baking the summary into data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).",
+      "doc": "linkCodeEntities links the first occurrence of each entity's match string (inside inline code or prose, never a fenced \u003cpre\u003e block) to its reference page, baking the summary into data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).",
       "source": "docs/lib/glossary.buzz:336",
       "attrs": {
         "exported": "true"
@@ -37720,7 +37720,7 @@
       "id": "function:docs/lib/glossary.buzz:linkGlossaryTerms",
       "kind": "function",
       "label": "linkGlossaryTerms",
-      "doc": "linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be ordered longest-first so multi-word terms win over their substrings) to relToGlossary + \"#\" + anchor, and records which anchors were linked. A page carrying the \"<!-- magus-noglossary -->\" opt-out marker is returned verbatim (marker stripped) with nothing linked.",
+      "doc": "linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be ordered longest-first so multi-word terms win over their substrings) to relToGlossary + \"#\" + anchor, and records which anchors were linked. A page carrying the \"\u003c!-- magus-noglossary --\u003e\" opt-out marker is returned verbatim (marker stripped) with nothing linked.",
       "source": "docs/lib/glossary.buzz:274",
       "attrs": {
         "exported": "true"
@@ -37730,14 +37730,14 @@
       "id": "function:docs/lib/glossary.buzz:lowerByte",
       "kind": "function",
       "label": "lowerByte",
-      "doc": "lowerByte lowercases an ASCII byte (A-Z -> a-z), leaving others untouched. Used to compare bytes case-insensitively WITHOUT allocating a lowercased substring per position - the hot path here runs over every character of every page for every term, so allocation-free byte comparison is what keeps a full-site render fast.",
+      "doc": "lowerByte lowercases an ASCII byte (A-Z -\u003e a-z), leaving others untouched. Used to compare bytes case-insensitively WITHOUT allocating a lowercased substring per position - the hot path here runs over every character of every page for every term, so allocation-free byte comparison is what keeps a full-site render fast.",
       "source": "docs/lib/glossary.buzz:55"
     },
     {
       "id": "function:docs/lib/glossary.buzz:maskLinkable",
       "kind": "function",
       "label": "maskLinkable",
-      "doc": "maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced by a space and the linkable text lowercased. Non-linkable = inside a tag (< .. >), an HTML comment, or a skip container (pre/a/headings, plus inline code when skipInlineCode). A native indexOf then lands only in linkable text, so the ONE interpreted pass over the page is this build - not one scan per term, which is the difference between a fast render and a ten-minute one. Emits per-run pieces (not per char) so allocat",
+      "doc": "maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced by a space and the linkable text lowercased. Non-linkable = inside a tag (\u003c .. \u003e), an HTML comment, or a skip container (pre/a/headings, plus inline code when skipInlineCode). A native indexOf then lands only in linkable text, so the ONE interpreted pass over the page is this build - not one scan per term, which is the difference between a fast render and a ten-minute one. Emits per-run pieces (not per char) so allocat",
       "source": "docs/lib/glossary.buzz:150"
     },
     {
@@ -37764,7 +37764,7 @@
       "id": "function:docs/lib/glossary.buzz:requireIndexOfFrom",
       "kind": "function",
       "label": "requireIndexOfFrom",
-      "doc": "applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are parallel and longest-first) in open ... </a>, matching natively on the masked `searchable` and inserting into html right-to-left so earlier positions never shift. Returns the linked html and the keys linked (longest-first). If masking changed the length (a non-ASCII case fold, not expected in these docs), it returns html unlinked rather than misplace a link. requireIndexOfFrom fails fast when the running magus predates str",
+      "doc": "applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are parallel and longest-first) in open ... \u003c/a\u003e, matching natively on the masked `searchable` and inserting into html right-to-left so earlier positions never shift. Returns the linked html and the keys linked (longest-first). If masking changed the length (a non-ASCII case fold, not expected in these docs), it returns html unlinked rather than misplace a link. requireIndexOfFrom fails fast when the running magus predates str",
       "source": "docs/lib/glossary.buzz:213",
       "attrs": {
         "exported": "true"
@@ -37781,7 +37781,7 @@
       "id": "function:docs/lib/glossary.buzz:scanPastByte",
       "kind": "function",
       "label": "scanPastByte",
-      "doc": "scanPastByte returns the index just past the next `target` byte at/after `from`, or the end of html. An allocation-free replacement for html.sub(from).indexOf(<char>) + 1.",
+      "doc": "scanPastByte returns the index just past the next `target` byte at/after `from`, or the end of html. An allocation-free replacement for html.sub(from).indexOf(\u003cchar\u003e) + 1.",
       "source": "docs/lib/glossary.buzz:62"
     },
     {
@@ -37812,7 +37812,7 @@
       "id": "function:docs/lib/glossary.buzz:tagNameLower",
       "kind": "function",
       "label": "tagNameLower",
-      "doc": "tagNameLower reads the tag name at a '<' (skipping a leading '/'), lowercased.",
+      "doc": "tagNameLower reads the tag name at a '\u003c' (skipping a leading '/'), lowercased.",
       "source": "docs/lib/glossary.buzz:92"
     },
     {
@@ -37826,7 +37826,7 @@
       "id": "function:docs/lib/html.buzz:aliasStub",
       "kind": "function",
       "label": "aliasStub",
-      "doc": "aliasStub is the redirect page written at each alias: meta-refresh + canonical + scripted replace + a plain <a>, so it works with or without JavaScript. csp is the caller-computed policy (cspForRedirectStub, hashing redirectScript(rel) - the page's only content, so default-src 'none' plus that one script hash suffices).",
+      "doc": "aliasStub is the redirect page written at each alias: meta-refresh + canonical + scripted replace + a plain \u003ca\u003e, so it works with or without JavaScript. csp is the caller-computed policy (cspForRedirectStub, hashing redirectScript(rel) - the page's only content, so default-src 'none' plus that one script hash suffices).",
       "source": "docs/lib/html.buzz:241",
       "attrs": {
         "exported": "true"
@@ -37866,7 +37866,7 @@
       "id": "function:docs/lib/html.buzz:lazyImages",
       "kind": "function",
       "label": "lazyImages",
-      "doc": "lazyImages adds loading=\"lazy\" decoding=\"async\" to every <img> without a loading or fetchpriority attribute (author markup wins, so the hero stays eager).",
+      "doc": "lazyImages adds loading=\"lazy\" decoding=\"async\" to every \u003cimg\u003e without a loading or fetchpriority attribute (author markup wins, so the hero stays eager).",
       "source": "docs/lib/html.buzz:133",
       "attrs": {
         "exported": "true"
@@ -37936,7 +37936,7 @@
       "id": "function:docs/lib/html.buzz:stripMdFromLinkText",
       "kind": "function",
       "label": "stripMdFromLinkText",
-      "doc": "stripMdFromLinkText drops a trailing \".md\" from LINK TEXT (between > and </a>). rewriteLinks cleans the href, but a path-named link (e.g. [workspace.md](workspace.md), common in the glossary) still shows a stale \".md\". Only \".md\" immediately before </a> is touched, so bare path-named links are hit and other link text left alone.",
+      "doc": "stripMdFromLinkText drops a trailing \".md\" from LINK TEXT (between \u003e and \u003c/a\u003e). rewriteLinks cleans the href, but a path-named link (e.g. [workspace.md](workspace.md), common in the glossary) still shows a stale \".md\". Only \".md\" immediately before \u003c/a\u003e is touched, so bare path-named links are hit and other link text left alone.",
       "source": "docs/lib/html.buzz:366",
       "attrs": {
         "exported": "true"
@@ -37946,7 +37946,7 @@
       "id": "function:docs/lib/html.buzz:tagAdmonition",
       "kind": "function",
       "label": "tagAdmonition",
-      "doc": "tagAdmonition turns GitHub-alert blockquotes (\"<blockquote>\\n<p>[!TYPE]\\n...\") into <div class=\"admonition admonition-<type>\"> callouts. Unknown types pass through.",
+      "doc": "tagAdmonition turns GitHub-alert blockquotes (\"\u003cblockquote\u003e\\n\u003cp\u003e[!TYPE]\\n...\") into \u003cdiv class=\"admonition admonition-\u003ctype\u003e\"\u003e callouts. Unknown types pass through.",
       "source": "docs/lib/html.buzz:324",
       "attrs": {
         "exported": "true"
@@ -37965,7 +37965,7 @@
       "id": "function:docs/lib/html.buzz:tagRunnable",
       "kind": "function",
       "label": "tagRunnable",
-      "doc": "tagRunnable swaps the <pre> after a \"<!-- magus-run -->\" / \"<!-- magus-run-recorder -->\" marker with a data-magus-run <pre> so run-example.js can find opt-in blocks; drops the marker. Every magus-authored doc marker shares the \"magus-\" prefix (and mirrors to a \"data-magus-\" attribute) so generated hooks are obviously ours.",
+      "doc": "tagRunnable swaps the \u003cpre\u003e after a \"\u003c!-- magus-run --\u003e\" / \"\u003c!-- magus-run-recorder --\u003e\" marker with a data-magus-run \u003cpre\u003e so run-example.js can find opt-in blocks; drops the marker. Every magus-authored doc marker shares the \"magus-\" prefix (and mirrors to a \"data-magus-\" attribute) so generated hooks are obviously ours.",
       "source": "docs/lib/html.buzz:76",
       "attrs": {
         "exported": "true"
@@ -37975,7 +37975,7 @@
       "id": "function:docs/lib/html.buzz:tagRunnableMarker",
       "kind": "function",
       "label": "tagRunnableMarker",
-      "doc": "tagRunnableMarker replaces the <pre> following each marker with openTag; a marker not immediately before a fence is just dropped.",
+      "doc": "tagRunnableMarker replaces the \u003cpre\u003e following each marker with openTag; a marker not immediately before a fence is just dropped.",
       "source": "docs/lib/html.buzz:83",
       "attrs": {
         "exported": "true"
@@ -37985,7 +37985,7 @@
       "id": "function:docs/lib/html.buzz:tagVersionNote",
       "kind": "function",
       "label": "tagVersionNote",
-      "doc": "tagCodeTitle wraps the <pre> after a \"<!-- magus-code-title: NAME -->\" marker in a <figure class=\"code-block-titled\"> with a <figcaption>; drops the marker. tagVersionNote turns \"<!-- magus-since: v0.4.0 -->\" and \"<!-- magus-changed: v0.4.0 -->\" into the same chip the frontmatter `since:` badge renders, so one convention covers both.  SECTION level, deliberately, where the frontmatter badge is PAGE level. concepts/targets.md long predates the release that changed one behavior inside it, so a page badge read",
+      "doc": "tagCodeTitle wraps the \u003cpre\u003e after a \"\u003c!-- magus-code-title: NAME --\u003e\" marker in a \u003cfigure class=\"code-block-titled\"\u003e with a \u003cfigcaption\u003e; drops the marker. tagVersionNote turns \"\u003c!-- magus-since: v0.4.0 --\u003e\" and \"\u003c!-- magus-changed: v0.4.0 --\u003e\" into the same chip the frontmatter `since:` badge renders, so one convention covers both.  SECTION level, deliberately, where the frontmatter badge is PAGE level. concepts/targets.md long predates the release that changed one behavior inside it, so a page badge read",
       "source": "docs/lib/html.buzz:264",
       "attrs": {
         "exported": "true"
@@ -38001,7 +38001,7 @@
       "id": "function:docs/lib/html.buzz:wrapTables",
       "kind": "function",
       "label": "wrapTables",
-      "doc": "wrapTables wraps each <table> in a <figure class=\"table-scroll\"> so a wide table scrolls horizontally instead of overflowing on narrow screens. goldmark emits a bare <table> that Pico renders full-bleed with no overflow handling.",
+      "doc": "wrapTables wraps each \u003ctable\u003e in a \u003cfigure class=\"table-scroll\"\u003e so a wide table scrolls horizontally instead of overflowing on narrow screens. goldmark emits a bare \u003ctable\u003e that Pico renders full-bleed with no overflow handling.",
       "source": "docs/lib/html.buzz:157",
       "attrs": {
         "exported": "true"
@@ -38031,7 +38031,7 @@
       "id": "function:docs/lib/text.buzz:decodeEntities",
       "kind": "function",
       "label": "decodeEntities",
-      "doc": "decodeEntities turns HTML entities back into characters for a plain-text description. &amp; decodes LAST so \"&amp;lt;\" is not double-decoded into \"<\".",
+      "doc": "decodeEntities turns HTML entities back into characters for a plain-text description. \u0026amp; decodes LAST so \"\u0026amp;lt;\" is not double-decoded into \"\u003c\".",
       "source": "docs/lib/text.buzz:145",
       "attrs": {
         "exported": "true"
@@ -38051,7 +38051,7 @@
       "id": "function:docs/lib/text.buzz:firstPathSegment",
       "kind": "function",
       "label": "firstPathSegment",
-      "doc": "firstPathSegment returns the leading segment of a clean URL (\"spells/go/\" -> \"spells\").",
+      "doc": "firstPathSegment returns the leading segment of a clean URL (\"spells/go/\" -\u003e \"spells\").",
       "source": "docs/lib/text.buzz:43",
       "attrs": {
         "exported": "true"
@@ -38101,7 +38101,7 @@
       "id": "function:docs/lib/text.buzz:strLess",
       "kind": "function",
       "label": "strLess",
-      "doc": "strLess is lexicographic byte ordering; buzz has no `<` on str, so the sibling pager spells it out to sort filenames deterministically.",
+      "doc": "strLess is lexicographic byte ordering; buzz has no `\u003c` on str, so the sibling pager spells it out to sort filenames deterministically.",
       "source": "docs/lib/text.buzz:90",
       "attrs": {
         "exported": "true"
@@ -38211,7 +38211,7 @@
       "id": "function:docs/lib/url.buzz:tagSlug",
       "kind": "function",
       "label": "tagSlug",
-      "doc": "tagSlug turns an author-written tag into one URL segment: \"remote cache\" -> \"remote-cache\", \"magus.yaml\" -> \"magus-yaml\". Tags are prose, so two that differ only in punctuation or case are the same topic and must land on the same page - kebabCase is what collapses them.",
+      "doc": "tagSlug turns an author-written tag into one URL segment: \"remote cache\" -\u003e \"remote-cache\", \"magus.yaml\" -\u003e \"magus-yaml\". Tags are prose, so two that differ only in punctuation or case are the same topic and must land on the same page - kebabCase is what collapses them.",
       "source": "docs/lib/url.buzz:11",
       "attrs": {
         "exported": "true"
@@ -38231,7 +38231,7 @@
       "id": "function:docs/magusfile.buzz:build_hljs",
       "kind": "function",
       "label": "build_hljs",
-      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
+      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
       "source": "docs/magusfile.buzz:557",
       "attrs": {
         "exported": "true"
@@ -38300,7 +38300,7 @@
       "id": "function:docs/magusfile.buzz:diagrams_generate",
       "kind": "function",
       "label": "diagrams_generate",
-      "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render time so a diagram follows the theme toggle. This pair is for GitHub, where the README loads an image through <img> and cannot reach the page's CSS at all.  The pair lands under this project rather than beside the terminal recordings in the workspace's assets/gen: docs already depends on the root project, so writing there is MGS1012, a targ",
+      "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render time so a diagram follows the theme toggle. This pair is for GitHub, where the README loads an image through \u003cimg\u003e and cannot reach the page's CSS at all.  The pair lands under this project rather than beside the terminal recordings in the workspace's assets/gen: docs already depends on the root project, so writing there is MGS1012, a targ",
       "source": "docs/magusfile.buzz:530",
       "attrs": {
         "exported": "true"
@@ -38347,7 +38347,7 @@
       "id": "function:docs/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both need node_modules, which it reaches through format -> generate -> preflight; proc.exec raises on a non-zero exit, so either gate fails lint.  Markdown formatting is dprint, run once from the root project (its scope is dprint.json at the workspace root), so `format` here is a dependency edge and nothing else. This project only lints prose; see docs/concep",
+      "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both need node_modules, which it reaches through format -\u003e generate -\u003e preflight; proc.exec raises on a non-zero exit, so either gate fails lint.  Markdown formatting is dprint, run once from the root project (its scope is dprint.json at the workspace root), so `format` here is a dependency edge and nothing else. This project only lints prose; see docs/concep",
       "source": "docs/magusfile.buzz:431",
       "attrs": {
         "exported": "true"
@@ -38530,7 +38530,7 @@
       "id": "function:docs/site/development.buzz:renderDevelopment",
       "kind": "function",
       "label": "renderDevelopment",
-      "doc": "renderDevelopment writes the /development/ section BELOW its landing: one themed page per project rendering its target catalog and run-order graph, the Contributing guide, and a /development/projects/ index linking to the project pages and showing how they depend on each other. Retired /development/projects/<slug> URLs redirect to the flattened locations.  The section LANDING is not written here - /development/ is the repository README, which renderRoot writes. That is why this file no longer carries a buil",
+      "doc": "renderDevelopment writes the /development/ section BELOW its landing: one themed page per project rendering its target catalog and run-order graph, the Contributing guide, and a /development/projects/ index linking to the project pages and showing how they depend on each other. Retired /development/projects/\u003cslug\u003e URLs redirect to the flattened locations.  The section LANDING is not written here - /development/ is the repository README, which renderRoot writes. That is why this file no longer carries a buil",
       "source": "docs/site/development.buzz:281",
       "attrs": {
         "exported": "true"
@@ -38540,7 +38540,7 @@
       "id": "function:docs/site/development.buzz:renderDevelopmentPage",
       "kind": "function",
       "label": "renderDevelopmentPage",
-      "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"<dir>/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail. collectDevelopmentPages has already registered it.",
+      "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"\u003cdir\u003e/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail. collectDevelopmentPages has already registered it.",
       "source": "docs/site/development.buzz:87"
     },
     {
@@ -38554,7 +38554,7 @@
       "id": "function:docs/site/development.buzz:slugifyProject",
       "kind": "function",
       "label": "slugifyProject",
-      "doc": "slugifyProject turns a workspace-relative project path into one URL segment: \"libs/gopherbuzz\" -> \"libs-gopherbuzz\". Nested projects are the reason this exists -- the previous shallow scan never produced a path with a separator in it.  split/join, not replace: str.replace substitutes only the FIRST match, so a two-separator path (\"cmd/magus/starter\") kept the rest and the \"one segment\" this promises became a directory tree - /development/cmd-magus/starter/ - plus a node id with slashes still in it.",
+      "doc": "slugifyProject turns a workspace-relative project path into one URL segment: \"libs/gopherbuzz\" -\u003e \"libs-gopherbuzz\". Nested projects are the reason this exists -- the previous shallow scan never produced a path with a separator in it.  split/join, not replace: str.replace substitutes only the FIRST match, so a two-separator path (\"cmd/magus/starter\") kept the rest and the \"one segment\" this promises became a directory tree - /development/cmd-magus/starter/ - plus a node id with slashes still in it.",
       "source": "docs/site/development.buzz:121"
     },
     {
@@ -38614,7 +38614,7 @@
       "id": "function:docs/site/diagrams/all.buzz:writeStandalonePair",
       "kind": "function",
       "label": "writeStandalonePair",
-      "doc": "writeStandalonePair writes the committed light/dark SVG files for every diagram into dir. These exist for GitHub: a README image is loaded through <img>, which makes it a separate document with no access to the page's CSS variables, so the palette has to be baked in and a second file is the only way to offer a dark one.  Naming follows the terminal recordings already in assets/gen: the unsuffixed file is dark and carries the <img> fallback, `-light` is the prefers-color-scheme: light source.",
+      "doc": "writeStandalonePair writes the committed light/dark SVG files for every diagram into dir. These exist for GitHub: a README image is loaded through \u003cimg\u003e, which makes it a separate document with no access to the page's CSS variables, so the palette has to be baked in and a second file is the only way to offer a dark one.  Naming follows the terminal recordings already in assets/gen: the unsuffixed file is dark and carries the \u003cimg\u003e fallback, `-light` is the prefers-color-scheme: light source.",
       "source": "docs/site/diagrams/all.buzz:67",
       "attrs": {
         "exported": "true"
@@ -38775,7 +38775,7 @@
       "id": "function:docs/site/public.buzz:renderPublic",
       "kind": "function",
       "label": "renderPublic",
-      "doc": "renderPublic writes /public/ - one ordinary page listing the machine-readable endpoints this site serves. It used to be four nested Apache-mod_autoindex listings (public/, public/atom/, public/release/, public/release/<ver>/) whose columns promised more than the site delivers: the per-version pages tabulated artifact names, sizes, and checksums for files that are hosted on GitHub and were never served from here, so each one rendered a directory listing of an empty directory. Releases now link to the GitHub",
+      "doc": "renderPublic writes /public/ - one ordinary page listing the machine-readable endpoints this site serves. It used to be four nested Apache-mod_autoindex listings (public/, public/atom/, public/release/, public/release/\u003cver\u003e/) whose columns promised more than the site delivers: the per-version pages tabulated artifact names, sizes, and checksums for files that are hosted on GitHub and were never served from here, so each one rendered a directory listing of an empty directory. Releases now link to the GitHub",
       "source": "docs/site/public.buzz:176",
       "attrs": {
         "exported": "true"
@@ -38805,7 +38805,7 @@
       "id": "function:docs/site/release.buzz:semverSortKey",
       "kind": "function",
       "label": "semverSortKey",
-      "doc": "semverSortKey returns a zero-padded sort key: \"v0.10.0.yaml\" -> \"0000.0010.0000\", so lexicographic order matches numeric semver. Unknown formats fall through to the original name (safe: sort-only).",
+      "doc": "semverSortKey returns a zero-padded sort key: \"v0.10.0.yaml\" -\u003e \"0000.0010.0000\", so lexicographic order matches numeric semver. Unknown formats fall through to the original name (safe: sort-only).",
       "source": "docs/site/release.buzz:12",
       "attrs": {
         "exported": "true"
@@ -38835,7 +38835,7 @@
       "id": "function:docs/site/sections.buzz:parentPrefixes",
       "kind": "function",
       "label": "parentPrefixes",
-      "doc": "parentPrefixes returns every ancestor directory URL of a page URL, each with a trailing slash: \"a/b/c/\" -> [\"a/\", \"a/b/\"]. The page's own URL is excluded; a page is not its own parent.",
+      "doc": "parentPrefixes returns every ancestor directory URL of a page URL, each with a trailing slash: \"a/b/c/\" -\u003e [\"a/\", \"a/b/\"]. The page's own URL is excluded; a page is not its own parent.",
       "source": "docs/site/sections.buzz:39"
     },
     {
@@ -38852,7 +38852,7 @@
       "id": "function:docs/site/sections.buzz:sectionTitle",
       "kind": "function",
       "label": "sectionTitle",
-      "doc": "sectionTitle turns a URL segment into a heading: \"targets\" -> \"Targets\", \"ci-providers\" -> \"Ci providers\". Deliberately dumb - a section that wants a better name should get a real authored page, which this then steps aside for.",
+      "doc": "sectionTitle turns a URL segment into a heading: \"targets\" -\u003e \"Targets\", \"ci-providers\" -\u003e \"Ci providers\". Deliberately dumb - a section that wants a better name should get a real authored page, which this then steps aside for.",
       "source": "docs/site/sections.buzz:30"
     },
     {
@@ -38909,7 +38909,7 @@
       "id": "function:docs/site/tour.buzz:renderPlayground",
       "kind": "function",
       "label": "renderPlayground",
-      "doc": "renderPlayground writes gen/playground/index.html from the hand-authored playground.html, injecting the shared nav at its <!-- site-nav --> placeholder. The playground is standalone (custom head, wasm, own scripts), so it skips renderPage(); templating just the nav keeps it in lockstep with every other page. Its bottom chrome is the console status bar (in playground.html), not the docs footer.",
+      "doc": "renderPlayground writes gen/playground/index.html from the hand-authored playground.html, injecting the shared nav at its \u003c!-- site-nav --\u003e placeholder. The playground is standalone (custom head, wasm, own scripts), so it skips renderPage(); templating just the nav keeps it in lockstep with every other page. Its bottom chrome is the console status bar (in playground.html), not the docs footer.",
       "source": "docs/site/tour.buzz:50",
       "attrs": {
         "exported": "true"
@@ -38934,7 +38934,7 @@
       "id": "function:docs/site/tour.buzz:tourDocSlug",
       "kind": "function",
       "label": "tourDocSlug",
-      "doc": "The doc cross-link is one line, `// doc: <slug>|<label>`, because a slug with no label renders a link with nothing to click.",
+      "doc": "The doc cross-link is one line, `// doc: \u003cslug\u003e|\u003clabel\u003e`, because a slug with no label renders a link with nothing to click.",
       "source": "docs/site/tour.buzz:159"
     },
     {
@@ -39038,7 +39038,7 @@
       "id": "function:docs/tour/04-buzz.buzz:fact",
       "kind": "function",
       "label": "fact",
-      "doc": "Recursion again, building a product. `eval fact(10)` -> 3628800.",
+      "doc": "Recursion again, building a product. `eval fact(10)` -\u003e 3628800.",
       "source": "docs/tour/04-buzz.buzz:20"
     },
     {
@@ -39052,7 +39052,7 @@
       "id": "function:docs/tour/04-buzz.buzz:reduce",
       "kind": "function",
       "label": "reduce",
-      "doc": "Higher-order: a function that takes a function, invoked with an inline closure. `eval sum([2, 4, 6, 8])` -> 20.",
+      "doc": "Higher-order: a function that takes a function, invoked with an inline closure. `eval sum([2, 4, 6, 8])` -\u003e 20.",
       "source": "docs/tour/04-buzz.buzz:27"
     },
     {
@@ -39346,7 +39346,7 @@
       "id": "function:docs/tour/12-magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "doc": "The conventional anchor `magus affected ci` keys off. It declares no work of its own; it fans out to lint, build, and test, which share the format -> generate -> preflight spine and each run once. Try `run ci` to see the plan.",
+      "doc": "The conventional anchor `magus affected ci` keys off. It declares no work of its own; it fans out to lint, build, and test, which share the format -\u003e generate -\u003e preflight spine and each run once. Try `run ci` to see the plan.",
       "source": "docs/tour/12-magusfile.buzz:152",
       "attrs": {
         "exported": "true"
@@ -40007,7 +40007,7 @@
       "id": "function:libs/diagram/diagram.buzz:cssVarPalette",
       "kind": "function",
       "label": "cssVarPalette",
-      "doc": "cssVarPalette drives the diagram from custom properties defined in site.css, which map onto Pico's own variables. Only valid for an SVG inlined into the page; an <img>-loaded SVG resolves these against nothing and falls back to the hardcoded light values.",
+      "doc": "cssVarPalette drives the diagram from custom properties defined in site.css, which map onto Pico's own variables. Only valid for an SVG inlined into the page; an \u003cimg\u003e-loaded SVG resolves these against nothing and falls back to the hardcoded light values.",
       "source": "libs/diagram/diagram.buzz:59",
       "attrs": {
         "exported": "true"
@@ -40088,7 +40088,7 @@
       "id": "function:libs/diagram/diagram.buzz:inlineDiagrams",
       "kind": "function",
       "label": "inlineDiagrams",
-      "doc": "inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by diagram id. Inlining is what makes a diagram follow the site's manual theme toggle: an <img>-loaded SVG is a separate document and can only ever see prefers-color-scheme.  Two reference forms are recognized, because the two audiences need different markup. A docs page carries `<!--diagram:id-->`, which GitHub renders as nothing and goldmark passes through untouched. The README carries a real <picture> so GitHub shows the",
+      "doc": "inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by diagram id. Inlining is what makes a diagram follow the site's manual theme toggle: an \u003cimg\u003e-loaded SVG is a separate document and can only ever see prefers-color-scheme.  Two reference forms are recognized, because the two audiences need different markup. A docs page carries `\u003c!--diagram:id--\u003e`, which GitHub renders as nothing and goldmark passes through untouched. The README carries a real \u003cpicture\u003e so GitHub shows the",
       "source": "libs/diagram/diagram.buzz:1005",
       "attrs": {
         "exported": "true"
@@ -40230,7 +40230,7 @@
       "id": "function:libs/diagram/diagram.buzz:replacePicture",
       "kind": "function",
       "label": "replacePicture",
-      "doc": "replacePicture rewrites each <picture> element whose markup mentions needle. Scanning for the element bounds beats a regex here: the srcset and img inside carry attributes in no fixed order, and a <picture> that does not mention the needle has to survive untouched.",
+      "doc": "replacePicture rewrites each \u003cpicture\u003e element whose markup mentions needle. Scanning for the element bounds beats a regex here: the srcset and img inside carry attributes in no fixed order, and a \u003cpicture\u003e that does not mention the needle has to survive untouched.",
       "source": "libs/diagram/diagram.buzz:1019"
     },
     {
@@ -40536,7 +40536,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:upstream_pinned_sha",
       "kind": "function",
       "label": "upstream_pinned_sha",
-      "doc": "upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and validated against from version.go's UpstreamRef git-describe string (\"0.5.0-251-ged42f47\" -> \"ed42f47\") - the sha `conformance` checks the upstream clone out to before running the Go test.",
+      "doc": "upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and validated against from version.go's UpstreamRef git-describe string (\"0.5.0-251-ged42f47\" -\u003e \"ed42f47\") - the sha `conformance` checks the upstream clone out to before running the Go test.",
       "source": "libs/gopherbuzz/magusfile.buzz:157"
     },
     {
@@ -40941,7 +40941,7 @@
       "id": "function:magusfile.buzz:bindings_generate",
       "kind": "function",
       "label": "bindings_generate",
-      "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
+      "doc": "Regenerates the Go host bindings (std -\u003e internal/interp/bindings/gen) from std.Module declarations.",
       "source": "magusfile.buzz:928",
       "attrs": {
         "exported": "true"
@@ -40991,7 +40991,7 @@
       "id": "function:magusfile.buzz:changelog_generate",
       "kind": "function",
       "label": "changelog_generate",
-      "doc": "CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a reverse docs -> root output edge while letting docs publication depend on the same execution stage.",
+      "doc": "CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a reverse docs -\u003e root output edge while letting docs publication depend on the same execution stage.",
       "source": "magusfile.buzz:905",
       "attrs": {
         "exported": "true"
@@ -41155,7 +41155,7 @@
       "id": "function:magusfile.buzz:goarm_level",
       "kind": "function",
       "label": "goarm_level",
-      "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix. Maps an ASSET architecture token to the GOARM level it implies, or \"\" for the arches that",
+      "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line \u003casset\u003e.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 \u003e dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix. Maps an ASSET architecture token to the GOARM level it implies, or \"\" for the arches that",
       "source": "magusfile.buzz:1339"
     },
     {
@@ -41312,7 +41312,7 @@
       "id": "function:magusfile.buzz:missing_input",
       "kind": "function",
       "label": "missing_input",
-      "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
+      "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run \u003ctarget\u003e [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
       "source": "magusfile.buzz:2846"
     },
     {
@@ -41408,7 +41408,7 @@
       "id": "function:magusfile.buzz:release_build",
       "kind": "function",
       "label": "release_build",
-      "doc": "Builds one release binary for one platform. Default is STATIC (CGO_ENABLED=0), and the `dynamic` charm (`magus run release-build:dynamic`) opts into the cgo build.  The default is static so that every layer says the same thing: the bare command produces the bare asset, and that asset is the one that runs anywhere - no loader, no glibc, no system libzstd. Inverted - the bare command producing the cgo build while the bare ARCHIVE is the static one - `release-build` and `magus_<v>_<os>_<arch>.tar.gz` would mea",
+      "doc": "Builds one release binary for one platform. Default is STATIC (CGO_ENABLED=0), and the `dynamic` charm (`magus run release-build:dynamic`) opts into the cgo build.  The default is static so that every layer says the same thing: the bare command produces the bare asset, and that asset is the one that runs anywhere - no loader, no glibc, no system libzstd. Inverted - the bare command producing the cgo build while the bare ARCHIVE is the static one - `release-build` and `magus_\u003cv\u003e_\u003cos\u003e_\u003carch\u003e.tar.gz` would mea",
       "source": "magusfile.buzz:1606",
       "attrs": {
         "exported": "true"
@@ -41602,7 +41602,7 @@
       "id": "function:magusfile.buzz:version",
       "kind": "function",
       "label": "version",
-      "doc": "The version stamped into the binary, into BUILDINFO, and into every release asset name.  A root release tag on HEAD beats describe(), because `git describe --tags` has no rule for choosing among the tags on one commit and a release commit carries one per independently-versioned module. Cutting v0.4.0 it chose libs/diagnostics/v0.1.0, so every asset was named magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz, a path rather than a filename, and the release uploaded nothing.  A dirty tree appends describe's `-d",
+      "doc": "The version stamped into the binary, into BUILDINFO, and into every release asset name.  A root release tag on HEAD beats describe(), because `git describe --tags` has no rule for choosing among the tags on one commit and a release commit carries one per independently-versioned module. Cutting v0.4.0 it chose libs/diagnostics/v0.1.0, so every asset was named magus_libs/diagnostics/v0.1.0_\u003cos\u003e_\u003carch\u003e.tar.gz, a path rather than a filename, and the release uploaded nothing.  A dirty tree appends describe's `-d",
       "source": "magusfile.buzz:253"
     },
     {
@@ -41691,7 +41691,7 @@
       "id": "function:releaser.buzz:manifestWithVersion",
       "kind": "function",
       "label": "manifestWithVersion",
-      "doc": "manifestWithVersion returns the SHA256SUMS content with the leading `version: <v>` line selfupdate's ParseManifest requires: the header binds the signed manifest to one release, and every shipped parser refuses a manifest without it. Idempotent - a manifest already carrying a version line comes back unchanged. sha256sum(1) warns on the line and still verifies the rest, and the install script's own filter reads only 64-hex-digit lines, so the file stays consumable everywhere it is documented.",
+      "doc": "manifestWithVersion returns the SHA256SUMS content with the leading `version: \u003cv\u003e` line selfupdate's ParseManifest requires: the header binds the signed manifest to one release, and every shipped parser refuses a manifest without it. Idempotent - a manifest already carrying a version line comes back unchanged. sha256sum(1) warns on the line and still verifies the rest, and the install script's own filter reads only 64-hex-digit lines, so the file stays consumable everywhere it is documented.",
       "source": "releaser.buzz:238",
       "attrs": {
         "exported": "true"
@@ -41701,7 +41701,7 @@
       "id": "function:releaser.buzz:matchesGlob",
       "kind": "function",
       "label": "matchesGlob",
-      "doc": "matchesGlob reports whether name matches pattern, where a single \"*\" stands for any run of characters that does not cross \"/\".  The \"/\" restriction is the semantics of both the shell glob release.yaml's upload step expands and the ref filter its `v*` tag trigger applies, and it is what a version carrying a \"/\" violates: the v0.4.0 assets were named magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz, real files under dist/magus_libs/diagnostics/ that dist/magus_*.tar.gz could not see. A prefix/suffix test call",
+      "doc": "matchesGlob reports whether name matches pattern, where a single \"*\" stands for any run of characters that does not cross \"/\".  The \"/\" restriction is the semantics of both the shell glob release.yaml's upload step expands and the ref filter its `v*` tag trigger applies, and it is what a version carrying a \"/\" violates: the v0.4.0 assets were named magus_libs/diagnostics/v0.1.0_\u003cos\u003e_\u003carch\u003e.tar.gz, real files under dist/magus_libs/diagnostics/ that dist/magus_*.tar.gz could not see. A prefix/suffix test call",
       "source": "releaser.buzz:150",
       "attrs": {
         "exported": "true"
@@ -41870,7 +41870,7 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:cache_key",
       "kind": "function",
       "label": "cache_key",
-      "doc": "cache_key derives the object key from the spec hash (already unique per project; hex, so URL-safe — no extra encoding needed in the canonical URI). NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose: S3 folds CACHE_VERSION into the key string (\"magus-<hash>-<version>\"), while GHA keeps the version in a separate `version` request field. Do NOT change the emitted string here — it would invalidate every existing S3 artifact. Track the inconsistency for follow-up only.",
+      "doc": "cache_key derives the object key from the spec hash (already unique per project; hex, so URL-safe — no extra encoding needed in the canonical URI). NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose: S3 folds CACHE_VERSION into the key string (\"magus-\u003chash\u003e-\u003cversion\u003e\"), while GHA keeps the version in a separate `version` request field. Do NOT change the emitted string here — it would invalidate every existing S3 artifact. Track the inconsistency for follow-up only.",
       "source": "spells/aws/s3-cache/spell.buzz:144"
     },
     {
@@ -42972,7 +42972,7 @@
       "id": "function:spells/github/actions/spell.buzz:resolve_secret",
       "kind": "function",
       "label": "resolve_secret",
-      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so a provider returning the wrong shape fails to load rather than failing at the first read.",
+      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `\u003e Secret`, not `\u003e str`: Buzz checks function signatures, so a provider returning the wrong shape fails to load rather than failing at the first read.",
       "source": "spells/github/actions/spell.buzz:404",
       "attrs": {
         "exported": "true"
@@ -43343,7 +43343,7 @@
       "id": "function:spells/golang/spell.buzz:goTest",
       "kind": "function",
       "label": "goTest",
-      "doc": "`./...` is a default, not a fixed arg: a magusfile that passes args replaces it, so one package's tests need not compile every test binary in the module. A bare go.test() (and `magus run <t> -- <extra>` forwarding) still runs the whole tree.",
+      "doc": "`./...` is a default, not a fixed arg: a magusfile that passes args replaces it, so one package's tests need not compile every test binary in the module. A bare go.test() (and `magus run \u003ct\u003e -- \u003cextra\u003e` forwarding) still runs the whole tree.",
       "source": "spells/golang/spell.buzz:139"
     },
     {
@@ -43520,7 +43520,7 @@
       "id": "function:spells/onepassword/spell.buzz:resolve_secret",
       "kind": "function",
       "label": "resolve_secret",
-      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so this one is enforced at compile time - a provider returning the wrong shape fails to load rather than failing at the first read. Secret comes from magus/spell, like Target and Command.  The reference may be written either way, because both read naturally at a call site:  magus\\secret.r",
+      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `\u003e Secret`, not `\u003e str`: Buzz checks function signatures, so this one is enforced at compile time - a provider returning the wrong shape fails to load rather than failing at the first read. Secret comes from magus/spell, like Target and Command.  The reference may be written either way, because both read naturally at a call site:  magus\\secret.r",
       "source": "spells/onepassword/spell.buzz:65",
       "attrs": {
         "exported": "true"
@@ -44006,7 +44006,7 @@
       "id": "function:tools/audit.buzz:hasInstallablePatch",
       "kind": "function",
       "label": "hasInstallablePatch",
-      "doc": "hasInstallablePatch reports whether any published version of pkg satisfies the advisory's patched range AND is old enough to clear the cooling period - that is, whether a fix could land today.  `pnpm view <pkg> time --json` returns a version -> ISO-8601 map plus the non-version keys \"created\" and \"modified\", which are skipped. A version that fails to parse is skipped rather than fatal: an odd tag upstream must not take a build down.",
+      "doc": "hasInstallablePatch reports whether any published version of pkg satisfies the advisory's patched range AND is old enough to clear the cooling period - that is, whether a fix could land today.  `pnpm view \u003cpkg\u003e time --json` returns a version -\u003e ISO-8601 map plus the non-version keys \"created\" and \"modified\", which are skipped. A version that fails to parse is skipped rather than fatal: an odd tag upstream must not take a build down.",
       "source": "tools/audit.buzz:78"
     },
     {
@@ -44945,7 +44945,7 @@
       "label": "archive.compress",
       "doc": "Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts keys: format (string, override format detection), threads (int, parallel encode workers; 0 or omitted = auto), level (int, compression level; -1 = format default), follow_symlinks (bool, default false), max_size (int, output byte cap, de",
       "attrs": {
-        "buzz": "archive\\compress(src, dest, [opts]) -> CompressResult"
+        "buzz": "archive\\compress(src, dest, [opts]) -\u003e CompressResult"
       }
     },
     {
@@ -44954,7 +44954,7 @@
       "label": "archive.list",
       "doc": "List the archive at src without extracting it, as entries of {name, size, is_dir} sorted by name. Use it to check what an archive holds - that a release tarball carries the binary you expect, or how large an entry is - before paying to extract it. Symlinks and devices are skipped, matching uncompress. opts keys: threads (int, parallel decode workers; 0 or omitted = auto).",
       "attrs": {
-        "buzz": "archive\\list(src, [opts]) -> [ArchiveEntry]"
+        "buzz": "archive\\list(src, [opts]) -\u003e [ArchiveEntry]"
       }
     },
     {
@@ -44963,7 +44963,7 @@
       "label": "archive.read_file",
       "doc": "Return the contents of the single entry named name inside the archive at src, without extracting anything to disk. Reading one manifest out of a release tarball is the usual reason. Raises when name is not in the archive, or when the entry exceeds max_size. opts keys: max_size (int, byte cap on the entry, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
       "attrs": {
-        "buzz": "archive\\readFile(src, name, [opts]) -> string"
+        "buzz": "archive\\readFile(src, name, [opts]) -\u003e string"
       }
     },
     {
@@ -44972,7 +44972,7 @@
       "label": "archive.uncompress",
       "doc": "Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts keys: strip (int, strip N leading path components), max_size (int, uncompressed byte cap, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
       "attrs": {
-        "buzz": "archive\\uncompress(src, dest, [opts]) -> UncompressResult"
+        "buzz": "archive\\uncompress(src, dest, [opts]) -\u003e UncompressResult"
       }
     },
     {
@@ -44981,7 +44981,7 @@
       "label": "base64.decode",
       "doc": "Decode a standard (padded) base64 string; errors on malformed input.",
       "attrs": {
-        "buzz": "base64\\decode(s) -> string"
+        "buzz": "base64\\decode(s) -\u003e string"
       }
     },
     {
@@ -44990,7 +44990,7 @@
       "label": "base64.encode",
       "doc": "Encode data as standard (padded) base64.",
       "attrs": {
-        "buzz": "base64\\encode(data) -> string"
+        "buzz": "base64\\encode(data) -\u003e string"
       }
     },
     {
@@ -44999,7 +44999,7 @@
       "label": "base64.url_decode",
       "doc": "Decode a URL-safe (padded) base64 string; errors on malformed input.",
       "attrs": {
-        "buzz": "base64\\urlDecode(s) -> string"
+        "buzz": "base64\\urlDecode(s) -\u003e string"
       }
     },
     {
@@ -45008,7 +45008,7 @@
       "label": "base64.url_encode",
       "doc": "Encode data as URL-safe (padded) base64.",
       "attrs": {
-        "buzz": "base64\\urlEncode(data) -> string"
+        "buzz": "base64\\urlEncode(data) -\u003e string"
       }
     },
     {
@@ -45017,7 +45017,7 @@
       "label": "charm.after",
       "doc": "Insert vals immediately after the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm\\after(argv, anchor, vals) -> Charm"
+        "buzz": "charm\\after(argv, anchor, vals) -\u003e Charm"
       }
     },
     {
@@ -45026,7 +45026,7 @@
       "label": "charm.after_func",
       "doc": "Insert vals after the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm\\afterFunc(argv, fn, vals) -> Charm"
+        "buzz": "charm\\afterFunc(argv, fn, vals) -\u003e Charm"
       }
     },
     {
@@ -45035,7 +45035,7 @@
       "label": "charm.append",
       "doc": "Append vals to the end of the argv.",
       "attrs": {
-        "buzz": "charm\\append(vals) -> Charm"
+        "buzz": "charm\\append(vals) -\u003e Charm"
       }
     },
     {
@@ -45044,7 +45044,7 @@
       "label": "charm.before",
       "doc": "Insert vals immediately before the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm\\before(argv, anchor, vals) -> Charm"
+        "buzz": "charm\\before(argv, anchor, vals) -\u003e Charm"
       }
     },
     {
@@ -45053,7 +45053,7 @@
       "label": "charm.before_func",
       "doc": "Insert vals before the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm\\beforeFunc(argv, fn, vals) -> Charm"
+        "buzz": "charm\\beforeFunc(argv, fn, vals) -\u003e Charm"
       }
     },
     {
@@ -45062,7 +45062,7 @@
       "label": "charm.copy",
       "doc": "Copy the first argv element equal to anchor to the JSON Pointer to (\"/-\" end, \"/0\" front, or charm.path(...)).",
       "attrs": {
-        "buzz": "charm\\copy(argv, anchor, to) -> Charm"
+        "buzz": "charm\\copy(argv, anchor, to) -\u003e Charm"
       }
     },
     {
@@ -45071,7 +45071,7 @@
       "label": "charm.copy_func",
       "doc": "Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.",
       "attrs": {
-        "buzz": "charm\\copyFunc(argv, fn, to) -> Charm"
+        "buzz": "charm\\copyFunc(argv, fn, to) -\u003e Charm"
       }
     },
     {
@@ -45080,7 +45080,7 @@
       "label": "charm.drop",
       "doc": "Drop (remove) the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm\\drop(argv, anchor) -> Charm"
+        "buzz": "charm\\drop(argv, anchor) -\u003e Charm"
       }
     },
     {
@@ -45089,7 +45089,7 @@
       "label": "charm.drop_func",
       "doc": "Drop (remove) the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm\\dropFunc(argv, fn) -> Charm"
+        "buzz": "charm\\dropFunc(argv, fn) -\u003e Charm"
       }
     },
     {
@@ -45098,7 +45098,7 @@
       "label": "charm.move",
       "doc": "Move the first argv element equal to anchor to the JSON Pointer to (\"/-\" end, \"/0\" front, or charm.path(...)).",
       "attrs": {
-        "buzz": "charm\\move(argv, anchor, to) -> Charm"
+        "buzz": "charm\\move(argv, anchor, to) -\u003e Charm"
       }
     },
     {
@@ -45107,7 +45107,7 @@
       "label": "charm.move_func",
       "doc": "Move the first argv element for which fn(s) is truthy to the JSON Pointer to.",
       "attrs": {
-        "buzz": "charm\\moveFunc(argv, fn, to) -> Charm"
+        "buzz": "charm\\moveFunc(argv, fn, to) -\u003e Charm"
       }
     },
     {
@@ -45116,7 +45116,7 @@
       "label": "charm.path",
       "doc": "Return the JSON Pointer (\"/N\") of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.",
       "attrs": {
-        "buzz": "charm\\path(argv, anchor) -> string"
+        "buzz": "charm\\path(argv, anchor) -\u003e string"
       }
     },
     {
@@ -45125,7 +45125,7 @@
       "label": "charm.path_func",
       "doc": "Return the JSON Pointer (\"/N\") of the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm\\pathFunc(argv, fn) -> string"
+        "buzz": "charm\\pathFunc(argv, fn) -\u003e string"
       }
     },
     {
@@ -45134,7 +45134,7 @@
       "label": "charm.prepend",
       "doc": "Insert vals at the front of the argv, in order.",
       "attrs": {
-        "buzz": "charm\\prepend(vals) -> Charm"
+        "buzz": "charm\\prepend(vals) -\u003e Charm"
       }
     },
     {
@@ -45143,7 +45143,7 @@
       "label": "charm.set",
       "doc": "Replace the first argv element equal to anchor with val.",
       "attrs": {
-        "buzz": "charm\\set(argv, anchor, val) -> Charm"
+        "buzz": "charm\\set(argv, anchor, val) -\u003e Charm"
       }
     },
     {
@@ -45152,7 +45152,7 @@
       "label": "charm.set_func",
       "doc": "Replace the first argv element for which fn(s) is truthy with val.",
       "attrs": {
-        "buzz": "charm\\setFunc(argv, fn, val) -> Charm"
+        "buzz": "charm\\setFunc(argv, fn, val) -\u003e Charm"
       }
     },
     {
@@ -45161,7 +45161,7 @@
       "label": "charm.test",
       "doc": "Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).",
       "attrs": {
-        "buzz": "charm\\test(argv, anchor) -> Charm"
+        "buzz": "charm\\test(argv, anchor) -\u003e Charm"
       }
     },
     {
@@ -45170,7 +45170,7 @@
       "label": "charm.test_func",
       "doc": "Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.",
       "attrs": {
-        "buzz": "charm\\testFunc(argv, fn) -> Charm"
+        "buzz": "charm\\testFunc(argv, fn) -\u003e Charm"
       }
     },
     {
@@ -45179,7 +45179,7 @@
       "label": "crypto.base64_decode_bytes",
       "doc": "Decode standard (padded) base64 into a byte list; errors on invalid input. Returns bytes rather than a str so arbitrary binary survives - a decoded key or archive would not.",
       "attrs": {
-        "buzz": "crypto\\base64DecodeBytes(s) -> []byte"
+        "buzz": "crypto\\base64DecodeBytes(s) -\u003e []byte"
       }
     },
     {
@@ -45188,7 +45188,7 @@
       "label": "crypto.base64_encode_bytes",
       "doc": "Encode raw bytes as standard (padded) base64. The byte-list counterpart to encoding/base64's encode, for data that came from another byte-level call and must not round-trip through a rune-oriented str.",
       "attrs": {
-        "buzz": "crypto\\base64EncodeBytes(data) -> string"
+        "buzz": "crypto\\base64EncodeBytes(data) -\u003e string"
       }
     },
     {
@@ -45197,7 +45197,7 @@
       "label": "crypto.hmac_sha256",
       "doc": "Return the raw HMAC-SHA256 of data keyed by key, as a BYTE LIST. key and data may each be a str or a byte list, which is what lets one result key the next call - the shape an AWS SigV4 signing chain needs (kDate to kRegion to kService to kSigning). Use hmac_sha256_hex for the final signature you actually send.",
       "attrs": {
-        "buzz": "crypto\\hmacSha256(key, data) -> []byte"
+        "buzz": "crypto\\hmacSha256(key, data) -\u003e []byte"
       }
     },
     {
@@ -45206,7 +45206,7 @@
       "label": "crypto.hmac_sha256_hex",
       "doc": "Return the lowercase hex HMAC-SHA256 of data keyed by key - the form a signature header carries, once the signing key has been derived with hmac_sha256.",
       "attrs": {
-        "buzz": "crypto\\hmacSha256Hex(key, data) -> string"
+        "buzz": "crypto\\hmacSha256Hex(key, data) -\u003e string"
       }
     },
     {
@@ -45215,7 +45215,7 @@
       "label": "crypto.md5_file",
       "doc": "Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto\\md5File(path) -> string"
+        "buzz": "crypto\\md5File(path) -\u003e string"
       }
     },
     {
@@ -45224,7 +45224,7 @@
       "label": "crypto.md5_hex",
       "doc": "Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto\\md5Hex(data) -> string"
+        "buzz": "crypto\\md5Hex(data) -\u003e string"
       }
     },
     {
@@ -45233,7 +45233,7 @@
       "label": "crypto.public_key",
       "doc": "Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is \"ed25519\".",
       "attrs": {
-        "buzz": "crypto\\publicKey(alg, key_env) -> string"
+        "buzz": "crypto\\publicKey(alg, key_env) -\u003e string"
       }
     },
     {
@@ -45242,7 +45242,7 @@
       "label": "crypto.sha1_file",
       "doc": "Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto\\sha1File(path) -> string"
+        "buzz": "crypto\\sha1File(path) -\u003e string"
       }
     },
     {
@@ -45251,7 +45251,7 @@
       "label": "crypto.sha1_hex",
       "doc": "Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto\\sha1Hex(data) -> string"
+        "buzz": "crypto\\sha1Hex(data) -\u003e string"
       }
     },
     {
@@ -45260,7 +45260,7 @@
       "label": "crypto.sha256_file",
       "doc": "Return the lowercase hex SHA-256 digest of the file at path.",
       "attrs": {
-        "buzz": "crypto\\sha256File(path) -> string"
+        "buzz": "crypto\\sha256File(path) -\u003e string"
       }
     },
     {
@@ -45269,7 +45269,7 @@
       "label": "crypto.sha256_hex",
       "doc": "Return the lowercase hex SHA-256 digest of data.",
       "attrs": {
-        "buzz": "crypto\\sha256Hex(data) -> string"
+        "buzz": "crypto\\sha256Hex(data) -\u003e string"
       }
     },
     {
@@ -45278,7 +45278,7 @@
       "label": "crypto.sha512_file",
       "doc": "Return the lowercase hex SHA-512 digest of the file at path.",
       "attrs": {
-        "buzz": "crypto\\sha512File(path) -> string"
+        "buzz": "crypto\\sha512File(path) -\u003e string"
       }
     },
     {
@@ -45287,7 +45287,7 @@
       "label": "crypto.sha512_hex",
       "doc": "Return the lowercase hex SHA-512 digest of data.",
       "attrs": {
-        "buzz": "crypto\\sha512Hex(data) -> string"
+        "buzz": "crypto\\sha512Hex(data) -\u003e string"
       }
     },
     {
@@ -45296,7 +45296,7 @@
       "label": "crypto.sign",
       "doc": "Sign data with the private key in the named environment variable and return the lowercase hex signature. alg is \"ed25519\". The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.",
       "attrs": {
-        "buzz": "crypto\\sign(alg, data, key_env) -> string"
+        "buzz": "crypto\\sign(alg, data, key_env) -\u003e string"
       }
     },
     {
@@ -45305,7 +45305,7 @@
       "label": "crypto.sign_file",
       "doc": "Sign the file at path, write the detached signature to path + \".sig\", and return the lowercase hex signature. alg is \"ed25519\".",
       "attrs": {
-        "buzz": "crypto\\signFile(alg, path, key_env) -> string"
+        "buzz": "crypto\\signFile(alg, path, key_env) -\u003e string"
       }
     },
     {
@@ -45314,7 +45314,7 @@
       "label": "crypto.verify",
       "doc": "Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is \"ed25519\".",
       "attrs": {
-        "buzz": "crypto\\verify(alg, data, sig_hex, pub_hex) -> bool"
+        "buzz": "crypto\\verify(alg, data, sig_hex, pub_hex) -\u003e bool"
       }
     },
     {
@@ -45323,7 +45323,7 @@
       "label": "csv.parse",
       "doc": "Parse delimiter-separated text into a list of rows, each a list of fields. Quoted fields, embedded delimiters, and embedded newlines are handled per RFC 4180. delimiter defaults to \",\" - pass \"\\t\" for TSV. When comment is a single character, lines starting with it are skipped. Raises when a row has a different field count than the first, which is the corruption a hand-rolled split would silently pass through.",
       "attrs": {
-        "buzz": "csv\\parse(s, [delimiter], [comment]) -> [][]string"
+        "buzz": "csv\\parse(s, [delimiter], [comment]) -\u003e [][]string"
       }
     },
     {
@@ -45332,7 +45332,7 @@
       "label": "csv.stringify",
       "doc": "Render rows (a list of lists of fields) as delimiter-separated text, quoting any field that needs it. delimiter defaults to \",\". The output ends with a newline, so it is ready to write.",
       "attrs": {
-        "buzz": "csv\\stringify(rows, [delimiter]) -> string"
+        "buzz": "csv\\stringify(rows, [delimiter]) -\u003e string"
       }
     },
     {
@@ -45341,7 +45341,7 @@
       "label": "diff.equal",
       "doc": "Report whether a and b are identical after normalizing line endings and a single trailing newline. It is the comparison a drift gate wants: a file that differs only by CRLF or by whether the last line is newline-terminated has not drifted in any sense a reader cares about, and a bare == would say it had.",
       "attrs": {
-        "buzz": "diff\\equal(a, b) -> bool"
+        "buzz": "diff\\equal(a, b) -\u003e bool"
       }
     },
     {
@@ -45350,7 +45350,7 @@
       "label": "diff.stat",
       "doc": "Return a one-line summary of the change: \"3 added, 1 removed\", or \"\" when a and b are identical. For a report that wants the shape of a drift without the whole patch - a summary line per file, with unified reserved for the one the reader drills into.",
       "attrs": {
-        "buzz": "diff\\stat(a, b) -> string"
+        "buzz": "diff\\stat(a, b) -\u003e string"
       }
     },
     {
@@ -45359,7 +45359,7 @@
       "label": "diff.unified",
       "doc": "Return a unified diff of a and b, or \"\" when they are identical - so the result doubles as the check. from_label and to_label name the two sides in the +++/--- header (default \"a\" and \"b\"); pass the file path and something like \"regenerated\" to make a drift report read like a patch. context is the unchanged lines kept around each hunk, defaulting to 3 as git does.",
       "attrs": {
-        "buzz": "diff\\unified(a, b, [from_label], [to_label], [context]) -> string"
+        "buzz": "diff\\unified(a, b, [from_label], [to_label], [context]) -\u003e string"
       }
     },
     {
@@ -45368,7 +45368,7 @@
       "label": "env.expand",
       "doc": "Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to \"\").",
       "attrs": {
-        "buzz": "env\\expand(s) -> string"
+        "buzz": "env\\expand(s) -\u003e string"
       }
     },
     {
@@ -45377,7 +45377,7 @@
       "label": "env.get",
       "doc": "Return the value of name, or \"\" if unset. Use lookup to tell unset from set-but-empty.",
       "attrs": {
-        "buzz": "env\\get(name) -> string"
+        "buzz": "env\\get(name) -\u003e string"
       }
     },
     {
@@ -45386,7 +45386,7 @@
       "label": "env.get_or",
       "doc": "Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is - def only applies when the variable is absent.",
       "attrs": {
-        "buzz": "env\\getOr(name, def) -> string"
+        "buzz": "env\\getOr(name, def) -\u003e string"
       }
     },
     {
@@ -45395,16 +45395,16 @@
       "label": "env.home",
       "doc": "Return the current user's home directory.",
       "attrs": {
-        "buzz": "env\\home() -> string"
+        "buzz": "env\\home() -\u003e string"
       }
     },
     {
       "id": "method:env.list",
       "kind": "method",
       "label": "env.list",
-      "doc": "Return all environment variables as a name->value map.",
+      "doc": "Return all environment variables as a name-\u003evalue map.",
       "attrs": {
-        "buzz": "env\\list() -> map[string]string"
+        "buzz": "env\\list() -\u003e map[string]string"
       }
     },
     {
@@ -45422,25 +45422,25 @@
       "label": "env.lookup",
       "doc": "Return (value, found); found is false when name is unset or stripped by the sandbox.",
       "attrs": {
-        "buzz": "env\\lookup(name) -> string, bool"
+        "buzz": "env\\lookup(name) -\u003e string, bool"
       }
     },
     {
       "id": "method:env.parse_dotenv",
       "kind": "method",
       "label": "env.parse_dotenv",
-      "doc": "Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
+      "doc": "Parse .env-format content into a name-\u003evalue map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
       "attrs": {
-        "buzz": "env\\parseDotenv(content) -> map[string]string"
+        "buzz": "env\\parseDotenv(content) -\u003e map[string]string"
       }
     },
     {
       "id": "method:env.read_dotenv",
       "kind": "method",
       "label": "env.read_dotenv",
-      "doc": "Read a .env file and return its name->value map (parse_dotenv over the file contents). Errors if the file cannot be read.",
+      "doc": "Read a .env file and return its name-\u003evalue map (parse_dotenv over the file contents). Errors if the file cannot be read.",
       "attrs": {
-        "buzz": "env\\readDotenv(path) -> map[string]string"
+        "buzz": "env\\readDotenv(path) -\u003e map[string]string"
       }
     },
     {
@@ -45449,7 +45449,7 @@
       "label": "env.require",
       "doc": "Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).",
       "attrs": {
-        "buzz": "env\\require(name) -> string"
+        "buzz": "env\\require(name) -\u003e string"
       }
     },
     {
@@ -45476,7 +45476,7 @@
       "label": "fmt.sprintf",
       "doc": "Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.",
       "attrs": {
-        "buzz": "fmt\\sprintf(format, args...) -> string"
+        "buzz": "fmt\\sprintf(format, args...) -\u003e string"
       }
     },
     {
@@ -45494,7 +45494,7 @@
       "label": "fs.basename",
       "doc": "Final element of path.",
       "attrs": {
-        "buzz": "fs\\basename(path) -> string"
+        "buzz": "fs\\basename(path) -\u003e string"
       }
     },
     {
@@ -45530,7 +45530,7 @@
       "label": "fs.dirname",
       "doc": "Directory portion of path.",
       "attrs": {
-        "buzz": "fs\\dirname(path) -> string"
+        "buzz": "fs\\dirname(path) -\u003e string"
       }
     },
     {
@@ -45539,7 +45539,7 @@
       "label": "fs.exists",
       "doc": "True iff path exists.",
       "attrs": {
-        "buzz": "fs\\exists(path) -> bool"
+        "buzz": "fs\\exists(path) -\u003e bool"
       }
     },
     {
@@ -45548,7 +45548,7 @@
       "label": "fs.ext",
       "doc": "File-name extension of path, including the leading dot (\"\" if none).",
       "attrs": {
-        "buzz": "fs\\ext(path) -> string"
+        "buzz": "fs\\ext(path) -\u003e string"
       }
     },
     {
@@ -45557,7 +45557,7 @@
       "label": "fs.glob",
       "doc": "Return paths matching pattern (doublestar-style).",
       "attrs": {
-        "buzz": "fs\\glob(pattern) -> [Path]"
+        "buzz": "fs\\glob(pattern) -\u003e [Path]"
       }
     },
     {
@@ -45566,7 +45566,7 @@
       "label": "fs.is_dir",
       "doc": "True iff path exists and is a directory. A sandbox-denied path raises rather than reading as false.",
       "attrs": {
-        "buzz": "fs\\isDir(path) -> bool"
+        "buzz": "fs\\isDir(path) -\u003e bool"
       }
     },
     {
@@ -45575,7 +45575,7 @@
       "label": "fs.is_file",
       "doc": "True iff path exists and is a regular file. A sandbox-denied path raises rather than reading as false.",
       "attrs": {
-        "buzz": "fs\\isFile(path) -> bool"
+        "buzz": "fs\\isFile(path) -\u003e bool"
       }
     },
     {
@@ -45584,7 +45584,7 @@
       "label": "fs.join",
       "doc": "Join path elements with the OS separator.",
       "attrs": {
-        "buzz": "fs\\join(parts...) -> string"
+        "buzz": "fs\\join(parts...) -\u003e string"
       }
     },
     {
@@ -45593,7 +45593,7 @@
       "label": "fs.list_dir",
       "doc": "Return directory entries; empty if path does not exist.",
       "attrs": {
-        "buzz": "fs\\listDir(path) -> []string"
+        "buzz": "fs\\listDir(path) -\u003e []string"
       }
     },
     {
@@ -45611,7 +45611,7 @@
       "label": "fs.read_file",
       "doc": "Return the contents of path as a string.",
       "attrs": {
-        "buzz": "fs\\readFile(path) -> string"
+        "buzz": "fs\\readFile(path) -\u003e string"
       }
     },
     {
@@ -45620,7 +45620,7 @@
       "label": "fs.read_lines",
       "doc": "Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.",
       "attrs": {
-        "buzz": "fs\\readLines(path) -> []string"
+        "buzz": "fs\\readLines(path) -\u003e []string"
       }
     },
     {
@@ -45629,7 +45629,7 @@
       "label": "fs.readlink",
       "doc": "Return the target of the symbolic link at path.",
       "attrs": {
-        "buzz": "fs\\readlink(path) -> string"
+        "buzz": "fs\\readlink(path) -\u003e string"
       }
     },
     {
@@ -45665,7 +45665,7 @@
       "label": "fs.size",
       "doc": "Return path's size in bytes. Raises when path does not exist; stat returns the whole FileInfo when more than the size is wanted.",
       "attrs": {
-        "buzz": "fs\\size(path) -> int"
+        "buzz": "fs\\size(path) -\u003e int"
       }
     },
     {
@@ -45674,7 +45674,7 @@
       "label": "fs.stat",
       "doc": "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
       "attrs": {
-        "buzz": "fs\\stat(path) -> FileInfo"
+        "buzz": "fs\\stat(path) -\u003e FileInfo"
       }
     },
     {
@@ -45692,7 +45692,7 @@
       "label": "fs.temp_dir",
       "doc": "Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.",
       "attrs": {
-        "buzz": "fs\\tempDir([prefix]) -> string"
+        "buzz": "fs\\tempDir([prefix]) -\u003e string"
       }
     },
     {
@@ -45701,7 +45701,7 @@
       "label": "fs.temp_file",
       "doc": "Create a new empty temporary file (in os.TempDir()) with an optional name prefix and return its path. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
       "attrs": {
-        "buzz": "fs\\tempFile([prefix]) -> string"
+        "buzz": "fs\\tempFile([prefix]) -\u003e string"
       }
     },
     {
@@ -45755,7 +45755,7 @@
       "label": "hex.decode",
       "doc": "Decode a hex string; errors on malformed input.",
       "attrs": {
-        "buzz": "hex\\decode(s) -> string"
+        "buzz": "hex\\decode(s) -\u003e string"
       }
     },
     {
@@ -45764,7 +45764,7 @@
       "label": "hex.encode",
       "doc": "Encode data as lowercase hex.",
       "attrs": {
-        "buzz": "hex\\encode(data) -> string"
+        "buzz": "hex\\encode(data) -\u003e string"
       }
     },
     {
@@ -45773,7 +45773,7 @@
       "label": "http.byteSize",
       "doc": "Byte length of the file at path. The companion to uploadChunked: the size a Content-Range needs, which len() on a Buzz string cannot give for binary data.",
       "attrs": {
-        "buzz": "http\\byteSize(path) -> int"
+        "buzz": "http\\byteSize(path) -\u003e int"
       }
     },
     {
@@ -45782,7 +45782,7 @@
       "label": "http.download",
       "doc": "GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry arg",
       "attrs": {
-        "buzz": "http\\download(url, dest, [headers], [opts], [retry]) -> int"
+        "buzz": "http\\download(url, dest, [headers], [opts], [retry]) -\u003e int"
       }
     },
     {
@@ -45791,7 +45791,7 @@
       "label": "http.get",
       "doc": "Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\get(url, [headers], [opts], [retry]) -> HttpResponse"
+        "buzz": "http\\get(url, [headers], [opts], [retry]) -\u003e HttpResponse"
       }
     },
     {
@@ -45800,7 +45800,7 @@
       "label": "http.post",
       "doc": "Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\post(url, body, [headers], [opts], [retry]) -> HttpResponse"
+        "buzz": "http\\post(url, body, [headers], [opts], [retry]) -\u003e HttpResponse"
       }
     },
     {
@@ -45809,25 +45809,25 @@
       "label": "http.request",
       "doc": "Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\request(method, url, [body], [headers], [opts], [retry]) -> HttpResponse"
+        "buzz": "http\\request(method, url, [body], [headers], [opts], [retry]) -\u003e HttpResponse"
       }
     },
     {
       "id": "method:http.server",
       "kind": "method",
       "label": "http.server",
-      "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
+      "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -\u003e dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
       "attrs": {
-        "buzz": "http\\server(opts) -> int"
+        "buzz": "http\\server(opts) -\u003e int"
       }
     },
     {
       "id": "method:http.upload_chunked",
       "kind": "method",
       "label": "http.upload_chunked",
-      "doc": "Send the file at src as the request body. chunk_size > 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunk_size <= 0 sends it in one request. Returns the final [status, body].",
+      "doc": "Send the file at src as the request body. chunk_size \u003e 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunk_size \u003c= 0 sends it in one request. Returns the final [status, body].",
       "attrs": {
-        "buzz": "http\\upload_chunked(method, url, src, chunk_size, [headers]) -> any"
+        "buzz": "http\\upload_chunked(method, url, src, chunk_size, [headers]) -\u003e any"
       }
     },
     {
@@ -45836,7 +45836,7 @@
       "label": "ini.parse",
       "doc": "Parse INI text into {section: {key: value}}. Entries before the first [section] header are under the \"\" key, which is where a flat file like .npmrc puts everything. Values are always strings; a repeated key takes the last value.",
       "attrs": {
-        "buzz": "ini\\parse(source) -> map[string]map[string]string"
+        "buzz": "ini\\parse(source) -\u003e map[string]map[string]string"
       }
     },
     {
@@ -45845,7 +45845,7 @@
       "label": "ini.stringify",
       "doc": "Render {section: {key: value}} back to INI text. The \"\" section is written first with no header, then the rest sorted by name with their keys sorted, so the output is byte-stable and diffs cleanly.",
       "attrs": {
-        "buzz": "ini\\stringify(sections) -> string"
+        "buzz": "ini\\stringify(sections) -\u003e string"
       }
     },
     {
@@ -45854,7 +45854,7 @@
       "label": "json.parse",
       "doc": "Decode a JSON string into a value (map, list, string, number, or boolean).",
       "attrs": {
-        "buzz": "json\\parse(s) -> any"
+        "buzz": "json\\parse(s) -\u003e any"
       }
     },
     {
@@ -45863,7 +45863,7 @@
       "label": "json.stringify",
       "doc": "Encode a value as a JSON string. With no indent (or \"\") the output is compact; pass an indent string (e.g. \"  \" or \"\\t\") for pretty, multi-line output.",
       "attrs": {
-        "buzz": "json\\stringify(value, [indent]) -> string"
+        "buzz": "json\\stringify(value, [indent]) -\u003e string"
       }
     },
     {
@@ -45872,7 +45872,7 @@
       "label": "lcov.mergePercent",
       "doc": "mergePercent is percent over SEVERAL lcov reports of the same sources,",
       "attrs": {
-        "buzz": "lcov\\mergePercent(reports, keep) -> str"
+        "buzz": "lcov\\mergePercent(reports, keep) -\u003e str"
       }
     },
     {
@@ -45881,7 +45881,7 @@
       "label": "lcov.percent",
       "doc": "percent is the covered-line percentage across an lcov report, as a string",
       "attrs": {
-        "buzz": "lcov\\percent(lcov, keep) -> str"
+        "buzz": "lcov\\percent(lcov, keep) -\u003e str"
       }
     },
     {
@@ -45944,25 +45944,25 @@
       "label": "magus.affected",
       "doc": "Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.",
       "attrs": {
-        "buzz": "magus\\affected([base]) -> Affected"
+        "buzz": "magus\\affected([base]) -\u003e Affected"
       }
     },
     {
       "id": "method:magus.affected_impact",
       "kind": "method",
       "label": "magus.affected_impact",
-      "doc": "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Computed in-process from the workspace on the con",
+      "doc": "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `\u003e Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Computed in-process from the workspace on the con",
       "attrs": {
-        "buzz": "magus\\affectedImpact([base], [opts]) -> Impact"
+        "buzz": "magus\\affectedImpact([base], [opts]) -\u003e Impact"
       }
     },
     {
       "id": "method:magus.attention",
       "kind": "method",
       "label": "magus.attention",
-      "doc": "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, lease, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `mag",
+      "doc": "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, lease, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose \u003cid\u003e -reason \u003ctext\u003e`. Runs a nested magus, so it works from a `mag",
       "attrs": {
-        "buzz": "magus\\attention(args, [opts]) -> map[string]any"
+        "buzz": "magus\\attention(args, [opts]) -\u003e map[string]any"
       }
     },
     {
@@ -45980,25 +45980,25 @@
       "label": "magus.canonical_name",
       "doc": "The canonical form of a magus entity name - a target, charm, or spell op. `build2` gains a '-' you did not type; `HTTPServer` breaks before its last letter. Returns the NAME, never a spell handle: a handle can only come from a literal import, because the target graph is built by reading imports statically.",
       "attrs": {
-        "buzz": "magus\\canonicalName(name) -> string"
+        "buzz": "magus\\canonicalName(name) -\u003e string"
       }
     },
     {
       "id": "method:magus.cmd",
       "kind": "method",
       "label": "magus.cmd",
-      "doc": "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv",
+      "doc": "Escape hatch: run `magus \u003csub\u003e \u003cargs\u003e` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv",
       "attrs": {
-        "buzz": "magus\\cmd(sub, args, [opts]) -> ExecResult"
+        "buzz": "magus\\cmd(sub, args, [opts]) -\u003e ExecResult"
       }
     },
     {
       "id": "method:magus.describe",
       "kind": "method",
       "label": "magus.describe",
-      "doc": "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
+      "doc": "Run `magus describe \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
       "attrs": {
-        "buzz": "magus\\describe(args, [opts]) -> ExecResult"
+        "buzz": "magus\\describe(args, [opts]) -\u003e ExecResult"
       }
     },
     {
@@ -46007,7 +46007,7 @@
       "label": "magus.describe_file",
       "doc": "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), `maintained` (magus writes it outside any target - commit it, never ignore it), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role`",
       "attrs": {
-        "buzz": "magus\\describeFile(paths, [opts]) -> FileReport"
+        "buzz": "magus\\describeFile(paths, [opts]) -\u003e FileReport"
       }
     },
     {
@@ -46016,7 +46016,7 @@
       "label": "magus.describe_module",
       "doc": "The host modules magus exposes, with their fields, methods and rendered Buzz signatures - the records `magus describe module` prints. Omit `name` for every module; pass one to detail it.",
       "attrs": {
-        "buzz": "magus\\describeModule([name]) -> [Module]"
+        "buzz": "magus\\describeModule([name]) -\u003e [Module]"
       }
     },
     {
@@ -46025,7 +46025,7 @@
       "label": "magus.diagnose_drift",
       "doc": "Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility",
       "attrs": {
-        "buzz": "magus\\diagnoseDrift(outputs, [inputs]) -> DriftResult"
+        "buzz": "magus\\diagnoseDrift(outputs, [inputs]) -\u003e DriftResult"
       }
     },
     {
@@ -46034,16 +46034,16 @@
       "label": "magus.diff",
       "doc": "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then wide",
       "attrs": {
-        "buzz": "magus\\diff([opts]) -> Diff"
+        "buzz": "magus\\diff([opts]) -\u003e Diff"
       }
     },
     {
       "id": "method:magus.doctor",
       "kind": "method",
       "label": "magus.doctor",
-      "doc": "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the rep",
+      "doc": "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `\u003e DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the rep",
       "attrs": {
-        "buzz": "magus\\doctor(args, [opts]) -> DoctorReport"
+        "buzz": "magus\\doctor(args, [opts]) -\u003e DoctorReport"
       }
     },
     {
@@ -46061,16 +46061,16 @@
       "label": "magus.has_charm",
       "doc": "True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm(\"rw\")).",
       "attrs": {
-        "buzz": "magus\\hasCharm(name) -> bool"
+        "buzz": "magus\\hasCharm(name) -\u003e bool"
       }
     },
     {
       "id": "method:magus.insight",
       "kind": "method",
       "label": "magus.insight",
-      "doc": "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context -",
+      "doc": "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `\u003e InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context -",
       "attrs": {
-        "buzz": "magus\\insight([opts]) -> InsightReport"
+        "buzz": "magus\\insight([opts]) -\u003e InsightReport"
       }
     },
     {
@@ -46088,16 +46088,16 @@
       "label": "magus.project_graph",
       "doc": "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
       "attrs": {
-        "buzz": "magus\\projectGraph() -> Graph"
+        "buzz": "magus\\projectGraph() -\u003e Graph"
       }
     },
     {
       "id": "method:magus.projects",
       "kind": "method",
       "label": "magus.projects",
-      "doc": "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd(\"ls\") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSO",
+      "doc": "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `\u003e Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd(\"ls\") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSO",
       "attrs": {
-        "buzz": "magus\\projects() -> Projects"
+        "buzz": "magus\\projects() -\u003e Projects"
       }
     },
     {
@@ -46122,18 +46122,18 @@
       "id": "method:magus.run",
       "kind": "method",
       "label": "magus.run",
-      "doc": "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
+      "doc": "Run `magus run \u003cargs\u003e` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
       "attrs": {
-        "buzz": "magus\\run(args, [opts]) -> ExecResult"
+        "buzz": "magus\\run(args, [opts]) -\u003e ExecResult"
       }
     },
     {
       "id": "method:magus.targets",
       "kind": "method",
       "label": "magus.targets",
-      "doc": "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.projectGraph() does not carry: that is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it ne",
+      "doc": "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `\u003e TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.projectGraph() does not carry: that is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it ne",
       "attrs": {
-        "buzz": "magus\\targets([opts]) -> TargetGraph"
+        "buzz": "magus\\targets([opts]) -\u003e TargetGraph"
       }
     },
     {
@@ -46142,7 +46142,7 @@
       "label": "magus.where",
       "doc": "Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.",
       "attrs": {
-        "buzz": "magus\\where(dir) -> string"
+        "buzz": "magus\\where(dir) -\u003e string"
       }
     },
     {
@@ -46151,7 +46151,7 @@
       "label": "markdown.frontmatter",
       "doc": "Parse the leading YAML frontmatter block (a \"---\" fenced header at the top of the document) and return it as a JSON object string; decode with serialize.jsonDecode. Returns \"{}\" when no frontmatter is present.",
       "attrs": {
-        "buzz": "markdown\\frontmatter(source) -> string"
+        "buzz": "markdown\\frontmatter(source) -\u003e string"
       }
     },
     {
@@ -46160,16 +46160,16 @@
       "label": "markdown.strip_frontmatter",
       "doc": "Return the Markdown body with any leading YAML frontmatter block removed (the source unchanged when none is present).",
       "attrs": {
-        "buzz": "markdown\\stripFrontmatter(source) -> string"
+        "buzz": "markdown\\stripFrontmatter(source) -\u003e string"
       }
     },
     {
       "id": "method:markdown.to_html",
       "kind": "method",
       "label": "markdown.to_html",
-      "doc": "Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a \"---\" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md -> index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).",
+      "doc": "Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a \"---\" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md -\u003e index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).",
       "attrs": {
-        "buzz": "markdown\\toHtml(source) -> string"
+        "buzz": "markdown\\toHtml(source) -\u003e string"
       }
     },
     {
@@ -46178,7 +46178,7 @@
       "label": "math.clamp",
       "doc": "Constrain x to the range lo..hi, returning lo when x is below it and hi when above. Sizing parallelism is the usual reason - clamp(cpus / 2, 1, 8) never yields zero workers. Raises when lo is greater than hi, which is a caller bug rather than an empty range.",
       "attrs": {
-        "buzz": "math\\clamp(x, lo, hi) -> float64"
+        "buzz": "math\\clamp(x, lo, hi) -\u003e float64"
       }
     },
     {
@@ -46187,7 +46187,7 @@
       "label": "math.max",
       "doc": "The largest number in the list. Distinct from Buzz's own maxInt/maxDouble, which compare exactly two values. Raises on an empty list.",
       "attrs": {
-        "buzz": "math\\max(nums) -> float64"
+        "buzz": "math\\max(nums) -\u003e float64"
       }
     },
     {
@@ -46196,7 +46196,7 @@
       "label": "math.mean",
       "doc": "The arithmetic mean. Raises on an empty list rather than returning 0, because 0 is a real average and \"there was nothing to average\" is not - returning it would let an empty set silently pass a floor check.",
       "attrs": {
-        "buzz": "math\\mean(nums) -> float64"
+        "buzz": "math\\mean(nums) -\u003e float64"
       }
     },
     {
@@ -46205,7 +46205,7 @@
       "label": "math.median",
       "doc": "The middle value, averaging the two middle values for an even count. Prefer it to mean when reporting what a TYPICAL run costs: one pathological outlier moves a mean and barely moves a median. Raises on an empty list, like mean.",
       "attrs": {
-        "buzz": "math\\median(nums) -> float64"
+        "buzz": "math\\median(nums) -\u003e float64"
       }
     },
     {
@@ -46214,7 +46214,7 @@
       "label": "math.min",
       "doc": "The smallest number in the list. Distinct from Buzz's own minInt/minDouble, which compare exactly two values. Raises on an empty list.",
       "attrs": {
-        "buzz": "math\\min(nums) -> float64"
+        "buzz": "math\\min(nums) -\u003e float64"
       }
     },
     {
@@ -46223,7 +46223,7 @@
       "label": "math.round",
       "doc": "Round x to places decimal places, half away from zero. places defaults to 0 (the nearest whole number) and may be negative to round to tens, hundreds and so on. Rendering a coverage percentage or a duration is the usual reason; Buzz's floor and ceil cannot express it.",
       "attrs": {
-        "buzz": "math\\round(x, [places]) -> float64"
+        "buzz": "math\\round(x, [places]) -\u003e float64"
       }
     },
     {
@@ -46232,7 +46232,7 @@
       "label": "math.sum",
       "doc": "Add every number in the list; an empty list sums to 0. Non-numeric items are skipped rather than counted as zero.",
       "attrs": {
-        "buzz": "math\\sum(nums) -> float64"
+        "buzz": "math\\sum(nums) -\u003e float64"
       }
     },
     {
@@ -46241,7 +46241,7 @@
       "label": "math.trunc",
       "doc": "Discard x's fractional part, rounding TOWARD ZERO - so -1.7 is -1, where floor gives -2. The difference matters whenever a value can be negative and you meant \"drop the decimals\".",
       "attrs": {
-        "buzz": "math\\trunc(x) -> float64"
+        "buzz": "math\\trunc(x) -\u003e float64"
       }
     },
     {
@@ -46250,7 +46250,7 @@
       "label": "net.free_port",
       "doc": "Ask the operating system for an unused TCP port and return it. Bind it promptly: the port is released before this returns, so between the call and your server's own bind another process could take it. That race is unavoidable for any \"find a free port\" answer and is why this is for choosing a dev-server port, not for anything that must not collide.",
       "attrs": {
-        "buzz": "net\\freePort() -> int"
+        "buzz": "net\\freePort() -\u003e int"
       }
     },
     {
@@ -46259,7 +46259,7 @@
       "label": "net.is_port_open",
       "doc": "Report whether a TCP connection to host:port succeeds right now, with no waiting. The single-shot form of wait_for_port - for deciding whether a service is ALREADY running before starting another one.",
       "attrs": {
-        "buzz": "net\\isPortOpen(host, port) -> bool"
+        "buzz": "net\\isPortOpen(host, port) -\u003e bool"
       }
     },
     {
@@ -46268,7 +46268,7 @@
       "label": "net.wait_for_port",
       "doc": "Block until a TCP connection to host:port succeeds, then return true; return false when the timeout elapses first. Use it after starting a dev server or a container instead of sleeping a guessed number of seconds. timeout_ms defaults to 30000. Returns FALSE rather than raising on timeout, so a caller can fall back or report its own message; the run's cancellation is honored, so Ctrl-C does not wait out the timeout.",
       "attrs": {
-        "buzz": "net\\waitForPort(host, port, [timeout_ms]) -> bool"
+        "buzz": "net\\waitForPort(host, port, [timeout_ms]) -\u003e bool"
       }
     },
     {
@@ -46277,7 +46277,7 @@
       "label": "os.executable",
       "doc": "Return the absolute path of the running magus binary. Pair it with fs.stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
       "attrs": {
-        "buzz": "os\\executable() -> string"
+        "buzz": "os\\executable() -\u003e string"
       }
     },
     {
@@ -46295,7 +46295,7 @@
       "label": "os.hostname",
       "doc": "Return the host machine's name.",
       "attrs": {
-        "buzz": "os\\hostname() -> string"
+        "buzz": "os\\hostname() -\u003e string"
       }
     },
     {
@@ -46304,7 +46304,7 @@
       "label": "os.num_cpu",
       "doc": "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).",
       "attrs": {
-        "buzz": "os\\numCpu() -> int"
+        "buzz": "os\\numCpu() -\u003e int"
       }
     },
     {
@@ -46313,7 +46313,7 @@
       "label": "os.platform",
       "doc": "Return the Docker/OCI platform triple: (os, arch, variant).",
       "attrs": {
-        "buzz": "os\\platform() -> string, string, string"
+        "buzz": "os\\platform() -\u003e string, string, string"
       }
     },
     {
@@ -46322,7 +46322,7 @@
       "label": "os.retry",
       "doc": "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.",
       "attrs": {
-        "buzz": "os\\retry(max, fn, [opts]) -> any"
+        "buzz": "os\\retry(max, fn, [opts]) -\u003e any"
       }
     },
     {
@@ -46349,7 +46349,7 @@
       "label": "path.abs",
       "doc": "Return the absolute form of path, resolved against the current directory and lexically cleaned.",
       "attrs": {
-        "buzz": "path\\abs(path) -> string"
+        "buzz": "path\\abs(path) -\u003e string"
       }
     },
     {
@@ -46358,7 +46358,7 @@
       "label": "path.clean",
       "doc": "Return the shortest lexically-equivalent path (resolves . and .., collapses separators).",
       "attrs": {
-        "buzz": "path\\clean(path) -> string"
+        "buzz": "path\\clean(path) -\u003e string"
       }
     },
     {
@@ -46367,7 +46367,7 @@
       "label": "path.expand_user",
       "doc": "Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.",
       "attrs": {
-        "buzz": "path\\expandUser(path) -> string"
+        "buzz": "path\\expandUser(path) -\u003e string"
       }
     },
     {
@@ -46376,7 +46376,7 @@
       "label": "path.is_abs",
       "doc": "Report whether path is absolute.",
       "attrs": {
-        "buzz": "path\\isAbs(path) -> bool"
+        "buzz": "path\\isAbs(path) -\u003e bool"
       }
     },
     {
@@ -46385,7 +46385,7 @@
       "label": "path.matches",
       "doc": "Report whether path matches a doublestar glob (** crosses directory separators, * does not). Purely lexical: unlike fs.glob it touches no filesystem, so it is what filters a list already in hand - the changed files from vcs.changed_files, the entries from archive.list - against the same pattern syntax a target's sources use. Raises on a malformed pattern rather than reporting no match, so a typo is not read as \"nothing changed\".",
       "attrs": {
-        "buzz": "path\\matches(pattern, path) -> bool"
+        "buzz": "path\\matches(pattern, path) -\u003e bool"
       }
     },
     {
@@ -46394,7 +46394,7 @@
       "label": "path.matches_any",
       "doc": "Report whether path matches ANY of the patterns; an empty pattern list is false. The common shape of a declared source or ignore set, which is a list rather than one glob.",
       "attrs": {
-        "buzz": "path\\matchesAny(patterns, path) -> bool"
+        "buzz": "path\\matchesAny(patterns, path) -\u003e bool"
       }
     },
     {
@@ -46403,7 +46403,7 @@
       "label": "path.rel",
       "doc": "Return a relative path from base to target; errors if no relative path exists.",
       "attrs": {
-        "buzz": "path\\rel(base, target) -> string"
+        "buzz": "path\\rel(base, target) -\u003e string"
       }
     },
     {
@@ -46412,7 +46412,7 @@
       "label": "platform.arch",
       "doc": "Normalize an architecture identifier (x86_64, aarch64, armv7l, ...) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
       "attrs": {
-        "buzz": "platform\\arch(name, [style]) -> string"
+        "buzz": "platform\\arch(name, [style]) -\u003e string"
       }
     },
     {
@@ -46421,7 +46421,7 @@
       "label": "platform.cpus",
       "doc": "How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory_bytes() when sizing parallel work: the smaller of the two limits is the one that matters.",
       "attrs": {
-        "buzz": "platform\\cpus() -> int"
+        "buzz": "platform\\cpus() -\u003e int"
       }
     },
     {
@@ -46430,7 +46430,7 @@
       "label": "platform.memory_bytes",
       "doc": "How much memory this process may commit, in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Narrowed by a container's memory ceiling where there is one, the way cpus() honors a CPU quota. Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0",
       "attrs": {
-        "buzz": "platform\\memoryBytes() -> int"
+        "buzz": "platform\\memoryBytes() -\u003e int"
       }
     },
     {
@@ -46439,7 +46439,7 @@
       "label": "platform.os",
       "doc": "Normalize an OS identifier (Darwin, macOS, win, ...) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
       "attrs": {
-        "buzz": "platform\\os(name, [style]) -> string"
+        "buzz": "platform\\os(name, [style]) -\u003e string"
       }
     },
     {
@@ -46448,7 +46448,7 @@
       "label": "proc.exec",
       "doc": "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console. opts.tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check is",
       "attrs": {
-        "buzz": "proc\\exec(cmd, [args], [dir], [opts]) -> ExecResult"
+        "buzz": "proc\\exec(cmd, [args], [dir], [opts]) -\u003e ExecResult"
       }
     },
     {
@@ -46457,7 +46457,7 @@
       "label": "proc.shell",
       "doc": "Build the command line that runs `line` through the platform shell, WITHOUT running it: returns {bin, args} for proc.exec. Default shell is /bin/sh (cmd on Windows); pass shell (e.g. \"bash\") to override, resolved via PATH. This is a pure function, so the argv is inspectable before anything executes - print it, log it, or assert on it. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes; for cross-platform logic prefer proc.exec plus the fs/os helpers.",
       "attrs": {
-        "buzz": "proc\\shell(line, [shell]) -> ShellCommand"
+        "buzz": "proc\\shell(line, [shell]) -\u003e ShellCommand"
       }
     },
     {
@@ -46466,7 +46466,7 @@
       "label": "proc.stdin_is_terminal",
       "doc": "Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.",
       "attrs": {
-        "buzz": "proc\\stdinIsTerminal() -> bool"
+        "buzz": "proc\\stdinIsTerminal() -\u003e bool"
       }
     },
     {
@@ -46475,7 +46475,7 @@
       "label": "proc.which",
       "doc": "Resolve cmd against PATH and return its absolute path. RAISES when the command is not found - wrap it in try/catch to check a tool is installed and emit a clear hint instead of a cryptic exec failure.",
       "attrs": {
-        "buzz": "proc\\which(cmd) -> string"
+        "buzz": "proc\\which(cmd) -\u003e string"
       }
     },
     {
@@ -46493,7 +46493,7 @@
       "label": "semver.canonical",
       "doc": "Canonical \"vX.Y.Z\" form of v, filling in missing components and discarding build metadata; errors on invalid input.",
       "attrs": {
-        "buzz": "semver\\canonical(v) -> string"
+        "buzz": "semver\\canonical(v) -\u003e string"
       }
     },
     {
@@ -46502,7 +46502,7 @@
       "label": "semver.compare",
       "doc": "Order two semver strings: -1 when a sorts before b, 0 when they are equal, 1 when a sorts after. Use satisfies() to test a relation or a range.",
       "attrs": {
-        "buzz": "semver\\compare(a, b) -> int"
+        "buzz": "semver\\compare(a, b) -\u003e int"
       }
     },
     {
@@ -46511,7 +46511,7 @@
       "label": "semver.isValid",
       "doc": "Whether v parses as a semantic version. Use it instead of calling parse purely to see whether it raises.",
       "attrs": {
-        "buzz": "semver\\isValid(v) -> bool"
+        "buzz": "semver\\isValid(v) -\u003e bool"
       }
     },
     {
@@ -46520,7 +46520,7 @@
       "label": "semver.major",
       "doc": "The major prefix of v as a string: major(\"1.2.3\") is \"v1\". This is the cache token a spell's VersionKey{upTo = \"major\"} produces; parse().major is the same number as an int.",
       "attrs": {
-        "buzz": "semver\\major(v) -> string"
+        "buzz": "semver\\major(v) -\u003e string"
       }
     },
     {
@@ -46529,7 +46529,7 @@
       "label": "semver.majorMinor",
       "doc": "The major.minor prefix of v as a string: majorMinor(\"1.2.3\") is \"v1.2\". This is the cache token a spell's VersionKey{upTo = \"minor\"} produces.",
       "attrs": {
-        "buzz": "semver\\majorMinor(v) -> string"
+        "buzz": "semver\\majorMinor(v) -\u003e string"
       }
     },
     {
@@ -46538,7 +46538,7 @@
       "label": "semver.next",
       "doc": "Candidate next versions after v: {major, minor, patch}, each \"vX.Y.Z\" - the result of bumping the major, minor, or patch component. Errors on invalid input.",
       "attrs": {
-        "buzz": "semver\\next(v) -> SemverNext"
+        "buzz": "semver\\next(v) -\u003e SemverNext"
       }
     },
     {
@@ -46547,16 +46547,16 @@
       "label": "semver.parse",
       "doc": "Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.",
       "attrs": {
-        "buzz": "semver\\parse(v) -> SemverVersion"
+        "buzz": "semver\\parse(v) -\u003e SemverVersion"
       }
     },
     {
       "id": "method:semver.satisfies",
       "kind": "method",
       "label": "semver.satisfies",
-      "doc": "Whether v meets constraint, the full range syntax magus.yaml required_version uses: \">= 1.2, < 2.0\", \"^1.2.3\", \"~1.2\". compare() tests one relation; this tests a range.",
+      "doc": "Whether v meets constraint, the full range syntax magus.yaml required_version uses: \"\u003e= 1.2, \u003c 2.0\", \"^1.2.3\", \"~1.2\". compare() tests one relation; this tests a range.",
       "attrs": {
-        "buzz": "semver\\satisfies(v, constraint) -> bool"
+        "buzz": "semver\\satisfies(v, constraint) -\u003e bool"
       }
     },
     {
@@ -46565,7 +46565,7 @@
       "label": "sort.natural",
       "doc": "Return a new list ordered so embedded numbers compare as numbers: file2 before file10, where a lexicographic sort puts file10 first. Use it for anything a human will read - filenames, shard names, versioned directories - and note it is NOT a version sort; semver is.",
       "attrs": {
-        "buzz": "sort\\natural(items) -> []string"
+        "buzz": "sort\\natural(items) -\u003e []string"
       }
     },
     {
@@ -46574,7 +46574,7 @@
       "label": "sort.semver",
       "doc": "Return a new list ordered by semantic version, oldest first, so v1.9.0 precedes v1.10.0 and a prerelease precedes its release. Accepts tags with or without a leading v. Anything that is not a valid version sorts AFTER every valid one, in lexicographic order among themselves - so a stray tag is visible at the end rather than silently reordering the releases.",
       "attrs": {
-        "buzz": "sort\\semver(items) -> []string"
+        "buzz": "sort\\semver(items) -\u003e []string"
       }
     },
     {
@@ -46583,7 +46583,7 @@
       "label": "sort.strings",
       "doc": "Return a new list ordered lexicographically by byte. The plain alphabetical sort, and the one to reach for when the goal is a stable order rather than a meaningful one - a listing that must not change between runs.",
       "attrs": {
-        "buzz": "sort\\strings(items) -> []string"
+        "buzz": "sort\\strings(items) -\u003e []string"
       }
     },
     {
@@ -46592,7 +46592,7 @@
       "label": "strings.camel_case",
       "doc": "Convert s to camelCase.",
       "attrs": {
-        "buzz": "strings\\camelCase(s) -> string"
+        "buzz": "strings\\camelCase(s) -\u003e string"
       }
     },
     {
@@ -46601,7 +46601,7 @@
       "label": "strings.capitalize",
       "doc": "Uppercase the first rune of s and lowercase the rest.",
       "attrs": {
-        "buzz": "strings\\capitalize(s) -> string"
+        "buzz": "strings\\capitalize(s) -\u003e string"
       }
     },
     {
@@ -46610,16 +46610,16 @@
       "label": "strings.collapse_ws",
       "doc": "Fold every run of whitespace in s into a single space and trim the ends, so a multi-line value reads as one clean line.",
       "attrs": {
-        "buzz": "strings\\collapseWs(s) -> string"
+        "buzz": "strings\\collapseWs(s) -\u003e string"
       }
     },
     {
       "id": "method:strings.compare",
       "kind": "method",
       "label": "strings.compare",
-      "doc": "Compare a and b lexicographically by byte, returning -1, 0, or 1. Buzz has no < operator on str, so this is what a list.sort comparator over strings is built from.",
+      "doc": "Compare a and b lexicographically by byte, returning -1, 0, or 1. Buzz has no \u003c operator on str, so this is what a list.sort comparator over strings is built from.",
       "attrs": {
-        "buzz": "strings\\compare(a, b) -> int"
+        "buzz": "strings\\compare(a, b) -\u003e int"
       }
     },
     {
@@ -46628,7 +46628,7 @@
       "label": "strings.contains",
       "doc": "Report whether s contains substr.",
       "attrs": {
-        "buzz": "strings\\contains(s, substr) -> bool"
+        "buzz": "strings\\contains(s, substr) -\u003e bool"
       }
     },
     {
@@ -46637,7 +46637,7 @@
       "label": "strings.ellipsis",
       "doc": "Trim s to at most length runes, appending \"...\" when truncated.",
       "attrs": {
-        "buzz": "strings\\ellipsis(s, length) -> string"
+        "buzz": "strings\\ellipsis(s, length) -\u003e string"
       }
     },
     {
@@ -46646,7 +46646,7 @@
       "label": "strings.fields",
       "doc": "Split s around runs of whitespace, discarding empties. Picking a column out of a tool's version banner is what this is for; str.split(\" \") cannot, because it yields an empty element per extra space.",
       "attrs": {
-        "buzz": "strings\\fields(s) -> []string"
+        "buzz": "strings\\fields(s) -\u003e []string"
       }
     },
     {
@@ -46655,7 +46655,7 @@
       "label": "strings.kebab_case",
       "doc": "Convert s to kebab-case.",
       "attrs": {
-        "buzz": "strings\\kebabCase(s) -> string"
+        "buzz": "strings\\kebabCase(s) -\u003e string"
       }
     },
     {
@@ -46664,7 +46664,7 @@
       "label": "strings.lines",
       "doc": "Split s into lines on \\n, tolerating \\r\\n endings and dropping the trailing empty element a final newline would produce. Reading a command's stdout line by line is what this is for; fs.read_lines is the same shape over a file.",
       "attrs": {
-        "buzz": "strings\\lines(s) -> []string"
+        "buzz": "strings\\lines(s) -\u003e []string"
       }
     },
     {
@@ -46673,7 +46673,7 @@
       "label": "strings.pad_left",
       "doc": "Left-pad s with pad until it is length runes wide; s is returned unchanged when already that wide or wider. pad defaults to a space. Zero-padding a number so it sorts lexically is the usual reason.",
       "attrs": {
-        "buzz": "strings\\padLeft(s, length, [pad]) -> string"
+        "buzz": "strings\\padLeft(s, length, [pad]) -\u003e string"
       }
     },
     {
@@ -46682,7 +46682,7 @@
       "label": "strings.pad_right",
       "doc": "Right-pad s with pad until it is length runes wide; s is returned unchanged when already that wide or wider. pad defaults to a space. Aligning a column of output is the usual reason.",
       "attrs": {
-        "buzz": "strings\\padRight(s, length, [pad]) -> string"
+        "buzz": "strings\\padRight(s, length, [pad]) -\u003e string"
       }
     },
     {
@@ -46691,7 +46691,7 @@
       "label": "strings.pascal_case",
       "doc": "Convert s to PascalCase.",
       "attrs": {
-        "buzz": "strings\\pascalCase(s) -> string"
+        "buzz": "strings\\pascalCase(s) -\u003e string"
       }
     },
     {
@@ -46700,7 +46700,7 @@
       "label": "strings.snake_case",
       "doc": "Convert s to snake_case.",
       "attrs": {
-        "buzz": "strings\\snakeCase(s) -> string"
+        "buzz": "strings\\snakeCase(s) -\u003e string"
       }
     },
     {
@@ -46709,7 +46709,7 @@
       "label": "strings.split_n",
       "doc": "Split s on sep into at most n pieces, leaving any remaining separators in the final piece; n of -1 means no limit. Parsing a KEY=VALUE line whose value itself contains the separator needs this rather than str.split.",
       "attrs": {
-        "buzz": "strings\\splitN(s, sep, n) -> []string"
+        "buzz": "strings\\splitN(s, sep, n) -\u003e []string"
       }
     },
     {
@@ -46718,7 +46718,7 @@
       "label": "strings.trim_prefix",
       "doc": "Remove prefix from the start of s if present, otherwise return s unchanged. Buzz's str.trim only strips whitespace, so there is no built-in way to drop a known affix.",
       "attrs": {
-        "buzz": "strings\\trimPrefix(s, prefix) -> string"
+        "buzz": "strings\\trimPrefix(s, prefix) -\u003e string"
       }
     },
     {
@@ -46727,7 +46727,7 @@
       "label": "strings.trim_suffix",
       "doc": "Remove suffix from the end of s if present, otherwise return s unchanged.",
       "attrs": {
-        "buzz": "strings\\trimSuffix(s, suffix) -> string"
+        "buzz": "strings\\trimSuffix(s, suffix) -\u003e string"
       }
     },
     {
@@ -46736,7 +46736,7 @@
       "label": "strings.upper_first",
       "doc": "Uppercase the first rune of s, leaving the rest untouched. Unlike capitalize, which lowercases the remainder, this preserves interior casing - the form a label or breadcrumb built from an existing string needs.",
       "attrs": {
-        "buzz": "strings\\upperFirst(s) -> string"
+        "buzz": "strings\\upperFirst(s) -\u003e string"
       }
     },
     {
@@ -46745,25 +46745,25 @@
       "label": "strings.words",
       "doc": "Split s into its constituent words (splitting on case changes, digits, and separators).",
       "attrs": {
-        "buzz": "strings\\words(s) -> []string"
+        "buzz": "strings\\words(s) -\u003e []string"
       }
     },
     {
       "id": "method:template.render",
       "kind": "method",
       "label": "template.render",
-      "doc": "Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
+      "doc": "Render a Mustache template against a context value (usually a name-\u003evalue map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
       "attrs": {
-        "buzz": "template\\render(template, data) -> string"
+        "buzz": "template\\render(template, data) -\u003e string"
       }
     },
     {
       "id": "method:template.render_partials",
       "kind": "method",
       "label": "template.render_partials",
-      "doc": "Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
+      "doc": "Render a Mustache template that includes partials via {{\u003ename}}, resolving each name against the partials map (name-\u003etemplate string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
       "attrs": {
-        "buzz": "template\\renderPartials(template, data, partials) -> string"
+        "buzz": "template\\renderPartials(template, data, partials) -\u003e string"
       }
     },
     {
@@ -46781,7 +46781,7 @@
       "label": "term.colorize",
       "doc": "Wrap s in the given style and close it again. Returns s UNCHANGED when the output is not a terminal or the environment asked for plain text, so a magusfile never has to guard the call and escape codes cannot leak into a CI log. A style of none is also pass-through, which lets a conditionally-computed style be passed without branching.",
       "attrs": {
-        "buzz": "term\\colorize(s, style) -> string"
+        "buzz": "term\\colorize(s, style) -\u003e string"
       }
     },
     {
@@ -46790,7 +46790,7 @@
       "label": "term.is_interactive",
       "doc": "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a daemon this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.",
       "attrs": {
-        "buzz": "term\\isInteractive() -> bool"
+        "buzz": "term\\isInteractive() -\u003e bool"
       }
     },
     {
@@ -46808,7 +46808,7 @@
       "label": "term.pick",
       "doc": "Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr.",
       "attrs": {
-        "buzz": "term\\pick(items, [prompt], [initial_filter], [initial], [max_rows]) -> int"
+        "buzz": "term\\pick(items, [prompt], [initial_filter], [initial], [max_rows]) -\u003e int"
       }
     },
     {
@@ -46817,7 +46817,7 @@
       "label": "term.size",
       "doc": "Return the terminal's {width, height} in character cells. Both are 0 when there is no terminal to measure - piped output, no controlling terminal - so check width rather than expecting a raise. Use it to wrap or truncate output to the reader's actual window instead of assuming 80 columns.",
       "attrs": {
-        "buzz": "term\\size() -> TermSize"
+        "buzz": "term\\size() -\u003e TermSize"
       }
     },
     {
@@ -46826,7 +46826,7 @@
       "label": "term.wants_color",
       "doc": "Report whether styled output should be emitted: standard error is a terminal and the environment does not ask for plain text (NO_COLOR, TERM=dumb). colorize already consults this, so a caller needs it only to make a wider rendering choice - a box-drawing table versus a plain one.",
       "attrs": {
-        "buzz": "term\\wantsColor() -> bool"
+        "buzz": "term\\wantsColor() -\u003e bool"
       }
     },
     {
@@ -46835,7 +46835,7 @@
       "label": "time.add",
       "doc": "Add a Go duration string (e.g. \"24h\", \"-1h30m\") to a Unix-millis timestamp; returns the new Unix-millis timestamp.",
       "attrs": {
-        "buzz": "time\\add(unix_millis, duration) -> float64"
+        "buzz": "time\\add(unix_millis, duration) -\u003e float64"
       }
     },
     {
@@ -46844,7 +46844,7 @@
       "label": "time.diff",
       "doc": "Return a minus b in milliseconds (positive when a is later than b).",
       "attrs": {
-        "buzz": "time\\diff(a, b) -> float64"
+        "buzz": "time\\diff(a, b) -\u003e float64"
       }
     },
     {
@@ -46853,7 +46853,7 @@
       "label": "time.format",
       "doc": "Render Unix-millis as a string using a Go reference layout (UTC).",
       "attrs": {
-        "buzz": "time\\format(layout, unix_millis) -> string"
+        "buzz": "time\\format(layout, unix_millis) -\u003e string"
       }
     },
     {
@@ -46862,7 +46862,7 @@
       "label": "time.now_iso",
       "doc": "Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().",
       "attrs": {
-        "buzz": "time\\nowIso() -> string"
+        "buzz": "time\\nowIso() -\u003e string"
       }
     },
     {
@@ -46871,7 +46871,7 @@
       "label": "time.parse",
       "doc": "Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.",
       "attrs": {
-        "buzz": "time\\parse(layout, value) -> float64"
+        "buzz": "time\\parse(layout, value) -\u003e float64"
       }
     },
     {
@@ -46880,7 +46880,7 @@
       "label": "time.parse_duration",
       "doc": "Parse a Go duration string (e.g. \"168h\", \"1h30m\") into milliseconds; errors on mismatch.",
       "attrs": {
-        "buzz": "time\\parseDuration(duration) -> float64"
+        "buzz": "time\\parseDuration(duration) -\u003e float64"
       }
     },
     {
@@ -46889,7 +46889,7 @@
       "label": "toml.parse",
       "doc": "Decode a TOML document into a value (tables become maps, arrays become lists, plus strings, numbers, bools, and datetimes); errors on invalid input.",
       "attrs": {
-        "buzz": "toml\\parse(source) -> any"
+        "buzz": "toml\\parse(source) -\u003e any"
       }
     },
     {
@@ -46898,7 +46898,7 @@
       "label": "toml.stringify",
       "doc": "Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.",
       "attrs": {
-        "buzz": "toml\\stringify(value) -> string"
+        "buzz": "toml\\stringify(value) -\u003e string"
       }
     },
     {
@@ -46907,7 +46907,7 @@
       "label": "url.build",
       "doc": "Build a URL string from a URL object - the same shape parse returns, so the two round-trip. Missing fields are treated as empty.",
       "attrs": {
-        "buzz": "url\\build(parts) -> string"
+        "buzz": "url\\build(parts) -\u003e string"
       }
     },
     {
@@ -46916,7 +46916,7 @@
       "label": "url.decode",
       "doc": "Decode a percent-encoded URL query component; errors on malformed input.",
       "attrs": {
-        "buzz": "url\\decode(s) -> string"
+        "buzz": "url\\decode(s) -\u003e string"
       }
     },
     {
@@ -46925,7 +46925,7 @@
       "label": "url.encode",
       "doc": "Percent-encode s for use in a URL query component.",
       "attrs": {
-        "buzz": "url\\encode(s) -> string"
+        "buzz": "url\\encode(s) -\u003e string"
       }
     },
     {
@@ -46934,7 +46934,7 @@
       "label": "url.parse",
       "doc": "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
       "attrs": {
-        "buzz": "url\\parse(raw_url) -> URL"
+        "buzz": "url\\parse(raw_url) -\u003e URL"
       }
     },
     {
@@ -46943,7 +46943,7 @@
       "label": "uuid.randomHex",
       "doc": "A cryptographically random lowercase hex string of n bytes (2*n characters); errors when n is not positive.",
       "attrs": {
-        "buzz": "uuid\\randomHex(n) -> string"
+        "buzz": "uuid\\randomHex(n) -\u003e string"
       }
     },
     {
@@ -46952,7 +46952,7 @@
       "label": "uuid.randomToken",
       "doc": "A cryptographically random URL-safe base64 token from n bytes of entropy (no padding); errors when n is not positive.",
       "attrs": {
-        "buzz": "uuid\\randomToken(n) -> string"
+        "buzz": "uuid\\randomToken(n) -\u003e string"
       }
     },
     {
@@ -46961,7 +46961,7 @@
       "label": "uuid.v4",
       "doc": "A random (version 4) UUID string, e.g. \"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d\".",
       "attrs": {
-        "buzz": "uuid\\v4() -> string"
+        "buzz": "uuid\\v4() -\u003e string"
       }
     },
     {
@@ -46970,7 +46970,7 @@
       "label": "uuid.v7",
       "doc": "A time-ordered (version 7) UUID string; lexically sorts by creation time, which makes it a good ordered run/build id.",
       "attrs": {
-        "buzz": "uuid\\v7() -> string"
+        "buzz": "uuid\\v7() -\u003e string"
       }
     },
     {
@@ -46979,7 +46979,7 @@
       "label": "vcs.base",
       "doc": "Resolved base ref for diffs.",
       "attrs": {
-        "buzz": "vcs\\base() -> string"
+        "buzz": "vcs\\base() -\u003e string"
       }
     },
     {
@@ -46988,7 +46988,7 @@
       "label": "vcs.changed_files",
       "doc": "The files changed against the given base (defaults to vcs.base), each a Path carrying the repository root as its base. Empty when no VCS is resolved. Named for what it returns: it answers WHICH files a branch touched, where vcs.dirtyDiff answers WHAT changed inside the working tree.",
       "attrs": {
-        "buzz": "vcs\\changedFiles([base]) -> [Path]"
+        "buzz": "vcs\\changedFiles([base]) -\u003e [Path]"
       }
     },
     {
@@ -46997,7 +46997,7 @@
       "label": "vcs.cmd",
       "doc": "Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch o",
       "attrs": {
-        "buzz": "vcs\\cmd(args, [opts]) -> ExecResult"
+        "buzz": "vcs\\cmd(args, [opts]) -\u003e ExecResult"
       }
     },
     {
@@ -47006,7 +47006,7 @@
       "label": "vcs.commit",
       "doc": "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Raises when no VCS is resolved or the revision cannot be looked up, so a caller never has to sniff a field to find out - use vcs.name() to test for a VCS, and try/catch for a revision that ma",
       "attrs": {
-        "buzz": "vcs\\commit([rev]) -> Commit"
+        "buzz": "vcs\\commit([rev]) -\u003e Commit"
       }
     },
     {
@@ -47015,7 +47015,7 @@
       "label": "vcs.describe",
       "doc": "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.commit().short as a fallback.",
       "attrs": {
-        "buzz": "vcs\\describe() -> string"
+        "buzz": "vcs\\describe() -\u003e string"
       }
     },
     {
@@ -47024,7 +47024,7 @@
       "label": "vcs.dirty_diff",
       "doc": "The uncommitted changes to paths, as the active VCS's own unified diff; \"\" when nothing changed or no VCS is resolved. is_dirty answers whether an output moved, this answers how - which is what a drift gate needs when it fires in CI and nobody can look at the tree. Every backend implements it, so a magusfile no longer branches on vcs.name() to print a diff; the bytes are the backend's native format, not a normalized one.",
       "attrs": {
-        "buzz": "vcs\\dirtyDiff([paths]) -> string"
+        "buzz": "vcs\\dirtyDiff([paths]) -\u003e string"
       }
     },
     {
@@ -47033,7 +47033,7 @@
       "label": "vcs.history",
       "doc": "Up to limit recent commits, newest first; each is the same object vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.",
       "attrs": {
-        "buzz": "vcs\\history([limit]) -> [Commit]"
+        "buzz": "vcs\\history([limit]) -\u003e [Commit]"
       }
     },
     {
@@ -47042,7 +47042,7 @@
       "label": "vcs.is_dirty",
       "doc": "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.",
       "attrs": {
-        "buzz": "vcs\\isDirty([paths]) -> bool"
+        "buzz": "vcs\\isDirty([paths]) -\u003e bool"
       }
     },
     {
@@ -47051,7 +47051,7 @@
       "label": "vcs.name",
       "doc": "VCS short name (e.g. \"git\"). Empty if unresolved, which is how a caller tests for a VCS without catching.",
       "attrs": {
-        "buzz": "vcs\\name() -> string"
+        "buzz": "vcs\\name() -\u003e string"
       }
     },
     {
@@ -47060,7 +47060,7 @@
       "label": "vcs.ref",
       "doc": "The movable name pointing at the current revision, or \"\" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so \"\" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
       "attrs": {
-        "buzz": "vcs\\ref() -> string"
+        "buzz": "vcs\\ref() -\u003e string"
       }
     },
     {
@@ -47069,7 +47069,7 @@
       "label": "vcs.root",
       "doc": "Absolute path of the repository root.",
       "attrs": {
-        "buzz": "vcs\\root() -> string"
+        "buzz": "vcs\\root() -\u003e string"
       }
     },
     {
@@ -47078,7 +47078,7 @@
       "label": "vcs.status",
       "doc": "The working tree's uncommitted state as {clean, files}: clean is true when nothing changed, files are the changed paths (empty when clean). Pass paths to scope it. Each file is a Path carrying the repository root as its base, because a VCS reports paths from the root while a target runs in its project directory. Paths only - a per-entry status code is not portable (jj reports none), so reach for vcs.cmd() when the codes matter.",
       "attrs": {
-        "buzz": "vcs\\status([paths]) -> Status"
+        "buzz": "vcs\\status([paths]) -\u003e Status"
       }
     },
     {
@@ -47087,7 +47087,7 @@
       "label": "vcs.tags",
       "doc": "Repository tags, newest first. Each is an object {name, date, id}: name as written (\"v0.3.0\", no refs/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name (\"v*\"); wildcards stop at \"/\", so \"v*\" selects releases and skips a namespaced tag like backup/x. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed query raises rather than reporting \"no tags\". Note a shallow or single-branch clone l",
       "attrs": {
-        "buzz": "vcs\\tags([pattern]) -> [Tag]"
+        "buzz": "vcs\\tags([pattern]) -\u003e [Tag]"
       }
     },
     {
@@ -47096,7 +47096,7 @@
       "label": "xml.element",
       "doc": "Build an element node from a tag, a flat [name, value, ...] attribute list, and a list of child nodes (elements or strings). Sugar for the {\"tag\", \"attrs\", \"children\"} map that render consumes.",
       "attrs": {
-        "buzz": "xml\\element(tag, attrs, children) -> any"
+        "buzz": "xml\\element(tag, attrs, children) -\u003e any"
       }
     },
     {
@@ -47105,7 +47105,7 @@
       "label": "xml.parse",
       "doc": "Parse an XML string into a node tree: each element becomes {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}, character data becomes a string. The inverse shape of render.",
       "attrs": {
-        "buzz": "xml\\parse(s) -> any"
+        "buzz": "xml\\parse(s) -\u003e any"
       }
     },
     {
@@ -47114,7 +47114,7 @@
       "label": "xml.render",
       "doc": "Serialize an XML node to a string. A node is a string (text) or an element map {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.",
       "attrs": {
-        "buzz": "xml\\render(node) -> string"
+        "buzz": "xml\\render(node) -\u003e string"
       }
     },
     {
@@ -47123,7 +47123,7 @@
       "label": "yaml.parse",
       "doc": "Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.",
       "attrs": {
-        "buzz": "yaml\\parse(source) -> any"
+        "buzz": "yaml\\parse(source) -\u003e any"
       }
     },
     {
@@ -47132,7 +47132,7 @@
       "label": "yaml.stringify",
       "doc": "Encode a value to a YAML string; errors on unencodable input.",
       "attrs": {
-        "buzz": "yaml\\stringify(value) -> string"
+        "buzz": "yaml\\stringify(value) -\u003e string"
       }
     },
     {
@@ -47229,7 +47229,7 @@
       "id": "module:magus",
       "kind": "module",
       "label": "magus",
-      "doc": "Magus core primitives.  Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects a remote cache provider, `magus\\ci.provider(<spell>)` a CI provider, and `magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret provider and the credentials read through it. Each takes an imported spell handle. `magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a"
+      "doc": "Magus core primitives.  Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\\cache.remote(\u003cspell\u003e)` selects a remote cache provider, `magus\\ci.provider(\u003cspell\u003e)` a CI provider, and `magus\\secret.provider(\u003cspell\u003e)` / `magus\\secret.read(\u003cref\u003e)` a secret provider and the credentials read through it. Each takes an imported spell handle. `magus\\secret.endpoint(\u003cgrant\u003e)` serves the case `read` cannot: it returns a loopback base URL a"
     },
     {
       "id": "module:markdown",
@@ -47265,7 +47265,7 @@
       "id": "module:platform",
       "kind": "module",
       "label": "platform",
-      "doc": "Normalize OS/architecture identifiers across naming conventions (aarch64<->arm64, Darwin<->darwin)."
+      "doc": "Normalize OS/architecture identifiers across naming conventions (aarch64\u003c-\u003earm64, Darwin\u003c-\u003edarwin)."
     },
     {
       "id": "module:proc",
@@ -47360,7 +47360,7 @@
       "kind": "op",
       "label": "shellcheck",
       "attrs": {
-        "argv": "shellcheck <sources:batch **/*.sh,**/*.bash>",
+        "argv": "shellcheck \u003csources:batch **/*.sh,**/*.bash\u003e",
         "tool": "shellcheck"
       }
     },
@@ -47414,7 +47414,7 @@
       "kind": "op",
       "label": "buzz-check",
       "attrs": {
-        "argv": "buzz --check <sources:each **/*.buzz>",
+        "argv": "buzz --check \u003csources:each **/*.buzz\u003e",
         "tool": "buzz"
       }
     },
@@ -47423,7 +47423,7 @@
       "kind": "op",
       "label": "buzz-test",
       "attrs": {
-        "argv": "buzz --test <sources:each **/*.buzz>",
+        "argv": "buzz --test \u003csources:each **/*.buzz\u003e",
         "tool": "buzz"
       }
     },
@@ -47432,7 +47432,7 @@
       "kind": "op",
       "label": "magus-buzz",
       "attrs": {
-        "argv": "$MAGUS buzz <sources:each **/*.buzz>",
+        "argv": "$MAGUS buzz \u003csources:each **/*.buzz\u003e",
         "tool": "$MAGUS"
       }
     },
@@ -49149,7 +49149,7 @@
       "id": "target:.:bindings-generate",
       "kind": "target",
       "label": "bindings-generate",
-      "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
+      "doc": "Regenerates the Go host bindings (std -\u003e internal/interp/bindings/gen) from std.Module declarations.",
       "source": ".",
       "attrs": {
         "declared_as": "bindings_generate",
@@ -49747,7 +49747,7 @@
       "id": "target:docs:build-hljs",
       "kind": "target",
       "label": "build-hljs",
-      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.",
+      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into gen/assets/hljs.js.",
       "source": "docs",
       "attrs": {
         "declared_as": "build_hljs",
