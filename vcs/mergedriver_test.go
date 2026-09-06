@@ -306,3 +306,37 @@ func TestDriverIsPreferredHere(t *testing.T) {
 	assert.True(t, driverIsPreferredHere(root, filepath.Join(root, "magus-dev")+gitDriverArgs),
 		"a deliberate pinned registration is from this worktree and must survive")
 }
+
+// TestRegisteredDriverReportsAbsence pins the two states git spells identically. `config`
+// exits 1 with no output for an absent key and exits 0 with no output for a key set to the
+// empty value, and both are unusable - every predicate downstream reads an executable path
+// out of the command, so "" would send them all looking for a file named "".
+//
+// The empty-value case is the one worth a fixture: a caller comparing the returned string
+// against "" happens to get it right, but only by re-deriving that judgment at the call
+// site, and there were two sites deriving it independently with nothing pinning either.
+func TestRegisteredDriverReportsAbsence(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	setDriver := func(value string) {
+		t.Helper()
+		require.NoError(t, gitExec(t.Context(), "-C", repo, "config", "merge.magus.driver", value).Run())
+	}
+
+	cmd, ok := gitVCS{}.registeredDriver(t.Context(), repo)
+	assert.False(t, ok, "a fresh clone has registered nothing")
+	assert.Empty(t, cmd)
+
+	setDriver("")
+	cmd, ok = gitVCS{}.registeredDriver(t.Context(), repo)
+	assert.False(t, ok, "a key set to the empty value names no executable either")
+	assert.Empty(t, cmd)
+
+	want := "/usr/local/bin/magus" + gitDriverArgs
+	setDriver(want)
+	cmd, ok = gitVCS{}.registeredDriver(t.Context(), repo)
+	assert.True(t, ok)
+	assert.Equal(t, want, cmd)
+}
