@@ -426,3 +426,25 @@ func TestMagnitude(t *testing.T) {
 		assert.Equalf(t, c.want, magnitude(c.in), "magnitude(%d)", c.in)
 	}
 }
+
+// The acceptance test for the committed index: a kind magus supplies renders the same
+// size whatever binary rendered it. Two binaries differing only in how many diagnostic
+// codes they register produced indexes that disagreed, and MGS4005 then refused to stage
+// the convergence as environmental drift, so the disagreement was permanent.
+func TestKindSizeWithholdsABinaryDependentCount(t *testing.T) {
+	release := types.KnowledgeRoutingKind{Kind: types.KindDiagnostic, Count: 79, FromBinary: true}
+	dev := types.KnowledgeRoutingKind{Kind: types.KindDiagnostic, Count: 84, FromBinary: true}
+	assert.Equal(t, kindSize(release), kindSize(dev),
+		"a count that moves with the binary must not reach a committed, drift-gated file")
+	assert.Equal(t, "built in", kindSize(dev))
+
+	// Crossing a magnitude boundary is what made the two disagree, so pin that the fix
+	// does not merely widen the bucket: 79 and 84 bucket to "70+" and "80+".
+	assert.NotEqual(t, magnitude(release.Count), magnitude(dev.Count))
+}
+
+// A workspace-derived kind keeps its size; withholding every count would cost the column
+// the thing it exists for.
+func TestKindSizeKeepsAWorkspaceCount(t *testing.T) {
+	assert.Equal(t, "200+", kindSize(types.KnowledgeRoutingKind{Kind: types.KindTarget, Count: 273}))
+}
