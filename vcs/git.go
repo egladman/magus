@@ -950,9 +950,9 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 	attrsCurrent, attrsWanted := v.gitAttrsState(root, outputGlobs)
 	// One read answers all three questions. Ensure runs on every workspace load and its
 	// contract is to be cheap in the steady state, so it cannot spawn a subprocess each.
-	registered := v.registeredDriver(ctx, root)
+	registered, haveDriver := v.registeredDriver(ctx, root)
 	attrsPresent := v.attrsSectionPresent(root)
-	if attrsCurrent == attrsWanted && registered != "" && attrsPresent &&
+	if attrsCurrent == attrsWanted && haveDriver && attrsPresent &&
 		driverExeExists(registered) && driverIsReachableHere(ctx, root, registered) &&
 		driverIsPreferredHere(root, registered) && driverUsable(ctx, registered) {
 		return false, nil
@@ -960,11 +960,24 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 	return true, v.InstallMergeDriver(ctx, root, outputGlobs)
 }
 
-// registeredDriver returns the command currently registered as the magus merge driver,
-// or "" when nothing is registered.
-func (v gitVCS) registeredDriver(ctx context.Context, root string) string {
-	out, _ := gitExec(ctx, "-C", root, "config", "merge.magus.driver").Output()
-	return strings.TrimSpace(string(out))
+// registeredDriver returns the command currently registered as the magus merge driver.
+// ok is false when nothing is registered, and the six predicates below may only be asked
+// about a command when it is true - each of them reads an executable path out of the
+// registration, and every one of them answers the wrong thing about "".
+//
+// The emptiness is reported rather than encoded in the string because git spells two
+// different states the same way: `config` exits non-zero with no output when the key is
+// absent, and exits zero with no output when the key is set to the empty value. Both are
+// unusable, so ok folds them together deliberately - but a caller reading `== ""` was
+// reconstructing that judgment at each site, and getting it right there is not something
+// the type was making it do.
+func (v gitVCS) registeredDriver(ctx context.Context, root string) (cmd string, ok bool) {
+	out, err := gitExec(ctx, "-C", root, "config", "merge.magus.driver").Output()
+	if err != nil {
+		return "", false
+	}
+	cmd = strings.TrimSpace(string(out))
+	return cmd, cmd != ""
 }
 
 // attrsSectionPresent reports whether .gitattributes carries the managed section.
@@ -1095,7 +1108,7 @@ func splitDriver(registered string) (exe, args string) {
 
 // CheckMergeDriver reports whether both .gitattributes and git config driver registration are present.
 func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error) {
-	if v.registeredDriver(ctx, root) == "" {
+	if _, ok := v.registeredDriver(ctx, root); !ok {
 		return false, nil // not configured; not an error
 	}
 	return v.attrsSectionPresent(root), nil
