@@ -306,6 +306,13 @@ jobs:
       - release-darwin-amd64
       - release-windows
     runs-on: ubuntu-latest
+    # See the same block in release-index.yaml. Scoped to this job rather than the whole
+    # workflow because only this one REGENERATES committed output; the release-build jobs
+    # above compile the shipped binaries, and changing the GOEXPERIMENT they build under
+    # changes an artifact users run, which is a separate decision from fixing the encoder
+    # that writes gen/.
+    env:
+      GOEXPERIMENT: jsonv2
     permissions:
       contents: write        # create the GitHub Release, upload assets, push the index branch
       pull-requests: write   # open the pull request carrying the signed release index
