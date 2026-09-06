@@ -18,6 +18,33 @@ func routingKind(r types.KnowledgeRouting, kind string) (types.KnowledgeRoutingK
 	return types.KnowledgeRoutingKind{}, false
 }
 
+// TestBinarySuppliedKindsMembership pins WHICH kinds withhold their size, because nothing
+// pinned it before and that is why the set shipped two kinds short.
+//
+// The three catalogs a binary carries are diagnostics, the host module registry, and the
+// embedded built-in spells (the same three types.KnowledgeGraphOutput's CatalogFingerprint
+// names). The first two were covered; the third was not, so spell, op and tool were counted
+// as workspace facts while 61 of 63 ops came from the binary.
+//
+// charm is the control. It has no registry mint site at all, so its count is genuinely the
+// workspace's, and a predicate loose enough to sweep it in is too loose.
+func TestBinarySuppliedKindsMembership(t *testing.T) {
+	for _, kind := range []string{
+		types.KindDiagnostic, types.KindModule, types.KindMethod,
+		types.KindSpell, types.KindOp, types.KindTool,
+	} {
+		assert.True(t, binarySuppliedKinds[kind],
+			"%q counts nodes the binary supplies, so a committed index must not carry its size", kind)
+	}
+	for _, kind := range []string{
+		types.KindCharm, types.KindProject, types.KindTarget,
+		types.KindDoc, types.KindFile, types.KindFunction,
+	} {
+		assert.False(t, binarySuppliedKinds[kind],
+			"%q is a workspace fact; withholding its size costs a real signal", kind)
+	}
+}
+
 func TestRoutingCountsAndKinds(t *testing.T) {
 	g := sampleGraph()
 	r := g.Routing()

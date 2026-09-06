@@ -21,22 +21,41 @@ var routingKindOrder = []string{
 // maxAnchors caps how many high-degree anchor nodes a routing row lists.
 const maxAnchors = 3
 
-// binarySuppliedKinds are the kinds magus itself populates, from Inputs.Diagnostics
-// (AllDiagnosticCodes) and Inputs.Modules (the host module registry, whose methods hang
-// off it). Nothing a workspace writes adds or removes one.
+// binarySuppliedKinds are the kinds whose COUNT the binary contributes to, so a committed,
+// drift-gated index carrying one disagrees with every index a different magus rendered.
 //
-// Their counts therefore move with the BINARY. Measured 2026-09-04: libs/textsearch's
-// committed index said "70+" diagnostics while five sibling indexes said "80+", because a
-// dev build carries codes a release does not, and MGS4005 then refuses to stage the
-// convergence as environmental drift. Every index disagreeing with every other one is the
-// permanent end state.
+// Measured 2026-09-04: libs/textsearch's committed index said "70+" diagnostics while five
+// siblings said "80+", because a dev build carries codes a release does not, and MGS4005
+// then refuses to stage the convergence as environmental drift. Every index disagreeing
+// with every other one is the permanent end state.
 //
-// The kinds still route: the row, the query and the anchors are all workspace-independent
-// and useful. Only the size is dropped, by the renderer of the committed file.
+// The predicate is "the binary contributes", not "nothing a workspace writes adds one",
+// which was the first spelling and is a SUFFICIENT condition dressed as a necessary one.
+// It admitted only the two inputs a workspace cannot touch at all (Inputs.Diagnostics from
+// AllDiagnosticCodes, Inputs.Modules from the host registry) and missed the third catalog
+// a binary carries: Inputs.Spells includes the go:embed'd built-ins, so spell, op and tool
+// are MIXED rather than workspace-owned. Measured here: 61 of 63 ops, 23 of 23 tools and
+// 11 of 13 spells come from the binary, and `tool` has already crossed a bucket in
+// committed history (10+ to 20+). types.KnowledgeGraphOutput's CatalogFingerprint names
+// the same three catalogs; this list is now the same set.
+//
+// charm is deliberately absent, and checking rather than assuming is what kept it out. It
+// has no registry mint site: types.Spell carries no charm field, so a charm node exists
+// only where a magusfile writes ctx.hasCharm(...). All 12 here are the workspace's own,
+// and withholding that size would cost a real signal for nothing.
+//
+// Only the SIZE is withheld; the row and its query still route. The anchors do not yet,
+// and that is a known hole: for a binary-supplied kind every node is degree-tied, so
+// topLabels falls back to the id tiebreak and the committed method anchors are simply the
+// three alphabetically-first ids. One new std module sorting before "archive" rewrites six
+// committed files with no workspace change.
 var binarySuppliedKinds = map[string]bool{
 	types.KindDiagnostic: true,
 	types.KindModule:     true,
 	types.KindMethod:     true,
+	types.KindSpell:      true,
+	types.KindOp:         true,
+	types.KindTool:       true,
 }
 
 // Routing derives the compact "query first" routing summary: per-kind counts with
