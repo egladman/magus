@@ -205,51 +205,54 @@ func runCut(args []string) error {
 		return fmt.Errorf("usage: magus-utils cut -version v0.2.0 -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases")
 	}
 
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", outDir, err)
+	}
+	outPath := filepath.Join(outDir, version+".yaml")
+
+	artifacts, err := scanReleaseArtifacts(artifactsDir, version)
+	if err != nil {
+		return err
+	}
+
+	// The artifacts are hashed BEFORE the changelog is read, because an already-cut
+	// version has to be recognised without consuming anything: on a rerun [Unreleased]
+	// is empty (this call emptied it) and the parse below would fail first, reporting a
+	// missing section when the truth is that the work is already done.
+	//
+	// A publish job is a sequence of steps and any of them can fail after this one
+	// succeeds - v0.4.3 died two steps later on a missing pnpm, and the rerun that
+	// should have fixed it could not get past this function. So a second cut of a
+	// version whose manifest already names exactly these artifacts converges instead of
+	// refusing. Immutability is kept where it means something: DIFFERENT bytes under a
+	// tag that already shipped is a conflict no rerun may paper over.
+	if cut, err := os.ReadFile(outPath); err == nil {
+		var prev ReleaseManifest
+		if err := yaml.Unmarshal(cut, &prev); err != nil {
+			// Unreadable is not the same as absent. Convergence needs to compare what is
+			// there, and a file that will not parse cannot be compared - so it keeps the
+			// old refusal rather than being treated as a fresh cut and overwritten.
+			return fmt.Errorf("%s already exists but does not parse as a manifest, so this cut cannot "+
+				"tell a rerun from a rebuild: %w", outPath, err)
+		}
+		if diff := artifactDiff(prev.Artifacts, artifacts); diff != "" {
+			return fmt.Errorf("%s already exists and names different artifacts; release manifests are "+
+				"immutable once committed, so this is a rebuild under a shipped tag rather than a rerun:\n%s",
+				outPath, diff)
+		}
+		fmt.Printf("%s already names these %d artifact(s); nothing to cut\n", outPath, len(artifacts))
+		return nil
+	}
+
 	// Extract the Unreleased section from CHANGELOG.md.
 	notes, body, err := parseUnreleased(changelogPath)
 	if err != nil {
 		return fmt.Errorf("parse changelog: %w", err)
 	}
 	if body == "" {
-		return fmt.Errorf("CHANGELOG.md has no [Unreleased] section with content")
-	}
-
-	// Scan the artifacts directory for release assets and compute their sizes + SHA256.
-	var artifacts []ReleaseArtifact
-	entries, err := os.ReadDir(artifactsDir)
-	if err != nil {
-		return fmt.Errorf("read artifacts dir %s: %w", artifactsDir, err)
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		// Only include files that look like release assets (tarballs and checksums).
-		if !isReleaseAsset(name) {
-			continue
-		}
-		path := filepath.Join(artifactsDir, name)
-		size, digest, err := fileSizeAndSHA256(path)
-		if err != nil {
-			return fmt.Errorf("hash %s: %w", name, err)
-		}
-		artifacts = append(artifacts, ReleaseArtifact{
-			Name:     name,
-			Platform: platformFromName(name, version),
-			Size:     fmt.Sprintf("%d", size),
-			SHA256:   digest,
-		})
-	}
-	// An empty artifacts list means the directory contained no release assets, which is
-	// almost certainly a path mistake rather than a valid hollow release.
-	//
-	// magus-release.pem used to be appended here, sizeless and hashless. No release
-	// since v0.1.0 has published such an asset - release.yaml uploads the tarballs and
-	// the SHA256SUMS pair, nothing else - so the entry named a download that 404s, in a
-	// file whose whole purpose is telling a client what it may fetch.
-	if len(artifacts) == 0 {
-		return fmt.Errorf("no release artifacts found in %s (expected *.tar.gz or SHA256SUMS)", artifactsDir)
+		return fmt.Errorf("CHANGELOG.md has no [Unreleased] section with content, and %s does not exist. "+
+			"An earlier run consumed the notes without leaving the manifest behind; recover them from that "+
+			"run's checkout or from git history, restore [Unreleased], and cut again", outPath)
 	}
 
 	m := ReleaseManifest{
@@ -263,14 +266,6 @@ func runCut(args []string) error {
 	out, err := yaml.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
-	}
-
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", outDir, err)
-	}
-	outPath := filepath.Join(outDir, version+".yaml")
-	if _, err := os.Stat(outPath); err == nil {
-		return fmt.Errorf("%s already exists; release manifests are immutable once committed", outPath)
 	}
 
 	// The manifest is staged and only renamed into place once the changelog has been
@@ -753,6 +748,82 @@ func notesFromBodyString(body string) ReleaseNotes {
 	}
 	flush()
 	return notes
+}
+
+// scanReleaseArtifacts hashes every release asset in dir, in name order so two scans of
+// one directory produce the same list and can be compared.
+func scanReleaseArtifacts(dir, version string) ([]ReleaseArtifact, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read artifacts dir %s: %w", dir, err)
+	}
+	var artifacts []ReleaseArtifact
+	for _, e := range entries {
+		if e.IsDir() || !isReleaseAsset(e.Name()) {
+			continue
+		}
+		size, digest, err := fileSizeAndSHA256(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("hash %s: %w", e.Name(), err)
+		}
+		artifacts = append(artifacts, ReleaseArtifact{
+			Name:     e.Name(),
+			Platform: platformFromName(e.Name(), version),
+			Size:     fmt.Sprintf("%d", size),
+			SHA256:   digest,
+		})
+	}
+	// An empty artifacts list means the directory contained no release assets, which is
+	// almost certainly a path mistake rather than a valid hollow release.
+	//
+	// magus-release.pem used to be appended here, sizeless and hashless. No release
+	// since v0.1.0 has published such an asset - release.yaml uploads the tarballs and
+	// the SHA256SUMS pair, nothing else - so the entry named a download that 404s, in a
+	// file whose whole purpose is telling a client what it may fetch.
+	if len(artifacts) == 0 {
+		return nil, fmt.Errorf("no release artifacts found in %s (expected *.tar.gz or SHA256SUMS)", dir)
+	}
+	slices.SortFunc(artifacts, func(a, b ReleaseArtifact) int { return strings.Compare(a.Name, b.Name) })
+	return artifacts, nil
+}
+
+// artifactDiff describes how a committed manifest's artifacts differ from a fresh scan,
+// or "" when they name the same bytes. The report lists every disagreement rather than
+// the first: a rerun that finds one mismatched digest has almost certainly rebuilt all
+// of them, and the count is what tells the reader which of those two it is.
+//
+// Only the identity fields are compared. Date moves on a rerun and says nothing about
+// the bytes, and the notes cannot be recomputed once [Unreleased] is empty.
+func artifactDiff(committed, scanned []ReleaseArtifact) string {
+	key := func(xs []ReleaseArtifact) map[string]ReleaseArtifact {
+		m := make(map[string]ReleaseArtifact, len(xs))
+		for _, a := range xs {
+			m[a.Name] = a
+		}
+		return m
+	}
+	was, now := key(committed), key(scanned)
+	var diffs []string
+	for name, a := range was {
+		b, ok := now[name]
+		if !ok {
+			diffs = append(diffs, fmt.Sprintf("  %s: in the manifest, absent from the build", name))
+			continue
+		}
+		if a.SHA256 != b.SHA256 {
+			diffs = append(diffs, fmt.Sprintf("  %s: sha256 %s -> %s", name, a.SHA256, b.SHA256))
+		}
+		if a.Size != b.Size {
+			diffs = append(diffs, fmt.Sprintf("  %s: size %s -> %s", name, a.Size, b.Size))
+		}
+	}
+	for name := range now {
+		if _, ok := was[name]; !ok {
+			diffs = append(diffs, fmt.Sprintf("  %s: built now, absent from the manifest", name))
+		}
+	}
+	slices.Sort(diffs)
+	return strings.Join(diffs, "\n")
 }
 
 // isReleaseAsset reports whether a filename looks like a release artifact.

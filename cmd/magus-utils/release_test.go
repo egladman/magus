@@ -14,6 +14,7 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -544,27 +545,65 @@ func TestCutThenGenerateChangelogDoesNotDuplicate(t *testing.T) {
 	require.Contains(t, string(got), "## [Unreleased]\n\n## [v0.2.0]", "Unreleased is emptied, not removed")
 }
 
-// TestRunCut_ImmutabilityGuard verifies that runCut refuses to overwrite an
-// existing manifest (release manifests are immutable once committed).
+// TestRunCut_ImmutabilityGuard covers what runCut does when the manifest is already
+// there, which is three different things. A publish job is a sequence of steps, any of
+// which can fail after the cut succeeds - v0.4.3 died two steps later on a missing pnpm -
+// so "already cut" has to be a state a rerun can pass THROUGH when the bytes agree, while
+// staying a refusal when they do not.
 func TestRunCut_ImmutabilityGuard(t *testing.T) {
-	artifactsDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.1.0_linux_amd64.tar.gz"), []byte("x"), 0o644))
+	const tarball = "magus_v0.1.0_linux_amd64.tar.gz"
+	setup := func(t *testing.T, payload string) (artifactsDir, changelogPath, outDir string) {
+		t.Helper()
+		artifactsDir = t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, tarball), []byte(payload), 0o644))
+		changelogPath = filepath.Join(t.TempDir(), "CHANGELOG.md")
+		require.NoError(t, os.WriteFile(changelogPath,
+			[]byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- x\n"), 0o644))
+		return artifactsDir, changelogPath, t.TempDir()
+	}
+	cut := func(artifactsDir, changelogPath, outDir string) error {
+		return runCut([]string{
+			"-version", "v0.1.0", "-artifacts", artifactsDir,
+			"-changelog", changelogPath, "-out", outDir,
+		})
+	}
 
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- x\n"), 0o644))
+	t.Run("a rerun over the same artifacts converges", func(t *testing.T) {
+		artifactsDir, changelogPath, outDir := setup(t, "x")
+		require.NoError(t, cut(artifactsDir, changelogPath, outDir))
+		first, err := os.ReadFile(filepath.Join(outDir, "v0.1.0.yaml"))
+		require.NoError(t, err)
 
-	outDir := t.TempDir()
-	// Pre-create the output file to trigger the immutability check.
-	require.NoError(t, os.WriteFile(filepath.Join(outDir, "v0.1.0.yaml"), []byte("existing"), 0o644))
-
-	err := runCut([]string{
-		"-version", "v0.1.0",
-		"-artifacts", artifactsDir,
-		"-changelog", changelogPath,
-		"-out", outDir,
+		// The second call is the rerun, and it runs against the tree the first one left:
+		// [Unreleased] is empty now. Passing the ORIGINAL changelog would test a case the
+		// workflow never produces, and would hide that the emptiness is what used to be
+		// reported - "no [Unreleased] section" - when the truth was "already done".
+		require.NoError(t, cut(artifactsDir, changelogPath, outDir), "a rerun must not fail")
+		again, err := os.ReadFile(filepath.Join(outDir, "v0.1.0.yaml"))
+		require.NoError(t, err)
+		assert.Equal(t, string(first), string(again), "the committed manifest is left untouched")
 	})
-	require.Error(t, err, "must refuse to overwrite an existing manifest")
-	require.Contains(t, err.Error(), "already exists", "error must mention existing file")
+
+	t.Run("different bytes under a shipped tag are refused", func(t *testing.T) {
+		artifactsDir, changelogPath, outDir := setup(t, "x")
+		require.NoError(t, cut(artifactsDir, changelogPath, outDir))
+
+		// A rebuild: same tag, same filename, different content, so a different digest.
+		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, tarball), []byte("rebuilt"), 0o644))
+		err := cut(artifactsDir, changelogPath, outDir)
+		require.Error(t, err, "a rebuild under a shipped tag is not a rerun")
+		assert.Contains(t, err.Error(), "immutable")
+		assert.Contains(t, err.Error(), tarball, "the report names the artifact that moved")
+		assert.Contains(t, err.Error(), "sha256", "and what moved about it")
+	})
+
+	t.Run("an unparseable manifest is refused rather than overwritten", func(t *testing.T) {
+		artifactsDir, changelogPath, outDir := setup(t, "x")
+		require.NoError(t, os.WriteFile(filepath.Join(outDir, "v0.1.0.yaml"), []byte("existing"), 0o644))
+		err := cut(artifactsDir, changelogPath, outDir)
+		require.Error(t, err, "must refuse to overwrite an existing manifest")
+		assert.Contains(t, err.Error(), "already exists", "error must mention existing file")
+	})
 }
 
 // TestRunCut_FailedChangelogClearIsRetryable: the manifest used to be written
