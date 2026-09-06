@@ -211,6 +211,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkGraphCycles() },
 	},
 	{
+		Name:           "merge-driver-loads-workspace",
+		Doc:            "whether the registered merge driver can read this workspace, or leaves every generated conflict to a hand merge",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkMergeDriverLoads() },
+	},
+	{
 		Name:           "guard-binary",
 		Doc:            "which magus an agent-host guard hook would execute, and whether it predates the tree",
 		Evidence:       types.EvidenceMeasured,
