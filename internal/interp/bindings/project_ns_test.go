@@ -47,15 +47,15 @@ func targetsOpts(name string, policy vm.Value) vm.Value {
 // key reaching only one side is exactly how memory_mb, cache, drift and drift_reason
 // came to pass a real run and fail their own preview.
 //
-// Driven off types.TargetPolicyKeys rather than a hand-written list: a list here would
+// Driven off types.TargetPolicyKeys() rather than a hand-written list: a list here would
 // be a third copy free to drift the same way, and a key added to the table is covered
 // the moment it lands, with nothing to add.
 //
 // A malformed VALUE is fine and expected; only the unknown-key verdict is under test,
 // so one bogus string serves every key and no per-key fixture has to be maintained.
 func TestParseBuzzProjectOpts_EveryTargetPolicyKeyAccepted(t *testing.T) {
-	require.NotEmpty(t, types.TargetPolicyKeys)
-	for _, key := range types.TargetPolicyKeys {
+	require.NotEmpty(t, types.TargetPolicyKeys())
+	for _, key := range types.TargetPolicyKeys() {
 		t.Run(key, func(t *testing.T) {
 			pol := vm.NewMap()
 			pol.MapSet(key, vm.StrValue("x"))
@@ -279,6 +279,51 @@ func TestParseBuzzProjectOpts_UnknownTargetPolicyKeyErrors(t *testing.T) {
 	assert.ErrorContains(t, err, `did you mean "skip_cache"`)
 }
 
+// TestParseBuzzProjectOpts_KeysFromTheFutureLoad is the deadlock regression, at both
+// depths where a magusfile can carry a key this binary predates.
+//
+// A rejection here aborts workspace load, which takes out every magus command at once -
+// `magus run go-build` included, so the workspace cannot even build the binary that
+// would understand the key. Ignoring it costs one policy not applying.
+func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {
+	t.Run("top level", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("quantum_flux", vm.BoolValue(true))
+		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		require.NoError(t, err)
+	})
+
+	t.Run("per-target policy", func(t *testing.T) {
+		pol := vm.NewMap()
+		pol.MapSet("quantum_flux", vm.StrValue("9m"))
+		_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+		require.NoError(t, err)
+	})
+
+	t.Run("tool bounds", func(t *testing.T) {
+		bound := vm.NewMap()
+		bound.MapSet("quantum_flux", vm.StrValue("1"))
+		tools := vm.NewMap()
+		tools.MapSet("go", bound)
+		opts := vm.NewMap()
+		opts.MapSet("tools", tools)
+		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		require.NoError(t, err)
+	})
+}
+
+// A recognized key still applies when an unrecognized one shares the map: tolerating the
+// second must not cost the first, which is the failure mode of dropping a whole map on
+// one bad member.
+func TestParseBuzzProjectOpts_AFutureKeyDoesNotDiscardItsNeighbors(t *testing.T) {
+	pol := vm.NewMap()
+	pol.MapSet("quantum_flux", vm.StrValue("9m"))
+	pol.MapSet("exclusive", vm.BoolValue(true))
+	opts, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+	require.NoError(t, err)
+	assert.NotEmpty(t, opts, "the exclusive policy beside the unknown key still lands")
+}
+
 // includePolicy builds `{"cache": {"include": {axis: {"enabled": on}}}}`.
 func includePolicy(axis string, on bool) vm.Value {
 	flag := vm.NewMap()
@@ -379,17 +424,24 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 		assert.ErrorContains(t, applyErr, `tools["node"].min "latest" is not a valid version`)
 	})
 
-	// An unknown key inside a tool entry is a load error naming the two valid ones, and
-	// deliberately NOT the "your magus may predate this" hint: min/below is a closed
-	// vocabulary that does not grow, so a stray key there is always a typo. ("minimum"
-	// is too far from "min" for the suggester's distance threshold, which is fine - the
-	// known-options list is two items long and the fix is visible in the message.)
-	t.Run("an unknown bound key is a plain load error, with no upgrade hint", func(t *testing.T) {
-		_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"minimum": "22"}))
-		assert.ErrorContains(t, err, `tools["node"]: unknown option "minimum"`)
+	// A misspelling the suggester can reach is still a load error naming the two valid
+	// keys.
+	t.Run("a near-miss bound key is a load error", func(t *testing.T) {
+		_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"minn": "22"}))
+		assert.ErrorContains(t, err, `tools["node"]: unknown option "minn"`)
+		assert.ErrorContains(t, err, `did you mean "min"`)
 		assert.ErrorContains(t, err, "known options: below, min")
-		assert.NotContains(t, err.Error(), "magus self update",
-			"a closed sub-map must not suggest upgrading; the key cannot be from the future")
+	})
+
+	// "minimum" is 4 edits from "min" against a threshold of 2, so nothing distinguishes
+	// it from a key added after this binary shipped, and it is warned about rather than
+	// refused. That is the accepted cost: this WAS a load error, on the reasoning that
+	// min/below is closed so a stray key there is always a typo. Closedness turned out
+	// to be the wrong discriminator, because the "closed" per-target policy vocabulary
+	// grew twice in three merges and rejecting its new key deadlocked a workspace.
+	t.Run("a bound key too far to suggest is ignored, not refused", func(t *testing.T) {
+		p := applyOpts(t, toolsOpts("node", map[string]string{"minimum": "22"}))
+		assert.Empty(t, p.ToolBounds, "an unrecognized key contributes no window")
 	})
 
 	// An empty entry contributes nothing, so a project that writes one is not treated as

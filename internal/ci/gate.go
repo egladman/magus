@@ -522,8 +522,18 @@ func isDirective(body string, directives []string) bool {
 // InheritOff reports whether any project declared gate_inherit false, the
 // workspace's off-switch for CI verdict inheritance. One declaration turns it
 // off workspace-wide, the same reach a gate_low_risk declaration has.
+//
+// A project that DROPPED an option counts as off too. Load tolerates a key it does not
+// recognize so a magusfile from the future cannot deadlock the binary that would build
+// its successor, but several options are opt-outs whose absence is the permissive answer:
+// an ignored `gate_inherit = false` reads as inheritance on, and an ignored
+// `gate_low_risk = []` restores the prose globs the author deleted. The binary cannot
+// tell which kind it dropped, because not knowing the key is the whole premise. So the
+// one decision that can SKIP CI declines whenever the magusfile was not fully understood.
 func InheritOff(projects []*types.Project) bool {
-	return slices.ContainsFunc(projects, func(p *types.Project) bool { return p.GateInheritOff })
+	return slices.ContainsFunc(projects, func(p *types.Project) bool {
+		return p.GateInheritOff || len(p.IgnoredOptions) > 0
+	})
 }
 
 // PRMergeFreeRange is MergeFreeRange with the head commit exempt from the

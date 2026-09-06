@@ -101,8 +101,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 // keys, so memory_mb, cache, drift and drift_reason failed the preview of a magusfile
 // `magus run` loads happily.
 func TestLoadMagusfile_everyTargetPolicyKeyAccepted(t *testing.T) {
-	require.NotEmpty(t, types.TargetPolicyKeys)
-	for _, key := range types.TargetPolicyKeys {
+	require.NotEmpty(t, types.TargetPolicyKeys())
+	for _, key := range types.TargetPolicyKeys() {
 		t.Run(key, func(t *testing.T) {
 			g := LoadMagusfile(context.Background(), `
 import "magus";

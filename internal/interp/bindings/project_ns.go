@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -57,60 +56,26 @@ var knownToolBoundKeys = types.ToolBoundKeys
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
 // magus.project's "targets" map, from the one shared table in types so the engine and
 // the dry-run host cannot drift.
-var knownTargetPolicyKeys = types.TargetPolicyKeys
+var knownTargetPolicyKeys = types.TargetPolicyKeys()
 
-// rejectUnknownKeys errors on the first key in m absent from known, so a typo
-// like "skip_cache" or "depend_on" is a loud load error instead of a silently
-// dropped option. context names the call site for the error message.
+// checkUnknownKeys errors on a typo and warns on a key this magus does not recognize at
+// all, per hint.CheckKeys. where names the call site; the ignored keys come back so the
+// caller can record them on the project.
 //
-// Use rejectUnknownSchemaKeys instead for a vocabulary that grows across releases.
-func rejectUnknownKeys(m vm.Value, known []string, context string) error {
+// Applied to every schema map, nested ones included. The split used to be by position,
+// on the grounds that a target's policy keys do not grow. They grew twice in three
+// merges, and one of them deadlocked a workspace.
+func checkUnknownKeys(ctx context.Context, m vm.Value, known []string, where string) ([]string, error) {
 	if !m.IsMap() {
-		return nil
+		return nil, nil
 	}
-	sortedKnown := slices.Sorted(slices.Values(known))
-	for _, k := range m.MapKeys() {
-		if slices.Contains(known, k) {
-			continue
-		}
-		if sug := hint.Nearest(k, known); sug != "" {
-			return fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
-				context, k, sug, strings.Join(sortedKnown, ", "))
-		}
-		return fmt.Errorf("%s: unknown option %q (known options: %s)",
-			context, k, strings.Join(sortedKnown, ", "))
+	ignored, err := hint.CheckKeys(m.MapKeys(), known, where)
+	for _, k := range ignored {
+		slog.WarnContext(ctx, "magusfile: ignoring an option this magus does not recognize",
+			slog.String("where", where), slog.String("option", k),
+			slog.String("advice", hint.IgnoredKeyAdvice()))
 	}
-	return nil
-}
-
-// rejectUnknownSchemaKeys is rejectUnknownKeys for a vocabulary that GROWS across
-// releases, so an unrecognized key there has a second possible cause.
-//
-// Only the top-level magus.project map qualifies. A key with no near match in a
-// vocabulary that gains members is more likely one this binary is too old to know than
-// a misspelling, and by far the more expensive reading to get wrong: a magusfile schema
-// key added upstream makes EVERY magus command fail at workspace load, including the one
-// that would build a binary that understands it, and the bare "unknown option" text
-// sends the reader hunting a typo that is not there.
-//
-// A closed sub-map (a tool's min/below, a target's policy keys) keeps the plain
-// rejection. Those vocabularies do not grow, so "your magus may predate it" is wrong
-// advice there - `minimum` for `min` is a typo the suggester cannot match on distance,
-// not a key from the future.
-func rejectUnknownSchemaKeys(m vm.Value, known []string, context string) error {
-	err := rejectUnknownKeys(m, known, context)
-	if err == nil {
-		return nil
-	}
-	for _, k := range m.MapKeys() {
-		if slices.Contains(known, k) || hint.Nearest(k, known) != "" {
-			continue
-		}
-		return fmt.Errorf("%s\nhint: nothing here is close to %q, so this magus may predate it."+
-			" Upgrade with `%s`, or delete the key if the workspace does not need it",
-			err.Error(), k, hint.SelfUpdate)
-	}
-	return err
+	return ignored, err
 }
 
 // buildProject returns magus.project, the callable that customizes the calling
@@ -169,10 +134,14 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	if !v.IsMap() {
 		return nil, nil
 	}
-	if err := rejectUnknownSchemaKeys(v, knownProjectOptionKeys, "magus.project"); err != nil {
+	ignored, err := checkUnknownKeys(ctx, v, knownProjectOptionKeys, "magus.project")
+	if err != nil {
 		return nil, err
 	}
 	var opts []workspace.ProjectOption
+	if len(ignored) > 0 {
+		opts = append(opts, workspace.WithIgnoredOptions(ignored...))
+	}
 
 	if dv, ok := v.MapGet("depends_on"); ok {
 		if paths := buzzValToStringSlice(dv); len(paths) > 0 {
@@ -342,9 +311,13 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			if !ok || !bv.IsMap() {
 				continue
 			}
-			if err := rejectUnknownKeys(bv, knownToolBoundKeys,
-				fmt.Sprintf("magus.project: tools[%q]", bin)); err != nil {
+			dropped, err := checkUnknownKeys(ctx, bv, knownToolBoundKeys,
+				fmt.Sprintf("magus.project: tools[%q]", bin))
+			if err != nil {
 				return nil, err
+			}
+			if len(dropped) > 0 {
+				opts = append(opts, workspace.WithIgnoredOptions(dropped...))
 			}
 			var b spells.VersionBounds
 			if mv, ok := bv.MapGet("min"); ok {
@@ -376,9 +349,13 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			if !ok || !pv.IsMap() {
 				continue
 			}
-			if err := rejectUnknownKeys(pv, knownTargetPolicyKeys,
-				fmt.Sprintf("magus.project: targets[%q]", name)); err != nil {
+			dropped, err := checkUnknownKeys(ctx, pv, knownTargetPolicyKeys,
+				fmt.Sprintf("magus.project: targets[%q]", name))
+			if err != nil {
 				return nil, err
+			}
+			if len(dropped) > 0 {
+				opts = append(opts, workspace.WithIgnoredOptions(dropped...))
 			}
 			// name is normalized by workspace.WithTarget, so a policy declared
 			// under any spelling matches a target invoked under any other.

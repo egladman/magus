@@ -187,7 +187,7 @@ func TestEvalInContext_compileError(t *testing.T) {
 	assert.NotEmpty(t, r.Diag.Msg)
 }
 
-// TestTraceProject_unknownKeyHint drives rejectUnknownKeys through
+// TestTraceProject_unknownKeyHint drives checkUnknownKeys through
 // hint.Nearest: a near-miss project option key yields a "did you mean" hint
 // naming the intended key.
 func TestTraceProject_unknownKeyHint(t *testing.T) {
@@ -199,20 +199,20 @@ func TestTraceProject_unknownKeyHint(t *testing.T) {
 	assert.Contains(t, g.Diag.Msg, `did you mean "outputs"`, "a distance-1 typo gets a suggestion")
 }
 
-// TestTraceProject_unknownKeyNoHint: a key far from every known option lists the
-// known options but offers no suggestion.
-func TestTraceProject_unknownKeyNoHint(t *testing.T) {
+// TestTraceProject_unknownKeyNoHintLoads: a key far from every known option is ignored,
+// not fatal, so a magusfile written for a newer magus still previews here.
+//
+// This asserted the opposite until the rejection deadlocked a workspace: the load abort
+// took out every magus command, the one that builds a newer binary included.
+func TestTraceProject_unknownKeyNoHintLoads(t *testing.T) {
 	const src = `import "magus"; magus.project({"zzzzzzzz": true});`
 	g := LoadMagusfile(context.Background(), src)
-	require.False(t, g.OK)
-	require.NotNil(t, g.Diag)
-	assert.Contains(t, g.Diag.Msg, `unknown option "zzzzzzzz"`)
-	assert.NotContains(t, g.Diag.Msg, "did you mean", "nothing is close enough to suggest")
-	assert.Contains(t, g.Diag.Msg, "known options:", "the message still enumerates the valid keys")
+	require.True(t, g.OK, "a key this magus cannot recognize must not fail the load")
+	assert.Nil(t, g.Diag)
 }
 
 // TestTraceProject_unknownTargetPolicyKey exercises the per-target policy
-// rejectUnknownKeys path (a distinct call site from the top-level options).
+// checkUnknownKeys path (a distinct call site from the top-level options).
 func TestTraceProject_unknownTargetPolicyKey(t *testing.T) {
 	const src = `import "magus"; magus.project({"targets": {"lint": {"skipcache": true}}});`
 	g := LoadMagusfile(context.Background(), src)
@@ -220,6 +220,19 @@ func TestTraceProject_unknownTargetPolicyKey(t *testing.T) {
 	require.NotNil(t, g.Diag)
 	assert.Contains(t, g.Diag.Msg, `targets["lint"]`, "the error names the offending target")
 	assert.Contains(t, g.Diag.Msg, `did you mean "skip_cache"`)
+}
+
+// TestTraceProject_futureTargetPolicyKeyLoads is the deadlock regression, one level down
+// from the top-level map where the tolerance used to stop.
+//
+// A per-target policy key was treated as a closed vocabulary that never grows. It grew
+// twice in three merges, and `timeout` then made every command fail at workspace load
+// against a binary that predated it.
+func TestTraceProject_futureTargetPolicyKeyLoads(t *testing.T) {
+	const src = `import "magus"; magus.project({"targets": {"lint": {"quantum_flux": "9m"}}});`
+	g := LoadMagusfile(context.Background(), src)
+	require.True(t, g.OK, "an unrecognized per-target policy key must not fail the load")
+	assert.Nil(t, g.Diag)
 }
 
 // TestTraceProject_slotsNotInt: a non-integer slots value is rejected with a

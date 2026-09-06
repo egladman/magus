@@ -239,6 +239,16 @@ type Project struct {
 	// reach a gate_low_risk declaration has - because inheritance is one
 	// decision over the whole plan, not a per-project one.
 	GateInheritOff bool
+	// IgnoredOptions are magus.project keys this binary did not recognize and dropped,
+	// rather than failing the load over (see hint.CheckKeys).
+	//
+	// Recorded because ignoring a key is not neutral. Several options are opt-OUTS whose
+	// absence is the permissive answer: dropping `gate_inherit = false` turns CI verdict
+	// inheritance back on, and dropping `gate_low_risk = []` restores the shipped prose
+	// globs the author deleted. A binary too old to read the key is exactly the one that
+	// cannot know which kind it dropped, so the decision has to be made without knowing:
+	// see ci.InheritOff.
+	IgnoredOptions []string
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via

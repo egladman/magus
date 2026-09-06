@@ -2,9 +2,8 @@ package dry
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"slices"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -104,9 +103,9 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m := vm.NewMap()
 
-	m.MapSet("project", fn("magus.project", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("project", fn("magus.project", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		path, opts := captureConfigure(args)
-		if err := tr.traceProject(path, opts); err != nil {
+		if err := tr.traceProject(ctx, path, opts); err != nil {
 			return vm.Null, err
 		}
 		return vm.Null, nil
@@ -579,40 +578,33 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 // engine's and each had drifted, and there was no third one at all.
 var (
 	dryKnownProjectOptionKeys = types.ProjectOptionKeys()
-	dryKnownTargetPolicyKeys  = types.TargetPolicyKeys
+	dryKnownTargetPolicyKeys  = types.TargetPolicyKeys()
 	dryKnownToolBoundKeys     = types.ToolBoundKeys
 )
 
-// rejectUnknownKeys errors on the first key in m absent from known. context
-// names the call site for the error message.
-func rejectUnknownKeys(m vm.Value, known []string, context string) error {
+// checkUnknownKeys is the engine's checkUnknownKeys over the same shared decision. This
+// host's copy of the key VOCABULARY had already drifted once, accepting a preview a real
+// run rejected; a second copy of the RULE would fail the same way.
+func checkUnknownKeys(ctx context.Context, m vm.Value, known []string, where string) error {
 	if !m.IsMap() {
 		return nil
 	}
-	for _, k := range m.MapKeys() {
-		if slices.Contains(known, k) {
-			continue
-		}
-		sortedKnown := append([]string(nil), known...)
-		slices.Sort(sortedKnown)
-		msg := fmt.Sprintf("%s: unknown option %q (known options: %s)",
-			context, k, strings.Join(sortedKnown, ", "))
-		if sug := hint.Nearest(k, known); sug != "" {
-			return fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
-				context, k, sug, strings.Join(sortedKnown, ", "))
-		}
-		return errors.New(msg)
+	ignored, err := hint.CheckKeys(m.MapKeys(), known, where)
+	for _, k := range ignored {
+		slog.WarnContext(ctx, "magusfile: ignoring an option this magus does not recognize",
+			slog.String("where", where), slog.String("option", k),
+			slog.String("advice", hint.IgnoredKeyAdvice()))
 	}
-	return nil
+	return err
 }
 
 // traceProject flattens the path and emitted options of a magus.project
 // call into the graph model. It mirrors parseBuzzProjectOpts in the real binding,
 // including its unknown-key and bad-slots-value validation.
-func (r *Tracer) traceProject(path string, opts vm.Value) error {
+func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) error {
 	p := Project{Path: path}
 	if opts.IsMap() {
-		if err := rejectUnknownKeys(opts, dryKnownProjectOptionKeys, "magus.project"); err != nil {
+		if err := checkUnknownKeys(ctx, opts, dryKnownProjectOptionKeys, "magus.project"); err != nil {
 			return err
 		}
 		if v, ok := opts.MapGet("depends_on"); ok {
@@ -645,7 +637,7 @@ func (r *Tracer) traceProject(path string, opts vm.Value) error {
 				if !ok || !bv.IsMap() {
 					continue
 				}
-				if err := rejectUnknownKeys(bv, dryKnownToolBoundKeys,
+				if err := checkUnknownKeys(ctx, bv, dryKnownToolBoundKeys,
 					fmt.Sprintf("magus.project: tools[%q]", bin)); err != nil {
 					return err
 				}
@@ -657,7 +649,7 @@ func (r *Tracer) traceProject(path string, opts vm.Value) error {
 				if !ok || !pv.IsMap() {
 					continue
 				}
-				if err := rejectUnknownKeys(pv, dryKnownTargetPolicyKeys,
+				if err := checkUnknownKeys(ctx, pv, dryKnownTargetPolicyKeys,
 					fmt.Sprintf("magus.project: targets[%q]", rawName)); err != nil {
 					return err
 				}

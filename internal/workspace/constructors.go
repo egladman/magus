@@ -157,6 +157,15 @@ func WithGateInheritOff() ProjectOption {
 	}
 }
 
+// WithIgnoredOptions records magus.project keys this binary did not recognize, so a
+// decision that turns on their absence can decline instead. See types.Project.
+func WithIgnoredOptions(keys ...string) ProjectOption {
+	return func(p *types.Project) error {
+		p.IgnoredOptions = append(p.IgnoredOptions, keys...)
+		return nil
+	}
+}
+
 // WithWatchIgnore appends patterns to the project's watch ignore list.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return func(p *types.Project) error {
