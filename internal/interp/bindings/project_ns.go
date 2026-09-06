@@ -311,13 +311,12 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			if !ok || !bv.IsMap() {
 				continue
 			}
-			dropped, err := checkUnknownKeys(ctx, bv, knownToolBoundKeys,
-				fmt.Sprintf("magus.project: tools[%q]", bin))
-			if err != nil {
+			// Strict, unlike the two maps above: min/below has never gained a member, so
+			// an unknown key here is a typo and tolerating it would only turn a declared
+			// version window into no window at all. See hint.RejectUnknownKeys.
+			if err := hint.RejectUnknownKeys(bv.MapKeys(), knownToolBoundKeys,
+				fmt.Sprintf("magus.project: tools[%q]", bin)); err != nil {
 				return nil, err
-			}
-			if len(dropped) > 0 {
-				opts = append(opts, workspace.WithIgnoredOptions(dropped...))
 			}
 			var b spells.VersionBounds
 			if mv, ok := bv.MapGet("min"); ok {

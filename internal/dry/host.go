@@ -637,7 +637,9 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 				if !ok || !bv.IsMap() {
 					continue
 				}
-				if err := checkUnknownKeys(ctx, bv, dryKnownToolBoundKeys,
+				// Strict, matching the engine: min/below cannot grow, so an unknown key
+				// there is a typo rather than one this binary predates.
+				if err := hint.RejectUnknownKeys(bv.MapKeys(), dryKnownToolBoundKeys,
 					fmt.Sprintf("magus.project: tools[%q]", bin)); err != nil {
 					return err
 				}
