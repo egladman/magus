@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+See the full changelog at
+https://github.com/egladman/magus/compare/v0.4.2...v0.4.3
+
 ### Added
 
 - **A pull request inherits its last green run's verdict when the delta is low-risk.**
