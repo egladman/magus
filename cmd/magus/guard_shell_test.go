@@ -74,6 +74,25 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git checkout origin/main -- .", rule: wholeTree("git checkout .")},
 		{command: "git restore --source HEAD .", rule: wholeTree("git restore .")},
 		{command: "git restore --source=HEAD .", rule: wholeTree("git restore .")},
+		// Restoring a path from one SIDE of an operation in progress. It reads as a
+		// narrow revert and is not: the working-tree copy is the merge, and this
+		// replaces it with one half. It dropped a branch's own side of a merged
+		// feature here, green the whole way.
+		{command: "git checkout MERGE_HEAD -- magusfile.buzz",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"}},
+		{command: "git checkout ORIG_HEAD -- a.go",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "ORIG_HEAD"}},
+		{command: "git restore --source=MERGE_HEAD -- a.go",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"}},
+		{command: "git restore --source MERGE_HEAD -- a.go",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"}},
+		{command: "git checkout CHERRY_PICK_HEAD -- a.go",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "CHERRY_PICK_HEAD"}},
+		// Moving HEAD to that ref touches no file, so it is not this rule's business.
+		{command: "git checkout MERGE_HEAD"},
+		// The whole-tree rule owns the pathspec-is-everything case, whichever ref
+		// precedes it, and it is the older and broader reason.
+		{command: "git checkout MERGE_HEAD -- .", rule: wholeTree("git checkout .")},
 		{command: "git checkout main"},
 		{command: "git checkout -b feat/x"},
 		{command: "git restore .", rule: wholeTree("git restore .")},
@@ -1168,6 +1187,18 @@ func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
 		"echo 'magus run format . ; magus run lint .'",
 	} {
 		assert.Empty(t, evaluateBashGuard(cmd).Context, "should not fire: %s", cmd)
+	}
+}
+
+// Naming the side deliberately is the spelling the merge-side deny points at, so it must
+// stay reachable. It still draws the path-scoped revert advisory, which is the pre-existing
+// "classify before you revert" advice and correct here.
+func TestGuardAllowsAnExplicitSideChoice(t *testing.T) {
+	for _, cmd := range []string{
+		"git checkout --ours -- a.go",
+		"git checkout --theirs -- a.go",
+	} {
+		assert.Empty(t, evaluateBashGuard(cmd).Deny, "an explicit side is the sanctioned form: %s", cmd)
 	}
 }
 

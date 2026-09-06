@@ -47,20 +47,21 @@ type bashGuardVerdict struct {
 type denyRuleName string
 
 const (
-	denyRuleNotesAuthor     denyRuleName = "notes-author"
-	denyRuleReadAck         denyRuleName = "read-ack"
-	denyRuleSedInPlace      denyRuleName = "sed-in-place"
-	denyRuleBusyWait        denyRuleName = "busy-wait"
-	denyRuleScriptedRewrite denyRuleName = "scripted-rewrite"
-	denyRuleRawTool         denyRuleName = "raw-tool"
-	denyRuleThrowawayCopy   denyRuleName = "throwaway-copy"
-	denyRuleSiblingCheckout denyRuleName = "sibling-checkout"
-	denyRuleOutputPipe      denyRuleName = "output-pipe"
-	denyRuleOutputRedirect  denyRuleName = "output-redirect"
-	denyRuleWholeTree       denyRuleName = "whole-tree"
-	denyRuleSharedStash     denyRuleName = "shared-stash"
-	denyRuleWorktreeRemove  denyRuleName = "worktree-remove"
-	denyRuleStageAll        denyRuleName = "stage-all"
+	denyRuleNotesAuthor       denyRuleName = "notes-author"
+	denyRuleReadAck           denyRuleName = "read-ack"
+	denyRuleSedInPlace        denyRuleName = "sed-in-place"
+	denyRuleBusyWait          denyRuleName = "busy-wait"
+	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
+	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
+	denyRuleRawTool           denyRuleName = "raw-tool"
+	denyRuleThrowawayCopy     denyRuleName = "throwaway-copy"
+	denyRuleSiblingCheckout   denyRuleName = "sibling-checkout"
+	denyRuleOutputPipe        denyRuleName = "output-pipe"
+	denyRuleOutputRedirect    denyRuleName = "output-redirect"
+	denyRuleWholeTree         denyRuleName = "whole-tree"
+	denyRuleSharedStash       denyRuleName = "shared-stash"
+	denyRuleWorktreeRemove    denyRuleName = "worktree-remove"
+	denyRuleStageAll          denyRuleName = "stage-all"
 )
 
 // denyRule is the rule plus what it fired on, so a rule that renders a verb or a
