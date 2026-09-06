@@ -42,34 +42,6 @@
           ]
         },
         {
-          "name": "dogfood",
-          "doc": "Compiles magus-dev, the binary THIS worktree points its own git tooling at.",
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-build"
-              ]
-            }
-          ],
-          "cross_dependencies": [
-            {
-              "project": "libs/gopherbuzz",
-              "target": "build"
-            }
-          ],
-          "chain": [
-            {
-              "project": "libs/gopherbuzz",
-              "target": "build"
-            }
-          ],
-          "reads_secrets": false,
-          "exec_overrides": [
-            "env:GOEXPERIMENT=jsonv2"
-          ]
-        },
-        {
           "name": "image-build",
           "declared": "image_build",
           "doc": "Two axes, one charm each.",

@@ -128,11 +128,6 @@ magus\project({
         // restore nothing, leaving no binary where the caller expects one. It has never
         // happened only because the key covers the whole tree and so never repeats.
         "go-build": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
-        // Same shape and the same reason, and worse if it fired: magus-dev is what
-        // install-dogfood registers as this worktree's merge driver, so a replay that
-        // restored nothing would leave git resolving conflicts with a binary that is
-        // missing or from another commit.
-        "dogfood": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
         "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         // Both read the environment and report or act on it per invocation; a replay
         // would report the charms and credentials of whatever ran last.
@@ -328,33 +323,18 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     });
 }
 
-// Compiles magus-dev, the binary THIS worktree points its own git tooling at. Paired with
-// hack/install-dogfood.sh, which registers it as the worktree's merge driver.
+// dogfood built a second binary, magus-dev, for this worktree's git merge driver to
+// resolve conflicts with. It is gone because the driver now finds ./magus on its own:
+// gitMergeDriverCommand prefers a magus built at the workspace root, and a driver
+// registered from inside the tree is no longer rewritten as foreign.
 //
-// A second binary rather than reusing ./magus, for one reason: ./magus is rebuilt constantly
-// while iterating, and the merge driver resolves conflicts with whatever binary it was
-// registered against. Rebuilding the driver's binary in the middle of a rebase swaps the
-// tool under a running git operation. magus-dev moves only when install-dogfood is re-run,
-// so a rebase resolves with one known build from start to finish.
-//
-// Why this exists at all: the driver registration prefers `magus` on PATH (see
-// gitMergeDriverCommand in vcs/git.go), which is right for a normal workspace - it survives
-// an upgrade-in-place - and wrong for magus's own worktrees, where PATH holds a RELEASE and
-// the change under test is in the working tree. That gap is not cosmetic: the released
-// driver regenerated the whole site once per conflicted file, so a rebase touching a handful
-// of generated files looked like a hang, while the fix had been in the tree the whole time.
-// No ctx.writesFiles here, matching go_build: the declared-output globs are what
-// EnsureMergeDriver writes into .gitattributes, and declaring a gitignored binary there
-// marks a path that can never be tracked and so can never conflict.
-export fun dogfood(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(gopherbuzz\build);
-    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
-        "args": ["-trimpath",
-            "-ldflags", ld_flags(),
-            "-o", "magus-dev",
-            "./cmd/magus"],
-    });
-}
+// The pinned second binary was there so a rebase could not have the driver swapped under
+// it mid-operation. That window needs a rebuild DURING an active rebase, between two
+// merge-driver invocations, and it cost a target, a script, and a copy of the link that
+// drifted - dogfood was missing the spells_generate dependency, so magus-dev could be
+// linked over stale embedded bytecode, which is worse in the merge driver than anywhere
+// else. Anyone who still wants a pinned driver registers one by hand and it now sticks:
+// `git config --worktree merge.magus.driver "$PWD/<build> vcs merge-driver %O %A %B %L %P"`.
 
 // One registry this project publishes to. The field names follow OCI distribution
 // vocabulary deliberately, because the loose usage is what makes this area painful:

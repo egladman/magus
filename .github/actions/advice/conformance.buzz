@@ -19,7 +19,7 @@
 //
 // Measured against this repo (2026-08) both gates hold it silent, correctly: the largest
 // cohort here is 7 targets sharing `go:go-build` under 6 different names, because
-// `dogfood`, `watch`, `release-build` and `buzz-build` genuinely ARE different jobs that
+// `watch`, `release-build` and `buzz-build` genuinely ARE different jobs that
 // happen to invoke the same op. An exact-op-set rule with a naive threshold would have
 // made that its first finding, and been wrong 7 times.
 //

@@ -246,14 +246,10 @@ A source build resolving a `git-ref` must be reachable from `main`; an unverifie
 would otherwise run with the job's permissions. `source-path` skips that gate by
 construction, since the caller checked the tree out itself.
 
-### Point your worktree's merge driver at your own build
+### Your worktree's merge driver resolves with your own build
 
 The rule above is about CI. Locally there is one place where "the released
-binary" is the wrong answer, and it is easy to lose an afternoon to:
-
-```sh
-./hack/install-dogfood.sh
-```
+binary" is the wrong answer, and it used to cost an afternoon.
 
 `magus init` registers the git merge driver as whichever `magus` leads PATH.
 That is correct for someone _using_ magus, because the registration survives an
@@ -264,17 +260,21 @@ generated conflict with the release, not with your tree.
 That is not a theoretical gap. A released driver regenerated the whole docs site
 once per conflicted file, so a rebase over a handful of generated files looked
 exactly like a hang, while the version in the tree resolved the same file in
-under a second.
+under a second. Worse, it was silent: git reads a driver that exits non-zero as
+"could not merge", so a broken driver and no driver look identical.
 
-The script builds `magus-dev` and registers it with `git config --worktree`, so
-the override stays local to that checkout. `.git/config` is shared by every
-linked worktree, so an absolute path there would aim all of them at one
-checkout's binary. It is a separate binary from `./magus` on purpose: `./magus`
-is rebuilt constantly while iterating, and swapping the driver's binary during a
-rebase changes the tool mid-operation.
+Nothing to run. A workspace that has built its own `./magus` registers that as
+its driver, and `magus doctor` fails if the registered one cannot read this
+workspace. To pin a specific build instead - so a long rebase cannot have the
+driver rebuilt under it - register one by hand and it will stick:
 
-Re-run it after changing the merge driver, or the registration keeps resolving
-with the older build.
+```sh
+git config --worktree merge.magus.driver "$PWD/magus vcs merge-driver %O %A %B %L %P"
+```
+
+`git config --worktree` keeps the override local to that checkout. `.git/config`
+is shared by every linked worktree, so an absolute path there would aim all of
+them at one checkout's binary.
 
 ## Naming
 

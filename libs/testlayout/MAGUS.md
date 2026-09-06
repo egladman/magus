@@ -64,7 +64,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 45 | `magus query project=.` | `buzz-test`, `generate`, `release-index` |
+| . | 44 | `magus query project=.` | `buzz-test`, `generate`, `release-index` |
 | console | 8 | `magus query project=console` | `preflight`, `build`, `ci` |
 | docs | 18 | `magus query project=docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -80,7 +80,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `go-build` | Compiles the version-stamped magus binary. |
-| `dogfood` | Compiles magus-dev, the binary THIS worktree points its own git tooling at. |
 | `image-registries` | Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment. |
 | `image-login` | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider. |
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
