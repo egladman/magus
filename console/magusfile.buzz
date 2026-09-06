@@ -77,6 +77,10 @@ magus\project({
         // registry, not in this tree. A hit would replay a clean bill of health from
         // before the advisory that now applies to a lockfile nobody touched.
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
+        // Same shape as the root ci: pure composition, keyed on this project's whole
+        // baseline, so an edit anywhere in it moves the key and no run can replay.
+        // 11 runs, 0 cached (MGS1009). The members are where a hit belongs.
+        "ci": {"skip_cache": "composes the gates and reads nothing itself; its key is the whole project, so it can never replay"},
     },
 });
 
