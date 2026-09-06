@@ -934,15 +934,27 @@
             },
             {
               "project": ".",
-              "glob": "**/*.md"
-            },
-            {
-              "project": ".",
               "glob": "mise.toml"
             },
             {
               "project": ".",
               "glob": "magus.yaml"
+            },
+            {
+              "project": ".",
+              "glob": "docs/**/*.md"
+            },
+            {
+              "project": ".",
+              "glob": "internal/agent/skills/**"
+            },
+            {
+              "project": ".",
+              "glob": "internal/agent/agents-section.md"
+            },
+            {
+              "project": ".",
+              "glob": "CHANGELOG.md"
             },
             {
               "project": ".",

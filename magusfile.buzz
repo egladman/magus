@@ -2304,15 +2304,36 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     //
     // The go spell's globs (spells/golang/spell.buzz mgs_listRequiredGlobs), because
     // .s/.S/.c/.h compile into packages and .txtar carries the behavior fixtures; **/*.buzz
-    // because the suite parses this repo's spell sources; **/*.md because
-    // internal/selfupdate's trust-anchor test reads docs/setup/verify.md; mise.toml and
-    // magus.yaml because they pin the toolchain the suite runs under and the policy it
-    // resolves. Spell-declared ignore dirs still prune the walk - baseStep sets
-    // step.IgnoreDirs before the replacement and the replacement does not touch it - so
-    // these globs do not descend into node_modules or a leftover worktree.
+    // because the suite parses this repo's spell sources; mise.toml and magus.yaml because
+    // they pin the toolchain the suite runs under and the policy it resolves. Spell-declared
+    // ignore dirs still prune the walk - baseStep sets step.IgnoreDirs before the
+    // replacement and the replacement does not touch it - so these globs do not descend
+    // into node_modules or a leftover worktree.
+    //
+    // THE MARKDOWN IS ENUMERATED, and adding a test that reads a .md outside these three
+    // roots is the way to break it: the suite would replay a stale pass when that file
+    // changes, which is this declaration's documented failure mode. It was `**/*.md`, which
+    // is safe and put every doc, blog post and README in the key, so editing CLAUDE.md
+    // re-ran the whole race-enabled suite. Each root is here because something reads it:
+    //
+    //   docs/**/*.md                      internal/selfupdate's trust anchor reads
+    //                                     docs/setup/verify.md; conventions_test walks all
+    //                                     of docs/ for leaked tokens; the docs tools assert
+    //                                     their generated pages byte-for-byte; and
+    //                                     diagnostics_test resolves every MGS code to a page
+    //   internal/agent/skills/**          go:embed pulls in the DIRECTORY, so a non-.md file
+    //                                     added there is a compile-time input too
+    //   internal/agent/agents-section.md  go:embed
+    //   CHANGELOG.md                      cmd/magus-utils/release_test.go parses it
+    //
+    // Narrowing this does NOT stop a markdown edit re-running `format`, which reads every
+    // .md because dprint and markdownlint genuinely format them all. What it stops is the
+    // Go suite re-running, which is the expensive half.
     ctx.readsFiles("**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h",
                    "go.mod", "go.sum", "go.work", "go.work.sum",
-                   "**/*.buzz", "**/*.md", "mise.toml", "magus.yaml");
+                   "**/*.buzz", "mise.toml", "magus.yaml",
+                   "docs/**/*.md", "internal/agent/skills/**",
+                   "internal/agent/agents-section.md", "CHANGELOG.md");
     // types/kindpalette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
