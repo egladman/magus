@@ -125,8 +125,30 @@ fun rpc(method: str, payload: any) > any !> any {
     return http\post(url, serialize\jsonEncode(payload), headers);
 }
 
+// snippet bounds a server's response body so a warning stays one readable line. A Twirp
+// error body is a short JSON object; anything longer is an HTML error page whose first
+// characters already say which proxy produced it.
+fun snippet(body: str) > str {
+    if (body.len() <= 200) { return body; }
+    return body.sub(0, len: 200) + "...";
+}
+
+// cache_warn reports a step of the cache protocol that did not do what the contract
+// says. The contract returns a bare bool, so magus can only ever say "did not store
+// artifact" - which is what let a total upload failure run unnoticed across every main
+// push for days, while the summary line read `0 published, 2 failed` and named no cause.
+// The spell owns this protocol, so the spell is the only layer that can name the step.
+fun cache_warn(step: str, detail: str) > void {
+    std\print("magus:notice:github-actions cache: {step}: {detail}");
+}
+
 // get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
 // true on a hit (dest written), false on a miss or when not running under Actions.
+//
+// A miss and a FAILURE both return false, because the contract has no third answer, and
+// the caller counts a false as a miss. So every error here is announced before it is
+// flattened - otherwise a service that rejects every read is indistinguishable from a
+// cold cache, which is exactly how `0 restored, 0 failed` read as normal.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
@@ -134,13 +156,24 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     final hash = "{io["hash"]}";
     final dest = "{io["dest"]}";
     final res = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
-    if (res["status"] != 200) { return false; }
+    if (res["status"] != 200) {
+        cache_warn("GetCacheEntryDownloadURL", "status {res["status"]}: {snippet("{res["body"]}")}");
+        return false;
+    }
     final decoded = serialize\jsonDecode(res["body"]);
     if (!decoded.q("ok").booleanValue()) { return false; }   // ok=false ⇒ miss
     final loc = decoded.q("signedDownloadUrl").stringValue();
-    if (loc == "") { return false; }
+    if (loc == "") {
+        cache_warn("GetCacheEntryDownloadURL", "ok=true but no signedDownloadUrl");
+        return false;
+    }
     // The download URL is a pre-signed Azure blob URL; it needs no auth header.
-    return http\download(loc, dest, {}) == 200;
+    final dcode = http\download(loc, dest, {});
+    if (dcode != 200) {
+        cache_warn("blob GET", "status {dcode}");
+        return false;
+    }
+    return true;
 }
 
 // put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
@@ -156,7 +189,10 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     // 1. Reserve the entry → pre-signed Azure upload URL.
     final cres = rpc("CreateCacheEntry", {"key": key, "version": CACHE_VERSION});
     if (cres["status"] == 409) { return true; }   // another runner already reserved this key
-    if (cres["status"] != 200) { return false; }
+    if (cres["status"] != 200) {
+        cache_warn("CreateCacheEntry", "status {cres["status"]}: {snippet("{cres["body"]}")}");
+        return false;
+    }
     final upload = serialize\jsonDecode(cres["body"]).q("signedUploadUrl").stringValue();
     if (upload == "") { return true; }             // ok=false with no URL ⇒ entry already exists
 
@@ -164,14 +200,24 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     //    file, no Content-Range). Azure returns 201 Created on success.
     final ures = http\upload_chunked("PUT", upload, src, 0, mut {"x-ms-blob-type": "BlockBlob"});
     final ucode = ures[0];
-    if (ucode != 201 and ucode != 200) { return false; }
+    if (ucode != 201 and ucode != 200) {
+        cache_warn("blob PUT", "status {ucode}: {snippet("{ures[1]}")}");
+        return false;
+    }
 
     // 3. Commit with the exact byte size. int64 fields are JSON strings in proto3,
     //    so send sizeBytes as a string.
     final fres = rpc("FinalizeCacheEntryUpload",
         {"key": key, "sizeBytes": "{http\byteSize(src)}", "version": CACHE_VERSION});
-    if (fres["status"] != 200) { return false; }
-    return serialize\jsonDecode(fres["body"]).q("ok").booleanValue();
+    if (fres["status"] != 200) {
+        cache_warn("FinalizeCacheEntryUpload", "status {fres["status"]}: {snippet("{fres["body"]}")}");
+        return false;
+    }
+    if (!serialize\jsonDecode(fres["body"]).q("ok").booleanValue()) {
+        cache_warn("FinalizeCacheEntryUpload", "ok=false: {snippet("{fres["body"]}")}");
+        return false;
+    }
+    return true;
 }
 
 // --- CI provider contract ----------------------------------------------------
@@ -488,6 +534,16 @@ fun tokenURL(endpoint: str, audience: str) > str {
 }
 
 import "assert";
+
+test "snippet keeps a Twirp error whole and truncates an HTML error page" {
+    final twirp = "code=permission_denied msg=insufficient scope";
+    assert\equal(snippet(twirp), twirp, "a short body is the whole diagnosis; never elide it");
+    // The cut has to land on the front of the body: a proxy names itself in the first
+    // line, and truncating from the end would keep the boilerplate and drop the name.
+    final page = "<html><head><title>502 Bad Gateway</title></head>" + " ".repeat(400);
+    assert\equal(snippet(page).len(), 203, "200 characters plus the ellipsis");
+    assert\equal(snippet(page).sub(0, len: 12), "<html><head>", "the front survives");
+}
 
 test "tokenURL appends the audience to whatever query the endpoint already carries" {
     assert\equal(tokenURL("https://run.example.com/token?api-version=2.0", "sts.amazonaws.com"),
