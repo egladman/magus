@@ -300,7 +300,10 @@ func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("tool bounds", func(t *testing.T) {
+	// Tool bounds are deliberately NOT in this list. The tolerance answers a vocabulary
+	// that grows, and min/below has never gained a member, so an unknown key there is a
+	// typo; see the tools subtest below.
+	t.Run("tool bounds stay strict", func(t *testing.T) {
 		bound := vm.NewMap()
 		bound.MapSet("quantum_flux", vm.StrValue("1"))
 		tools := vm.NewMap()
@@ -308,7 +311,7 @@ func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {
 		opts := vm.NewMap()
 		opts.MapSet("tools", tools)
 		_, err := parseBuzzProjectOpts(context.Background(), opts)
-		require.NoError(t, err)
+		assert.ErrorContains(t, err, `tools["go"]: unknown option "quantum_flux"`)
 	})
 }
 
@@ -439,9 +442,14 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	// min/below is closed so a stray key there is always a typo. Closedness turned out
 	// to be the wrong discriminator, because the "closed" per-target policy vocabulary
 	// grew twice in three merges and rejecting its new key deadlocked a workspace.
-	t.Run("a bound key too far to suggest is ignored, not refused", func(t *testing.T) {
-		p := applyOpts(t, toolsOpts("node", map[string]string{"minimum": "22"}))
-		assert.Empty(t, p.ToolBounds, "an unrecognized key contributes no window")
+	// "minimum" is 4 edits from "min" against a threshold of 2, so no suggester reaches
+	// it. It is still a load error, because min/below has never gained a member: there is
+	// no key from the future to tolerate here, and tolerating one turned a declared
+	// version window into no window at all, silently.
+	t.Run("a bound key too far to suggest is still refused", func(t *testing.T) {
+		_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"minimum": "22"}))
+		assert.ErrorContains(t, err, `tools["node"]: unknown option "minimum"`)
+		assert.ErrorContains(t, err, "known options: below, min")
 	})
 
 	// An empty entry contributes nothing, so a project that writes one is not treated as

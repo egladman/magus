@@ -143,6 +143,13 @@ var allChecks = []checkDef{
 		run:            (*runner).checkCITarget,
 	},
 	{
+		Name:           "magusfile-options-understood",
+		Doc:            "magus.project keys this binary dropped, so the policy each declares is not in force",
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            (*runner).checkIgnoredOptions,
+	},
+	{
 		Name:           "required-version-covers-schema",
 		Doc:            "every magus.project key the workspace uses is covered by its declared required_version",
 		Evidence:       types.EvidenceDeclared,
