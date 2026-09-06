@@ -204,7 +204,17 @@ type Outcome struct {
 	AffectedByDiff bool          `json:"affected"`
 	DurationMs     int64         `json:"duration_ms"`
 	At             time.Time     `json:"at"`
-	Attempts       int           `json:"attempts,omitempty"`
+	// Attempts is 1, or 2 when a volatility retry fired. Read by doctor's
+	// retry-declarations check, which is the only thing that can use it: on its own it
+	// is nearly redundant with Result, since a Volatile outcome already implies a retry
+	// that succeeded. What it uniquely says is which FAILURES were retried and lost
+	// anyway, and that is the evidence that a retry_on_volatile declaration is buying a
+	// second run and no verdict.
+	//
+	// It went unread from the first commit until that check existed. Anything that
+	// removes the last reader should remove this too, rather than leave the history
+	// carrying a field implying a capability magus does not have.
+	Attempts int `json:"attempts,omitempty"`
 	// MaxRSSBytes is the target's peak resident memory, the maximum over every
 	// process it ran. Omitted when unknown, and unknown is the honest default:
 	// the platforms that cannot report it and every history file written before
