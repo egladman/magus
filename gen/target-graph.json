@@ -44,6 +44,9 @@
         {
           "name": "dogfood",
           "doc": "Compiles magus-dev, the binary THIS worktree points its own git tooling at.",
+          "dependencies": [
+            "spells-generate"
+          ],
           "spells": [
             {
               "spell": "go",
@@ -62,6 +65,9 @@
             {
               "project": "libs/gopherbuzz",
               "target": "build"
+            },
+            {
+              "target": "spells-generate"
             }
           ],
           "reads_secrets": false,

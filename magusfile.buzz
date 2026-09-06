@@ -285,8 +285,14 @@ fun ld_flags() > str !> any {
         + " -X main.builtBy=" + built_by();
 }
 
-// Compiles the version-stamped magus binary.
-export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
+// link_magus compiles cmd/magus to binary, version-stamped.
+//
+// Shared by go_build and dogfood because those two differ only in the filename and in how
+// CURRENT the binary has to be, and a second hand-written copy of the link drifted from
+// this one: dogfood was missing the spells_generate dependency below, so magus-dev could
+// be linked over stale embedded bytecode. That binary is the merge driver, which is the
+// worst place to hold a spell that no longer matches the tree.
+fun link_magus(ctx: magus\Context, binary: str) > void !> any {
     ctx.needs(gopherbuzz\build);
     // The compiled built-in spells are go:embed'd into this binary, so the link has to
     // happen AFTER they are regenerated. The cache key cannot express that on its own:
@@ -300,9 +306,14 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
             "-ldflags", ld_flags(),
-            "-o", "magus",
+            "-o", binary,
             "./cmd/magus"],
     });
+}
+
+// Compiles the version-stamped magus binary.
+export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
+    link_magus(ctx, "magus");
 }
 
 // Compiles magus-dev, the binary THIS worktree points its own git tooling at. Paired with
@@ -324,13 +335,7 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
 // EnsureMergeDriver writes into .gitattributes, and declaring a gitignored binary there
 // marks a path that can never be tracked and so can never conflict.
 export fun dogfood(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(gopherbuzz\build);
-    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
-        "args": ["-trimpath",
-            "-ldflags", ld_flags(),
-            "-o", "magus-dev",
-            "./cmd/magus"],
-    });
+    link_magus(ctx, "magus-dev");
 }
 
 // One registry this project publishes to. The field names follow OCI distribution
