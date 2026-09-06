@@ -381,17 +381,23 @@ func TestDriverUsableOnAnOlderBinarysSpelling(t *testing.T) {
 // that exists and runs, so every rot check passes while merges resolve with a foreign
 // build. Only "is this what I would have chosen" catches it.
 func TestDriverIsReachableHere(t *testing.T) {
-	assert.False(t, driverIsReachableHere(t.Context(), ""))
-	assert.False(t, driverIsReachableHere(t.Context(),
+	root := t.TempDir()
+	assert.False(t, driverIsReachableHere(t.Context(), root, ""))
+	assert.False(t, driverIsReachableHere(t.Context(), root,
 		"/Users/x/repo/.claude/worktrees/other-8f2a/magus vcs merge-driver %O"),
 		"another worktree's binary is not this one's, however runnable it is")
 
-	assert.True(t, driverIsReachableHere(t.Context(), "magus vcs merge-driver %O"),
+	assert.True(t, driverIsReachableHere(t.Context(), root, "magus vcs merge-driver %O"),
 		"a bare name resolves through PATH wherever it runs")
+
+	// A binary inside THIS root is reachable by definition, which is what a deliberate
+	// per-worktree registration names and what the rule above used to reject.
+	assert.True(t, driverIsReachableHere(t.Context(), root,
+		filepath.Join(root, "magus-dev")+" vcs merge-driver %O"))
 
 	self, err := os.Executable()
 	require.NoError(t, err)
-	assert.True(t, driverIsReachableHere(t.Context(), self+" vcs merge-driver %O"))
-	assert.True(t, driverIsReachableHere(t.Context(), `"`+self+`" vcs merge-driver %O`),
+	assert.True(t, driverIsReachableHere(t.Context(), root, self+" vcs merge-driver %O"))
+	assert.True(t, driverIsReachableHere(t.Context(), root, `"`+self+`" vcs merge-driver %O`),
 		"a quoted path is unwrapped before comparison")
 }

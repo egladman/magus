@@ -953,8 +953,8 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 	registered := v.registeredDriver(ctx, root)
 	attrsPresent := v.attrsSectionPresent(root)
 	if attrsCurrent == attrsWanted && registered != "" && attrsPresent &&
-		driverExeExists(registered) && driverIsReachableHere(ctx, registered) &&
-		driverUsable(ctx, registered) {
+		driverExeExists(registered) && driverIsReachableHere(ctx, root, registered) &&
+		driverIsPreferredHere(root, registered) && driverUsable(ctx, registered) {
 		return false, nil
 	}
 	return true, v.InstallMergeDriver(ctx, root, outputGlobs)
@@ -1154,7 +1154,21 @@ func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
 // PATH is not enough: a source checkout finds an INSTALLED RELEASE there, and pairing that
 // path with this binary's spelling registers something nothing can dispatch. One release plus
 // one source tree is enough to hit it - the ordinary development setup.
-func gitMergeDriverCommand(ctx context.Context) string {
+//
+// A magus built at the workspace root comes FIRST, ahead of PATH. Answering the spelling is
+// a weaker test than it looks: driverExeAnswers probes with -h, which returns before the
+// child opens a workspace, so a release too old to READ this magusfile still answers and
+// still wins. That is how one v0.3.0 build became the registered driver for 142 worktrees
+// of the repo that defines magus, each failing at load on every conflict. A binary in the
+// tree is the one that can read the tree.
+//
+// It reaches only a workspace that builds an executable named `magus` at its root, which in
+// practice is magus's own. Everyone else keeps the PATH registration and its
+// upgrade-in-place behavior.
+func gitMergeDriverCommand(ctx context.Context, root string) string {
+	if exe := localDriverExe(root); exe != "" && driverExeAnswers(ctx, exe) {
+		return quoteDriverExe(exe) + gitDriverArgs
+	}
 	if exe, err := exec.LookPath("magus"); err == nil && driverExeAnswers(ctx, exe) {
 		return quoteDriverExe(exe) + gitDriverArgs
 	}
@@ -1162,6 +1176,16 @@ func gitMergeDriverCommand(ctx context.Context) string {
 		return quoteDriverExe(exe) + gitDriverArgs
 	}
 	return "magus" + gitDriverArgs
+}
+
+// localDriverExe is the workspace's own magus binary, or "" when it has none built.
+func localDriverExe(root string) string {
+	exe := filepath.Join(root, "magus")
+	info, err := os.Stat(exe)
+	if err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+		return ""
+	}
+	return exe
 }
 
 // quoteDriverExe quotes a path git would otherwise split on whitespace. splitDriver
@@ -1218,7 +1242,7 @@ func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
 	if v.worktreeConfigEnabled(ctx, root) {
 		args = append(args, "--worktree")
 	}
-	args = append(args, "merge.magus.driver", gitMergeDriverCommand(ctx))
+	args = append(args, "merge.magus.driver", gitMergeDriverCommand(ctx, root))
 	if out, err := gitExec(ctx, args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("git config merge.magus.driver: %w\n%s", err, out)
 	}
@@ -1235,7 +1259,15 @@ func (v gitVCS) worktreeConfigEnabled(ctx context.Context, root string) bool {
 // driverIsReachableHere reports whether the registered executable is one this process would
 // choose. Anything else is another worktree's build, and counting it as current is how the
 // first worktree to register wins permanently.
-func driverIsReachableHere(ctx context.Context, registered string) bool {
+//
+// A path INSIDE root is reachable by definition, and that is the case this got wrong. It
+// admitted only PATH's magus and this process's own binary, so a registration naming a
+// binary in the worktree - which is what install-dogfood writes, and the only thing that
+// can resolve conflicts with the change under test - was rejected as foreign and rewritten
+// on the next workspace load. Measured 2026-09-05: the registration survived exactly one
+// magus command. The distinction the original rule wanted is another worktree's root
+// versus this one, not "in a worktree at all".
+func driverIsReachableHere(ctx context.Context, root, registered string) bool {
 	exe, _ := splitDriver(registered)
 	if exe == "" {
 		return false
@@ -1243,11 +1275,44 @@ func driverIsReachableHere(ctx context.Context, registered string) bool {
 	if !strings.ContainsRune(exe, filepath.Separator) {
 		return true // a bare name resolves through PATH wherever it runs
 	}
+	if pathUnder(root, exe) {
+		return true
+	}
 	if p, err := exec.LookPath("magus"); err == nil && p == exe && driverExeAnswers(ctx, exe) {
 		return true
 	}
 	self, err := os.Executable()
 	return err == nil && self == exe
+}
+
+// driverIsPreferredHere reports whether the registration already names a binary from this
+// workspace, when the workspace has one to offer.
+//
+// Reachability alone leaves a wrong registration in place forever. An installed release
+// answers the -h probe, so driverIsReachableHere calls it fine, the steady-state check
+// returns early, and nothing ever rewrites - which is why 142 worktrees kept a v0.3.0
+// driver that could not read the tree. Preferring the local build has to be a reason to
+// REPLACE what is registered, not only a preference applied when something else already
+// forced a rewrite.
+//
+// A workspace with no magus of its own has nothing better to offer, so whatever is
+// registered stands and PATH keeps its upgrade-in-place behavior.
+func driverIsPreferredHere(root, registered string) bool {
+	if localDriverExe(root) == "" {
+		return true
+	}
+	exe, _ := splitDriver(registered)
+	return pathUnder(root, exe)
+}
+
+// pathUnder reports whether p sits inside root. Both are cleaned first, so a registration
+// written with a trailing slash or a "." segment compares the same as one without.
+func pathUnder(root, p string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(p))
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // InstallRefreshHook implements types.RefreshHookInstaller: it writes (or refreshes) the
