@@ -121,6 +121,13 @@ magus\project({
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "ci-shard": {"skip_cache": "emits a shard plan for the current invocation, not a reusable artifact"},
+        // Declares no outputs, deliberately: the output globs are what EnsureMergeDriver
+        // writes into .gitattributes, and /magus is gitignored, so declaring it would name
+        // a path that can never conflict. A cacheable target with nothing to restore is the
+        // other half of that decision, and it was missing - a hit would skip the link and
+        // restore nothing, leaving no binary where the caller expects one. It has never
+        // happened only because the key covers the whole tree and so never repeats.
+        "go-build": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
         "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         // Both read the environment and report or act on it per invocation; a replay
         // would report the charms and credentials of whatever ran last.
@@ -173,7 +180,18 @@ magus\project({
         // ends a hang wherever in the chain it starts - the deadline rides the context, so
         // it bounds every target ci composes. 45m against a worst recorded run of 6m8s
         // over 100 runs, which leaves room for a cold cache on the slowest machine here.
-        "ci": {"timeout": "45m"},
+        //
+        // skip_cache states what was already true. ci reads nothing itself and keys on the
+        // whole project baseline, 2516 source lines, so any edit anywhere moves its key and
+        // you only run it after an edit: 16 runs, 0 cached, 2672s (MGS1009). Declaring it
+        // stops paying to hash the tree for a key that cannot hit, and closes a hazard - a
+        // hit would skip every member, and ci's key is NOT a superset of theirs, since test
+        // reads console files the root baseline does not carry. Members cache individually,
+        // which is where the replay belongs.
+        "ci": {
+            "skip_cache": "composes the gates and reads nothing itself; its key is the whole tree, so it can never replay",
+            "timeout": "45m",
+        },
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
