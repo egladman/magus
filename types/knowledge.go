@@ -860,9 +860,10 @@ type KnowledgeRoutingKind struct {
 	Kind    string   `json:"kind"              yaml:"kind"`
 	Count   int      `json:"count"             yaml:"count"`
 	Anchors []string `json:"anchors,omitempty" yaml:"anchors,omitempty"`
-	// FromBinary marks a kind magus supplies rather than the workspace, so Count
-	// describes the tool and moves when the tool does. A dev build carries diagnostic
-	// codes and std methods a release does not.
+	// FromBinary marks a kind the binary CONTRIBUTES to, so Count describes the tool as
+	// well as the workspace and moves when the tool does. A dev build carries diagnostic
+	// codes and std methods a release does not, and a magus release embeds its own
+	// built-in spells, whose ops and tools land in the same count as a workspace's own.
 	//
 	// It exists because the routing table is COMMITTED and drift-gated. A committed
 	// count that tracks the binary makes every index disagree with every other one
