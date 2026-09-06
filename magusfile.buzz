@@ -128,6 +128,11 @@ magus\project({
         // restore nothing, leaving no binary where the caller expects one. It has never
         // happened only because the key covers the whole tree and so never repeats.
         "go-build": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
+        // Same shape and the same reason, and worse if it fired: magus-dev is what
+        // install-dogfood registers as this worktree's merge driver, so a replay that
+        // restored nothing would leave git resolving conflicts with a binary that is
+        // missing or from another commit.
+        "dogfood": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
         "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         // Both read the environment and report or act on it per invocation; a replay
         // would report the charms and credentials of whatever ran last.
