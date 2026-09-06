@@ -262,3 +262,47 @@ func gitConfigValue(t *testing.T, repo, key string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// pathUnder decides whether a registration names a binary from THIS worktree, which is the
+// difference between a deliberate local driver and another worktree's build.
+func TestPathUnder(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "w", "repo")
+	for _, tc := range []struct {
+		name string
+		p    string
+		want bool
+	}{
+		{"the binary at the root", filepath.Join(root, "magus"), true},
+		{"a binary in a subdirectory", filepath.Join(root, "hack", "driver.sh"), true},
+		{"the root itself", root, true},
+		{"an unclean path that still lands inside", filepath.Join(root, "hack", "..", "magus"), true},
+		{"a sibling worktree", filepath.Join(string(filepath.Separator), "w", "other", "magus"), false},
+		{"a prefix-sharing sibling", root + "-2" + string(filepath.Separator) + "magus", false},
+		{"an installed release", filepath.Join(string(filepath.Separator), "usr", "local", "bin", "magus"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, pathUnder(root, tc.p))
+		})
+	}
+}
+
+// A workspace that builds its own magus prefers it, and that preference has to be a reason
+// to REPLACE what is registered. Reachability alone left a v0.3.0 release registered across
+// 142 worktrees: it answered the -h probe, so the steady-state check returned early and
+// nothing ever rewrote.
+func TestDriverIsPreferredHere(t *testing.T) {
+	root := t.TempDir()
+	release := "/usr/local/bin/magus" + gitDriverArgs
+
+	assert.True(t, driverIsPreferredHere(root, release),
+		"with no local build there is nothing better to offer, so PATH keeps its registration")
+
+	local := filepath.Join(root, "magus")
+	require.NoError(t, os.WriteFile(local, []byte("#!/bin/sh\n"), 0o755))
+
+	assert.False(t, driverIsPreferredHere(root, release),
+		"a local build must displace a registration pointing outside the worktree")
+	assert.True(t, driverIsPreferredHere(root, local+gitDriverArgs))
+	assert.True(t, driverIsPreferredHere(root, filepath.Join(root, "magus-dev")+gitDriverArgs),
+		"a deliberate pinned registration is from this worktree and must survive")
+}
