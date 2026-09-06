@@ -299,3 +299,245 @@ func stmtCommands(s *syntax.Stmt) []guardCommand {
 	}
 	return peelWrappers(literalWords(call.Args))
 }
+
+// busyWaitFires reports whether the line contains a loop whose body only sleeps.
+//
+// Structural, not textual, for the reason at the top of this file. The first version of
+// this rule was a pattern and proved the point twice within a minute: it denied `echo
+// 'until grep -q x f; do sleep 1; done'`, a quoted string that runs no loop, and then
+// denied a heredoc that merely quoted the rule's own test cases. An AST knows a
+// WhileClause from a word that looks like one.
+func busyWaitFires(command string) bool {
+	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if found {
+			return false
+		}
+		if loop, ok := n.(*syntax.WhileClause); ok && bodyOnlySleeps(loop.Do) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// bodyOnlySleeps reports whether a loop body does nothing but sleep, which is what
+// separates polling from work. A loop that builds, tests or prints each pass is doing
+// something however long it runs; one that only sleeps is waiting, and the host already
+// waits for free.
+func bodyOnlySleeps(body []*syntax.Stmt) bool {
+	sleeps := 0
+	for _, s := range body {
+		for _, c := range stmtCommands(s) {
+			if path.Base(c.Name) != "sleep" {
+				return false
+			}
+			sleeps++
+		}
+	}
+	return sleeps > 0
+}
+
+// The rules below answer "which program runs, with what arguments", which is what the
+// parser is for. They were patterns, and each one denied or advised on a line that merely
+// MENTIONED the program: `echo "searching for the string sed -i in a file"` was refused as
+// an in-place edit, and the same misfire caught a `grep` looking for where the rule was
+// tested. Every predicate here takes the parsed commands, so a quoted string, a comment
+// and a heredoc are words rather than commands.
+
+// hasFlag reports whether args carry a long flag, or a short flag packed into a cluster
+// (`-rn` carries `r`). Only the letter matters, not where it sits.
+func hasFlag(args []string, short rune, long string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false // everything after is an operand
+		}
+		if long != "" && (a == "--"+long || strings.HasPrefix(a, "--"+long+"=")) {
+			return true
+		}
+		if len(a) > 1 && a[0] == '-' && !strings.HasPrefix(a, "--") && strings.ContainsRune(a[1:], short) {
+			return true
+		}
+	}
+	return false
+}
+
+// operands are the arguments that are not flags nor a flag's own value, so a rule can ask
+// what a command was pointed AT rather than how it was spelled.
+//
+// takesValue names the short flags that consume the next word. Without it `fd -t d` reads
+// as a search for a file named "d", which is what the pattern this replaced could not tell
+// apart and why it deliberately said nothing about that shape. Knowing it is the point of
+// parsing.
+func operands(args []string, takesValue string) []string {
+	var out []string
+	rest, skip := false, false
+	for _, a := range args {
+		switch {
+		case skip:
+			skip = false
+		case rest:
+			out = append(out, a)
+		case a == "--":
+			rest = true
+		case strings.HasPrefix(a, "--"):
+			// A long flag carries its value with `=`, or takes none we care about.
+		case strings.HasPrefix(a, "-") && a != "-":
+			last := a[len(a)-1:]
+			skip = strings.Contains(takesValue, last)
+		default:
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// sedInPlaceFires reports an in-place sed. The flag may be packed (`-ni`) or long.
+func sedInPlaceFires(cmds []guardCommand) bool {
+	return slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		return path.Base(c.Name) == "sed" && hasFlag(c.Args, 'i', "in-place")
+	})
+}
+
+// scriptedRewriteInterpreters are the inline interpreters a refused rewrite reaches for
+// once `sed -i` is denied.
+var scriptedRewriteInterpreters = map[string]bool{
+	"python": true, "python3": true, "perl": true, "ruby": true, "node": true,
+}
+
+// scriptedRewriteFires reports an interpreter running a regex substitution and writing the
+// result back, or perl/ruby invoked with -i.
+//
+// Narrow on purpose, as before: an interpreter that merely WRITES is ordinary authoring.
+// What is refused is substitute-then-write, the shape that cannot tell a symbol from a word
+// that looks like one.
+//
+// This one walks the AST itself rather than reading guardCommand, because the script is
+// commonly a HEREDOC and a heredoc body is a redirect rather than an argument. It is
+// deliberately the only rule that reads heredoc text: for this rule the heredoc IS the
+// program, while for every other rule it is data, and folding it into the shared command
+// words would make a heredoc that merely quotes `sed -i` a refused edit.
+func scriptedRewriteFires(command string) bool {
+	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return guardScriptedRewriteRe.MatchString(command)
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if found {
+			return false
+		}
+		st, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		call, ok := st.Cmd.(*syntax.CallExpr)
+		if !ok {
+			return true
+		}
+		for _, c := range peelWrappers(literalWords(call.Args)) {
+			if !scriptedRewriteInterpreters[path.Base(c.Name)] {
+				continue
+			}
+			if hasFlag(c.Args, 'i', "in-place") && path.Base(c.Name) != "node" {
+				found = true
+				return false
+			}
+			script := strings.Join(c.Args, "\n") + "\n" + heredocText(st)
+			if substitutes(script) && strings.Contains(script, ".write(") {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// heredocText is the body of every heredoc redirected into a statement.
+func heredocText(st *syntax.Stmt) string {
+	var b strings.Builder
+	for _, r := range st.Redirs {
+		if r.Hdoc == nil {
+			continue
+		}
+		for _, part := range r.Hdoc.Parts {
+			if lit, ok := part.(*syntax.Lit); ok {
+				b.WriteString(lit.Value)
+				b.WriteByte('\n')
+			}
+		}
+	}
+	return b.String()
+}
+
+// substitutes reports whether a script performs a regex or string substitution.
+func substitutes(script string) bool {
+	for _, call := range []string{"re.sub", "re.subn", "str.replace", ".replace("} {
+		if strings.Contains(script, call) {
+			return true
+		}
+	}
+	return false
+}
+
+// codeSearchFires reports a repo-wide CONTENT search: a recursive grep, or a bare ripgrep
+// or ag, both effectively always repo-wide. A plain `grep pattern file` reads one file and
+// is left alone.
+func codeSearchFires(cmds []guardCommand) bool {
+	return slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		switch path.Base(c.Name) {
+		case "grep", "egrep", "fgrep":
+			return hasFlag(c.Args, 'r', "recursive") || hasFlag(c.Args, 'R', "dereference-recursive")
+		case "rg", "ag":
+			return true
+		}
+		return false
+	})
+}
+
+// fileFindFires reports a repo-wide search for a file by NAME. `find . -type d` and `fd -t
+// d` list a tree rather than look a name up, and stay silent; fd is recursive by default,
+// so its admitting shapes are the name query itself.
+func fileFindFires(cmds []guardCommand) bool {
+	return slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		switch path.Base(c.Name) {
+		case "find":
+			return slices.Contains(c.Args, "-name") || slices.Contains(c.Args, "-iname")
+		case "fd":
+			// fdValueFlags are fd's short flags that consume the next word, so a
+			// `-t d` type filter is not read as a name query.
+			const fdValueFlags = "tedExXS"
+			return hasFlag(c.Args, 'e', "extension") || hasFlag(c.Args, 'g', "glob") ||
+				len(operands(c.Args, fdValueFlags)) > 0
+		}
+		return false
+	})
+}
+
+// docReaders are the commands that read or search a file's text.
+var docReaders = map[string]bool{
+	"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true,
+	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
+}
+
+// docSearchFires reports a read or search pointed at a markdown file. Markdown headings are
+// indexed as doc-section nodes, so the answer is a section query rather than a whole-file
+// scan. It asks whether an OPERAND is markdown, so a pattern that merely contains ".md"
+// does not count.
+func docSearchFires(cmds []guardCommand) bool {
+	return slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		if !docReaders[path.Base(c.Name)] {
+			return false
+		}
+		// grep's -e/-f take a value, so a pattern file is not read as the target.
+		return slices.ContainsFunc(operands(c.Args, "ef"), func(a string) bool {
+			return strings.HasSuffix(a, ".md")
+		})
+	})
+}

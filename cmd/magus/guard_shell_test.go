@@ -1170,3 +1170,67 @@ func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
 		assert.Empty(t, evaluateBashGuard(cmd).Context, "should not fire: %s", cmd)
 	}
 }
+
+// A poll loop waits for a notification the host already delivers, and it outlives its
+// purpose: past the tool timeout it is backgrounded rather than killed, so it goes on
+// polling a condition a run that failed early never satisfies.
+func TestGuardDeniesBusyWait(t *testing.T) {
+	for _, cmd := range []string{
+		`until grep -q "^summary:" out.log; do sleep 25; done`,
+		`until grep -qE "^summary:" /tmp/t.output 2>/dev/null; do sleep 20; done; tail -3 /tmp/t.output`,
+		`while ! test -f done.marker; do sleep 5; done`,
+		`while [ ! -f done.marker ]; do sleep 1; done`,
+		`until ./magus query output ref; do sleep 30; done`,
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
+	}
+}
+
+// The program rules read the parsed commands, so a line that only MENTIONS a program is
+// not that program running. Every case here was a live false positive: the sed rule
+// refused a `grep` looking for where it was tested, and refused an `echo` describing it.
+func TestGuardIgnoresProgramsOnlyMentioned(t *testing.T) {
+	for _, cmd := range []string{
+		`echo "searching for the string sed -i in a file"`,
+		`echo 'until grep -q x f; do sleep 1; done'`,
+		`echo "a doc note about README.md and rg usage"`,
+		`printf '%s\n' "replace the sed -i call with the editor tool"`,
+		`echo "run find . -name '*.go' by hand"`,
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny, "a mention is not an invocation: %s", cmd)
+		assert.Empty(t, v.Context, "a mention is not an invocation: %s", cmd)
+	}
+}
+
+// The conversion must not have blunted the rules: each still fires on the real thing.
+func TestGuardStillCatchesTheRealInvocations(t *testing.T) {
+	assert.NotEmpty(t, evaluateBashGuard(`sed -i '' 's/a/b/' f.go`).Deny, "in-place sed")
+	assert.NotEmpty(t, evaluateBashGuard(`sed -ni 's/a/b/' f.go`).Deny, "a packed -i cluster")
+	assert.NotEmpty(t, evaluateBashGuard(`grep -rn "Foo" .`).Context, "a recursive grep")
+	assert.NotEmpty(t, evaluateBashGuard(`rg Foo`).Context, "ripgrep is repo-wide")
+	assert.NotEmpty(t, evaluateBashGuard(`find . -name "*.go"`).Context, "a name query")
+	assert.NotEmpty(t, evaluateBashGuard(`cat docs/guide.md`).Context, "reading prose")
+	assert.NotEmpty(t, evaluateBashGuard(`perl -i -pe 's/a/b/' f`).Deny, "perl -i")
+}
+
+// The rule is about polling, not about loops or about sleep. A loop that does real work
+// each pass, and a bare sleep, both stay allowed.
+func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
+	for _, cmd := range []string{
+		`for f in *.go; do echo "$f"; done`,
+		`while read -r line; do echo "$line"; done < list.txt`,
+		"sleep 5",
+		"for i in 1 2 3; do ./magus run lint .; done",
+		// The case the first, pattern-based version of this rule got wrong: a quoted
+		// string that runs no loop at all. It is why the rule reads the AST.
+		`echo 'until grep -q x f; do sleep 1; done'`,
+		// A loop that sleeps AND does work each pass is working, not polling.
+		`while true; do ./magus run lint .; sleep 60; done`,
+	} {
+		assert.NotEqual(t, denyRuleBusyWait, evaluateBashGuard(cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
