@@ -3,6 +3,8 @@ package main
 import (
 	"slices"
 	"strings"
+
+	"github.com/egladman/magus/internal/hint"
 )
 
 // The git rules, which are the guard's largest single policy and the one with the
@@ -117,12 +119,26 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 				return denyWholeTree("git reset --hard"), true
 			}
 		case "checkout":
+			// Whole-tree first: it is the broader reason, and one rule owning `-- .`
+			// keeps the message the same whichever revision precedes the pathspec.
 			if isWholeTreePathspec(rest) {
 				return denyWholeTree("git checkout ."), true
+			}
+			if side := mergeSideRef(rest); side != "" {
+				return bashGuardVerdict{
+					Deny: denyMergeSideCheckout(side),
+					Rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: side},
+				}, true
 			}
 		case "restore":
 			if isWholeTreePathspec(rest) {
 				return denyWholeTree("git restore ."), true
+			}
+			if side := mergeSideRef(rest); side != "" {
+				return bashGuardVerdict{
+					Deny: denyMergeSideCheckout(side),
+					Rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: side},
+				}, true
 			}
 		case "clean":
 			if isDeletingClean(rest) {
@@ -254,6 +270,54 @@ func gitGuardFallback(command string) (bashGuardVerdict, bool) {
 // and fell through to the advisory. Everything after `--` is a pathspec by definition;
 // without the separator a bare `.` is one wherever it sits, since no revision is spelled
 // that way.
+// mergeSideRefs are the pseudo-refs that name ONE SIDE of an operation in progress.
+// MERGE_HEAD is the incoming side, ORIG_HEAD the position before it started, and
+// CHERRY_PICK_HEAD and REVERT_HEAD are the same shape for their own operations.
+var mergeSideRefs = []string{"MERGE_HEAD", "ORIG_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"}
+
+// mergeSideRef returns the side-naming ref a checkout or restore is pulling a path out of,
+// or "" when it names none.
+//
+// It requires a pathspec, because that is what separates the two commands. `git checkout
+// MERGE_HEAD` moves HEAD and touches no file; `git checkout MERGE_HEAD -- <path>`
+// OVERWRITES that path with one side's copy, discarding both the other side's changes and
+// any merge already computed for it.
+func mergeSideRef(args []string) string {
+	if !slices.Contains(args, "--") {
+		return ""
+	}
+	for _, a := range args {
+		if a == "--" {
+			return ""
+		}
+		if ref, ok := strings.CutPrefix(a, "--source="); ok {
+			if slices.Contains(mergeSideRefs, ref) {
+				return ref
+			}
+			continue
+		}
+		if slices.Contains(mergeSideRefs, a) {
+			return a
+		}
+	}
+	return ""
+}
+
+// denyMergeSideCheckout explains why restoring a path from one side of a merge is refused.
+func denyMergeSideCheckout(ref string) string {
+	return "Restoring a path from " + ref + " overwrites it with ONE side, discarding the " +
+		"other side's changes and any merge already computed for that file.\n" +
+		"It reads like \"undo my edit to this file\" and is not: during a merge the working-tree " +
+		"copy IS the merge, and this replaces it wholesale.\n" +
+		"Measured here: `git checkout MERGE_HEAD -- magusfile.buzz` during a conflict resolution " +
+		"silently dropped the branch's own half of a merged feature. Nothing failed, the gate " +
+		"stayed green, and the feature could not fire until someone read the code days later.\n" +
+		"What to do instead: for a generated file, `" + hint.VCSResolve.String() + "` settles every " +
+		"conflicted one by regenerating. To take one side deliberately, say which - `git checkout " +
+		"--ours` or `--theirs` -- <path>`. To keep the merged result, it is already in the file; " +
+		"copy it aside before doing anything else."
+}
+
 func isWholeTreePathspec(args []string) bool {
 	if i := slices.Index(args, "--"); i >= 0 {
 		args = args[i+1:]
