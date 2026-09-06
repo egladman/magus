@@ -136,6 +136,10 @@ func (g *machineGate) wait(ctx context.Context, waiter string, c types.MachineCl
 			g.admit.Drop(context.WithoutCancel(ctx), waiter)
 			return nil, ctx.Err()
 		case <-beat.C:
+			// The message says this run is not hung; the heartbeat says the same thing to
+			// the stall watchdog, which would otherwise abort a run that is queued behind
+			// a busy machine exactly as if it had wedged.
+			ProgressFromContext(ctx).Beat()
 			g.say(fmt.Sprintf("magus: still queued for the machine budget (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.\n",
 				time.Since(started).Round(time.Second)))
 		case <-poll.C:

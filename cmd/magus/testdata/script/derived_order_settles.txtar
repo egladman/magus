@@ -14,6 +14,15 @@ cp seed2.txt src/seed.txt
 
 # ONE invocation must settle the whole chain.
 exec magus run assemble . site
+# The settle re-run is accounted like a batch step - a limiter slot, the inflight
+# set, a journal result event with its own captured log - so it REPORTS like one.
+# The repro line comes from the cache's result record and from nowhere else, so it
+# is the observable difference between settling through the cache and dispatching
+# straight at the interpreter, which produced no record at all and made a stalled
+# settle indistinguishable from a run that forgot to exit. Match the repro line,
+# NOT the target name: the settle log line above already names the target, so an
+# assertion on that alone passes either way.
+stderr 'magus run index-generate'
 cmp SEED.md want-seed.md
 cmp site/page.md want-page.md
 cmp index.txt want-index.txt

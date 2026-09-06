@@ -290,6 +290,7 @@ automatically accounted for.
 | Concurrency slot | every `proc\exec`, so parallel work respects `-j` | on |
 | Own process group | subprocesses, so Ctrl+C reaches magus and not them | on |
 | Target deadline | a whole target, subprocesses included | **off** (`target_timeout`, and per target `timeout`) |
+| Stall watchdog | a whole invocation that stops making progress | 15m ([`stall_timeout`](../reference/codes/sandbox/MGS3012.md)) |
 | Filesystem sandbox | the magus process, where the platform supports it | per [sandbox](sandbox.md) config |
 | CI provider op deadline | each provider spell op | 5s, fixed |
 
@@ -337,6 +338,19 @@ Exceeding a ceiling **fails** the target with
 long it ran, and the log its output was captured to. `magus doctor` keeps the
 declaration honest against the durations magus recorded
 ([MGS1032](../reference/codes/magusfile/MGS1032.md)).
+
+### The stall watchdog
+
+The watchdog beside those ceilings is the opposite check, and is on by default for
+that reason: it bounds an invocation that makes **no** progress at all rather than
+one that runs long, so a target that is slow but still printing never reaches it.
+Every accounting edge counts as progress - a target taking or handing back its
+limiter slot, and every line its subprocesses write.
+
+The gap it was built for is work that runs outside every target: the post-batch
+settle pass that reconciles derived ordering holds every project lock while
+belonging to no target, so no ceiling reaches it. Neither bound subsumes the other;
+[MGS3012](../reference/codes/sandbox/MGS3012.md) has the side-by-side.
 
 ### A gap worth knowing
 

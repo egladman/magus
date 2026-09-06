@@ -6,6 +6,7 @@ type (
 	limiterKey  struct{}
 	cacheKey    struct{}
 	slotHeldKey struct{}
+	progressKey struct{}
 )
 
 // WithSlotsHeld marks ctx as holding n limiter slots. A hand-back site (Yield,
@@ -45,6 +46,19 @@ func ContextWithLimiter(ctx context.Context, lim *Limiter) context.Context {
 // LimiterFromContext retrieves the Limiter stored by ContextWithLimiter, or nil.
 func LimiterFromContext(ctx context.Context) *Limiter {
 	v, _ := ctx.Value(limiterKey{}).(*Limiter)
+	return v
+}
+
+// ContextWithProgress installs p so the accounting edges can beat it without the
+// heartbeat being threaded through every signature.
+func ContextWithProgress(ctx context.Context, p *Progress) context.Context {
+	return context.WithValue(ctx, progressKey{}, p)
+}
+
+// ProgressFromContext retrieves the heartbeat stored by ContextWithProgress, or nil.
+// Every [Progress] method is nil-safe, so a caller need not check.
+func ProgressFromContext(ctx context.Context) *Progress {
+	v, _ := ctx.Value(progressKey{}).(*Progress)
 	return v
 }
 

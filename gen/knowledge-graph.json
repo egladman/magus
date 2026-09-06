@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5242,
-  "edge_count": 9332,
+  "node_count": 5251,
+  "edge_count": 9360,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -516,6 +516,14 @@
       }
     },
     {
+      "id": "diagnostic:MGS3012",
+      "kind": "diagnostic",
+      "label": "MGS3012",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3012/"
+      }
+    },
+    {
       "id": "diagnostic:MGS4001",
       "kind": "diagnostic",
       "label": "MGS4001",
@@ -833,7 +841,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "585",
+        "dir_files": "586",
         "dir_languages": "markdown,md#1-built-in-command-spells-import-maguscharm,md#2-workspace-spells--magusfiles-import-charm,md#3-raw-rfc-6902-data-the-lowest-level,md#4-function-targets--ops-branch-in-code,md#a-bypass-fails-closed,md#a-gap-worth-knowing,md#a-known-leak-a-multi"
       }
     },
@@ -973,7 +981,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1538",
+        "dir_files": "1545",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1243,7 +1251,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "481",
+        "dir_files": "488",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -1323,8 +1331,8 @@
       "label": "docs/reference/codes/sandbox",
       "source": "docs/reference/codes/sandbox",
       "attrs": {
-        "dir_files": "115",
-        "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#configuring-the-prose-class,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#extending-the-allowlist,md#fix,md#mgs2001-path-read-denied-by-sandbox,md#mgs2002-path-wri"
+        "dir_files": "122",
+        "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#configuring-the-prose-class,md#configuring-the-window,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#extending-the-allowlist,md#fix,md#mgs2001-path-read-denied-by-s"
       }
     },
     {
@@ -4813,6 +4821,18 @@
         "section": "reference",
         "tags": "MGS3011,timeout,target_timeout,runaway,hang,locks,process group,declarations",
         "title": "MGS3011: target exceeded its declared timeout"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS3012.md",
+      "source": "docs/reference/codes/sandbox/MGS3012.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS3012,stall,watchdog,hang,deadlock,locks,stall_timeout,target_timeout,progress",
+        "title": "MGS3012: invocation stalled"
       }
     },
     {
@@ -11363,6 +11383,16 @@
       "source": "docs/concepts/spells.md#the-runaway-guard",
       "attrs": {
         "anchor": "the-runaway-guard",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/concepts/spells.md#the-stall-watchdog",
+      "kind": "docsection",
+      "label": "The stall watchdog",
+      "source": "docs/concepts/spells.md#the-stall-watchdog",
+      "attrs": {
+        "anchor": "the-stall-watchdog",
         "level": "3"
       }
     },
@@ -27323,6 +27353,66 @@
       "source": "docs/reference/codes/sandbox/MGS3011.md#why",
       "attrs": {
         "anchor": "why",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3012.md#configuring-the-window",
+      "kind": "docsection",
+      "label": "Configuring the window",
+      "source": "docs/reference/codes/sandbox/MGS3012.md#configuring-the-window",
+      "attrs": {
+        "anchor": "configuring-the-window",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled",
+      "kind": "docsection",
+      "label": "MGS3012: invocation stalled",
+      "source": "docs/reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled",
+      "attrs": {
+        "anchor": "mgs3012-invocation-stalled",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3012.md#resolution",
+      "kind": "docsection",
+      "label": "Resolution",
+      "source": "docs/reference/codes/sandbox/MGS3012.md#resolution",
+      "attrs": {
+        "anchor": "resolution",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3012.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/codes/sandbox/MGS3012.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3012.md#what-counts-as-progress",
+      "kind": "docsection",
+      "label": "What counts as progress",
+      "source": "docs/reference/codes/sandbox/MGS3012.md#what-counts-as-progress",
+      "attrs": {
+        "anchor": "what-counts-as-progress",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3012.md#why-it-is-not-a-target-timeout",
+      "kind": "docsection",
+      "label": "Why it is not a target timeout",
+      "source": "docs/reference/codes/sandbox/MGS3012.md#why-it-is-not-a-target-timeout",
+      "attrs": {
+        "anchor": "why-it-is-not-a-target-timeout",
         "level": "2"
       }
     },
@@ -52968,6 +53058,14 @@
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
       "target": "doc:docs/reference/codes/sandbox/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -55920,6 +56018,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3012",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS4003",
       "relation": "documents",
       "confidence": "inferred",
@@ -56985,6 +57091,14 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS3011",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS3012",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -59040,6 +59154,14 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
+      "target": "diagnostic:MGS3012",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
       "target": "doc:README.md",
       "relation": "references",
       "confidence": "extracted",
@@ -59249,6 +59371,14 @@
     {
       "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3011.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3012.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -68352,6 +68482,14 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/MGS3011.md",
+      "target": "diagnostic:MGS3012",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3011.md",
       "target": "doc:docs/concepts/spells.md",
       "relation": "references",
       "confidence": "extracted",
@@ -68376,11 +68514,123 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/MGS3011.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3011.md",
       "target": "docsection:docs/reference/codes/sandbox/MGS3011.md#mgs3011-target-exceeded-its-declared-timeout",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS3011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "diagnostic:MGS3011",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "diagnostic:MGS3012",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "diagnostic:MGS5003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "doc:docs/concepts/concurrency.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3011.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "doc:docs/reference/codes/services/MGS5003.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "doc:docs/reference/config.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
     },
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
@@ -68480,6 +68730,14 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "diagnostic:MGS3012",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -68569,6 +68827,14 @@
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3011.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3012.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -83192,6 +83458,14 @@
     },
     {
       "source": "docsection:docs/concepts/spells.md#what-magus-bounds-and-what-it-does-not",
+      "target": "docsection:docs/concepts/spells.md#the-stall-watchdog",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "docsection:docs/concepts/spells.md#what-magus-bounds-and-what-it-does-not",
       "target": "docsection:docs/concepts/spells.md#what-magus-bounds",
       "relation": "contains",
       "confidence": "extracted",
@@ -94421,6 +94695,46 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS3011.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3012.md#configuring-the-window",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3012.md#resolution",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3012.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3012.md#what-counts-as-progress",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3012.md#mgs3012-invocation-stalled",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3012.md#why-it-is-not-a-target-timeout",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3012.md"
     },
     {
       "source": "docsection:docs/reference/codes/sandbox/README.md#the-sandbox",
