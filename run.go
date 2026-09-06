@@ -546,10 +546,17 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 //
 // They run before RunAll rather than from inside it, which is the one window where
 // every project is already locked by acquireProjectLocks and no limiter slot is held
-// yet, so a gate needs neither a second lock nor a nested slot. Each gate goes through
-// cache.Run like any other target work, so its console output, output ref, journal
+// yet, so a gate needs no second lock and nests inside nothing. Each gate goes through
+// cache.RunAside like any other target work, so its console output, output ref, journal
 // entry and report events look the same as a directly invoked target's; its own
 // skip_cache policy is what keeps that call from replaying or snapshotting.
+//
+// RunAside rather than Run, which is the seam and not just a slot. The slot is the part
+// this window genuinely does not need; the machine claim and the inflight record are the
+// part it does, because they are what a SEPARATE magus and `magus status` read. A gate
+// wedging here reproduced the 2026-09-04 symptom exactly: every project lock held, zero
+// slots in use, nothing running. It takes the shared limiter (cacheOpts carries it), so
+// the occupancy it reports is against the budget every other step is measured by.
 //
 // A gate that changes an artifact turns its composer's hit into a miss, because
 // types.ChainSkipCacheOutputs put that artifact in the composer's key. The composer
@@ -590,7 +597,7 @@ func (m *Magus) runComposedSkipCacheGates(ctx context.Context, steps []cache.Ste
 			// target the user named, the same boundary runBuzzDependencies draws for a
 			// dependency.
 			handler := m.targetHandler(g.Target)
-			_, err := m.cache.Run(ctx, newStep(owner, g.Target), func(ctx context.Context) error {
+			_, err := m.cache.RunAside(ctx, newStep(owner, g.Target), func(ctx context.Context) error {
 				return handler(buzz.WithTargetMemo(ctx, buzz.NewTargetMemo()), owner)
 			}, opts...)
 			if err != nil {
