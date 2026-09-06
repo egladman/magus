@@ -38,7 +38,15 @@ fi
 
 # Built through magus, not `go build`: the target carries the version stamp (ld_flags) and the
 # gopherbuzz dependency, so magus-dev reports a real version instead of a bare "dev".
-magus run dogfood .
+#
+# ./magus before PATH, which is the same premise as the rest of this script: PATH holds a
+# RELEASE, and a release cannot necessarily load this workspace at all. required_version
+# has run ahead of the newest release more than once, and when it does the release stops at
+# "unknown option" before it can build anything. PATH stays the fallback so a fresh clone
+# with no ./magus yet still works.
+magus_bin=./magus
+test -x "$magus_bin" || magus_bin=magus
+"$magus_bin" run dogfood .
 
 test -x "$root/magus-dev" || { echo "install-dogfood: magus run dogfood produced no $root/magus-dev" >&2; exit 1; }
 
