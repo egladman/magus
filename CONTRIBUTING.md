@@ -112,17 +112,26 @@ feature no release contains, cut the release before the magusfile depends on it.
 When you hit this locally the symptom is a load error from the pinned binary,
 which is the mechanism working rather than a problem to route around.
 
-Raise `required_version` in `magus.yaml` **in the release commit, not in the
-feature commit.** The floor names a released version, and between releases a build
-describes itself from the last tag - a tree that is 42 commits past `v0.3.0`
-reports `v0.3.0-42-gabc`, which compares as 0.3.0. A floor set to the upcoming
-release therefore rejects a source build of the very commit that raised it, and
-this repo builds magus from source in CI. Add the feature first, cut the tag, then
-raise the floor to the tag.
+Raise `required_version` in `magus.yaml` **in the same commit that adds the key**,
+naming the release that will carry it. Doctor's floor check asserts the two agree,
+so a floor left behind is caught rather than remembered.
 
-Downstream users, who run released binaries, get
-[MGS1021](https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1021.md) naming both fixes instead of
-an error from wherever the magusfile happened to break first.
+This used to say the opposite: raise it in the release commit, because a floor
+naming an unreleased version would reject a source build of the very commit that
+raised it. Between releases a build describes itself from the last tag, so a tree
+42 commits past `v0.3.0` reports `v0.3.0-42-gabc` and compares as 0.3.0. That
+hazard is gone. `ward.CheckRequiredVersion` exempts dev builds outright, and
+`types.IsDevMagusVersion` counts anything carrying a `-g<sha>` suffix, which is
+every build from source. The floor is enforced only against a clean release tag,
+which is exactly who it is for.
+
+Two things follow from raising it early, and both are the mechanism working:
+`audit.yaml`'s `compat` job pins the newest release and will fail until the one
+you named ships, and a released binary meeting the workspace gets
+[MGS1021](https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1021.md)
+naming the version it needs. The alternative is worse: a floor that still admits
+the old release lets it load far enough to fail on whichever key it happens to hit
+first, which reads as a typo rather than a version problem.
 
 **Before 1.0, renaming is on the table; after, it is not.** magus is pre-1.0, so a
 badly chosen name can still be fixed, and the changelog records it under

@@ -5,7 +5,7 @@ import "slices"
 // ProjectOption is one recognized magus.project({...}) key and the release that first
 // understood it.
 //
-// Since is what lets a workspace say "this magusfile needs 0.5.0" before an older binary
+// Since is what lets a workspace say "this magusfile needs 0.4.3" before an older binary
 // meets a key it cannot act on. Load no longer aborts over such a key (hint.CheckKeys),
 // so the failure it prevents is quieter now and worth more: the key is dropped, the
 // policy it declared does not apply, and only the declared floor says why.
@@ -36,9 +36,9 @@ var ProjectOptions = []ProjectOption{
 	{Key: "targets"},
 	{Key: "no_language", Since: "0.4.0"},
 	{Key: "tools", Since: "0.4.0"},
-	{Key: "review_required", Since: "0.5.0"},
-	{Key: "gate_low_risk", Since: "0.5.0"},
-	{Key: "gate_inherit", Since: "0.5.0"},
+	{Key: "review_required", Since: "0.4.3"},
+	{Key: "gate_low_risk", Since: "0.4.3"},
+	{Key: "gate_inherit", Since: "0.4.3"},
 }
 
 // TargetPolicyOptions is the ONE list of recognized keys inside magus.project's
@@ -62,8 +62,8 @@ var TargetPolicyOptions = []ProjectOption{
 	{Key: "cache"},
 	{Key: "drift"},
 	{Key: "drift_reason"},
-	{Key: "timeout", Since: "0.5.0"},
-	{Key: "retry_on_volatile", Since: "0.5.0"},
+	{Key: "timeout", Since: "0.4.3"},
+	{Key: "retry_on_volatile", Since: "0.4.3"},
 }
 
 // ToolBoundKeys is the ONE list of recognized keys inside one entry of magus.project's
