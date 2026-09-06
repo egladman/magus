@@ -50,6 +50,7 @@ const (
 	denyRuleNotesAuthor     denyRuleName = "notes-author"
 	denyRuleReadAck         denyRuleName = "read-ack"
 	denyRuleSedInPlace      denyRuleName = "sed-in-place"
+	denyRuleBusyWait        denyRuleName = "busy-wait"
 	denyRuleScriptedRewrite denyRuleName = "scripted-rewrite"
 	denyRuleRawTool         denyRuleName = "raw-tool"
 	denyRuleThrowawayCopy   denyRuleName = "throwaway-copy"
@@ -625,6 +626,11 @@ var (
 	denySedInPlace = "Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. For a whole-tree mechanical edit, `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites rather than a pattern that also matches the comment about it.\n" +
 		"`sed -i` is not portable and the two spellings destroy each other's work: GNU reads `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the BACKUP SUFFIX, and `sed -i '' ...` makes GNU edit nothing. So it mangles the file on the next machine, by WRITING, before anyone reads a diff. Reading with sed is untouched."
 
+	denyBusyWait = "Do not poll for work you started; you are told when it finishes.\n" +
+		"A backgrounded command is tracked and announces its own completion, so start it and go do something else - or nothing. Read the result when the notification arrives.\n" +
+		"This loop has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive - a run that failed early never prints the line being grepped for. Several have had to be killed by hand.\n" +
+		"Waiting on something OUTSIDE this machine (a remote queue, a deploy nobody here started) is what your host's monitor surface is for."
+
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
 	// most likely to turn a focused change into an unreviewable one: it sweeps every
@@ -746,6 +752,21 @@ func magusInvokes(cmds []guardCommand, words ...string) bool {
 // magusRuleFires answers off the resolved argv when the line parses and off the anchored
 // pattern when it does not - the same split gitGuard and gitGuardFallback make, and for the
 // same reason: a line with no AST to read must still be judged.
+// fires asks a parsed rule when the line parsed, and its pattern when it did not.
+//
+// The fallback is for a line the shell parser rejects, not a second opinion: a rule that
+// consulted both would keep every false positive the pattern has, which is the whole reason
+// these moved. An unparseable line is rare and cannot be judged structurally at all, so
+// there the pattern is the only answer available.
+func fires(cmds []guardCommand, parsed bool, command string,
+	rule func([]guardCommand) bool, fallback *regexp.Regexp,
+) bool {
+	if parsed {
+		return rule(cmds)
+	}
+	return fallback.MatchString(command)
+}
+
 func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *regexp.Regexp, words ...string) bool {
 	if parsed {
 		return magusInvokes(cmds, words...)
@@ -916,10 +937,13 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	if magusRuleFires(cmds, parsed, command, guardReadAckRe, "diff", "--ack") {
 		return bashGuardVerdict{Deny: denyReadAck, Rule: denyRule{Name: denyRuleReadAck}}
 	}
-	if guardSedInPlaceRe.MatchString(command) {
+	if fires(cmds, parsed, command, sedInPlaceFires, guardSedInPlaceRe) {
 		return bashGuardVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	}
-	if guardScriptedRewriteRe.MatchString(command) {
+	if busyWaitFires(command) {
+		return bashGuardVerdict{Deny: denyBusyWait, Rule: denyRule{Name: denyRuleBusyWait}}
+	}
+	if scriptedRewriteFires(command) {
 		return bashGuardVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
 	var advisory bashGuardVerdict
@@ -972,7 +996,7 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 		return bashGuardVerdict{Context: relockGuardContext}
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
-	case guardDocSearchRe.MatchString(command):
+	case fires(cmds, parsed, command, docSearchFires, guardDocSearchRe):
 		return bashGuardVerdict{
 			Context: docSearchAdvice,
 			Kind:    advisoryDocSearch,
@@ -985,7 +1009,8 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 			Kind:    advisoryPrecedent,
 			Brief:   "magus workspace: `" + hint.Refs.With(ident, "--occurrences") + "` finds every use.",
 		}
-	case guardCodeSearchRe.MatchString(command), guardFileFindRe.MatchString(command):
+	case fires(cmds, parsed, command, codeSearchFires, guardCodeSearchRe),
+		fires(cmds, parsed, command, fileFindFires, guardFileFindRe):
 		return bashGuardVerdict{
 			Context: searchAdvisoryLead(cmds, hints) + searchGuardReason,
 			Kind:    advisoryCodeSearch,
