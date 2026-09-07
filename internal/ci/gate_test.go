@@ -25,15 +25,11 @@ func TestDecideGateMatrix(t *testing.T) {
 		{"not redundant, nested", GateFacts{Nested: true}, GateRun},
 		{"not redundant, forced and nested", GateFacts{Forced: true, Nested: true}, GateRun},
 
-		// Redundant refuses on its own. This cell used to require a saturated machine
-		// as well, which made the refusal unreachable in practice: the load reading
-		// comes from the daemon and ordinary commands run without a persistent one, so
-		// every real redundant gate ran anyway behind an advisory nobody obeyed.
+		// Redundant refuses on its own; no machine-load condition gates it.
 		{"redundant", GateFacts{Redundant: true}, GateRefuse},
 		{"redundant, forced", GateFacts{Redundant: true, Forced: true}, GateRun},
-		// Nested is the one caller that still cannot refuse: it counts its own
-		// ancestors' claims as load, so its view of the machine is the one reading that
-		// cannot be trusted to refuse on.
+		// Nested is the one caller that cannot refuse: it counts its own ancestors'
+		// claims as load.
 		{"redundant, nested", GateFacts{Redundant: true, Nested: true}, GateAdvise},
 		{"redundant, forced and nested", GateFacts{Redundant: true, Forced: true, Nested: true}, GateRun},
 	}

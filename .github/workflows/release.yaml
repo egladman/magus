@@ -306,11 +306,8 @@ jobs:
       - release-darwin-amd64
       - release-windows
     runs-on: ubuntu-latest
-    # See the same block in release-index.yaml. Scoped to this job rather than the whole
-    # workflow because only this one REGENERATES committed output; the release-build jobs
-    # above compile the shipped binaries, and changing the GOEXPERIMENT they build under
-    # changes an artifact users run, which is a separate decision from fixing the encoder
-    # that writes gen/.
+    # Job-scoped because only this job runs a bare `go run`; the release-build jobs above
+    # reach the toolchain through magusfile.buzz, which sets this on every Go target.
     env:
       GOEXPERIMENT: jsonv2
     permissions:

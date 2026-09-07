@@ -25,13 +25,9 @@ on:
         required: false
         default: ''
 
-# The same GOEXPERIMENT ci.yaml sets, because this job REGENERATES committed output and
-# the encoder is part of what it writes: v1 escapes the three HTML-significant characters
-# to their \u00XX form and jsonv2 leaves them as typed, so one label differs in bytes
-# between the two. mise.toml carries the setting for a laptop, but mise-action runs with
-# env: false here as everywhere else, so nothing exports it to the steps - and v0.4.3's
-# index branch was published with 336 lines of gen/knowledge-graph.json in the v1 spelling,
-# which the next gate read as drift.
+# This job runs a bare `go run` and regenerates committed output, so it needs the encoder
+# ci.yaml also pins. mise.toml carries it for a laptop, but mise-action runs with
+# env: false here as everywhere else and exports nothing to the steps.
 env:
   GOEXPERIMENT: jsonv2
 
@@ -67,21 +63,14 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # release.yaml cuts the manifest one step before it publishes the index, so a failure
-      # in between - v0.4.3 died on a missing pnpm - leaves the tag built and published with
-      # no manifest anywhere: the cut ran on the runner and went away with it. Rerunning the
-      # release job cannot fix that, because a rerun executes the workflow file from the
-      # TAG's tree, which is the tree that lacks whatever fix was just merged. That left
-      # rewriting a published tag as the only apparent exit, and rebuilding binaries under a
-      # tag people can already download is not one.
+      # release.yaml cuts the manifest one step before publishing the index, so a failure
+      # in between leaves a tag built and published with no manifest - the cut ran on the
+      # runner and went with it. Rerunning the release job cannot recover that: a rerun
+      # executes the workflow file from the TAG's tree, which lacks whatever fix was just
+      # merged. Cutting here instead, from the assets the release ALREADY published, keeps
+      # the digests describing what people can download rather than a rebuild.
       #
-      # So the cut is available here too, against the assets the release ALREADY published.
-      # The digests then describe what people can actually download rather than a rebuild,
-      # which is the property a rebuild cannot give at any price.
-      #
-      # The tag rides the environment and is never interpolated into the command, as in
-      # release.yaml. runCut is idempotent, so a rerun of THIS job converges rather than
-      # tripping over the manifest it wrote.
+      # The tag rides the environment rather than being interpolated, as in release.yaml.
       - name: Cut the manifest from a published release
         if: inputs.tag != ''
         env:

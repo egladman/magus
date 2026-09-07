@@ -115,10 +115,9 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 
 // TestGateEvaluateRefusesWhenIdle: the same finding on an IDLE pool also refuses.
 //
-// This asserted the opposite until 2026-09-07, and that is what made the whole feature
-// inert: load is read from the daemon, ordinary commands run without a persistent one, so
-// the idle branch was the one every real redundant gate took. It printed an advisory and
-// ran the duplicate - seven times in one session, about 17 minutes of wall clock.
+// This asserted the opposite until 2026-09-07, which made the feature inert: load is read
+// from the daemon, ordinary commands run without a persistent one, so the idle branch was
+// the one every real redundant gate took.
 func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_LEVEL", "0")

@@ -215,23 +215,19 @@ func runCut(args []string) error {
 		return err
 	}
 
-	// The artifacts are hashed BEFORE the changelog is read, because an already-cut
-	// version has to be recognised without consuming anything: on a rerun [Unreleased]
-	// is empty (this call emptied it) and the parse below would fail first, reporting a
-	// missing section when the truth is that the work is already done.
+	// Ordering matters: the artifacts are hashed before the changelog is read, so an
+	// already-cut version is recognised without consuming anything. On a rerun
+	// [Unreleased] is empty - this call emptied it - and the parse below would otherwise
+	// fail first, reporting a missing section when the work is simply already done.
 	//
-	// A publish job is a sequence of steps and any of them can fail after this one
-	// succeeds - v0.4.3 died two steps later on a missing pnpm, and the rerun that
-	// should have fixed it could not get past this function. So a second cut of a
-	// version whose manifest already names exactly these artifacts converges instead of
-	// refusing. Immutability is kept where it means something: DIFFERENT bytes under a
-	// tag that already shipped is a conflict no rerun may paper over.
+	// A rerun whose manifest names exactly these artifacts converges, because a publish
+	// job can fail at any later step and must be resumable. DIFFERENT bytes under a
+	// shipped tag stay a conflict.
 	if cut, err := os.ReadFile(outPath); err == nil {
 		var prev ReleaseManifest
 		if err := yaml.Unmarshal(cut, &prev); err != nil {
-			// Unreadable is not the same as absent. Convergence needs to compare what is
-			// there, and a file that will not parse cannot be compared - so it keeps the
-			// old refusal rather than being treated as a fresh cut and overwritten.
+			// Unreadable is not absent: convergence has to compare what is there, and a
+			// file that will not parse is refused rather than overwritten.
 			return fmt.Errorf("%s already exists but does not parse as a manifest, so this cut cannot "+
 				"tell a rerun from a rebuild: %w", outPath, err)
 		}
@@ -788,12 +784,11 @@ func scanReleaseArtifacts(dir, version string) ([]ReleaseArtifact, error) {
 }
 
 // artifactDiff describes how a committed manifest's artifacts differ from a fresh scan,
-// or "" when they name the same bytes. The report lists every disagreement rather than
-// the first: a rerun that finds one mismatched digest has almost certainly rebuilt all
-// of them, and the count is what tells the reader which of those two it is.
+// or "" when they name the same bytes. It reports every disagreement rather than the
+// first, because one mismatched digest and all of them mean different things.
 //
-// Only the identity fields are compared. Date moves on a rerun and says nothing about
-// the bytes, and the notes cannot be recomputed once [Unreleased] is empty.
+// Only the identity fields are compared: Date moves on a rerun and says nothing about the
+// bytes, and the notes cannot be recomputed once [Unreleased] is empty.
 func artifactDiff(committed, scanned []ReleaseArtifact) string {
 	key := func(xs []ReleaseArtifact) map[string]ReleaseArtifact {
 		m := make(map[string]ReleaseArtifact, len(xs))

@@ -133,11 +133,9 @@ fun snippet(body: str) > str {
     return body.sub(0, len: 200) + "...";
 }
 
-// cache_warn reports a step of the cache protocol that did not do what the contract
-// says. The contract returns a bare bool, so magus can only ever say "did not store
-// artifact" - which is what let a total upload failure run unnoticed across every main
-// push for days, while the summary line read `0 published, 2 failed` and named no cause.
-// The spell owns this protocol, so the spell is the only layer that can name the step.
+// cache_warn names a protocol step that did not do what the contract says. The contract
+// returns a bare bool, so magus can only report "did not store artifact"; this spell owns
+// the protocol and is the only layer that can say which step failed.
 fun cache_warn(step: str, detail: str) > void {
     std\print("magus:notice:github-actions cache: {step}: {detail}");
 }
@@ -145,10 +143,9 @@ fun cache_warn(step: str, detail: str) > void {
 // get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
 // true on a hit (dest written), false on a miss or when not running under Actions.
 //
-// A miss and a FAILURE both return false, because the contract has no third answer, and
-// the caller counts a false as a miss. So every error here is announced before it is
-// flattened - otherwise a service that rejects every read is indistinguishable from a
-// cold cache, which is exactly how `0 restored, 0 failed` read as normal.
+// A miss and a FAILURE both return false - the contract has no third answer - so every
+// error is announced before it is flattened. Otherwise a service rejecting every read is
+// indistinguishable from a cold cache.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};

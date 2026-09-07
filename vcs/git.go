@@ -961,16 +961,11 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 }
 
 // registeredDriver returns the command currently registered as the magus merge driver.
-// ok is false when nothing is registered, and the six predicates below may only be asked
-// about a command when it is true - each of them reads an executable path out of the
-// registration, and every one of them answers the wrong thing about "".
+// ok is false when nothing usable is registered; the predicates below read an executable
+// path out of the command and must not be asked about "".
 //
-// The emptiness is reported rather than encoded in the string because git spells two
-// different states the same way: `config` exits non-zero with no output when the key is
-// absent, and exits zero with no output when the key is set to the empty value. Both are
-// unusable, so ok folds them together deliberately - but a caller reading `== ""` was
-// reconstructing that judgment at each site, and getting it right there is not something
-// the type was making it do.
+// ok folds together the two states git spells identically: `config` exits non-zero with
+// no output for an absent key, and zero with no output for a key set to the empty value.
 func (v gitVCS) registeredDriver(ctx context.Context, root string) (cmd string, ok bool) {
 	out, err := gitExec(ctx, "-C", root, "config", "merge.magus.driver").Output()
 	if err != nil {
