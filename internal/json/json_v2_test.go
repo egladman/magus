@@ -1,5 +1,3 @@
-//go:build goexperiment.jsonv2
-
 package json
 
 import (
@@ -31,4 +29,20 @@ func TestMarshalKeepsNilCollectionsNull(t *testing.T) {
 	}{})
 	require.NoError(t, err)
 	assert.Equal(t, `{"items":null,"attrs":null}`, string(b))
+}
+
+// TestMarshalLeavesHTMLSignificantBytesAlone is the assertion the removed v1 fallback
+// would have failed, and the one nothing made before: v1's Marshal rewrites <, > and & to
+// their \u00XX form and v2 writes them as typed.
+//
+// It reads as a triviality about three characters. It is not - it is the byte-for-byte
+// contract for everything this package writes, and the two spellings are how the v0.4.3
+// release index shipped 336 lines of gen/knowledge-graph.json that the next gate read as
+// drift with no source change behind it. Every heading in the doc graph carrying a `>` is
+// one of these, and docs/gen/public/release/index.json is signed over exactly these bytes.
+func TestMarshalLeavesHTMLSignificantBytesAlone(t *testing.T) {
+	b, err := Marshal(map[string]string{"label": "magus query output <ref> & more"})
+	require.NoError(t, err)
+	assert.Equal(t, `{"label":"magus query output <ref> & more"}`, string(b),
+		"the encoder must not depend on how the binary was built")
 }

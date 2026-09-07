@@ -42,10 +42,9 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown
 ENV CGO_ENABLED=1
-# Enable the experimental encoding/json/v2 codec for faster JSON marshaling.
-# The build tag goexperiment.jsonv2 is set automatically by the toolchain when
-# this variable is present; the internal/util JSON shim falls back to v1
-# if GOEXPERIMENT is unset, so local builds without this variable still work.
+# Required, not an optimization: internal/json is v2-only, so a build without this fails
+# at internal/json/requires_jsonv2.go naming the variable. It used to fall back to v1, and
+# the two encoders disagreed on the bytes of every generated file.
 ENV GOEXPERIMENT=jsonv2
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
