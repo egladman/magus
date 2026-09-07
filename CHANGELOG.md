@@ -6,6 +6,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A release whose publish step fails can be finished without rewriting the tag.** Cutting
+  the manifest is idempotent: a second cut of a version whose manifest already names exactly
+  the artifacts on disk reports what is there and leaves it untouched, instead of refusing
+  because the manifest exists and the changelog it consumed is now empty. Different bytes
+  under a shipped tag still fail, naming every digest that moved, and a manifest that will
+  not parse is still refused rather than overwritten. The `Release index` workflow also takes
+  a tag, cutting from the assets the release ALREADY published so the digests describe what
+  people can download rather than a rebuild, and verifying them against the published
+  SHA256SUMS before hashing anything into a manifest.
+- **Both jobs that publish the release index install the Node toolchain.** `release-index`
+  regenerates the docs - the cut rewrites CHANGELOG.md and docs/changelog.md derives from it
+  - and that regeneration execs pnpm, which neither job had. v0.4.3 built and signed six
+  binaries and then died there, and the manual workflow that exists to recover a failed
+  publish had the same gap, so it could not.
+- **Generated output no longer depends on how the binary was built.** `internal/json` was a
+  build-tag shim whose two arms disagreed: v1 escapes the three HTML-significant characters
+  to their `\u00XX` form and v2 writes them as typed. magus now requires
+  `GOEXPERIMENT=jsonv2` and a build without it stops at a constant naming the variable. The
+  bootstrap build in `setup-magus` sets it itself rather than reading whatever the calling
+  workflow exported, which is how one release published 336 lines of a generated file in the
+  other spelling.
+- **A failed remote-cache exchange says which step failed.** The GitHub Actions cache spell
+  returned a bare `false` for five different failures, so magus could only report `did not
+  store artifact`; a read that the service rejected was indistinguishable from a cache miss.
+  Each step now names itself and its status.
+- `magus doctor` reports an unregistered merge driver from an explicit boolean rather than an
+  empty command string.
+
 ## [v0.4.3] - 2026-09-06
 
 See the full changelog at
