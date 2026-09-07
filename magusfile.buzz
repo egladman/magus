@@ -186,8 +186,12 @@ magus\project({
         // you only run it after an edit: 16 runs, 0 cached, 2672s (MGS1009). Declaring it
         // stops paying to hash the tree for a key that cannot hit, and closes a hazard - a
         // hit would skip every member, and ci's key is NOT a superset of theirs, since test
-        // reads console files the root baseline does not carry. Members cache individually,
-        // which is where the replay belongs.
+        // reads console files the root baseline does not carry.
+        //
+        // Members cache individually only when DISPATCHED. Reached through ctx.needs they
+        // run inline in the VM (runBuzzDependencies), never becoming cache steps, so a
+        // shard that dispatches only `ci` mints no cacheable step at all - which is why
+        // the remote cache publishes nothing from this project. See MGS1009.
         "ci": {
             "skip_cache": "composes the gates and reads nothing itself; its key is the whole tree, so it can never replay",
             "timeout": "45m",
