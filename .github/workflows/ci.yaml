@@ -403,6 +403,46 @@ jobs:
         with:
           offer-fix-label: 'true'
 
+  # One check name a branch rule can require, standing for the whole run.
+  #
+  # Nothing else here can do that job. `magus report` looks like the obvious candidate and
+  # is the wrong one: ci-outcome writes a summary and never exits non-zero, so report is
+  # GREEN on a red run. The shards are the real verdict, but their check names come from a
+  # matrix the plan sizes at run time, so requiring "magus shard 1" blocks every pull
+  # request whose plan needed only one.
+  #
+  # It exists because main required no status check at all: six of fourteen pull requests
+  # merged before their CI finished, and one of those runs then failed, with the main-push
+  # run its only completed verdict.
+  gate:
+    name: ci gate
+    needs: [plan, ci]
+    # always(), or a skipped or failed dependency would skip this job too - and a required
+    # check that never reports blocks the pull request instead of failing it, which reads
+    # as an infrastructure problem rather than a red build.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require the plan and every shard to have passed
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          CI_RESULT: ${{ needs.ci.result }}
+        run: |
+          set -euo pipefail
+          if [ "$PLAN_RESULT" != "success" ]; then
+            echo "::error::plan did not pass (${PLAN_RESULT}); nothing downstream is trustworthy"
+            exit 1
+          fi
+          # skipped is a pass: an inherited verdict plans an empty shard matrix on purpose,
+          # and that is the gate_inherit feature working rather than a run that did nothing.
+          case "$CI_RESULT" in
+            success|skipped) echo "shards: ${CI_RESULT}" ;;
+            *) echo "::error::shards did not pass (${CI_RESULT})"; exit 1 ;;
+          esac
+
   report:
     # One job for everything that runs AFTER the shards: the run summary always, and the
     # history merge only where there is a history to keep. They shared a checkout, a magus

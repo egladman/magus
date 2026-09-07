@@ -520,6 +520,29 @@ func fileFindFires(cmds []guardCommand) bool {
 	})
 }
 
+// ciWatchFires reports a gh invocation that BLOCKS until a CI run reaches a terminal
+// state: `gh run watch`, and the --watch form of `gh run view` and `gh pr checks`.
+//
+// It judges the parsed command rather than the raw line so an env prefix, a wrapper, or a
+// --watch that belongs to some other tool cannot change the verdict. `gh run view --log`
+// and a bare `gh pr checks` read a result that already exists and are untouched: what this
+// rule is about is the WAITING, not the reading.
+func ciWatchFires(cmds []guardCommand) bool {
+	return slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		if path.Base(c.Name) != "gh" {
+			return false
+		}
+		ops := operands(c.Args, "")
+		if len(ops) >= 2 && ops[0] == "run" && ops[1] == "watch" {
+			return true
+		}
+		if !hasFlag(c.Args, 0, "watch") {
+			return false
+		}
+		return len(ops) >= 2 && (ops[0] == "run" && ops[1] == "view" || ops[0] == "pr" && ops[1] == "checks")
+	})
+}
+
 // docReaders are the commands that read or search a file's text.
 var docReaders = map[string]bool{
 	"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true,

@@ -112,14 +112,14 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 		return nil
 	}
 	finding, redundant := g.finding(ctx, disabled)
-	var saturated bool
+	// Probed for the message, not for the decision: a refusal should say what the machine
+	// was doing, but load stopped deciding anything when redundancy alone became enough.
 	pool := "not probed"
 	if redundant && !disabled {
-		saturated, pool = gatePoolProbe(ctx)
+		_, pool = gatePoolProbe(ctx)
 	}
 	facts := internalci.GateFacts{
 		Redundant: redundant,
-		Saturated: saturated,
 		Forced:    disabled,
 		Nested:    runPkg.CurrentLevel() > 0,
 	}
@@ -127,7 +127,7 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 	case internalci.GateRefuse:
 		g.recordDeferral(ctx, finding.rec)
 		return gateRefusal{types.DiagnosticErrorf(types.RedundantGateDeferred,
-			"not running the %s gate for branch %s: it is redundant and this machine's build pool is saturated.\n%s\n  machine pool: %s\n  override: pass --no-redundancy-check to run it here anyway\n  alternative: push; the pull request runs the identical check",
+			"not running the %s gate for branch %s: it re-verifies a gate that already passed.\n%s\n  machine pool: %s\n  override: pass --no-redundancy-check to run it here anyway\n  alternative: push; the pull request runs the identical check",
 			g.target, g.ref, g.renderFinding(finding), pool)}
 	case internalci.GateAdvise:
 		fmt.Fprintf(os.Stderr,

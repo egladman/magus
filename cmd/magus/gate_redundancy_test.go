@@ -113,8 +113,13 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	require.Error(t, g.evaluate(context.Background(), false), "still refuses after its own deferral record")
 }
 
-// TestGateEvaluateAdvisesWhenIdle: the same finding on an idle pool runs.
-func TestGateEvaluateAdvisesWhenIdle(t *testing.T) {
+// TestGateEvaluateRefusesWhenIdle: the same finding on an IDLE pool also refuses.
+//
+// This asserted the opposite until 2026-09-07, and that is what made the whole feature
+// inert: load is read from the daemon, ordinary commands run without a persistent one, so
+// the idle branch was the one every real redundant gate took. It printed an advisory and
+// ran the duplicate - seven times in one session, about 17 minutes of wall clock.
+func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
@@ -122,7 +127,11 @@ func TestGateEvaluateAdvisesWhenIdle(t *testing.T) {
 	stubPool(t, false)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
-	assert.NoError(t, g.evaluate(context.Background(), false))
+	err := g.evaluate(context.Background(), false)
+	require.Error(t, err, "an idle machine is not a reason to re-verify a passed gate")
+	assert.Contains(t, err.Error(), "re-verifies a gate that already passed",
+		"the refusal names redundancy, not load, as its reason")
+	assert.Contains(t, err.Error(), "--no-redundancy-check", "and names the override")
 }
 
 // TestGateEvaluateInertWithoutRecord: the first gate on a branch always runs,

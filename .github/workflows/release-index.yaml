@@ -16,6 +16,14 @@ name: Release index
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Recover a release whose publish job failed after building: cut its manifest from
+          the assets ALREADY PUBLISHED under this tag (e.g. v0.4.3). Leave empty to re-sign
+          the index from the manifests already committed, which is the ordinary case.
+        required: false
+        default: ''
 
 # The same GOEXPERIMENT ci.yaml sets, because this job REGENERATES committed output and
 # the encoder is part of what it writes: v1 escapes the three HTML-significant characters
@@ -59,9 +67,43 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
+      # release.yaml cuts the manifest one step before it publishes the index, so a failure
+      # in between - v0.4.3 died on a missing pnpm - leaves the tag built and published with
+      # no manifest anywhere: the cut ran on the runner and went away with it. Rerunning the
+      # release job cannot fix that, because a rerun executes the workflow file from the
+      # TAG's tree, which is the tree that lacks whatever fix was just merged. That left
+      # rewriting a published tag as the only apparent exit, and rebuilding binaries under a
+      # tag people can already download is not one.
+      #
+      # So the cut is available here too, against the assets the release ALREADY published.
+      # The digests then describe what people can actually download rather than a rebuild,
+      # which is the property a rebuild cannot give at any price.
+      #
+      # The tag rides the environment and is never interpolated into the command, as in
+      # release.yaml. runCut is idempotent, so a rerun of THIS job converges rather than
+      # tripping over the manifest it wrote.
+      - name: Cut the manifest from a published release
+        if: inputs.tag != ''
+        env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --dir dist --clobber
+          # Verify before hashing anything into a manifest. A partial download hashes
+          # perfectly well and would pin digests that match nothing, in the one file whose
+          # job is telling a client what it may fetch. SHA256SUMS carries a `version:`
+          # header that is not a checksum line, so it is stripped rather than passed to a
+          # checker that would reject the file for it.
+          grep -v '^version:' dist/SHA256SUMS > "$RUNNER_TEMP/sums"
+          (cd dist && sha256sum -c "$RUNNER_TEMP/sums")
+          go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases
+          go run ./cmd/magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
+          rm -rf dist
+
       - name: Publish the release index
         env:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REASON: a manual refresh
+          REASON: ${{ inputs.tag != '' && format('recovering the {0} release', inputs.tag) || 'a manual refresh' }}
         run: magus run release-index:cd --no-default-charms -- "$REASON"

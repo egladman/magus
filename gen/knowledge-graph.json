@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5255,
-  "edge_count": 9366,
+  "node_count": 5257,
+  "edge_count": 9367,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -4808,7 +4808,7 @@
         "role": "doc",
         "section": "reference",
         "tags": "MGS3010,ci,gate,redundancy,admission,daemon,worktrees,exit 75,no-redundancy-check,gate_low_risk",
-        "title": "MGS3010: redundant gate deferred under load"
+        "title": "MGS3010: redundant gate deferred"
       }
     },
     {
@@ -6363,6 +6363,16 @@
       "source": "CHANGELOG.md#changed-1",
       "attrs": {
         "anchor": "changed-1",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:CHANGELOG.md#changed-10",
+      "kind": "docsection",
+      "label": "Changed",
+      "source": "CHANGELOG.md#changed-10",
+      "attrs": {
+        "anchor": "changed-10",
         "level": "3"
       }
     },
@@ -8323,6 +8333,16 @@
       "source": "docs/changelog.md#changed-1",
       "attrs": {
         "anchor": "changed-1",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/changelog.md#changed-10",
+      "kind": "docsection",
+      "label": "Changed",
+      "source": "docs/changelog.md#changed-10",
+      "attrs": {
+        "anchor": "changed-10",
         "level": "3"
       }
     },
@@ -27307,12 +27327,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "id": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred",
       "kind": "docsection",
-      "label": "MGS3010: redundant gate deferred under load",
-      "source": "docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "label": "MGS3010: redundant gate deferred",
+      "source": "docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred",
       "attrs": {
-        "anchor": "mgs3010-redundant-gate-deferred-under-load",
+        "anchor": "mgs3010-redundant-gate-deferred",
         "level": "1"
       }
     },
@@ -68476,15 +68496,7 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/codes/sandbox/MGS3010.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/MGS3010.md",
-      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -79700,6 +79712,14 @@
     },
     {
       "source": "docsection:CHANGELOG.md#unreleased",
+      "target": "docsection:CHANGELOG.md#changed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "docsection:CHANGELOG.md#unreleased",
       "target": "docsection:CHANGELOG.md#fixed",
       "relation": "contains",
       "confidence": "extracted",
@@ -79716,7 +79736,7 @@
     },
     {
       "source": "docsection:CHANGELOG.md#v010---2026-07-05",
-      "target": "docsection:CHANGELOG.md#changed-9",
+      "target": "docsection:CHANGELOG.md#changed-10",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -79796,14 +79816,6 @@
     },
     {
       "source": "docsection:CHANGELOG.md#v042---2026-09-03",
-      "target": "docsection:CHANGELOG.md#changed-1",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "docsection:CHANGELOG.md#v042---2026-09-03",
       "target": "docsection:CHANGELOG.md#changed-2",
       "relation": "contains",
       "confidence": "extracted",
@@ -79853,6 +79865,14 @@
     {
       "source": "docsection:CHANGELOG.md#v042---2026-09-03",
       "target": "docsection:CHANGELOG.md#changed-8",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "docsection:CHANGELOG.md#v042---2026-09-03",
+      "target": "docsection:CHANGELOG.md#changed-9",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -79940,7 +79960,7 @@
     },
     {
       "source": "docsection:CHANGELOG.md#v043---2026-09-06",
-      "target": "docsection:CHANGELOG.md#changed",
+      "target": "docsection:CHANGELOG.md#changed-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -81148,6 +81168,14 @@
     },
     {
       "source": "docsection:docs/changelog.md#unreleased",
+      "target": "docsection:docs/changelog.md#changed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "docsection:docs/changelog.md#unreleased",
       "target": "docsection:docs/changelog.md#fixed",
       "relation": "contains",
       "confidence": "extracted",
@@ -81164,7 +81192,7 @@
     },
     {
       "source": "docsection:docs/changelog.md#v010---2026-07-05",
-      "target": "docsection:docs/changelog.md#changed-9",
+      "target": "docsection:docs/changelog.md#changed-10",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -81244,14 +81272,6 @@
     },
     {
       "source": "docsection:docs/changelog.md#v042---2026-09-03",
-      "target": "docsection:docs/changelog.md#changed-1",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "docsection:docs/changelog.md#v042---2026-09-03",
       "target": "docsection:docs/changelog.md#changed-2",
       "relation": "contains",
       "confidence": "extracted",
@@ -81301,6 +81321,14 @@
     {
       "source": "docsection:docs/changelog.md#v042---2026-09-03",
       "target": "docsection:docs/changelog.md#changed-8",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "docsection:docs/changelog.md#v042---2026-09-03",
+      "target": "docsection:docs/changelog.md#changed-9",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -81388,7 +81416,7 @@
     },
     {
       "source": "docsection:docs/changelog.md#v043---2026-09-06",
-      "target": "docsection:docs/changelog.md#changed",
+      "target": "docsection:docs/changelog.md#changed-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -94699,7 +94727,7 @@
       "provenance": "docs/reference/codes/sandbox/MGS3009.md"
     },
     {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred",
       "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#configuring-the-prose-class",
       "relation": "contains",
       "confidence": "extracted",
@@ -94707,7 +94735,7 @@
       "provenance": "docs/reference/codes/sandbox/MGS3010.md"
     },
     {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred",
       "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#resolution",
       "relation": "contains",
       "confidence": "extracted",
@@ -94715,7 +94743,7 @@
       "provenance": "docs/reference/codes/sandbox/MGS3010.md"
     },
     {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred",
       "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#see-also",
       "relation": "contains",
       "confidence": "extracted",
@@ -94723,7 +94751,7 @@
       "provenance": "docs/reference/codes/sandbox/MGS3010.md"
     },
     {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred-under-load",
+      "source": "docsection:docs/reference/codes/sandbox/MGS3010.md#mgs3010-redundant-gate-deferred",
       "target": "docsection:docs/reference/codes/sandbox/MGS3010.md#why",
       "relation": "contains",
       "confidence": "extracted",
