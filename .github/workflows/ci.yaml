@@ -21,13 +21,20 @@ on:
 # On a PR the newest push supersedes the ones before it, so cancelling is right: the only
 # verdict anyone acts on is the one for the head commit.
 #
-# On main it is WRONG, and silently so. github.ref is refs/heads/main for every push, so
-# one group holds them all and each merge cancelled the previous merge's run - two merges
-# close together and the first one was never validated at all. That is how main comes to
-# carry generated output nothing regenerates, and the bill lands on whoever opens the next
-# pull request. Every commit on main gets its own verdict.
+# On main it is WRONG, and silently so. Every commit on main gets its own verdict.
+#
+# cancel-in-progress: false was supposed to buy that and does not. It protects the RUNNING
+# run; GitHub queues at most ONE run per group, so a third merge arriving cancels the
+# second while it is still pending. Measured 2026-09-07: 7 of the last 25 main runs
+# cancelled against 15 succeeded, every cancellation within a minute of being created.
+# A commit merged before its pull-request checks finish AND whose main run is cancelled
+# has no verdict from either side, which is how a red change reached main in #175.
+#
+# So the GROUP is what changes: main pushes key on the commit, giving each its own group so
+# they never contend. Pull requests keep the ref, because there supersession is the point -
+# the only verdict anyone acts on is the head commit's.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
