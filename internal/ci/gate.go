@@ -2,14 +2,15 @@
 // green gate already verified, so the CLI can defer it when the machine is
 // loaded instead of queuing a duplicate.
 //
-// The decision has three inputs, each computed by the caller: whether an
-// identical-or-equivalent gate already passed for this branch (Redundant),
-// whether the machine admission pool would queue this run (Saturated), and
-// whether the caller asked to skip the check (Forced). A redundant gate under
-// load is REFUSED with exit 75, the same fast-refusal shape MAGUS_NO_WAIT
-// uses; a redundant gate on an idle machine runs anyway behind an advisory,
-// because the daemon holding the load signal is an accelerant, never a
-// capability gate. A gate that is not redundant always runs, silently.
+// The decision has two inputs, each computed by the caller: whether an
+// identical-or-equivalent gate already passed for this branch (Redundant), and
+// whether the caller asked to skip the check (Forced). A redundant gate is
+// REFUSED with exit 75, the same fast-refusal shape MAGUS_NO_WAIT uses. A gate
+// that is not redundant always runs, silently.
+//
+// Machine load used to be a third input and is no longer one; see DecideGate.
+// The pool state is still probed and printed, because a refusal should say what
+// the machine was doing, but it decides nothing.
 //
 // "Equivalent" means every path changed since the green gate's commit falls in
 // one of exactly three low-risk classes: generated output (declared output
@@ -58,8 +59,6 @@ type GateFacts struct {
 	// Redundant: a green gate is on record for this branch with an identical
 	// input fingerprint, or with a delta that classifies entirely low-risk.
 	Redundant bool
-	// Saturated: the machine admission pool would queue this run.
-	Saturated bool
 	// Forced: the caller passed the override flag; the check is off.
 	Forced bool
 	// Nested: this magus runs under another one. It never refuses, because the
@@ -69,14 +68,33 @@ type GateFacts struct {
 
 // DecideGate is the decision matrix. It is a pure function so the matrix is
 // testable without a store, a daemon, or a repository.
+//
+// Redundancy alone refuses. A Saturated fact used to be required as well, and that made
+// the refusal unreachable in the case it was written for: the load reading comes from the
+// daemon, ordinary commands run without a persistent one, so an idle machine always fell
+// through to GateAdvise and ran the duplicate anyway. Measured 2026-09-07 in one session:
+// the advisory printed seven times, about 17 minutes of wall clock, and was ignored every
+// time - which is what an advisory that never escalates buys.
+//
+// Nothing about the redundancy finding needed the daemon. It is a recorded green gate for
+// this branch plus a delta in which EVERY path classified as generated output, prose, or a
+// comment-only edit; that is the same delta CONTRIBUTING already says to push rather than
+// re-gate. Saturation now only decides how loudly the refusal talks about queueing.
+//
+// The trade is deliberate and its cost lands on CI: refusing sends a first red to the pull
+// request instead of the laptop. That is the cheaper place for it - the same command on the
+// same tree, on a machine nobody is waiting at - and --force is one flag away when a caller
+// wants the local answer.
 func DecideGate(f GateFacts) GateDecision {
 	if f.Forced || !f.Redundant {
 		return GateRun
 	}
-	if f.Saturated && !f.Nested {
-		return GateRefuse
+	// Nested still never refuses: it reads its own ancestors' claims as load, so its
+	// view of the machine is the one reading that cannot be trusted to refuse on.
+	if f.Nested {
+		return GateAdvise
 	}
-	return GateAdvise
+	return GateRefuse
 }
 
 // PoolSaturated reports whether a new run would queue against the machine

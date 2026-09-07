@@ -244,13 +244,17 @@ const (
 	MachineBudgetExhausted DiagnosticCode = "MGS3009"
 	// RedundantGateDeferred is a ci gate magus did not start because an
 	// identical-or-equivalent gate already passed for this branch on this
-	// machine AND the machine admission pool would queue the run. It joins
-	// MGS3007/MGS3009 in the environment family: the workspace is fine, the
-	// machine's state is what changes the answer. On an idle machine the same
-	// finding is an advisory and the gate runs anyway.
+	// machine. It joins MGS3007/MGS3009 in the environment family: the workspace
+	// is fine, what already happened on this machine is what changes the answer.
 	//
-	// Exits 75 (EX_TEMPFAIL) like MGS3009: the same invocation is valid and
-	// runs once the pool frees, or immediately with the override flag.
+	// Machine load used to be required too, and that made this unreachable where
+	// it mattered: the load reading comes from the daemon, ordinary commands run
+	// without a persistent one, so an idle machine always advised and ran the
+	// duplicate anyway. Redundancy alone defers now; a nested run still only
+	// advises, because it counts its own ancestors' claims as load.
+	//
+	// Exits 75 (EX_TEMPFAIL) like MGS3009: the same invocation is valid and runs
+	// once the branch has a real delta, or immediately with the override flag.
 	RedundantGateDeferred DiagnosticCode = "MGS3010"
 	// TargetCeilingExceeded is a target magus cancelled because it outran the timeout
 	// its magusfile declared. It joins MGS3007/MGS3009/MGS3010 in the environment
