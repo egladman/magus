@@ -1,0 +1,431 @@
+version: v0.4.3
+date: "2026-09-06"
+notes:
+    added:
+        - |-
+          **A pull request inherits its last green run's verdict when the delta is low-risk.**
+          `magus affected ci --plan` asks the wired CI provider for the newest green run of the
+          same workflow on this branch - `magus\ci.provider(github)` wires it, and the github
+          spell's `last_green_run` answers under Actions and null everywhere else, so a laptop
+          plan is unchanged - then classifies every path changed since that run's head commit
+          through the same classifier the local redundancy check uses: generated output, prose,
+          comment-only edits. When nothing classifies as code the plan emits an empty shard
+          matrix and an `inherit` block, and ci.yaml's shard fan-out and advisor short-circuit
+          on that one plan output; plan and report always run. The verdict is GREEN and never a
+          silent skip: the run page carries a notice annotation, and the job summary a table
+          naming the inherited run, its head commit, and every changed path with the
+          declaration or mechanism that classified it. A merge anyone pushed into the range
+          re-runs the fan-out - the provider's own synthetic pull-request head merge does not,
+          since the classification already diffs the tree it produced - and every other
+          unanswerable case (no provider, no green run, an unreadable range) plans exactly as
+          it did before. `gate_inherit = false` in `magus.project` turns it off workspace-wide.
+        - |-
+          **A target can declare how long it may run.** `magus.project`'s target policies take
+          a `timeout`, a Go duration string spelled the way `magus.yaml`'s workspace-wide
+          `target_timeout` already is - `"security": {"timeout": "15m"}`. A target that outruns
+          its ceiling has its process tree killed and FAILS with MGS3011, naming the target,
+          the ceiling, how long it ran, and the log its output was captured to; a timeout is
+          never a skip and never a pass. The deadline rides the context, so it also bounds
+          every target reached through `ctx.needs`, and a composed target that declares its own
+          tighter ceiling is bounded by that one first - so the failure names the target that
+          hung rather than the gate that ran it. Nothing is inherited implicitly and nothing is
+          inferred: an undeclared target is unbounded exactly as before, and where both a
+          workspace-wide and a per-target figure exist the tighter one wins. `magus doctor`
+          keeps the declaration honest against the durations magus recorded (MGS1032), in both
+          directions: a ceiling a real run has crowded is about to fail a build that was fine,
+          and one sitting a hundred times above every run on record would hold a hung target's
+          locks for most of a day. This workspace declares two: `security` at 15m against a
+          worst recorded run of 44s, and `ci` at 45m against 6m8s.
+        - |-
+          **A target can declare that its failures are volatile, and say why.** `magus.project`'s
+          target policies take a `retry_on_volatile` reason string -
+          `"integration": {"retry_on_volatile": "talks to a shared broker that drops a connection under load"}` -
+          which routes that target's failures through volatility detection, so one magus predicts
+          is volatile is rerun once instead of failing the run. Previously this could only be set
+          through the Go registration API, so no magusfile could reach it. A bare `true` is a load
+          error, for the reason `skip_cache`'s and `drift_reason`'s are: asking magus to rerun a red
+          target until it goes green claims the target fails without the code being wrong, and a
+          bare bool cannot tell a suite somebody measured from a bug they stopped chasing. The
+          policy is visible wherever target policy already is - `magus describe target`, the Buzz
+          `Target` object, and the JSON record.
+        - |-
+          **A redundant ci gate defers to the pull request when the machine is loaded.** When a
+          green gate is already recorded for this branch and everything changed since falls in
+          a low-risk class - generated output, prose (magus ships markdown globs;
+          `magus.project`'s `gate_low_risk` replaces or empties them), or comment-only edits
+          (every language the same way: `mgs_getLanguage` returns a typed `Language` whose
+          `extensions` and `comments` declare the syntax, one string-aware stripper consumes
+          it, directive comments are always code) - a saturated machine refuses the run with
+          MGS3010
+          and exit 75, and an idle one prints the same finding and runs anyway. A deferral is
+          never a success: the refusal names the green gate's run ref, classifies every changed
+          path with the declaration that classified it, shows the pool state, and persists as a
+          record; `--no-redundancy-check` forces the run. A merge commit in the range always
+          re-gates, and a language without a declaration is always code. The per-repository
+          gate history lives in the sessions store, shared across worktrees. `release-build:immutable`
+          and `release-sign:immutable` refuse to replace an existing archive, checksum sidecar,
+          or manifest signature instead of overwriting it, so a re-run of the release process
+          cannot silently replace a published artifact. The default stays overwrite, which the
+          publish job's re-run path relies on; the rule is `releaser\overwriteRefusal`.
+        - |-
+          **A stall watchdog aborts a run that stops making progress.** An invocation holding
+          every selected project's lock is now watched from inside itself: if no target starts,
+          finishes, or writes a line of output for the stall window, the run fails with MGS3012
+          naming the last step that ran, how long it has been quiet, and its captured log. The
+          window is `stall_timeout` (`MAGUS_STALL_TIMEOUT`, `--stall-timeout`), 15 minutes by
+          default and off when negative. It is the complement of the ceilings above, not a
+          duplicate: a ceiling bounds a target that runs long and only one whose author
+          declared a bound, while this catches a process doing nothing at all, in work no
+          target declared. Output counts as progress, so a slow target that is still
+          printing never approaches the window, and the watchdog runs in-process because a
+          stall with no daemon up is exactly the case where nobody else is watching.
+    changed:
+        - |-
+          **The release-index publish flow is a magusfile target.** `.github/actions/release-index`
+          hand-rolled the branch, commit, push, and pull-request sequence in workflow shell;
+          `magus run release-index:cd -- "<reason>"` now owns the whole flow - build and sign
+          the index, regenerate the changelog's derived files across the root and docs
+          projects, answer "anything to publish?" through the vcs module, and open the pull
+          request - so release.yaml's tail and release-index.yaml are each one invocation and
+          the composite action is deleted. Without `cd` it rehearses locally, unsigned when
+          `MAGUS_SIGNING_KEY` is absent, and touches no branch.
+    fixed:
+        - |-
+          **A per-target policy the engine accepts no longer fails its own dry-run preview.**
+          The dry-run host validated `magus.project`'s `targets` policy against a hand-copied
+          list of recognized keys that had drifted to `skip_cache`, `exclusive` and `slots`,
+          so a magusfile setting `memory_mb`, `cache`, `drift` or `drift_reason` loaded fine
+          under `magus run` and was rejected as an unknown option by the Playground, the
+          editor diagnostics, and every other dry-run surface. Both the engine binding and the
+          dry-run host now reject against one shared table, `types.TargetPolicyKeys`, beside
+          the `magus.project` option table that got this treatment when the same drift bit the
+          project-level keys. A key added to the table reaches both consumers at once, and a
+          test per consumer reads the table and fails if either stops accepting a key in it.
+        - |-
+          **A typo inside a `tools` version window no longer passes the dry-run preview.** The
+          same divergence in the other direction: the dry-run host walked `magus.project`'s
+          `tools` map not at all, so `{"go": {"minn": "1.21"}}` was green in the Playground and
+          the dry-run preview and then failed the real run, where the engine has always
+          rejected an unrecognized bound key. The recognized keys are now one shared table,
+          `types.ToolBoundKeys`, and the dry-run host rejects against it entry by entry the way
+          the engine does, naming the bin and the two valid keys.
+        - |-
+          **One generate invocation settles a cross-project derivation chain.** The scheduler
+          now derives target-granular ordering from the declarations it already holds: when
+          one target's `ctx.writesFiles` globs intersect another's `ctx.readsFiles` or
+          sources and both run in one batch, the writer runs first, across projects and
+          across target names, which project-level `depends_on` cannot express. Where no step
+          order can honor an edge (two projects' generate chains writing into each other's
+          read sets, previously fixable only by hand-wiring a `ctx.needs`), the stale reader
+          re-runs once at the end of the batch, and only when its input's bytes actually
+          moved, so a settled tree re-runs nothing. Only targets that declare writes are
+          re-run this way, verifiers such as a security scan are not, and the settle pass
+          is accounted and watched like the batch itself, so a stalled re-run fails the
+          invocation loudly instead of holding the project locks in silence. A cycle among declared footprints
+          is not an error either: every project's routing index declares that it writes its
+          own `MAGUS.md` and reads its siblings', so the direction no schedule can honor is
+          dropped and settled afterwards like any other unorderable edge. Before this, a changelog
+          edit that was graph-visible needed a second `magus run generate` to land the edge
+          in the committed graph, and the release-index publish opened a born-red PR from
+          the gap.
+        - |-
+          **Work that runs outside the batch is accounted like a step in it.** The post-batch
+          settle pass dispatched its re-runs straight at the interpreter, so they held no
+          limiter slot, claimed nothing from the machine budget, joined no inflight set, and
+          produced no journal event: `magus status` reported 0 slots in use and nothing running
+          while the invocation still held every project lock and the run journal went stale.
+          Settle re-runs now go through the same admission a batch step passes - slots, the
+          machine claim `magus status` names by project and target, the inflight record a killed
+          run is reported from, a captured log and a journal result event with its own output
+          ref - so an off-batch re-run is visible to every observer that already watches the
+          batch, and a stalled one is legible instead of silent. The hardcoded ten-minute
+          ceiling the pass carried while it was invisible is gone with the invisibility: what
+          it still bounded was a settle making steady progress, on a figure nobody declared,
+          and a target that needs one now declares `timeout`.
+        - |-
+          **A rejected archive import no longer destroys the cache file it named.**
+          `magus config cache import` extracted each tar member directly at its final cache
+          path, so a concurrent process could replay a torn blob or manifest mid-import, and
+          a corrupt archive first truncated an existing valid CAS blob and then deleted it on
+          the hash mismatch, destroying a blob other manifests still referenced. Members now
+          stage through a unique same-directory temp file and rename into place only after
+          the size cap and content-hash check pass.
+        - |-
+          **A daemon no longer adopts runs from a binary built from different sources.** Every
+          modified-tree build of one commit stamps the same `-dirty` version string, so the
+          adoption identity gate matched byte-different binaries and a warm daemon executed
+          adopted runs with the code it loaded at start rather than the code just built:
+          generators then emitted stale output that the local drift gate blessed and CI
+          rejected. A modified-tree build's identity is now its executable file (resolved
+          path, size, mtime), captured at process start; a mismatch falls back to the
+          caller's own fresh binary, and a pre-fix daemon refuses fixed clients rather than
+          trusting them.
+        - |-
+          **Concurrent cache imports can no longer swap staged files under each other's
+          signatures.** The remote-artifact import staged its manifest and extras through fixed
+          temp names inside the machine-shared cache, so two processes importing the same entry
+          contended for one path: an importer could overwrite bytes a peer had already verified,
+          and the peer's rename then committed unverified content. Staging now goes through
+          unique temp names with same-directory renames, and extras dropped by a trust decision
+          are removed instead of accumulating.
+        - |-
+          **A composed target's declared in-place edit no longer trips its composer.** A target
+          run through `ctx.needs` executes inside the composing step's fingerprint window, and
+          the window carried only the composer's own `ctx.modifiesExistingFiles` declarations,
+          so `generate` failed MGS4007 whenever `changelog-generate` actually changed
+          `CHANGELOG.md` and the workaround was to run the constituent standalone first. The
+          composer now inherits chained update declarations the way it already inherits chained
+          outputs.
+        - |-
+          **The release-index pull request arrives with its derived files regenerated.** The cut
+          rewrites `CHANGELOG.md`, but the bot's commit carried neither the knowledge graph nor
+          the docs changelog derived from it, so every index pull request opened failing its own
+          drift gate; the publish flow now regenerates and commits them alongside.
+        - |-
+          **`SHA256SUMS` is hex again.** Releases v0.1.0 through v0.3.0 shipped hex; an
+          upstream-parity change then made Buzz's `crypto.hash` return raw digest bytes, and the
+          sidecar writer, unchanged since v0.1.0, shipped v0.4.2's manifest as those bytes. That
+          broke every consumer at once: `sha256sum -c` per the verify docs, the install script's
+          64-hex-digit gate (so a `setup-magus` `prebuilt` pin fails its checksum and audit's
+          compat job goes red), and `magus self update`'s manifest parser. The sidecar now
+          writes `crypto\sha256File`'s lowercase hex, and the `describe module` hint claiming
+          `crypto.hash` covers `sha256_hex` is gone - that claimed equivalence is what wrote
+          the bug.
+        - |-
+          **The signed manifest carries the `version:` header self-update requires.**
+          `ParseManifest` refuses a manifest without one, and no release had ever emitted it,
+          so `magus self update` could not verify any published release, independent of the
+          hex defect. `release-sign` now prepends `version: <tag>` before signing; sha256sum(1)
+          skips the line, so the documented verify procedure is unaffected.
+        - |-
+          **The publish job survives being unable to open the release-index pull request.** The
+          branch push is the deliverable and container images gate on the job, so a refused
+          `gh pr create` (repository Actions settings can forbid it, and did for v0.4.2) now
+          warns with the branch URL instead of failing; the branch push is forced so a re-run
+          survives its own earlier push.
+body: |-
+    See the full changelog at
+    https://github.com/egladman/magus/compare/v0.4.2...v0.4.3
+
+    ### Added
+
+    - **A pull request inherits its last green run's verdict when the delta is low-risk.**
+      `magus affected ci --plan` asks the wired CI provider for the newest green run of the
+      same workflow on this branch - `magus\ci.provider(github)` wires it, and the github
+      spell's `last_green_run` answers under Actions and null everywhere else, so a laptop
+      plan is unchanged - then classifies every path changed since that run's head commit
+      through the same classifier the local redundancy check uses: generated output, prose,
+      comment-only edits. When nothing classifies as code the plan emits an empty shard
+      matrix and an `inherit` block, and ci.yaml's shard fan-out and advisor short-circuit
+      on that one plan output; plan and report always run. The verdict is GREEN and never a
+      silent skip: the run page carries a notice annotation, and the job summary a table
+      naming the inherited run, its head commit, and every changed path with the
+      declaration or mechanism that classified it. A merge anyone pushed into the range
+      re-runs the fan-out - the provider's own synthetic pull-request head merge does not,
+      since the classification already diffs the tree it produced - and every other
+      unanswerable case (no provider, no green run, an unreadable range) plans exactly as
+      it did before. `gate_inherit = false` in `magus.project` turns it off workspace-wide.
+    - **A target can declare how long it may run.** `magus.project`'s target policies take
+      a `timeout`, a Go duration string spelled the way `magus.yaml`'s workspace-wide
+      `target_timeout` already is - `"security": {"timeout": "15m"}`. A target that outruns
+      its ceiling has its process tree killed and FAILS with MGS3011, naming the target,
+      the ceiling, how long it ran, and the log its output was captured to; a timeout is
+      never a skip and never a pass. The deadline rides the context, so it also bounds
+      every target reached through `ctx.needs`, and a composed target that declares its own
+      tighter ceiling is bounded by that one first - so the failure names the target that
+      hung rather than the gate that ran it. Nothing is inherited implicitly and nothing is
+      inferred: an undeclared target is unbounded exactly as before, and where both a
+      workspace-wide and a per-target figure exist the tighter one wins. `magus doctor`
+      keeps the declaration honest against the durations magus recorded (MGS1032), in both
+      directions: a ceiling a real run has crowded is about to fail a build that was fine,
+      and one sitting a hundred times above every run on record would hold a hung target's
+      locks for most of a day. This workspace declares two: `security` at 15m against a
+      worst recorded run of 44s, and `ci` at 45m against 6m8s.
+    - **A target can declare that its failures are volatile, and say why.** `magus.project`'s
+      target policies take a `retry_on_volatile` reason string -
+      `"integration": {"retry_on_volatile": "talks to a shared broker that drops a connection under load"}` -
+      which routes that target's failures through volatility detection, so one magus predicts
+      is volatile is rerun once instead of failing the run. Previously this could only be set
+      through the Go registration API, so no magusfile could reach it. A bare `true` is a load
+      error, for the reason `skip_cache`'s and `drift_reason`'s are: asking magus to rerun a red
+      target until it goes green claims the target fails without the code being wrong, and a
+      bare bool cannot tell a suite somebody measured from a bug they stopped chasing. The
+      policy is visible wherever target policy already is - `magus describe target`, the Buzz
+      `Target` object, and the JSON record.
+    - **A redundant ci gate defers to the pull request when the machine is loaded.** When a
+      green gate is already recorded for this branch and everything changed since falls in
+      a low-risk class - generated output, prose (magus ships markdown globs;
+      `magus.project`'s `gate_low_risk` replaces or empties them), or comment-only edits
+      (every language the same way: `mgs_getLanguage` returns a typed `Language` whose
+      `extensions` and `comments` declare the syntax, one string-aware stripper consumes
+      it, directive comments are always code) - a saturated machine refuses the run with
+      MGS3010
+      and exit 75, and an idle one prints the same finding and runs anyway. A deferral is
+      never a success: the refusal names the green gate's run ref, classifies every changed
+      path with the declaration that classified it, shows the pool state, and persists as a
+      record; `--no-redundancy-check` forces the run. A merge commit in the range always
+      re-gates, and a language without a declaration is always code. The per-repository
+      gate history lives in the sessions store, shared across worktrees. `release-build:immutable`
+      and `release-sign:immutable` refuse to replace an existing archive, checksum sidecar,
+      or manifest signature instead of overwriting it, so a re-run of the release process
+      cannot silently replace a published artifact. The default stays overwrite, which the
+      publish job's re-run path relies on; the rule is `releaser\overwriteRefusal`.
+    - **A stall watchdog aborts a run that stops making progress.** An invocation holding
+      every selected project's lock is now watched from inside itself: if no target starts,
+      finishes, or writes a line of output for the stall window, the run fails with MGS3012
+      naming the last step that ran, how long it has been quiet, and its captured log. The
+      window is `stall_timeout` (`MAGUS_STALL_TIMEOUT`, `--stall-timeout`), 15 minutes by
+      default and off when negative. It is the complement of the ceilings above, not a
+      duplicate: a ceiling bounds a target that runs long and only one whose author
+      declared a bound, while this catches a process doing nothing at all, in work no
+      target declared. Output counts as progress, so a slow target that is still
+      printing never approaches the window, and the watchdog runs in-process because a
+      stall with no daemon up is exactly the case where nobody else is watching.
+
+    ### Changed
+
+    - **The release-index publish flow is a magusfile target.** `.github/actions/release-index`
+      hand-rolled the branch, commit, push, and pull-request sequence in workflow shell;
+      `magus run release-index:cd -- "<reason>"` now owns the whole flow - build and sign
+      the index, regenerate the changelog's derived files across the root and docs
+      projects, answer "anything to publish?" through the vcs module, and open the pull
+      request - so release.yaml's tail and release-index.yaml are each one invocation and
+      the composite action is deleted. Without `cd` it rehearses locally, unsigned when
+      `MAGUS_SIGNING_KEY` is absent, and touches no branch.
+
+    ### Fixed
+
+    - **A per-target policy the engine accepts no longer fails its own dry-run preview.**
+      The dry-run host validated `magus.project`'s `targets` policy against a hand-copied
+      list of recognized keys that had drifted to `skip_cache`, `exclusive` and `slots`,
+      so a magusfile setting `memory_mb`, `cache`, `drift` or `drift_reason` loaded fine
+      under `magus run` and was rejected as an unknown option by the Playground, the
+      editor diagnostics, and every other dry-run surface. Both the engine binding and the
+      dry-run host now reject against one shared table, `types.TargetPolicyKeys`, beside
+      the `magus.project` option table that got this treatment when the same drift bit the
+      project-level keys. A key added to the table reaches both consumers at once, and a
+      test per consumer reads the table and fails if either stops accepting a key in it.
+    - **A typo inside a `tools` version window no longer passes the dry-run preview.** The
+      same divergence in the other direction: the dry-run host walked `magus.project`'s
+      `tools` map not at all, so `{"go": {"minn": "1.21"}}` was green in the Playground and
+      the dry-run preview and then failed the real run, where the engine has always
+      rejected an unrecognized bound key. The recognized keys are now one shared table,
+      `types.ToolBoundKeys`, and the dry-run host rejects against it entry by entry the way
+      the engine does, naming the bin and the two valid keys.
+    - **One generate invocation settles a cross-project derivation chain.** The scheduler
+      now derives target-granular ordering from the declarations it already holds: when
+      one target's `ctx.writesFiles` globs intersect another's `ctx.readsFiles` or
+      sources and both run in one batch, the writer runs first, across projects and
+      across target names, which project-level `depends_on` cannot express. Where no step
+      order can honor an edge (two projects' generate chains writing into each other's
+      read sets, previously fixable only by hand-wiring a `ctx.needs`), the stale reader
+      re-runs once at the end of the batch, and only when its input's bytes actually
+      moved, so a settled tree re-runs nothing. Only targets that declare writes are
+      re-run this way, verifiers such as a security scan are not, and the settle pass
+      is accounted and watched like the batch itself, so a stalled re-run fails the
+      invocation loudly instead of holding the project locks in silence. A cycle among declared footprints
+      is not an error either: every project's routing index declares that it writes its
+      own `MAGUS.md` and reads its siblings', so the direction no schedule can honor is
+      dropped and settled afterwards like any other unorderable edge. Before this, a changelog
+      edit that was graph-visible needed a second `magus run generate` to land the edge
+      in the committed graph, and the release-index publish opened a born-red PR from
+      the gap.
+    - **Work that runs outside the batch is accounted like a step in it.** The post-batch
+      settle pass dispatched its re-runs straight at the interpreter, so they held no
+      limiter slot, claimed nothing from the machine budget, joined no inflight set, and
+      produced no journal event: `magus status` reported 0 slots in use and nothing running
+      while the invocation still held every project lock and the run journal went stale.
+      Settle re-runs now go through the same admission a batch step passes - slots, the
+      machine claim `magus status` names by project and target, the inflight record a killed
+      run is reported from, a captured log and a journal result event with its own output
+      ref - so an off-batch re-run is visible to every observer that already watches the
+      batch, and a stalled one is legible instead of silent. The hardcoded ten-minute
+      ceiling the pass carried while it was invisible is gone with the invisibility: what
+      it still bounded was a settle making steady progress, on a figure nobody declared,
+      and a target that needs one now declares `timeout`.
+    - **A rejected archive import no longer destroys the cache file it named.**
+      `magus config cache import` extracted each tar member directly at its final cache
+      path, so a concurrent process could replay a torn blob or manifest mid-import, and
+      a corrupt archive first truncated an existing valid CAS blob and then deleted it on
+      the hash mismatch, destroying a blob other manifests still referenced. Members now
+      stage through a unique same-directory temp file and rename into place only after
+      the size cap and content-hash check pass.
+    - **A daemon no longer adopts runs from a binary built from different sources.** Every
+      modified-tree build of one commit stamps the same `-dirty` version string, so the
+      adoption identity gate matched byte-different binaries and a warm daemon executed
+      adopted runs with the code it loaded at start rather than the code just built:
+      generators then emitted stale output that the local drift gate blessed and CI
+      rejected. A modified-tree build's identity is now its executable file (resolved
+      path, size, mtime), captured at process start; a mismatch falls back to the
+      caller's own fresh binary, and a pre-fix daemon refuses fixed clients rather than
+      trusting them.
+    - **Concurrent cache imports can no longer swap staged files under each other's
+      signatures.** The remote-artifact import staged its manifest and extras through fixed
+      temp names inside the machine-shared cache, so two processes importing the same entry
+      contended for one path: an importer could overwrite bytes a peer had already verified,
+      and the peer's rename then committed unverified content. Staging now goes through
+      unique temp names with same-directory renames, and extras dropped by a trust decision
+      are removed instead of accumulating.
+    - **A composed target's declared in-place edit no longer trips its composer.** A target
+      run through `ctx.needs` executes inside the composing step's fingerprint window, and
+      the window carried only the composer's own `ctx.modifiesExistingFiles` declarations,
+      so `generate` failed MGS4007 whenever `changelog-generate` actually changed
+      `CHANGELOG.md` and the workaround was to run the constituent standalone first. The
+      composer now inherits chained update declarations the way it already inherits chained
+      outputs.
+    - **The release-index pull request arrives with its derived files regenerated.** The cut
+      rewrites `CHANGELOG.md`, but the bot's commit carried neither the knowledge graph nor
+      the docs changelog derived from it, so every index pull request opened failing its own
+      drift gate; the publish flow now regenerates and commits them alongside.
+    - **`SHA256SUMS` is hex again.** Releases v0.1.0 through v0.3.0 shipped hex; an
+      upstream-parity change then made Buzz's `crypto.hash` return raw digest bytes, and the
+      sidecar writer, unchanged since v0.1.0, shipped v0.4.2's manifest as those bytes. That
+      broke every consumer at once: `sha256sum -c` per the verify docs, the install script's
+      64-hex-digit gate (so a `setup-magus` `prebuilt` pin fails its checksum and audit's
+      compat job goes red), and `magus self update`'s manifest parser. The sidecar now
+      writes `crypto\sha256File`'s lowercase hex, and the `describe module` hint claiming
+      `crypto.hash` covers `sha256_hex` is gone - that claimed equivalence is what wrote
+      the bug.
+    - **The signed manifest carries the `version:` header self-update requires.**
+      `ParseManifest` refuses a manifest without one, and no release had ever emitted it,
+      so `magus self update` could not verify any published release, independent of the
+      hex defect. `release-sign` now prepends `version: <tag>` before signing; sha256sum(1)
+      skips the line, so the documented verify procedure is unaffected.
+    - **The publish job survives being unable to open the release-index pull request.** The
+      branch push is the deliverable and container images gate on the job, so a refused
+      `gh pr create` (repository Actions settings can forbid it, and did for v0.4.2) now
+      warns with the branch URL instead of failing; the branch push is forced so a re-run
+      survives its own earlier push.
+artifacts:
+    - name: SHA256SUMS
+      platform: ""
+      size: "652"
+      sha256: ccbdf36b85ced70f6297ba586666730c207b39900e8fac0eeadbc84ef213dc9d
+    - name: SHA256SUMS.sig
+      platform: ""
+      size: "64"
+      sha256: 93703bf566a0e785f80c4e563789800c381748422d905ba604d60aeeac64b272
+    - name: magus_v0.4.3_darwin_amd64_static.tar.gz
+      platform: darwin/amd64
+      size: "15950305"
+      sha256: 333478bf0d158976ba56e2971f7c0924423def6deffb0662e34f18d3a34a11fe
+    - name: magus_v0.4.3_darwin_arm64_static.tar.gz
+      platform: darwin/arm64
+      size: "14700975"
+      sha256: 5c8fa89fffc7743f8bea05f0d982b15a4185bcdd5710564d66933a6e7ca2aff8
+    - name: magus_v0.4.3_linux_amd64_static.tar.gz
+      platform: linux/amd64
+      size: "15613693"
+      sha256: 5391ee14e3ee5914246a69088cd5f3d02b66f043db710f5108942b5f41b09bd8
+    - name: magus_v0.4.3_linux_arm64_static.tar.gz
+      platform: linux/arm64
+      size: "14123301"
+      sha256: 718b95250ec91e35823383bf88e916e5d150888c98a28f68c43dec50f50b5251
+    - name: magus_v0.4.3_windows_amd64_static.tar.gz
+      platform: windows/amd64
+      size: "15974442"
+      sha256: d973391ede40387aba969dee6dec0e281ec69c1a45b89557c50e6ba23bb3501a
+    - name: magus_v0.4.3_windows_arm64_static.tar.gz
+      platform: windows/arm64
+      size: "14238655"
+      sha256: 049cfc1224fad58f81b5bf524f55cee3283a5bdd91f0bf12895904f5502e0c8f
