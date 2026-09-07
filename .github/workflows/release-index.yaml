@@ -17,6 +17,16 @@ name: Release index
 on:
   workflow_dispatch:
 
+# The same GOEXPERIMENT ci.yaml sets, because this job REGENERATES committed output and
+# the encoder is part of what it writes: v1 escapes the three HTML-significant characters
+# to their \u00XX form and jsonv2 leaves them as typed, so one label differs in bytes
+# between the two. mise.toml carries the setting for a laptop, but mise-action runs with
+# env: false here as everywhere else, so nothing exports it to the steps - and v0.4.3's
+# index branch was published with 336 lines of gen/knowledge-graph.json in the v1 spelling,
+# which the next gate read as drift.
+env:
+  GOEXPERIMENT: jsonv2
+
 permissions:
   contents: read
 

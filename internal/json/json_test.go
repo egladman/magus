@@ -77,7 +77,6 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 	require.True(t, ok)
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 	allowed := map[string]bool{
-		"internal/json/json.go":                     true,
 		"internal/json/json_v2.go":                  true,
 		"libs/gopherbuzz/internal/codec/json.go":    true,
 		"libs/gopherbuzz/internal/codec/json_v2.go": true,
