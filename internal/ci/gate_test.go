@@ -21,22 +21,21 @@ func TestDecideGateMatrix(t *testing.T) {
 		want GateDecision
 	}{
 		{"nothing on record", GateFacts{}, GateRun},
-		{"not redundant, saturated", GateFacts{Saturated: true}, GateRun},
 		{"not redundant, forced", GateFacts{Forced: true}, GateRun},
 		{"not redundant, nested", GateFacts{Nested: true}, GateRun},
-		{"not redundant, saturated and forced", GateFacts{Saturated: true, Forced: true}, GateRun},
-		{"not redundant, saturated and nested", GateFacts{Saturated: true, Nested: true}, GateRun},
 		{"not redundant, forced and nested", GateFacts{Forced: true, Nested: true}, GateRun},
-		{"not redundant, all set", GateFacts{Saturated: true, Forced: true, Nested: true}, GateRun},
 
-		{"redundant, idle", GateFacts{Redundant: true}, GateAdvise},
-		{"redundant, saturated", GateFacts{Redundant: true, Saturated: true}, GateRefuse},
+		// Redundant refuses on its own. This cell used to require a saturated machine
+		// as well, which made the refusal unreachable in practice: the load reading
+		// comes from the daemon and ordinary commands run without a persistent one, so
+		// every real redundant gate ran anyway behind an advisory nobody obeyed.
+		{"redundant", GateFacts{Redundant: true}, GateRefuse},
 		{"redundant, forced", GateFacts{Redundant: true, Forced: true}, GateRun},
-		{"redundant, nested but idle", GateFacts{Redundant: true, Nested: true}, GateAdvise},
-		{"redundant, saturated but forced", GateFacts{Redundant: true, Saturated: true, Forced: true}, GateRun},
-		{"redundant, saturated but nested", GateFacts{Redundant: true, Saturated: true, Nested: true}, GateAdvise},
+		// Nested is the one caller that still cannot refuse: it counts its own
+		// ancestors' claims as load, so its view of the machine is the one reading that
+		// cannot be trusted to refuse on.
+		{"redundant, nested", GateFacts{Redundant: true, Nested: true}, GateAdvise},
 		{"redundant, forced and nested", GateFacts{Redundant: true, Forced: true, Nested: true}, GateRun},
-		{"redundant, all set", GateFacts{Redundant: true, Saturated: true, Forced: true, Nested: true}, GateRun},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

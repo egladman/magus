@@ -13,6 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **A redundant ci gate is refused whether or not the machine is busy.** MGS3010 used to
+  require a saturated admission pool as well, which made it unreachable in the case it was
+  written for: the load reading comes from the daemon, ordinary commands run without a
+  persistent one, so an idle machine always printed the advisory and ran the duplicate
+  anyway. Measured across one session, that advisory fired seven times and about 17 minutes
+  of wall clock went to gates whose verdict was already on record. Redundancy alone defers
+  now, `--no-redundancy-check` still runs it here, and a nested magus still only advises
+  because it counts its own ancestors' claims as load. Nothing about what counts as
+  redundant changed: a green gate for this branch, plus a delta in which every path is
+  generated output, prose or a comment-only edit.
+
 ## [v0.4.3] - 2026-09-06
 
 See the full changelog at
