@@ -51,6 +51,7 @@ const (
 	denyRuleReadAck           denyRuleName = "read-ack"
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
+	denyRuleCIWatch           denyRuleName = "ci-watch"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
 	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
 	denyRuleRawTool           denyRuleName = "raw-tool"
@@ -632,6 +633,13 @@ var (
 		"This loop has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive - a run that failed early never prints the line being grepped for. Several have had to be killed by hand.\n" +
 		"Waiting on something OUTSIDE this machine (a remote queue, a deploy nobody here started) is what your host's monitor surface is for."
 
+	denyCIWatch = "Ask for the board once, when you need the answer:\n" +
+		"  gh pr list --state open --json number,mergeable,statusCheckRollup\n" +
+		"One call answers every open pull request, mergeability included, and costs one turn.\n" +
+		"Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: the human merges, not you. Measured in one session: four watches, every one green, every one a turn spent re-reading a verdict that was already true.\n" +
+		"It is also the second half of a duplicate. A gate you already ran locally is the same command on the same tree; running it here and then waiting for CI to agree is paying twice for one answer.\n" +
+		"Iterating on a run that is already RED is the case worth following, and polling the board serves it too - once checks exist, and only while you are acting on what it says."
+
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
 	// most likely to turn a focused change into an unreviewable one: it sweeps every
@@ -943,6 +951,12 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	}
 	if busyWaitFires(command) {
 		return bashGuardVerdict{Deny: denyBusyWait, Rule: denyRule{Name: denyRuleBusyWait}}
+	}
+	// Beside busy-wait and for the same reason: both are an agent blocking on a condition
+	// it will be told about anyway. This one has no raw-line fallback, because an
+	// unparseable line naming `watch` is far more likely to be something else entirely.
+	if parsed && ciWatchFires(cmds) {
+		return bashGuardVerdict{Deny: denyCIWatch, Rule: denyRule{Name: denyRuleCIWatch}}
 	}
 	if scriptedRewriteFires(command) {
 		return bashGuardVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
