@@ -1220,6 +1220,43 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 	}
 }
 
+// TestGuardDeniesWatchingCI pins the blocking forms. Measured 2026-09-07: four watches in
+// one session, every one green, each costing a wake-up to re-read a verdict that was
+// already true - and each following a local gate that had run the identical command on the
+// identical tree.
+func TestGuardDeniesWatchingCI(t *testing.T) {
+	for _, cmd := range []string{
+		`gh run watch 34069443069`,
+		`gh run watch 34069443069 --exit-status --interval 60`,
+		`gh pr checks 183 --watch`,
+		`gh run view 34069443069 --watch`,
+		// A wrapper or env prefix reaches the same verdict: the rule reads the parsed
+		// command, not the head of the line.
+		`GH_TOKEN=x gh run watch 123`,
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleCIWatch, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "GREEN CHANGES NOTHING", cmd)
+	}
+}
+
+// Reading a result that already exists is the point of the tool and stays allowed; what
+// the rule refuses is the WAITING. `watch` also names a real unrelated program.
+func TestGuardAllowsReadingCIWithoutWaiting(t *testing.T) {
+	for _, cmd := range []string{
+		`gh pr list --state open --json number,mergeable,statusCheckRollup`,
+		`gh pr checks 183`,
+		`gh run view 34069443069 --log`,
+		`gh run list --branch main --limit 5`,
+		`gh run view 34069443069 --json status,conclusion`,
+		// Not gh at all.
+		`watch -n 5 free -m`,
+	} {
+		assert.NotEqual(t, denyRuleCIWatch, evaluateBashGuard(cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
 // The program rules read the parsed commands, so a line that only MENTIONS a program is
 // not that program running. Every case here was a live false positive: the sed rule
 // refused a `grep` looking for where it was tested, and refused an `echo` describing it.
