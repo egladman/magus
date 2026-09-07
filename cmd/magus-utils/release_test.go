@@ -545,11 +545,9 @@ func TestCutThenGenerateChangelogDoesNotDuplicate(t *testing.T) {
 	require.Contains(t, string(got), "## [Unreleased]\n\n## [v0.2.0]", "Unreleased is emptied, not removed")
 }
 
-// TestRunCut_ImmutabilityGuard covers what runCut does when the manifest is already
-// there, which is three different things. A publish job is a sequence of steps, any of
-// which can fail after the cut succeeds - v0.4.3 died two steps later on a missing pnpm -
-// so "already cut" has to be a state a rerun can pass THROUGH when the bytes agree, while
-// staying a refusal when they do not.
+// TestRunCut_ImmutabilityGuard covers all three things runCut does when the manifest is
+// already there. A publish job can fail at any step after the cut, so "already cut" has to
+// be a state a rerun passes THROUGH when the bytes agree, and a refusal when they do not.
 func TestRunCut_ImmutabilityGuard(t *testing.T) {
 	const tarball = "magus_v0.1.0_linux_amd64.tar.gz"
 	setup := func(t *testing.T, payload string) (artifactsDir, changelogPath, outDir string) {
@@ -574,10 +572,8 @@ func TestRunCut_ImmutabilityGuard(t *testing.T) {
 		first, err := os.ReadFile(filepath.Join(outDir, "v0.1.0.yaml"))
 		require.NoError(t, err)
 
-		// The second call is the rerun, and it runs against the tree the first one left:
-		// [Unreleased] is empty now. Passing the ORIGINAL changelog would test a case the
-		// workflow never produces, and would hide that the emptiness is what used to be
-		// reported - "no [Unreleased] section" - when the truth was "already done".
+		// The rerun runs against the tree the first call left, [Unreleased] now empty.
+		// Restoring the original changelog would test a state the workflow never produces.
 		require.NoError(t, cut(artifactsDir, changelogPath, outDir), "a rerun must not fail")
 		again, err := os.ReadFile(filepath.Join(outDir, "v0.1.0.yaml"))
 		require.NoError(t, err)

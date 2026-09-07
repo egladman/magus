@@ -21,18 +21,10 @@ on:
 # On a PR the newest push supersedes the ones before it, so cancelling is right: the only
 # verdict anyone acts on is the one for the head commit.
 #
-# On main it is WRONG, and silently so. Every commit on main gets its own verdict.
-#
-# cancel-in-progress: false was supposed to buy that and does not. It protects the RUNNING
-# run; GitHub queues at most ONE run per group, so a third merge arriving cancels the
-# second while it is still pending. Measured 2026-09-07: 7 of the last 25 main runs
-# cancelled against 15 succeeded, every cancellation within a minute of being created.
-# A commit merged before its pull-request checks finish AND whose main run is cancelled
-# has no verdict from either side, which is how a red change reached main in #175.
-#
-# So the GROUP is what changes: main pushes key on the commit, giving each its own group so
-# they never contend. Pull requests keep the ref, because there supersession is the point -
-# the only verdict anyone acts on is the head commit's.
+# On main every commit must get its own verdict, and the GROUP is what buys that.
+# cancel-in-progress: false is not enough: it protects the running run, while GitHub queues
+# at most one run per group, so a third merge cancels the second while it is still pending.
+# Measured 2026-09-07: 7 of the last 25 main runs cancelled against 15 succeeded.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -410,17 +402,12 @@ jobs:
         with:
           offer-fix-label: 'true'
 
-  # One check name a branch rule can require, standing for the whole run.
+  # One stable check name a branch rule can require, standing for the whole run.
   #
-  # Nothing else here can do that job. `magus report` looks like the obvious candidate and
-  # is the wrong one: ci-outcome writes a summary and never exits non-zero, so report is
-  # GREEN on a red run. The shards are the real verdict, but their check names come from a
-  # matrix the plan sizes at run time, so requiring "magus shard 1" blocks every pull
-  # request whose plan needed only one.
-  #
-  # It exists because main required no status check at all: six of fourteen pull requests
-  # merged before their CI finished, and one of those runs then failed, with the main-push
-  # run its only completed verdict.
+  # Neither existing job can be that name. `magus report` is GREEN on a red run, because
+  # ci-outcome writes a summary and never exits non-zero. The shards are the real verdict,
+  # but their names come from a matrix the plan sizes at run time, so requiring
+  # "magus shard 1" blocks any pull request whose plan needed only one.
   gate:
     name: ci gate
     needs: [plan, ci]
@@ -443,8 +430,7 @@ jobs:
             echo "::error::plan did not pass (${PLAN_RESULT}); nothing downstream is trustworthy"
             exit 1
           fi
-          # skipped is a pass: an inherited verdict plans an empty shard matrix on purpose,
-          # and that is the gate_inherit feature working rather than a run that did nothing.
+          # skipped is a pass: an inherited verdict plans an empty shard matrix on purpose.
           case "$CI_RESULT" in
             success|skipped) echo "shards: ${CI_RESULT}" ;;
             *) echo "::error::shards did not pass (${CI_RESULT})"; exit 1 ;;

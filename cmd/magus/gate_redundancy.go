@@ -112,8 +112,8 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 		return nil
 	}
 	finding, redundant := g.finding(ctx, disabled)
-	// Probed for the message, not for the decision: a refusal should say what the machine
-	// was doing, but load stopped deciding anything when redundancy alone became enough.
+	// Probed for the message, not the decision: a refusal should say what the machine was
+	// doing. DecideGate does not read it.
 	pool := "not probed"
 	if redundant && !disabled {
 		_, pool = gatePoolProbe(ctx)

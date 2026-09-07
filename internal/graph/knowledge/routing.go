@@ -29,26 +29,19 @@ const maxAnchors = 3
 // then refuses to stage the convergence as environmental drift. Every index disagreeing
 // with every other one is the permanent end state.
 //
-// The predicate is "the binary contributes", not "nothing a workspace writes adds one",
-// which was the first spelling and is a SUFFICIENT condition dressed as a necessary one.
-// It admitted only the two inputs a workspace cannot touch at all (Inputs.Diagnostics from
-// AllDiagnosticCodes, Inputs.Modules from the host registry) and missed the third catalog
-// a binary carries: Inputs.Spells includes the go:embed'd built-ins, so spell, op and tool
-// are MIXED rather than workspace-owned. Measured here: 61 of 63 ops, 23 of 23 tools and
-// 11 of 13 spells come from the binary, and `tool` has already crossed a bucket in
-// committed history (10+ to 20+). types.KnowledgeGraphOutput's CatalogFingerprint names
-// the same three catalogs; this list is now the same set.
+// The test is whether the binary CONTRIBUTES to the count, not whether a workspace can
+// add one: the three catalogs a binary carries are diagnostics, the host module registry,
+// and the embedded built-in spells, which is why spell, op and tool belong here even
+// though a workspace can declare its own. types.KnowledgeGraphOutput's CatalogFingerprint
+// names the same three.
 //
-// charm is deliberately absent, and checking rather than assuming is what kept it out. It
-// has no registry mint site: types.Spell carries no charm field, so a charm node exists
-// only where a magusfile writes ctx.hasCharm(...). All 12 here are the workspace's own,
-// and withholding that size would cost a real signal for nothing.
+// charm is deliberately absent: types.Spell carries no charm field, so a charm node exists
+// only where a magusfile writes ctx.hasCharm(...), and withholding that size would cost a
+// real signal for nothing.
 //
-// Only the SIZE is withheld; the row and its query still route. The anchors do not yet,
-// and that is a known hole: for a binary-supplied kind every node is degree-tied, so
-// topLabels falls back to the id tiebreak and the committed method anchors are simply the
-// three alphabetically-first ids. One new std module sorting before "archive" rewrites six
-// committed files with no workspace change.
+// TODO: the anchors have the same defect and are not withheld. Every node of a
+// binary-supplied kind is degree-tied, so topLabels falls back to the id tiebreak and one
+// new std module sorting before "archive" rewrites six committed files.
 var binarySuppliedKinds = map[string]bool{
 	types.KindDiagnostic: true,
 	types.KindModule:     true,

@@ -1221,9 +1221,8 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 }
 
 // TestGuardDeniesWatchingCI pins the blocking forms. Measured 2026-09-07: four watches in
-// one session, every one green, each costing a wake-up to re-read a verdict that was
-// already true - and each following a local gate that had run the identical command on the
-// identical tree.
+// one session, every one green, each following a local gate that had already run the
+// identical command on the identical tree.
 func TestGuardDeniesWatchingCI(t *testing.T) {
 	for _, cmd := range []string{
 		`gh run watch 34069443069`,

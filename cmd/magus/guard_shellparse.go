@@ -523,10 +523,8 @@ func fileFindFires(cmds []guardCommand) bool {
 // ciWatchFires reports a gh invocation that BLOCKS until a CI run reaches a terminal
 // state: `gh run watch`, and the --watch form of `gh run view` and `gh pr checks`.
 //
-// It judges the parsed command rather than the raw line so an env prefix, a wrapper, or a
-// --watch that belongs to some other tool cannot change the verdict. `gh run view --log`
-// and a bare `gh pr checks` read a result that already exists and are untouched: what this
-// rule is about is the WAITING, not the reading.
+// Reading a result that already exists - `gh run view --log`, a bare `gh pr checks` - is
+// untouched. The rule is about the WAITING.
 func ciWatchFires(cmds []guardCommand) bool {
 	return slices.ContainsFunc(cmds, func(c guardCommand) bool {
 		if path.Base(c.Name) != "gh" {

@@ -257,14 +257,9 @@ runs:
         SOURCE_DESC: ${{ inputs.source-path != '' && format('source-path ''{0}''', inputs.source-path) || format('git-ref ''{0}''', inputs.git-ref) }}
         GIT_REF: ${{ inputs.git-ref }}
         STRATEGY: ${{ inputs.installation-strategy }}
-        # The one magus build the magusfile does not drive. Every Go target in
-        # magusfile.buzz threads this through ctx.withEnv, but this bootstrap runs before
-        # a magus exists to run them, so it read whatever the CALLING workflow happened to
-        # export - and internal/json picks its encoder on this build tag, so a caller that
-        # set nothing produced a magus whose every JSON byte differed. That is how the
-        # v0.4.3 index branch was published with 336 lines of gen/knowledge-graph.json in
-        # the other spelling. Declared here so the binary this action produces does not
-        # depend on the caller remembering.
+        # Required to compile internal/json, and the one magus build the magusfile does
+        # not drive: this bootstrap runs before a magus exists to run its targets, so
+        # without this it inherits whatever the calling workflow exported.
         GOEXPERIMENT: jsonv2
       run: |
         if [ "${STRATEGY}" = "source" ]; then
