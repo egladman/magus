@@ -23,13 +23,15 @@ func clone(t *testing.T, dir, url string) string {
 	return dir
 }
 
-// worktree writes a linked worktree of main at dir, the way `git worktree add` does:
-// a .git FILE pointing into the main checkout's worktrees directory.
-func worktree(t *testing.T, main, dir, name string) string {
+// worktree writes a linked worktree of the repository whose shared git directory is
+// common, the way `git worktree add` does: a .git FILE pointing at a per-worktree
+// gitdir, and a commondir file inside it naming the shared one.
+func worktree(t *testing.T, common, dir, name string) string {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(dir, 0o755))
-	gitdir := filepath.Join(main, ".git", "worktrees", name)
+	gitdir := filepath.Join(common, "worktrees", name)
 	require.NoError(t, os.MkdirAll(gitdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gitdir, "commondir"), []byte("../..\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+gitdir+"\n"), 0o644))
 	return dir
 }
@@ -62,10 +64,24 @@ func TestIdentityIsSharedAcrossClones(t *testing.T) {
 
 func TestIdentityReadsTheMainCheckoutConfigFromAWorktree(t *testing.T) {
 	main := clone(t, t.TempDir(), "git@github.com:egladman/magus.git")
-	linked := worktree(t, main, t.TempDir(), "feature")
+	linked := worktree(t, filepath.Join(main, ".git"), t.TempDir(), "feature")
 
 	assert.Equal(t, "github.com/egladman/magus", Identity(linked))
 	assert.Equal(t, main, Path(linked))
+}
+
+// A worktree of a BARE repository has no ".git" segment in its gitdir, so the path rule
+// Path must keep using cannot see it. Reading git's own commondir file can.
+func TestIdentityResolvesAWorktreeOfABareRepository(t *testing.T) {
+	bare := filepath.Join(t.TempDir(), "magus.git")
+	require.NoError(t, os.MkdirAll(bare, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bare, "config"),
+		[]byte("[remote \"origin\"]\n\turl = git@github.com:egladman/magus.git\n"), 0o644))
+	linked := worktree(t, bare, t.TempDir(), "feature")
+
+	assert.Equal(t, "github.com/egladman/magus", Identity(linked))
+	assert.Equal(t, filepath.Join(bare, "worktrees", "feature"), Path(linked),
+		"the legacy key sees a per-worktree directory here, and keeps that blind spot on purpose")
 }
 
 func TestIdentityFallsBackToPathWithoutARemote(t *testing.T) {

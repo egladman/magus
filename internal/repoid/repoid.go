@@ -7,18 +7,24 @@
 // CLONE of the same repository therefore got its own memory and its own session
 // history. That is not a split a developer can see - both stores live in XDG state,
 // not in the tree - and not one they expect, because both document themselves as
-// belonging to the REPOSITORY. Measured 2026-09-08: an agent session in
-// ~/Documents/ChatGPT/magus and one in ~/Repos/magus wrote to two stores, and the
-// handoff between them had nothing to read.
+// belonging to the REPOSITORY. Measured 2026-09-08: two sessions working one project
+// from ~/Documents/ChatGPT/magus and ~/Repos/magus wrote to two stores, so neither
+// could read what the other recorded.
 //
 // Identity is the default remote, which is the only name two clones of one
 // repository share.
 //
-// The remote is read out of .git/config rather than asked of a VCS driver.
-// types.RemoteReporter is the layered answer and cannot be used here: it needs a
-// context, a driver registry and a subprocess, and the callers are Dir() functions
-// with none of the three. Both stores already read .git directly for the worktree
-// rule, so this widens an accepted exception rather than opening a new one.
+// The remote is read out of .git/config rather than asked of a VCS driver, and the
+// reason is not that types.RemoteReporter is awkward to reach from a Dir() function,
+// though it is. It is that identity has to be ONE deterministic function every caller
+// shares, including callers on the run path that must never fail a build or spawn a
+// process to find out where state lives. A driver where one resolves and a file read
+// where one does not is two identity rules, and two identity rules is precisely the
+// split this package exists to close.
+//
+// The cost of that choice, stated rather than hidden: this is git-only. An hg or jj
+// checkout has no .git/config, so it identifies as Path(root) and its clones do not
+// share a store, even though types.VCSCheckpoint will happily name their backend.
 package repoid
 
 import (
@@ -37,8 +43,14 @@ import (
 //
 // A checkout with no readable remote - no git, no config, no remote declared -
 // identifies as Path(root), so a repository that never grows a remote still keys a
-// store of its own. Changing a repository's remote re-keys it; Adopt is what carries
-// the old store forward.
+// store of its own.
+//
+// Changing the remote re-keys the repository and orphans what was written under the old
+// one. Adopt does NOT cover that: it carries forward the checkout-path key magus used
+// before remotes did, and nothing records a previous remote to carry forward from. An
+// org rename or a repository transfer therefore looks like a store that emptied itself.
+// Closing that needs a recorded identity history, which is more machinery than the case
+// has earned so far.
 func Identity(root string) string {
 	if u := remoteURL(gitCommonDir(root)); u != "" {
 		if id := normalizeRemote(u); id != "" {
@@ -51,6 +63,10 @@ func Identity(root string) string {
 // Path returns the checkout-path identity that keyed the state stores before remotes
 // did: a linked worktree resolves to its main checkout, anything else to root itself.
 // Stores call it to find what an older binary wrote, and pass the result to Adopt.
+//
+// It must keep producing byte-identical answers to the rule it replaced, including that
+// rule's blind spot for a worktree of a bare repository. A "fix" here changes the key an
+// existing store is filed under, which does not repair that store, it hides it.
 func Path(root string) string {
 	gitdir, ok := gitFile(root)
 	if !ok {
@@ -118,18 +134,28 @@ func gitFile(root string) (string, bool) {
 	return gitdir, true
 }
 
-// gitCommonDir returns the directory holding the repository's shared config. Every
-// linked worktree has its own gitdir under <main>/.git/worktrees, and none of them
-// carries a config with the remotes in it.
+// gitCommonDir returns the directory holding the repository's shared config. A linked
+// worktree's own gitdir carries no config with remotes in it.
+//
+// git writes the answer: every linked worktree's gitdir holds a commondir file naming
+// the shared directory. Reading it beats matching "/.git/worktrees/" in the path, which
+// Path must keep doing for compatibility but which misses a worktree of a BARE
+// repository, where the gitdir is <repo>.git/worktrees/<n> and there is no ".git"
+// segment to find.
 func gitCommonDir(root string) string {
 	gitdir, ok := gitFile(root)
 	if !ok {
 		return filepath.Join(root, ".git")
 	}
-	if i := strings.Index(filepath.ToSlash(gitdir), "/.git/worktrees/"); i >= 0 {
-		return filepath.Join(filepath.Clean(gitdir[:i]), ".git")
+	b, err := os.ReadFile(filepath.Join(gitdir, "commondir"))
+	if err != nil {
+		return filepath.Clean(gitdir)
 	}
-	return filepath.Clean(gitdir)
+	common := strings.TrimSpace(string(b))
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(gitdir, common)
+	}
+	return filepath.Clean(common)
 }
 
 // remoteURL returns the fetch URL of the repository's default remote: origin where it
