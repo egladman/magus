@@ -1,14 +1,14 @@
 # Designing tests from observable boundaries
 
 Assess a test boundary from the behavior that must be proved, not from the
-package, directory, or test target name. Use this skill when designing, writing,
-or reviewing tests that need a unit/integration/end-to-end recommendation, a
-real/fake/stub decision, a full-result assertion, or a coverage-gap assessment.
+package, directory, or test target name. Use this skill when the test tier,
+real/fake/stub decision, complete observable assertion, or coverage placement
+is undecided or under review.
 
-Do not use it merely to run or diagnose tests (`magus-run` owns that), or to
-choose a package boundary (`magus-architecture-review` owns that).
-Use both only when a package refactor is deliberately intended to improve
-testability.
+Do not use it for routine implementation of an already-scoped test, merely to
+run or diagnose tests (`magus-run` owns that), or to choose a package boundary
+(`magus-architecture-review` owns that). Use it with architecture review only
+when a package refactor is deliberately intended to improve testability.
 
 This skill observes evidence and makes recommendations. It does not choose the
 repository's test policy, enable a service, create credentials, or decide what
@@ -86,6 +86,10 @@ stub supplies only the response the subject needs. For every substitute, state:
 Do not add an interface solely to mock something. It earns its place only when
 the production boundary is independently meaningful.
 
+When an existing concrete collaborator or test arrangement can falsify the
+contract at the selected tier, say so explicitly: **do not add or widen
+`<seam/interface>`; test through `<existing boundary>`**.
+
 ## Assert what the caller can observe
 
 Compare the complete normalized result or state: structured output, persisted
@@ -97,6 +101,23 @@ unordered iteration, generated IDs). Assert volatile invariants separately.
 Never normalize ordering, errors, or transitions that are part of the contract.
 Internal arrangement is appropriate only for a narrow owned unit invariant.
 
+## Name and record the proposed case
+
+Propose a test/case name in the repository's existing idiom. Do not impose a
+universal naming convention or infer one from another language or framework.
+Record the case as:
+
+```text
+<proposed repository-idiomatic case name>
+  trigger/precondition -> complete observable result/state -> visible side effects
+  volatile invariants asserted separately
+```
+
+When language- or framework-specific mechanics are the remaining question
+(syntax, helper conventions, fixture setup, or naming), hand that portion to
+the applicable language-specific guidance. This skill keeps the boundary,
+collaborator, and observable-contract recommendation language agnostic.
+
 ## Deliver the recommendation
 
 Report, for each behavior:
@@ -106,9 +127,12 @@ Report, for each behavior:
 3. Recommended tier and why it can falsify the contract.
 4. Collaborator matrix: `collaborator -> real/fake/stub -> reason -> contract check`.
 5. Full normalized assertion plan and separate volatile invariants.
-6. Execution profile: prerequisites, local reproducibility, cost, and observed
+6. Proposed repository-idiomatic case name and its explicit case record.
+7. Preservation conclusion: whether an existing boundary is sufficient, or the
+   independently meaningful production reason to introduce or widen one.
+8. Execution profile: prerequisites, local reproducibility, cost, and observed
    target/invocation.
-7. Owning Magus test target, final affected-CI route, and complementary coverage.
+9. Owning Magus test target, final affected-CI route, and complementary coverage.
 
 Hand execution to `magus-run`; this skill chooses the proof and does not bypass
 Magus with raw language test commands.
@@ -125,6 +149,15 @@ assumption.
 Do not claim a fake is protected by real-boundary coverage unless you name that
 test and its owning Magus target. If no such test exists, the recommendation
 must include it as complementary coverage.
+
+### Preservation gate
+
+Before proposing a seam, interface, or widened substitution point, identify the
+existing concrete collaborator or test arrangement that was considered. If it
+can falsify the contract at the selected tier, preserve it and state:
+**do not add or widen `<seam/interface>`; test through `<existing boundary>`**.
+Only recommend a new or wider seam when the production boundary has an
+independent reason to exist; a test double alone is not that reason.
 
 ### Execution-policy gate
 
@@ -174,6 +207,16 @@ Evidence:
 Boundary:
   unit | integration | end-to-end
   reason this boundary can falsify the contract:
+
+Case:
+  proposed repository-idiomatic name:
+  trigger/precondition -> complete observable result/state -> visible side effects:
+  volatile invariants asserted separately:
+
+Preservation:
+  existing boundary considered:
+  do not add or widen <seam/interface>; test through <existing boundary>
+  or independent production reason to introduce/widen it:
 
 Collaborators:
   <name> -> real|fake|stub -> reason -> named contract test / target
