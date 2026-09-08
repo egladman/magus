@@ -573,7 +573,7 @@ func adviseMemoryWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the handoff journal too: `" + hint.MemoryPut.With("<name>") + "`.\n" +
+	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the repository's memory too: `" + hint.MemoryPut.With("<name>") + "`.\n" +
 		"This file is per-host and per-checkout, so a second worktree or a different agent host never sees it. Host instructions belong right where you are writing them; workspace decisions outlive the file. Load the magus-memory skill if not already loaded."
 }
 
