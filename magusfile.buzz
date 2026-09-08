@@ -1044,6 +1044,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(
         ".claude/skills/magus-architecture-review*/**",
+		".claude/skills/magus-test-design*/**",
         ".claude/skills/magus-buzz-review*/**",
         ".claude/skills/magus-buzz-write*/**",
         ".claude/skills/magus-commit-composition*/**",
@@ -1058,6 +1059,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".claude/skills/magus-vcs-hygiene*/**",
         ".claude/skills/magus-workspace-rules*/**",
         ".agents/skills/magus-architecture-review*/**",
+		".agents/skills/magus-test-design*/**",
         ".agents/skills/magus-buzz-review*/**",
         ".agents/skills/magus-buzz-write*/**",
         ".agents/skills/magus-commit-composition*/**",
@@ -1072,6 +1074,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".agents/skills/magus-vcs-hygiene*/**",
         ".agents/skills/magus-workspace-rules*/**",
         ".opencode/skills/magus-architecture-review*/**",
+		".opencode/skills/magus-test-design*/**",
         ".opencode/skills/magus-buzz-review*/**",
         ".opencode/skills/magus-buzz-write*/**",
         ".opencode/skills/magus-commit-composition*/**",

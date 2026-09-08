@@ -63,7 +63,7 @@ func TestServiceGraphSkeleton(t *testing.T) {
 	require.Len(t, out.Nodes, 2)
 	assert.Equal(t, "project", out.Nodes[0].Kind)
 	require.Len(t, out.Links, 1)
-	assert.Equal(t, "depends_on", out.Links[0].Relation)
+	assert.Equal(t, types.RelationDependsOn, out.Links[0].Relation)
 	assert.True(t, out.Directed)
 	assert.Equal(t, types.KnowledgeSchemaVersion, out.SchemaVersion)
 }

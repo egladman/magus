@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 11157
-skill_simple_bytes: 7393
+skill_full_bytes: 11169
+skill_simple_bytes: 7401
 ---
 
 # magus-run
@@ -29,8 +29,8 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
 | `agent-skill-version` | `52` |
-| `knowledge-schema-version` | `10` |
-| `skill-content` | `1e0aa373960a` |
+| `knowledge-schema-version` | `11` |
+| `skill-content` | `b94fce866f3d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -68,8 +68,8 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
 
 1. Prefer the MCP tools.
    At session start, or after an MCP call fails, check `magus status --probe=mcp`.
-   If it is unavailable, say once that `magus server start` restores the full
-   agent experience, then continue with the CLI fallback below.
+   If it is unavailable, continue with the CLI fallback below. Hosts manage
+   their own MCP connection; do not manually start a server for an agent.
    - `magus_run_target` {target, projects} - run named projects.
    - `magus_run_affected` {target, base} - run ONLY the projects a VCS change
      touched.
@@ -229,9 +229,9 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
 
 1. Prefer the MCP tools; they return structured content with nothing to silence.
    At session start, or after an MCP call fails, check `magus status --probe=mcp`.
-   If it is unavailable, say once that `magus server start` restores the full
-   agent experience, then continue with the CLI fallback below. Do not make the
-   daemon a prerequisite for completing the work.
+   If it is unavailable, continue with the CLI fallback below. Hosts manage
+   their own MCP connection; do not manually start a server for an agent.
+   Do not make the connection a prerequisite for completing the work.
    - `magus_run_target` {target, projects} - run named projects (or the cwd
      project). Use when you know which projects to run.
    - `magus_run_affected` {target, base} - run ONLY the projects a VCS change

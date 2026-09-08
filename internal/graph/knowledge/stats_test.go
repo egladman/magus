@@ -26,7 +26,7 @@ func statsFixture() *Graph {
 		}
 		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSpell, Label: label, Attrs: attrs})
 	}
-	edge := func(src, tgt, rel string) {
+	edge := func(src, tgt string, rel types.RelationID) {
 		g.AddEdge(types.KnowledgeEdge{Source: src, Target: tgt, Relation: rel, Confidence: types.ConfidenceExtracted, Score: 1})
 	}
 	spell("spell:go", "go", true)

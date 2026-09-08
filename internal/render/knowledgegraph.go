@@ -61,7 +61,7 @@ func knowledgeGraphIR(out types.KnowledgeGraphOutput) renderGraph {
 		if !okF || !okT {
 			continue // edge to a node outside the selected subgraph; skip
 		}
-		g.Edges = append(g.Edges, renderEdge{From: from, To: to, Label: e.Relation})
+		g.Edges = append(g.Edges, renderEdge{From: from, To: to, Label: string(e.Relation)})
 	}
 
 	kinds := make([]string, 0, len(kindSet))
@@ -157,7 +157,7 @@ func WriteKnowledgeGraphML(w io.Writer, out types.KnowledgeGraphOutput) error {
 	}
 	for _, e := range out.Links {
 		fmt.Fprintf(&b, `    <edge source="%s" target="%s">`+"\n", xmlEscape(e.Source), xmlEscape(e.Target))
-		writeGraphMLData(&b, "relation", e.Relation)
+		writeGraphMLData(&b, "relation", string(e.Relation))
 		writeGraphMLData(&b, "confidence", e.Confidence)
 		fmt.Fprintf(&b, `      <data key="score">%g</data>`+"\n", e.Score)
 		writeGraphMLData(&b, "provenance", e.Provenance)

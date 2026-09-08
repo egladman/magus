@@ -47,7 +47,6 @@ enabled = true
 ```
 
 ```sh
-magus server start
 export MAGUS_MCP_TOKEN="$(magus config token print)"
 codex mcp list
 magus status --probe=liveness,mcp
@@ -55,7 +54,9 @@ magus status --probe=liveness,mcp
 
 `codex mcp list` confirms configuration; the probe confirms the endpoint is
 serving. [MCP](../mcp.md) covers dedicated connector tokens, the ChatGPT desktop
-app, and what to do when `mcp.address` changes.
+app, and what to do when `mcp.address` changes. This is user-owned host setup;
+an agent that cannot reach MCP uses the CLI fallback and does not manually start
+Magus solely to obtain tools.
 
 ## Guard hook
 

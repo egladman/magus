@@ -279,6 +279,134 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 	assert.Equal(t, "build\ntest\n", string(got), "CI step order")
 }
 
+// A skip_cache composer must still execute its body on every invocation, but
+// its cacheable ctx.needs members should mint and replay their own entries. The
+// second run reaches build again through ci; only a child cache hit keeps the
+// side-effect log to one line.
+func TestSkipCacheComposerCachesDynamicNeedsMember(t *testing.T) {
+	root := t.TempDir()
+	body := `
+import "magus";
+import "proc";
+magus\project({"targets": {"ci": {"skip_cache": "test composer"}}});
+fun record(name: str) > void !> any {
+    final c = proc.shell("printf '%s\n' " + name + " >> cache-order");
+    proc.exec(c.bin, c.args, "", {});
+}
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("cache-order");
+    record("build");
+}
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
+`
+	writeProject(t, root, "svc", body)
+
+	ctx := context.Background()
+	m, err := magus.Open(ctx, root)
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	targets, err := m.ExpandPath(types.Target{Name: "ci"})
+	require.NoError(t, err, "ExpandPath")
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	require.NoError(t, m.Run(ctx, targets), "second run")
+
+	got, err := os.ReadFile(filepath.Join(root, "svc", "cache-order"))
+	require.NoError(t, err, "cache-order log not written")
+	assert.Equal(t, "build\n", string(got), "the cacheable member must replay on the second dynamic dispatch")
+}
+
+// A single ctx.needs call can fan out to several cacheable members. The
+// uncached composer's scheduler lease is yielded once around that whole fan-out,
+// not once by each member: a second RUnlock would panic before either target ran.
+func TestSkipCacheComposerCachesConcurrentNeedsMembers(t *testing.T) {
+	root := t.TempDir()
+	body := `
+import "magus";
+import "proc";
+magus\project({"targets": {"ci": {"skip_cache": "test composer"}}});
+fun record(name: str) > void !> any {
+    final c = proc.shell("sleep 0.05; printf '%s\n' " + name + " >> " + name + "-runs");
+    proc.exec(c.bin, c.args, "", {});
+}
+export fun a(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("a-runs");
+    record("a");
+}
+export fun b(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("b-runs");
+    record("b");
+}
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(a, b); }
+`
+	writeProject(t, root, "svc", body)
+
+	ctx := context.Background()
+	m, err := magus.Open(ctx, root)
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	targets, err := m.ExpandPath(types.Target{Name: "ci"})
+	require.NoError(t, err, "ExpandPath")
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	require.NoError(t, m.Run(ctx, targets), "second run")
+
+	runs := make(map[string]string, 2)
+	for _, name := range []string{"a", "b"} {
+		got, err := os.ReadFile(filepath.Join(root, "svc", name+"-runs"))
+		require.NoError(t, err, "%s-runs log not written", name)
+		runs[name] = string(got)
+	}
+	assert.Equal(t, map[string]string{
+		"a": "a\n",
+		"b": "b\n",
+	}, runs, "each concurrent member must replay from its own dynamic cache entry")
+}
+
+// A cacheable member reached through an uncached composer can itself compose a
+// skip_cache target. It must run that target before checking the member's cache;
+// otherwise the member can replay around a declaration that says it always runs.
+// This is deliberately two levels deep: the top-level gate pass skips ci because
+// ci is uncached, so only the dynamic cache boundary can repair build's replay.
+func TestSkipCacheComposerRunsNestedSkipCacheGateBeforeMemberReplay(t *testing.T) {
+	root := t.TempDir()
+	body := `
+import "magus";
+import "proc";
+magus\project({"targets": {
+    "ci": {"skip_cache": "test composer"},
+    "generate": {"skip_cache": "always regenerate"},
+}});
+fun record(name: str) > void !> any {
+    final c = proc.shell("printf '%s\n' " + name + " >> ../generator-runs");
+    proc.exec(c.bin, c.args, "", {});
+}
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("generated");
+    final c = proc.shell("printf generated > generated");
+    proc.exec(c.bin, c.args, "", {});
+    record("generate");
+}
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(generate); }
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
+`
+	writeProject(t, root, "svc", body)
+
+	ctx := context.Background()
+	m, err := magus.Open(ctx, root)
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	targets, err := m.ExpandPath(types.Target{Name: "ci"})
+	require.NoError(t, err, "ExpandPath")
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	require.NoError(t, m.Run(ctx, targets), "second run")
+
+	got, err := os.ReadFile(filepath.Join(root, "generator-runs"))
+	require.NoError(t, err, "generator-runs log not written")
+	assert.Equal(t, "generate\ngenerate\n", string(got), "the nested skip_cache gate must run again before build checks its cache")
+}
+
 // TestNestedSDKRunKnowsItsAncestry is the regression for the CI break this package
 // found: shard 0 refused svc-a alpha with MGS3009 because the SDK consumer could not
 // name the invocation whose claim had filled the machine budget.

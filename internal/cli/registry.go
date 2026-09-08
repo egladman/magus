@@ -1819,6 +1819,7 @@ a pattern no graph verb fits.`,
 		{Name: "dry-run", Kind: FlagBool, Doc: "Print what would be written and removed without touching the filesystem (agent install)"},
 		{Name: "tar", Kind: FlagBool, Doc: "Stream a tar archive to stdout instead of writing files (agent install)"},
 		{Name: "global", Kind: FlagBool, Doc: "Allow absolute destination paths in write mode (agent install)"},
+		{Name: "skill-form", Kind: FlagString, Default: "dual", Doc: "Skill form to install: dual (compatibility default), full, or concise (agent install)"},
 	},
 	Examples: []Example{
 		{"Install into a repo's agent skills directory", "magus agent install .claude/skills"},

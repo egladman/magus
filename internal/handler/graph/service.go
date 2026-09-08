@@ -153,7 +153,7 @@ func (s *Service) FindPath(
 	}
 	for _, st := range out.Steps {
 		resp.Steps = append(resp.Steps, &graphv1.PathStep{
-			From: st.From, To: st.To, Relation: st.Relation, Forward: st.Forward,
+			From: st.From, To: st.To, Relation: string(st.Relation), Forward: st.Forward,
 		})
 	}
 	return connect.NewResponse(resp), nil

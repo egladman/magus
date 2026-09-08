@@ -14,7 +14,8 @@ stale only when the tool surface changes - and that staleness is detectable.
 One shared source is embedded in the binary in the cross-agent Agent Skills
 format (a `SKILL.md` with name and description frontmatter). Every destination
 receives identical bytes. Naming the directory your host reads is the only
-host-specific step, and there are no per-model bodies anywhere.
+host-specific step, and there are no provider-specific or model-specific
+skill bodies anywhere.
 
 | destination         | read by                                         |
 | ------------------- | ----------------------------------------------- |
@@ -68,7 +69,7 @@ install or a `--force` refresh. An already-open session keeps the skill set it
 launched with. The same launch-time rule applies to MCP tools; see
 [MCP](../mcp.md).
 
-## Two permutations, both installed
+## Choose a skill form deliberately
 
 Every skill has two hand-authored permutations, and install writes both.
 
@@ -94,6 +95,21 @@ and it gets the long form. The twin announces itself in the host's own skill
 listing, so a sub-agent browsing for a skill finds it without being told, and
 the primary spends no context pointing at it. Twins are loaded on demand rather
 than always, so they do not count against the context cost install reports.
+
+Magus does not infer a model's ability, and it does not maintain a provider or
+model routing table. Where a host can choose which skills an agent receives,
+the person configuring that host chooses the form explicitly: concise for an
+environment that has demonstrated it needs less procedural context, full where
+more explicit guidance is wanted. Record that choice in the host configuration
+and review it as part of that configuration; it is not a property Magus can
+truthfully infer from a model name.
+
+The current installer writes both names for compatibility. That is not an
+enforcement mechanism. Hosts that can restrict skill discovery may expose only
+the selected form; hosts that cannot should treat the choice as guidance rather
+than claim deterministic selection. [Cursor](cursor.md) has no Agent Skills
+surface at all, so it cannot enforce a skill-form choice. Its `AGENTS.md`
+guidance remains user-owned.
 
 **Both are curated.** The short form is not a summary and not model-generated.
 There is exactly one hand-written body per skill, and its author marks the spans

@@ -54,7 +54,7 @@ func edgesToProto(in []types.KnowledgeEdge) []*graphv1.Edge {
 		out = append(out, &graphv1.Edge{
 			Source:     e.Source,
 			Target:     e.Target,
-			Relation:   e.Relation,
+			Relation:   string(e.Relation),
 			Confidence: e.Confidence,
 			Score:      e.Score,
 			Provenance: e.Provenance,
@@ -95,7 +95,7 @@ func edgeRefsToProto(in []types.KnowledgeEdgeRef) []*graphv1.EdgeRef {
 	out := make([]*graphv1.EdgeRef, 0, len(in))
 	for _, e := range in {
 		out = append(out, &graphv1.EdgeRef{
-			Relation:   e.Relation,
+			Relation:   string(e.Relation),
 			Direction:  directionToProto(e.Direction),
 			Other:      e.Other,
 			OtherKind:  e.OtherKind,

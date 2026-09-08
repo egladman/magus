@@ -88,7 +88,7 @@ func fingerprintShardContent(sh Shard) string {
 	for _, e := range edges {
 		buf = appendField(buf, e.Source)
 		buf = appendField(buf, e.Target)
-		buf = appendField(buf, e.Relation)
+		buf = appendField(buf, string(e.Relation))
 		buf = appendField(buf, e.Confidence)
 		// 'g' with -1 precision round-trips exactly, so two runs that computed the
 		// same score hash alike and a re-scored edge does not. Formatted into a stack

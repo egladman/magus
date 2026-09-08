@@ -556,10 +556,19 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) error {
 	lim := cache.LimiterFromContext(ctx)
 	ancestors := buzz.AncestorsFromContext(ctx)
-	return proc.RunChildSync(ctx, lim, func() error {
-		childCtx := cache.WithoutSlotHeld(ctx)
-		return p.Dispatch(childCtx, names, ancestors)
-	})
+	dispatch := func(ctx context.Context) error {
+		return proc.RunChildSync(ctx, lim, func() error {
+			childCtx := cache.WithoutSlotHeld(ctx)
+			return p.Dispatch(childCtx, names, ancestors)
+		})
+	}
+	if buzz.HasTargetInterceptor(ctx) {
+		// Pool.Dispatch may fan names out concurrently. Yield once around that
+		// whole fan-out rather than once per intercepted target: the caller owns
+		// one isolation lease, and only its dispatcher may release it.
+		return cache.YieldRunIsolation(ctx, dispatch)
+	}
+	return dispatch(ctx)
 }
 
 // matchBuzzTargets matches registered Buzz target names against ctx.glob's patterns

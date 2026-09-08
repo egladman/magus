@@ -262,6 +262,18 @@ func TestCatalogSkillBytesByName(t *testing.T) {
 	assert.ErrorContains(t, err, "unknown skill")
 }
 
+func TestTestDesignFullVariantAddsDelegatedWorkflow(t *testing.T) {
+	catalog := Default(7)
+	concise, err := catalog.SkillBytes("magus-test-design", VariantSimple)
+	require.NoError(t, err)
+	full, err := catalog.SkillBytes("magus-test-design", VariantFull)
+	require.NoError(t, err)
+
+	assert.Greater(t, len(full), len(concise))
+	assert.NotContains(t, string(concise), "recommendation is **provisional**")
+	assert.Contains(t, string(full), "recommendation is **provisional**")
+}
+
 // TestMustSkillRefusesWhatMagusDoesNotShip is what makes a SkillRef worth more than a string. A
 // prompt naming a skill nobody can load still renders perfectly, so the only place to catch it is
 // where the reference is made.

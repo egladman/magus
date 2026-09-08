@@ -21,7 +21,7 @@ func dependentsFixture() *Graph {
 	} {
 		g.AddNode(n)
 	}
-	edge := func(s, t, rel string) {
+	edge := func(s, t string, rel types.RelationID) {
 		g.AddEdge(types.KnowledgeEdge{
 			Source: s, Target: t, Relation: rel,
 			Confidence: types.ConfidenceExtracted, Score: 1,

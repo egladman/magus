@@ -216,6 +216,57 @@ func (v Variant) Simple() bool { return v == VariantSimple }
 // constant and a String case rather than a new pair of markers.
 func (v Variant) Is(name string) bool { return v.String() == name }
 
+// InstallForm says which rendered skill form an installation contains. It is a
+// user-owned installation choice, not a claim about a host or model: Magus
+// cannot reliably observe either one. Dual keeps the established compatibility
+// behavior, while Full and Concise install one canonical name per skill.
+type InstallForm string
+
+const (
+	InstallFormDual    InstallForm = "dual"
+	InstallFormFull    InstallForm = "full"
+	InstallFormConcise InstallForm = "concise"
+)
+
+// ParseInstallForm validates the spelling accepted by `magus agent install`.
+func ParseInstallForm(s string) (InstallForm, error) {
+	form := InstallForm(s)
+	switch form {
+	case InstallFormDual, InstallFormFull, InstallFormConcise:
+		return form, nil
+	default:
+		return "", fmt.Errorf("unknown skill form %q (want dual, full, or concise)", s)
+	}
+}
+
+// RenderedSkillsForForm returns exactly the entries a selected installation
+// writes. It centralizes the compatibility dual form so planning, tar output,
+// and writes cannot disagree about which names exist.
+func (c *Catalog) RenderedSkillsForForm(form InstallForm) ([]AgentSkill, error) {
+	switch form {
+	case InstallFormDual:
+		return c.RenderedSkills(VariantSimple)
+	case InstallFormFull:
+		return c.RenderedSkills(VariantFull)
+	case InstallFormConcise:
+		defs, err := c.EmbeddedSkills()
+		if err != nil {
+			return nil, err
+		}
+		out := make([]AgentSkill, 0, len(defs))
+		for _, def := range defs {
+			skill, err := c.Render(def, VariantSimple)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, skill)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("unknown skill form %q", form)
+	}
+}
+
 // applyVariant renders body for v. The body is a text/template, so a permutation
 // is an ordinary {{if}} branch and a malformed one is a parse or execute error
 // rather than text that silently survives into an installed file.
@@ -310,6 +361,7 @@ func MustSkill(name string) SkillRef {
 var skillSources = []skillSource{
 	{name: "magus-workspace-rules", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md"},
 	{name: "magus-architecture-review", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture-review/SKILL.md"},
+	{name: "magus-test-design", description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior. Use when designing, writing, or reviewing tests that require a real/fake/stub decision, complete observable assertions, or a coverage-gap assessment. Do not use merely to execute or diagnose tests (magus-run), or to choose package seams (magus-architecture-review).", bodyPath: "skills/magus-test-design/SKILL.md"},
 	{name: "magus-buzz-write", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz-write/SKILL.md"},
 	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-write for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},
 	{name: "magus-change-summary", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-change-summary/SKILL.md"},
@@ -489,6 +541,20 @@ func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return c.skillTar(dest, skills)
+}
+
+// SkillTarForForm returns a reproducible archive for the selected installation
+// form. It is the form-aware counterpart to SkillTar for the agent CLI.
+func (c *Catalog) SkillTarForForm(dest string, form InstallForm) ([]byte, error) {
+	skills, err := c.RenderedSkillsForForm(form)
+	if err != nil {
+		return nil, err
+	}
+	return c.skillTar(dest, skills)
+}
+
+func (c *Catalog) skillTar(dest string, skills []AgentSkill) ([]byte, error) {
 	if dest == "" {
 		dest = "."
 	}
@@ -531,11 +597,27 @@ func (c *Catalog) PlanSkillTree(dir, dest string, v Variant) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return planSkillTree(dest, skills), nil
+}
+
+// PlanSkillTreeForForm returns the paths a selected form would write.
+func (c *Catalog) PlanSkillTreeForForm(dir, dest string, form InstallForm) ([]string, error) {
+	if err := checkDestination(dir, dest); err != nil {
+		return nil, err
+	}
+	skills, err := c.RenderedSkillsForForm(form)
+	if err != nil {
+		return nil, err
+	}
+	return planSkillTree(dest, skills), nil
+}
+
+func planSkillTree(dest string, skills []AgentSkill) []string {
 	planned := make([]string, 0, len(skills))
 	for _, skill := range skills {
 		planned = append(planned, filepath.Join(dest, skill.Name, "SKILL.md"))
 	}
-	return planned, nil
+	return planned
 }
 
 // checkDestination refuses a destination that lands outside dir. The joined path
@@ -564,6 +646,23 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 	if err != nil {
 		return nil, err
 	}
+	return c.writeSkillTree(dir, dest, force, skills)
+}
+
+// WriteSkillTreeForForm installs exactly the selected form's canonical skill
+// entries. The caller still controls destinations and overwrite behavior.
+func (c *Catalog) WriteSkillTreeForForm(dir, dest string, force bool, form InstallForm) ([]string, error) {
+	if err := checkDestination(dir, dest); err != nil {
+		return nil, err
+	}
+	skills, err := c.RenderedSkillsForForm(form)
+	if err != nil {
+		return nil, err
+	}
+	return c.writeSkillTree(dir, dest, force, skills)
+}
+
+func (c *Catalog) writeSkillTree(dir, dest string, force bool, skills []AgentSkill) ([]string, error) {
 	var written []string
 	for _, skill := range skills {
 		rel := filepath.Join(skill.Name, "SKILL.md")

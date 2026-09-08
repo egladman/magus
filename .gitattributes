@@ -12,6 +12,7 @@
 .agents/skills/magus-query*/** merge=magus linguist-generated
 .agents/skills/magus-run*/** merge=magus linguist-generated
 .agents/skills/magus-sdk*/** merge=magus linguist-generated
+.agents/skills/magus-test-design*/** merge=magus linguist-generated
 .agents/skills/magus-vcs-hygiene*/** merge=magus linguist-generated
 .agents/skills/magus-workspace-rules*/** merge=magus linguist-generated
 .claude/skills/magus-architecture-review*/** merge=magus linguist-generated
@@ -26,6 +27,7 @@
 .claude/skills/magus-query*/** merge=magus linguist-generated
 .claude/skills/magus-run*/** merge=magus linguist-generated
 .claude/skills/magus-sdk*/** merge=magus linguist-generated
+.claude/skills/magus-test-design*/** merge=magus linguist-generated
 .claude/skills/magus-vcs-hygiene*/** merge=magus linguist-generated
 .claude/skills/magus-workspace-rules*/** merge=magus linguist-generated
 .opencode/skills/magus-architecture-review*/** merge=magus linguist-generated
@@ -40,6 +42,7 @@
 .opencode/skills/magus-query*/** merge=magus linguist-generated
 .opencode/skills/magus-run*/** merge=magus linguist-generated
 .opencode/skills/magus-sdk*/** merge=magus linguist-generated
+.opencode/skills/magus-test-design*/** merge=magus linguist-generated
 .opencode/skills/magus-vcs-hygiene*/** merge=magus linguist-generated
 .opencode/skills/magus-workspace-rules*/** merge=magus linguist-generated
 MAGUS.md merge=magus linguist-generated

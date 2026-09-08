@@ -73,7 +73,7 @@ func nodeByID(out types.KnowledgeGraphOutput, id string) (types.KnowledgeNode, b
 	return types.KnowledgeNode{}, false
 }
 
-func hasEdge(out types.KnowledgeGraphOutput, source, target, relation string) bool {
+func hasEdge(out types.KnowledgeGraphOutput, source, target string, relation types.RelationID) bool {
 	for _, e := range out.Links {
 		if e.Source == source && e.Target == target && e.Relation == relation {
 			return true
@@ -83,7 +83,7 @@ func hasEdge(out types.KnowledgeGraphOutput, source, target, relation string) bo
 }
 
 // findEdge returns the edge matching (source, target, relation), or ok=false.
-func findEdge(out types.KnowledgeGraphOutput, source, target, relation string) (types.KnowledgeEdge, bool) {
+func findEdge(out types.KnowledgeGraphOutput, source, target string, relation types.RelationID) (types.KnowledgeEdge, bool) {
 	for _, e := range out.Links {
 		if e.Source == source && e.Target == target && e.Relation == relation {
 			return e, true

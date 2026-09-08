@@ -23,7 +23,7 @@ import (
 // direction: [active, passive]. Active is used when the focus node is the edge
 // source (an out edge); passive when it is the target (an in edge). So an
 // `op --uses--> tool` edge reads "uses" from the op and "used by" from the tool.
-var relationPhrase = map[string][2]string{
+var relationPhrase = map[types.RelationID][2]string{
 	types.RelationUses:         {"uses", "used by"},
 	types.RelationDependsOn:    {"depends on", "required by"},
 	types.RelationContains:     {"contains", "part of"},
@@ -49,12 +49,12 @@ var relationPhrase = map[string][2]string{
 // unreadable in practice. Delivery is the whole problem this store has: prose nobody meets
 // at the moment they need it may as well not be written, so the one group that carries it
 // goes first.
-var proseFirst = map[string]bool{types.RelationAnnotates: true}
+var proseFirst = map[types.RelationID]bool{types.RelationAnnotates: true}
 
 // phraseFor returns the natural-language verb for a relation in the given
 // direction, falling back to the raw relation name (with an "-> "/"<- " marker for
 // an unknown relation so the direction is never lost).
-func phraseFor(relation string, active bool) string {
+func phraseFor(relation types.RelationID, active bool) string {
 	if p, ok := relationPhrase[relation]; ok {
 		if active {
 			return p[0]
@@ -62,9 +62,9 @@ func phraseFor(relation string, active bool) string {
 		return p[1]
 	}
 	if active {
-		return relation + " ->"
+		return string(relation) + " ->"
 	}
-	return "<- " + relation
+	return "<- " + string(relation)
 }
 
 // wrapCol is the target line width for wrapped ID lists.
@@ -142,7 +142,7 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 
 type relationGroup struct {
 	header   string
-	relation string
+	relation types.RelationID
 	ids      []string
 }
 
@@ -153,8 +153,8 @@ type relationGroup struct {
 // Explain already produces.
 func relationGroups(out types.KnowledgeExplainOutput) []relationGroup {
 	build := func(edges []types.KnowledgeEdgeRef, active bool) []relationGroup {
-		var order []string
-		byRel := map[string][]string{}
+		var order []types.RelationID
+		byRel := map[types.RelationID][]string{}
 		for _, e := range edges {
 			if _, seen := byRel[e.Relation]; !seen {
 				order = append(order, e.Relation)

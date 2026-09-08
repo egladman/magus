@@ -225,6 +225,20 @@ After `magus run test` (or `magus run ci`), a `coverage` attr (with `covered_stm
 that reference a symbol. Sort symbols by `coverage` ascending for "what is untested",
 or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
 
+**What may be unused?** The graph offers scoped candidates, not a generic
+"dead code" verdict. `magus graph stats` reports structural orphans such as a
+declared spell no target uses. Where the symbol index is available,
+`magus_insight lens=unreferenced` reports code symbols with no indexed
+cross-file reference.
+
+Neither result proves that something is safe to delete. Entry points, external
+consumers, reflection, interface dispatch, generated code, build tags, package
+initializers, and intentionally navigational documentation can all be live
+without the relevant incoming edge. An isolated node likewise means only that
+the graph has no modeled connection. Treat each result as a candidate with a
+named visibility boundary; do not turn missing edges into a universal
+`dead=true` classification.
+
 **What does a target produce or consume, and is a file generated?** magus indexes each
 target's declared `magus\outputs` / `magus\inputs`, so the graph knows the build's file
 flow - which a pure code-graph cannot.

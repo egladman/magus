@@ -47,7 +47,8 @@ type Graph struct {
 // relation). A second edge with the same key upgrades score/provenance if the
 // newcomer is stronger, so extraction order never changes the result.
 type edgeKey struct {
-	source, target, relation string
+	source, target string
+	relation       types.RelationID
 }
 
 // NewGraph returns an empty graph ready for AddNode/AddEdge/Merge.

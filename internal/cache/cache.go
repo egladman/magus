@@ -451,9 +451,16 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		c.mtimes.flush(ctx)
 	}
 
-	// exportMu.RLock ensures Export/Import cannot race with an active Run.
-	c.exportMu.RLock()
-	defer c.exportMu.RUnlock()
+	// exportMu.RLock ensures Export/Import cannot race with an active Run. A
+	// composed target can start a cache run while its skip_cache parent is being
+	// captured by this same Cache. Do not take a second RLock in that case: a
+	// waiting Export owns writer intent, so Go's RWMutex would block the child
+	// behind it while the parent still holds the read lock Export needs.
+	if exportReadLockCacheFrom(ctx) != c {
+		c.exportMu.RLock()
+		defer c.exportMu.RUnlock()
+		ctx = withExportReadLockCache(ctx, c)
+	}
 
 	unlock, err := hashLocks.acquire(ctx, hash)
 	if err != nil {
@@ -716,6 +723,17 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	return result, nil
 }
 
+type exportReadLockCacheKey struct{}
+
+func withExportReadLockCache(ctx context.Context, c *Cache) context.Context {
+	return context.WithValue(ctx, exportReadLockCacheKey{}, c)
+}
+
+func exportReadLockCacheFrom(ctx context.Context) *Cache {
+	c, _ := ctx.Value(exportReadLockCacheKey{}).(*Cache)
+	return c
+}
+
 // recordOutput persists a step's captured output events under a per-execution
 // reference id and returns that ref for the result log event. It builds the target's
 // `result` record (status/duration/error), persists the output events plus that
@@ -897,9 +915,80 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), e
 // lock - which is exactly how a settle pass wedged a gate for over an hour on
 // 2026-09-04 with `magus status` reporting 0 slots in use and nothing running.
 //
-// Concurrency is the caller's to arrange: unlike RunAll there is no dependency barrier
-// and no exclusive-step isolation here, because a single step has nothing to order
-// against.
+// Concurrency is the caller's to arrange: unlike RunAll there is no dependency
+// barrier. It still joins the invocation's isolation scope, so an exclusive
+// off-batch step cannot overlap either a batch step or another dynamic child.
+type runIsolation struct {
+	mu sync.RWMutex
+}
+
+type runIsolationKey struct{}
+type runIsolationLeaseKey struct{}
+
+type runIsolationLease struct {
+	isolation *runIsolation
+	exclusive bool
+}
+
+// WithRunScope attaches the isolation gate shared by a top-level invocation and
+// its off-batch cache work. Reusing an existing scope makes nested entry points
+// join the same gate instead of serializing against an unrelated one.
+func WithRunScope(ctx context.Context) context.Context {
+	if isolationFrom(ctx) != nil {
+		return ctx
+	}
+	return context.WithValue(ctx, runIsolationKey{}, &runIsolation{})
+}
+
+func isolationFrom(ctx context.Context) *runIsolation {
+	isolation, _ := ctx.Value(runIsolationKey{}).(*runIsolation)
+	return isolation
+}
+
+func isolationLeaseFrom(ctx context.Context) *runIsolationLease {
+	lease, _ := ctx.Value(runIsolationLeaseKey{}).(*runIsolationLease)
+	return lease
+}
+
+func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, func()) {
+	ctx = WithRunScope(ctx)
+	isolation := isolationFrom(ctx)
+	if exclusive {
+		isolation.mu.Lock()
+	} else {
+		isolation.mu.RLock()
+	}
+	ctx = context.WithValue(ctx, runIsolationLeaseKey{}, &runIsolationLease{
+		isolation: isolation,
+		exclusive: exclusive,
+	})
+	return ctx, func() {
+		if exclusive {
+			isolation.mu.Unlock()
+			return
+		}
+		isolation.mu.RUnlock()
+	}
+}
+
+// YieldRunIsolation releases the caller's RunAll or RunAside isolation lease
+// while fn admits a dynamically dispatched child, then restores that lease
+// before returning. It is deliberately a no-op outside an admitted cache step.
+func YieldRunIsolation(ctx context.Context, fn func(context.Context) error) error {
+	lease := isolationLeaseFrom(ctx)
+	if lease == nil {
+		return fn(ctx)
+	}
+	if lease.exclusive {
+		lease.isolation.mu.Unlock()
+		defer lease.isolation.mu.Lock()
+	} else {
+		lease.isolation.mu.RUnlock()
+		defer lease.isolation.mu.RLock()
+	}
+	return fn(context.WithValue(ctx, runIsolationLeaseKey{}, nil))
+}
+
 func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) error, opts ...RunOption) (Result, error) {
 	rc := &runCtx{}
 	for _, o := range opts {
@@ -909,6 +998,8 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	if lim == nil {
 		lim = NewLimiter(DefaultConcurrency())
 	}
+	ctx, releaseIsolation := acquireRunIsolation(ctx, s.Exclusive)
+	defer releaseIsolation()
 	slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
@@ -930,6 +1021,7 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 // dependents). Every goroutine launches immediately and blocks on deps without
 // holding a slot, so the pool never deadlocks and g.Wait() always drains cleanly.
 func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Context, Step) error, opts ...RunOption) ([]Result, error) {
+	ctx = WithRunScope(ctx)
 	rc := &runCtx{}
 	for _, o := range opts {
 		o(rc)
@@ -948,25 +1040,6 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 
 	var keysMu sync.Mutex
 	resolvedKeys := make(map[string]string, len(steps))
-
-	// isolationMu serializes Step.Exclusive steps against the whole batch: an
-	// exclusive step takes the write lock (runs alone); every other step takes the
-	// read lock (runs in parallel with peers but never alongside an exclusive step).
-	//
-	// Ordering is load-bearing: take the lock AFTER waitForDeps (so a step's own
-	// deps aren't blocked by its writer intent) and BEFORE the limiter slot (so a
-	// pending writer never holds a slot and starves a dependent). That is also why
-	// the lock spans the whole c.Run rather than just fn - moving it inside would
-	// put it after the slot and reintroduce the starvation.
-	var isolationMu sync.RWMutex
-	acquireIsolation := func(exclusive bool) func() {
-		if exclusive {
-			isolationMu.Lock()
-			return isolationMu.Unlock
-		}
-		isolationMu.RLock()
-		return isolationMu.RUnlock
-	}
 
 	// optimization: coalesce the mtime-store flush to once per batch instead of once
 	// per step. A per-step flush rewrites every shard a completing step shares with
@@ -1060,7 +1133,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := barrier.waitForDeps(gctx, s); err != nil {
 				return fail(err)
 			}
-			defer acquireIsolation(s.Exclusive)()
+			stepCtx, releaseIsolation := acquireRunIsolation(gctx, s.Exclusive)
+			defer releaseIsolation()
 			// acquireIsolation's Lock/RLock is not ctx-aware, so a goroutine can
 			// park there uninterruptibly while a sibling fails. Re-check after it
 			// returns and bail before running fn. lim.Acquire below would catch a
@@ -1069,7 +1143,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}
-			slots, release, admitErr := c.admit(gctx, s, lim)
+			slots, release, admitErr := c.admit(stepCtx, s, lim)
 			if admitErr != nil {
 				// A machine refusal is an independent finding: nothing upstream failed and
 				// the batch was not cancelled, the machine refused this step on its own
@@ -1114,7 +1188,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// Past every gate: from here a failure is this step's own, not a consequence
 			// of someone else's, so it counts against the budget and is worth reporting.
 			ran = true
-			r, err := c.Run(gctx, s, func(ctx context.Context) error {
+			r, err := c.Run(stepCtx, s, func(ctx context.Context) error {
 				ctx = ContextWithLimiter(ctx, lim)
 				ctx = WithSlotsHeld(ctx, slots)
 				return fn(ctx, s)

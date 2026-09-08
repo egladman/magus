@@ -67,7 +67,10 @@ func SeedsLazyLayer(input string) bool {
 		// symbol->symbol only in the symbol shards. Seeding on it loads shards a buzz-only
 		// query does not need, which is the safe direction - the alternative is a
 		// relation:calls query that silently omits every code symbol.
-		return r == types.RelationDefines || r == types.RelationReferences || r == types.RelationCalls
+		// A query field is whatever the caller typed, so it is compared as text rather
+		// than assumed to name a declared relation.
+		rel := types.RelationID(r)
+		return rel == types.RelationDefines || rel == types.RelationReferences || rel == types.RelationCalls
 	})
 }
 
@@ -404,7 +407,7 @@ func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Gr
 		}
 	}
 	visit := func(e types.KnowledgeEdge, cur string) {
-		if len(relSet) > 0 && !relSet[e.Relation] {
+		if len(relSet) > 0 && !relSet[string(e.Relation)] {
 			return
 		}
 		next := e.Target
@@ -444,7 +447,7 @@ func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Gr
 			if !visited[e.Target] {
 				continue
 			}
-			if len(relSet) > 0 && !relSet[e.Relation] {
+			if len(relSet) > 0 && !relSet[string(e.Relation)] {
 				continue
 			}
 			sub.AddEdge(e)
@@ -803,12 +806,12 @@ func (g *Graph) touchesRelation(id string, rels []string) bool {
 	g.ensureAdj()
 	relSet := toSet(rels)
 	for _, e := range g.out[id] {
-		if relSet[e.Relation] {
+		if relSet[string(e.Relation)] {
 			return true
 		}
 	}
 	for _, e := range g.in[id] {
-		if relSet[e.Relation] {
+		if relSet[string(e.Relation)] {
 			return true
 		}
 	}

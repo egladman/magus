@@ -43,12 +43,10 @@ both.
 
 ## MCP
 
-```sh
-magus server start
-```
-
-Any client that takes a Streamable HTTP URL plus a bearer token can connect; see
-[MCP](../mcp.md).
+Any client that takes the documented connection details and a bearer token can
+connect; see [MCP](../mcp.md). This wiring belongs to the host owner. An agent
+uses the CLI fallback when MCP is unavailable; it does not manually start Magus
+solely to obtain tools.
 
 ## Guard hook
 

@@ -53,6 +53,38 @@ type TargetMemo struct {
 	waitingFor map[string]*waitEdge // caller name -> what it is waiting for
 }
 
+// TargetInterceptor owns the scheduling boundary for a target reached through
+// ctx.needs. Pool claims TargetMemo before calling it, so implementations may
+// admit, cache, or skip invoke without changing Buzz's runtime resolution or
+// duplicate-target semantics. The supplied invoke is already admitted: an
+// interceptor must arrange any concurrency policy it needs before calling it.
+type TargetInterceptor interface {
+	InterceptTarget(ctx context.Context, name string, invoke func(context.Context) error) error
+}
+
+type targetInterceptorKey struct{}
+
+// WithTargetInterceptor returns ctx carrying interceptor for targets reached
+// through ctx.needs. Directly invoked targets are not affected.
+func WithTargetInterceptor(ctx context.Context, interceptor TargetInterceptor) context.Context {
+	return context.WithValue(ctx, targetInterceptorKey{}, interceptor)
+}
+
+// WithoutTargetInterceptor returns ctx whose descendants run inline in their
+// caller's target boundary. An interceptor uses it once it has established a
+// cache boundary for a cacheable child.
+func WithoutTargetInterceptor(ctx context.Context) context.Context {
+	return context.WithValue(ctx, targetInterceptorKey{}, nil)
+}
+
+// HasTargetInterceptor reports whether targets dispatched from ctx are
+// intercepted. Dispatch bridges use it to yield their caller's scheduler lease
+// once around a whole ctx.needs fan-out.
+func HasTargetInterceptor(ctx context.Context) bool {
+	interceptor, _ := ctx.Value(targetInterceptorKey{}).(TargetInterceptor)
+	return interceptor != nil
+}
+
 type memoEntry struct {
 	done chan struct{} // closed when the target finishes
 	err  error
@@ -416,11 +448,21 @@ func (p *Pool) submitWithMemo(ctx context.Context, name string, ancestors []stri
 }
 
 func (p *Pool) execute(ctx context.Context, name string, ancestors []string) error {
+	invoke := func(ctx context.Context) error {
+		return p.executeTarget(ctx, name, ancestors, true)
+	}
+	if interceptor, _ := ctx.Value(targetInterceptorKey{}).(TargetInterceptor); interceptor != nil {
+		return interceptor.InterceptTarget(ctx, name, invoke)
+	}
+	return p.executeTarget(ctx, name, ancestors, false)
+}
+
+func (p *Pool) executeTarget(ctx context.Context, name string, ancestors []string, alreadyAdmitted bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	sem := p.getSemFrom(ctx)
-	if sem != nil {
+	if sem != nil && !alreadyAdmitted {
 		if err := sem.Acquire(ctx); err != nil {
 			return err
 		}

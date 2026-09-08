@@ -588,7 +588,7 @@ func assembleProject(p types.TargetGraphProject) Shard {
 }
 
 // extractedEdge builds a directly-observed edge (confidence extracted, score 1.0).
-func extractedEdge(source, target, relation, provenance string) types.KnowledgeEdge {
+func extractedEdge(source, target string, relation types.RelationID, provenance string) types.KnowledgeEdge {
 	return types.KnowledgeEdge{
 		Source:     source,
 		Target:     target,
@@ -601,7 +601,7 @@ func extractedEdge(source, target, relation, provenance string) types.KnowledgeE
 
 // inferredEdge builds a rubric-inferred edge (confidence inferred, sub-1.0 score)
 // for fuzzy evidence such as an in-body doc mention or an unresolved buzz import.
-func inferredEdge(source, target, relation, provenance string, score float64) types.KnowledgeEdge {
+func inferredEdge(source, target string, relation types.RelationID, provenance string, score float64) types.KnowledgeEdge {
 	return types.KnowledgeEdge{
 		Source:     source,
 		Target:     target,
