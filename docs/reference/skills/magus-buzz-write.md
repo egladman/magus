@@ -3,8 +3,6 @@ title: magus-buzz-write
 generated_from: internal/agent/skills/magus-buzz-write/SKILL.md
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz-write]
-aliases:
-  - reference/skills/magus-buzz
 skill_full_bytes: 8174
 skill_simple_bytes: 6776
 ---
@@ -30,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
 | `skill-content` | `ed8f6112969a` |
 | `skill-variant` | `full` |

@@ -216,7 +216,7 @@ Before spawning, record one row per lease - including the checkpoint it was hand
 tree is not clean) - and keep descendants in the same table:
 {{if .Full}}
 The same checkpoint is what a later incremental re-review diffs from (see the
-magus-change-summary skill) - review time and handoff time read the same object.
+magus-change-summary skill) - review time and pickup time read the same object.
 {{end}}
 
 | Lease | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |

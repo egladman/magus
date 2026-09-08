@@ -136,21 +136,9 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 	// The two byte counts are stated as FACTS; the SSG turns them into a percentage
 	// and a <progress> bar (engine/meta.buzz:insertSizeRatio). Presentation is the
 	// renderer's job, and a generated page hands it data rather than markup.
-	var aliases string
-	// A renamed skill keeps its old page URL working. The rename is recorded on the
-	// catalog row rather than in a redirect list beside the site, so the page that
-	// carries the redirect is generated from the same fact that caused it.
-	// One block, however many names: a second `aliases:` key is a duplicate mapping key
-	// and the frontmatter parser refuses the whole page.
-	if former := agent.FormerNames(full.Name); len(former) > 0 {
-		aliases = "aliases:\n"
-		for _, old := range former {
-			aliases += fmt.Sprintf("  - reference/skills/%s\n", old)
-		}
-	}
-	fmt.Fprintf(&b, "---\ntitle: %s\ngenerated_from: internal/agent/skills/%s/SKILL.md\ndescription: %q\ntags: [agents, skills, %s]\n%s"+
+	fmt.Fprintf(&b, "---\ntitle: %s\ngenerated_from: internal/agent/skills/%s/SKILL.md\ndescription: %q\ntags: [agents, skills, %s]\n"+
 		"skill_full_bytes: %d\nskill_simple_bytes: %d\n---\n\n",
-		full.Name, full.Name, firstSentence(full.Description), full.Name, aliases, len(full.Body), len(simple.Body))
+		full.Name, full.Name, firstSentence(full.Description), full.Name, len(full.Body), len(simple.Body))
 	fmt.Fprintf(&b, "# %s\n\n", full.Name)
 	fmt.Fprintf(&b, "%s\n\n", full.Description)
 	fmt.Fprintf(&b, "Install it, rather than copying from this page:\n\n")

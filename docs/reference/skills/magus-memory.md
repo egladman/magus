@@ -1,17 +1,15 @@
 ---
-title: magus-handoff-journal
-generated_from: internal/agent/skills/magus-handoff-journal/SKILL.md
-description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions."
-tags: [agents, skills, magus-handoff-journal]
-aliases:
-  - reference/skills/magus-memory
-skill_full_bytes: 5590
-skill_simple_bytes: 4625
+title: magus-memory
+generated_from: internal/agent/skills/magus-memory/SKILL.md
+description: "Maintain a user-owned per-repository memory through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions."
+tags: [agents, skills, magus-memory]
+skill_full_bytes: 5557
+skill_simple_bytes: 4609
 ---
 
-# magus-handoff-journal
+# magus-memory
 
-Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions. Use when a debugging session eliminates a possibility a later session would otherwise re-propose. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, broken-linked, and unresolvable-evidence entries before relying on them.
+Maintain a user-owned per-repository memory through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions. Use when a debugging session eliminates a possibility a later session would otherwise re-propose. It is not automatic model memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, broken-linked, and unresolvable-evidence entries before relying on them.
 
 Install it, rather than copying from this page:
 
@@ -30,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
-| `skill-content` | `2e9cc352b1cd` |
+| `skill-content` | `d7efb12dcc37` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -42,14 +40,14 @@ The `skill-content` digest covers this skill alone, and both permutations below 
 Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
 
 ````markdown
-# Handoff journal
+# Repository memory
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
-handoff journal. It lives outside the repo, is shared by its worktrees, and is
+memory. It lives outside the repo, is shared by its worktrees, and is
 visible in the console. It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
 
-The graph remains the source of truth. A journal entry links back to the query,
+The graph remains the source of truth. An entry links back to the query,
 node, output, command, or document that a later reader should reopen.
 
 Ref kinds (the closed set a ref may point at):
@@ -81,8 +79,8 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Read and write deliberately
 
-- At a handoff or session start, use `magus_memory` `{op: "list"}` or
-  `magus memory ls`. Empty is normal; do not manufacture journal entries.
+- When picking work up, use `magus_memory` `{op: "list"}` or
+  `magus memory ls`. Empty is normal; do not manufacture entries.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to
@@ -135,7 +133,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Records live outside the repo, keyed by repository identity. The console,
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one
-  session erase another's handoff.
+  session erase another's entry.
 ````
 
 ## Short form
@@ -146,10 +144,10 @@ The enumeration dropped, the judgment kept - for the most capable readers, not t
 <summary>Show the short form</summary>
 
 ````markdown
-# Handoff journal
+# Repository memory
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
-handoff journal. It is not automatic model memory: add an entry only
+memory. It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
 
 The graph remains the source of truth.
@@ -183,7 +181,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Read and write deliberately
 
-- At a handoff or session start, use `magus_memory` `{op: "list"}` or
+- When picking work up, use `magus_memory` `{op: "list"}` or
   `magus memory ls`.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.

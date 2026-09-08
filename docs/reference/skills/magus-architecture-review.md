@@ -3,8 +3,6 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-aliases:
-  - reference/skills/magus-architecture
 skill_full_bytes: 6322
 skill_simple_bytes: 5123
 ---
@@ -30,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
 | `skill-content` | `e4b75fa969de` |
 | `skill-variant` | `full` |

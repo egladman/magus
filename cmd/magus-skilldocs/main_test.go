@@ -125,21 +125,13 @@ func TestStampTableStopsAtTheBody(t *testing.T) {
 	assert.NotContains(t, table, "| `---` |")
 }
 
-// TestRenamedSkillPageCarriesItsOldURL pins the compat that the rename row
-// exists for: a published doc URL is a link someone else wrote, and nothing on
-// their end re-runs when the skill is renamed.
-func TestRenamedSkillPageCarriesItsOldURL(t *testing.T) {
+// A renamed skill's old page URL is not kept alive. Renaming one breaks that link,
+// deliberately: magus is pre-1.0 and a redirect list is a second place the name lives.
+func TestARenamedSkillPageCarriesNoRedirect(t *testing.T) {
 	out := generate(t)
 
-	require.NotEmpty(t, agent.FormerNames("magus-docs-lookup"), "this test is pinned to a skill that has been renamed")
-	assert.Contains(t, page(t, out, "magus-docs-lookup.md"), "aliases:\n  - reference/skills/magus-docs\n")
-	assert.NotContains(t, page(t, out, "magus-query.md"), "aliases:", "a skill that was never renamed carries no redirect")
-
-	// Renamed twice, so both old URLs sit under ONE aliases key: a repeated mapping key
-	// is a frontmatter parse error, which fails the whole site build.
-	require.Len(t, agent.FormerNames("magus-multi-agent"), 2, "this test is pinned to a skill renamed twice")
-	assert.Contains(t, page(t, out, "magus-multi-agent.md"),
-		"aliases:\n  - reference/skills/magus-delegate-ultra\n  - reference/skills/magus-delegate-multi-agent\n")
+	assert.NotContains(t, page(t, out, "magus-docs-lookup.md"), "aliases:")
+	assert.NotContains(t, page(t, out, "magus-query.md"), "aliases:")
 }
 
 // TestIndexTotalsEverySkill checks the numbers the index exists for: the choice

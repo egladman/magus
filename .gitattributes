@@ -7,7 +7,7 @@
 .agents/skills/magus-commit-composition*/** merge=magus linguist-generated
 .agents/skills/magus-context-audit*/** merge=magus linguist-generated
 .agents/skills/magus-docs-lookup*/** merge=magus linguist-generated
-.agents/skills/magus-handoff-journal*/** merge=magus linguist-generated
+.agents/skills/magus-memory*/** merge=magus linguist-generated
 .agents/skills/magus-multi-agent*/** merge=magus linguist-generated
 .agents/skills/magus-query*/** merge=magus linguist-generated
 .agents/skills/magus-run*/** merge=magus linguist-generated
@@ -21,7 +21,7 @@
 .claude/skills/magus-commit-composition*/** merge=magus linguist-generated
 .claude/skills/magus-context-audit*/** merge=magus linguist-generated
 .claude/skills/magus-docs-lookup*/** merge=magus linguist-generated
-.claude/skills/magus-handoff-journal*/** merge=magus linguist-generated
+.claude/skills/magus-memory*/** merge=magus linguist-generated
 .claude/skills/magus-multi-agent*/** merge=magus linguist-generated
 .claude/skills/magus-query*/** merge=magus linguist-generated
 .claude/skills/magus-run*/** merge=magus linguist-generated
@@ -35,7 +35,7 @@
 .opencode/skills/magus-commit-composition*/** merge=magus linguist-generated
 .opencode/skills/magus-context-audit*/** merge=magus linguist-generated
 .opencode/skills/magus-docs-lookup*/** merge=magus linguist-generated
-.opencode/skills/magus-handoff-journal*/** merge=magus linguist-generated
+.opencode/skills/magus-memory*/** merge=magus linguist-generated
 .opencode/skills/magus-multi-agent*/** merge=magus linguist-generated
 .opencode/skills/magus-query*/** merge=magus linguist-generated
 .opencode/skills/magus-run*/** merge=magus linguist-generated

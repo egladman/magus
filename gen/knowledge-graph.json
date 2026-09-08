@@ -1362,7 +1362,7 @@
       "source": "docs/reference/skills",
       "attrs": {
         "dir_files": "72",
-        "dir_languages": "markdown,md#agent-skills,md#full-form,md#magus-architecture-review,md#magus-buzz-review,md#magus-buzz-write,md#magus-change-summary,md#magus-commit-composition,md#magus-context-audit,md#magus-docs-lookup,md#magus-handoff-journal,md#magus-multi-agent,md#mag"
+        "dir_languages": "markdown,md#agent-skills,md#full-form,md#magus-architecture-review,md#magus-buzz-review,md#magus-buzz-write,md#magus-change-summary,md#magus-commit-composition,md#magus-context-audit,md#magus-docs-lookup,md#magus-memory,md#magus-multi-agent,md#magus-query,"
       }
     },
     {
@@ -1506,13 +1506,13 @@
       }
     },
     {
-      "id": "dir:internal/agent/skills/magus-handoff-journal",
+      "id": "dir:internal/agent/skills/magus-memory",
       "kind": "dir",
-      "label": "internal/agent/skills/magus-handoff-journal",
-      "source": "internal/agent/skills/magus-handoff-journal",
+      "label": "internal/agent/skills/magus-memory",
+      "source": "internal/agent/skills/magus-memory",
       "attrs": {
         "dir_files": "5",
-        "dir_languages": "markdown,md#handoff-journal,md#read-and-write-deliberately,md#recording,md#scope-boundaries"
+        "dir_languages": "markdown,md#read-and-write-deliberately,md#recording,md#repository-memory,md#scope-boundaries"
       }
     },
     {
@@ -5460,15 +5460,15 @@
       }
     },
     {
-      "id": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "id": "doc:docs/reference/skills/magus-memory.md",
       "kind": "doc",
-      "label": "docs/reference/skills/magus-handoff-journal.md",
-      "source": "docs/reference/skills/magus-handoff-journal.md",
+      "label": "docs/reference/skills/magus-memory.md",
+      "source": "docs/reference/skills/magus-memory.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-handoff-journal",
-        "title": "magus-handoff-journal"
+        "tags": "agents,skills,magus-memory",
+        "title": "magus-memory"
       }
     },
     {
@@ -5746,10 +5746,10 @@
       }
     },
     {
-      "id": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "id": "doc:internal/agent/skills/magus-memory/SKILL.md",
       "kind": "doc",
-      "label": "internal/agent/skills/magus-handoff-journal/SKILL.md",
-      "source": "internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "label": "internal/agent/skills/magus-memory/SKILL.md",
+      "source": "internal/agent/skills/magus-memory/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -31117,40 +31117,40 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-handoff-journal.md#full-form",
+      "id": "docsection:docs/reference/skills/magus-memory.md#full-form",
       "kind": "docsection",
       "label": "Full form",
-      "source": "docs/reference/skills/magus-handoff-journal.md#full-form",
+      "source": "docs/reference/skills/magus-memory.md#full-form",
       "attrs": {
         "anchor": "full-form",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-handoff-journal.md#magus-handoff-journal",
+      "id": "docsection:docs/reference/skills/magus-memory.md#magus-memory",
       "kind": "docsection",
-      "label": "magus-handoff-journal",
-      "source": "docs/reference/skills/magus-handoff-journal.md#magus-handoff-journal",
+      "label": "magus-memory",
+      "source": "docs/reference/skills/magus-memory.md#magus-memory",
       "attrs": {
-        "anchor": "magus-handoff-journal",
+        "anchor": "magus-memory",
         "level": "1"
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-handoff-journal.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-memory.md#short-form",
       "kind": "docsection",
       "label": "Short form",
-      "source": "docs/reference/skills/magus-handoff-journal.md#short-form",
+      "source": "docs/reference/skills/magus-memory.md#short-form",
       "attrs": {
         "anchor": "short-form",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-handoff-journal.md#what-an-installed-copy-carries",
+      "id": "docsection:docs/reference/skills/magus-memory.md#what-an-installed-copy-carries",
       "kind": "docsection",
       "label": "What an installed copy carries",
-      "source": "docs/reference/skills/magus-handoff-journal.md#what-an-installed-copy-carries",
+      "source": "docs/reference/skills/magus-memory.md#what-an-installed-copy-carries",
       "attrs": {
         "anchor": "what-an-installed-copy-carries",
         "level": "2"
@@ -32597,40 +32597,40 @@
       }
     },
     {
-      "id": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#handoff-journal",
-      "kind": "docsection",
-      "label": "Handoff journal",
-      "source": "internal/agent/skills/magus-handoff-journal/SKILL.md#handoff-journal",
-      "attrs": {
-        "anchor": "handoff-journal",
-        "level": "1"
-      }
-    },
-    {
-      "id": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#read-and-write-deliberately",
+      "id": "docsection:internal/agent/skills/magus-memory/SKILL.md#read-and-write-deliberately",
       "kind": "docsection",
       "label": "Read and write deliberately",
-      "source": "internal/agent/skills/magus-handoff-journal/SKILL.md#read-and-write-deliberately",
+      "source": "internal/agent/skills/magus-memory/SKILL.md#read-and-write-deliberately",
       "attrs": {
         "anchor": "read-and-write-deliberately",
         "level": "2"
       }
     },
     {
-      "id": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#recording",
+      "id": "docsection:internal/agent/skills/magus-memory/SKILL.md#recording",
       "kind": "docsection",
       "label": "Recording",
-      "source": "internal/agent/skills/magus-handoff-journal/SKILL.md#recording",
+      "source": "internal/agent/skills/magus-memory/SKILL.md#recording",
       "attrs": {
         "anchor": "recording",
         "level": "2"
       }
     },
     {
-      "id": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#scope-boundaries",
+      "id": "docsection:internal/agent/skills/magus-memory/SKILL.md#repository-memory",
+      "kind": "docsection",
+      "label": "Repository memory",
+      "source": "internal/agent/skills/magus-memory/SKILL.md#repository-memory",
+      "attrs": {
+        "anchor": "repository-memory",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:internal/agent/skills/magus-memory/SKILL.md#scope-boundaries",
       "kind": "docsection",
       "label": "Scope boundaries",
-      "source": "internal/agent/skills/magus-handoff-journal/SKILL.md#scope-boundaries",
+      "source": "internal/agent/skills/magus-memory/SKILL.md#scope-boundaries",
       "attrs": {
         "anchor": "scope-boundaries",
         "level": "2"
@@ -53548,11 +53548,11 @@
     },
     {
       "source": "dir:docs/reference/skills",
-      "target": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "target": "doc:docs/reference/skills/magus-memory.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
       "source": "dir:docs/reference/skills",
@@ -54148,11 +54148,11 @@
     },
     {
       "source": "dir:internal/agent/skills",
-      "target": "dir:internal/agent/skills/magus-handoff-journal",
+      "target": "dir:internal/agent/skills/magus-memory",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "internal/agent/skills/magus-handoff-journal"
+      "provenance": "internal/agent/skills/magus-memory"
     },
     {
       "source": "dir:internal/agent/skills",
@@ -54259,12 +54259,12 @@
       "provenance": "internal/agent/skills/magus-docs-lookup/SKILL.md"
     },
     {
-      "source": "dir:internal/agent/skills/magus-handoff-journal",
-      "target": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "source": "dir:internal/agent/skills/magus-memory",
+      "target": "doc:internal/agent/skills/magus-memory/SKILL.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+      "provenance": "internal/agent/skills/magus-memory/SKILL.md"
     },
     {
       "source": "dir:internal/agent/skills/magus-multi-agent",
@@ -77884,7 +77884,7 @@
     },
     {
       "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "target": "doc:docs/reference/skills/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -78195,52 +78195,52 @@
       "provenance": "docs/reference/skills/magus-docs-lookup.md"
     },
     {
-      "source": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "source": "doc:docs/reference/skills/magus-memory.md",
       "target": "doc:docs/guides/integrations/agents/skills.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
-      "source": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "source": "doc:docs/reference/skills/magus-memory.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
-      "source": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "source": "doc:docs/reference/skills/magus-memory.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
-      "source": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "source": "doc:docs/reference/skills/magus-memory.md",
       "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
-      "source": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "source": "doc:docs/reference/skills/magus-memory.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
-      "source": "doc:docs/reference/skills/magus-handoff-journal.md",
-      "target": "docsection:docs/reference/skills/magus-handoff-journal.md#magus-handoff-journal",
+      "source": "doc:docs/reference/skills/magus-memory.md",
+      "target": "docsection:docs/reference/skills/magus-memory.md#magus-memory",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
       "source": "doc:docs/reference/skills/magus-multi-agent.md",
@@ -79155,36 +79155,36 @@
       "provenance": "internal/agent/skills/magus-docs-lookup/SKILL.md"
     },
     {
-      "source": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "source": "doc:internal/agent/skills/magus-memory/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+      "provenance": "internal/agent/skills/magus-memory/SKILL.md"
     },
     {
-      "source": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "source": "doc:internal/agent/skills/magus-memory/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+      "provenance": "internal/agent/skills/magus-memory/SKILL.md"
     },
     {
-      "source": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "source": "doc:internal/agent/skills/magus-memory/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+      "provenance": "internal/agent/skills/magus-memory/SKILL.md"
     },
     {
-      "source": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
-      "target": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#handoff-journal",
+      "source": "doc:internal/agent/skills/magus-memory/SKILL.md",
+      "target": "docsection:internal/agent/skills/magus-memory/SKILL.md#repository-memory",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+      "provenance": "internal/agent/skills/magus-memory/SKILL.md"
     },
     {
       "source": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
@@ -97451,28 +97451,28 @@
       "provenance": "docs/reference/skills/magus-docs-lookup.md"
     },
     {
-      "source": "docsection:docs/reference/skills/magus-handoff-journal.md#magus-handoff-journal",
-      "target": "docsection:docs/reference/skills/magus-handoff-journal.md#full-form",
+      "source": "docsection:docs/reference/skills/magus-memory.md#magus-memory",
+      "target": "docsection:docs/reference/skills/magus-memory.md#full-form",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
-      "source": "docsection:docs/reference/skills/magus-handoff-journal.md#magus-handoff-journal",
-      "target": "docsection:docs/reference/skills/magus-handoff-journal.md#short-form",
+      "source": "docsection:docs/reference/skills/magus-memory.md#magus-memory",
+      "target": "docsection:docs/reference/skills/magus-memory.md#short-form",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
-      "source": "docsection:docs/reference/skills/magus-handoff-journal.md#magus-handoff-journal",
-      "target": "docsection:docs/reference/skills/magus-handoff-journal.md#what-an-installed-copy-carries",
+      "source": "docsection:docs/reference/skills/magus-memory.md#magus-memory",
+      "target": "docsection:docs/reference/skills/magus-memory.md#what-an-installed-copy-carries",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+      "provenance": "docs/reference/skills/magus-memory.md"
     },
     {
       "source": "docsection:docs/reference/skills/magus-multi-agent.md#magus-multi-agent",
@@ -98427,28 +98427,28 @@
       "provenance": "internal/agent/skills/magus-docs-lookup/SKILL.md"
     },
     {
-      "source": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#handoff-journal",
-      "target": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#read-and-write-deliberately",
+      "source": "docsection:internal/agent/skills/magus-memory/SKILL.md#repository-memory",
+      "target": "docsection:internal/agent/skills/magus-memory/SKILL.md#read-and-write-deliberately",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+      "provenance": "internal/agent/skills/magus-memory/SKILL.md"
     },
     {
-      "source": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#handoff-journal",
-      "target": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#recording",
+      "source": "docsection:internal/agent/skills/magus-memory/SKILL.md#repository-memory",
+      "target": "docsection:internal/agent/skills/magus-memory/SKILL.md#recording",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+      "provenance": "internal/agent/skills/magus-memory/SKILL.md"
     },
     {
-      "source": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#handoff-journal",
-      "target": "docsection:internal/agent/skills/magus-handoff-journal/SKILL.md#scope-boundaries",
+      "source": "docsection:internal/agent/skills/magus-memory/SKILL.md#repository-memory",
+      "target": "docsection:internal/agent/skills/magus-memory/SKILL.md#scope-boundaries",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "internal/agent/skills/magus-handoff-journal/SKILL.md"
+      "provenance": "internal/agent/skills/magus-memory/SKILL.md"
     },
     {
       "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
@@ -123320,7 +123320,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "target": "doc:docs/reference/skills/magus-memory.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -123432,7 +123432,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:internal/agent/skills/magus-handoff-journal/SKILL.md",
+      "target": "doc:internal/agent/skills/magus-memory/SKILL.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

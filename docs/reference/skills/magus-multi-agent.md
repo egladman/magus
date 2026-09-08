@@ -3,10 +3,7 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, bound fan-out depth, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-aliases:
-  - reference/skills/magus-delegate-ultra
-  - reference/skills/magus-delegate-multi-agent
-skill_full_bytes: 21840
+skill_full_bytes: 21839
 skill_simple_bytes: 16102
 ---
 
@@ -31,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
-| `skill-content` | `9e89dfcffbde` |
+| `skill-content` | `0f9c8a1b2b78` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -257,7 +254,7 @@ Before spawning, record one row per lease - including the checkpoint it was hand
 tree is not clean) - and keep descendants in the same table:
 
 The same checkpoint is what a later incremental re-review diffs from (see the
-magus-change-summary skill) - review time and handoff time read the same object.
+magus-change-summary skill) - review time and pickup time read the same object.
 
 | Lease | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
 |---|---|---|---|---|---|---|---|---|---|

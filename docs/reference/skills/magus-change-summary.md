@@ -3,8 +3,6 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-aliases:
-  - reference/skills/magus-changes
 skill_full_bytes: 7051
 skill_simple_bytes: 5385
 ---
@@ -30,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
 | `skill-content` | `52a5202ea89b` |
 | `skill-variant` | `full` |

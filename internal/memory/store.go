@@ -1,4 +1,4 @@
-// Package memory is the durable, per-repository handoff journal: discrete,
+// Package memory is a repository's durable memory: discrete,
 // categorized records (one markdown file per entry, YAML frontmatter carrying the
 // structured fields) plus a legacy cursor snapshot. It is the one place that owns
 // where journal entries live and how a record is serialized. Two consumers read and
@@ -117,7 +117,7 @@ type Issue struct {
 	Hint     string `json:"hint"`
 }
 
-// Verification is the deterministic result of checking a handoff journal.
+// Verification is the deterministic result of checking a repository's memory.
 type Verification struct {
 	Records int     `json:"records"`
 	Issues  []Issue `json:"issues"`

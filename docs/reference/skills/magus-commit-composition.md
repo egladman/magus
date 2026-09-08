@@ -3,8 +3,8 @@ title: magus-commit-composition
 generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
-skill_full_bytes: 4448
-skill_simple_bytes: 3840
+skill_full_bytes: 4432
+skill_simple_bytes: 3824
 ---
 
 # magus-commit-composition
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
-| `skill-content` | `9e41a5246143` |
+| `skill-content` | `6aa68b31eee9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -142,16 +142,16 @@ magus affected ci
 
 ## What does not belong in a commit at all
 
-Session notes, handoffs, and scratch plans are not repository content unless the
-repository already tracks them - check the path's history on the base
-branch before assuming either way. Untracked session state belongs in the
-handoff journal, not the branch, and dropping those commits is often
-the single largest reduction available.
+Session notes and scratch plans are not repository content unless the repository
+already tracks them - check the path's history on the base branch
+before assuming either way. Untracked session state belongs in the
+repository's memory, not the branch, and dropping those commits is
+often the single largest reduction available.
 
 ## See also
 
 - **magus-vcs-hygiene** - classifying paths and staging one commit safely.
-- **magus-handoff-journal** - where session notes live instead of the branch.
+- **magus-memory** - where session notes live instead of the branch.
 ````
 
 ## Short form
@@ -258,14 +258,14 @@ magus affected ci
 
 ## What does not belong in a commit at all
 
-Session notes, handoffs, and scratch plans are not repository content unless the
-repository already tracks them. Untracked session state belongs in the
-handoff journal, not the branch.
+Session notes and scratch plans are not repository content unless the repository
+already tracks them. Untracked session state belongs in the
+repository's memory, not the branch.
 
 ## See also
 
 - **magus-vcs-hygiene** - classifying paths and staging one commit safely.
-- **magus-handoff-journal** - where session notes live instead of the branch.
+- **magus-memory** - where session notes live instead of the branch.
 ````
 
 

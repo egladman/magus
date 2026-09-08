@@ -268,9 +268,8 @@ func TestCatalogSkillBytesByName(t *testing.T) {
 func TestMustSkillRefusesWhatMagusDoesNotShip(t *testing.T) {
 	assert.Equal(t, SkillRef("magus-query"), MustSkill("magus-query"))
 	assert.Panics(t, func() { MustSkill("magus-not-a-real-skill") })
-	// A FORMER name is refused too: it still resolves for an already-installed copy, which is
-	// precisely why a stale one would go unnoticed by anything but this.
-	require.NotEmpty(t, FormerNames("magus-architecture-review"))
+	// A name magus USED to ship is refused like any other unknown: it still resolves for an
+	// already-installed copy, which is precisely why a stale one would go unnoticed here.
 	assert.Panics(t, func() { MustSkill("magus-architecture") })
 }
 

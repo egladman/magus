@@ -94,7 +94,7 @@ const (
 	KindAgentSpawn Kind = "agent_spawn"
 	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
 	// other kinds it audits READS too (List/Get), not just edits: the memory files are the agent's
-	// own handoff journal, so knowing when the operator inspected it is part of the governance story,
+	// own memory, so knowing when the operator inspected it is part of the governance story,
 	// and the mount opts into read auditing (the agent/MCP door is already audited separately).
 	KindMemory Kind = "memory"
 	// KindNotes is the console NotesService door onto the workspace's human-authored notes.

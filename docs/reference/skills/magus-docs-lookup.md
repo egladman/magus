@@ -3,8 +3,6 @@ title: magus-docs-lookup
 generated_from: internal/agent/skills/magus-docs-lookup/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-docs-lookup]
-aliases:
-  - reference/skills/magus-docs
 skill_full_bytes: 3670
 skill_simple_bytes: 2956
 ---
@@ -30,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
 | `skill-content` | `0fb7b622ba6e` |
 | `skill-variant` | `full` |

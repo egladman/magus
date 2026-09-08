@@ -75,8 +75,8 @@ beside them, which install and verify both leave alone. If one exists, read it
 alongside the shipped skills; it overrides nothing, so report a conflict rather
 than picking a side. The magus-workspace-rules skill carries the method.
 
-The optional handoff journal (`magus memory` / `magus_memory`) is user-owned,
-outside the repo, and shared across worktrees. It is not automatic memory:
-read it at a deliberate handoff, and add only named decisions or plans that a
+The optional repository memory (`magus memory` / `magus_memory`) is user-owned,
+outside the repo, and shared across worktrees. It is not automatic model memory:
+read it when picking work up, and add only named decisions or plans that a
 later person must reopen. Use `magus memory verify` to repair stale or broken
 entries; do not write the retired shared cursor.

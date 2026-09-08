@@ -344,7 +344,7 @@
               "glob": ".claude/skills/magus-docs-lookup*/**"
             },
             {
-              "glob": ".claude/skills/magus-handoff-journal*/**"
+              "glob": ".claude/skills/magus-memory*/**"
             },
             {
               "glob": ".claude/skills/magus-multi-agent*/**"
@@ -386,7 +386,7 @@
               "glob": ".agents/skills/magus-docs-lookup*/**"
             },
             {
-              "glob": ".agents/skills/magus-handoff-journal*/**"
+              "glob": ".agents/skills/magus-memory*/**"
             },
             {
               "glob": ".agents/skills/magus-multi-agent*/**"
@@ -428,7 +428,7 @@
               "glob": ".opencode/skills/magus-docs-lookup*/**"
             },
             {
-              "glob": ".opencode/skills/magus-handoff-journal*/**"
+              "glob": ".opencode/skills/magus-memory*/**"
             },
             {
               "glob": ".opencode/skills/magus-multi-agent*/**"

@@ -3,8 +3,6 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-aliases:
-  - reference/skills/magus-vcs
 skill_full_bytes: 8132
 skill_simple_bytes: 5992
 ---
@@ -30,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
 | `skill-content` | `4525466a7e42` |
 | `skill-variant` | `full` |

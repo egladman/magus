@@ -1,15 +1,15 @@
 ---
 title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
-description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
+description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5846
-skill_simple_bytes: 4187
+skill_full_bytes: 5832
+skill_simple_bytes: 4173
 ---
 
 # magus-context-audit
 
-Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.
+Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
+| `agent-skill-version` | `52` |
 | `knowledge-schema-version` | `10` |
-| `skill-content` | `883a29c81e8d` |
+| `skill-content` | `622da65ffdb4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -65,7 +65,7 @@ the one nobody remembers is loaded.
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
 | a local, workspace-owned skill (`magus-local-development`) | loads beside the shipped set, but nothing generates or verifies it |
-| the handoff journal / memory entries | loaded at session start, and POINT-IN-TIME by definition |
+| memory entries | loaded at session start, and POINT-IN-TIME by definition |
 | a routing index (`MAGUS.md`) | invites being read, only true as of its last regeneration |
 | hook-injected text | fires on every matching tool call, and nothing displays it in one place |
 | a user-level or global instruction file | invisible from inside the repo, and outranks nothing |
@@ -91,7 +91,7 @@ Then RUN the commands the instructions tell an agent to run. A documented comman
 that errors is worse than an undocumented one: the agent trusts it, tries it,
 fails, and has to invent a recovery nothing sanctioned.
 
-Work outward from what CHANGED - a diff, a changelog, a handoff - rather than
+Work outward from what CHANGED - a diff, a changelog, a recent decision - rather than
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
@@ -188,7 +188,7 @@ the one nobody remembers is loaded.
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
 | a local, workspace-owned skill (`magus-local-development`) | loads beside the shipped set, but nothing generates or verifies it |
-| the handoff journal / memory entries | loaded at session start, and POINT-IN-TIME by definition |
+| memory entries | loaded at session start, and POINT-IN-TIME by definition |
 | a routing index (`MAGUS.md`) | invites being read, only true as of its last regeneration |
 | hook-injected text | fires on every matching tool call, and nothing displays it in one place |
 | a user-level or global instruction file | invisible from inside the repo, and outranks nothing |
@@ -206,7 +206,7 @@ magus describe file <path>            # is that file really source / output
 
 Then RUN the commands the instructions tell an agent to run.
 
-Work outward from what CHANGED - a diff, a changelog, a handoff - rather than
+Work outward from what CHANGED - a diff, a changelog, a recent decision - rather than
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
