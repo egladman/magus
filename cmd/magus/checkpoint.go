@@ -19,27 +19,28 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// pauseCmd records where the work stands, for whoever comes back to it.
+// checkpointCmd records where the work stands, for whoever comes back to it.
 //
-// It is one command with two callers and no branch between them. A person runs it
-// with a --note before putting something down; an agent host's stop hook pipes its
-// event envelope in. Both produce the same record, because what a reader needs -
-// which revision, which branch, whether the tree is dirty, and a sentence about it -
-// does not depend on who stopped working.
+// It is one command with two callers and no branch between them. A person runs it with
+// a --note before putting something down; an agent host's stop hook pipes its event
+// envelope in. Both produce the same record, because what a reader needs - which
+// revision, which branch, whether the tree is dirty, and a sentence about it - does not
+// depend on who stopped working.
 //
-// magus reads no transcript, resolves no session anywhere, and starts nothing. The
-// host's session id and transcript path are recorded as opaque pointers so a PERSON
-// can follow them with the tool that wrote them.
-func pauseCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
-	fset := flag.NewFlagSet("pause", flag.ContinueOnError)
+// It records the same thing `magus vcs checkpoint` computes, and keeps it. magus reads
+// no transcript, resolves no session anywhere, and starts nothing: the host's session id
+// and transcript path are opaque pointers, recorded so a PERSON can follow them with the
+// tool that wrote them.
+func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
+	fset := flag.NewFlagSet("checkpoint", flag.ContinueOnError)
 	bindDisplayFlags(fset)
-	pf := gen.BindSessionPause(fset)
-	fset.Usage = func() { pauseUsage(os.Stderr) }
+	cf := gen.BindSessionCheckpoint(fset)
+	fset.Usage = func() { checkpointUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus session pause: takes no positional arguments (pass --note, or pipe a host's hook envelope in)")
+		return usagef("magus session checkpoint: takes no positional arguments (pass --note, or pipe a host's hook envelope in)")
 	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
@@ -60,16 +61,16 @@ func pauseCmd(ctx context.Context, root string, in io.Reader, out io.Writer, arg
 		wsRoot, vcsOpts = ws.Root(), ws.VCSOptions()
 	}
 	if wsRoot == "" {
-		return errors.New("magus session pause: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
+		return errors.New("magus session checkpoint: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
 	}
 
-	env := readPauseEnvelope(in)
-	p := sessions.Pause{
+	env := readCheckpointEnvelope(in)
+	c := sessions.Checkpoint{
 		Workspace:   wsRoot,
-		Note:        pf.Note,
-		HostSession: cmp.Or(pf.Session, env.SessionID),
-		Transcript:  cmp.Or(pf.Transcript, env.TranscriptPath),
-		Host:        pf.AgentName,
+		Note:        cf.Note,
+		HostSession: cmp.Or(cf.Session, env.SessionID),
+		Transcript:  cmp.Or(cf.Transcript, env.TranscriptPath),
+		Host:        cf.AgentName,
 	}
 
 	// A tree with no revision to report still gets a record. Three ordinary states
@@ -78,7 +79,7 @@ func pauseCmd(ctx context.Context, root string, in io.Reader, out io.Writer, arg
 	// documented host, so failing would mean the hook errors every turn and files
 	// nothing in exactly the trees where "where was I" is hardest to answer.
 	if res, err := vcs.Resolve(ctx, wsRoot, "", vcsOpts); err == nil {
-		p.At, _ = vcs.Checkpoint(ctx, wsRoot, res)
+		c.Tree, _ = vcs.Checkpoint(ctx, wsRoot, res)
 	}
 
 	dir, err := sessions.Dir(wsRoot)
@@ -86,8 +87,8 @@ func pauseCmd(ctx context.Context, root string, in io.Reader, out io.Writer, arg
 		return err
 	}
 	spawn := trail.SpawnFromEnv()
-	stored, recorded, err := sessions.RecordPause(dir, p, sessions.SessionStart{
-		Host:      p.Host,
+	stored, recorded, err := sessions.RecordCheckpoint(dir, c, sessions.SessionStart{
+		Host:      c.Host,
 		Workspace: wsRoot,
 		Version:   version,
 		Lease:     spawn.Lease,
@@ -96,51 +97,51 @@ func pauseCmd(ctx context.Context, root string, in io.Reader, out io.Writer, arg
 		Spawner:   spawn.Spawner,
 	})
 	if err != nil {
-		return fmt.Errorf("magus session pause: %w", err)
+		return fmt.Errorf("magus session checkpoint: %w", err)
 	}
 
 	switch opts.Format {
 	case FormatText:
-		fmt.Fprintln(out, pauseLine(stored, recorded))
+		fmt.Fprintln(out, checkpointRecordedLine(stored, recorded))
 		return nil
 	case FormatName:
-		fmt.Fprintln(out, stored.At.Revision)
+		fmt.Fprintln(out, stored.Tree.Revision)
 		return nil
 	}
 	// recorded travels with the record: a wrapper reading the structured form has no
-	// other way to tell a new pause from one identical to the last.
+	// other way to tell a new checkpoint from one identical to the last.
 	return writeFormatted(out, opts, struct {
-		sessions.Pause
+		sessions.Checkpoint
 		Recorded bool `json:"recorded"`
-	}{Pause: stored, Recorded: recorded})
+	}{Checkpoint: stored, Recorded: recorded})
 }
 
-// pauseEnvelopeWait bounds how long a host's payload may take to arrive.
+// checkpointEnvelopeWait bounds how long a host's payload may take to arrive.
 //
 // stdin is this command's optional enrichment, not its input, so waiting on it forever
-// trades two pointers for the session it was meant to record. A hook writes its event
-// and closes; anything that has sent nothing by now is a shell that inherited an idle
-// pipe, which no amount of further waiting improves.
-const pauseEnvelopeWait = 2 * time.Second
+// trades two pointers for the record it was meant to write. A hook writes its event and
+// closes; anything that has sent nothing by now is a shell that inherited an idle pipe,
+// which no amount of further waiting improves.
+const checkpointEnvelopeWait = 2 * time.Second
 
-// pauseEnvelopeMax bounds how much of it is read, matching the cap the adoption command
-// puts on the same class of input.
-const pauseEnvelopeMax = 4 << 20
+// checkpointEnvelopeMax bounds how much of it is read, matching the cap the adoption
+// command puts on the same class of input.
+const checkpointEnvelopeMax = 4 << 20
 
-// readPauseEnvelope decodes a host's hook payload from in for the two pointers only a
-// host knows: its session id and its transcript path. A payload that is absent,
+// readCheckpointEnvelope decodes a host's hook payload from in for the two pointers only
+// a host knows: its session id and its transcript path. A payload that is absent,
 // unparsable, or slow to arrive yields the zero envelope, which contributes nothing.
 //
 // Nothing in the payload becomes the note. A host's closing message is the model's
 // prose, and copying it in would make the record indistinguishable from a sentence a
-// person wrote, in a store a person reads. A wrapper that wants the model's words
-// passes --note and owns that decision.
+// person wrote, in a store a person reads. A wrapper that wants the model's words passes
+// --note and owns that decision.
 //
-// The read is bounded rather than skipped when --note is set. Gating it on the flag
-// also kept the pointers out of the record for any wrapper that passed a note, which is
-// the shape the docs invite, and it left the actual hazard open: a caller with no --note
-// and an idle inherited pipe still waited forever.
-func readPauseEnvelope(in io.Reader) hookEnvelope {
+// The read is bounded rather than skipped when --note is set. Gating it on the flag also
+// kept the pointers out of the record for any wrapper that passed a note, which is the
+// shape the docs invite, and it left the actual hazard open: a caller with no --note and
+// an idle inherited pipe still waited forever.
+func readCheckpointEnvelope(in io.Reader) hookEnvelope {
 	if stdinIsTerminal() {
 		return hookEnvelope{}
 	}
@@ -150,7 +151,7 @@ func readPauseEnvelope(in io.Reader) hookEnvelope {
 	}
 	done := make(chan read, 1)
 	go func() {
-		body, err := io.ReadAll(io.LimitReader(in, pauseEnvelopeMax))
+		body, err := io.ReadAll(io.LimitReader(in, checkpointEnvelopeMax))
 		done <- read{body: body, err: err}
 	}()
 
@@ -161,7 +162,7 @@ func readPauseEnvelope(in io.Reader) hookEnvelope {
 			return hookEnvelope{}
 		}
 		body = r.body
-	case <-time.After(pauseEnvelopeWait):
+	case <-time.After(checkpointEnvelopeWait):
 		return hookEnvelope{}
 	}
 
@@ -176,23 +177,26 @@ func readPauseEnvelope(in io.Reader) hookEnvelope {
 	return env
 }
 
-// pauseLine is the terminal reading of one pause: where the work sits, and whether this
-// call changed anything. The location is rendered by the same function the listing uses,
-// so writing a pause and reading one back describe it identically.
-func pauseLine(p sessions.Pause, recorded bool) string {
-	verb := "paused at"
+// checkpointRecordedLine is the terminal reading of one write: where the work sits, and
+// whether this call changed anything. The location is rendered by the same function the
+// listing uses, so recording a checkpoint and reading one back describe it identically.
+//
+// Distinct from vcs.go's checkpointLine, which renders the VCS triple alone in fixed
+// columns for `magus vcs checkpoint`. Same noun, two audiences.
+func checkpointRecordedLine(c sessions.Checkpoint, recorded bool) string {
+	verb := "checkpoint at"
 	if !recorded {
-		verb = "unchanged since the last pause at"
+		verb = "unchanged since the last checkpoint at"
 	}
-	line := verb + " " + pausedWhere(p)
-	if p.Note != "" {
-		line += ": " + p.Note
+	line := verb + " " + checkpointWhere(c)
+	if c.Note != "" {
+		line += ": " + c.Note
 	}
 	return line
 }
 
-func pauseUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus session pause [--note <text>] [flags]")
+func checkpointUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: magus session checkpoint [--note <text>] [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Record where the work stands, so whoever comes back to it does not have to")
 	fmt.Fprintln(w, "reconstruct it. Run it before you put something down; an agent host can wire")

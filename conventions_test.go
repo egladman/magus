@@ -357,7 +357,7 @@ var templatePage = map[string]string{
 	"magus-guard-command.sh": "docs/guides/integrations/agents/guard-templates.md",
 	"magus-guard-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
 	"magus-guard-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-pause.sh":         "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.sh":    "docs/guides/integrations/agents/guard-templates.md",
 	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
 	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
 	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
@@ -371,12 +371,12 @@ var templatePage = map[string]string{
 var hookTemplates = []string{
 	"magus-guard-command.sh",
 	"magus-guard-path.sh",
-	// The two templates that carry no verdict: one records a path an agent
-	// reached, the other where a session stopped, and neither judges anything. So
-	// they declare no guard coverage and owe no parity row. See the note at the top
-	// of each for why that absence is deliberate rather than a hole.
+	// The two templates that carry no verdict: one records a path an agent reached,
+	// the other where the work stood when a session stopped, and neither judges
+	// anything. So they declare no guard coverage and owe no parity row. See the note
+	// at the top of each for why that absence is deliberate rather than a hole.
 	"magus-guard-observe.sh",
-	"magus-pause.sh",
+	"magus-checkpoint.sh",
 	"codex-hooks.json",
 	"cursor-guard.sh",
 	"opencode-plugin.ts",

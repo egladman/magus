@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5263,
-  "edge_count": 9380,
+  "edge_count": 9381,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -15767,6 +15767,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-checkpointsh",
+      "kind": "docsection",
+      "label": "magus-checkpoint.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-checkpointsh",
+      "attrs": {
+        "anchor": "magus-checkpointsh",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-commandsh",
       "kind": "docsection",
       "label": "magus-guard-command.sh",
@@ -15793,16 +15803,6 @@
       "source": "docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
       "attrs": {
         "anchor": "magus-guard-pathsh",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-pausesh",
-      "kind": "docsection",
-      "label": "magus-pause.sh",
-      "source": "docs/guides/integrations/agents/guard-templates.md#magus-pausesh",
-      "attrs": {
-        "anchor": "magus-pausesh",
         "level": "2"
       }
     },
@@ -30317,6 +30317,16 @@
       }
     },
     {
+      "id": "docsection:docs/reference/manpage/magus-session.md#session-checkpoint-options",
+      "kind": "docsection",
+      "label": "session checkpoint options",
+      "source": "docs/reference/manpage/magus-session.md#session-checkpoint-options",
+      "attrs": {
+        "anchor": "session-checkpoint-options",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/manpage/magus-session.md#session-dispose-options",
       "kind": "docsection",
       "label": "session dispose options",
@@ -30343,16 +30353,6 @@
       "source": "docs/reference/manpage/magus-session.md#session-notify-options",
       "attrs": {
         "anchor": "session-notify-options",
-        "level": "3"
-      }
-    },
-    {
-      "id": "docsection:docs/reference/manpage/magus-session.md#session-pause-options",
-      "kind": "docsection",
-      "label": "session pause options",
-      "source": "docs/reference/manpage/magus-session.md#session-pause-options",
-      "attrs": {
-        "anchor": "session-pause-options",
         "level": "3"
       }
     },
@@ -62220,6 +62220,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/guard-templates.md",
+      "target": "doc:docs/reference/manpage/magus-vcs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/guard-templates.md",
       "target": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
       "relation": "contains",
       "confidence": "extracted",
@@ -86828,6 +86836,14 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-checkpointsh",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
       "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-commandsh",
       "relation": "contains",
       "confidence": "extracted",
@@ -86845,14 +86861,6 @@
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
       "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/guard-templates.md"
-    },
-    {
-      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
-      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-pausesh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -96940,6 +96948,14 @@
     },
     {
       "source": "docsection:docs/reference/manpage/magus-session.md#options",
+      "target": "docsection:docs/reference/manpage/magus-session.md#session-checkpoint-options",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-session.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-session.md#options",
       "target": "docsection:docs/reference/manpage/magus-session.md#session-dispose-options",
       "relation": "contains",
       "confidence": "extracted",
@@ -96957,14 +96973,6 @@
     {
       "source": "docsection:docs/reference/manpage/magus-session.md#options",
       "target": "docsection:docs/reference/manpage/magus-session.md#session-notify-options",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-session.md"
-    },
-    {
-      "source": "docsection:docs/reference/manpage/magus-session.md#options",
-      "target": "docsection:docs/reference/manpage/magus-session.md#session-pause-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

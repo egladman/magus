@@ -592,7 +592,7 @@ all. Both scripts try with attribution and retry without it, and they retry only
 when the call produced no verdict - never merely because it exited non-zero,
 since a deny exits 2 with the verdict on stdout.
 
-## `magus-pause.sh`
+## `magus-checkpoint.sh`
 
 The second template that carries no verdict. Wire it to your host's stop or
 session-end event and it records where the work stands: the revision, branch and
@@ -606,22 +606,24 @@ saying so. Recovering one such stop was measured at a session id passed by hand,
 a guessed transcript location, and three failed commands before it emerged the
 commits had never been pushed.
 
-Nothing in the host's payload becomes the note. A note is a sentence a person
-writes, so `magus session pause --note "..."` is the form a person runs; the hook
-records the checkpoint and the pointers, and leaves the prose alone.
+It records the same position [`magus vcs checkpoint`](../../../reference/manpage/magus-vcs.md)
+computes and prints, and keeps it. What makes one worth keeping is the note, so
+`magus session checkpoint --note "..."` is the form a person runs; the hook
+records the position and the pointers, and leaves the prose alone. Nothing in the
+host's payload becomes the note.
 
 There is no `jq` here, unlike its siblings: magus parses the envelope itself, so
-a machine without jq records a pause rather than silently recording none. A host
-that spells those fields differently passes `--session` and `--transcript`
-instead, and one that can supply neither still records a usable pause, because
-the part that matters is read from the tree.
+a machine without jq records a checkpoint rather than silently recording none. A
+host that spells those fields differently passes `--session` and `--transcript`
+instead, and one that can supply neither still records a usable checkpoint,
+because the part that matters is read from the tree.
 
 It declares no `magus-guard-coverage` line, for the reason
 `magus-guard-observe.sh` declares none: it carries no verdict on any surface.
 
 ```sh
 #!/usr/bin/env sh
-# magus pause hook: records where the work stands when a session stops.
+# magus checkpoint hook: records where the work stands when a session stops.
 #
 # This file is the source of truth. The docs site embeds it, magus's own
 # repository invokes it, and you can download it and do the same. POSIX sh, no
@@ -635,22 +637,22 @@ It declares no `magus-guard-coverage` line, for the reason
 # it was measured at a session id passed by hand, a guessed transcript location,
 # and three failed commands before it emerged the work had never been pushed.
 #
-# Contract: pipes your host's event, unread, into `magus session pause`. magus
-# takes the two pointers only a host knows out of the envelope and ignores the
-# rest; nothing in the payload becomes the note, because a note is a sentence a
-# person writes. It prints NOTHING and always exits 0. Override:
+# Contract: pipes your host's event, unread, into `magus session checkpoint`.
+# magus takes the two pointers only a host knows out of the envelope and ignores
+# the rest; nothing in the payload becomes the note, because a note is a sentence
+# a person writes. It prints NOTHING and always exits 0. Override:
 #
-#   GUARD_AGENT_NAME  the agent host name recorded alongside the pause
+#   GUARD_AGENT_NAME  the agent host name recorded alongside the checkpoint
 #   GUARD_MAGUS_BIN   path to the binary, when it is not on PATH
 #
 # A host whose envelope spells those fields differently passes them as flags
 # instead - `--session` and `--transcript` outrank the envelope - and a host that
-# cannot supply either still records a usable pause, because the part that
+# cannot supply either still records a usable checkpoint, because the part that
 # matters is read from the tree rather than from the event.
 #
 # There is no jq here, unlike its siblings. This wrapper selects nothing: magus
-# parses the envelope itself, so a machine without jq records a pause rather than
-# silently recording none.
+# parses the envelope itself, so a machine without jq records a checkpoint rather
+# than silently recording none.
 #
 # NO magus-guard-coverage line, for the same reason magus-guard-observe.sh has
 # none: a coverage declaration states how much of a VERDICT a host can carry, and
@@ -684,11 +686,11 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-# Both streams are discarded: a magus too old for `session pause` prints its
+# Both streams are discarded: a magus too old for `session checkpoint` prints its
 # usage, and that would otherwise reach the host as this hook's response every
 # time a session ends. The absence shows up where it is actionable instead - as
-# an empty paused list in `magus session`.
-"$GUARD_MAGUS_BIN" session pause --agent-name "$GUARD_AGENT_NAME" >/dev/null 2>&1
+# an empty checkpoint list in `magus session`.
+"$GUARD_MAGUS_BIN" session checkpoint --agent-name "$GUARD_AGENT_NAME" >/dev/null 2>&1
 
 exit 0
 ```

@@ -72,7 +72,7 @@ The host's own session id for this invocation
 \fB\-\-transcript\fR \fIstring\fR
 Path to the host's own log of this session, recorded as a pointer; magus never opens it
 .RE
-.SS session pause options
+.SS session checkpoint options
 .RS
 .TP
 \fB\-\-agent\-name\fR \fIstring\fR
@@ -111,7 +111,7 @@ Close one open request by id or unambiguous id prefix
 \fBhook\fR
 Evaluate one shell command or file path against the magus guard rules
 .TP
-\fBpause\fR
+\fBcheckpoint\fR
 Record where the work stands, so it can be picked up later
 .TP
 \fBnotify\fR

@@ -44,14 +44,14 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		return attentionList(root, rest)
 	case "dispose":
 		return attentionDispose(root, rest)
-	case "pause":
-		return pauseCmd(ctx, root, os.Stdin, os.Stdout, rest)
+	case "checkpoint":
+		return checkpointCmd(ctx, root, os.Stdin, os.Stdout, rest)
 	case "hook":
 		return hookCmd(ctx, os.Stdin, os.Stdout, rest)
 	case "notify":
 		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, pause, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
+		return usagef("magus session: unknown subcommand %q (want ls, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
 	}
 }
 
@@ -59,15 +59,15 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--limit <n>] [--since <when>]")
 	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
 	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
-	fmt.Fprintln(os.Stderr, "       magus session pause [--note <text>]")
+	fmt.Fprintln(os.Stderr, "       magus session checkpoint [--note <text>]")
 	fmt.Fprintln(os.Stderr, "       magus session hook [flags]      # machine: guard verdicts, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent sessions")
 	fmt.Fprintln(os.Stderr, "did across every worktree of this repository, `session attention` lists the")
 	fmt.Fprintln(os.Stderr, "blocks agents raised, and `session dispose` closes one - nothing closes a")
-	fmt.Fprintln(os.Stderr, "request automatically. Humans write it too: `session pause` records where")
-	fmt.Fprintln(os.Stderr, "work stands before you put it down. Agent hosts write it from their hooks,")
+	fmt.Fprintln(os.Stderr, "request automatically. Humans write it too: `session checkpoint` records")
+	fmt.Fprintln(os.Stderr, "where work stands before you put it down. Agent hosts write it from hooks,")
 	fmt.Fprintln(os.Stderr, "through `session hook` and `session notify`.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
@@ -128,10 +128,10 @@ func sessionList(root string, args []string) error {
 		return nil
 	}
 	return emitFormatted(opts, map[string]any{
-		"sessions": summaries,
-		"paused":   sessions.LatestPauses(fold),
-		"skipped":  fold.Skipped,
-		"store":    dir,
+		"sessions":    summaries,
+		"checkpoints": sessions.LatestCheckpoints(fold),
+		"skipped":     fold.Skipped,
+		"store":       dir,
 	})
 }
 
@@ -139,7 +139,7 @@ func sessionList(root string, args []string) error {
 // from a store whose sessions are all older than the window. Reporting the second as the
 // first sends a person looking for a broken producer.
 func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
-	renderPaused(os.Stdout, sessions.LatestPauses(fold))
+	renderCheckpoints(os.Stdout, sessions.LatestCheckpoints(fold))
 	if len(summaries) == 0 {
 		if filtered {
 			fmt.Fprintf(os.Stdout, "no sessions in that window; %s holds %d session file(s)\n", dir, fold.Sessions)
@@ -191,23 +191,24 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 	return nil
 }
 
-// pausedShown bounds the paused block. Unfinished work does not expire - a pause from
+// checkpointsShown bounds the block. Unfinished work does not expire - a checkpoint from
 // three weeks ago is still where that work sits - so the list is bounded by count rather
 // than by age, and the tail is pointed at rather than dropped silently.
-const pausedShown = 3
+const checkpointsShown = 3
 
-// renderPaused prints unfinished work above the history, because "where was I" is the
-// question a person opens this listing with, and the history answers a different one.
+// renderCheckpoints prints unfinished work above the history, because "where was I" is
+// the question a person opens this listing with, and the history answers a different one.
 //
-// It is deliberately not filtered by --since. That flag bounds what RAN recently; a pause
-// records what has not finished, and hiding an old one would hide the case this exists for.
-func renderPaused(w io.Writer, paused []sessions.PauseRecord) {
-	if len(paused) == 0 {
+// It is deliberately not filtered by --since. That flag bounds what RAN recently; a
+// checkpoint records what has not finished, and hiding an old one would hide the case
+// this exists for.
+func renderCheckpoints(w io.Writer, checkpoints []sessions.CheckpointRecord) {
+	if len(checkpoints) == 0 {
 		return
 	}
-	fmt.Fprintln(w, "Paused, most recent first:")
-	for _, r := range paused[:min(len(paused), pausedShown)] {
-		fmt.Fprintf(w, "  %s  %s\n", r.At.Format("2006-01-02 15:04:05"), pausedWhere(r.Pause))
+	fmt.Fprintln(w, "Checkpoints, most recent first:")
+	for _, r := range checkpoints[:min(len(checkpoints), checkpointsShown)] {
+		fmt.Fprintf(w, "  %s  %s\n", r.At.Format("2006-01-02 15:04:05"), checkpointWhere(r.Checkpoint))
 		if r.Note != "" {
 			fmt.Fprintf(w, "    %s\n", r.Note)
 		}
@@ -218,32 +219,32 @@ func renderPaused(w io.Writer, paused []sessions.PauseRecord) {
 			fmt.Fprintf(w, "    transcript %s\n", r.Transcript)
 		}
 	}
-	if extra := len(paused) - pausedShown; extra > 0 {
+	if extra := len(checkpoints) - checkpointsShown; extra > 0 {
 		fmt.Fprintf(w, "  and %d more; `%s` lists them all\n", extra, hint.Session.With("-o", "json"))
 	}
 	fmt.Fprintln(w)
 }
 
-// pausedWhere reads the checkpoint back as one line. The revision leads because it is the
-// fact a reader acts on: a checkout that cannot resolve it is looking at work that was
-// never pushed, which no branch name would have revealed.
+// checkpointWhere reads one back as a phrase. The revision leads because it is the fact
+// a reader acts on: a checkout that cannot resolve it is looking at work that was never
+// pushed, which no branch name would have revealed.
 //
-// A pause with no revision is not a broken record. A tree before its first commit, or
-// under no VCS at all, still has a location worth naming, and the workspace is it.
-func pausedWhere(p sessions.Pause) string {
+// A checkpoint with no revision is not a broken record. A tree before its first commit,
+// or under no VCS at all, still has a location worth naming, and the workspace is it.
+func checkpointWhere(c sessions.Checkpoint) string {
 	var b strings.Builder
-	if p.Host != "" {
-		fmt.Fprintf(&b, "%s ", p.Host)
+	if c.Host != "" {
+		fmt.Fprintf(&b, "%s ", c.Host)
 	}
-	if p.At.Revision == "" {
-		b.WriteString(p.Workspace)
+	if c.Tree.Revision == "" {
+		b.WriteString(c.Workspace)
 		return b.String()
 	}
-	b.WriteString(shortRev(p.At.Revision))
-	if p.At.Branch != "" {
-		fmt.Fprintf(&b, " on %s", p.At.Branch)
+	b.WriteString(shortRev(c.Tree.Revision))
+	if c.Tree.Branch != "" {
+		fmt.Fprintf(&b, " on %s", c.Tree.Branch)
 	}
-	if p.At.Dirty {
+	if c.Tree.Dirty {
 		b.WriteString(", uncommitted changes")
 	}
 	return b.String()

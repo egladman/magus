@@ -1391,9 +1391,9 @@ no lease in it declared or running, nothing is graded and nothing is read.`,
 			},
 		},
 		{
-			Name:        "pause",
+			Name:        "checkpoint",
 			Short:       "Record where the work stands, so it can be picked up later",
-			Description: "Record one pause for this repository: what was being worked on, where the transcript is, and the revision the work sits on.",
+			Description: "Record one checkpoint for this repository: the revision the work sits on, and a note saying where it stands.",
 			Long: `Record where the work stands, so whoever comes back to it - you tomorrow,
 or another session - does not have to reconstruct it.
 
@@ -1402,21 +1402,27 @@ host hits a usage limit or is simply closed. In every case the work sits
 exactly where it was and nothing says so, and the next person starts by
 rediscovering what the last one already knew.
 
+` + "`magus vcs checkpoint`" + ` works out the same position and prints it; this one
+records it and keeps it, with a note. The note is what makes it worth keeping,
+so the position arrives with the reason someone stopped at it.
+
 Run it by hand before you put something down, or wire it to an agent host's
 stop hook. Only ` + "`--note`" + ` is worth typing: the workspace is where you ran it,
-and the revision, branch and dirtiness are read from the tree.
+and the revision, branch and dirtiness are read from the tree. A tree with no
+revision to report - one before its first commit, or under no VCS - still
+records a usable checkpoint.
 
 A host's hook envelope on stdin supplies the two pointers only a host knows, its
 session id and its transcript path, so a wrapper needs no JSON tool on the
 critical path. Nothing in that payload becomes the note: a host's closing message
-is the model's prose, and a note is written by whoever stopped working. Passing
---note skips the stdin read entirely, so this never blocks waiting for input.
+is the model's prose, and a note is written by whoever stopped working. The read
+is bounded, so this never blocks waiting for input that is not coming.
 
 --agent-name is an opaque label the caller chooses, exactly as on the guard's
 hook. magus does not know which tools exist, which model any of them ran, or how
 to start one; it records what it was told and reports it to a person. Read the
 result with ` + "`magus session`" + `.`,
-			Usage: "magus session pause [--note <text>] [flags]",
+			Usage: "magus session checkpoint [--note <text>] [flags]",
 			Flags: []Flag{
 				{Name: "note", Kind: FlagString, Doc: "A sentence on where the work stands"},
 				{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this session ran on, when one did (attribution only)"},

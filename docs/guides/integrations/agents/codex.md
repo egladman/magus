@@ -102,7 +102,7 @@ pointing at wherever you put your copies of the templates:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-pause.sh",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh",
             "statusMessage": "magus: recording where the work stands"
           }
         ]
@@ -121,7 +121,7 @@ The `Stop` entry is not a guard. It records where the work stands each time a
 turn ends, which is worth having here in particular: a Codex session that runs
 out of usage stops mid-task, and the transcript it leaves behind is addressed by
 a session id nobody wrote down. `magus session` lists what it recorded, and
-`magus session pause --note "..."` is the same record made by hand.
+`magus session checkpoint --note "..."` is the same record made by hand.
 
 ## Notifications
 

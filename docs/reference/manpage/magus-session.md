@@ -80,7 +80,7 @@ still working stays listed however long ago it began.
 **--transcript** *string*
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
 
-### session pause options
+### session checkpoint options
 
 **--agent-name** *string*
 : Name of the agent host this session ran on, when one did (attribution only)
@@ -116,7 +116,7 @@ still working stays listed however long ago it began.
 **hook**
 : Evaluate one shell command or file path against the magus guard rules
 
-**pause**
+**checkpoint**
 : Record where the work stands, so it can be picked up later
 
 **notify**

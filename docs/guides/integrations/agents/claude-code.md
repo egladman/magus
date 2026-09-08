@@ -20,7 +20,7 @@ event.
 | file surface     | deny and advise both reach the model   |
 | MCP              | [MCP](../mcp.md)                       |
 | attention events | `Notification`, `Stop`, `SubagentStop` |
-| pause            | `Stop`                                 |
+| checkpoint       | `Stop`                                 |
 | lease            | `PreToolUse` on the sub-agent tool     |
 
 ## Skills
@@ -169,9 +169,9 @@ magusfile walk as the lease hook above, for the same reason.
 
 ## Recording where the work stands
 
-Wire `Stop` to [`magus-pause.sh`](guard-templates.md#magus-pausesh) and each time
-a turn ends magus records the revision, branch and dirtiness of the tree, plus
-this session's id and transcript path. `magus session` lists it.
+Wire `Stop` to [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh) and
+each time a turn ends magus records the revision, branch and dirtiness of the
+tree, plus this session's id and transcript path. `magus session` lists it.
 
 ```json
 {
@@ -181,7 +181,7 @@ this session's id and transcript path. `magus session` lists it.
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-pause.sh",
+            "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
             "timeout": 10
           }
         ]
@@ -193,7 +193,7 @@ this session's id and transcript path. `magus session` lists it.
 
 This is the wiring this repository dogfoods, in `.claude/settings.json` beside
 the three guard hooks. It is not a guard: it judges nothing, prints nothing, and
-exits 0 whatever happens. `magus session pause --note "..."` writes the same
+exits 0 whatever happens. `magus session checkpoint --note "..."` writes the same
 record by hand, which is the form to reach for when you are the one stopping.
 
 ## Coverage and limits
