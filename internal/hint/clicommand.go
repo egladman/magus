@@ -93,9 +93,11 @@ var (
 	NotesLs          = cmd("notes", "ls")
 	NotesGet         = cmd("notes", "get")
 	NotesEdit        = cmd("notes", "edit")
+	Session          = cmd("session")
 	SessionAttention = cmd("session", "attention")
 	SessionDispose   = cmd("session", "dispose")
 	SessionNotify    = cmd("session", "notify")
+	SessionPause     = cmd("session", "pause")
 	VCSAdd           = cmd("vcs", "add")
 	VCSResolve       = cmd("vcs", "resolve")
 	VCSCheckpoint    = cmd("vcs", "checkpoint")
@@ -128,7 +130,7 @@ var AllCommands = []Command{
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
 	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
 	MemoryLs, MemoryPut, MemoryVerify, NotesLs, NotesGet, NotesEdit,
-	SessionAttention, SessionDispose, SessionNotify,
+	Session, SessionAttention, SessionDispose, SessionNotify, SessionPause,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,

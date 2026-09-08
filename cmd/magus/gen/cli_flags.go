@@ -377,6 +377,14 @@ const (
 	FlagSessionNotifyDesktop = "desktop"
 	// session notify: --outcome
 	FlagSessionNotifyOutcome = "outcome"
+	// session pause: --agent-name
+	FlagSessionPauseAgentName = "agent-name"
+	// session pause: --note
+	FlagSessionPauseNote = "note"
+	// session pause: --session
+	FlagSessionPauseSession = "session"
+	// session pause: --transcript
+	FlagSessionPauseTranscript = "transcript"
 	// session: --limit
 	FlagSessionLimit = "limit"
 	// session: --since
@@ -1114,6 +1122,24 @@ func BindSessionHook(fs *flag.FlagSet) *SessionHookFlags {
 	fs.StringVar(&f.Session, FlagSessionHookSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Transcript, FlagSessionHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagSessionHookEvent, "", "The host's hook event name (e.g. PreToolUse)")
+	return &f
+}
+
+// SessionPauseFlags are the flags declared for `magus session pause`.
+type SessionPauseFlags struct {
+	Note       string // --note
+	AgentName  string // --agent-name
+	Session    string // --session
+	Transcript string // --transcript
+}
+
+// BindSessionPause registers `magus session pause`'s flags on fs and returns the destination.
+func BindSessionPause(fs *flag.FlagSet) *SessionPauseFlags {
+	var f SessionPauseFlags
+	fs.StringVar(&f.Note, FlagSessionPauseNote, "", "A sentence on where the work stands")
+	fs.StringVar(&f.AgentName, FlagSessionPauseAgentName, "", "Name of the agent host this session ran on, when one did (attribution only)")
+	fs.StringVar(&f.Session, FlagSessionPauseSession, "", "The host's own session id for this session")
+	fs.StringVar(&f.Transcript, FlagSessionPauseTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	return &f
 }
 

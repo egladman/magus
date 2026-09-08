@@ -1391,6 +1391,40 @@ no lease in it declared or running, nothing is graded and nothing is read.`,
 			},
 		},
 		{
+			Name:        "pause",
+			Short:       "Record where the work stands, so it can be picked up later",
+			Description: "Record one pause for this repository: what was being worked on, where the transcript is, and the revision the work sits on.",
+			Long: `Record where the work stands, so whoever comes back to it - you tomorrow,
+or another session - does not have to reconstruct it.
+
+Work stops for ordinary reasons. A day ends, a branch gets parked, an agent
+host hits a usage limit or is simply closed. In every case the work sits
+exactly where it was and nothing says so, and the next person starts by
+rediscovering what the last one already knew.
+
+Run it by hand before you put something down, or wire it to an agent host's
+stop hook. Only ` + "`--note`" + ` is worth typing: the workspace is where you ran it,
+and the revision, branch and dirtiness are read from the tree.
+
+A host's hook envelope on stdin supplies the two pointers only a host knows, its
+session id and its transcript path, so a wrapper needs no JSON tool on the
+critical path. Nothing in that payload becomes the note: a host's closing message
+is the model's prose, and a note is written by whoever stopped working. Passing
+--note skips the stdin read entirely, so this never blocks waiting for input.
+
+--agent-name is an opaque label the caller chooses, exactly as on the guard's
+hook. magus does not know which tools exist, which model any of them ran, or how
+to start one; it records what it was told and reports it to a person. Read the
+result with ` + "`magus session`" + `.`,
+			Usage: "magus session pause [--note <text>] [flags]",
+			Flags: []Flag{
+				{Name: "note", Kind: FlagString, Doc: "A sentence on where the work stands"},
+				{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this session ran on, when one did (attribution only)"},
+				{Name: "session", Kind: FlagString, Doc: "The host's own session id for this session"},
+				{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
+			},
+		},
+		{
 			Name:        "notify",
 			Short:       "Normalize an attention event and optionally notify the local desktop",
 			Description: "Raise one canonical attention event from plain text or a JSON envelope, and optionally surface it as an operating-system notification.",

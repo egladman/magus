@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -43,12 +44,14 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		return attentionList(root, rest)
 	case "dispose":
 		return attentionDispose(root, rest)
+	case "pause":
+		return pauseCmd(ctx, root, os.Stdin, os.Stdout, rest)
 	case "hook":
 		return hookCmd(ctx, os.Stdin, os.Stdout, rest)
 	case "notify":
 		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
+		return usagef("magus session: unknown subcommand %q (want ls, pause, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
 	}
 }
 
@@ -56,14 +59,16 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--limit <n>] [--since <when>]")
 	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
 	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
+	fmt.Fprintln(os.Stderr, "       magus session pause [--note <text>]")
 	fmt.Fprintln(os.Stderr, "       magus session hook [flags]      # machine: guard verdicts, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent sessions")
 	fmt.Fprintln(os.Stderr, "did across every worktree of this repository, `session attention` lists the")
 	fmt.Fprintln(os.Stderr, "blocks agents raised, and `session dispose` closes one - nothing closes a")
-	fmt.Fprintln(os.Stderr, "request automatically. Agent hosts write it: their hooks pipe events through")
-	fmt.Fprintln(os.Stderr, "`session hook` and `session notify`.")
+	fmt.Fprintln(os.Stderr, "request automatically. Humans write it too: `session pause` records where")
+	fmt.Fprintln(os.Stderr, "work stands before you put it down. Agent hosts write it from their hooks,")
+	fmt.Fprintln(os.Stderr, "through `session hook` and `session notify`.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
 }
@@ -124,6 +129,7 @@ func sessionList(root string, args []string) error {
 	}
 	return emitFormatted(opts, map[string]any{
 		"sessions": summaries,
+		"paused":   sessions.Pauses(fold),
 		"skipped":  fold.Skipped,
 		"store":    dir,
 	})
@@ -133,6 +139,7 @@ func sessionList(root string, args []string) error {
 // from a store whose sessions are all older than the window. Reporting the second as the
 // first sends a person looking for a broken producer.
 func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
+	renderPaused(os.Stdout, sessions.Pauses(fold))
 	if len(summaries) == 0 {
 		if filtered {
 			fmt.Fprintf(os.Stdout, "no sessions in that window; %s holds %d session file(s)\n", dir, fold.Sessions)
@@ -182,6 +189,57 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 		fmt.Fprintf(os.Stdout, "\n%d unreadable line(s) skipped (a session killed mid-write leaves a partial line; the rest of its records still read)\n", fold.Skipped)
 	}
 	return nil
+}
+
+// pausedShown bounds the paused block. Unfinished work does not expire - a pause from
+// three weeks ago is still where that work sits - so the list is bounded by count rather
+// than by age, and the tail is pointed at rather than dropped silently.
+const pausedShown = 3
+
+// renderPaused prints unfinished work above the history, because "where was I" is the
+// question a person opens this listing with, and the history answers a different one.
+//
+// It is deliberately not filtered by --since. That flag bounds what RAN recently; a pause
+// records what has not finished, and hiding an old one would hide the case this exists for.
+func renderPaused(w io.Writer, paused []sessions.Pause) {
+	if len(paused) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "Paused, most recent first:")
+	for _, p := range paused[:min(len(paused), pausedShown)] {
+		fmt.Fprintf(w, "  %s\n", pausedWhere(p))
+		if p.Note != "" {
+			fmt.Fprintf(w, "    %s\n", p.Note)
+		}
+		if p.Session != "" {
+			fmt.Fprintf(w, "    session %s\n", p.Session)
+		}
+		if p.Transcript != "" {
+			fmt.Fprintf(w, "    transcript %s\n", p.Transcript)
+		}
+	}
+	if extra := len(paused) - pausedShown; extra > 0 {
+		fmt.Fprintf(w, "  and %d more; `%s` lists them all\n", extra, hint.Session.With("-o", "json"))
+	}
+	fmt.Fprintln(w)
+}
+
+// pausedWhere reads the checkpoint back as one line. The revision leads because it is the
+// fact a reader acts on: a checkout that cannot resolve it is looking at work that was
+// never pushed, which no branch name would have revealed.
+func pausedWhere(p sessions.Pause) string {
+	var b strings.Builder
+	if p.Host != "" {
+		fmt.Fprintf(&b, "%s ", p.Host)
+	}
+	b.WriteString(shortRevision(p.At))
+	if p.At.Branch != "" {
+		fmt.Fprintf(&b, " on %s", p.At.Branch)
+	}
+	if p.At.Dirty {
+		b.WriteString(", uncommitted changes")
+	}
+	return b.String()
 }
 
 // sessionParent names the session a span id belongs to, falling back to the raw id when this
