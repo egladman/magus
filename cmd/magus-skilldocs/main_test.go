@@ -99,12 +99,22 @@ func TestSkillPageShowsTheStampAndBothForms(t *testing.T) {
 		"## What an installed copy carries",
 		"| `skill-content` | `",
 		"| `skill-variant` | `full` |",
-		"## Full form",
-		"## Short form",
-		"<details>\n<summary>Show the short form</summary>",
+		"## The two forms",
+		// One tab strip, two panels, and no script: the reader flips between the
+		// permutations in place rather than scrolling from one to the other.
+		`<article class="landing-tabs">`,
+		`<input type="radio" name="magus-query-variant" id="magus-query-tab-short" checked>`,
+		`<label for="magus-query-tab-short">Short form</label>`,
+		`<input type="radio" name="magus-query-variant" id="magus-query-tab-full">`,
+		`<label for="magus-query-tab-full">Full form</label>`,
 	} {
 		assert.Contains(t, body, want)
 	}
+	assert.Equal(t, 2, strings.Count(body, `<section class="landing-tabpanel">`), "one panel per form")
+	assert.NotContains(t, body, "<script", "the toggle is CSS on a checked radio; the site ships no page script")
+	// The radio group is named per skill. Two strips sharing a group name would fight
+	// the moment anything assembles these pages into one document.
+	assert.NotContains(t, body, `name="variant"`)
 	// The two byte counts are stated as facts; the SSG turns them into the ratio
 	// the page's prose points at.
 	assert.Regexp(t, `(?m)^skill_full_bytes: \d+$`, body)
@@ -118,7 +128,7 @@ func TestSkillPageShowsTheStampAndBothForms(t *testing.T) {
 func TestStampTableStopsAtTheBody(t *testing.T) {
 	body := page(t, generate(t), "magus-query.md")
 	table := body[strings.Index(body, "## What an installed copy carries"):]
-	table = table[:strings.Index(table, "## Full form")]
+	table = table[:strings.Index(table, "## The two forms")]
 
 	assert.NotContains(t, table, "| `name` |")
 	assert.NotContains(t, table, "| `description` |")
@@ -134,19 +144,21 @@ func TestARenamedSkillPageCarriesNoRedirect(t *testing.T) {
 	assert.NotContains(t, page(t, out, "magus-query.md"), "aliases:")
 }
 
-// TestIndexTotalsEverySkill checks the numbers the index exists for: the choice
-// between the two permutations is meant to be made on measured bytes, so a
-// totals row that does not cover every skill misprices it.
-func TestIndexTotalsEverySkill(t *testing.T) {
+// TestIndexCardsEverySkill checks what the index exists for: one card per skill,
+// each reaching its page, and a total that covers all of them - the choice between
+// the two permutations is meant to be made on measured bytes, so a total that misses
+// a skill misprices it.
+func TestIndexCardsEverySkill(t *testing.T) {
 	out := generate(t)
 	index := page(t, out, "index.md")
 
 	defs, err := skillCatalog().EmbeddedSkills()
 	require.NoError(t, err)
 	for _, d := range defs {
-		assert.Contains(t, index, "| ["+d.Name+"]("+d.Name+".md) |", "no index row for %s", d.Name)
+		assert.Contains(t, index, `<a class="landing-card" href="`+d.Name+`/">`, "no index card for %s", d.Name)
 	}
-	assert.Contains(t, index, "| **all "+strconv.Itoa(len(defs))+"** | **")
+	assert.Equal(t, len(defs), strings.Count(index, `class="landing-card"`), "one card per skill, no more")
+	assert.Contains(t, index, "All "+strconv.Itoa(len(defs))+" together are ")
 
 	fm, ok := docs.ParseFrontmatter(index)
 	require.True(t, ok)

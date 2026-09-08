@@ -148,18 +148,50 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 
 	writeStampTable(&b, cat, full)
 
-	b.WriteString("## Full form\n\nEvery mechanical step spelled out, plus the rationale for each. Installed as the " +
-		"`<name>-full` twin: loaded by name rather than always, so a reader who needs the long " +
-		"form can ask for it without every session carrying it.\n\n")
-	writeFenced(&b, full.Body)
-	fmt.Fprintf(&b, "## Short form\n\nThe enumeration dropped, the judgment kept - for the most "+
-		"capable readers, not the least; the bar under the heading above shows by how much. This is "+
-		"the always-loaded primary. Both are hand-authored from one source body; see "+
-		"[Skills](../../guides/integrations/agents/skills.md) for the difference.\n\n")
-	b.WriteString("<details>\n<summary>Show the short form</summary>\n\n")
-	writeFenced(&b, simple.Body)
-	b.WriteString("\n</details>\n")
+	writeVariants(&b, full, simple)
 	return b.String()
+}
+
+// writeVariants writes both permutations into one tab strip, so the reader flips
+// between them in place rather than scrolling from one to the other.
+//
+// The comparison a reader wants is "what did the short one drop", and two walls of
+// near-identical text answer that badly however they are stacked: the previous shape
+// printed the full body and hid the short one in a <details>, which meant the two
+// bodies were never in the same position on screen and the difference had to be held
+// in the head. Swapping one for the other at a fixed position makes the diff a
+// flicker.
+//
+// No script. The strip is the site's existing radio-and-label pattern: the input is
+// visually hidden, its label is the tab, and the stylesheet shows the panel whose
+// input is checked. Every tab set on the site shares those rules, so a page adds
+// markup and no CSS.
+//
+// The ids are per skill because a radio GROUP is per name and an id is per document:
+// two strips sharing either would fight, and every skill page is its own document
+// only until someone assembles them onto one.
+func writeVariants(b *strings.Builder, full, simple agent.AgentSkill) {
+	b.WriteString("## The two forms\n\nBoth are hand-authored from one source body. The short form " +
+		"is the always-loaded primary - the enumeration dropped, the judgment kept, for the most " +
+		"capable readers rather than the least. The full form is its `<name>-full` twin, loaded by " +
+		"name when a reader wants the rationale. The bar above shows how much shorter the primary " +
+		"is; switch between them here to see exactly what it gave up. See " +
+		"[Skills](../../guides/integrations/agents/skills.md) for how to choose.\n\n")
+
+	short, long := full.Name+"-tab-short", full.Name+"-tab-full"
+	fmt.Fprintf(b, "<article class=\"landing-tabs\">\n<header>\n"+
+		"<input type=\"radio\" name=%q id=%q checked>\n<label for=%q>Short form</label>\n"+
+		"<input type=\"radio\" name=%q id=%q>\n<label for=%q>Full form</label>\n</header>\n\n",
+		full.Name+"-variant", short, short, full.Name+"-variant", long, long)
+
+	// A blank line after the opening tag hands the block back to the Markdown parser,
+	// which is what lets a fence render inside it; the same trick the <details> blocks
+	// in the prose pages use.
+	b.WriteString("<section class=\"landing-tabpanel\">\n\n")
+	writeFenced(b, simple.Body)
+	b.WriteString("\n</section>\n\n<section class=\"landing-tabpanel\">\n\n")
+	writeFenced(b, full.Body)
+	b.WriteString("\n</section>\n</article>\n")
 }
 
 // writeFenced wraps body in a code fence LONGER than any backtick run inside it.
@@ -203,25 +235,49 @@ func renderIndex(full, simple []agent.AgentSkill) string {
 	b.WriteString("is its `<name>-full` twin, loaded by name when a reader needs the rationale.\n")
 	b.WriteString("See [Skills](../../guides/integrations/agents/skills.md) for the difference.\n\n")
 
+	// Cards rather than a table. The row a reader wants is one skill, and a table made
+	// them read across five columns to reach the sentence that says whether it is the
+	// one; the card leads with the name and the sentence, and carries the sizes as a
+	// footnote. It is the site's existing card grid, so this adds markup and no CSS.
 	var tf, ts int
-	b.WriteString("| skill | full | short | saved | what it is for |\n| --- | --- | --- | --- | --- |\n")
+	b.WriteString("<div class=\"grid landing-cards\">\n")
 	for i, f := range full {
 		s := simple[i]
 		tf += len(f.Body)
 		ts += len(s.Body)
-		saved := 0
-		if len(f.Body) > 0 {
-			saved = (len(f.Body) - len(s.Body)) * 100 / len(f.Body)
-		}
-		fmt.Fprintf(&b, "| [%s](%s.md) | %d | %d | %d%% | %s |\n",
-			f.Name, f.Name, len(f.Body), len(s.Body), saved, firstSentence(f.Description))
+		fmt.Fprintf(&b, "  <a class=\"landing-card\" href=\"%s/\">"+
+			"<span class=\"landing-card-title\">%s</span>"+
+			"<span class=\"landing-card-body\">%s</span>"+
+			"<span class=\"landing-card-body\"><small>%s short, %s full - %d%% shorter</small></span></a>\n",
+			f.Name, f.Name, escapeHTML(firstSentence(f.Description)),
+			kb(len(s.Body)), kb(len(f.Body)), percentSaved(len(f.Body), len(s.Body)))
 	}
-	saved := 0
-	if tf > 0 {
-		saved = (tf - ts) * 100 / tf
-	}
-	fmt.Fprintf(&b, "| **all %d** | **%d** | **%d** | **%d%%** | |\n", len(full), tf, ts, saved)
+	b.WriteString("</div>\n\n")
+	fmt.Fprintf(&b, "All %d together are %s installed as the short form, against %s for the full "+
+		"twins: %d%% less always-loaded text.\n", len(full), kb(ts), kb(tf), percentSaved(tf, ts))
 	return b.String()
+}
+
+// percentSaved is how much shorter the short form is, as a whole percent. Zero when
+// there is no full body to measure against, which is a skill that ships one form.
+func percentSaved(full, simple int) int {
+	if full <= 0 {
+		return 0
+	}
+	return (full - simple) * 100 / full
+}
+
+// kb renders a byte count the way a reader compares two of them. The exact figures stay
+// in each page's frontmatter for the size bar; a listing of fourteen skills wants the
+// magnitude.
+func kb(n int) string {
+	return fmt.Sprintf("%.1f KB", float64(n)/1024)
+}
+
+// escapeHTML makes a description safe inside the card's span. Descriptions are prose
+// with backticks and quotes in them, and one `<` would silently eat the rest of a card.
+func escapeHTML(s string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 }
 
 // firstSentence trims a skill's description to its opening claim, for a table cell

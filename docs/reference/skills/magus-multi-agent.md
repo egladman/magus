@@ -35,9 +35,328 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
-## Full form
+## The two forms
 
-Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
+Both are hand-authored from one source body. The short form is the always-loaded primary - the enumeration dropped, the judgment kept, for the most capable readers rather than the least. The full form is its `<name>-full` twin, loaded by name when a reader wants the rationale. The bar above shows how much shorter the primary is; switch between them here to see exactly what it gave up. See [Skills](../../guides/integrations/agents/skills.md) for how to choose.
+
+<article class="landing-tabs">
+<header>
+<input type="radio" name="magus-multi-agent-variant" id="magus-multi-agent-tab-short" checked>
+<label for="magus-multi-agent-tab-short">Short form</label>
+<input type="radio" name="magus-multi-agent-variant" id="magus-multi-agent-tab-full">
+<label for="magus-multi-agent-tab-full">Full form</label>
+</header>
+
+<section class="landing-tabpanel">
+
+````markdown
+# Splitting work across agents
+
+Count the WRITE SETS your change needs - the distinct groups of files that must be
+edited - not the projects a change invalidates. That distinction decides everything
+here, and getting it backwards is the standard way fan-out goes wrong: a one-line
+edit in a central package invalidates half the workspace and is still one edit.
+
+`magus affected <target> --plan` partitions VALIDATION - which targets to run,
+grouped for runner balance. It is not an edit assignment and not a proof of write
+isolation (the section below is what establishes that). So it can veto a fan-out
+and never license one: one shard means keep the work local; several shards mean the
+testing parallelizes, and whether the editing does is still your question to answer.
+
+Before any edits exist there is no diff to plan, so the shard plan is empty and
+proves nothing. Finding the candidate paths IS the partitioning work, and it is
+done with the graph:
+
+```sh
+magus graph build                           # first in a fresh worktree, or refs answers "unknown, not absent"
+magus refs <symbol> --occurrences -o json   # every edit site, column-precise
+magus explain <node>                        # one node's edges and blast radius
+magus affected ci --plan --stdin            # plan PROPOSED paths, before editing
+```
+
+You do not need to be asked.
+
+Fan-out is not inherently expensive. Say what a
+round will cost when the user is deciding, and prefer the smallest fan-out that
+covers the work.
+
+Fan out only after the collision check below REPORTS the leases disjoint; write
+sets that look separate is not that check. If the graph supports only one
+coherent write set, keep the work local - fanning out one lease adds coordination
+and buys nothing. The root agent owns the goal, the budget, the topology,
+integration, and final verification, and never hands those out.
+
+## Run the graph-engineering loop
+
+Treat graph engineering as
+an acceptance-criteria loop with graph-derived leases: define, partition,
+hand out, observe, evaluate, course-correct, integrate. A worker is not complete
+until its criteria and assigned validation pass; the root agent decides whether
+the top-level goal is complete.
+
+## Set one topology boundary
+
+Before spawning, state one compact budget: maximum simultaneously active agents,
+effort tier per lease, whether isolated worktrees are available, and how deep
+leases may nest. Editing costs the workspace nothing; what contends is
+VALIDATION - the magus runs a lease triggers - so size that cap from the live
+pool (`magus status`) rather than a fixed number, and serialize validations
+that share a worktree even when their write sets are disjoint. Ask before
+exceeding the budget.
+
+Assign validation from the pipeline the workspace composed, not from convention:
+`magus describe target ci <project>` names what `ci` chains and in what order,
+so a lease gets the narrowest target from that decomposition and the integrator
+re-runs the described order, with `magus affected ci` re-proving the whole
+composition.
+
+Decide each lease's validation PLANE with its target. A worker environment that
+cannot execute magus at all - an isolated tree with no usable binary, or a
+guard that routes raw language tools back to targets it cannot run - cannot
+validate anything it writes. Mark that lease's validation ROOT-DEFERRED in the
+ledger before spawning: the worker writes the tests, stops at the static checks
+its environment does run, and says so; the root executes the lease's target
+centrally before accepting.
+
+A worker may hand work on again. What it may not do is hand it on without shrinking the
+problem. Three rules give it a
+definitive end:
+
+- **Every level narrows.** A child's scope is a strict subset of its parent's. A
+  worker that would hand on its whole lease should do the work instead.
+- **Depth is capped.** Two levels below the root by default: the root hands out leases,
+  a lease may hand out parts of its own, and those parts do the work. Say so if you need more.
+- **Every lease carries acceptance criteria down with it.** A child inherits its
+  parent's criteria plus its own. A lease nobody can evaluate is a lease that cannot
+  end, which is what makes depth dangerous rather than the nesting itself.
+- **A lease that fails its criteria twice is not re-issued.** The root does it
+  locally, or serializes it behind whatever keeps breaking it.
+- **Whatever the parent does not hand out, the parent still owns.** A strict subset
+  leaks by construction: split "no caller of X remains" into per-project leases and
+  the callers in no project belong to nobody, so every lease passes and the goal is
+  unmet. Carry a remainder row at each level and close it explicitly.
+
+Pick the model that FITS the lease. That is the whole rule, and it runs both ways:
+a mechanical rename does not need the strongest model available, and an ambiguous
+API boundary does not get the cheapest one because it looked like less work.
+
+Map work to provider capabilities without assuming model names:
+
+| Tier | Assign |
+|---|---|
+| principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
+| standard | isolated implementation with a clear contract and bounded project surface |
+| economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
+
+If the host cannot select models or reasoning effort, keep its default. Tool surface
+is a separate axis from tier: evidence gathering, scouting, and review get a
+read-only tool surface where the host offers one. Never downgrade the root
+integration pass or final release gate.
+
+Nesting is allowed when the host supports it, but it does not create a
+new budget or a private ownership map. Before a child spawns descendants, it must
+report the proposed leases to its parent. The root ledger must then record those
+descendants, their parent, effort tier, criteria, and owned paths. Descendants
+inherit the ancestor's forbidden paths and may subdivide only the ancestor's
+owned paths. Apply worker and cost caps globally, not once per parent.
+
+Keep one integration owner at the root even when the lease tree is deep.
+A child coordinates its descendants but may not relax the root's criteria.
+
+## Seed the partition with Magus
+
+Choose the target that will validate the work. `ci` is the release gate, but any
+target accepted by `magus affected <target>` can be planned:
+
+```sh
+magus affected <target> --plan --max-shards <global-worker-cap>
+```
+
+For a proposed change whose paths are known but not edited yet, plan those paths
+instead of the current diff:
+
+```sh
+printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan --max-shards <global-worker-cap>
+```
+
+Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`. A shard is a
+history-balanced execution group, not an edit assignment or proof of write
+isolation. Use it only as the first partition. If paths are not known, query the
+task's symbols, files, and projects before producing a stdin plan.
+
+## Prove that leases do not collide
+
+Classify the union of every lease's proposed paths in one call:
+
+```sh
+magus describe file <both leases' paths>... -o json
+```
+
+Read the facts: `overlaps` lists each declaration covering more than one
+proposed path - a shared write set by construction; `claims[].target` names the
+target that regenerates a path (generated outputs have one integration owner,
+never hand-edited by workers); `depends_on` carries the owner's direct edges.
+Affinity stays with `magus_insight lens=affinity`, and `magus refs <symbol>`
+when two leases may touch the same API. A read-only lease has no write set, so it is outside
+this analysis entirely.
+
+Two leases may run together only when:
+
+- The combined classification reports no overlaps - source write sets and
+  declared outputs disjoint.
+- Neither consumes an API or generated artifact the other will change.
+- Shared manifests, lockfiles, schemas, workspace configuration, and agent
+  instructions have one owner.
+- Dependency and temporal-affinity evidence does not indicate that they should
+  move together.
+
+Project boundaries alone are insufficient. A declared dependency means group the
+work or serialize producer before consumer. Treat strong hidden affinity as a
+warning. When evidence is incomplete, reduce parallelism.
+
+## Maintain the global lease ledger
+
+Before spawning, record one row per lease - including the checkpoint it was handed
+(`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
+tree is not clean) - and keep descendants in the same table:
+
+| Lease | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
+|---|---|---|---|---|---|---|---|---|---|
+
+Every worker prompt must include its row, its LEASE ID, relevant graph
+evidence, and the global spawn rule. Require the worker to export
+`BAGGAGE=magus.lease=<its id>` before it works - the guard grades its writes only when that is
+set. Require it to preserve
+unrelated changes, stay inside owned paths, avoid generated outputs, run only its
+assigned Magus target, and return changed paths, validation evidence, descendants
+it created, and unresolved risks.
+
+The checkpoint you recorded is what you HANDED the lease; the base it
+actually LANDED ON is a separate fact, because hosts that isolate workers in
+per-worker trees routinely branch them from an older revision than the tree you
+partitioned. A worker's first
+required act is registering it: run `magus vcs checkpoint -o name` in ITS OWN tree
+and call `magus_ledger op=register id=<its row> reported_base=<that token>`. The
+answer is a verdict recorded on the row - match, revision-match (same revision,
+different uncommitted patch), diverged, or unknown - plus a reading of it that
+names both tokens and the next step. It is a FACT and not a gate: every verdict
+registers, diverged included. Acting on it is still yours: respawn from the right
+revision, or have the worker materialize the files it builds on from the intended
+one (`git show <rev>:<path> > <path>`, verifying each blob against
+`git rev-parse <rev>:<path>`) and re-put the row's checkpoint.
+Also name any fact that will READ as drift to the worker's snapshot - a project
+deleted this session, a rename, an index regenerated underneath it - never a
+generic "expect drift" line.
+
+Ownership ends when EDITING ends, not when the worker exits. A worker that has
+finished writing a contested path announces the release immediately - shrink the
+lease's `owned_paths` with another `magus_ledger` put, or message the orchestrator
+if the host supports it - and then carries on validating.
+
+That put records each dropped path with the digest it carried at that moment.
+Hand the digest to the lease taking the path over: it names the version being
+inherited, and one that no longer matches at verification means the waiter built
+on a tree the releaser never saw.
+
+Re-put the row on every state change. `op=list` then answers two questions you
+would otherwise derive by hand: which live leases claim intersecting
+`owned_paths`, and how long since each row was touched. Both are facts, not
+verdicts - magus transitions nothing, so a row that has gone quiet is a lease YOU
+decide is possibly dead, and a reported overlap is a pair you either intended or
+must repartition.
+
+The ledger RECORDS and the agent guard GRADES. A worker that exported
+`magus.lease` has each file write judged against these declarations as it
+happens: inside its own owned paths passes; inside its forbidden paths, or inside
+another live lease's owned paths, is DENIED, and the denial names the owning
+lease. A writer magus cannot attribute - a person in their own checkout, or a
+worker that never enrolled - is ADVISED and never blocked, and every uncertainty
+fails open the same way. It is a seatbelt for harnesses that opt in, not a
+sandbox. So a denied worker
+COORDINATES and never works around: ask the orchestrator to re-partition, or have
+the owning lease release the path with the `owned_paths` put above once it has
+finished editing, then retry. Step 1 of Integrate
+and verify checks the same boundary against the checkpoint, and that is the half
+that does not depend on a worker cooperating.
+
+A read-only lease carries an abbreviated row: no Owned paths, no Forbidden paths. Every
+row ends in pass, fail, or NO-RETURN, and the root writes which: silence is not a pass.
+
+Make acceptance criteria observable: named tests,
+artifacts, diagnostics, API behavior, or review checks. A child that hands work on must
+evaluate its descendants before reporting upward.
+
+Run workers non-blocking by default, and block on one only when your next action
+requires its result. An agent spawned merely to wait, poll, or repeat discovery the
+root already owns is not an edit lease and spends budget for nothing.
+
+## Observe through the correct control plane
+
+Use the provider's agent or task view to track the lease tree, agent state,
+messages, and completion. Use this to keep the root ledger aware of descendants.
+
+Use Magus to watch processes and shared workspace resources:
+
+```sh
+magus status --watch=15s
+```
+
+This shows Magus process state, lock holders and waiters, and shared-service
+state and adoption. It does not show an agent that is thinking without running a
+Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
+agent.
+
+A blocked worker RAISES rather than stalling quietly. Piping the block to `magus
+session notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on
+approval) opens a durable request in this repository; no other outcome opens one.
+`magus session attention` lists what is open, and `magus session attention -q` prints nothing and exits 1 on an
+empty queue, which is the form to test from a loop. Nothing closes a request by
+itself: the orchestrator, or any human, disposes it with `magus session dispose
+<id> --reason "<why>"`. A worker
+that raised one waits for the disposition instead of choosing for itself.
+
+`magus session` is how the root audits what a lease actually RAN, as opposed
+to what it reported. Each session carries the lease it was launched under -
+the same `magus.lease` channel - along with the spawner label and parent span it
+claimed, the targets it finished and how they ended, and the store is keyed by
+repository identity, so a worker in its own worktree is still listed here. `magus session --since 2h -o json` is the
+form that answers what the fleet has been doing.
+
+Re-plan when nesting, dependencies, ownership, failing
+criteria, locks, or services change. Update the ledger before resuming affected
+work, and never act on a guessed or stale PID. A running worker keeps the
+constraints it was handed: tightening them means cancel and respawn, not a message
+sent mid-flight.
+
+## Integrate and verify
+
+As leases finish:
+
+1. Compare the ledger against the ACTUAL diff since each lease's checkpoint, not
+   the paths it reported (`magus graph diff --rev <revision>` for the domain; a
+   differing dirty digest means it saw a tree you are not diffing).
+2. Reopen each lease's acceptance evidence yourself (`magus query output <ref>`)
+   before accepting it; a worker reporting that its criteria passed is not that
+   evidence.
+3. Resolve cross-lease API changes centrally; never assign the same seam twice.
+4. Regenerate declared outputs once after source work converges.
+5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
+   invalidates the original partition, stop parallel integration and reconcile.
+6. Read the integrated changeset with `magus diff --impact` before landing it: what
+   the fleet's combined edit reaches, who else has been changing it, an estimate of
+   the rebuild from recorded run times, what the advisors say, and any note anchored
+   to a file it touched. Context, never a verdict, and an empty section means nobody
+   could measure it rather than nothing found.
+7. Run `magus affected ci` and evaluate the top-level acceptance criteria.
+
+Prefer fewer proven-independent leases over
+wide fan-out and conflict repair.
+````
+
+
+</section>
+
+<section class="landing-tabpanel">
 
 ````markdown
 # Splitting work across agents
@@ -424,316 +743,6 @@ repair, and the graph is evidence for that judgment rather than permission to
 spawn every possible worker.
 ````
 
-## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Skills](../../guides/integrations/agents/skills.md) for the difference.
-
-<details>
-<summary>Show the short form</summary>
-
-````markdown
-# Splitting work across agents
-
-Count the WRITE SETS your change needs - the distinct groups of files that must be
-edited - not the projects a change invalidates. That distinction decides everything
-here, and getting it backwards is the standard way fan-out goes wrong: a one-line
-edit in a central package invalidates half the workspace and is still one edit.
-
-`magus affected <target> --plan` partitions VALIDATION - which targets to run,
-grouped for runner balance. It is not an edit assignment and not a proof of write
-isolation (the section below is what establishes that). So it can veto a fan-out
-and never license one: one shard means keep the work local; several shards mean the
-testing parallelizes, and whether the editing does is still your question to answer.
-
-Before any edits exist there is no diff to plan, so the shard plan is empty and
-proves nothing. Finding the candidate paths IS the partitioning work, and it is
-done with the graph:
-
-```sh
-magus graph build                           # first in a fresh worktree, or refs answers "unknown, not absent"
-magus refs <symbol> --occurrences -o json   # every edit site, column-precise
-magus explain <node>                        # one node's edges and blast radius
-magus affected ci --plan --stdin            # plan PROPOSED paths, before editing
-```
-
-You do not need to be asked.
-
-Fan-out is not inherently expensive. Say what a
-round will cost when the user is deciding, and prefer the smallest fan-out that
-covers the work.
-
-Fan out only after the collision check below REPORTS the leases disjoint; write
-sets that look separate is not that check. If the graph supports only one
-coherent write set, keep the work local - fanning out one lease adds coordination
-and buys nothing. The root agent owns the goal, the budget, the topology,
-integration, and final verification, and never hands those out.
-
-## Run the graph-engineering loop
-
-Treat graph engineering as
-an acceptance-criteria loop with graph-derived leases: define, partition,
-hand out, observe, evaluate, course-correct, integrate. A worker is not complete
-until its criteria and assigned validation pass; the root agent decides whether
-the top-level goal is complete.
-
-## Set one topology boundary
-
-Before spawning, state one compact budget: maximum simultaneously active agents,
-effort tier per lease, whether isolated worktrees are available, and how deep
-leases may nest. Editing costs the workspace nothing; what contends is
-VALIDATION - the magus runs a lease triggers - so size that cap from the live
-pool (`magus status`) rather than a fixed number, and serialize validations
-that share a worktree even when their write sets are disjoint. Ask before
-exceeding the budget.
-
-Assign validation from the pipeline the workspace composed, not from convention:
-`magus describe target ci <project>` names what `ci` chains and in what order,
-so a lease gets the narrowest target from that decomposition and the integrator
-re-runs the described order, with `magus affected ci` re-proving the whole
-composition.
-
-Decide each lease's validation PLANE with its target. A worker environment that
-cannot execute magus at all - an isolated tree with no usable binary, or a
-guard that routes raw language tools back to targets it cannot run - cannot
-validate anything it writes. Mark that lease's validation ROOT-DEFERRED in the
-ledger before spawning: the worker writes the tests, stops at the static checks
-its environment does run, and says so; the root executes the lease's target
-centrally before accepting.
-
-A worker may hand work on again. What it may not do is hand it on without shrinking the
-problem. Three rules give it a
-definitive end:
-
-- **Every level narrows.** A child's scope is a strict subset of its parent's. A
-  worker that would hand on its whole lease should do the work instead.
-- **Depth is capped.** Two levels below the root by default: the root hands out leases,
-  a lease may hand out parts of its own, and those parts do the work. Say so if you need more.
-- **Every lease carries acceptance criteria down with it.** A child inherits its
-  parent's criteria plus its own. A lease nobody can evaluate is a lease that cannot
-  end, which is what makes depth dangerous rather than the nesting itself.
-- **A lease that fails its criteria twice is not re-issued.** The root does it
-  locally, or serializes it behind whatever keeps breaking it.
-- **Whatever the parent does not hand out, the parent still owns.** A strict subset
-  leaks by construction: split "no caller of X remains" into per-project leases and
-  the callers in no project belong to nobody, so every lease passes and the goal is
-  unmet. Carry a remainder row at each level and close it explicitly.
-
-Pick the model that FITS the lease. That is the whole rule, and it runs both ways:
-a mechanical rename does not need the strongest model available, and an ambiguous
-API boundary does not get the cheapest one because it looked like less work.
-
-Map work to provider capabilities without assuming model names:
-
-| Tier | Assign |
-|---|---|
-| principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and bounded project surface |
-| economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
-
-If the host cannot select models or reasoning effort, keep its default. Tool surface
-is a separate axis from tier: evidence gathering, scouting, and review get a
-read-only tool surface where the host offers one. Never downgrade the root
-integration pass or final release gate.
-
-Nesting is allowed when the host supports it, but it does not create a
-new budget or a private ownership map. Before a child spawns descendants, it must
-report the proposed leases to its parent. The root ledger must then record those
-descendants, their parent, effort tier, criteria, and owned paths. Descendants
-inherit the ancestor's forbidden paths and may subdivide only the ancestor's
-owned paths. Apply worker and cost caps globally, not once per parent.
-
-Keep one integration owner at the root even when the lease tree is deep.
-A child coordinates its descendants but may not relax the root's criteria.
-
-## Seed the partition with Magus
-
-Choose the target that will validate the work. `ci` is the release gate, but any
-target accepted by `magus affected <target>` can be planned:
-
-```sh
-magus affected <target> --plan --max-shards <global-worker-cap>
-```
-
-For a proposed change whose paths are known but not edited yet, plan those paths
-instead of the current diff:
-
-```sh
-printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan --max-shards <global-worker-cap>
-```
-
-Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`. A shard is a
-history-balanced execution group, not an edit assignment or proof of write
-isolation. Use it only as the first partition. If paths are not known, query the
-task's symbols, files, and projects before producing a stdin plan.
-
-## Prove that leases do not collide
-
-Classify the union of every lease's proposed paths in one call:
-
-```sh
-magus describe file <both leases' paths>... -o json
-```
-
-Read the facts: `overlaps` lists each declaration covering more than one
-proposed path - a shared write set by construction; `claims[].target` names the
-target that regenerates a path (generated outputs have one integration owner,
-never hand-edited by workers); `depends_on` carries the owner's direct edges.
-Affinity stays with `magus_insight lens=affinity`, and `magus refs <symbol>`
-when two leases may touch the same API. A read-only lease has no write set, so it is outside
-this analysis entirely.
-
-Two leases may run together only when:
-
-- The combined classification reports no overlaps - source write sets and
-  declared outputs disjoint.
-- Neither consumes an API or generated artifact the other will change.
-- Shared manifests, lockfiles, schemas, workspace configuration, and agent
-  instructions have one owner.
-- Dependency and temporal-affinity evidence does not indicate that they should
-  move together.
-
-Project boundaries alone are insufficient. A declared dependency means group the
-work or serialize producer before consumer. Treat strong hidden affinity as a
-warning. When evidence is incomplete, reduce parallelism.
-
-## Maintain the global lease ledger
-
-Before spawning, record one row per lease - including the checkpoint it was handed
-(`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
-tree is not clean) - and keep descendants in the same table:
-
-| Lease | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
-|---|---|---|---|---|---|---|---|---|---|
-
-Every worker prompt must include its row, its LEASE ID, relevant graph
-evidence, and the global spawn rule. Require the worker to export
-`BAGGAGE=magus.lease=<its id>` before it works - the guard grades its writes only when that is
-set. Require it to preserve
-unrelated changes, stay inside owned paths, avoid generated outputs, run only its
-assigned Magus target, and return changed paths, validation evidence, descendants
-it created, and unresolved risks.
-
-The checkpoint you recorded is what you HANDED the lease; the base it
-actually LANDED ON is a separate fact, because hosts that isolate workers in
-per-worker trees routinely branch them from an older revision than the tree you
-partitioned. A worker's first
-required act is registering it: run `magus vcs checkpoint -o name` in ITS OWN tree
-and call `magus_ledger op=register id=<its row> reported_base=<that token>`. The
-answer is a verdict recorded on the row - match, revision-match (same revision,
-different uncommitted patch), diverged, or unknown - plus a reading of it that
-names both tokens and the next step. It is a FACT and not a gate: every verdict
-registers, diverged included. Acting on it is still yours: respawn from the right
-revision, or have the worker materialize the files it builds on from the intended
-one (`git show <rev>:<path> > <path>`, verifying each blob against
-`git rev-parse <rev>:<path>`) and re-put the row's checkpoint.
-Also name any fact that will READ as drift to the worker's snapshot - a project
-deleted this session, a rename, an index regenerated underneath it - never a
-generic "expect drift" line.
-
-Ownership ends when EDITING ends, not when the worker exits. A worker that has
-finished writing a contested path announces the release immediately - shrink the
-lease's `owned_paths` with another `magus_ledger` put, or message the orchestrator
-if the host supports it - and then carries on validating.
-
-That put records each dropped path with the digest it carried at that moment.
-Hand the digest to the lease taking the path over: it names the version being
-inherited, and one that no longer matches at verification means the waiter built
-on a tree the releaser never saw.
-
-Re-put the row on every state change. `op=list` then answers two questions you
-would otherwise derive by hand: which live leases claim intersecting
-`owned_paths`, and how long since each row was touched. Both are facts, not
-verdicts - magus transitions nothing, so a row that has gone quiet is a lease YOU
-decide is possibly dead, and a reported overlap is a pair you either intended or
-must repartition.
-
-The ledger RECORDS and the agent guard GRADES. A worker that exported
-`magus.lease` has each file write judged against these declarations as it
-happens: inside its own owned paths passes; inside its forbidden paths, or inside
-another live lease's owned paths, is DENIED, and the denial names the owning
-lease. A writer magus cannot attribute - a person in their own checkout, or a
-worker that never enrolled - is ADVISED and never blocked, and every uncertainty
-fails open the same way. It is a seatbelt for harnesses that opt in, not a
-sandbox. So a denied worker
-COORDINATES and never works around: ask the orchestrator to re-partition, or have
-the owning lease release the path with the `owned_paths` put above once it has
-finished editing, then retry. Step 1 of Integrate
-and verify checks the same boundary against the checkpoint, and that is the half
-that does not depend on a worker cooperating.
-
-A read-only lease carries an abbreviated row: no Owned paths, no Forbidden paths. Every
-row ends in pass, fail, or NO-RETURN, and the root writes which: silence is not a pass.
-
-Make acceptance criteria observable: named tests,
-artifacts, diagnostics, API behavior, or review checks. A child that hands work on must
-evaluate its descendants before reporting upward.
-
-Run workers non-blocking by default, and block on one only when your next action
-requires its result. An agent spawned merely to wait, poll, or repeat discovery the
-root already owns is not an edit lease and spends budget for nothing.
-
-## Observe through the correct control plane
-
-Use the provider's agent or task view to track the lease tree, agent state,
-messages, and completion. Use this to keep the root ledger aware of descendants.
-
-Use Magus to watch processes and shared workspace resources:
-
-```sh
-magus status --watch=15s
-```
-
-This shows Magus process state, lock holders and waiters, and shared-service
-state and adoption. It does not show an agent that is thinking without running a
-Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
-agent.
-
-A blocked worker RAISES rather than stalling quietly. Piping the block to `magus
-session notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on
-approval) opens a durable request in this repository; no other outcome opens one.
-`magus session attention` lists what is open, and `magus session attention -q` prints nothing and exits 1 on an
-empty queue, which is the form to test from a loop. Nothing closes a request by
-itself: the orchestrator, or any human, disposes it with `magus session dispose
-<id> --reason "<why>"`. A worker
-that raised one waits for the disposition instead of choosing for itself.
-
-`magus session` is how the root audits what a lease actually RAN, as opposed
-to what it reported. Each session carries the lease it was launched under -
-the same `magus.lease` channel - along with the spawner label and parent span it
-claimed, the targets it finished and how they ended, and the store is keyed by
-repository identity, so a worker in its own worktree is still listed here. `magus session --since 2h -o json` is the
-form that answers what the fleet has been doing.
-
-Re-plan when nesting, dependencies, ownership, failing
-criteria, locks, or services change. Update the ledger before resuming affected
-work, and never act on a guessed or stale PID. A running worker keeps the
-constraints it was handed: tightening them means cancel and respawn, not a message
-sent mid-flight.
-
-## Integrate and verify
-
-As leases finish:
-
-1. Compare the ledger against the ACTUAL diff since each lease's checkpoint, not
-   the paths it reported (`magus graph diff --rev <revision>` for the domain; a
-   differing dirty digest means it saw a tree you are not diffing).
-2. Reopen each lease's acceptance evidence yourself (`magus query output <ref>`)
-   before accepting it; a worker reporting that its criteria passed is not that
-   evidence.
-3. Resolve cross-lease API changes centrally; never assign the same seam twice.
-4. Regenerate declared outputs once after source work converges.
-5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
-   invalidates the original partition, stop parallel integration and reconcile.
-6. Read the integrated changeset with `magus diff --impact` before landing it: what
-   the fleet's combined edit reaches, who else has been changing it, an estimate of
-   the rebuild from recorded run times, what the advisors say, and any note anchored
-   to a file it touched. Context, never a verdict, and an empty section means nobody
-   could measure it rather than nothing found.
-7. Run `magus affected ci` and evaluate the top-level acceptance criteria.
-
-Prefer fewer proven-independent leases over
-wide fan-out and conflict repair.
-````
-
-
-</details>
+</section>
+</article>

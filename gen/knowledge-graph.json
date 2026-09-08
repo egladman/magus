@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5263,
-  "edge_count": 9381,
+  "node_count": 5249,
+  "edge_count": 9353,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -981,7 +981,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1546",
+        "dir_files": "1532",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1361,8 +1361,8 @@
       "label": "docs/reference/skills",
       "source": "docs/reference/skills",
       "attrs": {
-        "dir_files": "72",
-        "dir_languages": "markdown,md#agent-skills,md#full-form,md#magus-architecture-review,md#magus-buzz-review,md#magus-buzz-write,md#magus-change-summary,md#magus-commit-composition,md#magus-context-audit,md#magus-docs-lookup,md#magus-memory,md#magus-multi-agent,md#magus-query,"
+        "dir_files": "58",
+        "dir_languages": "markdown,md#agent-skills,md#magus-architecture-review,md#magus-buzz-review,md#magus-buzz-write,md#magus-change-summary,md#magus-commit-composition,md#magus-context-audit,md#magus-docs-lookup,md#magus-memory,md#magus-multi-agent,md#magus-query,md#magus-run,"
       }
     },
     {
@@ -30837,16 +30837,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-architecture-review.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-architecture-review.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-architecture-review.md#magus-architecture-review",
       "kind": "docsection",
       "label": "magus-architecture-review",
@@ -30857,12 +30847,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-architecture-review.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-architecture-review.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-architecture-review.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-architecture-review.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -30877,16 +30867,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-buzz-review.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-buzz-review.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-buzz-review.md#magus-buzz-review",
       "kind": "docsection",
       "label": "magus-buzz-review",
@@ -30897,12 +30877,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-buzz-review.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-buzz-review.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-buzz-review.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-buzz-review.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -30917,16 +30897,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-buzz-write.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-buzz-write.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-buzz-write.md#magus-buzz-write",
       "kind": "docsection",
       "label": "magus-buzz-write",
@@ -30937,12 +30907,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-buzz-write.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-buzz-write.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-buzz-write.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-buzz-write.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -30957,16 +30927,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-change-summary.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-change-summary.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-change-summary.md#magus-change-summary",
       "kind": "docsection",
       "label": "magus-change-summary",
@@ -30977,12 +30937,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-change-summary.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-change-summary.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-change-summary.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-change-summary.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -30997,16 +30957,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-commit-composition.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-commit-composition.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-commit-composition.md#magus-commit-composition",
       "kind": "docsection",
       "label": "magus-commit-composition",
@@ -31017,12 +30967,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-commit-composition.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-commit-composition.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-commit-composition.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-commit-composition.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31037,16 +30987,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-context-audit.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-context-audit.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-context-audit.md#magus-context-audit",
       "kind": "docsection",
       "label": "magus-context-audit",
@@ -31057,12 +30997,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-context-audit.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-context-audit.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-context-audit.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-context-audit.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31077,16 +31017,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-docs-lookup.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-docs-lookup.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-docs-lookup.md#magus-docs-lookup",
       "kind": "docsection",
       "label": "magus-docs-lookup",
@@ -31097,12 +31027,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-docs-lookup.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-docs-lookup.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-docs-lookup.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-docs-lookup.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31117,16 +31047,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-memory.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-memory.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-memory.md#magus-memory",
       "kind": "docsection",
       "label": "magus-memory",
@@ -31137,12 +31057,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-memory.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-memory.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-memory.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-memory.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31157,16 +31077,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-multi-agent.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-multi-agent.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-multi-agent.md#magus-multi-agent",
       "kind": "docsection",
       "label": "magus-multi-agent",
@@ -31177,12 +31087,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-multi-agent.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-multi-agent.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-multi-agent.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-multi-agent.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31197,16 +31107,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-query.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-query.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-query.md#magus-query",
       "kind": "docsection",
       "label": "magus-query",
@@ -31217,12 +31117,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-query.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-query.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-query.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-query.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31237,16 +31137,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-run.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-run.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-run.md#magus-run",
       "kind": "docsection",
       "label": "magus-run",
@@ -31257,12 +31147,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-run.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-run.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-run.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-run.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31277,16 +31167,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-sdk.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-sdk.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-sdk.md#magus-sdk",
       "kind": "docsection",
       "label": "magus-sdk",
@@ -31297,12 +31177,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-sdk.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-sdk.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-sdk.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-sdk.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31317,16 +31197,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-vcs-hygiene.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-vcs-hygiene.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-vcs-hygiene.md#magus-vcs-hygiene",
       "kind": "docsection",
       "label": "magus-vcs-hygiene",
@@ -31337,12 +31207,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-vcs-hygiene.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-vcs-hygiene.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-vcs-hygiene.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-vcs-hygiene.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -31357,16 +31227,6 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-workspace-rules.md#full-form",
-      "kind": "docsection",
-      "label": "Full form",
-      "source": "docs/reference/skills/magus-workspace-rules.md#full-form",
-      "attrs": {
-        "anchor": "full-form",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/reference/skills/magus-workspace-rules.md#magus-workspace-rules",
       "kind": "docsection",
       "label": "magus-workspace-rules",
@@ -31377,12 +31237,12 @@
       }
     },
     {
-      "id": "docsection:docs/reference/skills/magus-workspace-rules.md#short-form",
+      "id": "docsection:docs/reference/skills/magus-workspace-rules.md#the-two-forms",
       "kind": "docsection",
-      "label": "Short form",
-      "source": "docs/reference/skills/magus-workspace-rules.md#short-form",
+      "label": "The two forms",
+      "source": "docs/reference/skills/magus-workspace-rules.md#the-two-forms",
       "attrs": {
-        "anchor": "short-form",
+        "anchor": "the-two-forms",
         "level": "2"
       }
     },
@@ -77828,118 +77688,6 @@
     },
     {
       "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-architecture-review.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-buzz-review.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-buzz-write.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-change-summary.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-commit-composition.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-context-audit.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-docs-lookup.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-memory.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-multi-agent.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-query.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-run.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-sdk.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-vcs-hygiene.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
-      "target": "doc:docs/reference/skills/magus-workspace-rules.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/index.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/index.md",
       "target": "docsection:docs/reference/skills/index.md#agent-skills",
       "relation": "contains",
       "confidence": "extracted",
@@ -97284,15 +97032,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-architecture-review.md#magus-architecture-review",
-      "target": "docsection:docs/reference/skills/magus-architecture-review.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-architecture-review.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-architecture-review.md#magus-architecture-review",
-      "target": "docsection:docs/reference/skills/magus-architecture-review.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-architecture-review.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97308,15 +97048,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-buzz-review.md#magus-buzz-review",
-      "target": "docsection:docs/reference/skills/magus-buzz-review.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-buzz-review.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-buzz-review.md#magus-buzz-review",
-      "target": "docsection:docs/reference/skills/magus-buzz-review.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-buzz-review.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97332,15 +97064,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-buzz-write.md#magus-buzz-write",
-      "target": "docsection:docs/reference/skills/magus-buzz-write.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-buzz-write.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-buzz-write.md#magus-buzz-write",
-      "target": "docsection:docs/reference/skills/magus-buzz-write.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-buzz-write.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97356,15 +97080,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-change-summary.md#magus-change-summary",
-      "target": "docsection:docs/reference/skills/magus-change-summary.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-change-summary.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-change-summary.md#magus-change-summary",
-      "target": "docsection:docs/reference/skills/magus-change-summary.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-change-summary.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97380,15 +97096,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-commit-composition.md#magus-commit-composition",
-      "target": "docsection:docs/reference/skills/magus-commit-composition.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-commit-composition.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-commit-composition.md#magus-commit-composition",
-      "target": "docsection:docs/reference/skills/magus-commit-composition.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-commit-composition.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97404,15 +97112,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-context-audit.md#magus-context-audit",
-      "target": "docsection:docs/reference/skills/magus-context-audit.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-context-audit.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-context-audit.md#magus-context-audit",
-      "target": "docsection:docs/reference/skills/magus-context-audit.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-context-audit.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97428,15 +97128,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-docs-lookup.md#magus-docs-lookup",
-      "target": "docsection:docs/reference/skills/magus-docs-lookup.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-docs-lookup.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-docs-lookup.md#magus-docs-lookup",
-      "target": "docsection:docs/reference/skills/magus-docs-lookup.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-docs-lookup.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97452,15 +97144,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-memory.md#magus-memory",
-      "target": "docsection:docs/reference/skills/magus-memory.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-memory.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-memory.md#magus-memory",
-      "target": "docsection:docs/reference/skills/magus-memory.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-memory.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97476,15 +97160,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-multi-agent.md#magus-multi-agent",
-      "target": "docsection:docs/reference/skills/magus-multi-agent.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-multi-agent.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-multi-agent.md#magus-multi-agent",
-      "target": "docsection:docs/reference/skills/magus-multi-agent.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-multi-agent.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97500,15 +97176,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-query.md#magus-query",
-      "target": "docsection:docs/reference/skills/magus-query.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-query.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-query.md#magus-query",
-      "target": "docsection:docs/reference/skills/magus-query.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-query.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97524,15 +97192,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-run.md#magus-run",
-      "target": "docsection:docs/reference/skills/magus-run.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-run.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-run.md#magus-run",
-      "target": "docsection:docs/reference/skills/magus-run.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-run.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97548,15 +97208,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-sdk.md#magus-sdk",
-      "target": "docsection:docs/reference/skills/magus-sdk.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-sdk.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-sdk.md#magus-sdk",
-      "target": "docsection:docs/reference/skills/magus-sdk.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-sdk.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97572,15 +97224,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-vcs-hygiene.md#magus-vcs-hygiene",
-      "target": "docsection:docs/reference/skills/magus-vcs-hygiene.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-vcs-hygiene.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-vcs-hygiene.md#magus-vcs-hygiene",
-      "target": "docsection:docs/reference/skills/magus-vcs-hygiene.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-vcs-hygiene.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97596,15 +97240,7 @@
     },
     {
       "source": "docsection:docs/reference/skills/magus-workspace-rules.md#magus-workspace-rules",
-      "target": "docsection:docs/reference/skills/magus-workspace-rules.md#full-form",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/skills/magus-workspace-rules.md"
-    },
-    {
-      "source": "docsection:docs/reference/skills/magus-workspace-rules.md#magus-workspace-rules",
-      "target": "docsection:docs/reference/skills/magus-workspace-rules.md#short-form",
+      "target": "docsection:docs/reference/skills/magus-workspace-rules.md#the-two-forms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
