@@ -506,3 +506,57 @@ func TestContainsChainRefusesEscape(t *testing.T) {
 	}
 	assert.NotEmpty(t, edges)
 }
+
+// TestAssembledEdgesAreAllDeclared is the enforcement point for the closed relation
+// vocabulary. types.KnowledgeRelationDefinitions declares which endpoint kinds each
+// predicate may connect; nothing checks that at write time, because shards load lazily
+// and an edge can arrive before the node that gives its endpoint a kind.
+//
+// So the check lives here, over a fully assembled graph. A producer that starts emitting
+// a shape nobody declared fails at this line, which is the moment worth catching: the
+// vocabulary is closed precisely so widening it is a decision someone makes on purpose
+// rather than a side effect of a new extractor.
+func TestAssembledEdgesAreAllDeclared(t *testing.T) {
+	g := mergeAll(AssembleShards(sampleInputs()))
+
+	undeclared := g.UndeclaredEdges()
+
+	for _, e := range undeclared {
+		source, _ := g.node(e.Source)
+		target, _ := g.node(e.Target)
+		t.Errorf("undeclared edge shape: %s(%s) --%s--> %s(%s); declare it in types.KnowledgeRelationDefinitions or stop emitting it",
+			e.Source, source.Kind, e.Relation, e.Target, target.Kind)
+	}
+}
+
+// A relation nobody declared permits no shape at all: the set is closed, so an unknown
+// predicate is rejected rather than waved through for lack of a rule to break.
+func TestUndeclaredRelationPermitsNothing(t *testing.T) {
+	assert.False(t, types.KnowledgeRelationAllows("teleports_to", types.KindProject, types.KindTarget))
+	assert.True(t, types.KnowledgeRelationAllows(types.RelationContains, types.KindProject, types.KindTarget))
+	assert.False(t, types.KnowledgeRelationAllows(types.RelationContains, types.KindTarget, types.KindProject),
+		"contains is directed; the reverse shape is not declared")
+}
+
+// An edge whose endpoints are not both present is unknown, not wrong. Reporting it here
+// would turn a dangling-reference question into a vocabulary one.
+func TestUndeclaredEdgesSkipsADanglingEdge(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "project:a", Kind: types.KindProject})
+	g.AddEdge(types.KnowledgeEdge{
+		Source: "project:a", Target: "project:gone", Relation: types.RelationDependsOn,
+		Confidence: types.ConfidenceExtracted, Score: 1,
+	})
+
+	assert.Empty(t, g.UndeclaredEdges())
+}
+
+// The export carries the vocabulary it was built against, so a consumer meeting an
+// unfamiliar predicate can resolve it without a matching binary.
+func TestOutputCarriesTheRelationVocabulary(t *testing.T) {
+	out := mergeAll(AssembleShards(sampleInputs())).Output()
+
+	assert.Equal(t, types.KnowledgeRelationDefinitions(), out.Relations)
+	assert.Equal(t, types.KnowledgeRelationFingerprint(), out.RelationFingerprint)
+	assert.NotEmpty(t, out.RelationFingerprint)
+}

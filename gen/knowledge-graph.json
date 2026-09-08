@@ -5,6 +5,392 @@
   "multigraph": false,
   "node_count": 5270,
   "edge_count": 9380,
+  "relations": [
+    {
+      "id": "annotates",
+      "description": "attaches a human-authored note to an existing entity",
+      "forward_label": "is about",
+      "reverse_label": "NOTE",
+      "shapes": [
+        {
+          "source_kind": "note",
+          "target_kind": "project"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "target"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "spell"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "op"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "tool"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "charm"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "module"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "method"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "diagnostic"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "doc"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "docsection"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "file"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "dir"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "function"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "import"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "rationale"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "owner"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "symbol"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "author"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "note"
+        },
+        {
+          "source_kind": "note",
+          "target_kind": "package"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "authored",
+      "description": "attributes a file to a git contributor",
+      "forward_label": "authored",
+      "reverse_label": "authored by",
+      "shapes": [
+        {
+          "source_kind": "author",
+          "target_kind": "file"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "calls",
+      "description": "invokes another callable",
+      "forward_label": "calls",
+      "reverse_label": "called by",
+      "shapes": [
+        {
+          "source_kind": "function",
+          "target_kind": "function"
+        },
+        {
+          "source_kind": "symbol",
+          "target_kind": "symbol"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "consumes",
+      "description": "declares a file or document input",
+      "forward_label": "consumes",
+      "reverse_label": "consumed by",
+      "shapes": [
+        {
+          "source_kind": "target",
+          "target_kind": "file"
+        },
+        {
+          "source_kind": "target",
+          "target_kind": "doc"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "contains",
+      "description": "structurally contains an entity",
+      "forward_label": "contains",
+      "reverse_label": "part of",
+      "shapes": [
+        {
+          "source_kind": "project",
+          "target_kind": "target"
+        },
+        {
+          "source_kind": "project",
+          "target_kind": "dir"
+        },
+        {
+          "source_kind": "project",
+          "target_kind": "file"
+        },
+        {
+          "source_kind": "project",
+          "target_kind": "doc"
+        },
+        {
+          "source_kind": "dir",
+          "target_kind": "dir"
+        },
+        {
+          "source_kind": "dir",
+          "target_kind": "file"
+        },
+        {
+          "source_kind": "dir",
+          "target_kind": "doc"
+        },
+        {
+          "source_kind": "spell",
+          "target_kind": "op"
+        },
+        {
+          "source_kind": "module",
+          "target_kind": "method"
+        },
+        {
+          "source_kind": "file",
+          "target_kind": "function"
+        },
+        {
+          "source_kind": "doc",
+          "target_kind": "docsection"
+        },
+        {
+          "source_kind": "docsection",
+          "target_kind": "docsection"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "defines",
+      "description": "defines an indexed code symbol",
+      "forward_label": "defines",
+      "reverse_label": "defined by",
+      "shapes": [
+        {
+          "source_kind": "file",
+          "target_kind": "symbol"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "depends_on",
+      "description": "declares a build or package dependency",
+      "forward_label": "depends on",
+      "reverse_label": "required by",
+      "shapes": [
+        {
+          "source_kind": "project",
+          "target_kind": "project"
+        },
+        {
+          "source_kind": "project",
+          "target_kind": "package"
+        },
+        {
+          "source_kind": "target",
+          "target_kind": "target"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "documents",
+      "description": "provides documentation for a domain entity",
+      "forward_label": "documents",
+      "reverse_label": "documented by",
+      "shapes": [
+        {
+          "source_kind": "doc",
+          "target_kind": "spell"
+        },
+        {
+          "source_kind": "doc",
+          "target_kind": "diagnostic"
+        },
+        {
+          "source_kind": "doc",
+          "target_kind": "module"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "emits",
+      "description": "has emitted a diagnostic in an observed run",
+      "forward_label": "emits",
+      "reverse_label": "emitted by",
+      "shapes": [
+        {
+          "source_kind": "project",
+          "target_kind": "diagnostic"
+        },
+        {
+          "source_kind": "target",
+          "target_kind": "diagnostic"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "imports",
+      "description": "imports another source file or unresolved import",
+      "forward_label": "imports",
+      "reverse_label": "imported by",
+      "shapes": [
+        {
+          "source_kind": "file",
+          "target_kind": "file"
+        },
+        {
+          "source_kind": "file",
+          "target_kind": "import"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "owns",
+      "description": "declares ownership through CODEOWNERS",
+      "forward_label": "owns",
+      "reverse_label": "owned by",
+      "shapes": [
+        {
+          "source_kind": "owner",
+          "target_kind": "project"
+        },
+        {
+          "source_kind": "owner",
+          "target_kind": "file"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "produces",
+      "description": "declares a generated file or document output",
+      "forward_label": "produces",
+      "reverse_label": "produced by",
+      "shapes": [
+        {
+          "source_kind": "target",
+          "target_kind": "file"
+        },
+        {
+          "source_kind": "target",
+          "target_kind": "doc"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "rationale_for",
+      "description": "records source-local rationale for code",
+      "forward_label": "explains",
+      "reverse_label": "explained by",
+      "shapes": [
+        {
+          "source_kind": "rationale",
+          "target_kind": "function"
+        },
+        {
+          "source_kind": "rationale",
+          "target_kind": "file"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "references",
+      "description": "names another entity without invoking or containing it",
+      "forward_label": "references",
+      "reverse_label": "referenced by",
+      "shapes": [
+        {
+          "source_kind": "charm",
+          "target_kind": "target"
+        },
+        {
+          "source_kind": "file",
+          "target_kind": "symbol"
+        },
+        {
+          "source_kind": "doc",
+          "target_kind": "doc"
+        }
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "uses",
+      "description": "invokes or executes an operation, spell, or program",
+      "forward_label": "uses",
+      "reverse_label": "used by",
+      "shapes": [
+        {
+          "source_kind": "target",
+          "target_kind": "spell"
+        },
+        {
+          "source_kind": "target",
+          "target_kind": "op"
+        },
+        {
+          "source_kind": "spell",
+          "target_kind": "tool"
+        },
+        {
+          "source_kind": "op",
+          "target_kind": "tool"
+        }
+      ],
+      "symmetric": false
+    }
+  ],
+  "relation_fingerprint": "0749afec46b82230",
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {

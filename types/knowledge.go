@@ -57,11 +57,17 @@ import (
 // v9 store on disk, whose doc shards were extracted before headings were indexed and whose
 // source markdown has not changed, so only a version mismatch forces the rebuild that adds
 // the sections.
-// v11 makes the edge vocabulary part of the exported schema. Each relation now has
-// one canonical definition (labels and exact allowed endpoint-kind pairs), graph
-// assembly rejects edges outside that closed set, and exports carry the definitions
-// plus their fingerprint. Edges also retain every independent piece of evidence when
-// two shards assert the same relation instead of discarding all but the strongest.
+// v11 makes the edge vocabulary part of the exported schema. Each relation has one
+// canonical definition - description, the labels a reader sees in either direction, and
+// the exact endpoint-kind pairs it may connect - and an export carries those definitions
+// plus a fingerprint of them, so a consumer meeting an unfamiliar predicate can look it
+// up instead of guessing, and two exports built against different vocabularies say so.
+//
+// The set is closed but not enforced at write time, deliberately: shards load lazily, so
+// an edge legitimately arrives before the node that gives its endpoint a kind, and
+// rejecting inside AddEdge would discard correct edges by arrival order.
+// Graph.UndeclaredEdges reports violations instead, and a test over this workspace's own
+// graph is what fails when a producer widens the vocabulary without declaring it.
 const KnowledgeSchemaVersion = 11
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
@@ -296,6 +302,23 @@ func KnowledgeRelation(id RelationID) (KnowledgeRelationDefinition, bool) {
 		}
 	}
 	return KnowledgeRelationDefinition{}, false
+}
+
+// KnowledgeRelationAllows reports whether an edge of this relation may run between
+// these two node kinds.
+//
+// An UNDECLARED relation answers false: the set is closed, so a predicate nothing
+// declares has no permitted shape rather than every shape.
+func KnowledgeRelationAllows(id RelationID, sourceKind, targetKind string) bool {
+	for _, definition := range knowledgeRelationDefinitions {
+		if definition.ID != id {
+			continue
+		}
+		return slices.ContainsFunc(definition.Shapes, func(s KnowledgeEndpointShape) bool {
+			return s.SourceKind == sourceKind && s.TargetKind == targetKind
+		})
+	}
+	return false
 }
 
 // KnowledgeRelationFingerprint identifies the exact relation vocabulary independently
@@ -1055,6 +1078,13 @@ type KnowledgeGraphOutput struct {
 	Multigraph    bool   `json:"multigraph"    yaml:"multigraph"`
 	NodeCount     int    `json:"node_count"    yaml:"node_count"`
 	EdgeCount     int    `json:"edge_count"    yaml:"edge_count"`
+	// Relations is the closed edge vocabulary this graph was built against, and
+	// RelationFingerprint identifies that vocabulary independently of graph content.
+	// A consumer reading an unfamiliar relation can look it up here rather than
+	// guessing from the predicate, and two exports with different fingerprints were
+	// built against different vocabularies even where the edges look alike.
+	Relations           []KnowledgeRelationDefinition `json:"relations"           yaml:"relations"`
+	RelationFingerprint string                        `json:"relation_fingerprint" yaml:"relation_fingerprint"`
 	// SourceBaseURL is the workspace's repo blob base (e.g.
 	// "https://github.com/owner/repo/blob/main"), derived from the VCS remote, so a
 	// viewer can turn a node's relative `source` path into a link to the RIGHT repo.
