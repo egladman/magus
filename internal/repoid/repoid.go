@@ -94,27 +94,27 @@ func Key(identity string) string {
 // stores means deciding which of two records with one name is current, and a store
 // that guesses that silently is worse than one a human reconciles.
 func Adopt(legacy, dir string) error {
-	if legacy == dir {
-		return nil
-	}
-	if _, err := os.Stat(legacy); err != nil {
-		return nil
-	}
-	if _, err := os.Stat(dir); err == nil {
+	if legacy == dir || !exists(legacy) || exists(dir) {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return fmt.Errorf("repoid: prepare %s: %w", dir, err)
 	}
-	if err := os.Rename(legacy, dir); err != nil {
-		// A concurrent adopter that got there first is the same outcome as the Stat
-		// above, and rename reports it differently per platform.
-		if _, statErr := os.Stat(dir); statErr == nil {
-			return nil
-		}
+	// A concurrent adopter that got there first leaves dir present, which is the same
+	// outcome as the Stat above and not a failure. Asked as "is it there now" rather
+	// than by matching the rename's error, which differs per platform.
+	if err := os.Rename(legacy, dir); err != nil && !exists(dir) {
 		return fmt.Errorf("repoid: adopt %s into %s: %w", legacy, dir, err)
 	}
 	return nil
+}
+
+// exists reports whether path is there. An unreadable path counts as absent: every
+// caller here is deciding whether to move a store, and one it cannot stat is one it
+// must not touch.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // gitFile reports the gitdir a .git FILE points at. A plain checkout's .git is a
@@ -223,9 +223,7 @@ func normalizeRemote(u string) string {
 	if u == "" {
 		return ""
 	}
-	if strings.HasPrefix(u, "file://") {
-		u = strings.TrimPrefix(u, "file://")
-	}
+	u = strings.TrimPrefix(u, "file://")
 	if strings.HasPrefix(u, "/") || strings.HasPrefix(u, ".") || strings.HasPrefix(u, "~") {
 		return filepath.Clean(strings.TrimSuffix(u, ".git"))
 	}
