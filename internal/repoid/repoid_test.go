@@ -46,7 +46,7 @@ func TestIdentityFoldsCloneSpellings(t *testing.T) {
 	}
 	for _, url := range urls {
 		t.Run(url, func(t *testing.T) {
-			assert.Equal(t, "github.com/egladman/magus", Identity(clone(t, t.TempDir(), url)))
+			assert.Equal(t, "github.com/egladman/magus", identity(clone(t, t.TempDir(), url)))
 		})
 	}
 }
@@ -57,17 +57,17 @@ func TestIdentityIsSharedAcrossClones(t *testing.T) {
 	a := clone(t, t.TempDir(), "git@github.com:egladman/magus.git")
 	b := clone(t, t.TempDir(), "https://github.com/egladman/magus.git")
 
-	assert.Equal(t, Identity(a), Identity(b))
-	assert.Equal(t, Key(Identity(a)), Key(Identity(b)))
-	assert.NotEqual(t, Path(a), Path(b), "the paths differ; only the remote makes them one repo")
+	assert.Equal(t, identity(a), identity(b))
+	assert.Equal(t, dirName(identity(a)), dirName(identity(b)))
+	assert.NotEqual(t, pathIdentity(a), pathIdentity(b), "the paths differ; only the remote makes them one repo")
 }
 
 func TestIdentityReadsTheMainCheckoutConfigFromAWorktree(t *testing.T) {
 	main := clone(t, t.TempDir(), "git@github.com:egladman/magus.git")
 	linked := worktree(t, filepath.Join(main, ".git"), t.TempDir(), "feature")
 
-	assert.Equal(t, "github.com/egladman/magus", Identity(linked))
-	assert.Equal(t, main, Path(linked))
+	assert.Equal(t, "github.com/egladman/magus", identity(linked))
+	assert.Equal(t, main, pathIdentity(linked))
 }
 
 // A worktree of a BARE repository has no ".git" segment in its gitdir, so the path rule
@@ -79,17 +79,17 @@ func TestIdentityResolvesAWorktreeOfABareRepository(t *testing.T) {
 		[]byte("[remote \"origin\"]\n\turl = git@github.com:egladman/magus.git\n"), 0o644))
 	linked := worktree(t, bare, t.TempDir(), "feature")
 
-	assert.Equal(t, "github.com/egladman/magus", Identity(linked))
-	assert.Equal(t, filepath.Join(bare, "worktrees", "feature"), Path(linked),
+	assert.Equal(t, "github.com/egladman/magus", identity(linked))
+	assert.Equal(t, filepath.Join(bare, "worktrees", "feature"), pathIdentity(linked),
 		"the legacy key sees a per-worktree directory here, and keeps that blind spot on purpose")
 }
 
 func TestIdentityFallsBackToPathWithoutARemote(t *testing.T) {
 	bare := clone(t, t.TempDir(), "")
-	assert.Equal(t, bare, Identity(bare))
+	assert.Equal(t, bare, identity(bare))
 
 	none := t.TempDir()
-	assert.Equal(t, none, Identity(none), "no git at all")
+	assert.Equal(t, none, identity(none), "no git at all")
 }
 
 func TestIdentityPrefersOriginThenFirstByName(t *testing.T) {
@@ -99,41 +99,105 @@ func TestIdentityPrefersOriginThenFirstByName(t *testing.T) {
 	config := "[remote \"upstream\"]\n\turl = git@github.com:egladman/magus.git\n" +
 		"[remote \"origin\"]\n\turl = git@github.com:fork/magus.git\n"
 	require.NoError(t, os.WriteFile(filepath.Join(git, "config"), []byte(config), 0o644))
-	assert.Equal(t, "github.com/fork/magus", Identity(dir))
+	assert.Equal(t, "github.com/fork/magus", identity(dir))
 
 	only := t.TempDir()
 	onlyGit := filepath.Join(only, ".git")
 	require.NoError(t, os.MkdirAll(onlyGit, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(onlyGit, "config"),
 		[]byte("[remote \"zeta\"]\n\turl = git@example.com:a/b.git\n[remote \"alpha\"]\n\turl = git@example.com:c/d.git\n"), 0o644))
-	assert.Equal(t, "example.com/c/d", Identity(only), "no origin: first remote by name")
+	assert.Equal(t, "example.com/c/d", identity(only), "no origin: first remote by name")
 }
 
-func TestNormalizeRemote(t *testing.T) {
+func TestRemoteIdentity(t *testing.T) {
 	cases := map[string]string{
 		"https://github.com/egladman/magus.git": "github.com/egladman/magus",
 		"git@github.com:egladman/magus.git":     "github.com/egladman/magus",
 		"ssh://git@example.com:2222/a/b.git":    "example.com/a/b",
 		"https://user:pass@example.com/a/b":     "example.com/a/b",
-		"file:///srv/git/magus.git":             "/srv/git/magus",
-		"/srv/git/magus.git":                    "/srv/git/magus",
-		"https://example.com":                   "",
-		"":                                      "",
+		// A password carrying an @ must not leave its tail glued to the host, or one
+		// repository's two spellings reduce to two identities.
+		"https://user:p@ss@example.com/a/b": "example.com/a/b",
+		// A bracketed IPv6 literal keeps its brackets and loses only the port. Cutting
+		// at the first colon reduced every one of these to the host "[", which is a
+		// COLLISION between unrelated repositories rather than a miss.
+		"ssh://git@[2001:db8::1]:22/a/b.git": "[2001:db8::1]/a/b",
+		"ssh://[2001:db8::1]/a/b.git":        "[2001:db8::1]/a/b",
+		"file:///srv/git/magus.git":          "/srv/git/magus",
+		"/srv/git/magus.git":                 "/srv/git/magus",
+		// A Windows drive letter is not a host; "c" would be one if the scp-like rule
+		// fired on it.
+		"C:/repos/magus.git": "",
+		// A relative remote names a different repository from every directory it is
+		// read in, so it is refused rather than collided onto one store.
+		"../shared.git":       "",
+		"https://example.com": "",
+		"":                    "",
 	}
 	for in, want := range cases {
 		t.Run(in, func(t *testing.T) {
-			assert.Equal(t, want, normalizeRemote(in))
+			assert.Equal(t, want, remoteIdentity(in))
 		})
 	}
 }
 
-func TestKeyIsDeterministicAndScopedToOneSegment(t *testing.T) {
-	key := Key("github.com/egladman/magus")
+// The host folds because DNS does; the path does not, because it is only
+// case-insensitive on some forges and merging two repositories is the error with no
+// recovery.
+func TestRemoteIdentityFoldsTheHostAndNotThePath(t *testing.T) {
+	assert.Equal(t, "github.com/Egladman/Magus", remoteIdentity("https://GitHub.com/Egladman/Magus.git"))
+}
 
-	assert.Equal(t, key, Key("github.com/egladman/magus"))
-	assert.NotEqual(t, key, Key("github.com/someone/magus"), "the digest separates same-named repos")
-	assert.NotContains(t, key, string(os.PathSeparator), "a key names one directory, never a path")
-	assert.True(t, filepath.IsLocal(key), "a key can never escape the store directory")
+func TestDirNameIsDeterministicAndScopedToOneSegment(t *testing.T) {
+	name := dirName("github.com/egladman/magus")
+
+	assert.Equal(t, name, dirName("github.com/egladman/magus"))
+	assert.NotEqual(t, name, dirName("github.com/someone/magus"), "the digest separates same-named repos")
+	assert.NotContains(t, name, string(os.PathSeparator), "a name is one directory, never a path")
+	assert.True(t, filepath.IsLocal(name), "a name can never escape the store directory")
+}
+
+// filepath.Base answers "/" and "." for these, and neither may be joined onto the store
+// directory. The digest still separates them.
+func TestDirNameSurvivesAnUnnameableIdentity(t *testing.T) {
+	for _, id := range []string{"/", "", "."} {
+		name := dirName(id)
+		assert.True(t, filepath.IsLocal(name), "identity %q produced %q", id, name)
+	}
+	assert.NotEqual(t, dirName("/"), dirName(""))
+}
+
+func TestStateDirIsSharedByEveryCloneAndAdoptsTheLegacyKey(t *testing.T) {
+	base := t.TempDir()
+	a := clone(t, t.TempDir(), "git@github.com:egladman/magus.git")
+	b := clone(t, t.TempDir(), "https://github.com/egladman/magus.git")
+
+	legacy := LegacyDir(base, "sessions", a)
+	require.NoError(t, os.MkdirAll(legacy, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacy, "kept.jsonl"), []byte("{}\n"), 0o644))
+
+	dirA, err := StateDir(base, "sessions", a)
+	require.NoError(t, err)
+	dirB, err := StateDir(base, "sessions", b)
+	require.NoError(t, err)
+
+	assert.Equal(t, dirA, dirB, "two clones, one store")
+	assert.FileExists(t, filepath.Join(dirA, "kept.jsonl"), "the legacy store came with it")
+	assert.NoDirExists(t, legacy)
+	assert.Contains(t, dirA, filepath.Join(base, "magus", "sessions"))
+}
+
+// Two kinds of state never share a directory, or one store's listing reads the other's
+// records.
+func TestStateDirSeparatesKinds(t *testing.T) {
+	base, root := t.TempDir(), clone(t, t.TempDir(), "git@github.com:egladman/magus.git")
+
+	sessions, err := StateDir(base, "sessions", root)
+	require.NoError(t, err)
+	memory, err := StateDir(base, "memory", root)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, sessions, memory)
 }
 
 func TestAdoptCarriesALegacyStoreForward(t *testing.T) {
@@ -142,7 +206,7 @@ func TestAdoptCarriesALegacyStoreForward(t *testing.T) {
 	require.NoError(t, os.MkdirAll(legacy, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, "record.md"), []byte("kept"), 0o644))
 
-	require.NoError(t, Adopt(legacy, dir))
+	require.NoError(t, adopt(legacy, dir))
 
 	body, err := os.ReadFile(filepath.Join(dir, "record.md"))
 	require.NoError(t, err)
@@ -158,7 +222,7 @@ func TestAdoptLeavesAnExistingStoreAlone(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "record.md"), []byte("current"), 0o644))
 
-	require.NoError(t, Adopt(legacy, dir))
+	require.NoError(t, adopt(legacy, dir))
 
 	body, err := os.ReadFile(filepath.Join(dir, "record.md"))
 	require.NoError(t, err)
@@ -170,7 +234,7 @@ func TestAdoptIsANoOpWithNothingToMove(t *testing.T) {
 	base := t.TempDir()
 	dir := filepath.Join(base, "new")
 
-	require.NoError(t, Adopt(filepath.Join(base, "absent"), dir))
-	require.NoError(t, Adopt(dir, dir))
+	require.NoError(t, adopt(filepath.Join(base, "absent"), dir))
+	require.NoError(t, adopt(dir, dir))
 	assert.NoDirExists(t, dir, "adoption never creates a store; the store's own writer does")
 }

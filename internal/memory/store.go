@@ -146,9 +146,8 @@ func Dir(root string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("memory: state dir: %w", err)
 	}
-	parent := filepath.Join(base, "magus", "memory")
-	dir := filepath.Join(parent, repoid.Key(repoid.Identity(root)))
-	if err := repoid.Adopt(filepath.Join(parent, repoid.Key(repoid.Path(root))), dir); err != nil {
+	dir, err := repoid.StateDir(base, "memory", root)
+	if err != nil {
 		return "", fmt.Errorf("memory: %w", err)
 	}
 	return dir, nil
