@@ -31,11 +31,9 @@ install surface.
 
 ## MCP
 
-```sh
-magus server start
-```
-
-See [MCP](../mcp.md) for the client configuration and token.
+Configure MCP for OpenCode as a host-level integration; see [MCP](../mcp.md)
+for the client configuration and token. An agent uses the CLI fallback when MCP
+is unavailable; it does not manually start Magus solely to obtain tools.
 
 ## Guard hook
 

@@ -148,7 +148,7 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 
 	before := dirSnapshot(t, dir)
 	out := captureStderr(t, func() {
-		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, nil, agent.VariantFull, false)
+		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, nil, agent.InstallFormFull, false)
 	})
 
 	assert.Contains(t, out, "magus does not write AGENTS.md")

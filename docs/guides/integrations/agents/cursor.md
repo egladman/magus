@@ -26,16 +26,18 @@ it prints the managed magus block when your `AGENTS.md` is missing it or
 carrying a stale one, and you paste it in. [Skills](skills.md) covers the block,
 its stamp, and the drift check that grades it.
 
+Because Cursor has no Agent Skills surface, it cannot enforce concise versus
+full skill selection. Keep that repository guidance explicit and user-owned in
+`AGENTS.md`; do not claim a model or provider setting selects it automatically.
+
 The nudges an `advise` verdict would carry live in that guidance, because Cursor
 cannot deliver them at the moment the command runs.
 
 ## MCP
 
-```sh
-magus server start
-```
-
-See [MCP](../mcp.md) for the client configuration and token.
+Configure MCP for Cursor as a host-level integration; see [MCP](../mcp.md) for
+the client configuration and token. An agent uses the CLI fallback when MCP is
+unavailable; it does not manually start Magus solely to obtain tools.
 
 ## Guard hook
 

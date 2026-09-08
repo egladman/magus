@@ -211,6 +211,57 @@ func (v Variant) Simple() bool { return v == VariantSimple }
 // constant and a String case rather than a new pair of markers.
 func (v Variant) Is(name string) bool { return v.String() == name }
 
+// InstallForm says which rendered skill form an installation contains. It is a
+// user-owned installation choice, not a claim about a host or model: Magus
+// cannot reliably observe either one. Dual keeps the established compatibility
+// behavior, while Full and Concise install one canonical name per skill.
+type InstallForm string
+
+const (
+	InstallFormDual    InstallForm = "dual"
+	InstallFormFull    InstallForm = "full"
+	InstallFormConcise InstallForm = "concise"
+)
+
+// ParseInstallForm validates the spelling accepted by `magus agent install`.
+func ParseInstallForm(s string) (InstallForm, error) {
+	form := InstallForm(s)
+	switch form {
+	case InstallFormDual, InstallFormFull, InstallFormConcise:
+		return form, nil
+	default:
+		return "", fmt.Errorf("unknown skill form %q (want dual, full, or concise)", s)
+	}
+}
+
+// RenderedSkillsForForm returns exactly the entries a selected installation
+// writes. It centralizes the compatibility dual form so planning, tar output,
+// and writes cannot disagree about which names exist.
+func (c *Catalog) RenderedSkillsForForm(form InstallForm) ([]AgentSkill, error) {
+	switch form {
+	case InstallFormDual:
+		return c.RenderedSkills(VariantSimple)
+	case InstallFormFull:
+		return c.RenderedSkills(VariantFull)
+	case InstallFormConcise:
+		defs, err := c.EmbeddedSkills()
+		if err != nil {
+			return nil, err
+		}
+		out := make([]AgentSkill, 0, len(defs))
+		for _, def := range defs {
+			skill, err := c.Render(def, VariantSimple)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, skill)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("unknown skill form %q", form)
+	}
+}
+
 // applyVariant renders body for v. The body is a text/template, so a permutation
 // is an ordinary {{if}} branch and a malformed one is a parse or execute error
 // rather than text that silently survives into an installed file.
@@ -508,6 +559,20 @@ func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return c.skillTar(dest, skills)
+}
+
+// SkillTarForForm returns a reproducible archive for the selected installation
+// form. It is the form-aware counterpart to SkillTar for the agent CLI.
+func (c *Catalog) SkillTarForForm(dest string, form InstallForm) ([]byte, error) {
+	skills, err := c.RenderedSkillsForForm(form)
+	if err != nil {
+		return nil, err
+	}
+	return c.skillTar(dest, skills)
+}
+
+func (c *Catalog) skillTar(dest string, skills []AgentSkill) ([]byte, error) {
 	if dest == "" {
 		dest = "."
 	}
@@ -550,11 +615,27 @@ func (c *Catalog) PlanSkillTree(dir, dest string, v Variant) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return planSkillTree(dest, skills), nil
+}
+
+// PlanSkillTreeForForm returns the paths a selected form would write.
+func (c *Catalog) PlanSkillTreeForForm(dir, dest string, form InstallForm) ([]string, error) {
+	if err := checkDestination(dir, dest); err != nil {
+		return nil, err
+	}
+	skills, err := c.RenderedSkillsForForm(form)
+	if err != nil {
+		return nil, err
+	}
+	return planSkillTree(dest, skills), nil
+}
+
+func planSkillTree(dest string, skills []AgentSkill) []string {
 	planned := make([]string, 0, len(skills))
 	for _, skill := range skills {
 		planned = append(planned, filepath.Join(dest, skill.Name, "SKILL.md"))
 	}
-	return planned, nil
+	return planned
 }
 
 // checkDestination refuses a destination that lands outside dir. The joined path
@@ -583,6 +664,23 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 	if err != nil {
 		return nil, err
 	}
+	return c.writeSkillTree(dir, dest, force, skills)
+}
+
+// WriteSkillTreeForForm installs exactly the selected form's canonical skill
+// entries. The caller still controls destinations and overwrite behavior.
+func (c *Catalog) WriteSkillTreeForForm(dir, dest string, force bool, form InstallForm) ([]string, error) {
+	if err := checkDestination(dir, dest); err != nil {
+		return nil, err
+	}
+	skills, err := c.RenderedSkillsForForm(form)
+	if err != nil {
+		return nil, err
+	}
+	return c.writeSkillTree(dir, dest, force, skills)
+}
+
+func (c *Catalog) writeSkillTree(dir, dest string, force bool, skills []AgentSkill) ([]string, error) {
 	var written []string
 	for _, skill := range skills {
 		rel := filepath.Join(skill.Name, "SKILL.md")

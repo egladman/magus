@@ -35,13 +35,10 @@ surface, the two permutations, and the drift check.
 
 ## MCP
 
-```sh
-magus server start
-```
-
-The daemon serves MCP on `http://127.0.0.1:7391/mcp`; [MCP](../mcp.md) has the
-token and client setup. Tools are discovered at launch, so a client already
-running when the daemon comes up sees them only after a restart.
+Configure MCP for Claude Code as a host-level integration; [MCP](../mcp.md) has
+the connection and token setup. Tools are discovered at launch, so restart a
+client after changing its MCP configuration. An agent that finds MCP unavailable
+uses the CLI fallback; it does not manually start Magus solely to obtain tools.
 
 ## Guard hook
 
