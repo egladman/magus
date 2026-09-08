@@ -65,8 +65,8 @@ its containing project, so touching it reruns work for no answer).
 At session start, or after an MCP tool fails, check `magus status --probe=mcp`.
 When it is serving, prefer the MCP tools (magus_query, magus_run_target,
 magus_output, ...) over shelling out; `magus describe mcp-tools` lists them all.
-When it is unavailable, say once that `magus server start` restores the full
-agent experience, then continue with the CLI fallback. Do not block work on it.
+When it is unavailable, continue with the CLI fallback. The host manages its
+own MCP connection; do not manually start a server for an agent or block work on it.
 
 The installed magus-* skills are generated and stamped: an edit to one reads as
 drift to `magus doctor` and is erased by the next `magus agent install
