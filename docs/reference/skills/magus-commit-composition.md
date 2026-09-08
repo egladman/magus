@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-commit-composition/SKILL.md
+```
+
 ````markdown
 # Composing unpushed commits into reviewable chunks
 
@@ -160,6 +164,10 @@ repository's memory, not the branch.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-commit-composition-full/SKILL.md
+```
 
 ````markdown
 # Composing unpushed commits into reviewable chunks
@@ -278,4 +286,5 @@ often the single largest reduction available.
 
 
 </section>
+
 </article>

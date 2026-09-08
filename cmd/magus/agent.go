@@ -167,7 +167,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 				return err
 			}
 			written = append(written, w...)
-			s, err := agentSkills.StaleSkillDirs(base, leaf)
+			s, err := agentSkills.StaleSkillDirs(base, leaf, form)
 			if err != nil {
 				return err
 			}
@@ -186,14 +186,14 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		// After writing, never before: a prune that ran first would delete a skill
 		// this install then failed to replace.
 		if af.Prune {
-			r, err := agentSkills.PruneSkillTree(base, leaf)
+			r, err := agentSkills.PruneSkillTree(base, leaf, form)
 			if err != nil {
 				return err
 			}
 			removed = append(removed, r...)
 			continue
 		}
-		s, err := agentSkills.StaleSkillDirs(base, leaf)
+		s, err := agentSkills.StaleSkillDirs(base, leaf, form)
 		if err != nil {
 			return err
 		}

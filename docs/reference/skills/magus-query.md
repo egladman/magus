@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-query/SKILL.md
+```
+
 ````markdown
 # magus knowledge graph
 
@@ -243,6 +247,10 @@ the magus documentation site.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-query-full/SKILL.md
+```
 
 ````markdown
 # magus knowledge graph
@@ -466,4 +474,5 @@ the magus documentation site. Prefer the tools' own output over assumptions.
 
 
 </section>
+
 </article>

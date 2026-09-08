@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-sdk/SKILL.md
+```
+
 ````markdown
 # Consuming magus as a Go library
 
@@ -278,6 +282,10 @@ specific that has to be.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-sdk-full/SKILL.md
+```
 
 ````markdown
 # Consuming magus as a Go library
@@ -512,4 +520,5 @@ specific that has to be.
 
 
 </section>
+
 </article>

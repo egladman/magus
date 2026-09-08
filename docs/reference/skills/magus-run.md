@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-run/SKILL.md
+```
+
 ````markdown
 # Running work through magus
 
@@ -207,6 +211,10 @@ Trust `magus describe targets`, `magus describe target <name>` and
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-run-full/SKILL.md
+```
 
 ````markdown
 # Running work through magus
@@ -426,4 +434,5 @@ lags the tree between regenerations.
 
 
 </section>
+
 </article>

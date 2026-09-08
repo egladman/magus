@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-change-summary/SKILL.md
+```
+
 ````markdown
 # Recent changes in a magus workspace
 
@@ -197,6 +201,10 @@ both.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-change-summary-full/SKILL.md
+```
 
 ````markdown
 # Recent changes in a magus workspace
@@ -366,4 +374,5 @@ both.
 
 
 </section>
+
 </article>

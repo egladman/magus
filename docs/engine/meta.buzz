@@ -179,9 +179,17 @@ export fun insertSizeRatio(html: str, fullOpt: int?, simpleOpt: int?) > str {
     // Integer arithmetic throughout: a percentage is what the reader wants, and a
     // float would render as "13.470319634703196%".
     final saved = ((full - simple) * 100) / full;
-    final label = "The --simple permutation is {saved}% smaller: {simple} of {full} bytes.";
-    final bar = "\n<p><progress value=\"{simple}\" max=\"{full}\" aria-label=\""
-        + escapeAttr(label) + "\"></progress><small>" + escapeAttr(label) + "</small></p>";
+    // Named for the two forms the page itself shows, in the same words its tabs use.
+    // This label used to say "the --simple permutation", a flag the CLI no longer has,
+    // so the one sentence explaining the bar pointed at something the reader could not
+    // go look up.
+    final label = "Short form: {simple} bytes, {saved}% smaller than the full form's {full}.";
+    // Caption BEFORE the bar. A bare progress element leading the page is a graphic
+    // with nothing saying what is being measured, and a reader meets it before the
+    // sentence that would have explained it.
+    final bar = "\n<p><small>" + escapeAttr(label) + "</small><br>"
+        + "<progress value=\"{simple}\" max=\"{full}\" aria-label=\""
+        + escapeAttr(label) + "\"></progress></p>";
     return html.sub(0, marker + 5) + bar + html.sub(marker + 5);
 }
 
@@ -190,6 +198,11 @@ test "insertSizeRatio renders a progress bar and the saved percentage" {
     assert\equal(got.indexOf("<progress value=\"720\" max=\"1000\"") != null, true, "bar carries the real byte counts");
     assert\equal(got.indexOf("28% smaller") != null, true, "the percentage is computed, not passed in");
     assert\equal(got.indexOf("progress") < got.indexOf("<p>body"), true, "the bar sits between the h1 and the body");
+    // The caption reads before the graphic, and names the forms the page shows rather
+    // than a CLI flag that no longer exists.
+    assert\equal(got.indexOf("<small>") < got.indexOf("<progress"), true, "the caption precedes the bar");
+    assert\equal(got.indexOf("Short form:") != null, true, "the caption names the form the bar measures");
+    assert\equal(got.indexOf("--simple") == null, true, "no reference to a removed flag");
 }
 
 test "insertSizeRatio is a no-op on missing, zero, or nonsensical counts" {

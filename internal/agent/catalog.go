@@ -702,8 +702,8 @@ func (c *Catalog) writeSkillTree(dir, dest string, force bool, skills []AgentSki
 // hand-authored skill sitting in the same folder (magus-skill-authoring and a
 // workspace's own magus-local-development both live there) and is never a candidate
 // even though the catalog does not name it.
-func (c *Catalog) StaleSkillDirs(dir, dest string) ([]string, error) {
-	shipped, err := c.shipped()
+func (c *Catalog) StaleSkillDirs(dir, dest string, form InstallForm) ([]string, error) {
+	shipped, err := c.shipped(form)
 	if err != nil {
 		return nil, err
 	}
@@ -738,8 +738,8 @@ func (c *Catalog) StaleSkillDirs(dir, dest string) ([]string, error) {
 // binary they may have just upgraded. Those are different enough acts that the
 // second one asks - so install reports what is stale and names this, and a person
 // decides. The stamp makes the deletion safe; it does not make it expected.
-func (c *Catalog) PruneSkillTree(dir, dest string) ([]string, error) {
-	stale, err := c.StaleSkillDirs(dir, dest)
+func (c *Catalog) PruneSkillTree(dir, dest string, form InstallForm) ([]string, error) {
+	stale, err := c.StaleSkillDirs(dir, dest, form)
 	if err != nil {
 		return nil, err
 	}
@@ -910,7 +910,10 @@ func (c *Catalog) gradeDest(dir, dest string) Status {
 	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
 	// reads an unknown name as "not magus's", which would silently drop a
 	// pre-versioning install of a shipped skill - the one case that must still report.
-	shipped, shippedErr := c.shipped()
+	// Dual, the permissive superset: grading asks whether a name is one magus ever
+	// writes, and a twin beside its primary is a correct dual install rather than
+	// litter. Pruning is the question that needs the form the caller chose.
+	shipped, shippedErr := c.shipped(InstallFormDual)
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
 		if err != nil {
@@ -957,15 +960,24 @@ func (c *Catalog) installedSkillNames(path string) []string {
 // The error is propagated rather than absorbed into an empty set: callers read this
 // as "magus did not write that", and an empty set says it of every skill magus owns -
 // which would make StaleSkillDirs offer the whole installed tree for deletion.
-func (c *Catalog) shipped() (map[string]bool, error) {
-	skills, err := c.RenderedSkills(VariantSimple)
+// The form decides which names count. Derived from what that form actually renders
+// rather than asserted here: the set used to be every primary PLUS every twin
+// unconditionally, which is right only for dual. Under full or concise no twin is
+// written, so the twins a previous dual install left behind graded as shipped - never
+// reported stale, never pruned, and still loaded by the host. That is the orphaned
+// directory the install form exists to prevent.
+//
+// Pass InstallFormDual to ask the permissive question ("is this a name magus ever
+// writes"), which is what grading an existing tree wants: a twin beside a primary is
+// a correct dual install, not litter.
+func (c *Catalog) shipped(form InstallForm) (map[string]bool, error) {
+	skills, err := c.RenderedSkillsForForm(form)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool, len(skills)*2)
+	out := make(map[string]bool, len(skills))
 	for _, s := range skills {
 		out[s.Name] = true
-		out[FullTwinName(s.Name)] = true
 	}
 	return out, nil
 }

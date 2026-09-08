@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-vcs-hygiene/SKILL.md
+```
+
 ````markdown
 # VCS hygiene in a magus workspace
 
@@ -176,6 +180,10 @@ affected set.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-vcs-hygiene-full/SKILL.md
+```
 
 ````markdown
 # VCS hygiene in a magus workspace
@@ -328,4 +336,5 @@ the result surprises you.
 
 
 </section>
+
 </article>

@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-docs-lookup/SKILL.md
+```
+
 ```markdown
 # Navigating the magus docs
 
@@ -121,6 +125,10 @@ page from the graph.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-docs-lookup-full/SKILL.md
+```
 
 ```markdown
 # Navigating the magus docs
@@ -199,4 +207,5 @@ magus-query skill) lists them from the graph.
 
 
 </section>
+
 </article>

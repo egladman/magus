@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-test-design/SKILL.md
+```
+
 ````markdown
 # Designing tests from observable boundaries
 
@@ -194,6 +198,10 @@ Magus with raw language test commands.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-test-design-full/SKILL.md
+```
 
 ````markdown
 # Designing tests from observable boundaries
@@ -432,4 +440,5 @@ Execution and gaps:
 
 
 </section>
+
 </article>

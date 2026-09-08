@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-memory/SKILL.md
+```
+
 ````markdown
 # Repository memory
 
@@ -142,6 +146,10 @@ than a ref you can anchor, it is theirs to record, not yours.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-memory-full/SKILL.md
+```
 
 ````markdown
 # Repository memory
@@ -242,4 +250,5 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 
 </section>
+
 </article>

@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-buzz-review/SKILL.md
+```
+
 ````markdown
 # Reviewing Buzz code
 
@@ -316,6 +320,10 @@ scope open-ended.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-buzz-review-full/SKILL.md
+```
 
 ````markdown
 # Reviewing Buzz code
@@ -654,4 +662,5 @@ times instead of once.
 
 
 </section>
+
 </article>

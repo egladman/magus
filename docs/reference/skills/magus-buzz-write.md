@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-buzz-write/SKILL.md
+```
+
 ````markdown
 # Writing Buzz
 
@@ -258,6 +262,10 @@ Reviewing existing Buzz code rather than writing new code: use magus-buzz-review
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-buzz-write-full/SKILL.md
+```
 
 ````markdown
 # Writing Buzz
@@ -481,4 +489,5 @@ Reviewing existing Buzz code rather than writing new code: use magus-buzz-review
 
 
 </section>
+
 </article>

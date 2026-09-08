@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-context-audit/SKILL.md
+```
+
 ````markdown
 # Auditing the instructions an agent was given
 
@@ -148,6 +152,10 @@ and have the other name it rather than restate it.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-context-audit-full/SKILL.md
+```
 
 ````markdown
 # Auditing the instructions an agent was given
@@ -270,4 +278,5 @@ and have the other name it rather than restate it.
 
 
 </section>
+
 </article>

@@ -49,6 +49,10 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <section class="landing-tabpanel">
 
+```sh
+magus agent install --tar | tar -xO -f - magus-multi-agent/SKILL.md
+```
+
 ````markdown
 # Splitting work across agents
 
@@ -357,6 +361,10 @@ wide fan-out and conflict repair.
 </section>
 
 <section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-multi-agent-full/SKILL.md
+```
 
 ````markdown
 # Splitting work across agents
@@ -745,4 +753,5 @@ spawn every possible worker.
 
 
 </section>
+
 </article>

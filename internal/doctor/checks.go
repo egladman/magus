@@ -2186,7 +2186,10 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 func (r *runner) orphanedSkillDirs(root string, locations []string) []string {
 	var out []string
 	for _, loc := range locations {
-		dirs, err := r.opts.skills.StaleSkillDirs(root, loc)
+		// Dual: doctor grades a tree it did not install and cannot know the form of, so
+		// it asks the permissive question. A twin beside its primary is reported only
+		// when it is a name magus no longer ships at all.
+		dirs, err := r.opts.skills.StaleSkillDirs(root, loc, agent.InstallFormDual)
 		if err != nil {
 			continue
 		}

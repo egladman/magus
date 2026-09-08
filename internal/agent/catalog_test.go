@@ -145,12 +145,12 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 
 	// Detection first, and it must not delete: an install that did not ask for a
 	// prune still reports what is stale, so the orphan stays visible.
-	stale, err := catalog.StaleSkillDirs(dir, dest)
+	stale, err := catalog.StaleSkillDirs(dir, dest, InstallFormDual)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, stale)
 	assert.DirExists(t, orphan, "detecting a stale skill must not remove it")
 
-	removed, err := catalog.PruneSkillTree(dir, dest)
+	removed, err := catalog.PruneSkillTree(dir, dest, InstallFormDual)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
 
@@ -159,13 +159,22 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 	assert.DirExists(t, notASkill, "a directory with no SKILL.md is not a skill")
 	assert.FileExists(t, filepath.Join(dir, dest, anchorSkillRel), "a shipped skill survives its own prune")
 
-	// Both variants count as shipped, so pruning a simple install does not eat the
-	// twins it just wrote.
-	assert.DirExists(t, filepath.Join(dir, dest, FullTwinName(skillSources[0].name)))
+	// A dual install writes both names, so pruning one does not eat the twins it just
+	// wrote.
+	twin := filepath.Join(dir, dest, FullTwinName(skillSources[0].name))
+	assert.DirExists(t, twin)
+
+	// ... and a form that writes NO twin reports them, which is the whole point of the
+	// form reaching this far. Left as a report: pruning them is the caller's ask.
+	stale, err = catalog.StaleSkillDirs(dir, dest, InstallFormConcise)
+	require.NoError(t, err)
+	assert.Contains(t, stale, filepath.Join(dest, FullTwinName(skillSources[0].name)),
+		"a twin no longer written by the selected form is an orphan")
+	assert.DirExists(t, twin, "reporting still does not delete")
 
 	// Nothing installed at all is not an error: install prunes unconditionally, and
 	// a first install has nothing to prune.
-	removed, err = catalog.PruneSkillTree(dir, "never/installed")
+	removed, err = catalog.PruneSkillTree(dir, "never/installed", InstallFormDual)
 	require.NoError(t, err)
 	assert.Empty(t, removed)
 }

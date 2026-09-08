@@ -187,11 +187,27 @@ func writeVariants(b *strings.Builder, full, simple agent.AgentSkill) {
 	// A blank line after the opening tag hands the block back to the Markdown parser,
 	// which is what lets a fence render inside it; the same trick the <details> blocks
 	// in the prose pages use.
+	writeVariantPanel(b, full.Name, simple.Body)
+	writeVariantPanel(b, full.Name+"-full", full.Body)
+	b.WriteString("</article>\n")
+}
+
+// writeVariantPanel writes one tab panel: how to read that exact variant from the
+// binary, then its body.
+//
+// The command is per PANEL, not per page, because the two variants are two entries in
+// the archive and the reader wants the one they are looking at. `-O` writes to stdout:
+// this reads a skill, it does not install one, so it puts nothing in the reader's
+// working tree and needs no destination to be chosen first.
+//
+// It is also the honest form of "do not copy from this page". Text copied out of a
+// browser carries no provenance stamp; these bytes come out of the binary with theirs,
+// which is what `magus doctor` grades later.
+func writeVariantPanel(b *strings.Builder, dir, body string) {
 	b.WriteString("<section class=\"landing-tabpanel\">\n\n")
-	writeFenced(b, simple.Body)
-	b.WriteString("\n</section>\n\n<section class=\"landing-tabpanel\">\n\n")
-	writeFenced(b, full.Body)
-	b.WriteString("\n</section>\n</article>\n")
+	fmt.Fprintf(b, "```sh\nmagus agent install --tar | tar -xO -f - %s/SKILL.md\n```\n\n", dir)
+	writeFenced(b, body)
+	b.WriteString("\n</section>\n\n")
 }
 
 // writeFenced wraps body in a code fence LONGER than any backtick run inside it.
