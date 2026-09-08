@@ -239,6 +239,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkGuardWiring() },
 	},
 	{
+		Name:           "checkpoint-wiring",
+		Doc:            "whether a wired agent host records where the work stood when a session stopped",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkCheckpointWiring() },
+	},
+	{
 		Name:           "agent-skills",
 		Doc:            "installed agent skills still current with this binary",
 		Evidence:       types.EvidenceMeasured,

@@ -1876,6 +1876,99 @@ func (r *runner) checkGuardWiring() types.DoctorCheck {
 	return checkGuardWiring(r.runCtx(), r.ws.Root(), home, guardCanaryBudget)
 }
 
+func (r *runner) checkCheckpointWiring() types.DoctorCheck {
+	home, _ := os.UserHomeDir()
+	return checkCheckpointWiring(r.ws.Root(), home)
+}
+
+// checkCheckpointWiring reports a host that magus is wired into but that records no
+// checkpoint, so nothing says where the work stood when a session stopped.
+//
+// It asks only of a checkout that ALREADY has a host hook config. A machine with no host
+// wiring at all is guard-wiring's finding, and repeating it here would be a second
+// advisory about the same absence. What this catches is the narrower and quieter case: a
+// host set up months ago, guarding correctly, silently recording nothing.
+//
+// Advice rather than a failure. Not every workspace wants this wired, and a doctor that
+// fails over an optional hook teaches people to stop reading it.
+func checkCheckpointWiring(root, home string) types.DoctorCheck {
+	const name = "checkpoint-wiring"
+
+	var hosts, recording []string
+	for _, candidate := range guardWiringCandidates(root, home) {
+		for _, path := range hookConfigFiles(candidate) {
+			body, err := os.ReadFile(path)
+			if err != nil || !bytes.Contains(body, []byte("magus")) {
+				continue
+			}
+			if !bytes.Contains(body, []byte("hook")) && !bytes.Contains(body, []byte(checkpointTemplate)) {
+				continue
+			}
+			hosts = append(hosts, path)
+			// The word alone, not a spelling of the invocation. A plugin calling magus
+			// directly passes its arguments as a list, so "session checkpoint" never
+			// appears as text there, and a detector that demanded it would report every
+			// such host as recording nothing.
+			if bytes.Contains(body, []byte("checkpoint")) {
+				recording = append(recording, path)
+			}
+		}
+	}
+
+	switch {
+	case len(hosts) == 0:
+		return types.DoctorCheck{
+			Name:     name,
+			Status:   types.DoctorOK,
+			Evidence: types.EvidenceUnknown,
+			Message:  "no agent-host hook config in this checkout, so there is nothing to record from; skipped",
+		}
+	case len(recording) == 0:
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorAdvice,
+			Message: fmt.Sprintf("%d host hook config(s) wired, none recording a checkpoint; nothing says where work stood when a session stopped", len(hosts)),
+			Details: append(append([]string{}, hosts...),
+				"wire a stop hook to "+checkpointTemplate+": docs/guides/integrations/agents.md",
+				"or record one by hand: "+hint.SessionCheckpoint.With(`--note "..."`)),
+		}
+	default:
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorOK,
+			Message: fmt.Sprintf("%d of %d host hook config(s) record a checkpoint", len(recording), len(hosts)),
+			Details: recording,
+		}
+	}
+}
+
+// checkpointTemplate is the shipped stop-hook script, named here so the check can spot a
+// config that runs it. A path, which is the one host-specific shape magus owns.
+const checkpointTemplate = "magus-checkpoint.sh"
+
+// hookConfigFiles expands one wiring candidate into the files worth reading: a plugin
+// DIRECTORY contributes its TypeScript, a config file contributes itself.
+func hookConfigFiles(candidate string) []string {
+	info, err := os.Stat(candidate)
+	if err != nil {
+		return nil
+	}
+	if !info.IsDir() {
+		return []string{candidate}
+	}
+	entries, err := os.ReadDir(candidate)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".ts" {
+			out = append(out, filepath.Join(candidate, e.Name()))
+		}
+	}
+	return out
+}
+
 // guardCanaryBudget bounds the canary. Generous for what it runs - one `magus
 // hook` that has to load the workspace to answer - but bounded because doctor
 // is interactive and a hung binary must not hang the report. Injected rather
