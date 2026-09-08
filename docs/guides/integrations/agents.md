@@ -188,8 +188,8 @@ concern: configure it once for the host that owns it. An agent checks
 the surface is unavailable; it must not manually start Magus merely to obtain
 MCP.
 
-One tool carries state across sessions: `magus_memory`, a user-owned handoff
-journal of per-repository records, each pointing at something magus can reopen,
+One tool carries state across sessions: `magus_memory`, a user-owned memory of
+per-repository records, each pointing at something magus can reopen,
 kept in the user state directory outside the repo and shared across branches and
 worktrees. It is pull-based - nothing is injected into an agent's context - and
 also available through `magus memory ls|get|put|delete|verify`. Use `verify` to
@@ -201,7 +201,7 @@ addressed by [output references](../../concepts/cache/output-refs.md).
 The CLI still reads the workspace, runs targets, uses the cache, and answers
 graph queries with no daemon running. What it lacks is MCP tool discovery, the
 warm graph and background indexes, structured output retrieval, and MCP-only
-capabilities such as the handoff journal.
+capabilities such as the memory store.
 
 An agent must not turn that into a blocker. At task start, or after an MCP
 error, run `magus status --probe=mcp`; if it is unavailable, use the CLI

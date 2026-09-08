@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
 skill_full_bytes: 11169
-skill_simple_bytes: 7401
+skill_short_bytes: 7401
 ---
 
 # magus-run
@@ -28,12 +28,12 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `52` |
+| `agent-skill-version` | `53` |
 | `knowledge-schema-version` | `11` |
 | `skill-content` | `b94fce866f3d` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
+The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## The two forms
 

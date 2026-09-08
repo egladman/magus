@@ -45,7 +45,7 @@ func TestAgentsSectionIsPlainASCII(t *testing.T) {
 
 func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 	dir := t.TempDir()
-	written, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.VariantFull)
+	written, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 	require.NotEmpty(t, written)
 
@@ -55,7 +55,7 @@ func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 
 	body, err := os.ReadFile(skillPath)
 	require.NoError(t, err)
-	skills, err := agentSkills.RenderedSkills(agent.VariantFull)
+	skills, err := agentSkills.RenderedSkills(agent.FormFull)
 	require.NoError(t, err)
 	var query agent.AgentSkill
 	for _, skill := range skills {
@@ -74,7 +74,7 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 	dir := t.TempDir()
 	dests := agent.WellKnownSkillDirs()
 	for _, dest := range dests {
-		_, err := agentSkills.WriteSkillTree(dir, dest, false, agent.VariantFull)
+		_, err := agentSkills.WriteSkillTree(dir, dest, false, agent.FormFull)
 		require.NoError(t, err)
 	}
 	first, err := os.ReadFile(filepath.Join(dir, dests[0], "magus-query/SKILL.md"))
@@ -88,31 +88,31 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 
 func TestInstallSkillTreeRefusesThenForces(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.VariantFull)
+	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 
-	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.VariantFull)
+	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.Error(t, err, "a second install without --force must refuse")
 	assert.Contains(t, err.Error(), "already exists")
 
-	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true, agent.VariantFull)
+	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true, agent.FormFull)
 	assert.NoError(t, err, "--force overwrites")
 }
 
 func TestInstallSkillTreeRefusesAbsoluteDestination(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.WriteSkillTree(dir, "/tmp/abs/skills", false, agent.VariantFull)
+	_, err := agentSkills.WriteSkillTree(dir, "/tmp/abs/skills", false, agent.FormFull)
 	require.Error(t, err, "an absolute destination must be refused")
 	assert.Contains(t, err.Error(), "outside the working tree")
 
-	_, err = agentSkills.WriteSkillTree(dir, "~/.config/skills", false, agent.VariantFull)
+	_, err = agentSkills.WriteSkillTree(dir, "~/.config/skills", false, agent.FormFull)
 	require.Error(t, err, "a tilde-prefixed destination must be refused")
 	assert.Contains(t, err.Error(), "outside the working tree")
 }
 
 func TestSkillTarIsReproducibleAndExtracts(t *testing.T) {
 	dir := t.TempDir()
-	body, err := agentSkills.SkillTar(".claude/skills", agent.VariantFull)
+	body, err := agentSkills.SkillTar(".claude/skills", agent.FormFull)
 	require.NoError(t, err)
 	require.NotEmpty(t, body)
 
@@ -129,7 +129,7 @@ func TestSkillTarIsReproducibleAndExtracts(t *testing.T) {
 	assert.Contains(t, string(first), "name: magus-query")
 
 	// Reproducibility: identical bytes on a second call (no timestamps in body).
-	body2, err := agentSkills.SkillTar(".claude/skills", agent.VariantFull)
+	body2, err := agentSkills.SkillTar(".claude/skills", agent.FormFull)
 	require.NoError(t, err)
 	assert.Equal(t, body, body2, "SkillTar must be byte-stable across calls")
 }
@@ -143,12 +143,12 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 	path := filepath.Join(dir, "AGENTS.md")
 	const theirs = "# My agents notes\n\nkeep me\n"
 	require.NoError(t, os.WriteFile(path, []byte(theirs), 0o644))
-	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.VariantFull)
+	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 
 	before := dirSnapshot(t, dir)
 	out := captureStderr(t, func() {
-		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, nil, agent.InstallFormFull, false)
+		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, nil, agent.FormFull, false)
 	})
 
 	assert.Contains(t, out, "magus does not write AGENTS.md")
@@ -241,7 +241,7 @@ func TestCheckSkillStatusesNothingInstalled(t *testing.T) {
 
 func TestCheckSkillStatusesCurrent(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.VariantFull)
+	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 	// Pasted the way a developer would, since magus no longer writes this file.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Their notes\n\n"+agentSkills.AgentsBlock()), 0o644))
@@ -288,66 +288,66 @@ func TestCheckSkillStatusesIgnoresForeignAgentsMD(t *testing.T) {
 // TestEvaluateBashGuard pins the guard's decision table: destructive whole-tree
 // git operations deny, staging and raw language tools get a context reminder,
 // and everything else passes silently.
-// TestEveryEmbeddedSkillHasBothPermutations is the completeness gate: --simple is
+// TestEveryEmbeddedSkillHasBothForms is the completeness gate: the short form is
 // advertised for the whole installable set, so a skill with no marked rationale
 // would quietly install identical bytes and the flag would be a lie for that one.
-func TestEveryEmbeddedSkillHasBothPermutations(t *testing.T) {
+func TestEveryEmbeddedSkillHasBothForms(t *testing.T) {
 	defs, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
 
 	for _, def := range defs {
 		f, err := agentSkills.Render(def, agent.VariantFull)
 		require.NoError(t, err)
-		s, err := agentSkills.Render(def, agent.VariantSimple)
+		s, err := agentSkills.Render(def, agent.VariantShort)
 		require.NoError(t, err)
 		require.Equal(t, f.Name, s.Name)
 		assert.Less(t, len(s.Body), len(f.Body),
-			"%s marks no rationale, so --simple installs the same bytes; curate it or drop the claim", f.Name)
+			"%s marks no rationale, so the short form installs the same bytes; curate it or drop the claim", f.Name)
 	}
 }
 
-// TestSimpleInstallShipsAFullTwinForEverySkill pins the dual install: a simple
-// install is a bet the INSTALLING reader can re-derive what simple drops, and a
+// TestShortInstallShipsAFullTwinForEverySkill pins FormBoth: the short body is a
+// bet the INSTALLING reader can re-derive what it drops, and a
 // delegated or smaller model that inherits it never made that bet. Every skill
 // therefore ships a <name>-full twin whose body is byte-identical to what a
 // plain full install writes under the base name, so pointing a sub-agent at the
 // twin is exactly as good as having installed full.
-func TestSimpleInstallShipsAFullTwinForEverySkill(t *testing.T) {
+func TestShortInstallShipsAFullTwinForEverySkill(t *testing.T) {
 	defs, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
-	installed, err := agentSkills.RenderedSkills(agent.VariantSimple)
+	installed, err := agentSkills.RenderedSkills(agent.FormBoth)
 	require.NoError(t, err)
 
 	byName := make(map[string]agent.AgentSkill, len(installed))
 	for _, s := range installed {
 		byName[s.Name] = s
 	}
-	require.Len(t, installed, 2*len(defs), "a simple install writes one primary plus one twin per skill")
+	require.Len(t, installed, 2*len(defs), "FormBoth writes one primary plus one twin per skill")
 
 	for _, def := range defs {
 		twin, ok := byName[agent.FullTwinName(def.Name)]
-		require.Truef(t, ok, "simple install ships no %s twin", agent.FullTwinName(def.Name))
+		require.Truef(t, ok, "FormBoth ships no %s twin", agent.FullTwinName(def.Name))
 
 		wantFull, err := agentSkills.Render(def, agent.VariantFull)
 		require.NoError(t, err)
 		assert.Equal(t, wantFull.Body, twin.Body,
 			"%s must carry the same body a full install writes for %s", twin.Name, def.Name)
 		// The stamp is keyed off the entry's own Variant, so a twin inside a
-		// simple install must still stamp itself full - otherwise a reader
-		// grading provenance sees "simple" on the copy it was handed BECAUSE
+		// FormBoth install must still stamp itself full - otherwise a reader
+		// grading provenance sees "short" on the copy it was handed BECAUSE
 		// it needed full.
 		assert.Contains(t, string(agentSkills.StampSkill(twin.Name, agentSkills.RenderSkill(twin), twin.Variant)),
 			"skill-variant: full", "%s must stamp itself full", twin.Name)
 
 		// The twin announces itself; the primary does not carry a pointer to it.
-		// simple exists to spend less context, so the discoverability cost is
-		// paid once on the twin's own listing entry rather than on every skill.
+		// The short form exists to spend less context, so the discoverability
+		// cost is paid once on the twin's own listing entry, not on every skill.
 		assert.Contains(t, twin.Description, "delegated",
 			"%s must tell a delegated model to prefer it, or nothing routes to it", twin.Name)
 		primary, ok := byName[def.Name]
 		require.True(t, ok)
 		assert.NotContains(t, primary.Description, agent.FullTwinName(def.Name),
-			"%s must not spend simple's context pointing at its twin; the twin's own entry does that", def.Name)
+			"%s must not spend the short form's context pointing at its twin; the twin's own entry does that", def.Name)
 	}
 }
 

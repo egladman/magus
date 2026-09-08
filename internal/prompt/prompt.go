@@ -12,7 +12,7 @@
 //   - An unmeasured value rendered as a zero accuses. [Builder.Field] omits an empty value rather
 //     than printing a blank or a nil-shaped default.
 //   - A prompt that spends the reader's context restating what their tools already loaded is a
-//     worse prompt for being longer. [Short] and [Long] are the same document at two lengths, so
+//     worse prompt for being longer. [Short] and [Full] are the same document at two lengths, so
 //     the short one is a deliberate edit rather than whatever happened to get written.
 //
 // The output is markdown because that is what models read best and what a person pasting it can
@@ -27,7 +27,7 @@ import (
 
 // Variant selects how much of a prompt renders.
 //
-// It mirrors the skill catalog's two curated permutations rather than sharing its type: a skill
+// It mirrors the skill catalog's two curated forms rather than sharing its type: a skill
 // variant carries template rendering, provenance and install stamping, none of which a prose
 // builder should depend on. The CONCEPT is shared on purpose - one source, two lengths, the short
 // one edited rather than truncated - and that is the part worth keeping consistent.
@@ -36,9 +36,13 @@ type Variant int
 const (
 	// Short is the default form: the facts, and nothing a reader's own tools already carry.
 	Short Variant = iota
-	// Long adds the rationale behind each instruction, for a reader who has not seen this before
+	// Full adds the rationale behind each instruction, for a reader who has not seen this before
 	// or is deciding whether to trust it.
-	Long
+	//
+	// Named Full rather than Long to match the skill catalog, which the doc above says this
+	// concept is deliberately shared with. That side cannot move: `full` is the installed
+	// twin's directory name and the branch 232 skill-body templates already take.
+	Full
 )
 
 // Builder assembles a prompt. The zero value is not useful; call [New].
@@ -103,14 +107,14 @@ func (b *Builder) Text(lines ...string) *Builder {
 	return b
 }
 
-// Because adds prose only in the [Long] variant: the rationale behind an instruction the short
+// Because adds prose only in the [Full] variant: the rationale behind an instruction the short
 // form states bare. Chained after the instruction it explains, a pair reads as one thought and
 // renders as one or two depending on the variant.
 //
 // It is a Note, not Text - a section whose only long-form addition is rationale still has nothing
 // to explain when there are no facts under it.
 func (b *Builder) Because(lines ...string) *Builder {
-	if b.variant != Long {
+	if b.variant != Full {
 		return b
 	}
 	return b.Note(lines...)

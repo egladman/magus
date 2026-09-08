@@ -830,7 +830,7 @@ than committed. If you want a graph of an arbitrary corpus, Graphify is the
 right tool; the magus graph is narrower and, within its domain, checkable
 edge by edge.
 
-[Obsidian](https://obsidian.md) shaped the handoff-journal side: durable,
+[Obsidian](https://obsidian.md) shaped the memory side: durable,
 linked markdown the user owns and any tool can read. magus borrows that
 files-first stance deliberately, but keeps the scope small: named decisions,
 plans, and pointers that a later person can reopen. It is not automatic agent

@@ -424,11 +424,11 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	// Before the format switch, because a prompt is TEXT for a person to paste whatever -o says.
 	// The other formats project a record; this one is prose, and there is nothing to project.
 	if rf.Prompt {
-		// --impact already means "give me the fuller answer", so it selects the long form here
-		// rather than a second flag that would ask the same question again.
+		// --impact already means "give me the fuller answer", so it selects the full form
+		// here rather than a second flag that would ask the same question again.
 		variant := prompt.Short
 		if impact {
-			variant = prompt.Long
+			variant = prompt.Full
 		}
 		// Best-effort: a backend that cannot report branches is an ordinary state, and the
 		// prompt omits that section rather than refusing to render.

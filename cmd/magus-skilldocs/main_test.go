@@ -101,7 +101,7 @@ func TestSkillPageShowsTheStampAndBothForms(t *testing.T) {
 		"| `skill-variant` | `full` |",
 		"## The two forms",
 		// One tab strip, two panels, and no script: the reader flips between the
-		// permutations in place rather than scrolling from one to the other.
+		// forms in place rather than scrolling from one to the other.
 		`<article class="landing-tabs">`,
 		`<input type="radio" name="magus-query-variant" id="magus-query-tab-short" checked>`,
 		`<label for="magus-query-tab-short">Short form</label>`,
@@ -118,7 +118,7 @@ func TestSkillPageShowsTheStampAndBothForms(t *testing.T) {
 	// The two byte counts are stated as facts; the SSG turns them into the ratio
 	// the page's prose points at.
 	assert.Regexp(t, `(?m)^skill_full_bytes: \d+$`, body)
-	assert.Regexp(t, `(?m)^skill_simple_bytes: \d+$`, body)
+	assert.Regexp(t, `(?m)^skill_short_bytes: \d+$`, body)
 }
 
 // TestStampTableStopsAtTheBody guards writeStampTable's scan, which walks the
@@ -146,7 +146,7 @@ func TestARenamedSkillPageCarriesNoRedirect(t *testing.T) {
 
 // TestIndexCardsEverySkill checks what the index exists for: one card per skill,
 // each reaching its page, and a total that covers all of them - the choice between
-// the two permutations is meant to be made on measured bytes, so a total that misses
+// the two forms is meant to be made on measured bytes, so a total that misses
 // a skill misprices it.
 func TestIndexCardsEverySkill(t *testing.T) {
 	out := generate(t)

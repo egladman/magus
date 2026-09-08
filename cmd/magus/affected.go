@@ -1274,7 +1274,7 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 // decision an agent cannot audit is one it should not act on.
 func shardSkills(b shardDetail) (skills, why []string) {
 	// The always-full twin, not the primary. The primary entry is the curated shorter
-	// permutation, a bet that the reader who INSTALLED it can re-derive the steps it drops.
+	// form, a bet that the reader who INSTALLED it can re-derive the steps it drops.
 	// A record like this is read by someone who did not make that bet and would inherit it
 	// with no say, so the twin is the name that survives being passed along.
 	skills = append(skills, agent.FullTwinName("magus-run"))

@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-memory/SKILL.md
 description: "Maintain a user-owned per-repository memory through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions."
 tags: [agents, skills, magus-memory]
 skill_full_bytes: 5557
-skill_simple_bytes: 4609
+skill_short_bytes: 4609
 ---
 
 # magus-memory
@@ -28,12 +28,12 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `52` |
+| `agent-skill-version` | `53` |
 | `knowledge-schema-version` | `11` |
 | `skill-content` | `d7efb12dcc37` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
+The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## The two forms
 

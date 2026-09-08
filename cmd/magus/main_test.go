@@ -419,7 +419,7 @@ func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 		"left in place. Only skills magus wrote are candidates - a hand-authored one beside them is never touched " +
 		"--tar stream a tar archive to stdout instead of writing files " +
 		"--global allow absolute destination paths in write mode " +
-		"--skill-form skill form: dual (default), full, or concise; choose explicitly when one canonical form is wanted"
+		"--skill-form skill form: both (default), short, or full; choose explicitly when one body per skill is wanted"
 	assert.Equal(t, want, strings.Join(strings.Fields(buf.String()), " "))
 
 	for _, line := range strings.Split(buf.String(), "\n") {

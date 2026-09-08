@@ -32,7 +32,7 @@ magus agent install .claude/skills
 Commit what it writes so every teammate's agent gets the same instructions.
 Claude Code discovers skills when a session starts, so restart the session
 before it can invoke anything new. [Skills](skills.md) covers the install
-surface, the two permutations, and the drift check.
+surface, the two forms, and the drift check.
 
 ## MCP
 

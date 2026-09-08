@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
 skill_full_bytes: 13065
-skill_simple_bytes: 10541
+skill_short_bytes: 10541
 ---
 
 # magus-query
@@ -28,12 +28,12 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `52` |
+| `agent-skill-version` | `53` |
 | `knowledge-schema-version` | `11` |
 | `skill-content` | `247a38915217` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
+The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## The two forms
 

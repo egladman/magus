@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
 skill_full_bytes: 13317
-skill_simple_bytes: 12880
+skill_short_bytes: 12880
 ---
 
 # magus-sdk
@@ -28,12 +28,12 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `52` |
+| `agent-skill-version` | `53` |
 | `knowledge-schema-version` | `11` |
 | `skill-content` | `afcd9002774b` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
+The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## The two forms
 

@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
 skill_full_bytes: 20279
-skill_simple_bytes: 15155
+skill_short_bytes: 15155
 ---
 
 # magus-buzz-review
@@ -28,12 +28,12 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `52` |
+| `agent-skill-version` | `53` |
 | `knowledge-schema-version` | `11` |
 | `skill-content` | `752d9e3b9c1e` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
+The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## The two forms
 

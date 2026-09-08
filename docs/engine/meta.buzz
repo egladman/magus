@@ -151,7 +151,7 @@ test "insertSinceBadge is a no-op without a since value or without an h1" {
 }
 
 // insertSizeRatio places a size comparison under the H1 of an agent-skill page: how
-// much smaller the `--simple` permutation is, as a number and as a bar.
+// much smaller the short form is, as a number and as a bar.
 //
 // The bar is a bare `<progress>`. Pico styles that element classlessly
 // (`progress{accent-color:var(--pico-primary)}` plus a themed track in both color
@@ -165,30 +165,30 @@ test "insertSinceBadge is a no-op without a since value or without an h1" {
 // percentage and a bar is presentation, and presentation is the SSG's. That split is
 // also why the counts arrive as frontmatter: a generated page hands the renderer
 // data, not markup.
-export fun insertSizeRatio(html: str, fullOpt: int?, simpleOpt: int?) > str {
+export fun insertSizeRatio(html: str, fullOpt: int?, shortOpt: int?) > str {
     // The counts are OPTIONAL because most pages have no such frontmatter, and an
     // absent key decodes to null rather than 0 - comparing that to an int is a
     // runtime error that took down the whole render, not a quiet no-op. Coalesce
     // first, then reject anything nonsensical, so a non-skill page passes through.
     final full = fullOpt ?? 0;
-    final simple = simpleOpt ?? 0;
-    if (full <= 0 or simple <= 0 or simple > full) { return html; }
+    final short = shortOpt ?? 0;
+    if (full <= 0 or short <= 0 or short > full) { return html; }
     final marker = html.indexOf("</h1>");
     if (marker == null) { return html; }
 
     // Integer arithmetic throughout: a percentage is what the reader wants, and a
     // float would render as "13.470319634703196%".
-    final saved = ((full - simple) * 100) / full;
+    final saved = ((full - short) * 100) / full;
     // Named for the two forms the page itself shows, in the same words its tabs use.
-    // This label used to say "the --simple permutation", a flag the CLI no longer has,
+    // This label used to say "the --simple permutation", a spelling nothing answers to,
     // so the one sentence explaining the bar pointed at something the reader could not
     // go look up.
-    final label = "Short form: {simple} bytes, {saved}% smaller than the full form's {full}.";
+    final label = "Short form: {short} bytes, {saved}% smaller than the full form's {full}.";
     // Caption BEFORE the bar. A bare progress element leading the page is a graphic
     // with nothing saying what is being measured, and a reader meets it before the
     // sentence that would have explained it.
     final bar = "\n<p><small>" + escapeAttr(label) + "</small><br>"
-        + "<progress value=\"{simple}\" max=\"{full}\" aria-label=\""
+        + "<progress value=\"{short}\" max=\"{full}\" aria-label=\""
         + escapeAttr(label) + "\"></progress></p>";
     return html.sub(0, marker + 5) + bar + html.sub(marker + 5);
 }
@@ -202,14 +202,14 @@ test "insertSizeRatio renders a progress bar and the saved percentage" {
     // than a CLI flag that no longer exists.
     assert\equal(got.indexOf("<small>") < got.indexOf("<progress"), true, "the caption precedes the bar");
     assert\equal(got.indexOf("Short form:") != null, true, "the caption names the form the bar measures");
-    assert\equal(got.indexOf("--simple") == null, true, "no reference to a removed flag");
+    assert\equal(got.indexOf("--simple") == null, true, "no reference to a spelling nothing answers to");
 }
 
 test "insertSizeRatio is a no-op on missing, zero, or nonsensical counts" {
     assert\equal(insertSizeRatio("<h1>X</h1>", null, null), "<h1>X</h1>", "an absent key decodes to null, not 0 - every non-skill page takes this path");
     assert\equal(insertSizeRatio("<h1>X</h1>", 4723, null), "<h1>X</h1>", "one count without the other is refused");
     assert\equal(insertSizeRatio("<h1>X</h1>", 0, 0), "<h1>X</h1>", "zero counts render nothing");
-    // simple > full would mean the elision GREW the body, which is a generator bug,
+    // short > full would mean the elision GREW the body, which is a generator bug,
     // not something to draw a backwards bar for.
     assert\equal(insertSizeRatio("<h1>X</h1>", 100, 200), "<h1>X</h1>", "an inverted ratio is refused");
     assert\equal(insertSizeRatio("<p>no heading</p>", 1000, 500), "<p>no heading</p>", "no h1 leaves html untouched");

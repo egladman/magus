@@ -48,6 +48,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   because it counts its own ancestors' claims as load. Nothing about what counts as
   redundant changed: a green gate for this branch, plus a delta in which every path is
   generated output, prose or a comment-only edit.
+- **The two skill forms answer to one word each: SHORT and FULL.** The shorter end used to
+  have three names - `simple` in the code and in an installed file's `skill-variant:` stamp,
+  `concise` on `--skill-form`, `short` on the website - so a reader could pass
+  `--skill-form=concise`, get a file stamped `simple`, and read a page about the short form.
+  `--skill-form` now takes `both` (the default), `short`, or `full`; the stamp records
+  `short`; and a skill body brackets its shorter wording with `{{if .Short}}`. Nothing
+  answers to the old spellings, and skill version 53 grades every installed tree stale so a
+  reinstall restamps it.
+- **"Handoff journal" is gone from the memory command and the docs.** `magus memory`
+  manages a per-repository MEMORY: that is what the command is called, what the MCP tool
+  is called, and now what its help text, manpage, and every page describing it call the
+  thing it stores. The skill was renamed a release ago and these surfaces were missed.
+- **`RenderedSkills` and the paths that draw from it take a form, not a variant.** A form may
+  name two bodies (`both` writes each skill short plus a full twin) and a variant names one,
+  so the enumerators that plan, archive and write an install now take the form the caller
+  chose. That retires the parallel `*ForForm` methods, whose Variant-taking twins silently
+  added twins for one value and not the other.
+
 - **Watching a CI run is refused.** `gh run watch`, and the `--watch` forms of
   `gh run view` and `gh pr checks`, now deny and name the one board query that answers
   every open pull request at once. Watching costs a wake-up per completion and buys

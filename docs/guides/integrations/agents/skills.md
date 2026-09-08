@@ -71,7 +71,8 @@ launched with. The same launch-time rule applies to MCP tools; see
 
 ## Choose a skill form deliberately
 
-Every skill has two hand-authored permutations, and install writes both.
+Every skill has two hand-authored forms, SHORT and FULL. `--skill-form` picks
+which an install writes: `both` (the default), `short`, or `full`.
 
 |               | what it carries                                                                              | who it is for                                          |
 | ------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
@@ -96,20 +97,20 @@ listing, so a sub-agent browsing for a skill finds it without being told, and
 the primary spends no context pointing at it. Twins are loaded on demand rather
 than always, so they do not count against the context cost install reports.
 
-Magus does not infer a model's ability, and it does not maintain a provider or
+magus does not infer a model's ability, and it does not maintain a provider or
 model routing table. Where a host can choose which skills an agent receives,
-the person configuring that host chooses the form explicitly: concise for an
-environment that has demonstrated it needs less procedural context, full where
+the person configuring that host chooses the form explicitly: `short` for an
+environment that has demonstrated it needs less procedural context, `full` where
 more explicit guidance is wanted. Record that choice in the host configuration
-and review it as part of that configuration; it is not a property Magus can
+and review it as part of that configuration; it is not a property magus can
 truthfully infer from a model name.
 
-The current installer writes both names for compatibility. That is not an
-enforcement mechanism. Hosts that can restrict skill discovery may expose only
-the selected form; hosts that cannot should treat the choice as guidance rather
-than claim deterministic selection. [Cursor](cursor.md) has no Agent Skills
-surface at all, so it cannot enforce a skill-form choice. Its `AGENTS.md`
-guidance remains user-owned.
+`both` is the default because it is the only form that leaves a delegated reader
+something to ask for. It is not an enforcement mechanism. Hosts that can restrict
+skill discovery may expose only the selected form; hosts that cannot should treat
+the choice as guidance rather than claim deterministic selection.
+[Cursor](cursor.md) has no Agent Skills surface at all, so it cannot enforce a
+skill-form choice. Its `AGENTS.md` guidance remains user-owned.
 
 **Both are curated.** The short form is not a summary and not model-generated.
 There is exactly one hand-written body per skill, and its author marks the spans
@@ -124,7 +125,7 @@ metadata:
   agent-skill-version: 37
   knowledge-schema-version: 9
   skill-content: 45653b90928c
-  skill-variant: simple
+  skill-variant: short
 ```
 
 `skill-content` is the digest of the source body, so it is identical for both

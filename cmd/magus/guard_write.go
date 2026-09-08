@@ -649,7 +649,7 @@ var agentSurfaceSources = []string{
 // maintains it, or returns "" for every other path.
 //
 // The gap it closes is the one the authoring method itself names: both failures here are
-// silent. A skill body is a text/template rendered per permutation, so a passage added
+// silent. A skill body is a text/template rendered per form, so a passage added
 // outside a branch changes both and a passage added inside one changes neither - and
 // nothing about the file says so. A content change without a SkillVersion bump leaves
 // every install reporting itself up to date while carrying the previous bytes.
@@ -664,7 +664,7 @@ func adviseAgentSurfaceWrite(path string) string {
 		return ""
 	}
 	return "magus workspace: load the magus-skill-authoring skill before editing this. It is hand-authored, committed beside the installed skills, and it holds the method these files are maintained by.\n" +
-		rel + " is a SOURCE of what agents are taught. Both ways to get it wrong here are silent: a skill body is a template, so a passage lands in one permutation, both, or neither depending on the branch it sits in, and a content change with no SkillVersion bump leaves every install reporting itself up to date while carrying the old bytes.\n" +
+		rel + " is a SOURCE of what agents are taught. Both ways to get it wrong here are silent: a skill body is a template, so a passage lands in one form, both, or neither depending on the branch it sits in, and a content change with no SkillVersion bump leaves every install reporting itself up to date while carrying the old bytes.\n" +
 		"Verify against a freshly built binary rather than against the docs. That is the method's first rule, and it is there because the registry once advertised a dry run that regenerated files."
 }
 

@@ -1350,7 +1350,7 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")
-	fs.StringVar(&f.SkillForm, FlagAgentSkillForm, "dual", "Skill form to install: dual (compatibility default), full, or concise (agent install)")
+	fs.StringVar(&f.SkillForm, FlagAgentSkillForm, "both", "Skill form to install: both (default), short, or full (agent install)")
 	return &f
 }
 

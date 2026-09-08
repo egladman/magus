@@ -110,16 +110,16 @@ func TestBecauseAppearsOnlyInTheLongForm(t *testing.T) {
 	}
 
 	assert.NotContains(t, build(Short), "a guess")
-	assert.Contains(t, build(Long), "a guess")
+	assert.Contains(t, build(Full), "a guess")
 	// The instruction itself survives both, which is what makes them the same document.
 	assert.Contains(t, build(Short), "ask the graph")
-	assert.Contains(t, build(Long), "ask the graph")
+	assert.Contains(t, build(Full), "ask the graph")
 }
 
 // TestBecauseAloneCannotConjureASection: rationale explains facts, so a section that gathered no
 // facts has nothing to explain and must stay gone even in the long form.
 func TestBecauseAloneCannotConjureASection(t *testing.T) {
-	out := New("T", Long).Section("Collisions").Because("branches collide").String()
+	out := New("T", Full).Section("Collisions").Because("branches collide").String()
 
 	assert.NotContains(t, out, "Collisions")
 }

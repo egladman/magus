@@ -1108,7 +1108,7 @@
       "source": ".claude",
       "attrs": {
         "dir_files": "23",
-        "dir_languages": "markdown,md#1-empiricism-before-documentation,md#2-hunt-the-silent-failure,md#3-one-source-of-truth-drift-gated,md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest,md#4-breadcrumbs-are-load-bearing,md#5-write-for-the-weakest-reader,md#5"
+        "dir_languages": "markdown,md#1-empiricism-before-documentation,md#2-hunt-the-silent-failure,md#3-one-source-of-truth-drift-gated,md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest,md#4-breadcrumbs-are-load-bearing,md#5-write-for-the-weakest-reader,md#5b-phras"
       }
     },
     {
@@ -1118,7 +1118,7 @@
       "source": ".claude/skills",
       "attrs": {
         "dir_files": "22",
-        "dir_languages": "markdown,md#1-empiricism-before-documentation,md#2-hunt-the-silent-failure,md#3-one-source-of-truth-drift-gated,md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest,md#4-breadcrumbs-are-load-bearing,md#5-write-for-the-weakest-reader,md#5"
+        "dir_languages": "markdown,md#1-empiricism-before-documentation,md#2-hunt-the-silent-failure,md#3-one-source-of-truth-drift-gated,md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest,md#4-breadcrumbs-are-load-bearing,md#5-write-for-the-weakest-reader,md#5b-phras"
       }
     },
     {
@@ -1138,7 +1138,7 @@
       "source": ".claude/skills/magus-skill-authoring",
       "attrs": {
         "dir_files": "13",
-        "dir_languages": "markdown,md#1-empiricism-before-documentation,md#2-hunt-the-silent-failure,md#3-one-source-of-truth-drift-gated,md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest,md#4-breadcrumbs-are-load-bearing,md#5-write-for-the-weakest-reader,md#5"
+        "dir_languages": "markdown,md#1-empiricism-before-documentation,md#2-hunt-the-silent-failure,md#3-one-source-of-truth-drift-gated,md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest,md#4-breadcrumbs-are-load-bearing,md#5-write-for-the-weakest-reader,md#5b-phras"
       }
     },
     {
@@ -5575,7 +5575,7 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "cli,magus memory,handoff,journal,agents",
+        "tags": "cli,magus memory,memory,decisions,agents",
         "title": "magus memory"
       }
     },
@@ -6554,12 +6554,12 @@
       }
     },
     {
-      "id": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest",
+      "id": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest",
       "kind": "docsection",
-      "label": "3b. Two permutations from one body: mark the why, then shorten the rest",
-      "source": ".claude/skills/magus-skill-authoring/SKILL.md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest",
+      "label": "3b. Two forms from one body: mark the why, then shorten the rest",
+      "source": ".claude/skills/magus-skill-authoring/SKILL.md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest",
       "attrs": {
-        "anchor": "3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest",
+        "anchor": "3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest",
         "level": "2"
       }
     },
@@ -6634,12 +6634,12 @@
       }
     },
     {
-      "id": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#who-simple-is-for-and-therefore-what-it-cuts",
+      "id": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#who-the-short-form-is-for-and-therefore-what-it-cuts",
       "kind": "docsection",
-      "label": "Who simple is FOR, and therefore what it cuts",
-      "source": ".claude/skills/magus-skill-authoring/SKILL.md#who-simple-is-for-and-therefore-what-it-cuts",
+      "label": "Who the short form is FOR, and therefore what it cuts",
+      "source": ".claude/skills/magus-skill-authoring/SKILL.md#who-the-short-form-is-for-and-therefore-what-it-cuts",
       "attrs": {
-        "anchor": "who-simple-is-for-and-therefore-what-it-cuts",
+        "anchor": "who-the-short-form-is-for-and-therefore-what-it-cuts",
         "level": "3"
       }
     },
@@ -17974,12 +17974,12 @@
       }
     },
     {
-      "id": "docsection:docs/guides/quickstart.md#two-permutations-both-installed",
+      "id": "docsection:docs/guides/quickstart.md#two-forms-both-installed",
       "kind": "docsection",
-      "label": "Two permutations, both installed",
-      "source": "docs/guides/quickstart.md#two-permutations-both-installed",
+      "label": "Two forms, both installed",
+      "source": "docs/guides/quickstart.md#two-forms-both-installed",
       "attrs": {
-        "anchor": "two-permutations-both-installed",
+        "anchor": "two-forms-both-installed",
         "level": "3"
       }
     },
@@ -37347,7 +37347,7 @@
       "id": "function:docs/engine/meta.buzz:insertSizeRatio",
       "kind": "function",
       "label": "insertSizeRatio",
-      "doc": "insertSizeRatio places a size comparison under the H1 of an agent-skill page: how much smaller the `--simple` permutation is, as a number and as a bar.  The bar is a bare `<progress>`. Pico styles that element classlessly (`progress{accent-color:var(--pico-primary)}` plus a themed track in both color schemes), so the ratio gets a graphic with no custom CSS and no new markup vocabulary - which is the site's whole rule. It is also the semantically correct element: a proportion of a known whole, readable by a",
+      "doc": "insertSizeRatio places a size comparison under the H1 of an agent-skill page: how much smaller the short form is, as a number and as a bar.  The bar is a bare `<progress>`. Pico styles that element classlessly (`progress{accent-color:var(--pico-primary)}` plus a themed track in both color schemes), so the ratio gets a graphic with no custom CSS and no new markup vocabulary - which is the site's whole rule. It is also the semantically correct element: a proportion of a known whole, readable by a screen reade",
       "source": "docs/engine/meta.buzz:168",
       "attrs": {
         "exported": "true"
@@ -80100,7 +80100,7 @@
       "provenance": ".claude/skills/magus-local-development/SKILL.md"
     },
     {
-      "source": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest",
+      "source": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest",
       "target": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#do-not-de-grammar-the-core",
       "relation": "contains",
       "confidence": "extracted",
@@ -80108,7 +80108,7 @@
       "provenance": ".claude/skills/magus-skill-authoring/SKILL.md"
     },
     {
-      "source": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest",
+      "source": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest",
       "target": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#showing-template-syntax-inside-a-skill",
       "relation": "contains",
       "confidence": "extracted",
@@ -80116,8 +80116,8 @@
       "provenance": ".claude/skills/magus-skill-authoring/SKILL.md"
     },
     {
-      "source": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest",
-      "target": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#who-simple-is-for-and-therefore-what-it-cuts",
+      "source": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest",
+      "target": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#who-the-short-form-is-for-and-therefore-what-it-cuts",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -80149,7 +80149,7 @@
     },
     {
       "source": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#authoring-the-agent-surface",
-      "target": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-permutations-from-one-body-mark-the-why-then-shorten-the-rest",
+      "target": "docsection:.claude/skills/magus-skill-authoring/SKILL.md#3b-two-forms-from-one-body-mark-the-why-then-shorten-the-rest",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -88565,7 +88565,7 @@
     },
     {
       "source": "docsection:docs/guides/quickstart.md#set-up-your-coding-agent",
-      "target": "docsection:docs/guides/quickstart.md#two-permutations-both-installed",
+      "target": "docsection:docs/guides/quickstart.md#two-forms-both-installed",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

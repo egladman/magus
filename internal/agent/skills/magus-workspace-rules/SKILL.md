@@ -106,7 +106,7 @@ or convention specific to you, and any magus workspace would want it.
 
 - With a Go toolchain: a pull request against `egladman/magus` editing
   `internal/agent/skills/<skill>/SKILL.md`{{if .Full}}, which then follows that repo's own authoring
-  method - both permutations, verified against a built binary, skill version
+  method - both forms, verified against a built binary, skill version
   bumped{{end}}.
 - Without one: an issue, pasting the stamped rule verbatim. The stamp already
   carries its evidence, which is what makes it actionable by someone else.

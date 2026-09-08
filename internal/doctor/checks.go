@@ -2189,7 +2189,7 @@ func (r *runner) orphanedSkillDirs(root string, locations []string) []string {
 		// Dual: doctor grades a tree it did not install and cannot know the form of, so
 		// it asks the permissive question. A twin beside its primary is reported only
 		// when it is a name magus no longer ships at all.
-		dirs, err := r.opts.skills.StaleSkillDirs(root, loc, agent.InstallFormDual)
+		dirs, err := r.opts.skills.StaleSkillDirs(root, loc, agent.FormBoth)
 		if err != nil {
 			continue
 		}

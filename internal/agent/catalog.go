@@ -85,9 +85,13 @@ import (
 // 52: magus-handoff-journal is magus-memory again, and "handoff journal" is gone
 // from every surface a reader meets. The word is agent-industry jargon and this
 // store predates it: it is a repository's memory, which is what the command has
-// always been called. formerNames carries the old directory so an install prunes
-// it rather than leaving two copies an agent loads both of.
-const SkillVersion = 52
+// always been called. Pre-1.0, so the old directory is not carried: `--prune`
+// removes it, which is what the stale report already names it for.
+// 53: the SHORT/FULL axis answers to one word per end everywhere - the constants,
+// the `skill-variant:` stamp value, `--skill-form`, and the published pages. An
+// installed file's stamp changes from `simple` to `short`, so every tree grades
+// stale until it is reinstalled.
+const SkillVersion = 53
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -124,20 +128,19 @@ type AgentSkill struct {
 	Description string
 	Body        string
 	// Variant is what THIS entry was actually rendered as, independent of the
-	// Variant requested from RenderedSkills. A simple request also returns
-	// each skill's always-full twin (see fullTwinSuffix), and the twin's own
-	// stamp must say "full", never "simple" - StampSkill and friends key off
-	// this field, not the request. Meaningless on an unrendered definition
-	// from EmbeddedSkills.
+	// Form requested from RenderedSkills. FormBoth also returns each skill's
+	// always-full twin (see fullTwinSuffix), and the twin's own stamp must say
+	// "full", never "short" - StampSkill and friends key off this field, not
+	// the request. Meaningless on an unrendered definition from EmbeddedSkills.
 	Variant Variant
 }
 
-// Variant selects which permutation of a skill body to render.
+// Variant selects which form of a skill body to render.
 //
-// BOTH PERMUTATIONS ARE CURATED, and that is the whole design. The simple one is
+// BOTH FORMS ARE CURATED, and that is the whole design. The short one is
 // not a summary, a truncation, or a model-generated paraphrase: there is exactly
 // one human-written body per skill, and its author brackets the spans that only
-// the full permutation keeps. So the two can never come to describe different
+// the full form keeps. So the two can never come to describe different
 // behavior, they share one content digest, and they version together - which is
 // the property a second hand-maintained file could not give.
 //
@@ -148,126 +151,129 @@ type AgentSkill struct {
 // choice is a flag - and re-asking "does this still earn its context?" is the
 // audit, not a rewrite.
 //
-// A {{if .Full}} branch alone caps how short the simple permutation can get,
-// because it can only SUBTRACT. Simple is "everything minus the full-only
-// branches", so a passage BOTH permutations must express sits in the shared
-// text at whatever length the full form needs, and the only way to shorten it
-// further is to drop it entirely and lose the step. The {{else}} arm is the
-// one construct that reaches it: full keeps the long wording, simple gets the
-// short one.
+// A {{if .Full}} branch alone caps how short the short form can get, because it
+// can only SUBTRACT. Short is "everything minus the full-only branches", so a
+// passage BOTH forms must express sits in the shared text at whatever length the
+// full form needs, and the only way to shorten it further is to drop it entirely
+// and lose the step. The {{else}} arm is the one construct that reaches it: full
+// keeps the long wording, short gets the terse one.
 //
-// Measured 2026-07-31 across the ten shipped skills: simple came out 20.3%
+// Measured 2026-07-31 across the ten shipped skills: short came out 20.3%
 // smaller than full, on 137 full-only branches against only 28 {{else}} arms.
-// The most prose-heavy simple forms are magus-run (82.6% prose) and magus-vcs-hygiene
+// The most prose-heavy short forms are magus-run (82.6% prose) and magus-vcs-hygiene
 // (91.0% prose). The headroom is in the wording of the shared text, not in the
 // tables. An earlier version of this comment blamed the tables; that was wrong,
 // and it pointed authors at the one part of the page they should not touch.
 type Variant int
 
+// The words are SHORT and FULL, one each, everywhere: the Go constants, the wire
+// strings, the installed stamp, the CLI flag, and the published pages. This axis used to
+// answer to three names for its shorter end - simple in the type and the stamp, concise
+// on the flag, short on the website - so a reader passed --skill-form=concise, got a file
+// stamped simple, and read a page about the short form. internal/prompt.Variant is the
+// same concept for prose and already says Short; the twin directory and 232 body
+// templates already say full; these are those two words.
 const (
-	// VariantFull is the default: every mechanical step spelled out, plus the
-	// rationale that says why each one is the right move and what goes wrong
-	// otherwise.
-	VariantFull Variant = iota
-	// VariantSimple sheds ENUMERATION and keeps JUDGMENT, for the most capable
-	// readers - not the least. A capable reader can re-derive the mechanical
-	// steps from the tool surface on its own; what it cannot re-derive is
-	// which failures are silent, what is load-bearing, and where a judgment
-	// call is being asked of it. So simple is a bet ON the reader, not a
-	// lossy compression - which is why the split is a judgment an author
-	// records, and why anything a step cannot survive losing belongs in the
+	// VariantShort sheds ENUMERATION and keeps JUDGMENT, for the most capable readers -
+	// not the least. A capable reader can re-derive the mechanical steps from the tool
+	// surface on its own; what it cannot re-derive is which failures are silent, what is
+	// load-bearing, and where a judgment call is being asked of it. So short is a bet ON
+	// the reader, not a lossy compression - which is why the split is a judgment an
+	// author records, and why anything a step cannot survive losing belongs in the
 	// unmarked core instead.
-	VariantSimple
+	//
+	// The ZERO value, because it is what an install writes by default. Full used to hold
+	// that slot, so every caller wanting default behavior had to name the non-default
+	// constant to get it.
+	VariantShort Variant = iota
+	// VariantFull spells out every mechanical step, plus the rationale that says why each
+	// one is the right move and what goes wrong otherwise.
+	VariantFull
 )
 
-// fullTwinSuffix names the always-full twin a VariantSimple install writes
-// alongside each skill's primary entry: <name>-full. Simple is a bet that the
+// fullTwinSuffix names the always-full twin [FormBoth] writes alongside each
+// skill's primary entry: <name>-full. The short form is a bet that the
 // INSTALLING reader can re-derive what it drops - but a session that installs
-// simple can still delegate to a smaller or less-briefed reader who cannot,
-// and that reader inherits whatever the top-level install picked with no say
-// in it. The twin gives it a stable name to ask for instead, independent of
-// what tier the primary install happened to choose.
+// short can still delegate to a smaller or less-briefed reader who cannot, and
+// that reader inherits whatever the top-level install picked with no say in it.
+// The twin gives it a stable name to ask for instead, independent of what the
+// primary install happened to choose.
 const fullTwinSuffix = "-full"
 
 // FullTwinName returns the always-full twin's name for a base skill name.
 func FullTwinName(base string) string { return base + fullTwinSuffix }
 
 // IsFullTwinName reports whether name is a full twin rather than a primary
-// skill entry. Callers that enumerate an INSTALLED tree need this: a simple
-// install writes both, so a name-by-name comparison against the canonical
-// skill list sees twins it would otherwise call unrecognized.
+// skill entry. Callers that enumerate an INSTALLED tree need this: [FormBoth]
+// writes both, so a name-by-name comparison against the canonical skill list
+// sees twins it would otherwise call unrecognized.
 func IsFullTwinName(name string) bool { return strings.HasSuffix(name, fullTwinSuffix) }
 
 func (v Variant) String() string {
-	if v == VariantSimple {
-		return "simple"
+	if v == VariantFull {
+		return "full"
 	}
-	return "full"
+	return "short"
 }
 
-// Full and Simple let a skill body branch on the permutation with {{if .Full}}.
-// They exist because text/template cannot reference a package constant, so the
+// Full and Short let a skill body branch on the variant with {{if .Full}}. They
+// exist because text/template cannot reference a package constant, so the
 // predicate has to hang off the value being rendered.
+//
+// Full is the one authors reach for: it brackets rationale the short form drops.
+// Short brackets text ONLY the shorter reader sees, which is almost always
+// wrong - a step in that arm is one the better-briefed reader never gets - so
+// use it for wording, not for content.
 func (v Variant) Full() bool { return v == VariantFull }
 
-func (v Variant) Simple() bool { return v == VariantSimple }
+func (v Variant) Short() bool { return v == VariantShort }
 
-// Is reports whether v is the named variant, so a third permutation costs a
-// constant and a String case rather than a new pair of markers.
+// Is reports whether v is the named variant, so a third form costs a constant
+// and a String case rather than a new pair of markers.
 func (v Variant) Is(name string) bool { return v.String() == name }
 
-// InstallForm says which rendered skill form an installation contains. It is a
-// user-owned installation choice, not a claim about a host or model: Magus
-// cannot reliably observe either one. Dual keeps the established compatibility
-// behavior, while Full and Concise install one canonical name per skill.
-type InstallForm string
+// Form says which entries an installation writes. It is a user-owned
+// installation choice, not a claim about a host or model: magus cannot reliably
+// observe either one.
+//
+// It is a superset of [Variant] rather than the same type, because a Form may
+// name TWO bodies: FormBoth writes each skill short and its twin full. Every
+// enumerator here takes a Form for that reason, and [Catalog.Render] takes a
+// Variant because one file holds one body.
+type Form string
 
 const (
-	InstallFormDual    InstallForm = "dual"
-	InstallFormFull    InstallForm = "full"
-	InstallFormConcise InstallForm = "concise"
+	// FormBoth writes each skill's short body under its own name plus a full
+	// twin (see fullTwinSuffix). The default, and the only form that leaves a
+	// delegated reader something to ask for.
+	FormBoth Form = "both"
+	// FormShort writes one short body per skill and no twins.
+	FormShort Form = "short"
+	// FormFull writes one full body per skill and no twins.
+	FormFull Form = "full"
 )
 
-// ParseInstallForm validates the spelling accepted by `magus agent install`.
-func ParseInstallForm(s string) (InstallForm, error) {
-	form := InstallForm(s)
+// ParseForm validates the spelling accepted by `magus agent install`.
+func ParseForm(s string) (Form, error) {
+	form := Form(s)
 	switch form {
-	case InstallFormDual, InstallFormFull, InstallFormConcise:
+	case FormBoth, FormShort, FormFull:
 		return form, nil
 	default:
-		return "", fmt.Errorf("unknown skill form %q (want dual, full, or concise)", s)
+		return "", fmt.Errorf("unknown skill form %q (want both, short, or full)", s)
 	}
 }
 
-// RenderedSkillsForForm returns exactly the entries a selected installation
-// writes. It centralizes the compatibility dual form so planning, tar output,
-// and writes cannot disagree about which names exist.
-func (c *Catalog) RenderedSkillsForForm(form InstallForm) ([]AgentSkill, error) {
-	switch form {
-	case InstallFormDual:
-		return c.RenderedSkills(VariantSimple)
-	case InstallFormFull:
-		return c.RenderedSkills(VariantFull)
-	case InstallFormConcise:
-		defs, err := c.EmbeddedSkills()
-		if err != nil {
-			return nil, err
-		}
-		out := make([]AgentSkill, 0, len(defs))
-		for _, def := range defs {
-			skill, err := c.Render(def, VariantSimple)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, skill)
-		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf("unknown skill form %q", form)
+// Variant returns the body this form's PRIMARY entries carry. FormBoth's twins
+// are full regardless; each twin's own Variant field records that.
+func (f Form) Variant() Variant {
+	if f == FormFull {
+		return VariantFull
 	}
+	return VariantShort
 }
 
-// applyVariant renders body for v. The body is a text/template, so a permutation
+// applyVariant renders body for v. The body is a text/template, so a form
 // is an ordinary {{if}} branch and a malformed one is a parse or execute error
 // rather than text that silently survives into an installed file.
 //
@@ -397,7 +403,7 @@ func NewCatalog(sourceFS fs.FS, agentsSection string, schemaVersion int) *Catalo
 //
 // A catalog-wide digest restamped all 26 installed files and all 16 reference
 // pages whenever any skill changed, so a diff could not show which one moved.
-// Both permutations of a skill still share this value - see StampSkill. The
+// Both forms of a skill still share this value - see StampSkill. The
 // catalog-wide contentDigest survives for the AGENTS.md block, which routes to
 // every skill by name and so does depend on the whole set.
 func (c *Catalog) SkillDigest(name string) string {
@@ -437,7 +443,7 @@ func (c *Catalog) computeSkillDigests() map[string]string {
 // EmbeddedSkills returns every embedded skill's canonical, unrendered
 // definition, in name order: Body carries the raw template source, exactly as
 // checked in. Variant is meaningless on these entries - render one for a
-// specific permutation with Render, or get the full install-ready list
+// specific variant with Render, or get the install-ready list for a form
 // (twins included) with RenderedSkills.
 func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
 	sources := append([]skillSource(nil), skillSources...)
@@ -454,10 +460,10 @@ func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
 }
 
 // Render renders def's raw template Body for v, returning a new AgentSkill
-// whose Body is the final Markdown and whose Variant records which
-// permutation produced it - RenderSkill and StampSkill key off that field on
-// the RESULT, never off an ambient caller-supplied variant, so a mixed batch
-// (see RenderedSkills) stamps every entry correctly regardless of what was
+// whose Body is the final Markdown and whose Variant records which variant
+// produced it - RenderSkill and StampSkill key off that field on the RESULT,
+// never off an ambient caller-supplied variant, so a mixed batch (see
+// RenderedSkills) stamps every entry correctly regardless of what was
 // requested. def is not mutated.
 func (c *Catalog) Render(def AgentSkill, v Variant) (AgentSkill, error) {
 	rendered, err := applyVariant(def.Name, def.Body, v)
@@ -467,32 +473,33 @@ func (c *Catalog) Render(def AgentSkill, v Variant) (AgentSkill, error) {
 	return AgentSkill{Name: def.Name, Description: def.Description, Body: rendered, Variant: v}, nil
 }
 
-// RenderedSkills returns every embedded skill rendered for v, in name order -
-// the install-ready list SkillBytes, SkillTar, and WriteSkillTree all write.
-// When v is VariantSimple, each skill is followed immediately by its
-// always-full <name>-full twin (see fullTwinSuffix), so every one of those
-// callers gets the dual install for free. VariantFull adds no twins: the
-// primary entry already IS the full form, so a twin would only duplicate it
-// under a second name.
-func (c *Catalog) RenderedSkills(v Variant) ([]AgentSkill, error) {
+// RenderedSkills returns exactly the entries form installs, in name order - the
+// install-ready list SkillBytes, SkillTar, PlanSkillTree, and WriteSkillTree all
+// draw from, so none of them can disagree about which names exist. Under
+// [FormBoth] each skill is followed immediately by its always-full <name>-full
+// twin (see fullTwinSuffix); the single-body forms add no twins.
+func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
+	if _, err := ParseForm(string(form)); err != nil {
+		return nil, err
+	}
 	defs, err := c.EmbeddedSkills()
 	if err != nil {
 		return nil, err
 	}
 	skills := make([]AgentSkill, 0, len(defs))
 	for _, def := range defs {
-		primary, err := c.Render(def, v)
+		primary, err := c.Render(def, form.Variant())
 		if err != nil {
 			return nil, err
 		}
 		// Deliberately NOT cross-referenced from the primary's description. The
 		// twin's own description already announces itself in the host's skill
 		// listing, where a delegated model browsing for a skill sees it; adding a
-		// pointer here would spend context on every simple skill to say something
-		// the twin's own entry already says, and simple exists to spend less.
+		// pointer here would spend context on every short skill to say something
+		// the twin's own entry already says, and short exists to spend less.
 		skills = append(skills, primary)
 
-		if v != VariantSimple {
+		if form != FormBoth {
 			continue
 		}
 		full, err := c.Render(def, VariantFull)
@@ -516,8 +523,8 @@ func (c *Catalog) RenderSkill(skill AgentSkill) []byte {
 // SkillBytes returns the rendered+stamped bytes for one named skill.
 // Pure rendering: callers decide what to do with the bytes (write to a
 // file, embed in a tar, hash, log).
-func (c *Catalog) SkillBytes(name string, v Variant) ([]byte, error) {
-	skills, err := c.RenderedSkills(v)
+func (c *Catalog) SkillBytes(name string, form Form) ([]byte, error) {
+	skills, err := c.RenderedSkills(form)
 	if err != nil {
 		return nil, err
 	}
@@ -536,25 +543,11 @@ func (c *Catalog) SkillBytes(name string, v Variant) ([]byte, error) {
 // result to `tar -xf - -C <dir>` is the supported way to install skills
 // outside the workspace root - the shell sees the command, the sandbox sees
 // it, and the user gets to choose the destination.
-func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
-	skills, err := c.RenderedSkills(v)
+func (c *Catalog) SkillTar(dest string, form Form) ([]byte, error) {
+	skills, err := c.RenderedSkills(form)
 	if err != nil {
 		return nil, err
 	}
-	return c.skillTar(dest, skills)
-}
-
-// SkillTarForForm returns a reproducible archive for the selected installation
-// form. It is the form-aware counterpart to SkillTar for the agent CLI.
-func (c *Catalog) SkillTarForForm(dest string, form InstallForm) ([]byte, error) {
-	skills, err := c.RenderedSkillsForForm(form)
-	if err != nil {
-		return nil, err
-	}
-	return c.skillTar(dest, skills)
-}
-
-func (c *Catalog) skillTar(dest string, skills []AgentSkill) ([]byte, error) {
 	if dest == "" {
 		dest = "."
 	}
@@ -589,35 +582,19 @@ func (c *Catalog) skillTar(dest string, skills []AgentSkill) ([]byte, error) {
 // Shares checkDestination with the writer, so a plan cannot name paths the run
 // would not. The --force conflict check is not repeated: a plan reports what a
 // successful run produces.
-func (c *Catalog) PlanSkillTree(dir, dest string, v Variant) ([]string, error) {
+func (c *Catalog) PlanSkillTree(dir, dest string, form Form) ([]string, error) {
 	if err := checkDestination(dir, dest); err != nil {
 		return nil, err
 	}
-	skills, err := c.RenderedSkills(v)
+	skills, err := c.RenderedSkills(form)
 	if err != nil {
 		return nil, err
 	}
-	return planSkillTree(dest, skills), nil
-}
-
-// PlanSkillTreeForForm returns the paths a selected form would write.
-func (c *Catalog) PlanSkillTreeForForm(dir, dest string, form InstallForm) ([]string, error) {
-	if err := checkDestination(dir, dest); err != nil {
-		return nil, err
-	}
-	skills, err := c.RenderedSkillsForForm(form)
-	if err != nil {
-		return nil, err
-	}
-	return planSkillTree(dest, skills), nil
-}
-
-func planSkillTree(dest string, skills []AgentSkill) []string {
 	planned := make([]string, 0, len(skills))
 	for _, skill := range skills {
 		planned = append(planned, filepath.Join(dest, skill.Name, "SKILL.md"))
 	}
-	return planned
+	return planned, nil
 }
 
 // checkDestination refuses a destination that lands outside dir. The joined path
@@ -638,31 +615,14 @@ func checkDestination(dir, dest string) error {
 // refused so magus never silently writes outside the working tree. The
 // caller is responsible for that guard at the CLI surface; this method
 // enforces it for safety.
-func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]string, error) {
+func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) ([]string, error) {
 	if err := checkDestination(dir, dest); err != nil {
 		return nil, err
 	}
-	skills, err := c.RenderedSkills(v)
+	skills, err := c.RenderedSkills(form)
 	if err != nil {
 		return nil, err
 	}
-	return c.writeSkillTree(dir, dest, force, skills)
-}
-
-// WriteSkillTreeForForm installs exactly the selected form's canonical skill
-// entries. The caller still controls destinations and overwrite behavior.
-func (c *Catalog) WriteSkillTreeForForm(dir, dest string, force bool, form InstallForm) ([]string, error) {
-	if err := checkDestination(dir, dest); err != nil {
-		return nil, err
-	}
-	skills, err := c.RenderedSkillsForForm(form)
-	if err != nil {
-		return nil, err
-	}
-	return c.writeSkillTree(dir, dest, force, skills)
-}
-
-func (c *Catalog) writeSkillTree(dir, dest string, force bool, skills []AgentSkill) ([]string, error) {
 	var written []string
 	for _, skill := range skills {
 		rel := filepath.Join(skill.Name, "SKILL.md")
@@ -702,7 +662,7 @@ func (c *Catalog) writeSkillTree(dir, dest string, force bool, skills []AgentSki
 // hand-authored skill sitting in the same folder (magus-skill-authoring and a
 // workspace's own magus-local-development both live there) and is never a candidate
 // even though the catalog does not name it.
-func (c *Catalog) StaleSkillDirs(dir, dest string, form InstallForm) ([]string, error) {
+func (c *Catalog) StaleSkillDirs(dir, dest string, form Form) ([]string, error) {
 	shipped, err := c.shipped(form)
 	if err != nil {
 		return nil, err
@@ -738,7 +698,7 @@ func (c *Catalog) StaleSkillDirs(dir, dest string, form InstallForm) ([]string, 
 // binary they may have just upgraded. Those are different enough acts that the
 // second one asks - so install reports what is stale and names this, and a person
 // decides. The stamp makes the deletion safe; it does not make it expected.
-func (c *Catalog) PruneSkillTree(dir, dest string, form InstallForm) ([]string, error) {
+func (c *Catalog) PruneSkillTree(dir, dest string, form Form) ([]string, error) {
 	stale, err := c.StaleSkillDirs(dir, dest, form)
 	if err != nil {
 		return nil, err
@@ -792,7 +752,7 @@ func (c *Catalog) footer(name string, v Variant) string {
 // StampSkill injects provenance frontmatter and appends a generated-by footer.
 //
 // The stamp names the variant but keeps the SOURCE content digest, deliberately:
-// both permutations come from one body, so they must report the same digest and go
+// both forms come from one body, so they must report the same digest and go
 // stale together. A per-variant digest would let a simple install look current
 // against a source its full sibling had already outgrown.
 func (c *Catalog) StampSkill(name string, body []byte, v Variant) []byte {
@@ -910,10 +870,10 @@ func (c *Catalog) gradeDest(dir, dest string) Status {
 	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
 	// reads an unknown name as "not magus's", which would silently drop a
 	// pre-versioning install of a shipped skill - the one case that must still report.
-	// Dual, the permissive superset: grading asks whether a name is one magus ever
-	// writes, and a twin beside its primary is a correct dual install rather than
-	// litter. Pruning is the question that needs the form the caller chose.
-	shipped, shippedErr := c.shipped(InstallFormDual)
+	// FormBoth, the permissive superset: grading asks whether a name is one magus ever
+	// writes, and a twin beside its primary is a correct install rather than litter.
+	// Pruning is the question that needs the form the caller chose.
+	shipped, shippedErr := c.shipped(FormBoth)
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
 		if err != nil {
@@ -953,25 +913,24 @@ func (c *Catalog) installedSkillNames(path string) []string {
 	return names
 }
 
-// shipped is the set of directory names an install of this catalog writes. Both
-// variants are included, so a tree installed under either one is judged by what the
-// catalog SHIPS rather than by which permutation last wrote it.
+// shipped is the set of directory names an install of form writes.
 //
 // The error is propagated rather than absorbed into an empty set: callers read this
 // as "magus did not write that", and an empty set says it of every skill magus owns -
 // which would make StaleSkillDirs offer the whole installed tree for deletion.
-// The form decides which names count. Derived from what that form actually renders
-// rather than asserted here: the set used to be every primary PLUS every twin
-// unconditionally, which is right only for dual. Under full or concise no twin is
-// written, so the twins a previous dual install left behind graded as shipped - never
-// reported stale, never pruned, and still loaded by the host. That is the orphaned
-// directory the install form exists to prevent.
 //
-// Pass InstallFormDual to ask the permissive question ("is this a name magus ever
-// writes"), which is what grading an existing tree wants: a twin beside a primary is
-// a correct dual install, not litter.
-func (c *Catalog) shipped(form InstallForm) (map[string]bool, error) {
-	skills, err := c.RenderedSkillsForForm(form)
+// Derived from what the form actually renders rather than asserted here: the set used
+// to be every primary PLUS every twin unconditionally, which is right only for
+// FormBoth. The single-body forms write no twin, so the twins a previous FormBoth
+// install left behind graded as shipped - never reported stale, never pruned, and
+// still loaded by the host. That is the orphaned directory the form choice exists to
+// prevent.
+//
+// Pass FormBoth to ask the permissive question ("is this a name magus ever writes"),
+// which is what grading an existing tree wants: a twin beside a primary is a correct
+// install, not litter.
+func (c *Catalog) shipped(form Form) (map[string]bool, error) {
+	skills, err := c.RenderedSkills(form)
 	if err != nil {
 		return nil, err
 	}
@@ -1014,11 +973,11 @@ func (c *Catalog) Section() string { return c.agentsSection }
 // VariantSize returns the total rendered size of every skill's PRIMARY entry
 // in v, stamp included, so a caller can state the context cost of an install
 // without performing one. Deliberately excludes RenderedSkills' full twins -
-// reportContextCost uses this to compare "what you have" against "what the
-// other variant would be", and a twin-inclusive total would make VariantSize
-// (VariantSimple) larger than VariantSize(VariantFull) precisely because
-// simple installs more files, silently inverting the comparison it exists to
-// answer ("would --simple cost less").
+// reportContextCost uses this to compare "what you have" against "what the other
+// variant would be", and a twin-inclusive total would make VariantSize(VariantShort)
+// larger than VariantSize(VariantFull) precisely because FormBoth installs more
+// files, silently inverting the comparison it exists to answer ("what does the
+// short form buy").
 func (c *Catalog) VariantSize(v Variant) (int64, error) {
 	defs, err := c.EmbeddedSkills()
 	if err != nil {

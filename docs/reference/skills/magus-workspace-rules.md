@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 5437
-skill_simple_bytes: 4393
+skill_full_bytes: 5430
+skill_short_bytes: 4393
 ---
 
 # magus-workspace-rules
@@ -28,12 +28,12 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `52` |
+| `agent-skill-version` | `53` |
 | `knowledge-schema-version` | `11` |
-| `skill-content` | `22d9d0478a47` |
+| `skill-content` | `50ab6c02ba08` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
+The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## The two forms
 
@@ -261,7 +261,7 @@ or convention specific to you, and any magus workspace would want it.
 
 - With a Go toolchain: a pull request against `egladman/magus` editing
   `internal/agent/skills/<skill>/SKILL.md`, which then follows that repo's own authoring
-  method - both permutations, verified against a built binary, skill version
+  method - both forms, verified against a built binary, skill version
   bumped.
 - Without one: an issue, pasting the stamped rule verbatim. The stamp already
   carries its evidence, which is what makes it actionable by someone else.

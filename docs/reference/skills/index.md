@@ -1,6 +1,6 @@
 ---
 title: Agent skills
-description: "Every skill magus installs, in both curated permutations, generated from the embedded bodies."
+description: "Every skill magus installs, in both curated forms, generated from the embedded bodies."
 tags: [agents, skills, reference]
 page_type: overview
 ---
@@ -8,7 +8,7 @@ page_type: overview
 # Agent skills
 
 These are the skills `magus agent install` writes, reproduced verbatim from the
-bodies embedded in the binary. Each ships in two hand-authored permutations, and
+bodies embedded in the binary. Each ships in two hand-authored forms, and
 install writes both: the short form is the always-loaded primary, and the full form
 is its `<name>-full` twin, loaded by name when a reader needs the rationale.
 See [Skills](../../guides/integrations/agents/skills.md) for the difference.

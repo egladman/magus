@@ -1480,9 +1480,9 @@ none. This is the only command that opens one.`,
 var memoryCommand = Command{
 	Name:        "memory",
 	Short:       "Durable cross-session project memory",
-	Description: "Manage the per-repository handoff journal that lives outside the checkout: named entries people and agents can read across sessions and worktrees.",
-	Tags:        []string{"cli", "magus memory", "handoff", "journal", "agents"},
-	Long: `Manage the per-repository handoff journal, which is stored outside the
+	Description: "Manage the per-repository memory that lives outside the checkout: named entries people and agents can read across sessions and worktrees.",
+	Tags:        []string{"cli", "magus memory", "memory", "decisions", "agents"},
+	Long: `Manage the per-repository memory, which is stored outside the
 checkout so it survives worktrees and branch switches.
 
 Entries are visible to people and to agents across sessions. They are NOT
@@ -1819,7 +1819,7 @@ a pattern no graph verb fits.`,
 		{Name: "dry-run", Kind: FlagBool, Doc: "Print what would be written and removed without touching the filesystem (agent install)"},
 		{Name: "tar", Kind: FlagBool, Doc: "Stream a tar archive to stdout instead of writing files (agent install)"},
 		{Name: "global", Kind: FlagBool, Doc: "Allow absolute destination paths in write mode (agent install)"},
-		{Name: "skill-form", Kind: FlagString, Default: "dual", Doc: "Skill form to install: dual (compatibility default), full, or concise (agent install)"},
+		{Name: "skill-form", Kind: FlagString, Default: "both", Doc: "Skill form to install: both (default), short, or full (agent install)"},
 	},
 	Examples: []Example{
 		{"Install into a repo's agent skills directory", "magus agent install .claude/skills"},

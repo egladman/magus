@@ -26,8 +26,8 @@ it prints the managed magus block when your `AGENTS.md` is missing it or
 carrying a stale one, and you paste it in. [Skills](skills.md) covers the block,
 its stamp, and the drift check that grades it.
 
-Because Cursor has no Agent Skills surface, it cannot enforce concise versus
-full skill selection. Keep that repository guidance explicit and user-owned in
+Because Cursor has no Agent Skills surface, it cannot enforce a short-versus-full
+skill-form choice. Keep that repository guidance explicit and user-owned in
 `AGENTS.md`; do not claim a model or provider setting selects it automatically.
 
 The nudges an `advise` verdict would carry live in that guidance, because Cursor

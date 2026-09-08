@@ -137,10 +137,11 @@ you install outside the working tree:
 magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
 ```
 
-### Two permutations, both installed
+### Two forms, both installed
 
-Every skill ships in two hand-authored permutations from one source body, and
-install writes both. There is no flag to pick between them.
+Every skill ships in two hand-authored forms from one source body, and install
+writes both by default. `--skill-form=short` or `--skill-form=full` writes one
+body per skill instead.
 
 The primary entry is the SHORT form: the enumeration dropped, the judgment kept,
 for the most capable readers - the ones that can re-derive the steps from the
@@ -153,7 +154,7 @@ want the rationale behind a step yourself. The short form bets its reader can
 re-derive what it drops; the twin is there for every reader who did not make
 that bet.
 
-Both permutations share ONE content digest, so they version together: a magus
+Both forms share ONE content digest, so they version together: a magus
 upgrade makes both stale at once, never one silently. Check with:
 
 ```sh

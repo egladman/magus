@@ -32,7 +32,7 @@ func TestLocalSkillNameIsReserved(t *testing.T) {
 
 // TestFullTwinNamesAreReserved keeps the twin namespace collision-free.
 //
-// A --simple install writes <name>-full beside every skill, so a shipped skill
+// FormBoth writes <name>-full beside every skill, so a shipped skill
 // whose own name ends in -full would either collide with another skill's twin
 // or be shadowed by its own. The collision is silent: WriteSkillTree writes
 // whichever entry comes last, so one of the two skills simply vanishes from
@@ -45,10 +45,10 @@ func TestFullTwinNamesAreReserved(t *testing.T) {
 	}
 	for _, source := range skillSources {
 		assert.Falsef(t, IsFullTwinName(source.name),
-			"%q ends in %q, which is the reserved suffix for a --simple install's always-full twin; rename the skill",
+			"%q ends in %q, which is the reserved suffix for FormBoth's always-full twin; rename the skill",
 			source.name, fullTwinSuffix)
 		assert.Falsef(t, shipped[FullTwinName(source.name)],
-			"%q collides with the twin --simple writes for %q; one of the two would silently overwrite the other",
+			"%q collides with the twin FormBoth writes for %q; one of the two would silently overwrite the other",
 			FullTwinName(source.name), source.name)
 	}
 }
@@ -65,7 +65,7 @@ func testCatalog(t *testing.T) *Catalog {
 func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
-	written, err := catalog.WriteSkillTree(dir, ".agents/skills", false, VariantFull)
+	written, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
 	require.NoError(t, err)
 	require.Len(t, written, len(skillSources), "a full install writes one file per skill and no twins")
 
@@ -93,7 +93,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
-	_, err := catalog.WriteSkillTree(dir, ".agents/skills", false, VariantFull)
+	_, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
 	require.NoError(t, err)
 	require.False(t, catalog.CheckStatuses(dir)[0].Stale)
 
@@ -126,14 +126,14 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".agents/skills"
-	_, err := catalog.WriteSkillTree(dir, dest, false, VariantSimple)
+	_, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
 	require.NoError(t, err)
 
 	// An orphan from an earlier release: magus wrote it, so magus may remove it.
 	orphan := filepath.Join(dir, dest, "magus-retired")
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), VariantSimple), 0o644))
+		catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), VariantShort), 0o644))
 
 	// A hand-authored skill beside it, and a directory that is not a skill at all.
 	handAuthored := filepath.Join(dir, dest, "magus-local-development")
@@ -145,12 +145,12 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 
 	// Detection first, and it must not delete: an install that did not ask for a
 	// prune still reports what is stale, so the orphan stays visible.
-	stale, err := catalog.StaleSkillDirs(dir, dest, InstallFormDual)
+	stale, err := catalog.StaleSkillDirs(dir, dest, FormBoth)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, stale)
 	assert.DirExists(t, orphan, "detecting a stale skill must not remove it")
 
-	removed, err := catalog.PruneSkillTree(dir, dest, InstallFormDual)
+	removed, err := catalog.PruneSkillTree(dir, dest, FormBoth)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
 
@@ -159,14 +159,13 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 	assert.DirExists(t, notASkill, "a directory with no SKILL.md is not a skill")
 	assert.FileExists(t, filepath.Join(dir, dest, anchorSkillRel), "a shipped skill survives its own prune")
 
-	// A dual install writes both names, so pruning one does not eat the twins it just
-	// wrote.
+	// FormBoth writes both names, so pruning one does not eat the twins it just wrote.
 	twin := filepath.Join(dir, dest, FullTwinName(skillSources[0].name))
 	assert.DirExists(t, twin)
 
 	// ... and a form that writes NO twin reports them, which is the whole point of the
 	// form reaching this far. Left as a report: pruning them is the caller's ask.
-	stale, err = catalog.StaleSkillDirs(dir, dest, InstallFormConcise)
+	stale, err = catalog.StaleSkillDirs(dir, dest, FormShort)
 	require.NoError(t, err)
 	assert.Contains(t, stale, filepath.Join(dest, FullTwinName(skillSources[0].name)),
 		"a twin no longer written by the selected form is an orphan")
@@ -174,7 +173,7 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 
 	// Nothing installed at all is not an error: install prunes unconditionally, and
 	// a first install has nothing to prune.
-	removed, err = catalog.PruneSkillTree(dir, "never/installed", InstallFormDual)
+	removed, err = catalog.PruneSkillTree(dir, "never/installed", FormBoth)
 	require.NoError(t, err)
 	assert.Empty(t, removed)
 }
@@ -188,12 +187,12 @@ func TestWriteSkillTreeRejectsPathEscape(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 
-	_, err := catalog.WriteSkillTree(dir, "../../outside", false, VariantFull)
+	_, err := catalog.WriteSkillTree(dir, "../../outside", false, FormFull)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "escapes the working tree")
 
 	// An ordinary nested destination is unaffected.
-	written, err := catalog.WriteSkillTree(dir, "nested/skills", false, VariantFull)
+	written, err := catalog.WriteSkillTree(dir, "nested/skills", false, FormFull)
 	require.NoError(t, err)
 	require.Len(t, written, len(skillSources))
 }
@@ -221,36 +220,36 @@ func TestCatalogAgentsBlockIsSelfDelimitedAndStable(t *testing.T) {
 	assert.False(t, statuses[0].Stale, statuses[0].Detail)
 }
 
-// TestSimpleInstallWritesTwinsStampedFull pins the mixed-batch property: one
-// VariantSimple install produces entries of BOTH variants, so the stamp has to
-// follow each entry's own Variant rather than the variant that was requested.
-// Keying off the request instead would stamp every twin "simple" - mislabelling
-// the copy a delegated model was handed precisely because it needed full.
-func TestSimpleInstallWritesTwinsStampedFull(t *testing.T) {
+// TestFormBothWritesTwinsStampedFull pins the mixed-batch property: one FormBoth
+// install produces entries of BOTH variants, so the stamp has to follow each
+// entry's own Variant rather than the form that was requested. Keying off the
+// request instead would stamp every twin "short" - mislabelling the copy a
+// delegated model was handed precisely because it needed full.
+func TestFormBothWritesTwinsStampedFull(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
-	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, VariantSimple)
+	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, FormBoth)
 	require.NoError(t, err)
-	require.Len(t, written, 2*len(skillSources), "simple writes one primary plus one twin per skill")
+	require.Len(t, written, 2*len(skillSources), "FormBoth writes one primary plus one twin per skill")
 
 	primary, err := os.ReadFile(filepath.Join(dir, ".claude/skills", anchorSkillRel))
 	require.NoError(t, err)
-	assert.Contains(t, string(primary), "skill-variant: simple")
+	assert.Contains(t, string(primary), "skill-variant: short")
 
 	base := strings.TrimSuffix(anchorSkillRel, "/SKILL.md")
 	twin, err := os.ReadFile(filepath.Join(dir, ".claude/skills", FullTwinName(base), "SKILL.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(twin), "skill-variant: full",
-		"a twin inside a simple install must stamp itself full")
+		"a twin inside a FormBoth install must stamp itself full")
 	// One source body, so both still report the same digest and go stale together.
 	assert.Contains(t, string(twin), "skill-content: "+catalog.SkillDigest("magus-query"))
 }
 
 func TestCatalogSkillTarIsByteStable(t *testing.T) {
 	catalog := testCatalog(t)
-	a, err := catalog.SkillTar(".claude/skills", VariantFull)
+	a, err := catalog.SkillTar(".claude/skills", FormFull)
 	require.NoError(t, err)
-	b, err := catalog.SkillTar(".claude/skills", VariantFull)
+	b, err := catalog.SkillTar(".claude/skills", FormFull)
 	require.NoError(t, err)
 	assert.Equal(t, a, b, "SkillTar must be reproducible; no embedded timestamps in the body")
 	assert.NotEmpty(t, a)
@@ -258,28 +257,28 @@ func TestCatalogSkillTarIsByteStable(t *testing.T) {
 
 func TestCatalogSkillBytesByName(t *testing.T) {
 	catalog := testCatalog(t)
-	body, err := catalog.SkillBytes("magus-architecture-review", VariantFull)
+	body, err := catalog.SkillBytes("magus-architecture-review", FormFull)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "name: magus-architecture-review")
 	assert.Contains(t, string(body), "skill-content: "+catalog.SkillDigest("magus-architecture-review"))
 
-	ultra, err := catalog.SkillBytes("magus-multi-agent", VariantFull)
+	ultra, err := catalog.SkillBytes("magus-multi-agent", FormFull)
 	require.NoError(t, err)
 	assert.Contains(t, string(ultra), "name: magus-multi-agent")
 
-	_, err = catalog.SkillBytes("does-not-exist", VariantFull)
+	_, err = catalog.SkillBytes("does-not-exist", FormFull)
 	assert.ErrorContains(t, err, "unknown skill")
 }
 
 func TestTestDesignFullVariantAddsDelegatedWorkflow(t *testing.T) {
 	catalog := Default(7)
-	concise, err := catalog.SkillBytes("magus-test-design", VariantSimple)
+	short, err := catalog.SkillBytes("magus-test-design", FormShort)
 	require.NoError(t, err)
-	full, err := catalog.SkillBytes("magus-test-design", VariantFull)
+	full, err := catalog.SkillBytes("magus-test-design", FormFull)
 	require.NoError(t, err)
 
-	assert.Greater(t, len(full), len(concise))
-	assert.NotContains(t, string(concise), "recommendation is **provisional**")
+	assert.Greater(t, len(full), len(short))
+	assert.NotContains(t, string(short), "recommendation is **provisional**")
 	assert.Contains(t, string(full), "recommendation is **provisional**")
 }
 
@@ -296,12 +295,12 @@ func TestMustSkillRefusesWhatMagusDoesNotShip(t *testing.T) {
 
 func TestMultiAgentVariantsKeepTheSameSafetyContract(t *testing.T) {
 	catalog := Default(7)
-	full, err := catalog.SkillBytes("magus-multi-agent", VariantFull)
+	full, err := catalog.SkillBytes("magus-multi-agent", FormFull)
 	require.NoError(t, err)
-	simple, err := catalog.SkillBytes("magus-multi-agent", VariantSimple)
+	short, err := catalog.SkillBytes("magus-multi-agent", FormShort)
 	require.NoError(t, err)
 
-	for _, body := range [][]byte{full, simple} {
+	for _, body := range [][]byte{full, short} {
 		text := string(body)
 		assert.Contains(t, text, "acceptance criteria")
 		assert.Contains(t, text, "magus affected <target> --plan")
@@ -310,9 +309,9 @@ func TestMultiAgentVariantsKeepTheSameSafetyContract(t *testing.T) {
 		assert.NotContains(t, text, "{{")
 	}
 	assert.Contains(t, string(full), "natural evolution of loop engineering")
-	assert.NotContains(t, string(simple), "natural evolution of loop engineering")
-	assert.LessOrEqual(t, len(simple)*5, len(full)*4,
-		"--simple must remove at least one fifth of the full skill while preserving its safety contract")
+	assert.NotContains(t, string(short), "natural evolution of loop engineering")
+	assert.LessOrEqual(t, len(short)*5, len(full)*4,
+		"the short form must remove at least one fifth of the full skill while preserving its safety contract")
 }
 
 // TestSkillDigestIsPerSkill pins the granularity, which is the whole point of the
@@ -325,11 +324,11 @@ func TestPlanSkillTreeMatchesTheWriter(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 
-	planned, err := catalog.PlanSkillTree(dir, ".claude/skills", VariantSimple)
+	planned, err := catalog.PlanSkillTree(dir, ".claude/skills", FormBoth)
 	require.NoError(t, err)
 	require.NotEmpty(t, planned)
 
-	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, VariantSimple)
+	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, FormBoth)
 	require.NoError(t, err)
 
 	assert.Equal(t, written, planned, "the plan must name exactly what the writer writes")
@@ -340,7 +339,7 @@ func TestPlanSkillTreeWritesNothing(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 
-	_, err := catalog.PlanSkillTree(dir, ".claude/skills", VariantSimple)
+	_, err := catalog.PlanSkillTree(dir, ".claude/skills", FormShort)
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(dir)
@@ -414,9 +413,9 @@ func TestApplyVariantKeepsBothPermutationsWellFormed(t *testing.T) {
 	assert.Equal(t, "Do the thing - because the alternative silently corrupts output.\n\nA whole paragraph of rationale.\n\nNext step.", full)
 	assert.NotContains(t, full, "{{", "no template action may reach an installed file")
 
-	simple, err := applyVariant("s", body, VariantSimple)
+	short, err := applyVariant("s", body, VariantShort)
 	require.NoError(t, err)
-	assert.Equal(t, "Do the thing.\n\nNext step.", simple,
+	assert.Equal(t, "Do the thing.\n\nNext step.", short,
 		"the full-only branches go, the sentence still ends in a period, and the emptied paragraph leaves no blank-line run")
 }
 
@@ -426,7 +425,7 @@ func TestApplyVariantDoesNotTouchUnelidedContent(t *testing.T) {
 	body := "Never run `git checkout .` or `git clean`{{if .Full}} - it destroys untracked work{{end}}.\n" +
 		"\nKeep ( these ) spaces and this : colon."
 
-	for _, v := range []Variant{VariantFull, VariantSimple} {
+	for _, v := range []Variant{VariantFull, VariantShort} {
 		got, err := applyVariant("s", body, v)
 		require.NoError(t, err)
 		assert.Contains(t, got, "`git checkout .`", "%s must not rewrite an unelided command", v)
@@ -435,7 +434,7 @@ func TestApplyVariantDoesNotTouchUnelidedContent(t *testing.T) {
 }
 
 // TestApplyVariantSwapsTwoWordings pins the else idiom that lets both
-// permutations express one instruction at different lengths.
+// forms express one instruction at different lengths.
 func TestApplyVariantSwapsTwoWordings(t *testing.T) {
 	body := "Scope explicitly{{if .Full}}, because a bare command acts on whichever project holds " +
 		"your current directory and therefore means something different depending on where you " +
@@ -447,26 +446,26 @@ func TestApplyVariantSwapsTwoWordings(t *testing.T) {
 		"current directory and therefore means something different depending on where you happen "+
 		"to be standing.", full)
 
-	simple, err := applyVariant("s", body, VariantSimple)
+	short, err := applyVariant("s", body, VariantShort)
 	require.NoError(t, err)
-	assert.Equal(t, "Scope explicitly (magus is CWD-relative).", simple)
+	assert.Equal(t, "Scope explicitly (magus is CWD-relative).", short)
 
-	for _, got := range []string{full, simple} {
+	for _, got := range []string{full, short} {
 		assert.NotContains(t, got, "{{", "no template action may reach an installed file")
 	}
 }
 
-// TestApplyVariantTerseAloneIsSimpleOnly covers a simple-only branch.
-func TestApplyVariantTerseAloneIsSimpleOnly(t *testing.T) {
-	body := "Step one.{{if .Simple}} See the docs for why.{{end}}"
+// TestApplyVariantTerseAloneIsShortOnly covers a short-only branch.
+func TestApplyVariantTerseAloneIsShortOnly(t *testing.T) {
+	body := "Step one.{{if .Short}} See the docs for why.{{end}}"
 
 	full, err := applyVariant("s", body, VariantFull)
 	require.NoError(t, err)
 	assert.Equal(t, "Step one.", full)
 
-	simple, err := applyVariant("s", body, VariantSimple)
+	short, err := applyVariant("s", body, VariantShort)
 	require.NoError(t, err)
-	assert.Equal(t, "Step one. See the docs for why.", simple)
+	assert.Equal(t, "Step one. See the docs for why.", short)
 }
 
 // TestApplyVariantRefusesMalformedTemplate keeps a malformed body from installing.
@@ -476,16 +475,16 @@ func TestApplyVariantRefusesMalformedTemplate(t *testing.T) {
 		"unknown field": "Do it {{.Unknown}}.",
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := applyVariant("magus-x", body, VariantSimple)
+			_, err := applyVariant("magus-x", body, VariantShort)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "magus-x", "the error must name the skill that is malformed")
 		})
 	}
 }
 
-// TestSkillTemplatesUseOnlyBranching keeps the permutations from diverging
+// TestSkillTemplatesUseOnlyBranching keeps the forms from diverging
 // structurally. The old marker scheme could only swap spans, so "both
-// permutations describe the same behaviour" was true by construction; with a
+// forms describe the same behaviour" was true by construction; with a
 // general template engine it has to be asserted.
 func TestSkillTemplatesUseOnlyBranching(t *testing.T) {
 	for _, source := range skillSources {
@@ -537,7 +536,7 @@ func validateBranchPipe(pipe *parse.PipeNode) error {
 	args := pipe.Cmds[0].Args
 	if len(args) == 1 {
 		field, ok := args[0].(*parse.FieldNode)
-		if ok && len(field.Ident) == 1 && (field.Ident[0] == "Full" || field.Ident[0] == "Simple") {
+		if ok && len(field.Ident) == 1 && (field.Ident[0] == "Full" || field.Ident[0] == "Short") {
 			return nil
 		}
 	}
@@ -548,7 +547,7 @@ func validateBranchPipe(pipe *parse.PipeNode) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("branch must be .Full, .Simple, or .Is \"name\"")
+	return fmt.Errorf("branch must be .Full, .Short, or .Is \"name\"")
 }
 
 func validateActionPipe(pipe *parse.PipeNode) error {
@@ -567,21 +566,21 @@ func validateActionPipe(pipe *parse.PipeNode) error {
 }
 
 // TestStampNamesTheVariantButSharesTheDigest pins the versioning property the
-// single-source design exists for: both permutations come from one body, so they
+// single-source design exists for: both forms come from one body, so they
 // must report the same content digest and go stale together. A per-variant digest
-// would let a simple install look current against a source its sibling outgrew.
+// would let a short install look current against a source its sibling outgrew.
 func TestStampNamesTheVariantButSharesTheDigest(t *testing.T) {
 	catalog := testCatalog(t)
-	full, err := catalog.SkillBytes("magus-vcs-hygiene", VariantFull)
+	full, err := catalog.SkillBytes("magus-vcs-hygiene", FormFull)
 	require.NoError(t, err)
-	simple, err := catalog.SkillBytes("magus-vcs-hygiene", VariantSimple)
+	short, err := catalog.SkillBytes("magus-vcs-hygiene", FormShort)
 	require.NoError(t, err)
 
 	assert.Contains(t, string(full), "skill-variant: full")
-	assert.Contains(t, string(simple), "skill-variant: simple")
+	assert.Contains(t, string(short), "skill-variant: short")
 
 	digest := footerDigestRe.FindStringSubmatch(string(full))
 	require.Len(t, digest, 2)
-	assert.Contains(t, string(simple), "skill-content: "+digest[1],
-		"one source body, one digest - the permutations version together")
+	assert.Contains(t, string(short), "skill-content: "+digest[1],
+		"one source body, one digest - the forms version together")
 }
