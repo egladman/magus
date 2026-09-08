@@ -31,6 +31,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-pause.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

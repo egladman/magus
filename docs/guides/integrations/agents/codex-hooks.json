@@ -21,6 +21,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-pause.sh",
+            "statusMessage": "magus: recording where the work stands"
+          }
+        ]
+      }
     ]
   }
 }

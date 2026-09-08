@@ -234,6 +234,21 @@ exit 0
 Cursor can run a command on its agent hook surface. Shape the event into the
 canonical envelope and pipe it to `magus session notify`; see [Attention hooks](notifications.md).
 
+## Recording where the work stands
+
+Run [`magus-pause.sh`](guard-templates.md#magus-pausesh) from the same hook
+surface, on whichever event fires when a turn ends, with
+`GUARD_AGENT_NAME=cursor`. It records the revision, branch and dirtiness of the
+tree; `magus session` lists it.
+
+Cursor's event does not have to carry a session id or a transcript path for this
+to be worth wiring. Those two are pointers magus records and never opens, and a
+pause without them still says where the work sits, which is the part a person
+coming back needs. Pass `--session` and `--transcript` if Cursor's payload
+spells them differently.
+
+`magus session pause --note "..."` writes the same record by hand.
+
 ## Coverage and limits
 
 Two gaps, and they are different in kind.

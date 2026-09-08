@@ -173,6 +173,22 @@ never opted in.
 
 Wire any event that means a human is needed to `magus session notify`; see [Attention hooks](notifications.md).
 
+## Recording where the work stands
+
+Wire whatever event fires when a session ends to
+[`magus-pause.sh`](guard-templates.md#magus-pausesh), passing your host's name
+as `GUARD_AGENT_NAME`. `magus session` lists what it records.
+
+The requirements are close to nothing, which is deliberate. magus reads the
+revision, branch and dirtiness from the tree itself, so a host that emits no
+payload at all still produces a usable pause. If your host does carry a session
+id and a transcript path, pipe its event in and magus takes them from the
+envelope, or pass `--session` and `--transcript`. Both are pointers magus
+records and never opens.
+
+magus needs no release to learn about your host. `--agent-name` is an opaque
+label you choose, exactly as on the guard hook.
+
 ## Coverage and limits
 
 Whatever your host's hook surface can carry. One binary produces the rules, so

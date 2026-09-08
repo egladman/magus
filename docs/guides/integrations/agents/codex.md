@@ -93,15 +93,32 @@ pointing at wherever you put your copies of the two templates:
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-pause.sh",
+            "statusMessage": "magus: recording where the work stands"
+          }
+        ]
+      }
     ]
   }
 }
 ```
 
 `GUARD_AGENT_NAME` labels the observation magus records; it cannot change a
-verdict. Everything else about the two scripts is described in
+verdict. Everything else about the three scripts is described in
 [Guard hook templates](guard-templates.md), including the variables that let one
 implementation serve several hosts.
+
+The `Stop` entry is not a guard. It records where the work stands each time a
+turn ends, which is worth having here in particular: a Codex session that runs
+out of usage stops mid-task, and the transcript it leaves behind is addressed by
+a session id nobody wrote down. `magus session` lists what it recorded, and
+`magus session pause --note "..."` is the same record made by hand.
 
 ## Notifications
 

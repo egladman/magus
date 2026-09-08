@@ -319,6 +319,20 @@ brew, asdf, `~/.local/bin`), set `GUARD_MAGUS_BIN` to an absolute path.
 Invoke `magus session notify` from the plugin with the same envelope every other host
 uses; see [Attention hooks](notifications.md).
 
+## Recording where the work stands
+
+Invoke `magus session pause --agent-name opencode` from the plugin when a
+session ends, or run [`magus-pause.sh`](guard-templates.md#magus-pausesh) with
+`GUARD_AGENT_NAME=opencode` if you would rather not reimplement the binary
+lookup. Either records the revision, branch and dirtiness of the tree, which
+`magus session` then lists.
+
+The plugin has the session id and transcript path to hand, so pass them as
+`--session` and `--transcript`; both are pointers magus records and never opens.
+A pause without them is still worth writing.
+
+`magus session pause --note "..."` writes the same record by hand.
+
 ## Coverage and limits
 
 - An `advise` verdict is logged for the person. OpenCode has no
