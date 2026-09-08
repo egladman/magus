@@ -363,6 +363,12 @@ type stage struct {
 	projects []*types.Project
 }
 
+type targetInterceptorFunc func(context.Context, string, func(context.Context) error) error
+
+func (f targetInterceptorFunc) InterceptTarget(ctx context.Context, name string, invoke func(context.Context) error) error {
+	return f(ctx, name, invoke)
+}
+
 // raceForcesNoCache reports whether o requires bypassing the cache so race
 // diagnostics always observe a genuine execution. Race diagnostics (watch:
 // MGS4001/4002/4004 via raceRT.TrackProject; replay: MGS4003 via runReplay)
@@ -1383,6 +1389,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		svcSession.ReleaseAll(shutdownCtx)
 	}()
 	ctx = service.WithSession(ctx, svcSession)
+	// The pre-run composed gates and RunAll's batch steps share one isolation
+	// scope. A dynamically admitted needs child temporarily yields its parent's
+	// lease, so its own exclusive policy is enforced without holding the parent
+	// slot or lock across the child scheduler.
+	ctx = cache.WithRunScope(ctx)
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err
 	}
@@ -1404,6 +1415,38 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// completes, giving the reader a checklist of what ran in place of the wall.
 		if m.cache.Collapsing() {
 			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label})
+		}
+		if s.NoCache {
+			// An uncached composer still executes its body, so this is the runtime
+			// boundary at which a same-project ctx.needs target can become an
+			// independently admitted cache step. GopherBuzz resolves the actual
+			// branch and glob first, claims its TargetMemo, then delegates the
+			// already-memoed execution here.
+			spanCtx = buzz.WithTargetInterceptor(spanCtx, targetInterceptorFunc(func(memberCtx context.Context, name string, invoke func(context.Context) error) error {
+				member := newStep(p, name)
+				member.SkipReplay = opts.NoCache
+				if raceForcesNoCache(opts) {
+					member.NoCache = true
+				}
+				// A cache hit skips the member's body, so repair any skip_cache
+				// target it composes before replaying it. The helper asks whether
+				// the member is fresh first, so a miss still runs its chain once.
+				if !member.NoCache {
+					if err := m.runComposedSkipCacheGates(memberCtx, []cache.Step{member}, newStep, cacheOpts); err != nil {
+						return err
+					}
+				}
+				_, err := m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
+					if !member.NoCache {
+						// A cacheable member is now the lexical cache boundary: its
+						// own needs calls remain inline on a miss and do not acquire
+						// extra entries.
+						workerCtx = buzz.WithoutTargetInterceptor(workerCtx)
+					}
+					return invoke(workerCtx)
+				}, cacheOpts...)
+				return err
+			}))
 		}
 		var err error
 		if raceRT != nil {
