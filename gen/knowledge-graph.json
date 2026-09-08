@@ -3,8 +3,8 @@
   "schema_version": 10,
   "directed": true,
   "multigraph": false,
-  "node_count": 5257,
-  "edge_count": 9367,
+  "node_count": 5263,
+  "edge_count": 9380,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -981,7 +981,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1545",
+        "dir_files": "1546",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1351,7 +1351,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "264",
+        "dir_files": "265",
         "dir_languages": "markdown,md#agent-adoption-options,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-options,md#config-history-import-options,md#config-history-passed-options,md#config-mcp-connector-create-options,md#config-set-op"
       }
     },
@@ -15457,6 +15457,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/any-host.md#recording-where-the-work-stands",
+      "kind": "docsection",
+      "label": "Recording where the work stands",
+      "source": "docs/guides/integrations/agents/any-host.md#recording-where-the-work-stands",
+      "attrs": {
+        "anchor": "recording-where-the-work-stands",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/any-host.md#skills",
       "kind": "docsection",
       "label": "Skills",
@@ -15543,6 +15553,16 @@
       "source": "docs/guides/integrations/agents/claude-code.md#notifications",
       "attrs": {
         "anchor": "notifications",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/claude-code.md#recording-where-the-work-stands",
+      "kind": "docsection",
+      "label": "Recording where the work stands",
+      "source": "docs/guides/integrations/agents/claude-code.md#recording-where-the-work-stands",
+      "attrs": {
+        "anchor": "recording-where-the-work-stands",
         "level": "2"
       }
     },
@@ -15687,6 +15707,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/cursor.md#recording-where-the-work-stands",
+      "kind": "docsection",
+      "label": "Recording where the work stands",
+      "source": "docs/guides/integrations/agents/cursor.md#recording-where-the-work-stands",
+      "attrs": {
+        "anchor": "recording-where-the-work-stands",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/cursor.md#skills",
       "kind": "docsection",
       "label": "Skills",
@@ -15763,6 +15793,16 @@
       "source": "docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
       "attrs": {
         "anchor": "magus-guard-pathsh",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-pausesh",
+      "kind": "docsection",
+      "label": "magus-pause.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-pausesh",
+      "attrs": {
+        "anchor": "magus-pausesh",
         "level": "2"
       }
     },
@@ -16084,6 +16124,16 @@
       "attrs": {
         "anchor": "opencode",
         "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/opencode.md#recording-where-the-work-stands",
+      "kind": "docsection",
+      "label": "Recording where the work stands",
+      "source": "docs/guides/integrations/agents/opencode.md#recording-where-the-work-stands",
+      "attrs": {
+        "anchor": "recording-where-the-work-stands",
+        "level": "2"
       }
     },
     {
@@ -30293,6 +30343,16 @@
       "source": "docs/reference/manpage/magus-session.md#session-notify-options",
       "attrs": {
         "anchor": "session-notify-options",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/manpage/magus-session.md#session-pause-options",
+      "kind": "docsection",
+      "label": "session pause options",
+      "source": "docs/reference/manpage/magus-session.md#session-pause-options",
+      "attrs": {
+        "anchor": "session-pause-options",
         "level": "3"
       }
     },
@@ -61912,6 +61972,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/any-host.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/any-host.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/any-host.md",
       "target": "docsection:docs/guides/integrations/agents/any-host.md#any-other-host",
       "relation": "contains",
       "confidence": "extracted",
@@ -61956,6 +62024,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/claude-code.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/guides/integrations/agents/claude-code.md"
     },
     {
@@ -62016,11 +62092,27 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/codex.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/codex.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/codex.md",
       "target": "docsection:docs/guides/integrations/agents/codex.md#codex",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents/codex.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/cursor.md",
+      "target": "doc:docs/guides/integrations/agents/guard-templates.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/cursor.md"
     },
     {
       "source": "doc:docs/guides/integrations/agents/cursor.md",
@@ -62049,6 +62141,14 @@
     {
       "source": "doc:docs/guides/integrations/agents/cursor.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/cursor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/cursor.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -62376,6 +62476,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/opencode.md",
+      "target": "doc:docs/guides/integrations/agents/guard-templates.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/opencode.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/opencode.md",
       "target": "doc:docs/guides/integrations/agents/notifications.md",
       "relation": "references",
       "confidence": "extracted",
@@ -62396,6 +62504,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/agents/opencode.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/opencode.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/guides/integrations/agents/opencode.md"
     },
     {
@@ -86488,6 +86604,14 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/any-host.md#any-other-host",
+      "target": "docsection:docs/guides/integrations/agents/any-host.md#recording-where-the-work-stands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/any-host.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/any-host.md#any-other-host",
       "target": "docsection:docs/guides/integrations/agents/any-host.md#skills",
       "relation": "contains",
       "confidence": "extracted",
@@ -86553,6 +86677,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
       "target": "docsection:docs/guides/integrations/agents/claude-code.md#notifications",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
+      "target": "docsection:docs/guides/integrations/agents/claude-code.md#recording-where-the-work-stands",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -86656,6 +86788,14 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/cursor.md#cursor",
+      "target": "docsection:docs/guides/integrations/agents/cursor.md#recording-where-the-work-stands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/cursor.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/cursor.md#cursor",
       "target": "docsection:docs/guides/integrations/agents/cursor.md#skills",
       "relation": "contains",
       "confidence": "extracted",
@@ -86705,6 +86845,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
       "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-pausesh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -86929,6 +87077,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/opencode.md#opencode",
       "target": "docsection:docs/guides/integrations/agents/opencode.md#notifications",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/opencode.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/opencode.md#opencode",
+      "target": "docsection:docs/guides/integrations/agents/opencode.md#recording-where-the-work-stands",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -96801,6 +96957,14 @@
     {
       "source": "docsection:docs/reference/manpage/magus-session.md#options",
       "target": "docsection:docs/reference/manpage/magus-session.md#session-notify-options",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-session.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-session.md#options",
+      "target": "docsection:docs/reference/manpage/magus-session.md#session-pause-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

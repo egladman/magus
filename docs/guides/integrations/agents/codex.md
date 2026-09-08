@@ -59,15 +59,18 @@ app, and what to do when `mcp.address` changes.
 
 ## Guard hook
 
-Hooks are experimental and off by default. Turn them on in `~/.codex/config.toml`:
+Check that hooks are on before wiring anything:
 
-```toml
-[features]
-codex_hooks = true
+```sh
+codex features list
 ```
 
-Then save this as `~/.codex/hooks.json` (or `.codex/hooks.json`), with the paths
-pointing at wherever you put your copies of the two templates:
+The `hooks` row reports the stage and whether it is enabled. It is stable and on
+by default as of codex-cli 0.145.0; older builds gated it behind a feature flag
+in `~/.codex/config.toml`, so read the row rather than trusting this paragraph.
+
+Save this as `~/.codex/hooks.json` (or `.codex/hooks.json`), with the paths
+pointing at wherever you put your copies of the templates:
 
 ```json
 {

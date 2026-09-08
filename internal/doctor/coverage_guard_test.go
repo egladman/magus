@@ -179,12 +179,14 @@ func TestGuardWiringCandidates(t *testing.T) {
 		filepath.Join("/repo", ".claude", "settings.json"),
 		filepath.Join("/repo", ".cursor", "hooks.json"),
 		filepath.Join("/repo", ".opencode", "plugins"),
+		filepath.Join("/repo", ".codex", "hooks.json"),
+		filepath.Join("/home/dev", ".codex", "hooks.json"),
 		filepath.Join("/home/dev", ".codex", "config.toml"),
 		filepath.Join("/home/dev", ".config", "opencode", "plugins"),
 	}, withHome)
 
 	// os.UserHomeDir can fail, and the workspace-relative candidates still apply.
-	assert.Len(t, guardWiringCandidates("/repo", ""), 3)
+	assert.Len(t, guardWiringCandidates("/repo", ""), 4)
 }
 
 func TestGuardReferencedTemplates(t *testing.T) {

@@ -1719,6 +1719,10 @@ var guardTemplateBasenames = []string{
 	"magus-guard-command.sh",
 	"magus-guard-path.sh",
 	"cursor-guard.sh",
+	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
+	// the observe template's did: silently, as a store that looks like a repository
+	// where nobody ever stopped mid-task.
+	"magus-pause.sh",
 }
 
 // guardWiringCandidates are the config locations a shipped host glue installs
@@ -1730,9 +1734,16 @@ func guardWiringCandidates(root, home string) []string {
 		filepath.Join(root, ".claude", "settings.json"),
 		filepath.Join(root, ".cursor", "hooks.json"),
 		filepath.Join(root, ".opencode", "plugins"),
+		filepath.Join(root, ".codex", "hooks.json"),
 	}
 	if home != "" {
 		candidates = append(candidates,
+			// The hook wiring and the settings that enable it are separate files, and
+			// only the second was listed here. So a machine whose hooks were never
+			// installed graded exactly like one whose hooks were installed and
+			// current: measured 2026-09-08, a full day of sessions ran unguarded on
+			// this machine and no check anywhere reported it.
+			filepath.Join(home, ".codex", "hooks.json"),
 			filepath.Join(home, ".codex", "config.toml"),
 			filepath.Join(home, ".config", "opencode", "plugins"),
 		)
