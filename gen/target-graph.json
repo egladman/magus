@@ -326,6 +326,9 @@
               "glob": ".claude/skills/magus-architecture-review*/**"
             },
             {
+              "glob": ".claude/skills/magus-test-design*/**"
+            },
+            {
               "glob": ".claude/skills/magus-buzz-review*/**"
             },
             {
@@ -368,6 +371,9 @@
               "glob": ".agents/skills/magus-architecture-review*/**"
             },
             {
+              "glob": ".agents/skills/magus-test-design*/**"
+            },
+            {
               "glob": ".agents/skills/magus-buzz-review*/**"
             },
             {
@@ -408,6 +414,9 @@
             },
             {
               "glob": ".opencode/skills/magus-architecture-review*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-test-design*/**"
             },
             {
               "glob": ".opencode/skills/magus-buzz-review*/**"
