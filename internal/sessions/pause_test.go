@@ -11,10 +11,10 @@ import (
 
 func hostPause() Pause {
 	return Pause{
-		Host:       "codex",
-		Session:    "01a07dab-240a-75b2-b9fe-816562939726",
-		Transcript: "/Users/e/.codex/sessions/2026/09/07/rollout.jsonl",
-		Workspace:  "/repo",
+		Host:        "codex",
+		HostSession: "01a07dab-240a-75b2-b9fe-816562939726",
+		Transcript:  "/Users/e/.codex/sessions/2026/09/07/rollout.jsonl",
+		Workspace:   "/repo",
 		At: types.VCSCheckpoint{
 			Revision: "bcac8934e1a2b3c4d5e6f708192a3b4c5d6e7f80",
 			Branch:   "cache-dynamic-needs",
@@ -26,12 +26,24 @@ func hostPause() Pause {
 }
 
 // A person types a note and nothing else. Everything below has to work from that.
-func personPause(branch, note string) Pause {
+func personPause(workspace, branch, note string) Pause {
 	return Pause{
-		Workspace: "/repo",
+		Workspace: workspace,
 		At:        types.VCSCheckpoint{Revision: "62660968c1d2e3f4", Branch: branch, VCS: "git"},
 		Note:      note,
 	}
+}
+
+func paused(t *testing.T, dir string) []Pause {
+	t.Helper()
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	out := make([]Pause, 0, len(fold.Records))
+	for _, rec := range LatestPauses(fold) {
+		assert.False(t, rec.At.IsZero(), "every pause carries the envelope's timestamp")
+		out = append(out, rec.Pause)
+	}
+	return out
 }
 
 func TestRecordPauseRoundTrip(t *testing.T) {
@@ -39,33 +51,46 @@ func TestRecordPauseRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	want := hostPause()
 
-	recorded, err := RecordPause(dir, want, SessionStart{Workspace: "/repo"})
+	stored, recorded, err := RecordPause(dir, want, SessionStart{Workspace: "/repo"})
 	require.NoError(t, err)
 	assert.True(t, recorded)
-
-	fold, err := ReadAll(dir)
-	require.NoError(t, err)
-	assert.Equal(t, []Pause{want}, Pauses(fold))
+	assert.Equal(t, want, stored)
+	assert.Equal(t, []Pause{want}, paused(t, dir))
 }
 
 // The case that makes this a developer's tool rather than an agent's: two branches
 // parked by a person, with no host session anywhere, are two lines of work.
-func TestPausesSeparateAPersonsBranches(t *testing.T) {
+func TestLatestPausesSeparateAPersonsBranches(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	monday := personPause("cache-dynamic-needs", "waiting on the review")
-	tuesday := personPause("release-index", "half a manifest written")
+	monday := personPause("/repo", "cache-dynamic-needs", "waiting on the review")
+	tuesday := personPause("/repo", "release-index", "half a manifest written")
 
-	recorded, err := RecordPause(dir, monday, SessionStart{})
+	_, recorded, err := RecordPause(dir, monday, SessionStart{})
 	require.NoError(t, err)
 	require.True(t, recorded)
-	recorded, err = RecordPause(dir, tuesday, SessionStart{})
+	_, recorded, err = RecordPause(dir, tuesday, SessionStart{})
 	require.NoError(t, err)
 	require.True(t, recorded, "a second branch is not a refile of the first")
 
-	fold, err := ReadAll(dir)
+	assert.ElementsMatch(t, []Pause{monday, tuesday}, paused(t, dir))
+}
+
+// The store is repo-wide across clones and worktrees, so a branch name alone is not a
+// line of work: two checkouts parked on main are two.
+func TestLatestPausesSeparateWorktreesOnOneBranch(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	here := personPause("/repo", "main", "mid-refactor")
+	there := personPause("/repo-review", "main", "reviewing a pull request")
+
+	_, _, err := RecordPause(dir, here, SessionStart{})
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []Pause{monday, tuesday}, Pauses(fold))
+	_, recorded, err := RecordPause(dir, there, SessionStart{})
+	require.NoError(t, err)
+	require.True(t, recorded)
+
+	assert.ElementsMatch(t, []Pause{here, there}, paused(t, dir))
 }
 
 // A host hook fires every turn. Turns that moved nothing must not each cost a record.
@@ -74,17 +99,14 @@ func TestRecordPauseSkipsAnUnchangedRefile(t *testing.T) {
 	dir := t.TempDir()
 	p := hostPause()
 
-	recorded, err := RecordPause(dir, p, SessionStart{})
+	_, recorded, err := RecordPause(dir, p, SessionStart{})
 	require.NoError(t, err)
 	require.True(t, recorded)
 
-	recorded, err = RecordPause(dir, p, SessionStart{})
+	_, recorded, err = RecordPause(dir, p, SessionStart{})
 	require.NoError(t, err)
 	assert.False(t, recorded, "nothing about the work moved")
-
-	fold, err := ReadAll(dir)
-	require.NoError(t, err)
-	assert.Len(t, Pauses(fold), 1)
+	assert.Len(t, paused(t, dir), 1)
 }
 
 func TestRecordPauseSupersedesRatherThanRewrites(t *testing.T) {
@@ -95,19 +117,18 @@ func TestRecordPauseSupersedesRatherThanRewrites(t *testing.T) {
 	second.At.Revision = "cc76e76ef1e2d3c4b5a6978869574635241302ff"
 	second.Note = "test design skill committed"
 
-	_, err := RecordPause(dir, first, SessionStart{})
+	_, _, err := RecordPause(dir, first, SessionStart{})
 	require.NoError(t, err)
-	recorded, err := RecordPause(dir, second, SessionStart{})
+	_, recorded, err := RecordPause(dir, second, SessionStart{})
 	require.NoError(t, err)
 	assert.True(t, recorded)
+	assert.Equal(t, []Pause{second}, paused(t, dir), "one line of work, at its newest")
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
-	assert.Equal(t, []Pause{second}, Pauses(fold), "one line of work, at its newest")
-
 	kept := 0
 	for _, rec := range fold.Records {
-		if rec.Kind == KindSessionPause {
+		if rec.Kind == KindPause {
 			kept++
 		}
 	}
@@ -123,7 +144,7 @@ func TestRecordPauseAppendsToOneSessionFile(t *testing.T) {
 
 	for i, rev := range []string{"aaaa111122223333", "bbbb444455556666", "cccc777788889999"} {
 		p.At.Revision = rev
-		recorded, err := RecordPause(dir, p, SessionStart{})
+		_, recorded, err := RecordPause(dir, p, SessionStart{})
 		require.NoError(t, err)
 		require.True(t, recorded, "revision %d moved", i)
 	}
@@ -134,40 +155,37 @@ func TestRecordPauseAppendsToOneSessionFile(t *testing.T) {
 	assert.Len(t, Summarize(fold), 1)
 }
 
-func TestPausesReportOneThreadPerHostSession(t *testing.T) {
+func TestLatestPausesReportOneThreadPerHostSession(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	codex := hostPause()
-	claude := Pause{Host: "claude", Session: "54023016-5d8b", Workspace: "/repo", At: types.VCSCheckpoint{Revision: "62660968c", Branch: "main"}}
+	claude := Pause{Host: "claude", HostSession: "54023016-5d8b", Workspace: "/repo", At: types.VCSCheckpoint{Revision: "62660968c", Branch: "main"}}
 
-	_, err := RecordPause(dir, codex, SessionStart{})
+	_, _, err := RecordPause(dir, codex, SessionStart{})
 	require.NoError(t, err)
-	_, err = RecordPause(dir, claude, SessionStart{})
+	_, _, err = RecordPause(dir, claude, SessionStart{})
 	require.NoError(t, err)
 
-	fold, err := ReadAll(dir)
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []Pause{codex, claude}, Pauses(fold))
+	assert.ElementsMatch(t, []Pause{codex, claude}, paused(t, dir))
 }
 
 // The store is grow-only and every reader folds all of it, so one pasted transcript
-// cannot be allowed to become a cost every later read pays.
-func TestRecordPauseClampsANote(t *testing.T) {
+// cannot become a cost every later read pays. The caller is told what was stored, not
+// what it asked for.
+func TestRecordPauseClampsANoteAndReportsTheStoredOne(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	p := personPause("main", strings.Repeat("e", MaxMessageBytes+512))
+	p := personPause("/repo", "main", strings.Repeat("e", MaxMessageBytes+512))
 
-	_, err := RecordPause(dir, p, SessionStart{})
+	stored, _, err := RecordPause(dir, p, SessionStart{})
 	require.NoError(t, err)
 
-	fold, err := ReadAll(dir)
-	require.NoError(t, err)
-	got := Pauses(fold)
-	require.Len(t, got, 1)
-	assert.Equal(t, strings.Repeat("e", MaxMessageBytes)+messageTruncated, got[0].Note)
+	want := strings.Repeat("e", MaxMessageBytes) + messageTruncated
+	assert.Equal(t, want, stored.Note)
+	assert.Equal(t, []Pause{stored}, paused(t, dir))
 }
 
-func TestPausesIsEmptyWithoutAny(t *testing.T) {
+func TestLatestPausesIsEmptyWithoutAny(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -175,9 +193,7 @@ func TestPausesIsEmptyWithoutAny(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 
-	fold, err := ReadAll(dir)
-	require.NoError(t, err)
-	assert.Empty(t, Pauses(fold))
+	assert.Empty(t, paused(t, dir))
 }
 
 // A detached HEAD has no branch to key on; two of them in one workspace are one line

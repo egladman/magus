@@ -67,15 +67,23 @@ const messageTruncated = "... [truncated]"
 // The request id is derived from the message the producer SENT (see [RequestID]), not
 // from this copy, so two long blocks that share a 4 KiB prefix stay two requests.
 func (o AttentionOpen) bounded() AttentionOpen {
-	if len(o.Message) <= MaxMessageBytes {
-		return o
+	o.Message = boundMessage(o.Message)
+	return o
+}
+
+// boundMessage clamps one stored string to [MaxMessageBytes]. Shared by every payload
+// that carries prose a producer supplied: the bound is a property of the store, not of
+// any one record, and two copies of this rule would rot apart on the first change to
+// either.
+func boundMessage(s string) string {
+	if len(s) <= MaxMessageBytes {
+		return s
 	}
 	cut := MaxMessageBytes
-	for cut > 0 && !utf8.RuneStart(o.Message[cut]) {
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}
-	o.Message = o.Message[:cut] + messageTruncated
-	return o
+	return s[:cut] + messageTruncated
 }
 
 // AttentionDispose is the payload of a person closing a request.
