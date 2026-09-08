@@ -129,7 +129,7 @@ func sessionList(root string, args []string) error {
 	}
 	return emitFormatted(opts, map[string]any{
 		"sessions": summaries,
-		"paused":   sessions.Pauses(fold),
+		"paused":   sessions.LatestPauses(fold),
 		"skipped":  fold.Skipped,
 		"store":    dir,
 	})
@@ -139,7 +139,7 @@ func sessionList(root string, args []string) error {
 // from a store whose sessions are all older than the window. Reporting the second as the
 // first sends a person looking for a broken producer.
 func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
-	renderPaused(os.Stdout, sessions.Pauses(fold))
+	renderPaused(os.Stdout, sessions.LatestPauses(fold))
 	if len(summaries) == 0 {
 		if filtered {
 			fmt.Fprintf(os.Stdout, "no sessions in that window; %s holds %d session file(s)\n", dir, fold.Sessions)
@@ -201,21 +201,21 @@ const pausedShown = 3
 //
 // It is deliberately not filtered by --since. That flag bounds what RAN recently; a pause
 // records what has not finished, and hiding an old one would hide the case this exists for.
-func renderPaused(w io.Writer, paused []sessions.Pause) {
+func renderPaused(w io.Writer, paused []sessions.PauseRecord) {
 	if len(paused) == 0 {
 		return
 	}
 	fmt.Fprintln(w, "Paused, most recent first:")
-	for _, p := range paused[:min(len(paused), pausedShown)] {
-		fmt.Fprintf(w, "  %s\n", pausedWhere(p))
-		if p.Note != "" {
-			fmt.Fprintf(w, "    %s\n", p.Note)
+	for _, r := range paused[:min(len(paused), pausedShown)] {
+		fmt.Fprintf(w, "  %s  %s\n", r.At.Format("2006-01-02 15:04:05"), pausedWhere(r.Pause))
+		if r.Note != "" {
+			fmt.Fprintf(w, "    %s\n", r.Note)
 		}
-		if p.Session != "" {
-			fmt.Fprintf(w, "    session %s\n", p.Session)
+		if r.HostSession != "" {
+			fmt.Fprintf(w, "    session %s\n", r.HostSession)
 		}
-		if p.Transcript != "" {
-			fmt.Fprintf(w, "    transcript %s\n", p.Transcript)
+		if r.Transcript != "" {
+			fmt.Fprintf(w, "    transcript %s\n", r.Transcript)
 		}
 	}
 	if extra := len(paused) - pausedShown; extra > 0 {
@@ -227,12 +227,19 @@ func renderPaused(w io.Writer, paused []sessions.Pause) {
 // pausedWhere reads the checkpoint back as one line. The revision leads because it is the
 // fact a reader acts on: a checkout that cannot resolve it is looking at work that was
 // never pushed, which no branch name would have revealed.
+//
+// A pause with no revision is not a broken record. A tree before its first commit, or
+// under no VCS at all, still has a location worth naming, and the workspace is it.
 func pausedWhere(p sessions.Pause) string {
 	var b strings.Builder
 	if p.Host != "" {
 		fmt.Fprintf(&b, "%s ", p.Host)
 	}
-	b.WriteString(shortRevision(p.At))
+	if p.At.Revision == "" {
+		b.WriteString(p.Workspace)
+		return b.String()
+	}
+	b.WriteString(shortRev(p.At.Revision))
 	if p.At.Branch != "" {
 		fmt.Fprintf(&b, " on %s", p.At.Branch)
 	}

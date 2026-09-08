@@ -1,12 +1,15 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	json "github.com/egladman/magus/internal/json"
@@ -57,25 +60,25 @@ func pauseCmd(ctx context.Context, root string, in io.Reader, out io.Writer, arg
 		wsRoot, vcsOpts = ws.Root(), ws.VCSOptions()
 	}
 	if wsRoot == "" {
-		return fmt.Errorf("magus session pause: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
+		return errors.New("magus session pause: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
 	}
 
-	p := sessions.Pause{Workspace: wsRoot, Note: pf.Note}
-	if env, ok := readPauseEnvelope(in, pf.Note); ok {
-		p.Session = env.SessionID
-		p.Transcript = env.TranscriptPath
+	env := readPauseEnvelope(in)
+	p := sessions.Pause{
+		Workspace:   wsRoot,
+		Note:        pf.Note,
+		HostSession: cmp.Or(pf.Session, env.SessionID),
+		Transcript:  cmp.Or(pf.Transcript, env.TranscriptPath),
+		Host:        pf.AgentName,
 	}
-	// An explicit flag outranks the envelope: a wrapper that passed one meant it.
-	overlay(&p.Host, pf.AgentName)
-	overlay(&p.Session, pf.Session)
-	overlay(&p.Transcript, pf.Transcript)
 
-	res, err := vcs.Resolve(ctx, wsRoot, "", vcsOpts)
-	if err != nil {
-		return fmt.Errorf("magus session pause: %w", err)
-	}
-	if p.At, err = vcs.Checkpoint(ctx, wsRoot, res); err != nil {
-		return fmt.Errorf("magus session pause: %w", err)
+	// A tree with no revision to report still gets a record. Three ordinary states
+	// reach here - a repository before its first commit, a directory under no VCS at
+	// all, and VCS disabled by config - and this runs as a stop hook on every
+	// documented host, so failing would mean the hook errors every turn and files
+	// nothing in exactly the trees where "where was I" is hardest to answer.
+	if res, err := vcs.Resolve(ctx, wsRoot, "", vcsOpts); err == nil {
+		p.At, _ = vcs.Checkpoint(ctx, wsRoot, res)
 	}
 
 	dir, err := sessions.Dir(wsRoot)
@@ -83,7 +86,7 @@ func pauseCmd(ctx context.Context, root string, in io.Reader, out io.Writer, arg
 		return err
 	}
 	spawn := trail.SpawnFromEnv()
-	recorded, err := sessions.RecordPause(dir, p, sessions.SessionStart{
+	stored, recorded, err := sessions.RecordPause(dir, p, sessions.SessionStart{
 		Host:      p.Host,
 		Workspace: wsRoot,
 		Version:   version,
@@ -98,83 +101,94 @@ func pauseCmd(ctx context.Context, root string, in io.Reader, out io.Writer, arg
 
 	switch opts.Format {
 	case FormatText:
-		fmt.Fprintln(out, pauseLine(p, recorded))
+		fmt.Fprintln(out, pauseLine(stored, recorded))
 		return nil
 	case FormatName:
-		fmt.Fprintln(out, p.At.Revision)
+		fmt.Fprintln(out, stored.At.Revision)
 		return nil
 	}
-	return writeFormatted(out, opts, p)
+	// recorded travels with the record: a wrapper reading the structured form has no
+	// other way to tell a new pause from one identical to the last.
+	return writeFormatted(out, opts, struct {
+		sessions.Pause
+		Recorded bool `json:"recorded"`
+	}{Pause: stored, Recorded: recorded})
 }
 
+// pauseEnvelopeWait bounds how long a host's payload may take to arrive.
+//
+// stdin is this command's optional enrichment, not its input, so waiting on it forever
+// trades two pointers for the session it was meant to record. A hook writes its event
+// and closes; anything that has sent nothing by now is a shell that inherited an idle
+// pipe, which no amount of further waiting improves.
+const pauseEnvelopeWait = 2 * time.Second
+
+// pauseEnvelopeMax bounds how much of it is read, matching the cap the adoption command
+// puts on the same class of input.
+const pauseEnvelopeMax = 4 << 20
+
 // readPauseEnvelope decodes a host's hook payload from in for the two pointers only a
-// host knows - its session id and its transcript path - reporting whether one arrived.
+// host knows: its session id and its transcript path. A payload that is absent,
+// unparsable, or slow to arrive yields the zero envelope, which contributes nothing.
 //
 // Nothing in the payload becomes the note. A host's closing message is the model's
 // prose, and copying it in would make the record indistinguishable from a sentence a
 // person wrote, in a store a person reads. A wrapper that wants the model's words
 // passes --note and owns that decision.
 //
-// note being set is what stops the read, and a terminal is never read at all. Both
-// guard the same failure: `magus session pause --note "..."` from a Makefile, a CI step,
-// or any shell holding an open pipe would otherwise block on an EOF nobody is going to
-// send. stdin is this command's optional enrichment, not its input.
-func readPauseEnvelope(in io.Reader, note string) (hookEnvelope, bool) {
-	if note != "" || stdinIsTerminal() {
-		return hookEnvelope{}, false
+// The read is bounded rather than skipped when --note is set. Gating it on the flag
+// also kept the pointers out of the record for any wrapper that passed a note, which is
+// the shape the docs invite, and it left the actual hazard open: a caller with no --note
+// and an idle inherited pipe still waited forever.
+func readPauseEnvelope(in io.Reader) hookEnvelope {
+	if stdinIsTerminal() {
+		return hookEnvelope{}
 	}
-	body, err := io.ReadAll(in)
-	if err != nil {
-		return hookEnvelope{}, false
+	type read struct {
+		body []byte
+		err  error
 	}
+	done := make(chan read, 1)
+	go func() {
+		body, err := io.ReadAll(io.LimitReader(in, pauseEnvelopeMax))
+		done <- read{body: body, err: err}
+	}()
+
+	var body []byte
+	select {
+	case r := <-done:
+		if r.err != nil {
+			return hookEnvelope{}
+		}
+		body = r.body
+	case <-time.After(pauseEnvelopeWait):
+		return hookEnvelope{}
+	}
+
 	trimmed := strings.TrimSpace(string(body))
 	if trimmed == "" || trimmed[0] != '{' {
-		return hookEnvelope{}, false
+		return hookEnvelope{}
 	}
 	var env hookEnvelope
 	if json.Unmarshal([]byte(trimmed), &env) != nil {
-		return hookEnvelope{}, false
+		return hookEnvelope{}
 	}
-	return env, true
+	return env
 }
 
-// overlay writes v over dst when v was set, leaving whatever the envelope supplied when
-// it was not.
-func overlay(dst *string, v string) {
-	if v != "" {
-		*dst = v
-	}
-}
-
-// pauseLine is the terminal reading of one pause: where the work sits, and whether
-// this call changed anything.
+// pauseLine is the terminal reading of one pause: where the work sits, and whether this
+// call changed anything. The location is rendered by the same function the listing uses,
+// so writing a pause and reading one back describe it identically.
 func pauseLine(p sessions.Pause, recorded bool) string {
-	var b strings.Builder
-	if recorded {
-		b.WriteString("paused at ")
-	} else {
-		b.WriteString("unchanged since the last pause at ")
+	verb := "paused at"
+	if !recorded {
+		verb = "unchanged since the last pause at"
 	}
-	b.WriteString(shortRevision(p.At))
-	if p.At.Branch != "" {
-		fmt.Fprintf(&b, " on %s", p.At.Branch)
-	}
-	if p.At.Dirty {
-		b.WriteString(", uncommitted changes")
-	}
+	line := verb + " " + pausedWhere(p)
 	if p.Note != "" {
-		fmt.Fprintf(&b, ": %s", p.Note)
+		line += ": " + p.Note
 	}
-	return b.String()
-}
-
-// shortRevision abbreviates for reading. The stored revision stays full, because that
-// is the one a reader feeds back to a VCS.
-func shortRevision(cp types.VCSCheckpoint) string {
-	if len(cp.Revision) > 12 {
-		return cp.Revision[:12]
-	}
-	return cp.Revision
+	return line
 }
 
 func pauseUsage(w io.Writer) {
