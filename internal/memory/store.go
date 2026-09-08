@@ -17,8 +17,6 @@
 package memory
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -30,6 +28,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/repoid"
 	"gopkg.in/yaml.v3"
 )
 
@@ -139,37 +138,20 @@ const cursorFile = "cursor.md"
 
 // Dir resolves the per-repository memory directory:
 // <XDG state>/magus/memory/<repo-basename>-<hash12>. The hash keys on repository
-// identity, not the checkout path, so every worktree of a repo shares one memory.
+// identity (repoid.Identity), not the checkout path, so every worktree AND every
+// clone of a repo shares one memory. A store written under the older path-based key
+// is adopted on the way past.
 func Dir(root string) (string, error) {
 	base, err := config.UserStateDir()
 	if err != nil {
 		return "", fmt.Errorf("memory: state dir: %w", err)
 	}
-	id := repoIdentity(root)
-	sum := sha256.Sum256([]byte(id))
-	name := filepath.Base(id) + "-" + hex.EncodeToString(sum[:])[:12]
-	return filepath.Join(base, "magus", "memory", name), nil
-}
-
-// repoIdentity returns the path that identifies the repository behind root. A linked
-// worktree's .git is a file holding "gitdir: <main>/.git/worktrees/<n>"; resolve it to
-// <main> so worktrees share identity. Anything else identifies as root itself.
-func repoIdentity(root string) string {
-	b, err := os.ReadFile(filepath.Join(root, ".git"))
-	if err != nil {
-		return root // .git is a directory (plain checkout) or absent (other VCS)
+	parent := filepath.Join(base, "magus", "memory")
+	dir := filepath.Join(parent, repoid.Key(repoid.Identity(root)))
+	if err := repoid.Adopt(filepath.Join(parent, repoid.Key(repoid.Path(root))), dir); err != nil {
+		return "", fmt.Errorf("memory: %w", err)
 	}
-	gitdir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
-	if gitdir == "" {
-		return root
-	}
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(root, gitdir)
-	}
-	if i := strings.Index(filepath.ToSlash(gitdir), "/.git/worktrees/"); i >= 0 {
-		return filepath.Clean(gitdir[:i])
-	}
-	return filepath.Clean(gitdir)
+	return dir, nil
 }
 
 // ErrUnknownType marks a record whose Type this binary does not know. Writing one is an
