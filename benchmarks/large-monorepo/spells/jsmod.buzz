@@ -1,0 +1,21 @@
+// Plain-ESM package spell for the large-monorepo benchmark's platform packages and
+// the feature-library bridges that import them. Non-opaque so the .mjs sources are
+// hashed; gen/api.md is declared as provided output, which keeps the generated API
+// summary out of its own project's input hash.
+import "magus/spell";
+
+export fun mgs_getName() > str { return "jsmod"; }
+
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.mjs"}, Path{value = "package.json"}];
+}
+
+export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "gen/api.md"}]; }
+
+export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }
+
+fun noop(target: Target) > Command { return Command{bin = "true", args = []}; }
+
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"noop": noop};
+}

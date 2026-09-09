@@ -11,10 +11,14 @@ Status: turbo/nx/lage baseline + magus. moon and bazel are not wired yet.
 
 ```text
 large-monorepo/
-  setup.sh          clone upstream @ pinned SHA into gen/repo, write magus config, npm install
+  setup.sh          clone upstream @ pinned SHA into gen/repo, write magus config, overlay
+                    the enrichment, cut the task branches, npm install
+  tasks.sh          cut one task/<id> branch per agent-benchmark task; called by setup.sh
   bench.sh          run the scenarios, emit results/, write BENCHMARKS-large-monorepo.md
   spells/nextjs.buzz  Next.js app spell (next-build = next build, caches .next/**)
   spells/tslib.buzz   feature-library spell (non-opaque, no-op build); see below
+  spells/jsmod.buzz   plain-ESM spell for the platform packages and the bridges
+  enrich/           the overlay source: platform/*, tools/gen-api.mjs, bridges.tsv
   versions.lock     pinned upstream SHA + tool versions
   gen/repo/         the checkout + generated magusfiles + node_modules (gitignored)
   results/          hyperfine JSON (gitignored, created by bench.sh)
@@ -60,6 +64,31 @@ match, node-for-node and edge-for-edge, what turbo/nx/lage derive from
    handle, so each lib exposes a near-instant `build` for the app to
    `ctx.needs`. The 5 real `next build`s dominate the wall-clock, exactly as
    they do for turbo/nx/lage, which also build only the apps.
+
+### The enrichment, and who it is for
+
+The perf comparison above needs only apps and feature libs. The agent benchmark
+(`../agent/`) needs a workspace with something to reason ABOUT, so `setup.sh` also
+overlays, from `enrich/`:
+
+1. **`packages/platform/{logging,config,http,metrics}`** - four small plain-ESM
+   packages with real cross-imports (`config` and `metrics` use `logging`; `http`
+   uses both) and `node --test` suites that need no dependencies.
+2. **One bridge module per feature library named in `enrich/bridges.tsv`** - ten of
+   the hundred, each importing exactly ONE platform package. The edges are
+   deliberately non-uniform: `packages/platform/config` reaches four of the five
+   apps and not the fifth, which is what makes "what breaks if I change this" a
+   question with a wrong answer.
+3. **A generated `gen/api.md` per package with modules in it** - exported names plus
+   the names imported from each sibling package, written by `tools/gen-api.mjs`. The
+   `generate` target writes it and the read-only `verify` target fails on drift, so
+   a rename in `logging` goes stale in six summaries at once.
+4. **A `ci` target on every project**, composing `verify` and `tests` (and `build`
+   for the apps and libs), with cross-project `ctx.needs` along the platform chain.
+
+The overlay only ADDS files, and it is committed on the `bench/enriched` branch of
+the clone; `tasks.sh` then cuts the `task/<id>` branches off it. The upstream tree is
+still unpatched, so the turbo/nx/lage comparison is unaffected.
 
 ### Verified behavior
 
