@@ -32,21 +32,28 @@ func TestDeclaredCeilingTracksDependencyWait(t *testing.T) {
 		"the ceiling scope carries no accumulator, so the split can never be measured")
 }
 
-// A target declaring no timeout gets no deadline and no tracker: the pass-through must
-// stay a pass-through, or every uncapped body pays for an accumulator nothing reads.
+// A target declaring no timeout gets no deadline, but it still gets its own accumulator:
+// an uncapped body is exactly the one that would otherwise write its ctx.needs waits into
+// a ceilinged ancestor that already counts the whole child as one span.
 func TestDeclaredCeilingIsAPassThroughWithoutATimeout(t *testing.T) {
 	ws := &ceilingWorkspace{projects: []*types.Project{{
 		Dir:            "/w/api",
 		TargetPolicies: map[string]types.Target{"build": {}},
 	}}}
-	ctx := types.WithWorkspace(context.Background(), ws)
+	parent := types.TrackDependencyWait(types.WithWorkspace(context.Background(), ws))
+	types.AddDependencyWait(parent, time.Minute)
 
-	bodyCtx, cancel, ceiling := withDeclaredCeiling(ctx, "/w/api", "build")
+	bodyCtx, cancel, ceiling := withDeclaredCeiling(parent, "/w/api", "build")
 	defer cancel()
 
 	assert.Zero(t, ceiling)
 	_, hasDeadline := bodyCtx.Deadline()
 	assert.False(t, hasDeadline)
+
+	types.AddDependencyWait(bodyCtx, 30*time.Second)
+	assert.Equal(t, 30*time.Second, types.DependencyWait(bodyCtx))
+	assert.Equal(t, time.Minute, types.DependencyWait(parent),
+		"an uncapped body's dependency time reached the ceilinged ancestor that already counts it")
 }
 
 // The trace line is the whole point of measuring a ceiling that did NOT expire, so it has

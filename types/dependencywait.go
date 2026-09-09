@@ -9,11 +9,12 @@ import (
 type dependencyWaitKey struct{}
 
 // TrackDependencyWait installs a fresh accumulator for the time a target body spends
-// inside ctx.needs, and is installed by whoever arms that body's ceiling.
+// inside ctx.needs. Every body gets one, whether or not it declares a ceiling.
 //
-// Fresh per body, not inherited: a composed target's own dependency time belongs to
-// ITS ceiling, and the parent already counts the whole child - queueing, work and all -
-// as one span of its own dependency time. Sharing one accumulator would double it.
+// Fresh per body, not inherited: a composed target's own dependency time belongs to ITS
+// body, and the parent already counts the whole child (queueing, work and all) as one
+// span of its own dependency time. Sharing one accumulator would double it, so the
+// install must not be conditional on the body declaring a ceiling.
 func TrackDependencyWait(ctx context.Context) context.Context {
 	return context.WithValue(ctx, dependencyWaitKey{}, new(atomic.Int64))
 }
