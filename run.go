@@ -2197,10 +2197,16 @@ func charmedTarget(target string, charms []string) string {
 // the deadlock measured on 2026-09-08, reachable from every entry point but the two the
 // CLI covers.
 //
-// Deliberately NOT a journal. Opening one here would truncate the file BeginInvocation
-// opened on the paths that do call it, and the journal is the CLI's to own - it fans out
-// live handlers and session facts this has no way to reproduce. Identity is the half that
-// is a correctness property rather than an observability one.
+// Deliberately NOT a journal. The journal is the CLI's to own: it fans out live handlers
+// and session facts this has no way to reproduce, and it has a second half this shape
+// cannot carry at all, since a journal needs its finish, flush and close and all this
+// returns is a ctx. Identity is the half that is a correctness property rather than an
+// observability one.
+//
+// The consequence, and it is accepted: every non-CLI run carries an invocation id that
+// resolves to no journal file, while lock sidecars and machine claims record that id. A
+// reader who follows one there finds nothing, and the id is still doing its job, which is
+// to let a descendant recognize this run's claims.
 func attributeRun(ctx context.Context) context.Context {
 	if journal.InvocationIDFromContext(ctx) != "" {
 		return ctx
