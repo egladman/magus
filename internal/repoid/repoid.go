@@ -387,3 +387,17 @@ func stripPort(host string) string {
 	}
 	return host
 }
+
+// CheckoutRoot is the nearest ancestor of dir holding a .git entry: a directory
+// in a main checkout, a file in a linked worktree. Empty when no ancestor is a
+// checkout. It is how a path a host reported absolutely is reduced to the form
+// every checkout of one repository shares, without magus knowing where any host
+// keeps its worktrees.
+func CheckoutRoot(dir string) string {
+	for d := dir; d != "" && d != filepath.Dir(d); d = filepath.Dir(d) {
+		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+			return d
+		}
+	}
+	return ""
+}

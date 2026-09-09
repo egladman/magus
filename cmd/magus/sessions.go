@@ -20,6 +20,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -711,13 +712,7 @@ func checkoutRoots() func(string) string {
 		if root, ok := seen[cwd]; ok {
 			return root
 		}
-		root := ""
-		for dir := cwd; dir != "" && dir != "/"; dir = filepath.Dir(dir) {
-			if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
-				root = dir
-				break
-			}
-		}
+		root := repoid.CheckoutRoot(cwd)
 		seen[cwd] = root
 		return root
 	}
