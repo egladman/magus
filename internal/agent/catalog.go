@@ -103,7 +103,10 @@ import (
 // and a fence. A template action on its own line reads as a paragraph, so `{{if .Full}}`
 // flush against a heading left it with nothing above it. The skill has never passed lint
 // since it landed; the gate had not completed in between to say so.
-const SkillVersion = 55
+// 56: magus-architecture-review gains "Say when not to build it". It already applied
+// that test to a graph kind, which earns its place only by answering a question the
+// others cannot; nothing applied it to a mechanism that ACTS.
+const SkillVersion = 56
 
 const skillLicense = "GPL-3.0-or-later"
 

@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5301,
-  "edge_count": 9447,
+  "node_count": 5302,
+  "edge_count": 9448,
   "relations": [
     {
       "id": "annotates",
@@ -1797,7 +1797,7 @@
       "label": "internal",
       "source": "internal",
       "attrs": {
-        "dir_files": "164",
+        "dir_files": "165",
         "dir_languages": "buzz,markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md"
       }
     },
@@ -1807,7 +1807,7 @@
       "label": "internal/agent",
       "source": "internal/agent",
       "attrs": {
-        "dir_files": "154",
+        "dir_files": "155",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md#asse"
       }
     },
@@ -1817,7 +1817,7 @@
       "label": "internal/agent/skills",
       "source": "internal/agent/skills",
       "attrs": {
-        "dir_files": "151",
+        "dir_files": "152",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md#asse"
       }
     },
@@ -1827,8 +1827,8 @@
       "label": "internal/agent/skills/magus-architecture-review",
       "source": "internal/agent/skills/magus-architecture-review",
       "attrs": {
-        "dir_files": "9",
-        "dir_languages": "markdown,md#architecture-decisions-from-the-graph,md#audit-the-domain-model-itself,md#do-not-render-the-graph-yourself,md#match-the-existing-conventions,md#sizing-a-specific-refactor,md#survey-before-proposing,md#then-survey-the-opposite-what-is-too-thin-t"
+        "dir_files": "10",
+        "dir_languages": "markdown,md#architecture-decisions-from-the-graph,md#audit-the-domain-model-itself,md#do-not-render-the-graph-yourself,md#match-the-existing-conventions,md#say-when-not-to-build-it,md#sizing-a-specific-refactor,md#survey-before-proposing,md#then-survey-the"
       }
     },
     {
@@ -32419,6 +32419,16 @@
       "source": "internal/agent/skills/magus-architecture-review/SKILL.md#match-the-existing-conventions",
       "attrs": {
         "anchor": "match-the-existing-conventions",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:internal/agent/skills/magus-architecture-review/SKILL.md#say-when-not-to-build-it",
+      "kind": "docsection",
+      "label": "Say when not to build it",
+      "source": "internal/agent/skills/magus-architecture-review/SKILL.md#say-when-not-to-build-it",
+      "attrs": {
+        "anchor": "say-when-not-to-build-it",
         "level": "2"
       }
     },
@@ -98739,6 +98749,14 @@
     {
       "source": "docsection:internal/agent/skills/magus-architecture-review/SKILL.md#architecture-decisions-from-the-graph",
       "target": "docsection:internal/agent/skills/magus-architecture-review/SKILL.md#match-the-existing-conventions",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-architecture-review/SKILL.md"
+    },
+    {
+      "source": "docsection:internal/agent/skills/magus-architecture-review/SKILL.md#architecture-decisions-from-the-graph",
+      "target": "docsection:internal/agent/skills/magus-architecture-review/SKILL.md#say-when-not-to-build-it",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
