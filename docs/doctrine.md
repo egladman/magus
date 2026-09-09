@@ -327,6 +327,30 @@ on rather than from what the writer claims. A batch waits for a person because
 publishing is one outward-facing act; splitting it into a call per remark would
 turn the act that needs confirming into a series of small ones nobody confirms.
 
+### Corrective competence
+
+The skill this page protects is narrow: your ability to fix the thing yourself
+when the agent is wrong, or gone. Not speed, and not thinking in general.
+
+Two studies set the target. Bastani et al. (PNAS 122(26), 2025) measured a tutor
+that handed over answers at 48% better while it was available and 17% worse once
+it was taken away, against 127% better with no residual harm for a version that
+gave hints instead. Sankaranarayanan (arXiv 2602.20206, a preprint) found 77% of
+developers could not finish a 30-minute task once their assistant was withdrawn,
+against 39% of a group whose tool required a stated reason before it accepted
+output, at no cost to how fast either group shipped.
+
+The mechanisms are already on this page. Notes are human-authored by
+construction. `--ack` refuses without a terminal, agent hosts are denied it
+outright, and the count is shown to nobody but the reader. The guard advises
+where advice will do and denies only what cannot be undone. magus never calls a
+model, which is what makes the Friday above an option rather than a slogan.
+
+This repository is built with agents at scale: 113,430 agent-run shell commands
+in twenty-one days. Our own oversight lapsed too. In 22 of 203 recent sessions
+the guard was not running, and those sessions carried 17% of all commands. The
+only reason that number exists is that we went looking for it.
+
 ## Where this is strained
 
 Friction placed wrong is bureaucracy. A refusal that teaches and one that nags
@@ -377,3 +401,28 @@ records, so each passes the scope test; none is built:
 The line between automated and manual moves as a mechanism earns confidence.
 To move a row out of the table above, or a debt off this list, edit this page
 in the same commit that changes the behavior.
+
+### A record of refusals
+
+The decision to build and the decision to stop both stay with a person; what the
+tool owes them is a record that makes each one visible and cheap to revisit.
+Below is that record: capabilities magus could have had and does not, or had and
+removed, with what decided each and where to check it.
+
+| what                                                                   | what was decided                                                                                                                                                                 | where                                                     |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| an advisory when an agent edits a file it never looked up              | not built: 0.8% of 3,560 first edits were never anchored, and all 27 cases read by hand were matcher artifacts                                                                   | transcript measurement, 2026-09-02                        |
+| denying a recursive grep of a bare identifier, to force `refs`         | measured and refused: 45 such greps in the whole corpus, and `refs` answered roughly 60% of them; an advisory routed by the pattern's shape shipped instead, and it never blocks | `f963a9f1b`, measured with `9519797b3`                    |
+| an `ask` verdict, so a denial could be waved through in the moment     | built across 14 files and reverted the same day: two of the four host glues would have silently PERMITTED every raw-tool denial instead of prompting                             | `internal/agent/guard.go:25`, still three decisions       |
+| 47 half-built features found in an audit before the project was shared | each one killed, finished, or pinned with its reason; one kill was wrong and the person reversed it                                                                              | `05751be7f`                                               |
+| machine-wide memory admission control                                  | deleted; `memory_mb` kept as a slot weight                                                                                                                                       | `b6abdfe43`                                               |
+| rotating the activity trail from its write path                        | deleted rather than keep promising bounded retention to a workspace running no daemon                                                                                            | `42a0996c5`                                               |
+| `magus graph verify`                                                   | folded into `doctor`: no in-tree consumer, absent from the CLI registry, and filed under a graph it never read                                                                   | `3f805e159`                                               |
+| `magus_tail_log`                                                       | named in public as a duplicate of `magus_output` and still shipped, so it sits here as a debt rather than a refusal                                                              | `blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md` |
+| a model adapter                                                        | never built; the one extension seam that is absent rather than sealed                                                                                                            | [Scope](scope.md#where-others-drew-it)                    |
+| a paid tier, an account, a capability behind either                    | never built; there is nothing to upsell                                                                                                                                          | [Scope](scope.md#the-line)                                |
+| generating code your build depends on                                  | never built; nothing magus writes into your repository has to exist for `magus run build` to work                                                                                | [Scope](scope.md#the-line)                                |
+
+Two of those rows record a measurement that killed an idea somebody wanted,
+which is the only reason the rest of the list is worth anything. A ledger of
+things nobody was going to build proves nothing.
