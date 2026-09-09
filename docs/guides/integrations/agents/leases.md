@@ -41,8 +41,7 @@ that skill writes to and reads from.
 Only one thing in that table enforces, and it is not the ledger. The ledger is a
 declaration, the checkpoint is a reading, and the Plan surface renders both. The
 [guard](guard.md) is what reads the declaration back, on every file write and
-every command: see [what the guard enforces under a
-lease](#what-the-guard-enforces-under-a-lease). It grades only a worker that named
+every command: see [what the guard enforces under a lease](#what-the-guard-enforces-under-a-lease). It grades only a worker that named
 its lease, so the last step below - the actual diff against the checkpoint - is
 still what catches a write nobody could attribute.
 
@@ -117,8 +116,7 @@ Three properties are worth stating plainly.
 **A declared boundary is enforced elsewhere.** This store gates nothing: it
 records the text an orchestrator put in a worker's prompt, where a human can read
 it. The [agent guard](guard.md) is the one reader that turns it into a verdict;
-what it refuses is listed under [what the guard enforces under a
-lease](#what-the-guard-enforces-under-a-lease) below. Every uncertainty there
+what it refuses is listed under [what the guard enforces under a lease](#what-the-guard-enforces-under-a-lease) below. Every uncertainty there
 fails open with at most an advisory - no ledger, an unreadable one, a writer that
 named no lease - because this is a seatbelt for a harness that opted in and not a
 sandbox. Which is why the diff since each lease's checkpoint, the last step
