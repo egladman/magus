@@ -169,10 +169,14 @@ func TestCeilingExceededErrorSplitsWaitingFromOwnWork(t *testing.T) {
 
 // A leaf target composes nothing, so there is no split to report and the clause is
 // omitted rather than printed as a pair of zeroes.
+//
+// Asserted as one contiguous span, not as NotContains on the clause's wording: a negative
+// assertion on emitted prose goes vacuous the moment that prose is reworded, and this has
+// to fail whatever a wrongly-emitted split would have said.
 func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
 	err := CeilingExceededError(expiredCeiling(t), nil, "build", time.Minute, 90*time.Second)
 
 	require.Error(t, err)
-	assert.NotContains(t, err.Error(), "on its own work")
-	assert.Contains(t, err.Error(), "its process tree was killed")
+	assert.Contains(t, err.Error(),
+		`target "build" exceeded its declared timeout of 1m0s after 1m30s; its process tree was killed`)
 }
