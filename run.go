@@ -153,6 +153,7 @@ func (e redactedError) Unwrap() error { return e.err }
 // runResolved groups targets by name and executes them with already-applied
 // options. Shared by Run and the read-only RunCI entry point.
 func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
+	ctx = attributeRun(ctx)
 	type targetGroup struct {
 		name    string
 		targets []types.Target
@@ -2180,4 +2181,29 @@ func charmedTarget(target string, charms []string) string {
 		return target
 	}
 	return target + ":" + strings.Join(charms, ",")
+}
+
+// attributeRun gives a run an invocation identity when nothing upstream gave it one, so
+// the work it dispatches can recognize the resources this run already holds.
+//
+// The CLI's run and affected paths call BeginInvocation, which does this and opens the
+// event journal besides. Every other entry point reaches runResolved without either -
+// `magus x`, the MCP run and run_affected tools, and any embedder calling Run or
+// RunAffected directly - and an anonymous run is not merely unlogged. Ancestry is how a
+// descendant recognizes an ancestor's machine claim and its locks: with an empty
+// ancestors list, a cross-project dispatch takes a SECOND claim against memory the parent
+// already reserved, then queues behind the parent that is blocked waiting for it. That is
+// the deadlock measured on 2026-09-08, reachable from every entry point but the two the
+// CLI covers.
+//
+// Deliberately NOT a journal. Opening one here would truncate the file BeginInvocation
+// opened on the paths that do call it, and the journal is the CLI's to own - it fans out
+// live handlers and session facts this has no way to reproduce. Identity is the half that
+// is a correctness property rather than an observability one.
+func attributeRun(ctx context.Context) context.Context {
+	if journal.InvocationIDFromContext(ctx) != "" {
+		return ctx
+	}
+	id := journal.NewInvocationID()
+	return types.AppendInvocationAncestor(journal.WithInvocationID(ctx, id), os.Getpid(), id)
 }

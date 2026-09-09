@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,4 +51,26 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 		{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"test"}, Cwd: root, Trigger: journal.TriggerRun}, MagusVersion: "v0.test"},
 		{Kind: journal.KindFinished, Status: journal.StatusFail},
 	}, events)
+}
+
+// attributeRun is what keeps a run identifiable when the caller is not the CLI. The two
+// halves are asserted separately because they fail differently: an id with no ancestor
+// entry still logs, and still lets a descendant take a second machine claim.
+func TestAttributeRunNamesAnAnonymousRun(t *testing.T) {
+	ctx := attributeRun(context.Background())
+
+	id := journal.InvocationIDFromContext(ctx)
+	require.NotEmpty(t, id, "a run reached the engine with no invocation identity")
+	assert.True(t, types.HasInvocationAncestor(ctx, os.Getpid(), id),
+		"the run is not its own ancestor, so a descendant cannot recognize the resources it holds")
+}
+
+// An identity already on the context is the CLI's or the daemon's, and taking a second one
+// would orphan the first: the journal file, the pool entry and the locks are all keyed on
+// it, and a descendant comparing ancestry would stop recognizing its parent.
+func TestAttributeRunKeepsAnIdentityItWasGiven(t *testing.T) {
+	given := journal.NewInvocationID()
+	ctx := attributeRun(journal.WithInvocationID(context.Background(), given))
+
+	assert.Equal(t, given, journal.InvocationIDFromContext(ctx))
 }
