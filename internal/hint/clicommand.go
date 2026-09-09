@@ -96,6 +96,7 @@ var (
 	Session           = cmd("session")
 	SessionLoad       = cmd("session", "load")
 	SessionShow       = cmd("session", "show")
+	SessionLease      = cmd("session", "lease")
 	SessionAttention  = cmd("session", "attention")
 	SessionDispose    = cmd("session", "dispose")
 	SessionNotify     = cmd("session", "notify")
@@ -132,7 +133,7 @@ var AllCommands = []Command{
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
 	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
 	MemoryLs, MemoryPut, MemoryVerify, NotesLs, NotesGet, NotesEdit,
-	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
+	Session, SessionLoad, SessionShow, SessionLease, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,

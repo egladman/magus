@@ -119,6 +119,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// The bound value, which envDefault has already filled from the environment when no
 	// --lease was passed, so an explicit flag still wins.
 	actingLease := hf.Lease
+	// The checkout's own marker is the last resort, and the one a worker in its own
+	// worktree actually reaches the hook through: see leaseMarkerName.
+	if actingLease == "" {
+		actingLease = leaseFromTree(ctx)
+	}
 
 	input, hasInput, readErr := readGuardInput(in)
 	// A failed read is not an empty stdin, and collapsing the two cleared every
@@ -290,6 +295,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// it, and a sibling checkout's gate is the wrong tree before it is the wrong scope.
 		if verdict.Decision != "deny" {
 			if reason := denyLeaseScopedGate(ctx, actingLease, input.Value); reason != "" {
+				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
+			}
+		}
+		if verdict.Decision != "deny" {
+			if reason := denyLeaseScopedVCS(ctx, actingLease, input.Value); reason != "" {
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
 			}
 		}

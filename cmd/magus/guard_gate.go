@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -262,4 +263,97 @@ func validationNamesGate(validation string) bool {
 		}
 	}
 	return false
+}
+
+// leaseMarkerName is the file, beside the activity trail in a checkout's cache dir,
+// that binds a lease to THAT checkout. It exists because the environment cannot carry
+// a lease into a hook: a host runs its hooks with the host's own environment, so a
+// worker that exports BAGGAGE for its shell is invisible to the guard judging its
+// commands. A worker with its own worktree has one checkout, and a file in it is the
+// one channel both the worker's shell and the host's hook read. --lease and BAGGAGE
+// still win when set: the marker is the default of last resort.
+const leaseMarkerName = "lease"
+
+// leaseFromTree reads the lease bound to the checkout the hook is judging, or "".
+func leaseFromTree(ctx context.Context) string {
+	location := hookActivityTrail(ctx)
+	if location.base == "" {
+		return ""
+	}
+	raw, err := os.ReadFile(filepath.Join(location.base, leaseMarkerName))
+	if err != nil {
+		return ""
+	}
+	id := strings.TrimSpace(string(raw))
+	if !types.ValidLeaseID(id) {
+		return ""
+	}
+	return id
+}
+
+// denyLeaseScopedVCS refuses version-control mutation under a WORKER lease: a row with
+// a parent. The orchestrator lands every unit from the worker's tree, so a worker that
+// commits, pushes, stashes or reverts edits the state it is being integrated from, and a
+// whole-tree revert destroys a sibling's uncommitted work. A root lease, a lease with no
+// row, and no lease at all are untouched: a boundary nobody declared is not one of size
+// zero, the same rule the gate and the write arms follow.
+func denyLeaseScopedVCS(ctx context.Context, actingLease, command string) string {
+	if actingLease == "" {
+		return ""
+	}
+	me, ok := actingLiveLease(ctx, actingLease)
+	if !ok || me.Parent == "" {
+		return ""
+	}
+	cmds, ok := parseGuardCommands(command)
+	if !ok {
+		return ""
+	}
+	for _, c := range cmds {
+		op := vcsMutation(c)
+		if op == "" {
+			continue
+		}
+		return fmt.Sprintf(
+			"magus workspace: leave version control to the orchestrator: report your worktree path and `git status --short`, and it lands the work from there.\n"+
+				"`%s` runs `%s`, and lease %s is a worker under %s in this workspace's ledger. A worker that commits, pushes, stashes or reverts changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. If this lease really owns version control, clear its parent with the "+hint.ToolLedger.String()+" tool and retry.",
+			command, op, me.ID, me.Parent)
+	}
+	return ""
+}
+
+// vcsMutation names the git operation a parsed command performs when it is one a
+// worker must leave to the orchestrator, or "" for anything else. Global options
+// before the subcommand (-C <dir>, -c k=v) are skipped so a relocated commit is still a
+// commit.
+func vcsMutation(c guardCommand) string {
+	if c.Name != "git" {
+		return ""
+	}
+	var sub string
+	var rest []string
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
+		if strings.HasPrefix(a, "-") {
+			if a == "-C" || a == "-c" {
+				i++
+			}
+			continue
+		}
+		sub, rest = a, c.Args[i+1:]
+		break
+	}
+	switch sub {
+	case "commit", "push", "stash", "reset", "clean":
+		return "git " + sub
+	case "worktree":
+		if slices.Contains(rest, "remove") {
+			return "git worktree remove"
+		}
+	case "checkout":
+		if slices.Contains(rest, ".") {
+			return "git checkout ."
+		}
+	}
+	return ""
 }

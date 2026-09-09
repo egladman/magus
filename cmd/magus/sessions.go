@@ -18,6 +18,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/repoid"
@@ -56,6 +57,8 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		return sessionLoad(root, rest)
 	case "show":
 		return sessionShow(root, rest)
+	case "lease":
+		return sessionLease(root, rest)
 	case "attention":
 		return attentionList(root, rest)
 	case "dispose":
@@ -75,6 +78,7 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--limit <n>] [--since <when>]")
 	fmt.Fprintln(os.Stderr, "       magus session show <session-id>")
 	fmt.Fprintln(os.Stderr, "       magus session load [--file <path>]")
+	fmt.Fprintln(os.Stderr, "       magus session lease [<lease-id>]  # bind a lease to this checkout for the guard")
 	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
 	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
 	fmt.Fprintln(os.Stderr, "       magus session checkpoint [--note <text>]")
@@ -700,6 +704,44 @@ func repoScope(dir string) func(string) bool {
 		seen[cwd] = match
 		return match
 	}
+}
+
+// sessionLease binds a lease to this checkout, or reports the one bound. The binding
+// is a marker in the checkout's cache dir that the guard hook reads when neither
+// --lease nor BAGGAGE names one: a host runs its hooks with its own environment, so
+// the file is the only channel a worker's shell and the host's hook both see. One
+// line in a worker's brief (`magus session lease <id>`) is then what puts every
+// lease-scoped rule in force for it, instead of a paragraph of prohibitions.
+func sessionLease(root string, args []string) error {
+	if len(args) > 1 {
+		return usagef("magus session lease: takes at most one lease id")
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return fmt.Errorf("magus session lease: %w", err)
+	}
+	marker := filepath.Join(cacheDir, leaseMarkerName)
+	if len(args) == 0 {
+		raw, err := os.ReadFile(marker)
+		if err != nil {
+			fmt.Println("no lease is bound to this checkout")
+			return nil
+		}
+		fmt.Println(strings.TrimSpace(string(raw)))
+		return nil
+	}
+	id := args[0]
+	if !types.ValidLeaseID(id) {
+		return usagef("magus session lease: %q is not a lease id (letters, digits and -_./: only)", id)
+	}
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return fmt.Errorf("magus session lease: %w", err)
+	}
+	if err := os.WriteFile(marker, []byte(id+"\n"), 0o644); err != nil {
+		return fmt.Errorf("magus session lease: %w", err)
+	}
+	fmt.Printf("lease %s bound to %s; the guard now applies its ledger row to every hook here\n", id, root)
+	return nil
 }
 
 // checkoutRoots resolves a cwd to the checkout that contains it: the nearest

@@ -115,6 +115,9 @@ still working stays listed however long ago it began.
 **load**
 : Load a normalized agent-session event stream from a host transcript
 
+**lease**
+: Bind a lease to this checkout so the guard applies its ledger row here
+
 **show**
 : Report one loaded session: what it ran, what the rules say, what it loaded
 

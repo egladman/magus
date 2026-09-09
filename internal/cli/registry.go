@@ -1376,6 +1376,25 @@ transcript pointer lead back to.`,
 			},
 		},
 		{
+			Name:        "lease",
+			Short:       "Bind a lease to this checkout so the guard applies its ledger row here",
+			Description: "Write the lease id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one; with no id, print the lease bound.",
+			Long: `Bind a lease to this checkout.
+
+A host runs its hooks with the host's own environment, so a worker that
+exports BAGGAGE for its shell is invisible to the guard judging its commands.
+A worker with its own worktree has one checkout, and a marker in it is the one
+channel both the worker's shell and the host's hook read. Once bound, every
+lease-scoped rule applies here: writes outside the row's owned_paths, the ci
+gate under a narrower validation, and version-control mutation under a worker
+lease are all denied with the lease named.
+
+An explicit --lease on the hook, or BAGGAGE in the hook's environment, still
+wins over the marker. With no id the command prints the lease bound, or says
+none is.`,
+			Usage: "magus session lease [<lease-id>]",
+		},
+		{
 			Name:        "show",
 			Short:       "Report one loaded session: what it ran, what the rules say, what it loaded",
 			Description: "Summarize one loaded agent session: events by kind, commands grouped by program with re-judged verdicts, skills loaded, and files read and written.",

@@ -283,3 +283,63 @@ func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
 	require.NoError(t, hookCmd(ctx, strings.NewReader(command), &unleased, []string{"-o", "name"}))
 	assert.Equal(t, "pass\n", unleased.String(), "a caller naming no lease is scoped by nobody's row")
 }
+
+// TestLeaseFromTree pins the channel a worker in its own worktree reaches the hook
+// through: a marker in the checkout's cache dir, honored only when it holds a lease id.
+func TestLeaseFromTree(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+	base := hookActivityTrail(ctx).base
+
+	assert.Empty(t, leaseFromTree(ctx), "no marker, no lease")
+
+	require.NoError(t, os.WriteFile(filepath.Join(base, leaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
+	assert.Equal(t, "harness/lease-scoped-deny", leaseFromTree(ctx))
+
+	require.NoError(t, os.WriteFile(filepath.Join(base, leaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	assert.Empty(t, leaseFromTree(ctx), "a malformed marker binds nothing rather than something")
+}
+
+// TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
+// version-control mutations the orchestrator owns, with the lease and its parent named.
+func TestDenyLeaseScopedVCS(t *testing.T) {
+	worker := narrowLease()
+	worker.Parent = "harness"
+	ctx, _ := fleetFixture(t, worker)
+
+	for _, command := range []string{
+		"git commit -q -m done",
+		"git -C /tmp/elsewhere commit -m done",
+		"git push origin main",
+		"git stash push -u -m wip",
+		"git reset --hard HEAD",
+		"git clean -fd",
+		"git worktree remove ../x",
+		"git checkout .",
+		"cd sub && git commit -m done",
+	} {
+		reason := denyLeaseScopedVCS(ctx, worker.ID, command)
+		require.NotEmpty(t, reason, "%q", command)
+		assert.Contains(t, reason, worker.ID)
+		assert.Contains(t, reason, "harness", "the denial names the parent the worker belongs to")
+	}
+
+	for _, command := range []string{
+		"git status --short",
+		"git diff --stat",
+		"git checkout -- go.mod",
+		"git log --oneline -3",
+		"./magus run go::go-test . -- -run Guard ./cmd/magus/",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, worker.ID, command), "%q", command)
+	}
+}
+
+// TestDenyLeaseScopedVCSStaysQuiet covers the silences: no lease, a root lease with
+// no parent, and a lease nobody declared.
+func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
+	rootLease := narrowLease()
+	ctx, _ := fleetFixture(t, rootLease)
+	assert.Empty(t, denyLeaseScopedVCS(ctx, "", "git commit -m done"))
+	assert.Empty(t, denyLeaseScopedVCS(ctx, rootLease.ID, "git commit -m done"), "a lease with no parent is the orchestrator's own")
+	assert.Empty(t, denyLeaseScopedVCS(ctx, "harness/absent", "git commit -m done"))
+}
