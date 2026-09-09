@@ -1268,12 +1268,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// package importing observability; CacheTracer is nil (no-op) when disabled.
 		ctx = cache.ContextWithTracer(ctx, observability.CacheTracer(m.tel))
 	}
-	if m.cfg.Sandbox.Enabled {
-		var err error
-		ctx, err = m.applySandbox(ctx)
-		if err != nil {
-			return err
-		}
+	ctx, sandboxErr := m.ApplySandbox(ctx)
+	if sandboxErr != nil {
+		return sandboxErr
 	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	ctx = secret.ContextWithResolver(ctx, m.resolver)

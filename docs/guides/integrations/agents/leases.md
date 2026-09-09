@@ -230,6 +230,37 @@ Two absences are boundaries nobody declared rather than boundaries of size zero,
 and both scope nothing: an empty `owned_paths` on a row that is not `read_only`,
 and an empty `validation`.
 
+## What the sandbox enforces under a lease
+
+The guard above is a seatbelt for harnesses that opt in: it explains a boundary
+and, for a worker, denies the tool call that crosses it. The
+[sandbox](../../../concepts/sandbox.md) is the boundary itself, and it reads the
+same ledger row rather than a second declaration - a boundary written twice is a
+boundary that disagrees with itself.
+
+When `sandbox.enabled` is true and the acting lease resolves to a live row with a
+`parent` and non-empty `owned_paths`, every target run and every `magus buzz`
+script in that checkout gets a filesystem WRITE grant of exactly:
+
+- the `owned_paths`, resolved as globs against the workspace root (a glob that
+  matches nothing grants nothing);
+- the workspace cache directory and `$TMPDIR`, which a target needs to produce
+  output at all.
+
+Reads are untouched: the row declares a write boundary, and a worker has to read
+the tree it is changing. A refusal is recorded on the trail as a
+`sandbox_denial` carrying the lease id, so a reader can say whose boundary was
+hit rather than only that something was blocked.
+
+Nothing narrows for a ROOT lease (a row with no parent is the orchestrator, and
+it owns the checkout), for a lease id that names no live row, for a row with no
+owned paths, or when the sandbox is off.
+
+A `forbidden_path` inside an owned one is refused, and it costs the directory
+holding it as well: both this policy and landlock are allowlists with no deny
+rule, so the enclosing grant is replaced by grants on its children, and a new
+file created beside the forbidden entry is refused with it.
+
 ## Watch it: Dashboard's Lease plan
 
 The [console](../../../reference/console.md)'s Dashboard includes a Lease plan

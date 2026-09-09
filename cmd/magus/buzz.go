@@ -109,7 +109,11 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// is what lets a denial land as sandbox_denial, the way a target's does.
 	if m, lerr := loadMagus(ctx, root); lerr == nil && m != nil {
 		ctx = types.WithWorkspace(ctx, m)
-		sctx, serr := m.WithSandbox(ctx)
+		// Confined by the same policy a target run gets, lease narrowing included. A
+		// script is the shortest way around a boundary the sandbox enforces everywhere
+		// else: `magus buzz -e 'fs\write(...)'` writes through the same bindings a spell
+		// does, and leaving it unpoliced would make the write grant advice.
+		sctx, serr := m.ApplySandbox(ctx)
 		if serr != nil {
 			return serr
 		}

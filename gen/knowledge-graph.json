@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5409,
-  "edge_count": 9570,
+  "node_count": 5411,
+  "edge_count": 9575,
   "relations": [
     {
       "id": "annotates",
@@ -1357,7 +1357,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "588",
+        "dir_files": "589",
         "dir_languages": "markdown,md#1-built-in-command-spells-import-maguscharm,md#2-workspace-spells--magusfiles-import-charm,md#3-raw-rfc-6902-data-the-lowest-level,md#4-function-targets--ops-branch-in-code,md#a-bypass-fails-closed,md#a-gap-worth-knowing,md#a-known-leak-a-multi"
       }
     },
@@ -11932,6 +11932,16 @@
       }
     },
     {
+      "id": "docsection:docs/concepts/sandbox.md#a-lease-narrows-it-further",
+      "kind": "docsection",
+      "label": "A lease narrows it further",
+      "source": "docs/concepts/sandbox.md#a-lease-narrows-it-further",
+      "attrs": {
+        "anchor": "a-lease-narrows-it-further",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/concepts/sandbox.md#diagnostic-map",
       "kind": "docsection",
       "label": "Diagnostic map",
@@ -17268,6 +17278,16 @@
       "source": "docs/guides/integrations/agents/leases.md#what-the-guard-enforces-under-a-lease",
       "attrs": {
         "anchor": "what-the-guard-enforces-under-a-lease",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/leases.md#what-the-sandbox-enforces-under-a-lease",
+      "kind": "docsection",
+      "label": "What the sandbox enforces under a lease",
+      "source": "docs/guides/integrations/agents/leases.md#what-the-sandbox-enforces-under-a-lease",
+      "attrs": {
+        "anchor": "what-the-sandbox-enforces-under-a-lease",
         "level": "2"
       }
     },
@@ -61088,6 +61108,14 @@
     },
     {
       "source": "doc:docs/concepts/sandbox.md",
+      "target": "doc:docs/guides/integrations/agents/leases.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/sandbox.md"
+    },
+    {
+      "source": "doc:docs/concepts/sandbox.md",
       "target": "doc:docs/guides/integrations/daemon.md",
       "relation": "references",
       "confidence": "extracted",
@@ -64584,6 +64612,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/concepts/sandbox.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
       "target": "doc:docs/guides/integrations/agents.md",
       "relation": "references",
       "confidence": "extracted",
@@ -64628,6 +64664,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
@@ -85672,6 +85716,14 @@
     },
     {
       "source": "docsection:docs/concepts/sandbox.md#the-allowlist-is-the-policy",
+      "target": "docsection:docs/concepts/sandbox.md#a-lease-narrows-it-further",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/sandbox.md"
+    },
+    {
+      "source": "docsection:docs/concepts/sandbox.md#the-allowlist-is-the-policy",
       "target": "docsection:docs/concepts/sandbox.md#environment-scrubbing",
       "relation": "contains",
       "confidence": "extracted",
@@ -89545,6 +89597,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#what-the-guard-enforces-under-a-lease",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#what-the-sandbox-enforces-under-a-lease",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

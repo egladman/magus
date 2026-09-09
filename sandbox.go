@@ -12,31 +12,42 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxapply "github.com/egladman/magus/internal/sandbox/apply"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
-// applySandbox applies the process-wide landlock sandbox and attaches the Policy to ctx.
-func (m *Magus) applySandbox(ctx context.Context) (context.Context, error) {
-	p := sandboxapply.FromConfig(ctx, m.ws.Root, m.cfg)
-	return sandboxapply.Apply(ctx, p, m.ws.Root)
-}
-
-// WithSandbox attaches this workspace's sandbox policy to ctx, applying the
-// process-wide landlock ruleset exactly as Run does, and returns ctx untouched when
-// the workspace has the sandbox disabled.
-//
-// It exists for the surfaces that execute workspace code outside a target run: the
-// Buzz script runner in particular, whose script gets the same host module surface a
-// magusfile does and so must get the same policy. Behind the library seam for the same
-// reason ApplyUnionSandbox is: policy assembly stays in one place, so a caller cannot
-// assemble a policy that differs from the one a target gets.
-func (m *Magus) WithSandbox(ctx context.Context) (context.Context, error) {
+// ApplySandbox applies the process-wide landlock sandbox and attaches the Policy to ctx,
+// or returns ctx unchanged when this workspace's config leaves the sandbox off. Callers
+// outside a target run (a `magus buzz` script) go through here so a script and a target
+// are confined by the same policy; Run calls it too, so there is one condition rather
+// than a copy per entry point.
+func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if !m.cfg.Sandbox.Enabled {
 		return ctx, nil
 	}
 	return m.applySandbox(ctx)
+}
+
+func (m *Magus) applySandbox(ctx context.Context) (context.Context, error) {
+	p := sandboxapply.FromConfig(ctx, m.ws.Root, m.cfg)
+	p = sandboxapply.NarrowToLease(ctx, p, m.ws.Root, m.CacheDir(), m.actingLease())
+	return sandboxapply.Apply(ctx, p, m.ws.Root)
+}
+
+// actingLease is the ledger lease this process claims to be acting as: the W3C
+// baggage a worker inherits, else the marker `magus session lease` bound to this
+// checkout. A host runs its hooks with its own environment, so the marker is the
+// channel a worker in its own worktree actually reaches the guard AND the sandbox
+// through; both read it through this one function so the two tiers cannot
+// disagree about who is acting.
+func (m *Magus) actingLease() string {
+	if lease := trail.LeaseFromEnv(); lease != "" {
+		return lease
+	}
+	return ledger.LeaseFromMarker(m.CacheDir())
 }
 
 // ApplyUnionSandbox unions the landlock policies of every workspace root and

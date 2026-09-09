@@ -490,3 +490,29 @@ func (s *Store) write(f ledgerFile) error {
 	}
 	return file.WriteFileAtomic(s.path, append(raw, '\n'), 0o644)
 }
+
+// MarkerName is the file, in a checkout's cache dir, that binds a lease to THAT
+// checkout (`magus session lease <id>` writes it). It exists because the
+// environment cannot carry a lease into a hook: a host runs its hooks with its own
+// environment, so a worker exporting BAGGAGE for its shell is invisible to the guard
+// judging its commands. A worker with its own worktree has one checkout, and a file
+// in it is the one channel the worker's shell, the host's hook and the sandbox all
+// read. BAGGAGE and an explicit --lease still win; the marker is the last resort.
+const MarkerName = "lease"
+
+// LeaseFromMarker reads the lease bound to the checkout whose cache dir is cacheDir,
+// or "" when none is bound or the marker does not hold a lease id.
+func LeaseFromMarker(cacheDir string) string {
+	if cacheDir == "" {
+		return ""
+	}
+	raw, err := os.ReadFile(filepath.Join(cacheDir, MarkerName))
+	if err != nil {
+		return ""
+	}
+	id := strings.TrimSpace(string(raw))
+	if !types.ValidLeaseID(id) {
+		return ""
+	}
+	return id
+}

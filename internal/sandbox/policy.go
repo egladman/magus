@@ -28,6 +28,11 @@ type Policy struct {
 	Env        env.Allowlist      // allowlist of inheritable env-var names
 	BaseEnv    []string           // frozen pre-scrubbed env snapshot (prevents cross-run mutation)
 	EnvDropped []string           // names withheld from BaseEnv by the allowlist, recorded for the env-dropped metric
+	// Lease is the ledger lease whose declared boundary narrowed FS, empty on a policy
+	// derived from config alone. Read only to name the boundary on a denial: it is not a
+	// [Policy.Fingerprint] input, because the kernel ruleset is built from FS and two
+	// policies with equal rules must still share one landlock application.
+	Lease string
 }
 
 // CheckRead reports whether the policy permits a read of path; nil Policy permits everything.
@@ -62,7 +67,7 @@ func (p *Policy) CheckExec(path string) error {
 func (p *Policy) CheckReadCtx(ctx context.Context, path string) error {
 	err := p.CheckRead(path)
 	RecordCheck(ctx, "read", err)
-	recordDenial(ctx, "read", path, err)
+	recordDenial(ctx, p, "read", path, err)
 	return err
 }
 
@@ -70,7 +75,7 @@ func (p *Policy) CheckReadCtx(ctx context.Context, path string) error {
 func (p *Policy) CheckWriteCtx(ctx context.Context, path string) error {
 	err := p.CheckWrite(path)
 	RecordCheck(ctx, "write", err)
-	recordDenial(ctx, "write", path, err)
+	recordDenial(ctx, p, "write", path, err)
 	return err
 }
 
@@ -78,7 +83,7 @@ func (p *Policy) CheckWriteCtx(ctx context.Context, path string) error {
 func (p *Policy) CheckExecCtx(ctx context.Context, path string) error {
 	err := p.CheckExec(path)
 	RecordCheck(ctx, "exec", err)
-	recordDenial(ctx, "exec", path, err)
+	recordDenial(ctx, p, "exec", path, err)
 	return err
 }
 
@@ -97,7 +102,7 @@ func (p *Policy) CheckExecCtx(ctx context.Context, path string) error {
 // Allows are dropped. A read check fires once per glob match, and a durable append-only file is
 // the wrong place for a hot loop's happy path: a denial ends the operation, so it is rare by
 // construction.
-func recordDenial(ctx context.Context, access, path string, err error) {
+func recordDenial(ctx context.Context, p *Policy, access, path string, err error) {
 	if err == nil {
 		return
 	}
@@ -105,9 +110,16 @@ func recordDenial(ctx context.Context, access, path string, err error) {
 	if base == "" {
 		return
 	}
+	lease := ""
+	if p != nil {
+		lease = p.Lease
+	}
 	trail.Append(ctx, base, trail.Event{
 		Ts:   time.Now().UnixMilli(),
 		Kind: trail.KindSandboxDenial,
+		// Set only on a lease-narrowed policy, so a reader can tell a boundary a lease
+		// declared for itself from the workspace default every run already has.
+		Lease: lease,
 		// The magusfile is what asked, and no identity below this layer knows who ran it.
 		// Naming a person or an agent magus cannot identify would be worse than naming the
 		// file that made the request.

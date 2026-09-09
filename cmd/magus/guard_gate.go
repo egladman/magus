@@ -265,30 +265,14 @@ func validationNamesGate(validation string) bool {
 	return false
 }
 
-// leaseMarkerName is the file, beside the activity trail in a checkout's cache dir,
-// that binds a lease to THAT checkout. It exists because the environment cannot carry
-// a lease into a hook: a host runs its hooks with the host's own environment, so a
-// worker that exports BAGGAGE for its shell is invisible to the guard judging its
-// commands. A worker with its own worktree has one checkout, and a file in it is the
-// one channel both the worker's shell and the host's hook read. --lease and BAGGAGE
-// still win when set: the marker is the default of last resort.
-const leaseMarkerName = "lease"
+// leaseMarkerName is the checkout-bound lease marker; the definition and the reason
+// it exists live beside the ledger (ledger.MarkerName), because the sandbox reads
+// the same file and the two tiers must not disagree about who is acting.
+const leaseMarkerName = ledger.MarkerName
 
 // leaseFromTree reads the lease bound to the checkout the hook is judging, or "".
 func leaseFromTree(ctx context.Context) string {
-	location := hookActivityTrail(ctx)
-	if location.base == "" {
-		return ""
-	}
-	raw, err := os.ReadFile(filepath.Join(location.base, leaseMarkerName))
-	if err != nil {
-		return ""
-	}
-	id := strings.TrimSpace(string(raw))
-	if !types.ValidLeaseID(id) {
-		return ""
-	}
-	return id
+	return ledger.LeaseFromMarker(hookActivityTrail(ctx).base)
 }
 
 // denyLeaseScopedVCS refuses version-control mutation under a WORKER lease: a row with
