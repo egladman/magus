@@ -120,10 +120,12 @@ magus\project({
         // that fan-out, so the flag bought nothing for as long as it has been here. Once
         // the engine started honouring it (see YieldRunIsolation), the cost arrived
         // without the benefit: every other ci member reaches generate, so all of them
-        // serialized behind its entire codegen chain, and because a declared timeout
-        // wraps a target's whole body - dependency waits included - lint, build, test and
-        // security each burned their 15m ceiling waiting and were killed. Measured: those
-        // four ran 15m52s apiece in one gate; security alone finishes in 14s.
+        // serialized behind its entire codegen chain with nothing of their own to report,
+        // the built-in 15m stall window ran out, and the watchdog took the invocation.
+        // Measured: lint, build, test and security ran 15m52s apiece in one gate;
+        // security alone finishes in 14s. Not a ceiling of their own: security is the
+        // only one of the four that declares a timeout, and this workspace sets no
+        // target_timeout.
         //
         // What the drift check actually needs isolation for is its hash-before against
         // hash-after comparison, not for running the generators. Declaring it over the
