@@ -207,6 +207,99 @@ func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
 	assert.True(t, b.Request("child-docs", child(3)).Granted, "the queued child is seated once a peer finishes")
 }
 
+// TestMachineBudgetSeatsAChildOfEachStalledRoot is the pair no exclusion can reach: two
+// independent roots, each blocked in exec on a child that needs more than the other root
+// leaves free. Neither parent can release until its child runs, so without make's free
+// slot the machine parks forever.
+func TestMachineBudgetSeatsAChildOfEachStalledRoot(t *testing.T) {
+	b, now, _ := testBudget(t, 12_000, 16)
+
+	rootA := b.Request("a", types.MachineClaim{
+		Project: "a", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100, Invocation: "100:aaa",
+	})
+	require.True(t, rootA.Granted)
+	rootB := b.Request("b", types.MachineClaim{
+		Project: "b", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:bbb",
+	})
+	require.True(t, rootB.Granted)
+
+	*now = now.Add(time.Second)
+	childA := b.Request("child-a", types.MachineClaim{
+		Project: "a", Target: "test", MemoryMB: 7000, Slots: 1, PID: 300,
+		Invocation: "300:ccc", Ancestors: []string{"100:aaa"},
+	})
+	assert.True(t, childA.Granted, "the bottom of a stalled chain always has a seat")
+
+	// The control. A top-level run has no stalled ancestor to charge a seat to, so this
+	// cannot become a way past a full machine.
+	*now = now.Add(time.Second)
+	stranger := types.MachineClaim{Project: "c", Target: "build", MemoryMB: 7000, Slots: 1, PID: 400}
+	v := b.Request("stranger", stranger)
+	assert.False(t, v.Granted, "a stranger does not get a seat out of somebody else's stall")
+	assert.True(t, v.Fits, "it would fit on an idle machine, so it queues rather than being refused")
+
+	*now = now.Add(time.Second)
+	childB := b.Request("child-b", types.MachineClaim{
+		Project: "b", Target: "test", MemoryMB: 7000, Slots: 1, PID: 500,
+		Invocation: "500:ddd", Ancestors: []string{"200:bbb"},
+	})
+	assert.True(t, childB.Granted, "the symmetric root is seated too, so both chains finish")
+
+	b.Release(childA.ID)
+	b.Release(rootA.ID)
+	b.Release(childB.ID)
+	b.Release(rootB.ID)
+	assert.True(t, b.Request("stranger", stranger).Granted, "and the machine drains")
+}
+
+// TestMachineBudgetFreeSeatsOneChildPerStalledAncestor is the bound. Make's tokens are
+// unit-sized, so a seat per requester costs it little; a claim here is megabytes, and
+// four seats under one parent would put 28 GB of children on a 12 GB machine.
+func TestMachineBudgetFreeSeatsOneChildPerStalledAncestor(t *testing.T) {
+	b, now, _ := testBudget(t, 12_000, 16)
+	stranger := b.Request("stranger", types.MachineClaim{
+		Project: "other", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100,
+	})
+	require.True(t, stranger.Granted)
+	require.True(t, b.Request("parent", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:bbb",
+	}).Granted)
+
+	child := func(i int) types.MachineClaim {
+		return types.MachineClaim{
+			Project: ".", Target: fmt.Sprintf("t%d", i), MemoryMB: 7000, Slots: 1, PID: 300 + i,
+			Invocation: fmt.Sprintf("%d:ccc", 300+i), Ancestors: []string{"200:bbb"},
+		}
+	}
+	first := b.Request("child-0", child(0))
+	require.True(t, first.Granted, "one child of a stalled parent is seated over budget")
+
+	*now = now.Add(time.Second)
+	for i := 1; i < 4; i++ {
+		v := b.Request(fmt.Sprintf("child-%d", i), child(i))
+		assert.False(t, v.Granted, "the parent's one seat is spent on a child that IS running")
+		assert.True(t, v.Fits)
+	}
+	assert.Equal(t, 19_000, b.Snapshot().HeldMB, "one claim over a full machine, which is make's own bound")
+
+	b.Release(stranger.ID)
+	b.Release(first.ID)
+	assert.True(t, b.Request("child-1", child(1)).Granted, "a queued sibling is seated as peers release")
+}
+
+func TestMachineBudgetFreeSeatIsNotABypassForWhatCanNeverFit(t *testing.T) {
+	b, _, _ := testBudget(t, 4000, 8)
+	require.True(t, b.Request("parent", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 1000, Slots: 1, PID: 100, Invocation: "100:aaa",
+	}).Granted)
+
+	v := b.Request("child", types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 64_000, Slots: 1, PID: 200, Ancestors: []string{"100:aaa"},
+	})
+	assert.False(t, v.Granted)
+	assert.False(t, v.Fits, "a seat is room for a claim this machine can hold, not a waiver of the budget")
+}
+
 func TestMachineSnapshotReportsHoldersAndWaiters(t *testing.T) {
 	b, now, alive := testBudget(t, 10_000, 8)
 	require.True(t, b.Request("w1", types.MachineClaim{
@@ -229,7 +322,10 @@ func TestMachineSnapshotReportsHoldersAndWaiters(t *testing.T) {
 	// Snapshot retires nothing, so a corpse is filtered out of the report rather than
 	// shown to a reader who would go looking for a process that has gone.
 	alive[100] = false
-	assert.Empty(t, b.Snapshot().Holders, "a dead holder is not reported")
+	dead := b.Snapshot()
+	assert.Empty(t, dead.Holders, "a dead holder is not reported")
+	assert.Zero(t, dead.HeldMB, "and it is not billed either; the ci gate reads these totals as saturation")
+	assert.Zero(t, dead.HeldSlots)
 }
 
 // fakeAdmitter is a MachineAdmitter whose answers a test writes. It records every
