@@ -55,17 +55,23 @@ type VCSDriver interface {
 	// backend can resolve it; nothing here reads one back.
 	//
 	// A handle stays resolvable until it is older than the retention PrunePreserved
-	// enforces. That bound is part of the contract because the alternative is a store
-	// that only grows, and a caller recording a handle deserves to know it has a
-	// lifetime rather than discovering later that it does not.
+	// enforces, on every backend whose PrunePreserved can enforce one. Sapling's cannot
+	// and says why, so its captures accumulate; a caller recording a handle deserves to
+	// know which of the two it is holding rather than discovering later.
 	Preserve(ctx context.Context, dir string) (string, error)
 	// PrunePreserved drops every state Preserve minted in dir before the given time,
 	// and reports the handles it dropped, oldest first.
 	//
-	// Only what MAGUS minted. A backend whose Preserve mints nothing prunes nothing and
-	// returns no handles: its snapshots are its own model's to keep, and reaching into
-	// them would delete history magus did not create. That is the same guarantee, not a
-	// weaker one - magus cleans up after itself everywhere, and nowhere else.
+	// Only what MAGUS minted, and only what it can PROVE it minted. Membership of a
+	// namespace magus owns is not proof: a user can land on a magus-shaped shelf name
+	// without trying, and anyone can write into a magus ref prefix. What identifies an
+	// object is the message Preserve left on it, so an implementation reads that before
+	// deleting. This runs unasked inside every Preserve, so the cost of guessing wrong
+	// is a user's only copy of their work.
+	//
+	// Returning no handles means one of two things, and they are not the same. A backend
+	// that mints nothing has nothing to drop. A backend that mints something it cannot
+	// remove has a GAP, and its implementation says so where a reader will meet it.
 	PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error)
 	Metadata(ctx context.Context, dir string) (VCSMeta, error)
 	// Dirty reports whether the working tree has uncommitted changes. When paths

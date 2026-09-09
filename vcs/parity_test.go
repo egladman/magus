@@ -41,14 +41,21 @@ type parityBackend struct {
 	// is what makes PrunePreserved checkable: a pruner that reports the right handles and
 	// deletes nothing passes every other assertion.
 	listPreserved func(t *testing.T, dir string) []string
+	// mints says whether Preserve leaves an object behind at all, and prunes whether
+	// magus can then drop it. They are separate fields because sl is the case where they
+	// differ, and collapsing them is what let the suite assert a false fact: sl was listed
+	// as minting nothing, so every prune assertion compared nil to nil while Preserve was
+	// in fact minting a hidden commit per call that nothing ever removes.
+	mints  bool
+	prunes bool
 }
 
 func parityBackends() []parityBackend {
 	return []parityBackend{
-		{"git", "git", gitVCS{}, gitInitRepo, gitReadback, gitListPreserved},
-		{"hg", "hg", hgVCS{}, hgInitRepo, hgReadback, hgListPreserved},
-		{"sl", "sl", saplingVCS{}, slInitRepo, slReadback, mintsNothing},
-		{"jj", "jj", jjVCS{}, jjInitRepo, jjReadback, mintsNothing},
+		{"git", "git", gitVCS{}, gitInitRepo, gitReadback, gitListPreserved, true, true},
+		{"hg", "hg", hgVCS{}, hgInitRepo, hgReadback, hgListPreserved, true, true},
+		{"sl", "sl", saplingVCS{}, slInitRepo, slReadback, slListPreserved, true, false},
+		{"jj", "jj", jjVCS{}, jjInitRepo, jjReadback, mintsNothing, false, false},
 	}
 }
 
@@ -762,6 +769,50 @@ func TestParityPreserveCostsNoState(t *testing.T) {
 	})
 }
 
+// TestParityPreserveFromASubdirectoryCostsNoState is the same invariant asserted from the
+// one place every other test in this file avoids: a dir that is NOT the repository root.
+//
+// Every fixture here passed the root, which is what let an asymmetry hide. Mercurial's
+// status answers in ROOT-relative paths while its revert and forget resolve arguments
+// against the CWD, so from a subdirectory the capture read "sub/deleted.txt" and handed
+// that string back to a command that looked for "sub/sub/deleted.txt", found nothing, and
+// exited ZERO. The user was left with a tracked file scheduled for removal they never
+// asked for, reported as success.
+func TestParityPreserveFromASubdirectoryCostsNoState(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"sub/tracked.txt": "v1\n", "sub/deleted.txt": "gone\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "tracked.txt"), []byte("v2\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "untracked.txt"), []byte("scratch\n"), 0o644))
+		// The deleted tracked file is the fixture's whole point: it is the only pending
+		// state whose restore is a path argument the backend has to resolve.
+		require.NoError(t, os.Remove(filepath.Join(dir, "sub", "deleted.txt")))
+
+		// Read from the ROOT on both sides, so the comparison is over one vocabulary
+		// whatever the driver was handed.
+		beforeFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
+		require.NoError(t, err)
+		beforeDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+
+		handle, err := b.drv.Preserve(t.Context(), filepath.Join(dir, "sub"))
+		require.NoErrorf(t, err, "%s: Preserve failed from a subdirectory", b.name)
+		require.NotEmptyf(t, handle, "%s: a dirty tree produced no handle", b.name)
+
+		afterFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
+		require.NoError(t, err)
+		assert.ElementsMatchf(t, beforeFiles, afterFiles,
+			"%s: Preserve from a subdirectory changed which paths report dirty", b.name)
+		afterDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+		assert.Equalf(t, beforeDiff, afterDiff,
+			"%s: Preserve from a subdirectory changed the uncommitted diff", b.name)
+		untracked, err := os.ReadFile(filepath.Join(dir, "sub", "untracked.txt"))
+		require.NoErrorf(t, err, "%s: Preserve removed the untracked file", b.name)
+		assert.Equalf(t, "scratch\n", string(untracked), "%s: Preserve changed an untracked file", b.name)
+	})
+}
+
 // A clean tree has nothing to capture, and says so with "" rather than an error or a
 // handle to emptiness - matching how PatchDigest already reports "nothing measured".
 func TestParityPreserveOfACleanTreeIsEmpty(t *testing.T) {
@@ -834,21 +885,43 @@ func hgListPreserved(t *testing.T, dir string) []string {
 	return names
 }
 
-// mintsNothing is sl's and jj's store of magus-minted state, which is empty by
-// construction: sl leaves its snapshot in Sapling's hidden set and jj mints nothing at
-// all, so on both backends there is nothing for magus to list or to prune. Shared rather
-// than written twice, because it is one fact about two backends.
+// slListPreserved names the snapshots sl's Preserve left in Sapling's hidden set.
+//
+// They are reachable only by their message, which is also the only thing that identifies
+// them as magus's, so this is the same query a person would run to find them by hand. It
+// exists because the fixture used to claim sl minted nothing: with an empty mint set,
+// every prune assertion in this file compared nil to nil and could not have noticed that
+// sl accumulates one hidden commit per capture forever.
+func slListPreserved(t *testing.T, dir string) []string {
+	t.Helper()
+	out := vcsTestOutput(t, dir, "sl", "log", "--hidden",
+		"-r", "desc('"+preserveMessage+"')", "--template", "{node}\n")
+	var nodes []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			nodes = append(nodes, line)
+		}
+	}
+	return nodes
+}
+
+// mintsNothing is jj's store of magus-minted state, which is empty by construction: jj
+// has already snapshotted the working copy, so its Preserve reads a commit id and writes
+// nothing. Named rather than inlined so the claim is legible next to the three backends
+// that do mint.
 func mintsNothing(*testing.T, string) []string { return nil }
 
 // TestParityPrunePreservedDropsWhatMagusMinted holds the other half of Preserve's
 // contract: a handle has a LIFETIME, and what ends it is magus deleting its own object
 // and nothing else.
 //
-// One test over four backends again, and the split it exposes is the honest one. git and
-// hg mint a named thing magus owns and must therefore clean up; sl and jj mint nothing,
-// so their mint set is empty and every assertion below reads correctly against it. That
-// is the same guarantee on all four - magus removes what magus wrote - rather than a
-// weaker promise hidden behind an optional interface.
+// One test over four backends again, and the split it exposes is the honest one, which
+// is not the same split the fixture used to claim. git and hg mint a named object magus
+// owns and drop it on schedule. jj mints nothing. sl mints a hidden commit and CANNOT
+// drop it, because the only Sapling command that removes a commit is test-only and
+// aborts on the dirty working copy Preserve always runs against (see
+// saplingVCS.PrunePreserved), so the assertion for it is that the capture SURVIVES:
+// the gap stated, rather than a nil compared against nil.
 func TestParityPrunePreservedDropsWhatMagusMinted(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -859,6 +932,11 @@ func TestParityPrunePreservedDropsWhatMagusMinted(t *testing.T) {
 		_, err := b.drv.Preserve(t.Context(), dir)
 		require.NoErrorf(t, err, "%s: Preserve failed", b.name)
 		minted := b.listPreserved(t, dir)
+		if b.mints {
+			require.NotEmptyf(t, minted, "%s: Preserve left nothing in the store this test could watch", b.name)
+		} else {
+			require.Emptyf(t, minted, "%s: a backend documented to mint nothing left an object behind", b.name)
+		}
 
 		// A cutoff OLDER than the capture drops nothing. Without this the test passes for a
 		// pruner that ignores its argument and deletes everything it finds.
@@ -870,8 +948,14 @@ func TestParityPrunePreservedDropsWhatMagusMinted(t *testing.T) {
 
 		dropped, err = b.drv.PrunePreserved(t.Context(), dir, time.Now().Add(time.Hour))
 		require.NoErrorf(t, err, "%s: PrunePreserved failed", b.name)
-		assert.ElementsMatchf(t, minted, dropped, "%s: reported the wrong handles", b.name)
-		assert.Emptyf(t, b.listPreserved(t, dir), "%s: reported handles it did not delete", b.name)
+		if b.prunes {
+			assert.ElementsMatchf(t, minted, dropped, "%s: reported the wrong handles", b.name)
+			assert.Emptyf(t, b.listPreserved(t, dir), "%s: reported handles it did not delete", b.name)
+		} else {
+			assert.Emptyf(t, dropped, "%s: reported dropping what it cannot drop", b.name)
+			assert.ElementsMatchf(t, minted, b.listPreserved(t, dir),
+				"%s: the store lost a capture nothing here is able to remove", b.name)
+		}
 
 		// Pruning is still not allowed to cost working-copy state, for the same reason
 		// capturing is not: it runs inside Preserve, on a tree somebody is working in.

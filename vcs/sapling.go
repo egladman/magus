@@ -1062,20 +1062,33 @@ func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	if out, err := run("uncommit"); err != nil {
 		return sha, fmt.Errorf("sl preserve: recorded %s but uncommit failed, so the working copy is parked on it: %w: %s", sha, err, out)
 	}
-	if err := hgFamilyRestorePending(ctx, "sl", dir, pending); err != nil {
+	if err := hgFamilyRestorePending(ctx, "sl", pending); err != nil {
 		return sha, fmt.Errorf("sl preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
 			sha, pending.unknown, pending.missing, err)
 	}
 	return sha, nil
 }
 
-// PrunePreserved drops nothing, because Preserve anchored nothing to drop.
+// PrunePreserved drops nothing, and on this backend that is a GAP rather than a property.
 //
-// The uncommit leaves the snapshot in Sapling's hidden set, which is where Sapling puts
-// everything it stops showing you and is the reason `sl` can promise nothing is ever
-// lost. No bookmark, no remote name, nothing magus owns - so its lifetime is Sapling's
-// own, and a retention pass here would be magus deleting commits out of a store built on
-// not deleting them.
+// Preserve MINTS here: the uncommit leaves the snapshot in Sapling's hidden set, so one
+// commit accumulates per capture and no retention ever ends it. That is not the promise
+// git and hg keep, and the CLI says so rather than implying the 30-day bound holds
+// everywhere.
+//
+// Nothing available closes it. `sl debugstrip` is the only command that removes a commit,
+// and it is test-only in the shipped binary: it crashes on an "assert util.istest()"
+// outside Sapling's own test mode (measured 2026-09-09 on 0.2.20260811-150444). Its help
+// also says it aborts on a dirty working copy unless forced, and forcing DISCARDS those
+// changes; a dirty working copy is the only state Preserve ever runs in. Hiding is
+// already what the uncommit did.
+//
+// The commits stay reachable by their message, so a person can find them:
+//
+//	sl log --hidden -r "desc('magus preserved working copy')"
+//
+// Revisit when Sapling ships a non-debug command that drops a hidden commit without
+// touching the working copy; the check is that the log above comes back empty after it.
 func (v saplingVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
 	return nil, nil
 }

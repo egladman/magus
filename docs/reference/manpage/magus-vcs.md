@@ -54,9 +54,15 @@ say.
 it cannot rebuild either one. --preserve additionally captures the uncommitted
 work - tracked edits and untracked files alike - and prints a handle that gets it
 back, using each backend's own mechanism: a commit under refs/magus/preserved for
-git, a kept shelf for Mercurial, the snapshot Sapling and Jujutsu already hold. The
-working copy is untouched either way. A preserved capture is kept for 30 days and
-then dropped, so the store cannot grow without bound.
+git, a kept shelf for Mercurial, a commit Sapling keeps hidden, and for Jujutsu the
+working-copy commit it already holds. The working copy is untouched either way.
+
+Retention differs, so it is stated per backend rather than promised once. On git
+and Mercurial a capture is dropped once it is 30 days old, and that pass runs
+inside every preserve. On Sapling it is not: magus mints a hidden commit there and
+no Sapling command removes one without discarding the working copy, so those stay
+until you remove them; list them with sl log --hidden -r "desc('magus preserved
+working copy')". Jujutsu mints nothing, so it accumulates nothing.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.
