@@ -64,7 +64,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 44 | `magus query project=.` | `buzz-test`, `generate`, `release-index` |
+| . | 45 | `magus query project=.` | `buzz-test`, `generate`, `release-index` |
 | console | 8 | `magus query project=console` | `preflight`, `build`, `ci` |
 | docs | 18 | `magus query project=docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -109,6 +109,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci-shard` | Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed. |
 | `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
 | `toolchain-report` | serve is the workspace-root dev loop for BOTH deployables. |
+| `session-load` | Loads this checkout's own Claude Code sessions, so the repository dogfoods the recipe it ships the same way it invokes the guard template it ships rather than keeping a private copy. |
 | `serve` |  |
 | `image-build` | Two axes, one charm each. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |

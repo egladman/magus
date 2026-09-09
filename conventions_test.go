@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -361,6 +362,12 @@ var templatePage = map[string]string{
 	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
 	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
 	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
+	// The three session-load recipes share a page with the contract they emit and
+	// the coverage table that compares them, because choosing between hosts is
+	// exactly the question that page answers.
+	"magus-session-load-claude-code.sh": sessionGuideDoc,
+	"magus-session-load-codex.sh":       sessionGuideDoc,
+	"magus-session-load-opencode.sh":    sessionGuideDoc,
 }
 
 // hookTemplates are the artifacts a reader installs. The directory also holds
@@ -380,7 +387,32 @@ var hookTemplates = []string{
 	"codex-hooks.json",
 	"cursor-guard.sh",
 	"opencode-plugin.ts",
+	// The session-load recipes are shipped artifacts too: version-stamped, embedded
+	// in their page, and registered here so a new one cannot arrive unnoticed. They
+	// carry no guard coverage, because they judge nothing, and answer the session
+	// parity gate below instead.
+	"magus-session-load-claude-code.sh",
+	"magus-session-load-codex.sh",
+	"magus-session-load-opencode.sh",
 }
+
+// sessionRecipePrefix names a session-load recipe. Registration is by NAME rather
+// than by a hand-kept second list alone, so a fourth host's recipe dropped into
+// the directory is claimed by the gates below the moment it exists.
+const sessionRecipePrefix = "magus-session-load-"
+
+// sessionRecipes are the per-host extraction recipes. Every one of them must also
+// appear in hookTemplates, which is what gets it embedded and version-stamped;
+// this list is what the coverage and parity gates iterate.
+var sessionRecipes = []string{
+	"magus-session-load-claude-code.sh",
+	"magus-session-load-codex.sh",
+	"magus-session-load-opencode.sh",
+}
+
+// sessionGuideDoc is the page that embeds the recipes and carries the parity
+// table they are checked against.
+const sessionGuideDoc = "docs/guides/integrations/agents/session-load.md"
 
 type hookSettings struct {
 	Hooks struct {
@@ -629,17 +661,43 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 	// Codex ships no script of its own: codex-hooks.json points at the two
 	// generic templates. Those templates claim the codex host, so this is what
 	// makes the claim checkable rather than aspirational.
+	//
+	// The claim is read off the GUARD declaration rather than off the file's text.
+	// A session-load recipe names the same host on a contract this config has
+	// nothing to do with, and matching that would demand a hook wiring for a file
+	// nobody wires to a hook.
 	wiring, err := os.ReadFile(filepath.Join(hookTemplateDir, "codex-hooks.json"))
 	require.NoError(t, err)
 	for _, name := range hookTemplates {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err)
-		if !strings.Contains(string(body), "host=codex") && !strings.Contains(string(body), ",codex") {
+		if !claimsGuardHost(string(body), "codex") {
 			continue
 		}
 		assert.Contains(t, string(wiring), name,
 			"%s claims to cover the codex host, but codex-hooks.json never invokes it", name)
 	}
+}
+
+// claimsGuardHost reports whether a template names host in one of its guard
+// coverage declarations.
+func claimsGuardHost(body, host string) bool {
+	for _, line := range strings.Split(body, "\n") {
+		_, decl, found := strings.Cut(line, guardCoverageMarker)
+		if !found {
+			continue
+		}
+		for _, kv := range strings.Fields(decl) {
+			key, value, ok := strings.Cut(kv, "=")
+			if !ok || key != "host" {
+				continue
+			}
+			if slices.Contains(strings.Split(value, ","), host) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // failOpenArmRe matches the tests a shipped template makes before answering
@@ -775,6 +833,260 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 			"announces itself (see magus-guard-command.sh's GUARD_UNAVAILABLE_RESPONSE). Add a notice,\n"+
 			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
 		name, line)
+}
+
+// TestEverySessionRecipeIsRegistered gives the session recipes the property the
+// guard templates already have: a fourth host arrives and nothing stays green by
+// accident.
+//
+// Two directions, because either one alone leaves a hole. A recipe in the
+// directory that no list names answers to no gate; a recipe listed here but
+// absent from hookTemplates is neither version-stamped nor embedded in its page,
+// so a reader browsing the docs site never sees it.
+func TestEverySessionRecipeIsRegistered(t *testing.T) {
+	registered := make(map[string]bool, len(sessionRecipes))
+	for _, name := range sessionRecipes {
+		registered[name] = true
+		assert.Contains(t, hookTemplates, name,
+			"%s is a session recipe but is not in hookTemplates, so it carries no version marker\n"+
+				"and the guide is not required to embed it.", name)
+	}
+
+	entries, err := os.ReadDir(hookTemplateDir)
+	require.NoError(t, err, "read %s", hookTemplateDir)
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, sessionRecipePrefix) {
+			continue
+		}
+		assert.True(t, registered[name],
+			"%s ships %s, but sessionRecipes does not list it, so the parity gates skip it:\n"+
+				"no coverage declaration is demanded of it and the table in %s owes it no row.",
+			hookTemplateDir, name, sessionGuideDoc)
+	}
+}
+
+// sessionCoverage is host -> dimension -> stance.
+type sessionCoverage map[string]map[string]string
+
+// parseSessionCoverage reads every session-coverage declaration out of the
+// recipes, and is the sibling of parseGuardCoverage: same shape, different
+// contract. A recipe that names a dimension the contract does not have, or omits
+// one it does, fails here rather than in a report that quietly reads the gap as
+// a measured zero.
+func parseSessionCoverage(t *testing.T) sessionCoverage {
+	t.Helper()
+	stances := map[string]bool{}
+	for _, s := range agent.SessionStances() {
+		stances[s] = true
+	}
+
+	cov := sessionCoverage{}
+	for _, name := range sessionRecipes {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+
+		found := false
+		for _, line := range strings.Split(string(body), "\n") {
+			_, decl, ok := strings.Cut(line, agent.SessionCoverageMarker)
+			if !ok {
+				continue
+			}
+			found = true
+			fields := map[string]string{}
+			for _, kv := range strings.Fields(decl) {
+				key, value, split := strings.Cut(kv, "=")
+				require.True(t, split, "%s: coverage declaration field %q is not key=value", name, kv)
+				fields[key] = value
+			}
+			require.Equal(t, strconv.Itoa(agent.SessionSchemaVersion), fields["schema"],
+				"%s declares session schema %q; the contract is agent.SessionSchemaVersion=%d.\n"+
+					"A schema bump means every recipe must be updated and re-downloaded before it loads again.",
+				name, fields["schema"], agent.SessionSchemaVersion)
+			host := fields["host"]
+			require.NotEmpty(t, host, "%s: coverage declaration names no host", name)
+			require.Nil(t, cov[host],
+				"host %q has two session-coverage declarations; one recipe per host, or the gate cannot tell which is true", host)
+
+			declared := map[string]string{}
+			for _, dimension := range agent.SessionDimensions() {
+				stance, ok := fields[dimension]
+				require.True(t, ok,
+					"%s declares session coverage for host %q but says nothing about %q.\n"+
+						"Every dimension in agent.SessionDimensions needs an explicit stance (yes or none):\n"+
+						"an undeclared dimension is one nobody asked about, and a report reads that as a zero it never measured.",
+					name, host, dimension)
+				require.True(t, stances[stance], "%s: unknown stance %q for %q (want yes or none)", name, stance, dimension)
+				declared[dimension] = stance
+			}
+			cov[host] = declared
+		}
+		assert.True(t, found, "%s carries no %s line, so nothing states what its host can supply", name, agent.SessionCoverageMarker)
+	}
+	require.NotEmpty(t, cov, "no %s declarations found in any session recipe", agent.SessionCoverageMarker)
+	return cov
+}
+
+// TestSessionParityTableMatchesTheRecipeDeclarations keeps the guide's
+// hand-written "Session load across hosts" table honest against the recipes.
+//
+// The table is what a person reads before believing a report. A cell claiming a
+// dimension the recipe cannot supply turns "unobservable" into a silent zero,
+// which is the one reading this whole arrangement exists to prevent.
+func TestSessionParityTableMatchesTheRecipeDeclarations(t *testing.T) {
+	cov := parseSessionCoverage(t)
+	guide, err := os.ReadFile(sessionGuideDoc)
+	require.NoError(t, err, "read %s", sessionGuideDoc)
+
+	rows := sessionParityRows(t, string(guide))
+	for host, dimensions := range cov {
+		cells, ok := rows[normalizeHost(host)]
+		require.True(t, ok,
+			"host %q is declared by a recipe but has no row in the session parity table in %s.\n"+
+				"Every host with a recipe belongs in the table a reader uses to judge a report.", host, sessionGuideDoc)
+		for dimension, stance := range dimensions {
+			cell, ok := cells[dimension]
+			require.True(t, ok, "the session parity table has no %q column; the contract needs one", dimension)
+			got := "none"
+			if strings.HasPrefix(strings.ToLower(cell), "yes") {
+				got = "yes"
+			}
+			assert.Equal(t, stance, got,
+				"session parity table row %q, column %q reads %q, which disagrees with the recipe's declaration.\n"+
+					"Fix whichever is wrong - the table is a promise to a reader, the declaration is what the file does.",
+				host, dimension, cell)
+		}
+	}
+
+	var declared []string
+	for host := range cov {
+		declared = append(declared, normalizeHost(host))
+	}
+	sort.Strings(declared)
+	for row := range rows {
+		assert.Contains(t, declared, row,
+			"the session parity table in %s promises host %q, which no recipe declares coverage for", sessionGuideDoc, row)
+	}
+}
+
+// sessionParityRows extracts the guide's session table as row label -> dimension
+// -> cell. Column headers are folded to the contract's dimension names, so a
+// header may read "hook output" while the contract says hook-output.
+func sessionParityRows(t *testing.T, guide string) map[string]map[string]string {
+	t.Helper()
+	_, section, found := strings.Cut(guide, "Session load across hosts")
+	require.True(t, found, "%s has no 'Session load across hosts' section; the table is the human half of this gate", sessionGuideDoc)
+
+	fold := strings.NewReplacer(" ", "-", "`", "")
+	var header []string
+	rows := map[string]map[string]string{}
+	for _, line := range strings.Split(section, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			if len(rows) > 0 || header != nil {
+				break
+			}
+			continue
+		}
+		cells := splitTableRow(line)
+		switch {
+		case header == nil:
+			for _, cell := range cells {
+				header = append(header, fold.Replace(strings.ToLower(cell)))
+			}
+		case strings.HasPrefix(cells[0], "---"):
+		default:
+			row := map[string]string{}
+			for i, cell := range cells {
+				if i < len(header) && i > 0 {
+					row[header[i]] = cell
+				}
+			}
+			rows[normalizeHost(cells[0])] = row
+		}
+	}
+	require.NotEmpty(t, rows, "parsed no rows out of the session parity table in %s", sessionGuideDoc)
+	return rows
+}
+
+// sessionExitArmRe matches a recipe giving up: a bare `exit 0` inside a
+// conditional block, which is how every one of these arms ends.
+var sessionExitArmRe = regexp.MustCompile(`^exit 0$`)
+
+// TestSessionRecipeFailOpenArmsAnnounceThemselves is the session half of the
+// doctrine's enforcement point, and it exists for the same reason its guard
+// sibling does: a recipe that extracted nothing looks exactly like a host nobody
+// used, and that reading is the one the audit must never invite.
+//
+// Structural, so rewording a message costs nothing and DELETING one fails.
+func TestSessionRecipeFailOpenArmsAnnounceThemselves(t *testing.T) {
+	for _, name := range sessionRecipes {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+
+		lines := strings.Split(string(body), "\n")
+		arms := 0
+		for i, line := range lines {
+			if !strings.HasPrefix(strings.TrimSpace(line), "if ") {
+				continue
+			}
+			block := lines[i:failOpenArmEnd(lines, i)]
+			if !sessionArmGivesUp(block) {
+				continue
+			}
+			arms++
+			assert.True(t, strings.Contains(strings.Join(block, "\n"), ">&2"),
+				"%s stops extracting at line %d and says nothing.\n"+
+					"A recipe that loaded no events looks exactly like a host nobody used, so every arm that\n"+
+					"gives up announces why on stderr.", name, i+1)
+		}
+		assert.NotZero(t, arms,
+			"%s has no arm that gives up, so either it now fails some other way - update sessionExitArmRe -\n"+
+				"or it aborts on a missing tool, which is a change this gate should have been told about.", name)
+	}
+}
+
+// sessionArmGivesUp reports whether a conditional block ends the run rather than
+// skipping one input.
+func sessionArmGivesUp(block []string) bool {
+	for _, l := range block {
+		if sessionExitArmRe.MatchString(strings.TrimSpace(l)) {
+			return true
+		}
+	}
+	return false
+}
+
+// sessionRecipeCorpus is the testscript that executes a session recipe against a
+// synthetic transcript. Synthetic on purpose: a real one carries a person's own
+// commands and prompts, and a fixture is committed forever.
+const sessionRecipeCorpus = "cmd/magus/testdata/script/session_load_recipes.txtar"
+
+// TestSessionRecipeCorpusCoversEveryKind ties the executed cases to the contract
+// the declarations answer to.
+//
+// Coverage parity asks a recipe to DECLARE what its host supplies; this asks that
+// somebody ran it and looked at what came out. Without it, adding a kind would
+// demand new declarations while the corpus quietly kept asserting the old ones,
+// which is exactly how a shell artifact ships broken with a correct declaration
+// on top of it.
+//
+// A kind no recipe can currently produce is declared rather than skipped:
+// `# kind: file.read unreachable - <why>` satisfies this in the file where the
+// next person will look.
+func TestSessionRecipeCorpusCoversEveryKind(t *testing.T) {
+	body, err := os.ReadFile(sessionRecipeCorpus)
+	require.NoError(t, err, "read %s", sessionRecipeCorpus)
+	corpus := string(body)
+
+	for _, kind := range agent.SessionKinds() {
+		label := "# kind: " + kind
+		assert.Contains(t, corpus, label,
+			"%s has no case labeled %q.\n"+
+				"Every kind in the session contract needs one executed case, or an explicit\n"+
+				"`%s unreachable - <why>` line when no recipe can produce it.",
+			sessionRecipeCorpus, label, label)
+	}
 }
 
 // transportCorpus is the testscript that executes the sh templates against real

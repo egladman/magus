@@ -1437,6 +1437,12 @@
           "reads_secrets": false
         },
         {
+          "name": "session-load",
+          "declared": "session_load",
+          "doc": "Loads this checkout's own Claude Code sessions, so the repository dogfoods the recipe it ships the same way it invokes the guard template it ships rather than keeping a private copy.",
+          "reads_secrets": false
+        },
+        {
           "name": "serve",
           "reads_secrets": false
         }

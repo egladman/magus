@@ -77,7 +77,9 @@ what it costs you.
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install surface, [The guard](agents/guard.md) for what is denied and why,
 [Guard hook templates](agents/guard-templates.md) for the two files Claude Code
-and Codex run, [Attention hooks](agents/notifications.md) for `magus session notify`,
+and Codex run, [Session load recipes](agents/session-load.md) for reading a
+host's own session log back into magus,
+[Attention hooks](agents/notifications.md) for `magus session notify`,
 and [Leases](agents/leases.md) for the surface an agent uses when it
 fans work out across several.
 
