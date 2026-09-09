@@ -722,9 +722,12 @@ func sessionLease(root string, args []string) error {
 	marker := filepath.Join(cacheDir, leaseMarkerName)
 	if len(args) == 0 {
 		raw, err := os.ReadFile(marker)
-		if err != nil {
+		if os.IsNotExist(err) {
 			fmt.Println("no lease is bound to this checkout")
 			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("magus session lease: %w", err)
 		}
 		fmt.Println(strings.TrimSpace(string(raw)))
 		return nil

@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5406,
-  "edge_count": 9564,
+  "node_count": 5407,
+  "edge_count": 9565,
   "relations": [
     {
       "id": "annotates",
@@ -1147,7 +1147,7 @@
       "label": "benchmarks",
       "source": "benchmarks",
       "attrs": {
-        "dir_files": "106",
+        "dir_files": "107",
         "dir_languages": "buzz,markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-corpus,md#agent-harness-effectiveness-benchmark,md#analysis-image,md#answer,md#answer-format,md#arms,md#behavior-change,md#benchmark-analysis,md#budget-caps,md#catc"
       }
     },
@@ -1157,7 +1157,7 @@
       "label": "benchmarks/agent",
       "source": "benchmarks/agent",
       "attrs": {
-        "dir_files": "64",
+        "dir_files": "65",
         "dir_languages": "markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-corpus,md#agent-harness-effectiveness-benchmark,md#analysis-image,md#answer,md#answer-format,md#arms,md#behavior-change,md#benchmark-analysis,md#budget-caps,md#catch-me-"
       }
     },
@@ -1187,7 +1187,7 @@
       "label": "benchmarks/agent/tasks",
       "source": "benchmarks/agent/tasks",
       "attrs": {
-        "dir_files": "35",
+        "dir_files": "36",
         "dir_languages": "markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-corpus,md#answer,md#answer-format,md#behavior-change,md#catch-me-up-on-what-landed-since-release-2,md#changing-a-task-invalidates-prior-numbers,md#query-strings-come-out"
       }
     },
@@ -1197,8 +1197,8 @@
       "label": "benchmarks/agent/tasks/_placeholder",
       "source": "benchmarks/agent/tasks/_placeholder",
       "attrs": {
-        "dir_files": "1",
-        "dir_languages": "markdown"
+        "dir_files": "2",
+        "dir_languages": "markdown,md#the-answer-file-holds-the-wrong-value"
       }
     },
     {
@@ -8399,6 +8399,16 @@
       "attrs": {
         "anchor": "task-validity-and-outcome-validity",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/_placeholder/task.md#the-answer-file-holds-the-wrong-value",
+      "kind": "docsection",
+      "label": "The answer file holds the wrong value",
+      "source": "benchmarks/agent/tasks/_placeholder/task.md#the-answer-file-holds-the-wrong-value",
+      "attrs": {
+        "anchor": "the-answer-file-holds-the-wrong-value",
+        "level": "1"
       }
     },
     {
@@ -58966,6 +58976,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "benchmarks/agent/tasks/README.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/_placeholder/task.md",
+      "target": "docsection:benchmarks/agent/tasks/_placeholder/task.md#the-answer-file-holds-the-wrong-value",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/_placeholder/task.md"
     },
     {
       "source": "doc:benchmarks/agent/tasks/add-metrics-percentile/task.md",
