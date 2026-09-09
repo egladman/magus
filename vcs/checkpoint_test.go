@@ -2,6 +2,7 @@ package vcs
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -160,4 +161,32 @@ func TestCheckpointPreservesOnlyWhenAsked(t *testing.T) {
 	// The identity half of the record is unaffected by capturing: same tree, same digests.
 	assert.Equal(t, plain.PatchDigest, kept.PatchDigest)
 	assert.Equal(t, plain.UntrackedDigest, kept.UntrackedDigest)
+}
+
+// preserveFailsAfterMinting is a driver whose Preserve returns a handle AND an error,
+// which is the shape hg and sl deliberately produce: the shelf or the snapshot commit
+// exists from that point on, and only the handle can reach it. Everything else is the real
+// git driver, so nothing else about the checkpoint is faked.
+type preserveFailsAfterMinting struct {
+	types.VCSDriver
+}
+
+func (preserveFailsAfterMinting) Preserve(context.Context, string) (string, error) {
+	return "e5e5e5e5", errors.New("recorded e5e5e5e5, but the working copy still shows [scratch.txt] added")
+}
+
+// TestCheckpointKeepsTheHandleWhenPreservingFails is the counterpart to those two
+// drivers' contract. A capture that half-succeeded has already minted an object in the
+// user's repository; returning a zero checkpoint alongside the error threw away the only
+// thing that reaches it, which turns a recoverable failure into an orphan.
+func TestCheckpointKeepsTheHandleWhenPreservingFails(t *testing.T) {
+	dir, res := checkpointRepo(t)
+	writeFile(t, dir, "scratch.txt", "unfinished\n")
+	res.VCS = preserveFailsAfterMinting{VCSDriver: res.VCS}
+
+	cp, err := Checkpoint(context.Background(), dir, res, true)
+
+	require.Error(t, err, "a failed preserve is still a failure")
+	assert.Equal(t, "e5e5e5e5", cp.Preserved, "the handle to the minted object was discarded")
+	assert.NotEmpty(t, cp.Revision, "the identity the checkpoint had already resolved was discarded too")
 }

@@ -53,11 +53,16 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preser
 	cp.PatchDigest = patchDigest(patch)
 	cp.UntrackedDigest = untrackedDigest(ctx, dir, res)
 	if preserve {
+		// The handle is recorded BEFORE the error is weighed, because hg and sl both
+		// return one alongside a failure on purpose: the shelf or the snapshot commit
+		// exists from that point, and on sl the working copy can be parked on it. Dropping
+		// the handle there would leave a minted object with nothing pointing at it, which
+		// is the one outcome preserving exists to prevent.
 		handle, err := res.VCS.Preserve(ctx, dir)
-		if err != nil {
-			return types.VCSCheckpoint{}, fmt.Errorf("vcs checkpoint: %w", err)
-		}
 		cp.Preserved = handle
+		if err != nil {
+			return cp, fmt.Errorf("vcs checkpoint: %w", err)
+		}
 	}
 	return cp, nil
 }
