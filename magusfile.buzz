@@ -141,6 +141,7 @@ magus\project({
         // Its input is a host's session store, which no glob in this tree can key,
         // and a replay would report the sessions of whatever ran last.
         "session-load": {"skip_cache": "reads an agent host's session store, which changes independently of this tree"},
+        "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
         // Declares no outputs, deliberately: the output globs are what EnsureMergeDriver
         // writes into .gitattributes, and /magus is gitignored, so declaring it would name
         // a path that can never conflict. A cacheable target with nothing to restore is the
@@ -2790,6 +2791,57 @@ export fun agent_bench_test(ctx: magus\Context, args: [str]) > void !> any {
         "-v", root + "/benchmarks/agent:/w", "-w", "/w/analysis", image,
         "python3", "-m", "unittest", "discover", "-v",
     ]});
+}
+
+// Turns a results tree into the benchmark report: extract one metrics record per
+// run, analyze the paired deltas, render report.md, all in the container the
+// analysis is written for. `-- --results <dir>` names a tree other than results/
+// (a synthetic one from makefixture.py, say); `-- --image <img>` overrides the
+// image the way agent-bench-test does. Reads run artifacts that change under it,
+// so it never replays from cache.
+export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
+    try {
+        proc\which("docker");
+    } catch (e) {
+        throw "agent-bench-report needs a docker daemon: the analysis runs in the benchmark image";
+    }
+    var image = "python:3.12-slim";
+    var results = "results";
+    var synthetic = false;
+    var i = 0;
+    while (i < args.len()) {
+        if (args[i] == "--synthetic") {
+            synthetic = true;
+            i = i + 1;
+        } else {
+            if (i + 1 < args.len()) {
+                if (args[i] == "--image") { image = args[i + 1]; }
+                if (args[i] == "--results") { results = args[i + 1]; }
+            }
+            i = i + 2;
+        }
+    }
+    final root = vcs\root();
+    final mount = ["-v", root + "/benchmarks/agent:/w", image, "python3"];
+    var steps = mut [];
+    // The synthetic tree is the pipeline's own control, the way the runner's golden
+    // and null runs are: a known results tree must produce a report before a real
+    // one is trusted to.
+    if (synthetic) {
+        // makefixture creates results/ under the directory it is given.
+        steps.append(["/w/analysis/makefixture.py", "/w/results-synthetic"]);
+        results = "results-synthetic/results";
+    }
+    steps.append(["/w/analysis/extract.py", "/w/" + results, "-o", "/w/metrics.jsonl"]);
+    steps.append(["/w/analysis/analyze.py", "/w/metrics.jsonl", "-o", "/w/analysis.json", "--seed", "20260902"]);
+    steps.append(["/w/analysis/report.py", "/w/analysis.json", "-o", "/w/report.md"]);
+    foreach (step in steps) {
+        var argv = mut [];
+        foreach (part in mount) { argv.append(part); }
+        foreach (part in step) { argv.append(part); }
+        docker["docker-run"](ctx, {"args": argv});
+    }
+    magus\log.info("benchmark report written to benchmarks/agent/report.md");
 }
 
 // Runs internal/compress's tests under the CGO tags, which the ordinary test target

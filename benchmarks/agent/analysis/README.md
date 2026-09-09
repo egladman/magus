@@ -12,10 +12,9 @@ library, so `python:3.12-slim` runs it as-is with no build:
 docker pull python:3.12-slim
 ```
 
-The `Dockerfile` beside this README pins that image for anyone who wants a
-named one (`docker build -t magus-bench-analysis benchmarks/agent/analysis`).
-It exists because `benchmarks/agent/Dockerfile` did not yet when this landed;
-delete it and use that image once it does.
+`benchmarks/agent/Dockerfile` pins that image with a `python3` entrypoint for
+anyone who wants a named one; the commands below use the upstream image
+directly, so they spell `python` themselves.
 
 ## Invocations
 
@@ -43,10 +42,11 @@ docker run --rm -v "$PWD/benchmarks/agent:/w" python:3.12-slim \
   python /w/analysis/makefixture.py /tmp/fx
 ```
 
-The magus agent guard denies a raw `docker run` that does work, so an agent
-session in this repo runs these as
-`magus run docker::docker-run . -- <the args above>`, which needs a magus binary
-that can load this workspace.
+The magus agent guard denies a raw `docker run` that does work, so inside this
+repo the same steps are targets: `magus run agent-bench-test .` runs the unit
+tests, and `magus run agent-bench-report .` runs extract, analyze and report
+over `results/` (`-- --results <dir>` for another tree, `-- --image <img>` for
+another image). Both need a magus binary that loads this workspace.
 
 `extract.py` takes `--pricing` if you need a table other than the one beside it.
 `analyze.py` takes `--seed`; the bootstrap is seeded per metric and task, so the

@@ -5,3 +5,8 @@
 results/*
 !results/.gitkeep
 __pycache__/
+# written by agent-bench-report from whatever results/ holds
+results-synthetic/
+metrics.jsonl
+analysis.json
+report.md

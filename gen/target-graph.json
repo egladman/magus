@@ -1412,6 +1412,20 @@
           "reads_secrets": false
         },
         {
+          "name": "agent-bench-report",
+          "declared": "agent_bench_report",
+          "doc": "Turns a results tree into the benchmark report: extract one metrics record per run, analyze the paired deltas, render report.md, all in the container the analysis is written for.",
+          "spells": [
+            {
+              "spell": "docker",
+              "ops": [
+                "docker-run"
+              ]
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
           "name": "compress-cgo-test",
           "declared": "compress_cgo_test",
           "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.",
