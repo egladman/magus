@@ -9,8 +9,8 @@
 // destroyed together so neither outlives the other.
 //
 // This package is the subject of two figures on the docs site; edit them alongside it.
-// magus:diagram daemon-share: the boxes "/api/v1/share" and "LAN listener".
-// magus:diagram daemon-http: the box "/api/v1/share".
+// magus:diagram daemon-share (the boxes "/api/v1/share" and "LAN listener").
+// magus:diagram daemon-http (the box "/api/v1/share").
 //
 // The console app is served from the SAME origin as its API on this listener, so
 // the phone's browser never issues a cross-origin request and CORS never engages.
