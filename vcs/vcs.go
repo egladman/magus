@@ -428,8 +428,8 @@ type hgFamilyPending struct {
 	missing []string
 }
 
-// hgFamilyRoot resolves the repository root, which is where every step of the
-// pending-state dance has to run.
+// hgFamilyRoot resolves the repository root, which is where reading the pending state and
+// putting it back both have to run.
 //
 // `hg status` answers in ROOT-relative paths while `hg revert` and `hg forget` resolve
 // their arguments against the CWD, so the same string names two different files whenever
@@ -438,6 +438,14 @@ type hgFamilyPending struct {
 // ZERO, leaving the file scheduled for removal that the user never asked for. Anchoring
 // both halves at the root makes the two agree; Sapling needs it for the mirror-image
 // reason, since its status is CWD-relative from a subdirectory and root-relative here.
+//
+// The capture itself (hg's shelve, Sapling's commit --addremove) runs in the caller's dir
+// and needs no anchoring, because it carries no pathspec: both act on the whole
+// repository wherever inside it they are invoked.
+//
+// The root comes back with symlinks RESOLVED, so it is not the caller's dir string with a
+// suffix trimmed. A repository deliberately reached through a symlink gets its real path
+// here, and every command anchored on it reports that path back.
 func hgFamilyRoot(ctx context.Context, prog, dir string) (string, error) {
 	cmd := vcsExec(ctx, prog, "root")
 	cmd.Dir = dir
