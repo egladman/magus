@@ -97,6 +97,18 @@ type PrettyHandler struct {
 	// Per RUN rather than a constant line, because a run that minted none would
 	// otherwise explain a notation nothing on screen uses.
 	mintedRef bool
+	// blocked groups a root failure with the dependent targets whose failure
+	// only restated it, so one cause is printed once and the targets it took
+	// down are named in a single line at the summary. blockedAt indexes into it
+	// by cause; both are per RUN and cleared by resetRun.
+	//
+	// Ordering assumption: a dependency fails before its dependents, so the root
+	// reports first and becomes the key holder. Nothing enforces that. If some
+	// path ever reported a dependent first, the dependent would hold the key and
+	// the real root would be listed as blocked by it. That reads no worse than
+	// printing every restatement in full, which is what happens today.
+	blockedAt map[causeKey]int
+	blocked   []blockedGroup
 	// rowFailure maps each band row to the index in the drawn failure list it
 	// shows, or -1 for a row that is not a failure (a project header). Written
 	// by band, read by HitFailure.
@@ -742,6 +754,11 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// wording: nothing executed, so "cached / ran / failed" would all read 0
 		// for a plan that intends to run plenty. Dry-ness is stated here and
 		// nowhere else in the run, so the two outputs differ in one line.
+
+		// Ahead of the counts, because it is the list that turns the one printed
+		// failure back into the full set of targets that stopped.
+		h.printBlocked(colorize)
+
 		lead := "summary: "
 		if colorize {
 			lead = "\nSummary: "
@@ -963,6 +980,20 @@ type failureReport struct {
 	logPath string
 }
 
+// causeKey identifies a failure by its project and by its cause with every
+// dependency hop stripped, which is exactly what a root failure and each target
+// it blocked have in common.
+type causeKey struct {
+	project string
+	cause   string
+}
+
+// blockedGroup is one root failure and the targets suppressed under it.
+type blockedGroup struct {
+	root    string   // heading of the target that reported the cause first
+	blocked []string // targets whose failure only restated it, in report order
+}
+
 // printFailure keeps the failure and every useful next step together so a reader
 // does not need to infer which concurrent project, target, or captured log failed.
 //
@@ -977,6 +1008,9 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 	heading := label
 	if target != "" {
 		heading += " " + target
+	}
+	if h.suppressBlocked(heading, project, target, cause) {
+		return
 	}
 	h.ensureLease()
 	pinned := false
@@ -1057,6 +1091,92 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 	}
 }
 
+// suppressBlocked files this failure under the root that already reported the
+// same cause and says whether it was suppressed.
+//
+// It runs before anything is printed or pinned. A suppressed failure that had
+// already taken a slot in the failure ring would push a real one out of the band.
+//
+// Counters are deliberately untouched: a blocked target did fail, and the
+// summary has to keep saying so. This changes what is printed, not what is counted.
+func (h *PrettyHandler) suppressBlocked(heading, project, target, cause string) bool {
+	if cause == "" {
+		return false
+	}
+	sig, viaDeps := causeSignature(cause)
+	key := causeKey{project: project, cause: sig}
+	i, known := h.blockedAt[key]
+	if !known {
+		if h.blockedAt == nil {
+			h.blockedAt = make(map[causeKey]int)
+		}
+		h.blockedAt[key] = len(h.blocked)
+		h.blocked = append(h.blocked, blockedGroup{root: heading})
+		return false
+	}
+	if !viaDeps {
+		return false
+	}
+	name := target
+	if name == "" {
+		name = heading
+	}
+	h.blocked[i].blocked = append(h.blocked[i].blocked, name)
+	return true
+}
+
+// printBlocked names, once per root, the targets whose failure was suppressed as
+// a restatement of it. A run that blocked nothing prints nothing.
+func (h *PrettyHandler) printBlocked(colorize bool) {
+	for _, g := range h.blocked {
+		if len(g.blocked) == 0 {
+			continue
+		}
+		line := "blocked by " + g.root + ": " + strings.Join(g.blocked, ", ")
+		if colorize {
+			line = tty.Colorize(line, colDim)
+		}
+		h.printf("%s\n", line)
+	}
+}
+
+// causeSignature reduces a cause to what a root failure and everything it
+// blocked share: the messages with their dependency hops stripped, in order and
+// without repeats. A target that composes several failing chains restates the
+// same message once per chain, so the repeats have to collapse or its signature
+// could never match the root's.
+//
+// The second return says every line arrived through a dependency. A cause with
+// no hops is the target's own failure, and a target reporting its own failure is
+// never suppressed however familiar the message looks.
+func causeSignature(cause string) (sig string, viaDeps bool) {
+	var msgs []string
+	seen := make(map[string]bool)
+	viaDeps = true
+	for _, part := range strings.Split(cause, "\n") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		hops, msg := splitHopChain(part)
+		if len(hops) == 0 {
+			viaDeps = false
+		}
+		if msg == "" {
+			msg = part
+		}
+		if seen[msg] {
+			continue
+		}
+		seen[msg] = true
+		msgs = append(msgs, msg)
+	}
+	if len(msgs) == 0 {
+		return cause, false
+	}
+	return strings.Join(msgs, "\n"), viaDeps
+}
+
 func failureCauseExcerpt(cause string) string {
 	const maxRunes = 240
 	cause = strings.Join(strings.Fields(cause), " ")
@@ -1080,17 +1200,38 @@ func failureCauseExcerpt(cause string) string {
 // The leading segment joins the path when any marker follows it. Everything else
 // is the message, colons and all.
 func hopChain(cause string) string {
-	const marker = "ctx.needs"
+	hops, message := splitHopChain(cause)
+	// Drawing a path needs two hops to be worth it, and a chain with nothing
+	// under it has no message to hang off one. Both fall back to the cause with
+	// the markers removed. This is a RENDERING choice; splitHopChain still
+	// reports the hops and the message it found, which is what lets a
+	// single-hop dependent be matched against the root it restates.
+	if len(hops) < 2 || message == "" {
+		return strings.ReplaceAll(cause, hopMarker+": ", "")
+	}
+	return strings.Join(hops, " -> ") + ": " + message
+}
+
+// hopMarker is the plumbing prefix every ctx.needs hop wraps a cause in.
+const hopMarker = "ctx.needs"
+
+// splitHopChain separates a cause into the dependency hops that carried it and
+// the message underneath, without deciding how either is rendered.
+//
+// The message is the half that identifies a failure across a cascade: every hop
+// wraps the same text again, so a root and each of its dependents produce a
+// byte-identical message here.
+func splitHopChain(cause string) (hops []string, message string) {
 	segs := strings.Split(cause, ": ")
-	var hops, rest []string
+	var rest []string
 	pending := false // the previous segment was a marker, so this one is a hop
 	for i, seg := range segs {
 		switch {
-		case seg == marker:
+		case seg == hopMarker:
 			// rest is empty at the top of every iteration (the loop breaks the
 			// moment it is not), so there is nothing to guard against here.
 			pending = true
-		case pending || (i == 0 && len(segs) > 1 && segs[1] == marker):
+		case pending || (i == 0 && len(segs) > 1 && segs[1] == hopMarker):
 			hops = append(hops, seg)
 			pending = false
 		default:
@@ -1100,10 +1241,7 @@ func hopChain(cause string) string {
 			break
 		}
 	}
-	if len(hops) < 2 || len(rest) == 0 {
-		return strings.ReplaceAll(cause, marker+": ", "")
-	}
-	return strings.Join(hops, " -> ") + ": " + strings.Join(rest, ": ")
+	return hops, strings.Join(rest, ": ")
 }
 
 // failureCauses splits a joined failure into one line per independent cause and
@@ -1681,6 +1819,8 @@ func (h *PrettyHandler) resetRun() {
 	h.failureAt = 0
 	h.selected = -1
 	h.mintedRef = false
+	h.blockedAt = nil
+	h.blocked = nil
 	// The preview belongs to a failure from the run that just ended. Left set,
 	// a rerun drew rows of the PREVIOUS run's log beside an empty tree: stale
 	// content pinned on a surface whose whole promise is that it holds still.

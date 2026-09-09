@@ -894,6 +894,157 @@ func TestHopChainUsesTheMarkersNotGuesswork(t *testing.T) {
 	}
 }
 
+// anchorsStale is the root cause the docs cascade below is built from: the one
+// real failure, before any dependent wrapped it.
+const anchorsStale = "buzz: uncaught error: diagram anchors are stale: 2 finding(s)"
+
+// failEvent drives one cache.error through a handler.
+func failEvent(t *testing.T, h *PrettyHandler, project, target, cause string) {
+	t.Helper()
+	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",
+		slog.String("project", project), slog.String("target", target),
+		slog.Int64("duration", int64(time.Second)),
+		slog.String("error", cause), slog.String("ref", "out177c63a16c3e"))), target)
+}
+
+func summaryEvent(t *testing.T, h *PrettyHandler, errors int) {
+	t.Helper()
+	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.summary",
+		slog.Int("hits", 0), slog.Int("misses", 0), slog.Int("errors", errors),
+		slog.Int64("elapsed", int64(time.Second)))), "summary")
+}
+
+// docsCascade replays the run this dedup exists for: one stale-anchor failure in
+// docs, and six targets that compose it and restate its message through one, two
+// and three dependency hops.
+func docsCascade(t *testing.T, h *PrettyHandler) {
+	t.Helper()
+	oneHop := "ctx.needs: diagrams-generate: " + anchorsStale
+	twoHop := "ctx.needs: generate: " + oneHop
+	threeHop := "ctx.needs: format: " + twoHop
+
+	failEvent(t, h, "docs", "diagrams-generate", anchorsStale)
+	failEvent(t, h, "docs", "generate", oneHop)
+	failEvent(t, h, "docs", "format", twoHop)
+	failEvent(t, h, "docs", "lint", threeHop)
+	failEvent(t, h, "docs", "build", twoHop)
+	failEvent(t, h, "docs", "test", threeHop)
+	// ci composes all four chains, so its cause restates the same message four
+	// times over. Its signature has to collapse to the root's or the target with
+	// the most restatements would be the one that escapes suppression.
+	failEvent(t, h, "docs", "ci", strings.Join([]string{oneHop, twoHop, threeHop, "ctx.needs: build: " + twoHop}, "\n"))
+}
+
+func TestBlockedCascadeReportsTheRootOnce(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	docsCascade(t, h)
+	summaryEvent(t, h, 7)
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, "diagram anchors are stale"),
+		"the cause is printed once, not once per dependent")
+	assert.Contains(t, out, "blocked by docs diagrams-generate: generate, format, lint, build, test, ci",
+		"and the targets it stopped are named in report order")
+	assert.Equal(t, 1, strings.Count(out, "reproduce: "),
+		"only the root is worth rerunning; a dependent reruns into the same failure")
+	// The run this replaces printed 39 lines: five per failure, seven failures,
+	// plus the summary. The cause is worth reading once.
+	assert.Equal(t, 7, strings.Count(out, "\n"),
+		"one failure block, one blocked-by line, one summary")
+}
+
+// TestBlockedCascadeLeavesTheRootPinned is why suppression has to happen before
+// the failure reaches the ring: the band holds five rows and this cascade is
+// seven failures, so suppressed restatements that still took a slot would evict
+// the one failure worth looking at.
+func TestBlockedCascadeLeavesTheRootPinned(t *testing.T) {
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+	docsCascade(t, h)
+
+	got := h.Failures()
+	require.Len(t, got, 1)
+	assert.Equal(t, "diagrams-generate", got[0].Target)
+}
+
+// TestBlockedLeavesIndependentFailuresAlone: suppression keys on the cause, so
+// two roots that failed for different reasons both have to survive it.
+func TestBlockedLeavesIndependentFailuresAlone(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, "docs", "diagrams-generate", anchorsStale)
+	// Same project, and it did arrive through a dependency, so only the message
+	// separates it from the root above.
+	failEvent(t, h, "docs", "link-check", "ctx.needs: crawl: 4 dead links")
+	failEvent(t, h, "api", "build", "go exited 1")
+	summaryEvent(t, h, 3)
+
+	out := buf.String()
+	assert.Contains(t, out, "diagram anchors are stale")
+	assert.Contains(t, out, "4 dead links")
+	assert.Contains(t, out, "go exited 1")
+	assert.NotContains(t, out, "blocked by", "no failure here restates another")
+}
+
+// TestBlockedKeepsADependentWithItsOwnFailure guards the case that makes this
+// safe to do at all: a dependent that failed for its OWN reason is not a
+// restatement of anything, however far down the chain it sits.
+func TestBlockedKeepsADependentWithItsOwnFailure(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, "docs", "diagrams-generate", anchorsStale)
+	failEvent(t, h, "docs", "lint", "ctx.needs: generate: markdownlint exited 1")
+	summaryEvent(t, h, 2)
+
+	out := buf.String()
+	assert.Contains(t, out, "diagram anchors are stale")
+	assert.Contains(t, out, "markdownlint exited 1")
+	assert.NotContains(t, out, "blocked by")
+}
+
+// TestBlockedKeepsAnUnrelatedTargetWithTheSameMessage: two targets that ran the
+// same broken tool independently report the same message and neither depends on
+// the other. Message equality alone would fold the second into the first and
+// claim a dependency that does not exist, so a failure with no hops is never
+// suppressed.
+func TestBlockedKeepsAnUnrelatedTargetWithTheSameMessage(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	const missing = "config.json: missing key: name"
+	failEvent(t, h, "docs", "lint", missing)
+	failEvent(t, h, "docs", "test", missing)
+	summaryEvent(t, h, 2)
+
+	out := buf.String()
+	assert.Equal(t, 2, strings.Count(out, missing), "both targets failed on their own")
+	assert.NotContains(t, out, "blocked by")
+}
+
+// TestBlockedSuppressionDoesNotChangeTheCount is the line between presentation
+// and bookkeeping: a blocked target did fail, and the footer must keep saying so.
+func TestBlockedSuppressionDoesNotChangeTheCount(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, "docs", "diagrams-generate", anchorsStale)
+	failEvent(t, h, "docs", "generate", "ctx.needs: diagrams-generate: "+anchorsStale)
+	failEvent(t, h, "docs", "build", "ctx.needs: generate: ctx.needs: diagrams-generate: "+anchorsStale)
+
+	assert.Equal(t, 3, h.status.failed, "three targets failed, whatever was printed")
+	summaryEvent(t, h, 3)
+	assert.Contains(t, buf.String(), "3 failed")
+}
+
 // TestHitFailureResolvesAClickToTheTargetThatFailed is the property that makes
 // the band actionable rather than merely visible.
 func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
