@@ -102,12 +102,33 @@ linters:
     # no runtime plugin loading, and it is why `magus run lint` builds the binary.
     - testlayout
 
+    # commentdash reports a comment spelling an em-dash with a spaced hyphen, which
+    # this repo bans in prose. It is compiled into ./custom-gcl and declared below,
+    # but deliberately NOT enabled: the tree carries 4513 of them, so turning it on
+    # ahead of the sweep that clears them makes `magus run lint` red on the first
+    # run. Uncomment the line below once the sweep lands. The reasoning and the
+    # per-exemption measurements are in libs/commentdash/readme.md.
+    # - commentdash
+
   settings:
     custom:
       testlayout:
         type: module
         description: reports a test file whose name narrows a source file's name
         original-url: github.com/egladman/magus/libs/testlayout
+
+      # Declared but not enabled: see the commented entry above. Declaring it here
+      # keeps the settings block reviewed alongside the rule instead of arriving
+      # with the sweep, and a declared-but-disabled custom linter runs nothing.
+      commentdash:
+        type: module
+        description: reports a comment using a spaced hyphen as an em-dash aside
+        original-url: github.com/egladman/magus/libs/commentdash
+        settings:
+          # The wrapped half is the same aside with its second clause on the next
+          # line, 281 more lines in this tree. Its fix rewraps a paragraph rather
+          # than editing one line, so it is worth a sweep of its own.
+          wrapped: false
 
     sloglint:
       # all, not scope: EVERY slog call must take a context. `scope` would only catch a

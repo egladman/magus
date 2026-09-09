@@ -1120,6 +1120,18 @@
             {
               "project": ".",
               "glob": "libs/testlayout/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "libs/commentdash/go.mod"
+            },
+            {
+              "project": ".",
+              "glob": "libs/commentdash/go.sum"
+            },
+            {
+              "project": ".",
+              "glob": "libs/commentdash/**/*.go"
             }
           ],
           "reads_secrets": false
@@ -1167,6 +1179,10 @@
             {
               "project": ".",
               "glob": "libs/testlayout/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "libs/commentdash/**/*.go"
             },
             {
               "project": ".",
@@ -2319,6 +2335,166 @@
               "ops": [
                 "dprint"
               ]
+            }
+          ],
+          "reads_secrets": false
+        }
+      ]
+    },
+    {
+      "path": "libs/commentdash",
+      "name": "libs/commentdash",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight",
+          "reads_secrets": false
+        },
+        {
+          "name": "generate",
+          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "dependencies": [
+            "preflight",
+            "index-generate"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "target": "index-generate"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "index-generate",
+          "declared": "index_generate",
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+          "reads_files": [
+            {
+              "project": "libs/commentdash",
+              "glob": "../../**/MAGUS.md"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "MAGUS.md"
+            }
+          ]
+        },
+        {
+          "name": "format",
+          "dependencies": [
+            "generate"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-fmt",
+                "go-mod-tidy"
+              ]
+            },
+            {
+              "spell": "markdown",
+              "ops": [
+                "dprint"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "generate"
+            }
+          ],
+          "reads_files": [
+            {
+              "project": "libs/commentdash",
+              "glob": "**/*.md"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "lint",
+          "doc": "go-vet only, as in libs/testlayout.",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-vet"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "build",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "test",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "ci",
+          "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
+          "dependencies": [
+            "lint",
+            "build",
+            "test"
+          ],
+          "chain": [
+            {
+              "target": "lint"
+            },
+            {
+              "target": "build"
+            },
+            {
+              "target": "test"
             }
           ],
           "reads_secrets": false

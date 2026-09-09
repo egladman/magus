@@ -85,6 +85,7 @@ internal/langservice/manifest_data.go merge=magus linguist-generated
 internal/spellruntime/gen/*.bo merge=magus linguist-generated
 internal/spellruntime/gen/decls/*.buzz merge=magus linguist-generated
 internal/spellruntime/gen/types/*.buzz merge=magus linguist-generated
+libs/commentdash/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/testlayout/MAGUS.md merge=magus linguist-generated
