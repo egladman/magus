@@ -557,7 +557,9 @@ func vcsCheckpointUsage(w io.Writer) {
 	fmt.Fprintln(w, "you whether two trees match; it cannot rebuild either one. --preserve also")
 	fmt.Fprintln(w, "captures the uncommitted work, tracked edits and untracked files alike, and")
 	fmt.Fprintln(w, "prints a handle that restores it. The working copy is untouched either way.")
-	fmt.Fprintln(w, "A capture is kept for 30 days, then dropped.")
+	fmt.Fprintln(w, "On git and Mercurial a capture is dropped once it is 30 days old. On Sapling")
+	fmt.Fprintln(w, "it is a hidden commit no Sapling command can drop, so it stays until you")
+	fmt.Fprintln(w, "remove it; Jujutsu mints nothing and accumulates nothing.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Feed the revision to anything that takes one ("+hint.GraphDiff.With("--rev", "<rev>")+").")
 	fmt.Fprintln(w, "Compare two digests to learn whether two workers saw the same uncommitted")
@@ -634,9 +636,15 @@ func checkpointToken(cp types.VCSCheckpoint) string {
 }
 
 // checkpointLine is the human reading: "<rev> <branch> clean" or "<rev> <branch> dirty
-// <digest>". The field count is fixed through the dirty word, so a branchless revision (a
-// detached head, jj's usual anonymous change) renders "-" rather than collapsing the
-// column and silently shifting everything after it.
+// <digest>", with " preserved <handle>" appended when --preserve minted one. The field
+// count is fixed through the dirty word, so a branchless revision (a detached head, jj's
+// usual anonymous change) renders "-" rather than collapsing the column and silently
+// shifting everything after it.
+//
+// The handle is on this line because --preserve promises to print one and this is the
+// default rendering. Without it the two spellings of the command produced identical
+// output while one of them left an object in the user's repository, and the only way back
+// to that object was a format flag nobody was told to pass.
 func checkpointLine(cp types.VCSCheckpoint) string {
 	branch := cp.Branch
 	if branch == "" {
@@ -645,7 +653,11 @@ func checkpointLine(cp types.VCSCheckpoint) string {
 	if !cp.Dirty {
 		return fmt.Sprintf("%s %s clean", cp.Revision, branch)
 	}
-	return fmt.Sprintf("%s %s dirty %s", cp.Revision, branch, cp.PatchDigest)
+	line := fmt.Sprintf("%s %s dirty %s", cp.Revision, branch, cp.PatchDigest)
+	if cp.Preserved != "" {
+		line += " preserved " + cp.Preserved
+	}
+	return line
 }
 
 // -------------------------------------------------------------------- vcs add
