@@ -362,6 +362,14 @@ func swapMachineWaitTimings(poll, beat time.Duration) func() {
 	return func() { machinePollEvery, machineWaitHeartbeat = oldPoll, oldBeat }
 }
 
+// swapMachineDeadlockGrace shortens how long a wedge must persist and returns the
+// restore, so a test that polls in real time does not spend the production grace.
+func swapMachineDeadlockGrace(d time.Duration) func() {
+	old := machineDeadlockGrace
+	machineDeadlockGrace = d
+	return func() { machineDeadlockGrace = old }
+}
+
 func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
 	b, _, _ := testBudget(t, 10_000, 8)
 	g, adm, _ := testGate(t, b, true)
@@ -631,4 +639,210 @@ func TestLocalAdmitterWithoutABudgetFailsOpen(t *testing.T) {
 		adm.Release(t.Context(), "1.1")
 		adm.Drop(t.Context(), "w1")
 	})
+}
+
+// TestMachineBudgetDetectsTwoIndependentRootsWedgingEachOther is the residual held used
+// to record as unfixable. Two unrelated invocations each hold half the machine and each
+// block in exec on a child that needs more than the other half; every claim that could
+// free room belongs to a run waiting on a queued descendant, so no order of releases
+// exists and the queue is a hang wearing a progress bar.
+func TestMachineBudgetDetectsTwoIndependentRootsWedgingEachOther(t *testing.T) {
+	b, now, _ := testBudget(t, 12_000, 16)
+	require.True(t, b.Request("root-a", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100, Invocation: "100:a", Dir: "/tree/a",
+	}).Granted)
+	require.True(t, b.Request("root-b", types.MachineClaim{
+		Project: "other", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:b", Dir: "/tree/b",
+	}).Granted)
+
+	childA := types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 7000, Slots: 1, PID: 300,
+		Invocation: "300:aa", Ancestors: []string{"100:a"},
+	}
+	childB := types.MachineClaim{
+		Project: "other", Target: "test", MemoryMB: 7000, Slots: 1, PID: 400,
+		Invocation: "400:bb", Ancestors: []string{"200:b"},
+	}
+	require.False(t, b.Request("child-a", childA).Granted, "6000 held by the other root leaves no room for 7000")
+	require.False(t, b.Request("child-b", childB).Granted)
+
+	// One reading is a photograph, and a holder can be one instruction from releasing
+	// when it is taken.
+	assert.False(t, b.Request("child-a", childA).Deadlocked, "a single poll does not declare a deadlock")
+
+	*now = now.Add(machineDeadlockGrace)
+	v := b.Request("child-a", childA)
+	require.True(t, v.Deadlocked, "waiting cannot end: the only room left is held by a run blocked on a queued child")
+	assert.True(t, v.Fits, "it would fit on an idle machine; that is what makes the wait look survivable")
+	require.Len(t, v.Stuck, 1, "the refusal names the run that will never release, not this claim's own parent")
+	assert.Equal(t, 200, v.Stuck[0].PID)
+	assert.Equal(t, "/tree/b", v.Stuck[0].Dir)
+	assert.True(t, b.Request("child-a", childA).Deadlocked, "the verdict is stable while the wedge is")
+}
+
+// TestMachineBudgetLetsAHealthyPairOfRootsThrough is the control: the same two-root
+// shape with declarations that DO compose. Nothing here may be refused, because the peer
+// root finishes on its own and hands its room over.
+func TestMachineBudgetLetsAHealthyPairOfRootsThrough(t *testing.T) {
+	b, now, _ := testBudget(t, 12_000, 16)
+	require.True(t, b.Request("root-a", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 4000, Slots: 1, PID: 100, Invocation: "100:a",
+	}).Granted)
+	require.True(t, b.Request("root-b", types.MachineClaim{
+		Project: "other", Target: "ci", MemoryMB: 4000, Slots: 1, PID: 200, Invocation: "200:b",
+	}).Granted)
+
+	childA := types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 7000, Slots: 1, PID: 300,
+		Invocation: "300:aa", Ancestors: []string{"100:a"},
+	}
+	childB := types.MachineClaim{
+		Project: "other", Target: "test", MemoryMB: 7000, Slots: 1, PID: 400,
+		Invocation: "400:bb", Ancestors: []string{"200:b"},
+	}
+	seated := b.Request("child-a", childA)
+	require.True(t, seated.Granted, "4000 from the peer root plus 7000 fits in 12000")
+	assert.False(t, seated.Deadlocked)
+
+	// The second child queues behind a RUNNING sibling descendant rather than behind a
+	// blocked holder, so however long it sits there it is queued and not wedged.
+	require.False(t, b.Request("child-b", childB).Granted)
+	*now = now.Add(4 * machineDeadlockGrace)
+	assert.False(t, b.Request("child-b", childB).Deadlocked,
+		"the run it waits for is running, so waiting is what seats it")
+
+	b.Release(seated.ID)
+	assert.True(t, b.Request("child-b", childB).Granted)
+}
+
+// TestMachineBudgetDoesNotWedgeAFannedOutParentsQueuedChild is the shape a busy
+// workspace produces all day, and the one a detector reading held memory instead of
+// STUCK memory would refuse: the fourth child of a fanned-out parent queues behind three
+// running sibling descendants. They are ancestors of nobody, so however long it sits
+// there it is queued rather than wedged.
+func TestMachineBudgetDoesNotWedgeAFannedOutParentsQueuedChild(t *testing.T) {
+	b, now, _ := testBudget(t, 12_000, 16)
+	targets := []string{"build", "test", "lint", "docs"}
+	for _, target := range targets {
+		require.True(t, b.Request("parent-"+target, types.MachineClaim{
+			Project: ".", Target: target, MemoryMB: 3000, Slots: 1, PID: 100, Invocation: "100:aaa",
+		}).Granted, target)
+	}
+	child := func(i int) types.MachineClaim {
+		return types.MachineClaim{
+			Project: ".", Target: targets[i], MemoryMB: 4000, Slots: 1, PID: 200 + i,
+			Invocation: fmt.Sprintf("%d:bbb", 200+i), Ancestors: []string{"100:aaa"},
+		}
+	}
+	var seated string
+	for i := range 3 {
+		v := b.Request("child-"+targets[i], child(i))
+		require.True(t, v.Granted, targets[i])
+		seated = v.ID
+	}
+
+	require.False(t, b.Request("child-docs", child(3)).Granted)
+	*now = now.Add(4 * machineDeadlockGrace)
+	assert.False(t, b.Request("child-docs", child(3)).Deadlocked,
+		"nothing it waits for is blocked on it, so the wait ends on its own")
+
+	b.Release(seated)
+	assert.True(t, b.Request("child-docs", child(3)).Granted)
+}
+
+// TestMachineBudgetDoesNotWedgeOnATransientOverlap covers the false positive the grace
+// period exists for: the condition holds, clears, and holds again. Each stretch is
+// short, and a detector that summed them would refuse a machine that was making progress
+// the whole time.
+func TestMachineBudgetDoesNotWedgeOnATransientOverlap(t *testing.T) {
+	b, now, _ := testBudget(t, 12_000, 16)
+	require.True(t, b.Request("root-a", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100, Invocation: "100:a",
+	}).Granted)
+	require.True(t, b.Request("root-b", types.MachineClaim{
+		Project: "other", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:b",
+	}).Granted)
+	childA := types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 7000, Slots: 1, PID: 300,
+		Invocation: "300:aa", Ancestors: []string{"100:a"},
+	}
+	childB := types.MachineClaim{
+		Project: "other", Target: "test", MemoryMB: 7000, Slots: 1, PID: 400,
+		Invocation: "400:bb", Ancestors: []string{"200:b"},
+	}
+	require.False(t, b.Request("child-a", childA).Granted)
+	require.False(t, b.Request("child-b", childB).Granted)
+
+	*now = now.Add(machineDeadlockGrace - time.Millisecond)
+	require.False(t, b.Request("child-a", childA).Deadlocked, "the grace has not been spent yet")
+
+	// The peer's child gives up, so its root is no longer blocked on anything queued and
+	// can finish. Nothing about this poll says deadlock.
+	b.Drop("child-b")
+	v := b.Request("child-a", childA)
+	require.False(t, v.Granted, "still short of room, which is a queue and not a wedge")
+	require.False(t, v.Deadlocked)
+	assert.Empty(t, v.Stuck)
+
+	// The peer's child comes back and the overlap starts over.
+	require.False(t, b.Request("child-b", childB).Granted)
+	*now = now.Add(machineDeadlockGrace - time.Millisecond)
+	require.False(t, b.Request("child-a", childA).Deadlocked, "this poll is what re-arms it")
+
+	// One millisecond past a full grace measured from the FIRST overlap, and two
+	// milliseconds into the second. A detector that resumed its timer instead of
+	// restarting it fires here, on a machine that spent the interval making progress.
+	*now = now.Add(2 * time.Millisecond)
+	assert.False(t, b.Request("child-a", childA).Deadlocked,
+		"a condition that lifted starts its grace over rather than resuming it")
+
+	*now = now.Add(machineDeadlockGrace)
+	assert.True(t, b.Request("child-a", childA).Deadlocked, "and an overlap that stays fires as before")
+}
+
+// TestMachineGateRefusesADeadlockedBudget is the whole path a wedged run takes: it
+// queues, polls, and is refused with an answer rather than heartbeating forever.
+func TestMachineGateRefusesADeadlockedBudget(t *testing.T) {
+	// Not blind: this run can name its ancestor, so the refusal under test is the
+	// deadlock one rather than machineBlindError.
+	t.Setenv("MAGUS_LEVEL", "0")
+	defer swapMachineWaitTimings(10*time.Millisecond, time.Hour)()
+	defer swapMachineDeadlockGrace(20 * time.Millisecond)()
+
+	b, _, _ := testBudget(t, 12_000, 16)
+	// The grace is a real duration and the poll loop spends real time, so the frozen
+	// clock testBudget pins would never let it elapse.
+	b.now = time.Now
+	require.True(t, b.Request("root-a", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100, Invocation: "100:a", Dir: "/tree/a",
+	}).Granted)
+	require.True(t, b.Request("root-b", types.MachineClaim{
+		Project: "other", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:b",
+	}).Granted)
+	require.False(t, b.Request("child-a", types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 7000, Slots: 1, PID: 300,
+		Invocation: "300:aa", Ancestors: []string{"100:a"},
+	}).Granted, "the first root is now blocked in exec on a step this budget has queued")
+
+	g, adm, _ := testGate(t, b, false)
+	// Bounded, so a regression that queues fails in seconds rather than hanging the
+	// package until the go test timeout.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	_, err := g.acquire(ctx, types.MachineClaim{
+		Project: "other", Target: "test", MemoryMB: 7000, Slots: 1, PID: 400,
+		Invocation: "400:bb", Ancestors: []string{"200:b"},
+	})
+	require.Error(t, err)
+	require.NotErrorIs(t, err, context.DeadlineExceeded, "it must REFUSE, not queue until the caller gives up")
+	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
+	assert.Contains(t, err.Error(), "deadlocked rather than busy")
+	assert.Contains(t, err.Error(), "pid 100 (root) ci", "the refusal names the run that cannot release")
+	assert.Contains(t, err.Error(), "/tree/a", "and the tree to go and look at")
+
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeMachineDeclaration, stated.ExitCode(),
+		"the same workload wedges the same way every time, so a retry wrapper must not loop on it")
+	assert.NotEmpty(t, adm.dropped, "leaving the queue is what lets the root it wedged against proceed")
 }

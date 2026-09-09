@@ -53,10 +53,25 @@ const (
 	machineWaiterStaleAfter = 30 * time.Second
 )
 
+// machineDeadlockGrace is how long a waiter must see progress stay impossible before the
+// budget calls it a deadlock. A single poll is a photograph: a holder can be one
+// instruction from releasing when it is sampled, and refusing on that reading turns a
+// won race into a build failure. A var rather than a const for the reason machinegate
+// states about its own timings: a test that has to spend the real cadence either sleeps
+// for it or does not cover it.
+//
+// Well under machineWaiterStaleAfter, so the verdict lands while the waiters that prove
+// it are still registered.
+var machineDeadlockGrace = 3 * time.Second
+
 type machineEntry struct {
 	claim    types.MachineClaim
 	started  time.Time
 	lastSeen time.Time
+	// blockedSince is when this WAITER first saw progress become impossible, cleared the
+	// moment it becomes possible again. Only a condition that persists is a deadlock; see
+	// wedged.
+	blockedSince time.Time
 }
 
 // NewMachineBudget returns a budget of budgetMB megabytes and budgetSlots concurrency
@@ -124,6 +139,13 @@ func (b *MachineBudget) Request(waiter string, c types.MachineClaim) types.Machi
 	reserveMB, reserveSlots := b.headReservation(waiter, c.Ancestors)
 	if !b.fits(c, heldMB+reserveMB, heldSlots+reserveSlots) {
 		v.Ahead = b.ahead(waiter)
+		// Some waits cannot end, and this is the only place that can tell: say so rather
+		// than let the client heartbeat at a queue that will never move. The waiter stays
+		// registered either way, because leaving the queue is the CLIENT's move here as
+		// it is for every other refusal.
+		if stuck := b.stuckHolders(c.Ancestors); b.wedged(w, c, stuck, now) {
+			v.Deadlocked, v.Stuck = true, b.claimants(stuck, nil)
+		}
 		return v
 	}
 
@@ -203,9 +225,10 @@ func (b *MachineBudget) reap() {
 // fan-out stays bounded, and a declaration larger than the whole budget is still
 // refused.
 //
-// Residual: two INDEPENDENT roots whose children each need more than the other root
-// leaves free still wedge each other. Nothing here can see that; a holder does not
-// report whether it is blocked.
+// Two INDEPENDENT roots whose children each need more than the other root leaves free
+// still wedge each other, and no exclusion rule closes that: each root's claim is a
+// stranger's to the other's child, and excusing a stranger is the throttling this
+// exists to do. Request DETECTS that case instead and refuses it; see wedged.
 func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 	excused := b.excusedClaims(ancestors)
 	for id, e := range b.claims {
@@ -232,6 +255,67 @@ func (b *MachineBudget) excusedClaims(ancestors []string) map[string]bool {
 		}
 	}
 	return out
+}
+
+// stuckHolders is every counted holder that cannot release: it is an ancestor of some
+// REGISTERED WAITER, so it is blocked in exec on a step this budget has queued and not
+// seated. A holder whose descendants are all running is not stuck, and neither is one
+// with no descendant asking at all.
+//
+// Claims this waiter is excused from are skipped, by the reasoning on held: an ancestor
+// of ours holds nothing we compete for, and seating us is what unblocks it.
+func (b *MachineBudget) stuckHolders(ancestors []string) map[string]*machineEntry {
+	excused := b.excusedClaims(ancestors)
+	out := map[string]*machineEntry{}
+	for id, e := range b.claims {
+		if excused[id] || e.claim.Invocation == "" {
+			continue
+		}
+		for _, w := range b.waiters {
+			if isMachineAncestor(e.claim.Invocation, w.claim.Ancestors) {
+				out[id] = e
+				break
+			}
+		}
+	}
+	return out
+}
+
+// wedged reports the wait that cannot end: releasing every holder that CAN still finish
+// would not seat this claim, because what is left belongs to runs blocked on queued
+// descendants. Waiting is then a hang the heartbeat reports as healthy forever.
+//
+// It asks whether the STUCK memory alone already excludes this claim, which is what
+// keeps it quiet in the two shapes a naive wait-for cycle misreads:
+//
+//   - Two independent roots, 12 GB budget, each holding 6 GB while blocked on a 7 GB
+//     child. Our own root is excused, the other is stuck, and 6+7 exceeds 12, so no order
+//     of releases seats us: it fires, which is the deadlock this exists for.
+//   - The same pair holding 4 GB each. 4+7 fits, so the child is granted outright and
+//     never reaches here; queued behind a reservation it still fits, and the answer stays
+//     keep waiting, which is right because the peer root does finish.
+//   - One parent fanning out four steps, each shelling out to a magus of its own. The
+//     three running children are ancestors of NOBODY waiting, so the stuck sum is zero
+//     and the fourth keeps its place in the queue: correct, since a running sibling ends
+//     and frees it.
+//
+// The grace period is what separates a wedge from a holder that was one instruction from
+// releasing when it happened to be sampled. Keeping it is why this takes the waiter's
+// entry rather than the two figures: the timer belongs to the run that is waiting.
+func (b *MachineBudget) wedged(w *machineEntry, c types.MachineClaim, stuck map[string]*machineEntry, now time.Time) bool {
+	mb, slots := 0, 0
+	for _, e := range stuck {
+		mb += e.claim.MemoryMB
+		slots += e.claim.Slots
+	}
+	if b.fits(c, mb, slots) {
+		w.blockedSince = time.Time{}
+		return false
+	}
+	if w.blockedSince.IsZero() {
+		w.blockedSince = now
+	}
+	return now.Sub(w.blockedSince) >= machineDeadlockGrace
 }
 
 // fits reports whether c still fits once mb and slots are spoken for. A non-positive

@@ -168,6 +168,14 @@ func (g *machineGate) wait(ctx context.Context, waiter string, c types.MachineCl
 				// A peer grew its claim while this one queued, and the budget can no
 				// longer seat this step at all. No position in the queue fixes that.
 				return nil, machineDoesNotFitError(c, v)
+			case v.Deadlocked:
+				// Only reachable from the poll loop: the budget wants the condition to
+				// hold across several polls before it believes it, so a first request
+				// never carries this. Leaving the queue is what turns one refusal into a
+				// cure: this run's ancestors stop counting as stuck, so the peer root it
+				// was wedged against is seated rather than refused alongside it.
+				g.admit.Drop(context.WithoutCancel(ctx), waiter)
+				return nil, machineDeadlockError(c, v)
 			}
 		}
 	}
@@ -309,6 +317,21 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; correct the declaration if it is wrong, or run this on a bigger machine.",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		FormatMB(v.BudgetMB), v.BudgetSlots)}
+}
+
+// machineDeadlockError is the refusal for a wait that can never end: every run still
+// holding room is blocked on a descendant this budget has queued, so the memory that
+// would have to free is memory nobody can hand back.
+//
+// It asks for the permanent code rather than EX_TEMPFAIL. The wedge is a property of
+// what these invocations declare and compose, not of when they ran: retrying the same
+// workload on the same machine reproduces it exactly, and a wrapper that retries on 75
+// would loop on it forever.
+func machineDeadlockError(c types.MachineClaim, v types.MachineVerdict) error {
+	return machineRefusal{exit: ExitCodeMachineDeclaration, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
+		"refusing to start %s %s: this machine's build budget is deadlocked rather than busy; %s, %s, and every run that could free room is itself blocked waiting for a step this budget has queued. Waiting cannot clear that, so this run is refused instead of queued forever. %s. What is running declares more at once than this machine has: either a parent's memory declaration is lower than what it composes, or the build budget is too small for this workload.",
+		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
+		describeMachineRemaining(v), describeMachineHolders(v.Stuck))}
 }
 
 // machineBlindError is the refusal for a nested magus that cannot name its ancestors.
