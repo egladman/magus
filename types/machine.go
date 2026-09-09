@@ -50,14 +50,9 @@ type MachineVerdict struct {
 	ID      string `json:"id,omitempty" yaml:"id,omitempty"`
 	// Fits is false when no state of the machine admits this claim, so waiting is a
 	// hang rather than a queue.
-	Fits    bool              `json:"fits" yaml:"fits"`
-	Holders []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
-	Ahead   int               `json:"ahead,omitzero" yaml:"ahead,omitempty"` // waiters queued in front of this one
-	// Deadlocked means waiting cannot end: every holder that could still free room is
-	// itself blocked on a descendant this budget has queued. Stuck names those holders,
-	// so a refusal can point at the runs that will never release.
-	Deadlocked  bool              `json:"deadlocked,omitzero" yaml:"deadlocked,omitempty"`
-	Stuck       []MachineClaimant `json:"stuck,omitempty" yaml:"stuck,omitempty"`
+	Fits        bool              `json:"fits" yaml:"fits"`
+	Holders     []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
+	Ahead       int               `json:"ahead,omitzero" yaml:"ahead,omitempty"` // waiters queued in front of this one
 	BudgetMB    int               `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
 	HeldMB      int               `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
 	BudgetSlots int               `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
