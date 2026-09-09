@@ -118,7 +118,7 @@ func regenerateAdvice(f types.FileEntry, owner string) string {
 //
 // Two honest limits. The guard is not a security boundary (see TestGuardKnownHoles): this
 // is a habit rail, and the gate that holds is a check on the pull-request path. And on a
-// host with no pre-write file hook (Cursor), the deny arrives after the write has landed,
+// host with no pre-write file hook, the deny arrives after the write has landed,
 // which its template records as deny=human rather than papering over.
 //
 // Silent unless the store is DECLARED. A deny fired on a guessed location would block work

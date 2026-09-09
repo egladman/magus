@@ -1118,10 +1118,35 @@ func TestWholeTreeTargetsKeyOnTheGoTree(t *testing.T) {
 // else (prose, help text, printed setup instructions, a per-host branch), the
 // host-specific part belongs in documentation the reader owns.
 
-// hostNames are agent hosts magus must not encode behavior for. Deliberately
-// omits "cursor": magus uses it as an ordinary pagination term, so matching it
-// would be noise rather than signal.
+// hostNames are agent hosts magus must not encode behavior for. Cursor is a
+// supported host too and is deliberately absent here, because the bare word is a
+// terminal position in internal/interactive and a pagination token in the graph
+// query and MCP handlers: 209 lines in this tree use it innocently, against the one
+// that names the host. cursorHostUse carries it instead.
 var hostNames = regexp.MustCompile(`(?i)\b(claude|opencode|codex|aider|windsurf)\b`)
+
+// cursorHostUse matches the shapes "cursor" takes when it means the HOST: the proper
+// noun in prose, a phrase naming the host's own machinery, and a comparison against
+// the host label. It flags nothing an editor cursor or a page cursor produces, so it
+// needs no exemption list at all, which an allowlist of the legitimate identifiers
+// would have needed and would have gone stale on the next paging field.
+//
+// The trade it makes: a bare `case "cursor":` is NOT matched, because two switches in
+// this tree already have one (a diff-session op and a memory op) and no line-level
+// pattern separates those from a host switch. A host branch written that way slips
+// through; every other shape does not.
+var cursorHostUse = regexp.MustCompile(`\(Cursor\)|(?i:\bcursor (hooks?|ide|editor|rules)\b|[!=]=\s*"cursor")`)
+
+// hostSpecificLine reports whether one line of Go source names an agent host outside
+// a filesystem path.
+func hostSpecificLine(text string) bool {
+	if cursorHostUse.MatchString(text) {
+		return true
+	}
+	// Strip every path-shaped use, then re-test: a line may legitimately carry both
+	// (an example destination plus surrounding prose).
+	return hostNames.MatchString(text) && hostNames.MatchString(hostPathUse.ReplaceAllString(text, ""))
+}
 
 // hostPathUse allows a host name that names something ON DISK: a path
 // (`.claude/skills`, `~/.config/opencode/skills`, `.codex/config.toml`) or a bare
@@ -1168,12 +1193,7 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for line := 1; sc.Scan(); line++ {
 			text := sc.Text()
-			if !hostNames.MatchString(text) {
-				continue
-			}
-			// Strip every path-shaped use, then re-test: a line may legitimately
-			// carry both (an example destination plus surrounding prose).
-			if !hostNames.MatchString(hostPathUse.ReplaceAllString(text, "")) {
+			if !hostSpecificLine(text) {
 				continue
 			}
 			violations = append(violations, fmt.Sprintf("%s:%d: %s", path, line, strings.TrimSpace(text)))
@@ -1191,6 +1211,33 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 			"instructions, help text, a per-host branch - belongs in docs the reader owns, or the next\n"+
 			"change to that host becomes a magus release.\n\nviolations:\n%s",
 		strings.Join(violations, "\n"))
+}
+
+// TestHostSpecificLineMatcher grades the matcher against lines rather than against the
+// tree, because a tree scan that finds nothing is equally consistent with a matcher that
+// matches nothing. Cursor is the case that needs it: the name went unenforced for its
+// whole life as a supported host, and the reason it stays hard is right here in the
+// negative cases.
+func TestHostSpecificLineMatcher(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		want bool
+	}{
+		{`if host == "cursor" {`, true},
+		{`return h.Host != "cursor"`, true},
+		{`// Cursor hooks fire after the write, not before it.`, true},
+		{`// on a host with no pre-write file hook (Cursor), the deny lands late`, true},
+		{`fmt.Println("paste this into your Claude settings")`, true},
+
+		{`cursor := paramString(req.Params, "cursor", "")`, false},
+		{`// Cursor reports where the cursor is, in 1-based terminal coordinates.`, false},
+		{"\tCursor DiffCursor `json:\"cursor\" yaml:\"cursor\"`", false},
+		{`"cursor-guard.sh",`, false},
+		{`filepath.Join(root, ".cursor", "hooks.json"),`, false},
+		{`filepath.Join(root, ".claude", "settings.json"),`, false},
+	} {
+		assert.Equal(t, tc.want, hostSpecificLine(tc.line), "hostSpecificLine(%q)", tc.line)
+	}
 }
 
 // The test above is one layer shallower than the rule it enforces. A branch keyed
