@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -555,6 +556,7 @@ func readLoadStream(in io.Reader, dir string) ([]sessions.LoadEvent, sessionLoad
 	var rejects []string
 
 	sameRepo := repoScope(dir)
+	rootOf := checkoutRoots()
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 0, 64*1024), loadMaxLineBytes)
 	for line := 1; sc.Scan(); line++ {
@@ -574,6 +576,17 @@ func readLoadStream(in io.Reader, dir string) ([]sessions.LoadEvent, sessionLoad
 		if ev.Cwd != "" && !sameRepo(ev.Cwd) {
 			summary.Dropped++
 			continue
+		}
+		// A host names files by absolute path; graph file nodes are keyed by the
+		// path inside the checkout, and every worktree of one repository shares
+		// that layout. Storing the checkout-relative path is what lets the
+		// @session shard land the event on a node.
+		if (ev.Kind == sessions.EventFileRead || ev.Kind == sessions.EventFileWrite) && filepath.IsAbs(ev.Text) {
+			if root := rootOf(ev.Cwd); root != "" {
+				if rel, err := filepath.Rel(root, ev.Text); err == nil && !strings.HasPrefix(rel, "..") {
+					ev.Text = filepath.ToSlash(rel)
+				}
+			}
 		}
 		events = append(events, sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev)})
 	}
@@ -685,6 +698,28 @@ func repoScope(dir string) func(string) bool {
 		match := err == nil && other == dir
 		seen[cwd] = match
 		return match
+	}
+}
+
+// checkoutRoots resolves a cwd to the checkout that contains it: the nearest
+// ancestor holding a .git entry, which is a file in a worktree and a directory
+// in the main checkout. Memoized for the same reason repoScope is. Empty when
+// nothing above the cwd is a checkout.
+func checkoutRoots() func(string) string {
+	seen := map[string]string{}
+	return func(cwd string) string {
+		if root, ok := seen[cwd]; ok {
+			return root
+		}
+		root := ""
+		for dir := cwd; dir != "" && dir != "/"; dir = filepath.Dir(dir) {
+			if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+				root = dir
+				break
+			}
+		}
+		seen[cwd] = root
+		return root
 	}
 }
 

@@ -607,3 +607,21 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 	assert.Equal(t, want, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()),
 		"a file in the old shape must miss, not decode as zeros")
 }
+
+// TestContactPathReducesHostPathsToCheckoutRelative pins the join between loaded
+// session events and graph file nodes: a host names files absolutely, nodes are
+// keyed inside the checkout, and a sibling worktree of the same repository shares
+// that layout.
+func TestContactPathReducesHostPathsToCheckoutRelative(t *testing.T) {
+	root := "/repo/main"
+	for _, tc := range []struct{ in, want string }{
+		{"internal/a.go", "internal/a.go"},
+		{"/repo/main/internal/a.go", "internal/a.go"},
+		{"/repo/main/.claude/worktrees/x-1/internal/a.go", "internal/a.go"},
+		{"/elsewhere/internal/a.go", "/elsewhere/internal/a.go"},
+	} {
+		if got := contactPath(root, tc.in); got != tc.want {
+			t.Errorf("contactPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

@@ -412,7 +412,7 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 		// stored, so it arrives path-less and the assembler counts it as dropped.
 		out = append(out, knowledge.AgentContact{
 			Session: rec.Session,
-			Path:    ev.Text,
+			Path:    contactPath(root, ev.Text),
 			Read:    ev.Event == sessions.EventFileRead,
 			Write:   ev.Event == sessions.EventFileWrite,
 			At:      ev.At,
@@ -420,6 +420,30 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 		})
 	}
 	return out
+}
+
+// contactPath reduces a stored file path to the checkout-relative form graph file
+// nodes are keyed by. Loads now store that form; events loaded before they did
+// hold the host's absolute path, under this checkout or a sibling worktree of it,
+// and stripping either prefix lets them join instead of counting as dropped.
+func contactPath(root, p string) string {
+	if !filepath.IsAbs(p) {
+		return p
+	}
+	// The worktree segment is checked first: a worktree lives under the main
+	// checkout, so its files are also "under root" and Rel alone would keep the
+	// .claude/worktrees/<name>/ prefix that no node id carries.
+	const worktrees = "/.claude/worktrees/"
+	if i := strings.Index(p, worktrees); i >= 0 {
+		rest := p[i+len(worktrees):]
+		if j := strings.IndexByte(rest, '/'); j >= 0 {
+			return rest[j+1:]
+		}
+	}
+	if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {
+		return filepath.ToSlash(rel)
+	}
+	return p
 }
 
 // guardVerdictDeny is the [sessions.AgentEvent.Verdict] value meaning today's guard rules
