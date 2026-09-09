@@ -338,6 +338,62 @@ func TestCacheRunOptions(t *testing.T) {
 	assert.True(t, cache.LooksLikeRef(results[1].Ref), "hit event should carry an output ref, got %q", results[1].Ref)
 }
 
+// A failing target carries its breadcrumbs as a field. The line a run PRINTS is
+// unchanged; this is the structural half, and it is absent on a pass so a consumer
+// counting uptake can tell "nothing to suggest" from "suggested and ignored".
+func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "run.jsonl")
+	w := openFileWriter(t, path, WithBlockOnFull())
+
+	root := t.TempDir()
+	src := filepath.Join(root, "pkg", "main.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
+	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
+	spec := cache.Step{
+		ProjectPath:   "pkg",
+		Sources:       []string{"pkg/*.go"},
+		WorkspaceRoot: root,
+		Target:        "test",
+	}
+
+	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), cache.WithMutable(true))
+	require.NoError(t, err)
+	_, err = c.Run(t.Context(), spec, func(_ context.Context) error {
+		return fmt.Errorf("exit 2")
+	}, RunOptions(w)...)
+	require.Error(t, err)
+
+	passing := spec
+	passing.Target = "build"
+	_, err = c.Run(t.Context(), passing, func(_ context.Context) error { return nil }, RunOptions(w)...)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var results []TargetResult
+	for _, line := range bytes.Split(bytes.TrimSpace(body), []byte("\n")) {
+		var ev TargetResult
+		require.NoError(t, json.Unmarshal(line, &ev))
+		results = append(results, ev)
+	}
+	require.Len(t, results, 2)
+
+	failed := results[0]
+	require.Equal(t, "failed", failed.Status)
+	ids := make([]string, len(failed.Next))
+	for i, n := range failed.Next {
+		ids[i] = n.ID
+	}
+	assert.Equal(t, []string{"run-output", "run-explain-target"}, ids)
+	assert.Equal(t, "magus query output "+failed.Ref, failed.Next[0].Run)
+	assert.Equal(t, "magus explain target:pkg:test", failed.Next[1].Run)
+
+	assert.Empty(t, results[1].Next, "a pass has nothing to suggest")
+	assert.NotContains(t, string(body), `"next":[]`, "absence is a missing key, never an empty list")
+}
+
 func TestWriterContextRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")

@@ -210,6 +210,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 			return err
 		}
 		listTargets("affected:ls", targets, source)
+		// The plan breadcrumb names ci, not ls: ls is the listing verb and has no shard
+		// plan of its own, while ci is the target the set is listed in order to run.
+		paths := make([]string, len(targets))
+		for i, t := range targets {
+			paths[i] = t.Path
+		}
+		printNext(os.Stdout, nextGate(root), hint.NextForAffected("ci", paths))
 		return nil
 	}
 

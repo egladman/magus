@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5411,
-  "edge_count": 9575,
+  "node_count": 5412,
+  "edge_count": 9576,
   "relations": [
     {
       "id": "annotates",
@@ -1357,7 +1357,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "589",
+        "dir_files": "590",
         "dir_languages": "markdown,md#1-built-in-command-spells-import-maguscharm,md#2-workspace-spells--magusfiles-import-charm,md#3-raw-rfc-6902-data-the-lowest-level,md#4-function-targets--ops-branch-in-code,md#a-bypass-fails-closed,md#a-gap-worth-knowing,md#a-known-leak-a-multi"
       }
     },
@@ -1367,7 +1367,7 @@
       "label": "docs/concepts/cache",
       "source": "docs/concepts/cache",
       "attrs": {
-        "dir_files": "41",
+        "dir_files": "42",
         "dir_languages": "markdown,md#a-known-leak-a-multi-line-tool-probe-lands-whole-in-the-key,md#a-probes-output-is-not-a-version,md#attempts-one-ref-every-execution,md#diagnostics,md#diff-delegates-it-does-not-render,md#explaining-a-ref-difference,md#extraction-is-opt-in,md#fo"
       }
     },
@@ -10218,6 +10218,16 @@
       "source": "docs/concepts/cache/output-refs.md#the-log-viewer",
       "attrs": {
         "anchor": "the-log-viewer",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/concepts/cache/output-refs.md#the-next-line",
+      "kind": "docsection",
+      "label": "The next line",
+      "source": "docs/concepts/cache/output-refs.md#the-next-line",
+      "attrs": {
+        "anchor": "the-next-line",
         "level": "2"
       }
     },
@@ -84381,6 +84391,14 @@
     {
       "source": "docsection:docs/concepts/cache/output-refs.md#target-output-references",
       "target": "docsection:docs/concepts/cache/output-refs.md#the-log-viewer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "docsection:docs/concepts/cache/output-refs.md#target-output-references",
+      "target": "docsection:docs/concepts/cache/output-refs.md#the-next-line",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

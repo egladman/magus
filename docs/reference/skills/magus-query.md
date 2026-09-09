@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 13065
-skill_short_bytes: 10541
+skill_full_bytes: 13412
+skill_short_bytes: 10888
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `57` |
+| `agent-skill-version` | `58` |
 | `knowledge-schema-version` | `11` |
-| `skill-content` | `247a38915217` |
+| `skill-content` | `a1c2664c449e` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -95,6 +95,12 @@ only: no daemon AND no CLI, or a human asking what the committed index says.
    `unknown` names the projects it could not search, and building those with
    `magus graph build` is what turns the answer into a fact. Read the verdict before
    concluding anything from an empty result.
+
+   Every result that has one names its own next step: text mode prints the commands
+   under a `next:` label and `-o json` carries them as a `next` field, each with the
+   real ids already filled in. Following one is optional - it is a suggestion magus
+   offers, never an order, and a result with nothing to suggest carries no `next` at
+   all.
 
    `magus describe target <name>` prints, per project, the resolved source globs,
    output globs (the generated files), spells, and policy for that target.
@@ -308,6 +314,12 @@ unavailable too, or when a human explicitly asks what the committed index says.
    `unknown` names the projects it could not search, and building those with
    `magus graph build` is what turns the answer into a fact. Read the verdict before
    concluding anything from an empty result.
+
+   Every result that has one names its own next step: text mode prints the commands
+   under a `next:` label and `-o json` carries them as a `next` field, each with the
+   real ids already filled in. Following one is optional - it is a suggestion magus
+   offers, never an order, and a result with nothing to suggest carries no `next` at
+   all.
 
    The graph relates entities; the evaluated dispatch plan lives one verb over.
    `magus describe target <name>` prints, per project, the resolved source globs,

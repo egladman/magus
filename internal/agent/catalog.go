@@ -110,7 +110,10 @@ import (
 // narrow target and enforced nothing, so seven fanned-out workers each ran the whole
 // pipeline concurrently; the guard now denies the gate under a lease that declared
 // something narrower, and the skill is where a worker learns why before it is refused.
-const SkillVersion = 57
+// 58: magus-query says every result names its own next step, and that following it is
+// optional. The breadcrumb is a field on the result now, so a reader that never meets
+// the text still meets the suggestion.
+const SkillVersion = 58
 
 const skillLicense = "GPL-3.0-or-later"
 

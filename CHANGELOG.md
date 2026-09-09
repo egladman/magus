@@ -26,6 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   naming no lease, and a lease with no live row are all unaffected: an absent declaration
   is a boundary nobody wrote rather than one of size zero, and the guard stays a seatbelt
   for a harness that opted in.
+- **Every result that has a next step names it, as a field rather than as prose.**
+  `magus query`, `magus explain`, `magus describe file`, the affected listing and a failing
+  target's result event now carry up to three `next` entries: a stable id, a complete
+  command with the real ids already filled in, and one sentence of why. Text mode prints
+  the commands under a `next:` label and `-o json` carries them beside the record, so a
+  person and a tool meet the same suggestion. The reason fires once per session through
+  the marker store the guard advisories already keep, and the command prints every time;
+  `-s` keeps the commands and drops the reasons. A result with nothing to suggest carries
+  no field at all, never an empty list, so absence stays countable, and the line a failing
+  run prints is unchanged. It replaces prose that was measured not working: over 21 days
+  the printed `magus query output <ref>` line after a failing run was followed 21% of the
+  time, the same rate as no hint at all, while re-running the same failing target won 84%.
+  Each id exists so a suggestion nobody takes is deleted from the data rather than
+  reworded.
 
 ### Fixed
 

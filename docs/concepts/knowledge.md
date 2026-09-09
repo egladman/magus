@@ -145,6 +145,9 @@ used by (10)  op:go:go-build, op:go:go-clean, op:go:go-generate,
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago
 (append &token=$(magus config token print) to open it authenticated)
 (start the magus daemon if the graph does not load)
+
+next:
+  magus path tool:go op:go:go-build  (path resolves the chain between two nodes, and this is the neighbor the card names most.)
 ```
 
 <!-- /example -->
@@ -168,6 +171,9 @@ part of     project:.
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest
 (append &token=$(magus config token print) to open it authenticated)
 (start the magus daemon if the graph does not load)
+
+next:
+  magus path target:.:test op:go:go-test
 ```
 
 <!-- /example -->

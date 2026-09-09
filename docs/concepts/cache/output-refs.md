@@ -44,6 +44,35 @@ outcc49db1f
   open in browser: magus query output outcc49db1f --open
 ```
 
+## The next line
+
+The ref line answers "where is the output". A **next** answers "what would you run
+now". Every result that has an answer carries one: the graph verbs
+(`query`, `explain`, `describe file`, the affected listing) print theirs under a
+`next:` label, and a failing target's own result event carries the same suggestions as
+a `next` field, so a tool reading `-o json` gets the affordance a person sees.
+
+```text
+next:
+  magus explain spell:go  (explain names a node's edges, provenance and blast radius.)
+  magus path spell:go spell:gomod
+```
+
+Three rules keep it from becoming noise:
+
+- **At most three, one line each.** Each entry is a complete command with the real ids
+  filled in, never a placeholder to edit.
+- **The command prints every time; the reason prints once per session.** A reason is
+  advice and says nothing the second time; the command is navigation. `-s` keeps the
+  commands and drops the reasons.
+- **Nothing to suggest means no field at all.** A result never carries an empty list,
+  so a consumer can tell "magus had no suggestion" from "magus suggested and nobody
+  followed it".
+
+A next is a suggestion. magus informs and never decides, so ignoring one costs
+nothing, and each entry carries a stable id precisely so a suggestion nobody takes can
+be deleted from the data rather than reworded.
+
 ## Retrieval: `magus query output <ref>`
 
 `magus query` doubles as the retrieval verb through an explicit `output` subcommand.

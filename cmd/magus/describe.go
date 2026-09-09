@@ -1530,10 +1530,11 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	report := types.NewFileReport(files)
+	next := hint.NextForFiles(files)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, report)
+		return emitFormatted(opts, filesWithNext{FileReport: report, Next: next})
 	case outputName:
 		// One bare path per line. This used to print "<path>\t<role>", which is two
 		// columns in the one format that promises a single token, so `xargs` and
@@ -1581,6 +1582,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 			fmt.Printf("  %-6s %-24s %-24s %s\n", c.Role, claimLabel(c), c.Glob, strings.Join(c.Paths, ", "))
 		}
 	}
+	printNext(os.Stdout, nextGate(root), next)
 	return nil
 }
 
