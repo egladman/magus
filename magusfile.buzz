@@ -2769,6 +2769,29 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
+// Runs the agent benchmark's analysis tests in a container, because Python never runs
+// on the host (benchmarks/agent/README.md): the extractor and the statistics are
+// stdlib-only and the image pins the interpreter. The image is overridable for a
+// machine whose Docker cannot pull, `-- --image golang:1.25`; any image with a
+// python3 serves, since nothing is installed into it.
+export fun agent_bench_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("benchmarks/agent/analysis/*");
+    try {
+        proc\which("docker");
+    } catch (e) {
+        throw "agent-bench-test needs a docker daemon: it runs the analysis tests in the benchmark image";
+    }
+    var image = "python:3.12-slim";
+    if (args.len() >= 2 and args[0] == "--image") {
+        image = args[1];
+    }
+    final root = vcs\root();
+    docker["docker-run"](ctx, {"args": [
+        "-v", root + "/benchmarks/agent:/w", "-w", "/w/analysis", image,
+        "python3", "-m", "unittest", "discover", "-v",
+    ]});
+}
+
 // Runs internal/compress's tests under the CGO tags, which the ordinary test target
 // cannot reach.
 //

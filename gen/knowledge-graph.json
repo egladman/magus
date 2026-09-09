@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5331,
-  "edge_count": 9479,
+  "node_count": 5365,
+  "edge_count": 9522,
   "relations": [
     {
       "id": "annotates",
@@ -1147,8 +1147,58 @@
       "label": "benchmarks",
       "source": "benchmarks",
       "attrs": {
-        "dir_files": "39",
-        "dir_languages": "buzz,markdown,md#caveats,md#cost--tuning,md#environment,md#fixture-go-n50,md#fixtures,md#how-magus-is-wired,md#large-monorepo-benchmark-magus-vs-turbo--nx--lage,md#large-monorepo-dependency-graph,md#layout,md#magus-benchmarks,md#prerequisites,md#quick-star"
+        "dir_files": "71",
+        "dir_languages": "buzz,markdown,md#agent-harness-effectiveness-benchmark,md#analysis-image,md#arms,md#benchmark-analysis,md#budget-caps,md#caveats,md#claudemd,md#confounds,md#controls,md#cost--tuning,md#environment,md#fixture-go-n50,md#fixtures,md#headline-metric,md#how-mag"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent",
+      "kind": "dir",
+      "label": "benchmarks/agent",
+      "source": "benchmarks/agent",
+      "attrs": {
+        "dir_files": "31",
+        "dir_languages": "markdown,md#agent-harness-effectiveness-benchmark,md#analysis-image,md#arms,md#benchmark-analysis,md#budget-caps,md#claudemd,md#confounds,md#controls,md#headline-metric,md#inputs,md#invocations,md#metric-definitions,md#not-built-yet,md#results-schema,md#ru"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/analysis",
+      "kind": "dir",
+      "label": "benchmarks/agent/analysis",
+      "source": "benchmarks/agent/analysis",
+      "attrs": {
+        "dir_files": "6",
+        "dir_languages": "markdown,md#benchmark-analysis,md#inputs,md#invocations,md#metric-definitions,md#statistics"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/arms",
+      "kind": "dir",
+      "label": "benchmarks/agent/arms",
+      "source": "benchmarks/agent/arms",
+      "attrs": {
+        "dir_files": "8",
+        "dir_languages": "markdown,md#arms,md#claudemd,md#confounds,md#switches-as-implemented,md#what-is-not-switched-mcp,md#what-the-probes-check-and-what-they-cannot"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks",
+      "source": "benchmarks/agent/tasks",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks/_placeholder",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/_placeholder",
+      "source": "benchmarks/agent/tasks/_placeholder",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
       }
     },
     {
@@ -2610,6 +2660,51 @@
       "source": "benchmarks/README.md",
       "attrs": {
         "role": "readme"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/README.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/README.md",
+      "source": "benchmarks/agent/README.md",
+      "attrs": {
+        "role": "readme"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/analysis/README.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/analysis/README.md",
+      "source": "benchmarks/agent/analysis/README.md",
+      "attrs": {
+        "role": "readme"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/arms/README.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/arms/README.md",
+      "source": "benchmarks/agent/arms/README.md",
+      "attrs": {
+        "role": "readme"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/arms/repo-description.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/arms/repo-description.md",
+      "source": "benchmarks/agent/arms/repo-description.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/_placeholder/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/_placeholder/task.md",
+      "source": "benchmarks/agent/tasks/_placeholder/task.md",
+      "attrs": {
+        "role": "doc"
       }
     },
     {
@@ -7883,6 +7978,226 @@
       "attrs": {
         "anchor": "what-is-and-is-not-measured",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "kind": "docsection",
+      "label": "Agent harness-effectiveness benchmark",
+      "source": "benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "attrs": {
+        "anchor": "agent-harness-effectiveness-benchmark",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#analysis-image",
+      "kind": "docsection",
+      "label": "Analysis image",
+      "source": "benchmarks/agent/README.md#analysis-image",
+      "attrs": {
+        "anchor": "analysis-image",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#arms",
+      "kind": "docsection",
+      "label": "Arms",
+      "source": "benchmarks/agent/README.md#arms",
+      "attrs": {
+        "anchor": "arms",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#budget-caps",
+      "kind": "docsection",
+      "label": "Budget caps",
+      "source": "benchmarks/agent/README.md#budget-caps",
+      "attrs": {
+        "anchor": "budget-caps",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#controls",
+      "kind": "docsection",
+      "label": "Controls",
+      "source": "benchmarks/agent/README.md#controls",
+      "attrs": {
+        "anchor": "controls",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#headline-metric",
+      "kind": "docsection",
+      "label": "Headline metric",
+      "source": "benchmarks/agent/README.md#headline-metric",
+      "attrs": {
+        "anchor": "headline-metric",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#not-built-yet",
+      "kind": "docsection",
+      "label": "Not built yet",
+      "source": "benchmarks/agent/README.md#not-built-yet",
+      "attrs": {
+        "anchor": "not-built-yet",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#results-schema",
+      "kind": "docsection",
+      "label": "Results schema",
+      "source": "benchmarks/agent/README.md#results-schema",
+      "attrs": {
+        "anchor": "results-schema",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#running-a-pilot",
+      "kind": "docsection",
+      "label": "Running a pilot",
+      "source": "benchmarks/agent/README.md#running-a-pilot",
+      "attrs": {
+        "anchor": "running-a-pilot",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#swapping-the-agent",
+      "kind": "docsection",
+      "label": "Swapping the agent",
+      "source": "benchmarks/agent/README.md#swapping-the-agent",
+      "attrs": {
+        "anchor": "swapping-the-agent",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/README.md#what-a-run-does",
+      "kind": "docsection",
+      "label": "What a run does",
+      "source": "benchmarks/agent/README.md#what-a-run-does",
+      "attrs": {
+        "anchor": "what-a-run-does",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/analysis/README.md#benchmark-analysis",
+      "kind": "docsection",
+      "label": "Benchmark analysis",
+      "source": "benchmarks/agent/analysis/README.md#benchmark-analysis",
+      "attrs": {
+        "anchor": "benchmark-analysis",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/analysis/README.md#inputs",
+      "kind": "docsection",
+      "label": "Inputs",
+      "source": "benchmarks/agent/analysis/README.md#inputs",
+      "attrs": {
+        "anchor": "inputs",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/analysis/README.md#invocations",
+      "kind": "docsection",
+      "label": "Invocations",
+      "source": "benchmarks/agent/analysis/README.md#invocations",
+      "attrs": {
+        "anchor": "invocations",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/analysis/README.md#metric-definitions",
+      "kind": "docsection",
+      "label": "Metric definitions",
+      "source": "benchmarks/agent/analysis/README.md#metric-definitions",
+      "attrs": {
+        "anchor": "metric-definitions",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/analysis/README.md#statistics",
+      "kind": "docsection",
+      "label": "Statistics",
+      "source": "benchmarks/agent/analysis/README.md#statistics",
+      "attrs": {
+        "anchor": "statistics",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/arms/README.md#arms",
+      "kind": "docsection",
+      "label": "Arms",
+      "source": "benchmarks/agent/arms/README.md#arms",
+      "attrs": {
+        "anchor": "arms",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/arms/README.md#confounds",
+      "kind": "docsection",
+      "label": "Confounds",
+      "source": "benchmarks/agent/arms/README.md#confounds",
+      "attrs": {
+        "anchor": "confounds",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/arms/README.md#switches-as-implemented",
+      "kind": "docsection",
+      "label": "Switches, as implemented",
+      "source": "benchmarks/agent/arms/README.md#switches-as-implemented",
+      "attrs": {
+        "anchor": "switches-as-implemented",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/arms/README.md#what-is-not-switched-mcp",
+      "kind": "docsection",
+      "label": "What is NOT switched: MCP",
+      "source": "benchmarks/agent/arms/README.md#what-is-not-switched-mcp",
+      "attrs": {
+        "anchor": "what-is-not-switched-mcp",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/arms/README.md#what-the-probes-check-and-what-they-cannot",
+      "kind": "docsection",
+      "label": "What the probes check, and what they cannot",
+      "source": "benchmarks/agent/arms/README.md#what-the-probes-check-and-what-they-cannot",
+      "attrs": {
+        "anchor": "what-the-probes-check-and-what-they-cannot",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/arms/repo-description.md#claudemd",
+      "kind": "docsection",
+      "label": "CLAUDE.md",
+      "source": "benchmarks/agent/arms/repo-description.md#claudemd",
+      "attrs": {
+        "anchor": "claudemd",
+        "level": "1"
       }
     },
     {
@@ -41992,6 +42307,16 @@
       }
     },
     {
+      "id": "function:magusfile.buzz:agent_bench_test",
+      "kind": "function",
+      "label": "agent_bench_test",
+      "doc": "Runs the agent benchmark's analysis tests in a container, because Python never runs on the host (benchmarks/agent/README.md): the extractor and the statistics are stdlib-only and the image pins the interpreter. The image is overridable for a machine whose Docker cannot pull, `-- --image golang:1.25`; any image with a python3 serves, since nothing is installed into it.",
+      "source": "magusfile.buzz:2777",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:magusfile.buzz:bindings_generate",
       "kind": "function",
       "label": "bindings_generate",
@@ -42073,7 +42398,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.  Transport only: the plan names its own outputs and renders its own summary, so porting this to another provider is a rewrite of the two file formats and nothing else.",
-      "source": "magusfile.buzz:2811",
+      "source": "magusfile.buzz:2834",
       "attrs": {
         "exported": "true"
       }
@@ -42100,7 +42425,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:2792",
+      "source": "magusfile.buzz:2815",
       "attrs": {
         "exported": "true"
       }
@@ -42143,7 +42468,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:2938",
+      "source": "magusfile.buzz:2961",
       "attrs": {
         "exported": "true"
       }
@@ -42367,7 +42692,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:2899"
+      "source": "magusfile.buzz:2922"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -42433,7 +42758,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:2861"
+      "source": "magusfile.buzz:2884"
     },
     {
       "id": "function:magusfile.buzz:refuse_overwrite",
@@ -42507,7 +42832,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:2873"
+      "source": "magusfile.buzz:2896"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -42536,7 +42861,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:2996",
+      "source": "magusfile.buzz:3019",
       "attrs": {
         "exported": "true"
       }
@@ -42546,7 +42871,7 @@
       "kind": "function",
       "label": "session_load",
       "doc": "Loads this checkout's own Claude Code sessions, so the repository dogfoods the recipe it ships the same way it invokes the guard template it ships rather than keeping a private copy.  The recipe resolves the binary itself by walking up to the magusfile, so no argument names one here; from a worktree with no ./magus it falls through to PATH and announces itself on stderr if that copy cannot load.",
-      "source": "magusfile.buzz:2992",
+      "source": "magusfile.buzz:3015",
       "attrs": {
         "exported": "true"
       }
@@ -42633,7 +42958,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:2981",
+      "source": "magusfile.buzz:3004",
       "attrs": {
         "exported": "true"
       }
@@ -49970,7 +50295,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "target_count": "45"
+        "target_count": "46"
       }
     },
     {
@@ -50216,6 +50541,17 @@
       "source": ".",
       "attrs": {
         "declared_as": "advice_test",
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:.:agent-bench-test",
+      "kind": "target",
+      "label": "agent-bench-test",
+      "doc": "Runs the agent benchmark's analysis tests in a container, because Python never runs on the host (benchmarks/agent/README.md): the extractor and the statistics are stdlib-only and the image pins the interpreter.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "agent_bench_test",
         "engine": "buzz"
       }
     },
@@ -51938,6 +52274,14 @@
     },
     {
       "source": "dir:benchmarks",
+      "target": "dir:benchmarks/agent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent"
+    },
+    {
+      "source": "dir:benchmarks",
       "target": "dir:benchmarks/large-monorepo",
       "relation": "contains",
       "confidence": "extracted",
@@ -51959,6 +52303,78 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "benchmarks/README.md"
+    },
+    {
+      "source": "dir:benchmarks/agent",
+      "target": "dir:benchmarks/agent/analysis",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/analysis"
+    },
+    {
+      "source": "dir:benchmarks/agent",
+      "target": "dir:benchmarks/agent/arms",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms"
+    },
+    {
+      "source": "dir:benchmarks/agent",
+      "target": "dir:benchmarks/agent/tasks",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks"
+    },
+    {
+      "source": "dir:benchmarks/agent",
+      "target": "doc:benchmarks/agent/README.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/analysis",
+      "target": "doc:benchmarks/agent/analysis/README.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/analysis/README.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/arms",
+      "target": "doc:benchmarks/agent/arms/README.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms/README.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/arms",
+      "target": "doc:benchmarks/agent/arms/repo-description.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms/repo-description.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/_placeholder",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/_placeholder"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/_placeholder",
+      "target": "doc:benchmarks/agent/tasks/_placeholder/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/_placeholder/task.md"
     },
     {
       "source": "dir:benchmarks/large-monorepo",
@@ -57967,6 +58383,46 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "benchmarks/README.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/README.md",
+      "target": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/analysis/README.md",
+      "target": "docsection:benchmarks/agent/analysis/README.md#benchmark-analysis",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/analysis/README.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/arms/README.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "benchmarks/agent/arms/README.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/arms/README.md",
+      "target": "docsection:benchmarks/agent/arms/README.md#arms",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms/README.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/arms/repo-description.md",
+      "target": "docsection:benchmarks/agent/arms/repo-description.md#claudemd",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms/repo-description.md"
     },
     {
       "source": "doc:benchmarks/large-monorepo/README.md",
@@ -81783,6 +82239,150 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "benchmarks/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#analysis-image",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#arms",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#budget-caps",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#controls",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#headline-metric",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#not-built-yet",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#results-schema",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#running-a-pilot",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#swapping-the-agent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/README.md#agent-harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/README.md#what-a-run-does",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/analysis/README.md#benchmark-analysis",
+      "target": "docsection:benchmarks/agent/analysis/README.md#inputs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/analysis/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/analysis/README.md#benchmark-analysis",
+      "target": "docsection:benchmarks/agent/analysis/README.md#invocations",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/analysis/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/analysis/README.md#benchmark-analysis",
+      "target": "docsection:benchmarks/agent/analysis/README.md#metric-definitions",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/analysis/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/analysis/README.md#benchmark-analysis",
+      "target": "docsection:benchmarks/agent/analysis/README.md#statistics",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/analysis/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/arms/README.md#arms",
+      "target": "docsection:benchmarks/agent/arms/README.md#confounds",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/arms/README.md#arms",
+      "target": "docsection:benchmarks/agent/arms/README.md#switches-as-implemented",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/arms/README.md#arms",
+      "target": "docsection:benchmarks/agent/arms/README.md#what-is-not-switched-mcp",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/arms/README.md#arms",
+      "target": "docsection:benchmarks/agent/arms/README.md#what-the-probes-check-and-what-they-cannot",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/arms/README.md"
     },
     {
       "source": "docsection:benchmarks/large-monorepo/README.md#how-magus-is-wired",
@@ -108690,6 +109290,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:agent_bench_test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:bindings_generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -120770,6 +121378,14 @@
     },
     {
       "source": "project:.",
+      "target": "target:.:agent-bench-test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
       "target": "target:.:bindings-generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -122955,6 +123571,70 @@
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
+    },
+    {
+      "source": "target:.:agent-bench-test",
+      "target": "doc:benchmarks/agent/analysis/README.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:agent-bench-test",
+      "target": "docsection:benchmarks/agent/analysis/README.md#benchmark-analysis",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:agent-bench-test",
+      "target": "docsection:benchmarks/agent/analysis/README.md#inputs",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:agent-bench-test",
+      "target": "docsection:benchmarks/agent/analysis/README.md#invocations",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:agent-bench-test",
+      "target": "docsection:benchmarks/agent/analysis/README.md#metric-definitions",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:agent-bench-test",
+      "target": "docsection:benchmarks/agent/analysis/README.md#statistics",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:agent-bench-test",
+      "target": "op:docker:docker-run",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:agent-bench-test",
+      "target": "spell:docker",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
     },
     {
       "source": "target:.:bindings-generate",

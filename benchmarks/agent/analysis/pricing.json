@@ -1,0 +1,43 @@
+{
+  "_source": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "_read_on": "2026-09-09",
+  "_units": "USD per million tokens, first-party Claude API list prices",
+  "_note": "cache_write_5m is the 1.25x multiplier, cache_write_1h the 2x multiplier, cache_read the 0.1x multiplier (0.025x on the Fable models). A model absent from this table is an extraction error, never a guess.",
+  "models": {
+    "claude-opus-5": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0,
+      "cache_read": 0.5
+    },
+    "claude-opus-4-8": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0,
+      "cache_read": 0.5
+    },
+    "claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_write_5m": 2.5,
+      "cache_write_1h": 4.0,
+      "cache_read": 0.2
+    },
+    "claude-haiku-4-5": {
+      "input": 1.0,
+      "output": 5.0,
+      "cache_write_5m": 1.25,
+      "cache_write_1h": 2.0,
+      "cache_read": 0.1
+    },
+    "claude-fable-5-1": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_write_5m": 12.5,
+      "cache_write_1h": 20.0,
+      "cache_read": 0.25
+    }
+  }
+}

@@ -1392,6 +1392,26 @@
           "reads_secrets": false
         },
         {
+          "name": "agent-bench-test",
+          "declared": "agent_bench_test",
+          "doc": "Runs the agent benchmark's analysis tests in a container, because Python never runs on the host (benchmarks/agent/README.md): the extractor and the statistics are stdlib-only and the image pins the interpreter.",
+          "spells": [
+            {
+              "spell": "docker",
+              "ops": [
+                "docker-run"
+              ]
+            }
+          ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "benchmarks/agent/analysis/*"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
           "name": "compress-cgo-test",
           "declared": "compress_cgo_test",
           "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.",
