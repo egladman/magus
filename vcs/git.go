@@ -1879,8 +1879,6 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 		return "", fmt.Errorf("git preserve: temp index: %w", err)
 	}
 	idxPath := idx.Name()
-	// Created only for its NAME: git wants to write this file itself, and an open handle
-	// on Windows would block that. Removed on every path, including the error ones.
 	// Created only for its NAME: git writes this file itself, and an open handle would
 	// block that on Windows. Both errors are deliberately dropped - the file is about to
 	// be recreated by git, and the defer below removes it either way.
@@ -1932,11 +1930,60 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	// would make the handle resolve today and not next week.
 	//
 	// refs/magus/ is off every branch and not pushed without an explicit refspec, but it is
-	// NOT invisible: `git log --all`, `rev-list --all` and `clone --mirror` all see it.
-	// Nothing prunes these yet, and each pins the ancestry it was taken on, so a retention
-	// policy is owed before this runs on a schedule rather than on demand.
-	if _, err := run("update-ref", "refs/magus/preserved/"+sha, sha); err != nil {
+	// NOT invisible: `git log --all`, `rev-list --all` and `clone --mirror` all see it, and
+	// each ref pins the ancestry it was taken on. PrunePreserved below is what keeps that
+	// bounded.
+	if _, err := run("update-ref", preservedRefPrefix+sha, sha); err != nil {
 		return "", fmt.Errorf("git preserve: update-ref: %w", err)
 	}
+	// Pruned AFTER the new ref exists, so a failure here costs the old refs their cleanup
+	// and never costs this capture its anchor. The error is dropped for the same reason:
+	// preserving succeeded, and reporting a housekeeping failure as a preserve failure
+	// would send a caller looking for work that is safely stored.
+	_, _ = v.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
 	return sha, nil
+}
+
+// preservedRefPrefix is the namespace Preserve anchors under. Under refs/magus/ rather
+// than refs/heads/ or refs/tags/ so it shows up in neither `git branch` nor `git tag`,
+// and is not pushed without an explicit refspec.
+const preservedRefPrefix = "refs/magus/preserved/"
+
+// PrunePreserved deletes the refs Preserve anchored whose commit predates before.
+//
+// Keyed on the ref's COMMITTER date, which is when the capture was taken - not the
+// author date, which commit-tree copies from the environment and a caller can set.
+func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
+	run := func(args ...string) (string, error) {
+		cmd := vcsExec(ctx, "git", args...)
+		cmd.Dir = dir
+		cmd.Env = gitEnviron()
+		out, err := cmd.Output()
+		return strings.TrimSpace(string(out)), err
+	}
+	listed, err := run("for-each-ref", "--sort=committerdate",
+		"--format=%(refname) %(committerdate:unix)", preservedRefPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("git prune-preserved: for-each-ref: %w", err)
+	}
+	var dropped []string
+	for _, line := range strings.Split(listed, "\n") {
+		name, unix, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok {
+			continue
+		}
+		secs, convErr := strconv.ParseInt(unix, 10, 64)
+		if convErr != nil {
+			continue
+		}
+		// Sorted ascending, so the first ref at or after the cutoff ends the scan.
+		if !time.Unix(secs, 0).Before(before) {
+			break
+		}
+		if _, err := run("update-ref", "-d", name); err != nil {
+			return dropped, fmt.Errorf("git prune-preserved: update-ref -d %s: %w", name, err)
+		}
+		dropped = append(dropped, strings.TrimPrefix(name, preservedRefPrefix))
+	}
+	return dropped, nil
 }

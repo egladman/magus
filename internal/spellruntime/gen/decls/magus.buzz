@@ -171,6 +171,7 @@ export object VCSCheckpoint {
     patchDigest: str = "",
     untrackedDigest: str = "",
     vcs: str = "",
+    preserved: str = "",
 }
 
 export object DiffReviewed {

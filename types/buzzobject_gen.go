@@ -506,6 +506,7 @@ func (v VCSCheckpoint) BuzzObject() BuzzObject {
 		"patchDigest":     v.PatchDigest,
 		"untrackedDigest": v.UntrackedDigest,
 		"vcs":             v.VCS,
+		"preserved":       v.Preserved,
 	}
 }
 

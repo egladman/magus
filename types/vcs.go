@@ -43,7 +43,20 @@ type VCSDriver interface {
 	//
 	// The handle is OPAQUE. Each backend returns its own kind of name and only that
 	// backend can resolve it; nothing here reads one back.
+	//
+	// A handle stays resolvable until it is older than the retention PrunePreserved
+	// enforces. That bound is part of the contract because the alternative is a store
+	// that only grows, and a caller recording a handle deserves to know it has a
+	// lifetime rather than discovering later that it does not.
 	Preserve(ctx context.Context, dir string) (string, error)
+	// PrunePreserved drops every state Preserve minted in dir before the given time,
+	// and reports the handles it dropped, oldest first.
+	//
+	// Only what MAGUS minted. A backend whose Preserve mints nothing prunes nothing and
+	// returns no handles: its snapshots are its own model's to keep, and reaching into
+	// them would delete history magus did not create. That is the same guarantee, not a
+	// weaker one - magus cleans up after itself everywhere, and nowhere else.
+	PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error)
 	Metadata(ctx context.Context, dir string) (VCSMeta, error)
 	// Dirty reports whether the working tree has uncommitted changes. When paths
 	// is non-empty the probe is scoped to those pathspecs (interpreted relative to
@@ -899,6 +912,14 @@ type VCSCheckpoint struct {
 	// VCS is the resolved backend name (git, hg, jj), so a reader knows whose revision
 	// syntax Revision is written in.
 	VCS string `json:"vcs,omitempty" yaml:"vcs,omitempty"`
+	// Preserved is the handle to a capture of the uncommitted work, empty unless one was
+	// asked for and the tree was dirty.
+	//
+	// It is the only field a checkpoint MINTS, and the only one that answers a different
+	// question than the rest: the digests say whether two trees match, this one gets a
+	// tree back. Opaque and backend-native (see VCSDriver.Preserve), so it is read by the
+	// backend VCS names and by nothing else.
+	Preserved string `json:"preserved,omitempty" yaml:"preserved,omitempty"`
 }
 
 // DriftResultRecord is the boundary mirror cmd/magus-utils types reflects over; see

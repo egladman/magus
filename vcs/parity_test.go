@@ -4,7 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -35,14 +37,18 @@ type parityBackend struct {
 	// exactly why it belongs in the test: without it, a Preserve that returned a constant
 	// would satisfy every other assertion here.
 	readback func(t *testing.T, dir, handle, path string) string
+	// listPreserved names what MAGUS has minted in dir, in this backend's own store. It
+	// is what makes PrunePreserved checkable: a pruner that reports the right handles and
+	// deletes nothing passes every other assertion.
+	listPreserved func(t *testing.T, dir string) []string
 }
 
 func parityBackends() []parityBackend {
 	return []parityBackend{
-		{"git", "git", gitVCS{}, gitInitRepo, gitReadback},
-		{"hg", "hg", hgVCS{}, hgInitRepo, hgReadback},
-		{"sl", "sl", saplingVCS{}, slInitRepo, slReadback},
-		{"jj", "jj", jjVCS{}, jjInitRepo, jjReadback},
+		{"git", "git", gitVCS{}, gitInitRepo, gitReadback, gitListPreserved},
+		{"hg", "hg", hgVCS{}, hgInitRepo, hgReadback, hgListPreserved},
+		{"sl", "sl", saplingVCS{}, slInitRepo, slReadback, mintsNothing},
+		{"jj", "jj", jjVCS{}, jjInitRepo, jjReadback, mintsNothing},
 	}
 }
 
@@ -662,14 +668,14 @@ func TestParityCheckpointSeesUntrackedContent(t *testing.T) {
 		res := types.VCSResolution{VCS: b.drv, Name: b.name}
 
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "scratch.txt"), []byte("one\n"), 0o644))
-		first, err := Checkpoint(t.Context(), dir, res)
+		first, err := Checkpoint(t.Context(), dir, res, false)
 		require.NoError(t, err)
 		require.NotEmpty(t, first.UntrackedDigest, "%s: an untracked file left no mark", b.name)
 
 		// CONTENT, not just the path: the file name is unchanged, so a path-only
 		// fingerprint would call these two trees identical.
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "scratch.txt"), []byte("two\n"), 0o644))
-		second, err := Checkpoint(t.Context(), dir, res)
+		second, err := Checkpoint(t.Context(), dir, res, false)
 		require.NoError(t, err)
 		assert.NotEqual(t, first.UntrackedDigest, second.UntrackedDigest,
 			"%s: editing an untracked file did not move the digest", b.name)
@@ -691,7 +697,7 @@ func TestParityCheckpointUntrackedDigestEmptyWhenNoneAreUntracked(t *testing.T) 
 		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("edited\n"), 0o644))
 
-		cp, err := Checkpoint(t.Context(), dir, types.VCSResolution{VCS: b.drv, Name: b.name})
+		cp, err := Checkpoint(t.Context(), dir, types.VCSResolution{VCS: b.drv, Name: b.name}, false)
 		require.NoError(t, err)
 
 		assert.Empty(t, cp.UntrackedDigest, "%s: reported an untracked digest with nothing untracked", b.name)
@@ -791,4 +797,89 @@ func slReadback(t *testing.T, dir, handle, path string) string {
 func jjReadback(t *testing.T, dir, handle, path string) string {
 	t.Helper()
 	return vcsTestOutput(t, dir, "jj", "file", "show", "-r", handle, path)
+}
+
+// gitListPreserved names the refs Preserve anchored.
+func gitListPreserved(t *testing.T, dir string) []string {
+	t.Helper()
+	out := vcsTestOutput(t, dir, "git", "for-each-ref", "--format=%(refname)", "refs/magus/preserved/")
+	var names []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		names = append(names, strings.TrimPrefix(line, "refs/magus/preserved/"))
+	}
+	return names
+}
+
+// hgListPreserved names the magus shelves, ignoring any a person made by hand.
+//
+// Reads the PLAIN listing and trims the age Mercurial appends, rather than calling the
+// --quiet form the pruner uses. Sharing that call would make this test agree with the
+// pruner by construction: a parser that found nothing would report an empty mint set,
+// and every assertion below would pass over it.
+func hgListPreserved(t *testing.T, dir string) []string {
+	t.Helper()
+	out := vcsTestOutput(t, dir, "hg", "--config", "extensions.shelve=", "shelve", "--list")
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		// "name(1s ago)    message" - and with no space before the "(" when the name
+		// overflows the column, which is why the paren is the cut and whitespace is not.
+		name, _, _ := strings.Cut(strings.TrimSpace(line), "(")
+		if strings.HasPrefix(name, "magus-") {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// mintsNothing is sl's and jj's store of magus-minted state, which is empty by
+// construction: sl leaves its snapshot in Sapling's hidden set and jj mints nothing at
+// all, so on both backends there is nothing for magus to list or to prune. Shared rather
+// than written twice, because it is one fact about two backends.
+func mintsNothing(*testing.T, string) []string { return nil }
+
+// TestParityPrunePreservedDropsWhatMagusMinted holds the other half of Preserve's
+// contract: a handle has a LIFETIME, and what ends it is magus deleting its own object
+// and nothing else.
+//
+// One test over four backends again, and the split it exposes is the honest one. git and
+// hg mint a named thing magus owns and must therefore clean up; sl and jj mint nothing,
+// so their mint set is empty and every assertion below reads correctly against it. That
+// is the same guarantee on all four - magus removes what magus wrote - rather than a
+// weaker promise hidden behind an optional interface.
+func TestParityPrunePreservedDropsWhatMagusMinted(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v2\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("scratch\n"), 0o644))
+
+		_, err := b.drv.Preserve(t.Context(), dir)
+		require.NoErrorf(t, err, "%s: Preserve failed", b.name)
+		minted := b.listPreserved(t, dir)
+
+		// A cutoff OLDER than the capture drops nothing. Without this the test passes for a
+		// pruner that ignores its argument and deletes everything it finds.
+		dropped, err := b.drv.PrunePreserved(t.Context(), dir, time.Now().Add(-time.Hour))
+		require.NoErrorf(t, err, "%s: PrunePreserved failed", b.name)
+		assert.Emptyf(t, dropped, "%s: dropped a capture newer than the cutoff", b.name)
+		assert.ElementsMatchf(t, minted, b.listPreserved(t, dir),
+			"%s: the store changed under a cutoff that matched nothing", b.name)
+
+		dropped, err = b.drv.PrunePreserved(t.Context(), dir, time.Now().Add(time.Hour))
+		require.NoErrorf(t, err, "%s: PrunePreserved failed", b.name)
+		assert.ElementsMatchf(t, minted, dropped, "%s: reported the wrong handles", b.name)
+		assert.Emptyf(t, b.listPreserved(t, dir), "%s: reported handles it did not delete", b.name)
+
+		// Pruning is still not allowed to cost working-copy state, for the same reason
+		// capturing is not: it runs inside Preserve, on a tree somebody is working in.
+		tracked, err := os.ReadFile(filepath.Join(dir, "tracked.txt"))
+		require.NoError(t, err)
+		assert.Equalf(t, "v2\n", string(tracked), "%s: PrunePreserved changed a tracked file", b.name)
+		untracked, err := os.ReadFile(filepath.Join(dir, "untracked.txt"))
+		require.NoErrorf(t, err, "%s: PrunePreserved removed an untracked file", b.name)
+		assert.Equalf(t, "scratch\n", string(untracked), "%s: PrunePreserved changed an untracked file", b.name)
+	})
 }

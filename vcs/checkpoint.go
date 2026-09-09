@@ -21,10 +21,15 @@ import (
 // pays only the cost of the probes, and a checkpoint nobody kept has cost nothing.
 // magus emits the facts; whoever holds the ledger decides what they mean.
 //
+// preserve is the one exception, and it is opt-in for exactly that reason: it captures
+// the uncommitted work through [types.VCSDriver.Preserve] and fills VCSCheckpoint.Preserved
+// with a handle that restores it. The working copy is still untouched, but the backend
+// gains an object, so a caller asks for it rather than paying for it by default.
+//
 // One Metadata call covers revision, branch and dirtiness, so a clean tree spawns no
 // second round of processes. The patch is read only when the tree is dirty, which is
 // also the only case where a digest would say anything.
-func Checkpoint(ctx context.Context, dir string, res types.VCSResolution) (types.VCSCheckpoint, error) {
+func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preserve bool) (types.VCSCheckpoint, error) {
 	if res.VCS == nil {
 		return types.VCSCheckpoint{}, errors.New("vcs checkpoint: no VCS resolved for this workspace; there is no revision to record")
 	}
@@ -47,6 +52,13 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution) (types
 	}
 	cp.PatchDigest = patchDigest(patch)
 	cp.UntrackedDigest = untrackedDigest(ctx, dir, res)
+	if preserve {
+		handle, err := res.VCS.Preserve(ctx, dir)
+		if err != nil {
+			return types.VCSCheckpoint{}, fmt.Errorf("vcs checkpoint: %w", err)
+		}
+		cp.Preserved = handle
+	}
 	return cp, nil
 }
 

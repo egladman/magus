@@ -411,6 +411,8 @@ const (
 	FlagVCSAddReason = "reason"
 	// vcs add: --untracked
 	FlagVCSAddUntracked = "untracked"
+	// vcs checkpoint: --preserve
+	FlagVCSCheckpointPreserve = "preserve"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
 	// version: --client
@@ -929,6 +931,18 @@ type VCSResolveFlags struct {
 func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	var f VCSResolveFlags
 	fs.StringVar(&f.Against, FlagVCSResolveAgainst, "", "Merge this `ref` first, then settle what it conflicts with")
+	return &f
+}
+
+// VCSCheckpointFlags are the flags declared for `magus vcs checkpoint`.
+type VCSCheckpointFlags struct {
+	Preserve bool // --preserve
+}
+
+// BindVCSCheckpoint registers `magus vcs checkpoint`'s flags on fs and returns the destination.
+func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
+	var f VCSCheckpointFlags
+	fs.BoolVar(&f.Preserve, FlagVCSCheckpointPreserve, false, "Also capture the uncommitted work and print a handle that restores it")
 	return &f
 }
 

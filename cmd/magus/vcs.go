@@ -553,20 +553,29 @@ func vcsCheckpointUsage(w io.Writer) {
 	fmt.Fprintln(w, "do not keep costs nothing either. Record it when you hand work out, so a")
 	fmt.Fprintln(w, "later reader knows what that work was looking at.")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "--preserve is the exception, and the reason it is a flag. An identity tells")
+	fmt.Fprintln(w, "you whether two trees match; it cannot rebuild either one. --preserve also")
+	fmt.Fprintln(w, "captures the uncommitted work, tracked edits and untracked files alike, and")
+	fmt.Fprintln(w, "prints a handle that restores it. The working copy is untouched either way.")
+	fmt.Fprintln(w, "A capture is kept for 30 days, then dropped.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Feed the revision to anything that takes one ("+hint.GraphDiff.With("--rev", "<rev>")+").")
 	fmt.Fprintln(w, "Compare two digests to learn whether two workers saw the same uncommitted")
 	fmt.Fprintln(w, "tree, which the revision alone cannot tell you: a dirty tree's revision is")
 	fmt.Fprintln(w, "the same one everybody else has.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
+	fmt.Fprintln(w, "  --preserve capture the uncommitted work too, and print a handle for it")
 	fmt.Fprintln(w, "  -o name    the citable token: the revision, or <revision>+<digest> when dirty")
 	fmt.Fprintln(w, "  -o json    the whole record (global flag; yaml, jsonl and template too)")
 }
 
 // vcsCheckpointCmd reads the working state's identity and prints it.
 func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
+	var flags *gen.VCSCheckpointFlags
 	pos, err := cmdParse("vcs checkpoint", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() { vcsCheckpointUsage(os.Stderr) }
+		flags = gen.BindVCSCheckpoint(fs)
 	})
 	if err != nil {
 		return err
@@ -588,7 +597,7 @@ func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("vcs checkpoint: %w", err)
 	}
-	cp, err := vcs.Checkpoint(ctx, wsRoot, res)
+	cp, err := vcs.Checkpoint(ctx, wsRoot, res, flags.Preserve)
 	if err != nil {
 		return err
 	}

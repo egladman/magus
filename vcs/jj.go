@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/types"
 )
@@ -761,4 +762,13 @@ func (v jjVCS) Preserve(ctx context.Context, dir string) (string, error) {
 		return "", fmt.Errorf("jj preserve: log: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// PrunePreserved drops nothing, because Preserve minted nothing.
+//
+// The handle is @'s own commit id. jj keeps it in the operation log, which jj expires on
+// its own schedule; magus deleting from there would be discarding the working-copy
+// history the backend maintains for its own undo.
+func (v jjVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
+	return nil, nil
 }

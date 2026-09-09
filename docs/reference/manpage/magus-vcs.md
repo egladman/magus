@@ -44,10 +44,19 @@ clone would settle silently, and why resolve exists as the bulk counterpart.
 checkpoint prints the identity of the working state right now - head revision,
 branch, whether the tree is dirty, and a digest of the uncommitted patch. Record
 one when you hand a piece of work out, so a later reader knows what that work was
-looking at. It RESOLVES AND RECORDS and never MINTS: no tag, no stash, no ref, no
-file, nothing changed anywhere, so a checkpoint nobody keeps has cost nothing.
-Feed the revision to anything that takes one; compare two digests to learn whether
-two workers saw the same uncommitted tree, which the revision alone cannot say.
+looking at. By default it RESOLVES AND RECORDS and never MINTS: no tag, no stash,
+no ref, no file, nothing changed anywhere, so a checkpoint nobody keeps has cost
+nothing. Feed the revision to anything that takes one; compare two digests to learn
+whether two workers saw the same uncommitted tree, which the revision alone cannot
+say.
+
+--preserve is the one thing that mints. An identity says whether two trees match;
+it cannot rebuild either one. --preserve additionally captures the uncommitted
+work - tracked edits and untracked files alike - and prints a handle that gets it
+back, using each backend's own mechanism: a commit under refs/magus/preserved for
+git, a kept shelf for Mercurial, the snapshot Sapling and Jujutsu already hold. The
+working copy is untouched either way. A preserved capture is kept for 30 days and
+then dropped, so the store cannot grow without bound.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.
@@ -65,6 +74,11 @@ base in yourself on the others, then run resolve.
 **--against** *ref*
 : Merge this \`ref\` first, then settle what it conflicts with
 
+### vcs checkpoint options
+
+**--preserve**
+: Also capture the uncommitted work and print a handle that restores it
+
 ## Subcommands
 
 **add**
@@ -74,7 +88,7 @@ base in yourself on the others, then run resolve.
 : Settle an in-progress merge's conflicted generated files, then regenerate once
 
 **checkpoint**
-: Print the working state's identity, for recording what a lease was handed; writes nothing
+: Print the working state's identity, for recording what a lease was handed; writes nothing unless --preserve
 
 **merge-driver**
 : The per-file merge driver git and hg invoke; you do not run this by hand
@@ -121,6 +135,12 @@ magus vcs checkpoint
 
 ```sh
 magus vcs checkpoint -o name
+```
+
+*Capture the uncommitted work too, before something risky*
+
+```sh
+magus vcs checkpoint --preserve
 ```
 
 ## See Also

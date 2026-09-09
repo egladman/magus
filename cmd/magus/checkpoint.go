@@ -79,7 +79,9 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 	// documented host, so failing would mean the hook errors every turn and files
 	// nothing in exactly the trees where "where was I" is hardest to answer.
 	if res, err := vcs.Resolve(ctx, wsRoot, "", vcsOpts); err == nil {
-		c.Tree, _ = vcs.Checkpoint(ctx, wsRoot, res)
+		// Never preserves: this runs as a stop hook on every turn, and a hook that minted
+		// an object per turn would fill the backend with captures nobody asked for.
+		c.Tree, _ = vcs.Checkpoint(ctx, wsRoot, res, false)
 	}
 
 	dir, err := sessions.Dir(wsRoot)

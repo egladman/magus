@@ -1064,3 +1064,14 @@ func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	}
 	return sha, nil
 }
+
+// PrunePreserved drops nothing, because Preserve anchored nothing to drop.
+//
+// The uncommit leaves the snapshot in Sapling's hidden set, which is where Sapling puts
+// everything it stops showing you and is the reason `sl` can promise nothing is ever
+// lost. No bookmark, no remote name, nothing magus owns - so its lifetime is Sapling's
+// own, and a retention pass here would be magus deleting commits out of a store built on
+// not deleting them.
+func (v saplingVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
+	return nil, nil
+}

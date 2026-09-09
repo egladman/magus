@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -968,5 +969,54 @@ func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 		return name, fmt.Errorf("hg preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
 			name, pending.unknown, pending.missing, err)
 	}
+	// Pruned after the shelf exists, and its error dropped: preserving succeeded, and a
+	// housekeeping failure reported as a preserve failure sends a caller looking for work
+	// that is safely stored.
+	_, _ = v.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
 	return name, nil
+}
+
+// PrunePreserved deletes the magus shelves older than before.
+//
+// Only shelves whose name shelfName minted, read back from the name itself: `hg shelve
+// --list` prints ages as prose and takes no template, so the mint time travels in the
+// name rather than through Mercurial's human output. A shelf a person made by hand does
+// not carry the prefix and is never in scope.
+func (v hgVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
+	// --quiet prints bare names, one per line. Without it the name runs straight into the
+	// age when it overflows the column ("magus-...(1s ago)"), so there is no separator to
+	// split on.
+	cmd := vcsExec(ctx, "hg", "--config", "extensions.shelve=", "shelve", "--list", "--quiet")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("hg prune-preserved: shelve --list: %w", err)
+	}
+	type shelf struct {
+		name   string
+		minted time.Time
+	}
+	var stale []shelf
+	for _, line := range strings.Split(string(out), "\n") {
+		name := strings.TrimSpace(line)
+		minted, ok := shelfMinted(name)
+		if !ok || !minted.Before(before) {
+			continue
+		}
+		stale = append(stale, shelf{name: name, minted: minted})
+	}
+	// Oldest first, as the contract says, and by the stamped time rather than the listing
+	// order: `hg shelve --list` prints newest first.
+	slices.SortFunc(stale, func(a, b shelf) int { return a.minted.Compare(b.minted) })
+	var dropped []string
+	for _, s := range stale {
+		name := s.name
+		del := vcsExec(ctx, "hg", "--config", "extensions.shelve=", "shelve", "--delete", name)
+		del.Dir = dir
+		if delOut, err := del.CombinedOutput(); err != nil {
+			return dropped, fmt.Errorf("hg prune-preserved: shelve --delete %s: %w: %s", name, err, strings.TrimSpace(string(delOut)))
+		}
+		dropped = append(dropped, name)
+	}
+	return dropped, nil
 }

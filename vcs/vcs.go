@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -353,16 +354,54 @@ func trimStatusColumns(lines []string, width int) []string {
 // what put it there before they wonder what they did.
 const preserveMessage = "magus preserved working copy"
 
-// shelfName mints the name Mercurial stores a shelf under. Random rather than derived
-// from the content: two preserved copies of one tree are distinct events, and a content-derived
-// name would collapse them into one.
+// preserveRetention is how long a preserved state stays resolvable. Enforced by every
+// Preserve rather than by a schedule, so the bound holds on a machine that never runs a
+// maintenance target and the store cannot grow without one.
+//
+// Thirty days because the handle's whole job is to survive the gap between handing work
+// out and someone coming back to it, and that gap is measured in days. Short enough that
+// a busy repository does not accumulate a year of snapshots; long enough that a handle
+// recorded in a ledger still resolves when anyone actually reads that ledger.
+const preserveRetention = 30 * 24 * time.Hour
+
+// shelfPrefix marks a shelf as magus's. PrunePreserved deletes only these, so a shelf a
+// person made by hand is never in scope.
+const shelfPrefix = "magus-"
+
+// shelfName mints the name Mercurial stores a shelf under: the prefix, the mint time in
+// unix seconds, then random bytes.
+//
+// Random, because two preserved copies of one tree are distinct events and a
+// content-derived name would collapse them into one. Timestamped, because the name is
+// the only thing about a shelf that both magus and Mercurial agree on - `hg shelve
+// --list` prints ages as prose ("2m ago") and takes no template, so a retention pass
+// that read it would be parsing a UI string. Putting the time in the name we mint keeps
+// pruning off that surface entirely.
 func shelfName() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		// A snapshot that cannot be named is worse than one named predictably.
-		return fmt.Sprintf("magus-%d", time.Now().UnixNano())
+		return fmt.Sprintf("%s%d-%d", shelfPrefix, time.Now().Unix(), time.Now().UnixNano())
 	}
-	return "magus-" + hex.EncodeToString(b[:])
+	return fmt.Sprintf("%s%d-%s", shelfPrefix, time.Now().Unix(), hex.EncodeToString(b[:]))
+}
+
+// shelfMinted reads back the time shelfName stamped, and reports false for any name it
+// did not mint.
+func shelfMinted(name string) (time.Time, bool) {
+	rest, ok := strings.CutPrefix(name, shelfPrefix)
+	if !ok {
+		return time.Time{}, false
+	}
+	secs, _, ok := strings.Cut(rest, "-")
+	if !ok {
+		return time.Time{}, false
+	}
+	n, err := strconv.ParseInt(secs, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(n, 0), true
 }
 
 // hgFamilyPending is the working-copy state preserving consumes and has to put

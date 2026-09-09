@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/egladman/magus/types"
 	mock "github.com/stretchr/testify/mock"
@@ -1043,6 +1044,80 @@ func (_c *MockVCSDriver_Preserve_Call) Return(s string, err error) *MockVCSDrive
 }
 
 func (_c *MockVCSDriver_Preserve_Call) RunAndReturn(run func(ctx context.Context, dir string) (string, error)) *MockVCSDriver_Preserve_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PrunePreserved provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
+	ret := _mock.Called(ctx, dir, before)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PrunePreserved")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, time.Time) ([]string, error)); ok {
+		return returnFunc(ctx, dir, before)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, time.Time) []string); ok {
+		r0 = returnFunc(ctx, dir, before)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, time.Time) error); ok {
+		r1 = returnFunc(ctx, dir, before)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_PrunePreserved_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PrunePreserved'
+type MockVCSDriver_PrunePreserved_Call struct {
+	*mock.Call
+}
+
+// PrunePreserved is a helper method to define mock.On call
+//   - ctx context.Context
+//   - dir string
+//   - before time.Time
+func (_e *MockVCSDriver_Expecter) PrunePreserved(ctx interface{}, dir interface{}, before interface{}) *MockVCSDriver_PrunePreserved_Call {
+	return &MockVCSDriver_PrunePreserved_Call{Call: _e.mock.On("PrunePreserved", ctx, dir, before)}
+}
+
+func (_c *MockVCSDriver_PrunePreserved_Call) Run(run func(ctx context.Context, dir string, before time.Time)) *MockVCSDriver_PrunePreserved_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 time.Time
+		if args[2] != nil {
+			arg2 = args[2].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_PrunePreserved_Call) Return(strings []string, err error) *MockVCSDriver_PrunePreserved_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_PrunePreserved_Call) RunAndReturn(run func(ctx context.Context, dir string, before time.Time) ([]string, error)) *MockVCSDriver_PrunePreserved_Call {
 	_c.Call.Return(run)
 	return _c
 }
