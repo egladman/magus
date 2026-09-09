@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5326,
-  "edge_count": 9474,
+  "node_count": 5329,
+  "edge_count": 9477,
   "relations": [
     {
       "id": "annotates",
@@ -1227,7 +1227,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "586",
+        "dir_files": "587",
         "dir_languages": "markdown,md#1-built-in-command-spells-import-maguscharm,md#2-workspace-spells--magusfiles-import-charm,md#3-raw-rfc-6902-data-the-lowest-level,md#4-function-targets--ops-branch-in-code,md#a-bypass-fails-closed,md#a-gap-worth-knowing,md#a-known-leak-a-multi"
       }
     },
@@ -1237,7 +1237,7 @@
       "label": "docs/concepts/cache",
       "source": "docs/concepts/cache",
       "attrs": {
-        "dir_files": "40",
+        "dir_files": "41",
         "dir_languages": "markdown,md#a-known-leak-a-multi-line-tool-probe-lands-whole-in-the-key,md#a-probes-output-is-not-a-version,md#attempts-one-ref-every-execution,md#diagnostics,md#diff-delegates-it-does-not-render,md#explaining-a-ref-difference,md#extraction-is-opt-in,md#fo"
       }
     },
@@ -6776,6 +6776,16 @@
       }
     },
     {
+      "id": "docsection:CHANGELOG.md#added-8",
+      "kind": "docsection",
+      "label": "Added",
+      "source": "CHANGELOG.md#added-8",
+      "attrs": {
+        "anchor": "added-8",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:CHANGELOG.md#breaking",
       "kind": "docsection",
       "label": "Breaking",
@@ -8816,6 +8826,16 @@
       }
     },
     {
+      "id": "docsection:docs/changelog.md#added-8",
+      "kind": "docsection",
+      "label": "Added",
+      "source": "docs/changelog.md#added-8",
+      "attrs": {
+        "anchor": "added-8",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/changelog.md#breaking",
       "kind": "docsection",
       "label": "Breaking",
@@ -9462,6 +9482,16 @@
       "source": "docs/concepts/cache/output-refs.md#how-refs-are-stored",
       "attrs": {
         "anchor": "how-refs-are-stored",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/concepts/cache/output-refs.md#re-running-a-target-whose-inputs-have-not-moved",
+      "kind": "docsection",
+      "label": "Re-running a target whose inputs have not moved",
+      "source": "docs/concepts/cache/output-refs.md#re-running-a-target-whose-inputs-have-not-moved",
+      "attrs": {
+        "anchor": "re-running-a-target-whose-inputs-have-not-moved",
         "level": "2"
       }
     },
@@ -80888,6 +80918,14 @@
     },
     {
       "source": "docsection:CHANGELOG.md#unreleased",
+      "target": "docsection:CHANGELOG.md#added",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "docsection:CHANGELOG.md#unreleased",
       "target": "docsection:CHANGELOG.md#changed",
       "relation": "contains",
       "confidence": "extracted",
@@ -80904,7 +80942,7 @@
     },
     {
       "source": "docsection:CHANGELOG.md#v010---2026-07-05",
-      "target": "docsection:CHANGELOG.md#added-7",
+      "target": "docsection:CHANGELOG.md#added-8",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -80921,14 +80959,6 @@
     {
       "source": "docsection:CHANGELOG.md#v010---2026-07-05",
       "target": "docsection:CHANGELOG.md#fixed-8",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "docsection:CHANGELOG.md#v042---2026-09-03",
-      "target": "docsection:CHANGELOG.md#added-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -80969,6 +80999,14 @@
     {
       "source": "docsection:CHANGELOG.md#v042---2026-09-03",
       "target": "docsection:CHANGELOG.md#added-6",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "docsection:CHANGELOG.md#v042---2026-09-03",
+      "target": "docsection:CHANGELOG.md#added-7",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -81128,7 +81166,7 @@
     },
     {
       "source": "docsection:CHANGELOG.md#v043---2026-09-06",
-      "target": "docsection:CHANGELOG.md#added",
+      "target": "docsection:CHANGELOG.md#added-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -82392,6 +82430,14 @@
     },
     {
       "source": "docsection:docs/changelog.md#unreleased",
+      "target": "docsection:docs/changelog.md#added",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "docsection:docs/changelog.md#unreleased",
       "target": "docsection:docs/changelog.md#changed",
       "relation": "contains",
       "confidence": "extracted",
@@ -82408,7 +82454,7 @@
     },
     {
       "source": "docsection:docs/changelog.md#v010---2026-07-05",
-      "target": "docsection:docs/changelog.md#added-7",
+      "target": "docsection:docs/changelog.md#added-8",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -82425,14 +82471,6 @@
     {
       "source": "docsection:docs/changelog.md#v010---2026-07-05",
       "target": "docsection:docs/changelog.md#fixed-8",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "docsection:docs/changelog.md#v042---2026-09-03",
-      "target": "docsection:docs/changelog.md#added-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -82473,6 +82511,14 @@
     {
       "source": "docsection:docs/changelog.md#v042---2026-09-03",
       "target": "docsection:docs/changelog.md#added-6",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "docsection:docs/changelog.md#v042---2026-09-03",
+      "target": "docsection:docs/changelog.md#added-7",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -82632,7 +82678,7 @@
     },
     {
       "source": "docsection:docs/changelog.md#v043---2026-09-06",
-      "target": "docsection:docs/changelog.md#added",
+      "target": "docsection:docs/changelog.md#added-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -82905,6 +82951,14 @@
     {
       "source": "docsection:docs/concepts/cache/output-refs.md#target-output-references",
       "target": "docsection:docs/concepts/cache/output-refs.md#how-refs-are-stored",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "docsection:docs/concepts/cache/output-refs.md#target-output-references",
+      "target": "docsection:docs/concepts/cache/output-refs.md#re-running-a-target-whose-inputs-have-not-moved",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

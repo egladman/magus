@@ -48,7 +48,8 @@ type TargetResult struct {
 	Hash       string `json:"hash,omitempty"`
 	DurationMs int64  `json:"duration_ms,omitempty"`
 	Error      string `json:"error,omitempty"`
-	Ref        string `json:"ref,omitempty"` // per-execution output reference id, so a consumer can fetch this target's captured output by ref
+	Ref        string `json:"ref,omitempty"`  // per-execution output reference id, so a consumer can fetch this target's captured output by ref
+	Hint       string `json:"hint,omitempty"` // stable id of the advisory line this target printed, so a hint's uptake is countable without matching its wording
 }
 
 // GraphBuild is one graph construction event, emitted once per Build.
@@ -184,6 +185,7 @@ func RunOptions(w *Writer) []cache.RunOption {
 				Hash:       r.Hash,
 				DurationMs: r.Duration.Milliseconds(),
 				Ref:        r.Ref,
+				Hint:       r.Hint,
 			}
 			if err != nil {
 				tr.Status = "failed"

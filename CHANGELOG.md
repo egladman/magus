@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **A target whose inputs have not moved since it failed says so before it runs again.** A
+  failure is not a cache entry, but its descriptor is still stored under the step's cache
+  key, so a miss can check whether this exact tree has already been seen to fail. When it
+  has, the run prints one line naming the recorded ref, the error it ended with, and the
+  `magus query output` that reads it. Nothing is replayed and nothing is skipped: the
+  target executes exactly as before, and the line is context rather than a verdict. It
+  fires once per cache key, so an edit that moves the inputs speaks again; `-s` keeps it
+  and `--no-hints` drops it. The result record carries `"hint": "unchanged-failure"` in
+  `-o jsonl`, a stable id to count instead of the wording.
+
 ### Fixed
 
 - **A release whose publish step fails can be finished without rewriting the tag.** Cutting

@@ -980,3 +980,96 @@ func TestRunAllSlotsHandbackNoDeadlock(t *testing.T) {
 		t.Fatal("weighted step deadlocked handing back its slot to reserve more")
 	}
 }
+
+// hintCache opens a mutable cache whose one source file holds body, which every hint
+// test must make unique: interactive.Emit dedupes on the whole message for the life of
+// the process, and the ref inside the message derives from the cache key, so two tests
+// built on identical sources would have the second one's line silently swallowed.
+func hintCache(t *testing.T, body string) (Step, *Cache) {
+	t.Helper()
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, body)
+	return makeStep(root), c
+}
+
+// TestRunHintsUnchangedFailureOnce covers the whole contract of the unchanged-inputs
+// warning: silent on the run that fails, spoken on the next run with the same key,
+// silent again after that, and never in place of executing the step. A failure is not a
+// replayable cache result, so every one of these runs calls fn.
+func TestRunHintsUnchangedFailureOnce(t *testing.T) {
+	step, c := hintCache(t, "package main // hint once")
+	boom := errors.New("linker segfaulted")
+	calls := 0
+	fn := func(_ context.Context) error {
+		calls++
+		return boom
+	}
+
+	first := captureStderr(t, func() {
+		_, err := c.Run(context.Background(), step, fn)
+		require.ErrorIs(t, err, boom)
+	})
+	assert.NotContains(t, first, "inputs unchanged", "nothing was recorded yet to point at")
+
+	var second Result
+	out := captureStderr(t, func() {
+		var err error
+		second, err = c.Run(context.Background(), step, fn)
+		require.ErrorIs(t, err, boom)
+	})
+	assert.Contains(t, out, "hint: inputs unchanged since out")
+	assert.Contains(t, out, boom.Error(), "the line names why the recorded run failed")
+	assert.Contains(t, out, "magus query output out", "the line names how to read it")
+	assert.Equal(t, 2, calls, "the hint advises; it never replaces the run")
+	// The id the report layer projects into the result record's `hint` field, so a
+	// consumer counts uptake by id rather than by matching the wording above.
+	assert.Equal(t, HintUnchangedFailure, second.Hint)
+
+	third := captureStderr(t, func() {
+		_, err := c.Run(context.Background(), step, fn)
+		require.ErrorIs(t, err, boom)
+	})
+	assert.NotContains(t, third, "inputs unchanged", "once per key, not once per run")
+	assert.Equal(t, 3, calls)
+}
+
+// TestRunNoHintWhenInputsChanged verifies the warning is about the KEY: an edited source
+// hashes to a different one, which has no recorded failure to report.
+func TestRunNoHintWhenInputsChanged(t *testing.T) {
+	step, c := hintCache(t, "package main // hint moved inputs")
+	boom := errors.New("compile error")
+	fn := func(_ context.Context) error { return boom }
+
+	_, err := c.Run(context.Background(), step, fn)
+	require.ErrorIs(t, err, boom)
+
+	writeMain(t, step.WorkspaceRoot, "package main // hint moved inputs, edited")
+	var res Result
+	out := captureStderr(t, func() {
+		res, err = c.Run(context.Background(), step, fn)
+		require.ErrorIs(t, err, boom)
+	})
+	assert.NotContains(t, out, "inputs unchanged")
+	assert.Empty(t, res.Hint)
+}
+
+// TestRunNoHintAfterSuccess verifies a passing step's recorded descriptor is never
+// reported as a failure. SkipReplay forces the second run down the miss path, so the
+// stored descriptor is actually consulted rather than the run ending at a cache hit.
+func TestRunNoHintAfterSuccess(t *testing.T) {
+	step, c := hintCache(t, "package main // hint after success")
+	fn := func(_ context.Context) error { return nil }
+
+	_, err := c.Run(context.Background(), step, fn)
+	require.NoError(t, err)
+
+	step.SkipReplay = true
+	var res Result
+	out := captureStderr(t, func() {
+		res, err = c.Run(context.Background(), step, fn)
+		require.NoError(t, err)
+	})
+	assert.False(t, res.Hit, "SkipReplay must take the miss path for this to test anything")
+	assert.NotContains(t, out, "inputs unchanged")
+	assert.Empty(t, res.Hint)
+}

@@ -290,6 +290,24 @@ as a cache entry, and an entry can never file itself under a different key. Arti
 from an older magus still verify; magus simply ignores the extras their signature did
 not cover.
 
+## Re-running a target whose inputs have not moved
+
+A failure is not a cache entry, so re-running a failing target always executes it
+again. The descriptor is still stored under the step's cache key, though, so magus can
+tell you it has seen this exact tree fail before. When a miss lands on a key whose last
+recorded execution failed, the run prints one line before the target starts:
+
+```text
+hint: inputs unchanged since outcc49db1f, which failed: tsc exit 2; read it with magus query output outcc49db1f
+```
+
+Nothing is replayed and nothing is skipped: the target runs exactly as it would have,
+and the line is context rather than a verdict. It appears once per cache key, so an
+edit that moves the inputs mints a different ref and the hint speaks again; `-s` keeps
+it, and `--no-hints` drops it with every other hint. The target's result record carries
+`"hint": "unchanged-failure"` in `-o jsonl`, which is the stable id to count rather than
+the wording above.
+
 ## Tips and tricks
 
 Copy-paste-ready one-liners:

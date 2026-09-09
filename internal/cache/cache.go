@@ -29,7 +29,9 @@ import (
 
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	runPkg "github.com/egladman/magus/internal/proc/run"
@@ -233,6 +235,10 @@ type Result struct {
 	// an entry written before the manifest carried a duration: the same understatement
 	// SavedMs carries, for the same reason.
 	Saved time.Duration
+	// Hint is the stable id of the advisory line this step printed, "" when it printed
+	// none; today only [HintUnchangedFailure]. It rides the result the way Ref does so a
+	// consumer counting a hint's uptake never has to match on its wording.
+	Hint string
 }
 
 type runCtx struct {
@@ -585,6 +591,8 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		return result, err
 	}
 
+	result.Hint = c.emitUnchangedFailureHint(hash)
+
 	// Taken here rather than threaded out of hashStep, to leave that pinned hot path
 	// alone; the files were just hashed, so the mtime fast-path makes this a stat sweep.
 	preSources, preErr := c.fingerprintSources(ctx, rc.step)
@@ -732,6 +740,43 @@ func withExportReadLockCache(ctx context.Context, c *Cache) context.Context {
 func exportReadLockCacheFrom(ctx context.Context) *Cache {
 	c, _ := ctx.Value(exportReadLockCacheKey{}).(*Cache)
 	return c
+}
+
+// HintUnchangedFailure is the stable id of the line a step prints when its inputs are
+// unchanged since a recorded failure. Carried on [Result.Hint] so a consumer counts the
+// hint's uptake by id rather than by matching its wording, which is free to change.
+const HintUnchangedFailure = "unchanged-failure"
+
+// maxHintErrChars bounds the recorded failure message inside a hint that promises to be
+// one line. The full message is behind the ref the line names.
+const maxHintErrChars = 120
+
+// emitUnchangedFailureHint names the recorded failure this step's cache key already
+// holds, and returns [HintUnchangedFailure] when it said so. Nothing is replayed: a
+// failure is deliberately not a cacheable result (docs/concepts/cache/output-refs.md),
+// so the step runs either way and the line is context, never a verdict. Empty when the
+// key has no stored execution, when the newest one passed, or when hints are off.
+//
+// Once per key rather than per target, because the fact reported is about the KEY: a
+// re-run whose inputs moved hashes differently and deserves silence. The dedupe rides
+// interactive.Emit, which keys on the whole message; the ref inside it is derived from
+// the cache key, so one line per key per process falls out with no state of its own,
+// and one `magus run` invocation is one process.
+func (c *Cache) emitUnchangedFailureHint(hash string) string {
+	if c.outputs == nil || !interactive.HintsEnabled() {
+		return ""
+	}
+	d, err := c.outputs.newestDescriptor(hash)
+	if err != nil || !d.Failed || d.Ref == "" {
+		return ""
+	}
+	msg, _, _ := strings.Cut(d.ErrMsg, "\n")
+	if len(msg) > maxHintErrChars {
+		msg = msg[:maxHintErrChars] + "..."
+	}
+	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; read it with %s",
+		d.Ref, msg, hint.QueryOutput.With(d.Ref)))
+	return HintUnchangedFailure
 }
 
 // recordOutput persists a step's captured output events under a per-execution
