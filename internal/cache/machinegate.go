@@ -12,6 +12,7 @@ import (
 	"time"
 
 	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/types"
 )
 
@@ -304,11 +305,43 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
 
 // machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit
 // in the whole budget, so an empty machine would refuse it too.
+//
+// PERMANENT on purpose, where Buck2 clamps an oversized request down to the machine and
+// Bazel runs one anyway while nothing else is running. Both are right for what they
+// arbitrate and wrong for this. Buck2's permits are an abstract share, so capping one
+// changes a scheduling number and nothing physical; a claim here is megabytes of resident
+// memory with a measured ground truth in MGS1030, and clamping 26 GiB to 24 GiB does not
+// make the process use less. It moves the arbiter from this gate to the OOM killer, which
+// picks its victim from the whole machine rather than from the offender. Bazel's idle rule
+// ends the same way and costs one thing more here: a claim admitted over the budget is a
+// floor that freeSlot then seats another claim on top of, and the !Fits early return that
+// keeps a free seat from being a waiver stops firing for exactly the claims it exists for.
+//
+// So over-admission stays where freeSlot left it: at most one claim per stalled ancestor,
+// and never a claim larger than the whole budget.
 func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error {
 	return machineRefusal{exit: ExitCodeMachineDeclaration, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; correct the declaration if it is wrong, or run this on a bigger machine.",
+		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		FormatMB(v.BudgetMB), v.BudgetSlots)}
+		FormatMB(v.BudgetMB), v.BudgetSlots, describeMachineOversize(c, v))}
+}
+
+// machineBudgetPercent is mem.UsableFraction as a whole number, so a refusal can name the
+// share instead of restating it as prose that drifts the day the constant moves. A reader
+// who does not know about the fraction reads the budget as a miscount of their own RAM.
+var machineBudgetPercent = int(mem.UsableFraction * 100)
+
+// describeMachineOversize says what to change, which is not the same sentence for the two
+// axes. A memory figure is a declaration magus has already measured against, so the reader
+// is sent to that check rather than to a guess; a slot count is bounded by the cores and
+// has nothing to check.
+func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
+	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
+		return fmt.Sprintf("that budget is %d%% of the memory available here, and the remainder is not spare capacity but the OS and everything else on the machine. Run `magus doctor` and read MGS1030, which holds this declaration against the peak memory magus has measured for the target: correct the declaration if it has drifted, and if it is honest this needs a bigger machine.",
+			machineBudgetPercent)
+	}
+	return fmt.Sprintf("this machine has %d slots in total, so no state of it seats a step taking %d. Correct the declaration if it is wrong, or run this on a bigger machine.",
+		v.BudgetSlots, max(c.Slots, 1))
 }
 
 // machineBlindError is the refusal for a nested magus that cannot name its ancestors.

@@ -487,6 +487,42 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 	assert.Contains(t, err.Error(), "Waiting would not help")
 }
 
+// TestMachineRefusalNamesTheFractionAndTheDeclarationCheck covers the refusal an author
+// meets with a 26 GiB target on a 32 GiB machine. magus budgets 0.75 of the machine, so
+// the figure in the message is smaller than the RAM the reader can see, and a refusal
+// that does not say so reads as arithmetic magus got wrong.
+func TestMachineRefusalNamesTheFractionAndTheDeclarationCheck(t *testing.T) {
+	b, _, _ := testBudget(t, 4000, 8)
+	g, _, _ := testGate(t, b, false)
+
+	_, err := g.acquire(t.Context(), types.MachineClaim{
+		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "3.9 GiB", "the budget it did not fit in")
+	assert.Contains(t, err.Error(), "declares 25.4 GiB", "and the declaration held against it")
+	assert.Contains(t, err.Error(), "75% of the memory available here",
+		"a budget smaller than the machine reads as a miscount unless the share is named")
+	assert.Contains(t, err.Error(), "MGS1030",
+		"magus has measured this target's peak, so the author is sent to the check rather than to a guess")
+}
+
+// TestMachineRefusalForTooManySlotsStaysAboutSlots is the other axis. A step declaring
+// more slots than the machine has cores is refused by the same path, and neither the
+// memory fraction nor a memory check has anything to say about it.
+func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
+	b, _, _ := testBudget(t, 32_000, 8)
+	g, _, _ := testGate(t, b, false)
+
+	_, err := g.acquire(t.Context(), types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 1000, Slots: 32, PID: 100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "8 slots in total")
+	assert.NotContains(t, err.Error(), "MGS1030", "a core count is not a declaration MGS1030 measures")
+	assert.NotContains(t, err.Error(), "75%", "and the memory share is not why this was refused")
+}
+
 func TestMachineGateAdmitsWhenTheArbiterIsGone(t *testing.T) {
 	b, _, _ := testBudget(t, 10_000, 8)
 	g, adm, said := testGate(t, b, false)
