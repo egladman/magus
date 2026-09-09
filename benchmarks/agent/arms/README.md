@@ -54,16 +54,18 @@ yet. Holding it at zero for both arms keeps the paired deltas clean.
 
 How the absence is guaranteed, and how the probes prove it:
 
-- `CLAUDE_CONFIG_DIR` (exported by `env.sh`) moves the host's user-scoped
-  config, which is where `claude mcp add --scope user` and `--scope local`
-  write, into `<worktree>/.benchmark/claude-config`, created empty.
+- Provisioning writes `<worktree>/.benchmark/mcp.json` naming no servers and
+  exports its path as `RUNNER_MCP_CONFIG` in `env.sh`. The runner hands that
+  file to the host with `--strict-mcp-config`, which makes it the only MCP
+  configuration the session sees: the operator's user-scoped registrations are
+  never consulted.
 - The tree carries no `.mcp.json`, which is the project scope.
-- Both probes run `claude mcp list` from the worktree and require "No MCP
-  servers configured". It reports what the CURRENT `CLAUDE_CONFIG_DIR` and cwd
-  resolve to, so it verifies both scopes at once.
-- The runner should additionally pass `--strict-mcp-config` with no
-  `--mcp-config`, which ignores every MCP configuration the two mechanisms
-  above do not already cover.
+- Both probes require the exported file to exist and to name an empty server
+  set, and the tree to carry no `.mcp.json`.
+- Relocating `CLAUDE_CONFIG_DIR` to an empty directory is NOT how this is done,
+  and it was, once: the host keeps its login beside its MCP registrations, so
+  the first pilot's six sessions all ended in "Not logged in". The file plus
+  the strict flag isolates MCP without touching credentials.
 
 ## Confounds
 
