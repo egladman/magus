@@ -870,12 +870,17 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 	// the step would hold machine-wide memory while waiting for a local lock, which is
 	// the resource that spans every worktree rather than just this run.
 	//
-	// A step admitted BENEATH one that already holds a claim takes none. Step.MemoryMB is
-	// documented as including every target it composes, so the ancestor's figure already
-	// covers this one: a second claim double-counts the same memory, and the ancestor -
-	// blocked in dispatch waiting for this step - cannot release it, so the child queues
-	// forever behind its own parent. Measured 2026-09-08: `magus affected ci` sat 27
-	// minutes at 13s of CPU with no child process running.
+	// A step admitted BENEATH one that already holds a claim takes none, because the
+	// ancestor is the one thing that cannot release: it is blocked in dispatch waiting
+	// for this step, so a second claim queued behind it would wait forever. Measured
+	// 2026-09-08: `magus affected ci` sat 27 minutes at 13s of CPU with no child process
+	// running.
+	//
+	// The cover is a floor, not an exact figure. Step.MemoryMB folds a chain by MAXIMUM,
+	// and one ctx.needs(a, b, c) runs its members concurrently, so three 4 GB members are
+	// covered by a 4 GB claim; see types.ChainMemoryMB for why the recorded chain cannot
+	// yet tell a concurrent needs from a sequential one. Inside this process the limiter
+	// still bounds how many run at once; the machine budget does not see them at all.
 	//
 	// Covering rather than yielding, because a machine claim's re-acquire is FALLIBLE: it
 	// re-queues behind strangers and can be refused, so a parent that released and retook

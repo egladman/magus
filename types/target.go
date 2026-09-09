@@ -438,7 +438,16 @@ func (t Target) Key() []string {
 //
 // Without the fold a declaration is INERT for the command people run: only `ci` is
 // scheduled as a step, so the `test` it composes reaches neither the limiter nor
-// machine-wide admission. The MAXIMUM, not the sum, because a chain runs in order.
+// machine-wide admission.
+//
+// The MAXIMUM, not the sum, which makes this a LOWER BOUND rather than a peak. One
+// `ctx.needs(a, b, c)` dispatches all three through the Buzz pool at once and their
+// declarations do add; only separate ctx.needs calls run in order. TargetChains cannot
+// tell the two apart, being a flat list of steps in invocation order with no record of
+// which were dispatched together, and summing is the worse guess of the two available:
+// a sequential chain would then over-declare, and an over-declaration past the whole
+// machine budget is refused outright rather than throttled. Grouping in ChainStep is
+// what would make a true peak computable here.
 //
 // lookup resolves a cross-project step and may return nil, in which case that step
 // contributes nothing rather than a guess. It lives here because admission and
