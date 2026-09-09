@@ -26,10 +26,20 @@ func allowLabel(target string) string {
 	return b.String()
 }
 
-// denyHint renders the `magus config set` command(s) that allow a sandbox-denied
-// operation on target (a path, or a resolved binary for exec). mode is "ro"
-// (read/exec) or "rw" (write); rw needs the extra mode command.
-func denyHint(mode, target string) string {
+// denyHint renders the remedy for a sandbox-denied operation on target (a path, or
+// a resolved binary for exec). mode is "ro" (read/exec) or "rw" (write); rw needs
+// the extra mode command.
+//
+// Under a lease the remedy is not a config edit: the boundary is the lease's own
+// owned_paths, declared by the orchestrator, and telling a worker to widen the
+// workspace allow list would be telling it to route around its contract. The lease
+// hint names the lease and hands the decision back to whoever declared the row.
+func denyHint(lease, mode, target string) string {
+	if lease != "" {
+		return fmt.Sprintf("sandbox blocked access to %s: it is outside the paths lease %s was given. "+
+			"Report it to the orchestrator, which can widen the row's owned_paths with the magus_ledger tool; do not edit sandbox.allow yourself.",
+			target, lease)
+	}
 	label := allowLabel(target)
 	cmd := fmt.Sprintf("sandbox blocked access to %s; allow it with:\n"+
 		"        magus config set key=sandbox.allow.%s.path,value=%s", target, label, target)
@@ -44,8 +54,12 @@ func denyHint(mode, target string) string {
 // returning the diagnostic error, while the path/command is still typed and in
 // scope — it doesn't survive being raised across a script VM, so a central
 // handler could not reconstruct the target.
-func EmitDenyHint(mode, target string) {
-	interactive.Emit(os.Stderr, denyHint(mode, target))
+func EmitDenyHint(p *Policy, mode, target string) {
+	lease := ""
+	if p != nil {
+		lease = p.Lease
+	}
+	interactive.Emit(os.Stderr, denyHint(lease, mode, target))
 }
 
 // shimMarker pairs a PATH-shim runtime manager with the env var it reads at

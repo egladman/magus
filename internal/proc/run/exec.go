@@ -148,7 +148,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			resolved = name // let exec.Cmd surface the real lookup error
 		}
 		if err := policy.CheckExecCtx(ctx, resolved); err != nil {
-			sandbox.EmitDenyHint("ro", resolved)
+			sandbox.EmitDenyHint(policy, "ro", resolved)
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}

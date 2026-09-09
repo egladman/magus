@@ -718,7 +718,7 @@ func checkRead(ctx context.Context, path string) error {
 		return nil
 	}
 	if err := p.CheckReadCtx(ctx, path); err != nil {
-		sandbox.EmitDenyHint("ro", path)
+		sandbox.EmitDenyHint(p, "ro", path)
 		return types.DiagnosticErrorf(types.PathReadDenied, "fs read denied: %s", path)
 	}
 	return nil
@@ -732,7 +732,7 @@ func checkWrite(ctx context.Context, path string) error {
 		return nil
 	}
 	if err := p.CheckWriteCtx(ctx, path); err != nil {
-		sandbox.EmitDenyHint("rw", path)
+		sandbox.EmitDenyHint(p, "rw", path)
 		return types.DiagnosticErrorf(types.PathWriteDenied, "fs write denied: %s", path)
 	}
 	return nil
