@@ -1,0 +1,249 @@
+# The VCS rules of guard_git.go, run through the real `magus session hook`.
+#
+# guard_shell_test.go already covers which rule fires, and deliberately compares the
+# rule IDENTITY rather than the prose: asserting on a substring of a reason could not
+# tell two rules that share a sentence apart, and rewording one churned the table.
+#
+# That leaves the half nothing checks. A refusal's whole value is the sentence naming
+# what to run instead, and none of it is reachable from a rule identity: the reason can
+# go blank, lose the magus verb, or stop being rendered at all, and every unit assertion
+# stays green. So these cases run the binary a host actually invokes and assert on the
+# text it hands back, plus the decision line and the exit status carrying it.
+#
+# There is no magusfile here on purpose. Outside a workspace the advisory gate has no
+# base to write markers under and suppresses nothing, so each case below is judged on
+# its own rather than on which case ran before it.
+
+# --- the refusals: each names the magus verb that replaces it -----------------
+
+# A whole-tree discard. Exit is non-zero (2), because a hook that reports a deny and
+# exits 0 blocks nothing.
+stdin stash.txt
+! exec magus session hook
+stdout 'deny: Verify in place'
+stdout 'magus run <target> <project>'
+stdout 'magus affected ci'
+stdout 'throwaway .git worktree add'
+stdout 'whole-tree git stash destroys uncommitted and untracked work'
+stdout 'magus-vcs-hygiene'
+
+# An unqualified restore takes whatever sits at the top of a stack the whole repository
+# shares, so the routing is to READ the stack and name an entry.
+stdin stash-pop.txt
+! exec magus session hook
+stdout 'deny: Name the entry you meant'
+stdout 'git stash list'
+stdout 'git stash pop stash@'
+
+stdin reset-hard.txt
+! exec magus session hook
+stdout 'whole-tree git reset --hard destroys'
+
+# A tree-ish before the pathspec is still the whole tree, and the reason says so rather
+# than echoing back the revision the caller typed.
+stdin checkout-dot.txt
+! exec magus session hook
+stdout 'whole-tree git checkout . destroys'
+
+stdin clean-fd.txt
+! exec magus session hook
+stdout 'whole-tree git clean destroys'
+
+# Restoring a path from one side of a merge. It reads as a narrow revert, so the reason
+# has to spend its length saying why it is not, and then offer both deliberate forms.
+stdin checkout-merge-head.txt
+! exec magus session hook
+stdout 'deny: Restoring a path from MERGE_HEAD overwrites it with ONE side'
+stdout 'magus vcs resolve'
+stdout 'git checkout --ours'
+
+stdin add-all.txt
+! exec magus session hook
+stdout 'deny: Stage through the workspace instead'
+stdout 'magus vcs add'
+stdout 'magus vcs add --dry-run'
+stdout 'git add -- <paths>'
+
+stdin worktree-remove.txt
+! exec magus session hook
+stdout 'deny: Check it is clean first with .git -C <path> status'
+stdout 'git worktree remove deletes that worktree'
+
+# The non-git backends reach the same rule, and the replacement is REWRITTEN for them:
+# an hg user cannot follow advice to add a git worktree, and it would be the first thing
+# they were told.
+stdin hg-purge.txt
+! exec magus session hook
+stdout 'whole-tree hg purge destroys'
+stdout 'throwaway clone'
+! stdout 'git worktree add'
+
+stdin jj-abandon.txt
+! exec magus session hook
+stdout 'whole-tree jj abandon destroys'
+
+stdin jj-workspace-forget.txt
+! exec magus session hook
+stdout 'jj workspace forget drops that workspace'
+
+# A deny anywhere in a compound command outranks an advisory earlier in it, or the
+# refusal is lost to whichever reminder the first command earned.
+stdin restore-then-add-all.txt
+! exec magus session hook
+stdout 'deny: Stage through the workspace instead'
+
+# A line that does not parse falls back to the regexes, where an over-eager deny is the
+# safe direction: these rules guard work that cannot be recovered.
+stdin unparsable-stash.txt
+! exec magus session hook
+stdout 'whole-tree git stash destroys'
+
+# --- the advisories: allowed, and carrying the verb worth knowing -------------
+
+stdin push.txt
+exec magus session hook
+stdout 'advise: magus workspace: run the gate before publishing'
+stdout 'magus affected ci'
+
+stdin add-paths.txt
+exec magus session hook
+stdout 'advise: magus workspace: classify the dirty tree first'
+stdout 'magus describe file'
+
+stdin commit.txt
+exec magus session hook
+stdout 'advise: magus workspace: classify the dirty tree first'
+
+stdin checkout-path.txt
+exec magus session hook
+stdout 'advise: magus workspace: classify before reverting'
+stdout 'magus describe file <paths>'
+
+stdin rev-parse-head.txt
+exec magus session hook
+stdout 'advise: magus workspace: .magus vcs checkpoint'
+stdout 'identifies the working state'
+
+# --- the allowed shapes: a guard that denies everything routes nobody ---------
+
+# Reading a stash, and naming the entry to restore, are the deliberate forms.
+stdin stash-list.txt
+exec magus session hook
+stdout 'pass'
+
+stdin stash-pop-ref.txt
+exec magus session hook
+stdout 'pass'
+
+# The documented bootstrap-deadlock escape: shelve the one hunk an old binary rejects,
+# build, restore. Denying it put the workspace's own answer out of reach.
+stdin stash-push-paths.txt
+exec magus session hook
+stdout 'pass'
+
+stdin worktree-list.txt
+exec magus session hook
+stdout 'pass'
+
+stdin reset-soft.txt
+exec magus session hook
+stdout 'pass'
+
+# -n removes nothing, and the d in --dry-run is not the -d that deletes.
+stdin clean-dry-run.txt
+exec magus session hook
+stdout 'pass'
+
+# The scoped forms of the non-git backends name what they touch.
+stdin hg-revert-path.txt
+exec magus session hook
+stdout 'pass'
+
+stdin jj-restore-path.txt
+exec magus session hook
+stdout 'pass'
+
+# The build-stamp spelling of describe wants a version string to embed, not the identity
+# of a tree it is handing anybody, so the checkpoint advisory would be noise on every
+# build.
+stdin describe-tags.txt
+exec magus session hook
+stdout 'pass'
+
+# rev-parse answers repository-layout questions too, and --abbrev-ref answers with a
+# branch name; a checkpoint replaces neither.
+stdin rev-parse-toplevel.txt
+exec magus session hook
+stdout 'pass'
+
+stdin rev-parse-abbrev.txt
+exec magus session hook
+stdout 'pass'
+
+# A quoted word structurally cannot be a command. This is why the rules read an AST: the
+# unanchored regexes denied `git stash` written as PROSE, including the commit message
+# and the skill whose whole subject is these commands.
+stdin prose.txt
+exec magus session hook
+stdout 'pass'
+
+-- stash.txt --
+git stash
+-- stash-pop.txt --
+git stash pop
+-- reset-hard.txt --
+git reset --hard origin/main
+-- checkout-dot.txt --
+git checkout HEAD -- .
+-- clean-fd.txt --
+git clean -fd
+-- checkout-merge-head.txt --
+git checkout MERGE_HEAD -- magusfile.buzz
+-- add-all.txt --
+git add -A
+-- worktree-remove.txt --
+git worktree remove ../wt
+-- hg-purge.txt --
+hg purge
+-- jj-abandon.txt --
+jj abandon
+-- jj-workspace-forget.txt --
+jj workspace forget ../ws
+-- restore-then-add-all.txt --
+git restore -- cmd/magus/guard_git.go && git add -A
+-- unparsable-stash.txt --
+git stash && (
+-- push.txt --
+git push origin HEAD
+-- add-paths.txt --
+git add -- cmd/magus/guard_git.go
+-- commit.txt --
+git commit -m wip
+-- checkout-path.txt --
+git checkout -- cmd/magus/guard_git.go
+-- rev-parse-head.txt --
+git rev-parse HEAD
+-- stash-list.txt --
+git stash list
+-- stash-pop-ref.txt --
+git stash pop stash@{2}
+-- stash-push-paths.txt --
+git stash push -- magusfile.buzz
+-- worktree-list.txt --
+git worktree list
+-- reset-soft.txt --
+git reset HEAD~1
+-- clean-dry-run.txt --
+git clean --dry-run
+-- hg-revert-path.txt --
+hg revert internal/agent/catalog.go
+-- jj-restore-path.txt --
+jj restore internal/agent/catalog.go
+-- describe-tags.txt --
+git describe --tags --always
+-- rev-parse-toplevel.txt --
+git rev-parse --show-toplevel
+-- rev-parse-abbrev.txt --
+git rev-parse --abbrev-ref HEAD
+-- prose.txt --
+echo 'run git stash to clean up'
