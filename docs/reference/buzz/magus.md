@@ -12,7 +12,7 @@ Magus core primitives.
 
 Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 
-`import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, `where` and `insight` all answer in-process, and so does `magus\ledger` (list, put, register, clear): the lease ledger an orchestrating agent declares about work it handed out (see types.Lease). There is deliberately no `magus ledger` CLI subcommand, so this namespace and the magus_ledger MCP tool are the only doors onto it. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves.
+`import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, `where` and `insight` all answer in-process, and so does `magus\ledger` (list, put, register, clear): the lease ledger an orchestrating agent declares about work it handed out (see types.Lease). The `magus ledger` CLI subcommand READS the same rows and never writes them, so this namespace and the magus_ledger MCP tool remain the only write doors onto it. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves.
 
 > **Naming convention:** import the module under its bare name (`import "magus"`), reach members with a backslash, and call methods in `camelCase`: `magus\someMethod`.
 
@@ -151,7 +151,7 @@ The VCS-affected set and WHY each project is in it: {base, changedFileCount, cha
 
 Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), `maintained` (magus writes it outside any target - commit it, never ignore it), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question "can I disregard this changed file", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.
 
-**Signature:** `magus\describeFile(paths, [opts]) -> FileReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1009)
+**Signature:** `magus\describeFile(paths, [opts]) -> FileReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1008)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -164,7 +164,7 @@ Classify paths against the workspace's declared globs: for each, the owning proj
 
 Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.
 
-**Signature:** `magus\diff([opts]) -> Diff` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1023)
+**Signature:** `magus\diff([opts]) -> Diff` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1022)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -202,7 +202,7 @@ List the OPEN attention requests of this repository's session store: {requests, 
 
 Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs.status; does not replace it.
 
-**Signature:** `magus\diagnoseDrift(outputs, [inputs]) -> DriftResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1200)
+**Signature:** `magus\diagnoseDrift(outputs, [inputs]) -> DriftResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1199)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

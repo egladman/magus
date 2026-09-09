@@ -18,10 +18,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// tmpLedger keeps a test's rows under temp directories. The store resolves the
+// per-repository state directory now, so a Location without StateBase would write the
+// developer's own ledger.
+func tmpLedger(t *testing.T, root string) *ledger.Store {
+	t.Helper()
+	return ledger.NewStore(ledger.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root})
+}
+
 func TestLedgerTool(t *testing.T) {
 	t.Parallel()
 
-	tool := &ledgerTool{store: ledger.NewStore(ledger.Location{CacheDir: t.TempDir(), Root: t.TempDir()})}
+	tool := &ledgerTool{store: tmpLedger(t, t.TempDir())}
 	invoke := func(t *testing.T, params map[string]any) spells.InvokeResponse {
 		t.Helper()
 		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
@@ -207,7 +215,7 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "shared.go"), []byte("package shared\n"), 0o644))
 
-	tool := &ledgerTool{store: ledger.NewStore(ledger.Location{CacheDir: t.TempDir(), Root: root})}
+	tool := &ledgerTool{store: tmpLedger(t, root)}
 	invoke := func(params map[string]any) spells.InvokeResponse {
 		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 		require.NoError(t, err)
@@ -245,7 +253,7 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 func TestLedgerToolPutMergesConcurrently(t *testing.T) {
 	t.Parallel()
 
-	tool := &ledgerTool{store: ledger.NewStore(ledger.Location{CacheDir: t.TempDir(), Root: t.TempDir()})}
+	tool := &ledgerTool{store: tmpLedger(t, t.TempDir())}
 	put := func(params map[string]any) error {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 		return err
@@ -290,7 +298,7 @@ func TestLedgerToolPutMergesConcurrently(t *testing.T) {
 func TestLedgerDoorsAgreeOnAnEmptyLedger(t *testing.T) {
 	t.Parallel()
 
-	store := ledger.NewStore(ledger.Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	store := tmpLedger(t, t.TempDir())
 	tool := &ledgerTool{store: store}
 	resp, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "list"}})
 	require.NoError(t, err)

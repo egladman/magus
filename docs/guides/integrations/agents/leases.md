@@ -10,6 +10,8 @@ tags:
     plan,
     magus vcs checkpoint,
     magus_ledger,
+    magus ledger,
+    brief,
     console,
     activity,
   ]
@@ -35,7 +37,8 @@ that skill writes to and reads from.
 | Record the working state | `magus vcs checkpoint`, `magus_vcs_checkpoint` |
 | Hand out the leases      | the host's own spawn - recorded, never judged  |
 | Declare the plan         | `magus_ledger` (`op=put`)                      |
-| Watch it                 | the console Plan surface, `GET /api/v1/ledger` |
+| Brief each worker        | `magus ledger brief <lease-id>`                |
+| Watch it                 | `magus ledger`, the console Plan surface       |
 | Verify                   | the actual diff since each lease's checkpoint  |
 
 Only one thing in that table enforces, and it is not the ledger. The ledger is a
@@ -169,12 +172,25 @@ actually left rather than the one it believed it left. Hand it to the lease taki
 the path over; a digest that no longer matches at verification time means that
 lease built on a tree the releaser never saw.
 
-The rows live in one JSON file under the cache directory
-(`<cache-dir>/ledger/leases.json`). `magus_ledger` is its write door and the
-daemon's read-only `GET /api/v1/ledger` route is its read door; there is no CLI
-verb, because the ledger has a single author by definition of what it records -
-the one agent doing the orchestrating. The store takes no cross-process lock, so
-do not point two orchestrators at one workspace.
+The rows live in one JSON file in the per-REPOSITORY state directory
+(`<XDG state>/magus/ledger/<repo>/leases.json`), keyed the way
+[memory](../../../reference/manpage/magus-memory.md) and session history are
+keyed: every worktree and every clone of one repository reads one book. That is
+what lets an orchestrator declare a plan in its own checkout and a worker read
+its lease from another. A ledger an older magus left at `<cache-dir>/ledger` is
+carried forward the first time the new one opens it.
+
+`magus_ledger` is its write door, and the daemon's read-only
+`GET /api/v1/ledger` route and `magus ledger` are its read doors. Writing stays
+off the CLI because the ledger has a single author by definition of what it
+records - the one agent doing the orchestrating - while reading it is exactly
+what the person running that agent needs.
+
+```sh
+magus ledger                # the rows as a tree, parents above the leases they handed out
+magus ledger -o json        # the same records, overlaps included
+magus ledger brief <lease>  # one lease's worker brief
+```
 
 ## Wiring the lease into a worker
 
@@ -260,6 +276,29 @@ A `forbidden_path` inside an owned one is refused, and it costs the directory
 holding it as well: both this policy and landlock are allowlists with no deny
 rule, so the enclosing grant is replaced by grants on its children, and a new
 file created beside the forbidden entry is refused with it.
+
+## Briefing a worker
+
+The context a delegated agent receives should come from the row, not from the
+orchestrating model's recollection of it. `magus ledger brief <lease-id>` renders
+that context and nothing else: the lease id and the one line that binds it to a
+checkout, the goal and acceptance criteria verbatim from the row, the owned and
+forbidden paths, the knowledge graph's blast radius for each owned path it can
+resolve, the single validation target that lease is allowed to run, and the
+leases it depends on. A section with nothing in it is dropped, which is the
+mechanism rather than a nicety: `ci` cannot leak into a worker's brief because
+nothing renders it. When the graph is cold the evidence lines are replaced by one
+line saying so, so a missing blast radius never reads as "nothing depends on
+this".
+
+Below that sits a fixed footer your workspace owns: the bootstrap, rules, and
+skills blocks in `docs/guides/integrations/agents/brief.md.tmpl`, a Go
+`text/template` rendered against the lease row. A workspace with no such file
+gets a brief with no footer, which is a legitimate answer rather than an error.
+The command renders context and never a verdict, the same shape
+`magus diff --prompt` has: magus assembles what it holds and you hand it to the
+worker. `-o json` emits the same brief as a record, for an orchestrator that
+composes the prompt itself.
 
 ## Watch it: Dashboard's Lease plan
 

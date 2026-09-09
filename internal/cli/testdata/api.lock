@@ -199,6 +199,7 @@ subcommand events
 subcommand explain
 subcommand graph
 subcommand init
+subcommand ledger
 subcommand ls
 subcommand man
 subcommand mcp

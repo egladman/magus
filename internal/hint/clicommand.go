@@ -90,6 +90,8 @@ var (
 	MemoryLs          = cmd("memory", "ls")
 	MemoryPut         = cmd("memory", "put")
 	MemoryVerify      = cmd("memory", "verify")
+	Ledger            = cmd("ledger")
+	LedgerBrief       = cmd("ledger", "brief")
 	NotesLs           = cmd("notes", "ls")
 	NotesGet          = cmd("notes", "get")
 	NotesEdit         = cmd("notes", "edit")
@@ -132,7 +134,7 @@ var AllCommands = []Command{
 	GraphDiff, ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
 	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
-	MemoryLs, MemoryPut, MemoryVerify, NotesLs, NotesGet, NotesEdit,
+	MemoryLs, MemoryPut, MemoryVerify, Ledger, LedgerBrief, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionLease, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,

@@ -1,0 +1,19 @@
+bootstrap
+  Work in your own worktree and confirm it is clean before you edit:
+    git status --short
+  Bind the lease so the guard can grade your writes:
+    magus session lease {{.ID}}
+
+rules
+  Version control belongs to the orchestrator. Do not commit, push, stash, reset,
+  clean, or run `git checkout .`; leave the tree for it to land.
+  Write only inside the owned paths above. A path another live lease owns is denied,
+  and a path this lease declared forbidden is denied.
+  Run the validation above and nothing wider. Never `magus affected ci`.
+  Report what you changed, what you verified, and what you left out.
+
+skills to load
+  magus-run, before any build, test, lint, or generate.
+  magus-vcs-hygiene, before reading a diff or staging anything.
+  magus-architecture, before creating a package or a file.
+  idiomatic-code-comments, before writing a comment.

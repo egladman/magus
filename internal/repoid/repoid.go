@@ -50,7 +50,7 @@ import (
 func StateDir(base, kind, root string) (string, error) {
 	parent := filepath.Join(base, "magus", kind)
 	dir := filepath.Join(parent, dirName(identity(root)))
-	if err := adopt(LegacyDir(base, kind, root), dir); err != nil {
+	if err := Adopt(LegacyDir(base, kind, root), dir); err != nil {
 		return "", err
 	}
 	return dir, nil
@@ -120,9 +120,14 @@ func dirName(id string) string {
 	return base + "-" + hex.EncodeToString(sum[:])[:12]
 }
 
-// adopt moves a legacy store directory onto dir so records written under an older key
+// Adopt moves a legacy store directory onto dir so records written under an older key
 // stay reachable. There is nothing to do when the paths match, the legacy directory is
 // absent, or dir already exists.
+//
+// Exported for the legacy this package's own key cannot name: a store that lived
+// somewhere else entirely before it moved here, such as the lease ledger's old home in
+// the workspace cache directory. The caller supplies that path and the rule stays here,
+// so there is one answer to what adoption does.
 //
 // An existing dir wins and the legacy directory is left where it is. Merging two stores
 // means deciding which of two records with one name is current, and a store that
@@ -130,7 +135,7 @@ func dirName(id string) string {
 // clone's legacy store stranded where it lies: both clones now read the adopted one, so
 // nothing is lost that was not already invisible, and recovering it is a copy a person
 // makes deliberately.
-func adopt(legacy, dir string) error {
+func Adopt(legacy, dir string) error {
 	if legacy == dir || !present(legacy) || present(dir) {
 		return nil
 	}

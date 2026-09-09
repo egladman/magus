@@ -49,6 +49,10 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 // directories, so a guard test never reads or writes the checkout's real ledger.
 func fleetFixture(t *testing.T, leases ...types.Lease) (context.Context, string) {
 	t.Helper()
+	// The ledger now lives in the per-repository state directory, and the guard resolves
+	// it with no seam a test can reach, so the environment is what keeps this off the
+	// developer's own ledger.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root, cacheDir := t.TempDir(), t.TempDir()
 	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root})
 	for _, u := range leases {
@@ -303,8 +307,9 @@ func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 // fleet nobody declared.
 func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
-	location := ctx.Value(hookActivityLocationKey{}).(hookActivityLocation)
-	require.NoError(t, os.WriteFile(filepath.Join(location.base, "ledger", "leases.json"), []byte("{not json"), 0o644))
+	path, err := fleetLedger(t, ctx).Path()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
 
 	got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 	assert.NotEqual(t, "deny", got.Decision, "a ledger magus cannot read must never block an edit")

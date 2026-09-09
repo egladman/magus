@@ -206,7 +206,7 @@ func TestAdoptCarriesALegacyStoreForward(t *testing.T) {
 	require.NoError(t, os.MkdirAll(legacy, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, "record.md"), []byte("kept"), 0o644))
 
-	require.NoError(t, adopt(legacy, dir))
+	require.NoError(t, Adopt(legacy, dir))
 
 	body, err := os.ReadFile(filepath.Join(dir, "record.md"))
 	require.NoError(t, err)
@@ -222,7 +222,7 @@ func TestAdoptLeavesAnExistingStoreAlone(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "record.md"), []byte("current"), 0o644))
 
-	require.NoError(t, adopt(legacy, dir))
+	require.NoError(t, Adopt(legacy, dir))
 
 	body, err := os.ReadFile(filepath.Join(dir, "record.md"))
 	require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestAdoptIsANoOpWithNothingToMove(t *testing.T) {
 	base := t.TempDir()
 	dir := filepath.Join(base, "new")
 
-	require.NoError(t, adopt(filepath.Join(base, "absent"), dir))
-	require.NoError(t, adopt(dir, dir))
+	require.NoError(t, Adopt(filepath.Join(base, "absent"), dir))
+	require.NoError(t, Adopt(dir, dir))
 	assert.NoDirExists(t, dir, "adoption never creates a store; the store's own writer does")
 }

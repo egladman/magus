@@ -70,7 +70,7 @@ func TestStoreRegister(t *testing.T) {
 			t.Parallel()
 
 			ctx := t.Context()
-			s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+			s := tmpStore(t, t.TempDir())
 			_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: tt.checkpoint, State: types.StateDeclared})
 			require.NoError(t, err)
 
@@ -109,7 +109,7 @@ func TestStoreRegisterRefusesAnUnknownLease(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	s := tmpStore(t, t.TempDir())
 	_, err := s.Put(ctx, types.Lease{ID: "declared", Checkpoint: baseA})
 	require.NoError(t, err)
 
@@ -128,7 +128,7 @@ func TestStoreRegisterRequiresABase(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	s := tmpStore(t, t.TempDir())
 	_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: baseA})
 	require.NoError(t, err)
 
@@ -148,7 +148,7 @@ func TestStoreRegisterIsIdempotentPerBase(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	s := tmpStore(t, t.TempDir())
 	_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: baseA, Goal: "declared goal"})
 	require.NoError(t, err)
 

@@ -25,6 +25,7 @@ var All = []Command{
 	configCommand,
 	sessionCommand,
 	memoryCommand,
+	ledgerCommand,
 	notesCommand,
 	diffCommand,
 	serverCommand,
@@ -1640,6 +1641,42 @@ either side learning a new format.`,
 		{"Record what an investigation ruled out", "magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'"},
 		{"Refresh one field and keep the rest", "magus memory put release-checklist --amend --status done"},
 		{"Check the journal's health", "magus memory verify"},
+	},
+}
+
+var ledgerCommand = Command{
+	Name:        "ledger",
+	Short:       "Read the lease ledger a fan-out declared",
+	Description: "Read the per-repository lease ledger: the leases an orchestrating agent declared, as a tree, plus the worker brief for any one of them.",
+	Tags:        []string{"cli", "magus ledger", "ledger", "leases", "agents", "delegation"},
+	Long: `Read the lease ledger: one row per lease an orchestrating agent declared,
+rendered as a tree of parents and the leases they handed out.
+
+The ledger is written by AGENTS, through the magus_ledger MCP tool, and read by
+PEOPLE here. put, register and clear are deliberately not on this verb: the plan
+has one author by definition of what it records, and a second write door invites
+two.
+
+The rows are kept per repository rather than per checkout, so an orchestrator
+declaring a plan in one worktree and a worker reading it in another see the same
+book.
+
+brief renders one lease's worker brief: the row's own goal and acceptance
+criteria, its owned and forbidden paths, the knowledge graph's blast radius for
+each owned path it can resolve, the single validation target that lease is
+allowed to run, its dependencies, and the fixed bootstrap, rules and skills
+blocks this workspace's docs/guides/integrations/agents/brief.md.tmpl carries. It
+is context and never a verdict, the same shape magus diff --prompt has: magus
+assembles what it holds, and you hand it to the worker.`,
+	Usage: "magus ledger [ls|brief <lease-id>] [flags]",
+	Children: []Command{
+		{Name: "ls", Short: "Print the declared leases as a tree, with the overlapping pairs"},
+		{Name: "brief", Short: "Print one lease's worker brief"},
+	},
+	Examples: []Example{
+		{"Read the declared plan", "magus ledger"},
+		{"Read it as records", "magus ledger -o json"},
+		{"Brief one worker", "magus ledger brief session-load/core"},
 	},
 }
 

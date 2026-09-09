@@ -102,8 +102,9 @@ one agent-specific field in an otherwise human-first surface - the
 skill-routing hint sits quarantined inside it, so everything around it reads
 as what it is, ordinary build metadata a person wanted first. The one
 deliberate exception is the lease ledger, an agent-to-agent declaration
-under [Agents propose, humans dispose](#agents-propose-humans-dispose): it
-carries no CLI verb because no person is its audience. This prevents the
+under [Agents propose, humans dispose](#agents-propose-humans-dispose): it is
+WRITTEN by agents through MCP and READ by people at `magus ledger`, so the
+asymmetry is in who authors it, not in who may see it. This prevents the
 bolted-on AI integration, papering over a tool
 people already struggle with, and the quiet inversion where a person becomes
 the secondary user of their own build tool.
@@ -211,10 +212,11 @@ authorship from the surface that performed the write, so a change made through
 the agent surface carries an agent's name no matter what the writer reports
 about itself. Interrupting a person costs attention, and the suggestion
 operation reflects that: it requires a stated reason before the proposal
-reaches anyone. The lease ledger has no CLI verb, unlike the attention
-events `notify` raises, because an attention event is addressed to a person
-while the ledger is an agent-to-agent declaration read back by the guard and
-the console.
+reaches anyone. The lease ledger has no CLI verb that WRITES, unlike the
+attention events `notify` raises, because an attention event is addressed to a
+person while the ledger is an agent-to-agent declaration read back by the guard
+and the console. Reading it is a person's business, so `magus ledger` does that
+and nothing else.
 
 Automated review is wrong at a steady rate, and wrong in a characteristic way:
 the confident finding that "fixes" behavior somebody chose on purpose. The

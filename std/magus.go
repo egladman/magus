@@ -52,9 +52,9 @@ var Magus = Module{
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
 		"`where` and `insight` all answer in-process, and so does `magus\\ledger` (list, put, " +
 		"register, clear): the lease ledger an orchestrating agent declares about work it handed " +
-		"out (see types.Lease). There is deliberately no `magus ledger` CLI " +
-		"subcommand, so this namespace and the magus_ledger MCP tool are the only doors onto " +
-		"it. Only the members that DECLARE into " +
+		"out (see types.Lease). The `magus ledger` CLI subcommand READS the same rows and " +
+		"never writes them, so this namespace and the magus_ledger MCP tool remain the only " +
+		"write doors onto it. Only the members that DECLARE into " +
 		"the workspace being loaded (`magus\\project`, the provider selections above) raise " +
 		"[MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to " +
 		"declare into. Run a script outside any workspace and the reading members raise it too, " +
@@ -433,7 +433,7 @@ var Magus = Module{
 				"reads them to grade a write, and register's verdict is a fact it hands back rather " +
 				"than a gate. See the field docs on " +
 				"types.Lease. This namespace and the magus_ledger MCP tool are the only " +
-				"doors onto it - there is deliberately no `magus ledger` CLI subcommand. Bound by " +
+				"WRITE doors onto it; `magus ledger` reads the rows for a person and writes none. Bound by " +
 				"hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's " +
 				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
 				"codegen to reflect a trampoline from, the same reason magus\\secret.read is hand-bound.",
@@ -917,12 +917,11 @@ func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, 
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		// NOT errNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
-		// which fork a nested magus and rediscover the root. That escape hatch exists for
-		// every other in-process member because each one HAS a CLI subcommand behind it.
-		// The ledger deliberately has none, so the advice would send a reader to a command
-		// that does not exist. Same code, because the constraint is the same one.
+		// which fork a nested magus and rediscover the root. `magus ledger` cannot stand in
+		// for those here, because it READS and this member may be a put or a clear. Same
+		// code, because the constraint is the same one.
 		return nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"magus\\%s: no workspace on the context - the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. There is no `magus ledger` subcommand to fall back to; run from inside the workspace instead",
+			"magus\\%s: no workspace on the context - the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. The `magus ledger` subcommand only reads, so it is no fallback for a write; run from inside the workspace instead",
 			member)
 	}
 	cd, ok := ws.(ledgerCacheDir)
