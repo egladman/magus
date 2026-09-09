@@ -70,7 +70,7 @@ func openLedger(root string) (*ledger.Store, error) {
 }
 
 func ledgerList(root string, args []string) error {
-	if _, err := cmdParse("ledger ls", args, func(fs *flag.FlagSet) {
+	rest, err := cmdParse("ledger ls", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ledger ls [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -80,8 +80,12 @@ func ledgerList(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
-	}); err != nil {
+	})
+	if err != nil {
 		return err
+	}
+	if len(rest) > 0 {
+		return usagef("magus ledger ls: takes no arguments (got %q)", rest[0])
 	}
 	store, err := openLedger(root)
 	if err != nil {
@@ -103,8 +107,8 @@ func ledgerList(root string, args []string) error {
 	switch opts.Format {
 	case outputName:
 		ids := make([]string, len(report.Leases))
-		for i, u := range report.Leases {
-			ids[i] = u.ID
+		for i, lease := range report.Leases {
+			ids[i] = lease.ID
 		}
 		return emitNames(ids)
 	case outputText:
@@ -123,11 +127,11 @@ func printLedgerTree(out io.Writer, report types.LeaseReport) {
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "LEASE\tSTATE\tTIER\tPATHS\tVALIDATION")
-	for _, u := range ledgerTreeOrder(report.Leases) {
+	for _, row := range ledgerTreeOrder(report.Leases) {
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%d\t%s\n",
-			strings.Repeat("  ", u.depth), u.lease.ID,
-			dashIfEmpty(string(u.lease.State)), dashIfEmpty(u.lease.Tier),
-			len(u.lease.OwnedPaths), dashIfEmpty(u.lease.Validation))
+			strings.Repeat("  ", row.depth), row.lease.ID,
+			orDash(string(row.lease.State)), orDash(row.lease.Tier),
+			len(row.lease.OwnedPaths), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()
 
@@ -156,37 +160,30 @@ type ledgerRow struct {
 // than one shown without its indentation, and both cases mean the plan is already damaged.
 func ledgerTreeOrder(leases []types.Lease) []ledgerRow {
 	children := map[string][]types.Lease{}
-	for _, u := range leases {
-		children[u.Parent] = append(children[u.Parent], u)
+	for _, lease := range leases {
+		children[lease.Parent] = append(children[lease.Parent], lease)
 	}
 	out := make([]ledgerRow, 0, len(leases))
 	emitted := map[string]bool{}
 	var walk func(parent string, depth int)
 	walk = func(parent string, depth int) {
-		for _, u := range children[parent] {
-			if emitted[u.ID] {
+		for _, lease := range children[parent] {
+			if emitted[lease.ID] {
 				continue
 			}
-			emitted[u.ID] = true
-			out = append(out, ledgerRow{lease: u, depth: depth})
-			walk(u.ID, depth+1)
+			emitted[lease.ID] = true
+			out = append(out, ledgerRow{lease: lease, depth: depth})
+			walk(lease.ID, depth+1)
 		}
 	}
 	walk("", 0)
-	for _, u := range leases {
-		if !emitted[u.ID] {
-			emitted[u.ID] = true
-			out = append(out, ledgerRow{lease: u})
+	for _, lease := range leases {
+		if !emitted[lease.ID] {
+			emitted[lease.ID] = true
+			out = append(out, ledgerRow{lease: lease})
 		}
 	}
 	return out
-}
-
-func dashIfEmpty(s string) string {
-	if strings.TrimSpace(s) == "" {
-		return "-"
-	}
-	return s
 }
 
 func ledgerBrief(ctx context.Context, root string, args []string) error {
@@ -219,13 +216,13 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	i := slices.IndexFunc(leases, func(u types.Lease) bool { return u.ID == pos[0] })
+	i := slices.IndexFunc(leases, func(lease types.Lease) bool { return lease.ID == pos[0] })
 	if i < 0 {
 		return fmt.Errorf("magus ledger brief: no lease %q is declared (run `%s` to see the plan)", pos[0], hint.Ledger)
 	}
 	row := leases[i]
 
-	brief := ledger.Brief{Lease: row, Bind: ledger.BriefBind(row.ID)}
+	brief := ledger.NewBrief(row)
 	brief.Evidence, brief.GraphCold = leaseGraphEvidence(ctx, root, row.OwnedPaths)
 	if brief.Footer, err = leaseBriefFooter(root, row); err != nil {
 		return err
@@ -247,14 +244,13 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 }
 
 // leaseGraphEvidence resolves each owned path against the knowledge graph, one line per
-// path the graph knows.
+// path the graph knows. cold reports a graph that would not load at all.
 //
 // A path the graph cannot resolve is skipped SILENTLY, because most owned paths are
 // ordinary source directories the containment tree does not carry, and a "no node" line
-// per path would bury the ones that do resolve. A graph that would not load at all is
-// different and is reported once, through the cold flag: "not asked" must not read as
-// "nothing depends on this".
-func leaseGraphEvidence(ctx context.Context, root string, paths []string) ([]ledger.BriefEvidence, bool) {
+// per path would bury the ones that do resolve. A cold graph is different and is
+// reported once: "not asked" must not read as "nothing depends on this".
+func leaseGraphEvidence(ctx context.Context, root string, paths []string) (evidence []ledger.BriefEvidence, cold bool) {
 	if len(paths) == 0 {
 		return nil, false
 	}
@@ -262,11 +258,12 @@ func leaseGraphEvidence(ctx context.Context, root string, paths []string) ([]led
 	if err != nil {
 		return nil, true
 	}
-	var out []ledger.BriefEvidence
 	for _, p := range paths {
-		out = append(out, pathEvidence(g, p)...)
+		if e, ok := pathEvidence(g, p); ok {
+			evidence = append(evidence, e)
+		}
 	}
-	return out, false
+	return evidence, false
 }
 
 // pathEvidence answers for one declared path, trying the node ids a path can carry in the
@@ -276,15 +273,15 @@ func leaseGraphEvidence(ctx context.Context, root string, paths []string) ([]led
 // fuzzily, which is right for a person typing `magus explain build` and wrong here: asked
 // for "cmd/magus" it answered target:.:release-sign, and a brief that hands a worker the
 // blast radius of an unrelated node is worse than one that stays quiet.
-func pathEvidence(g *knowledge.Graph, declared string) []ledger.BriefEvidence {
+func pathEvidence(g *knowledge.Graph, declared string) (ledger.BriefEvidence, bool) {
 	for _, ref := range []string{types.KindDir + ":" + declared, types.KindFile + ":" + declared, declared} {
 		out, ok := g.Explain(ref)
 		if !ok || out.Node.ID != ref {
 			continue
 		}
-		return []ledger.BriefEvidence{{Path: declared, Node: out.Node.ID, BlastRadius: out.BlastRadius}}
+		return ledger.BriefEvidence{Path: declared, Node: out.Node.ID, BlastRadius: out.BlastRadius}, true
 	}
-	return nil
+	return ledger.BriefEvidence{}, false
 }
 
 // leaseBriefFooter renders the workspace's footer template, or nothing when the workspace
@@ -294,7 +291,7 @@ func pathEvidence(g *knowledge.Graph, declared string) []ledger.BriefEvidence {
 // owning none is a legitimate answer for a workspace that has not written one yet. A
 // template that exists and will not render IS an error, because the person who put it
 // there meant it to appear.
-func leaseBriefFooter(root string, u types.Lease) (string, error) {
+func leaseBriefFooter(root string, row types.Lease) (string, error) {
 	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(ledger.BriefTemplatePath)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", nil
@@ -302,5 +299,5 @@ func leaseBriefFooter(root string, u types.Lease) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return ledger.RenderBriefFooter(string(raw), u)
+	return ledger.RenderBriefFooter(string(raw), row)
 }

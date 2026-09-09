@@ -1023,7 +1023,7 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	assert.Equal(t, 2, calls, "the hint advises; it never replaces the run")
 	// The id the report layer projects into the result record's `hint` field, so a
 	// consumer counts uptake by id rather than by matching the wording above.
-	assert.Equal(t, HintUnchangedFailure, second.Hint)
+	assert.Equal(t, HintUnchangedFailure, second.HintID)
 
 	third := captureStderr(t, func() {
 		_, err := c.Run(context.Background(), step, fn)
@@ -1050,7 +1050,7 @@ func TestRunNoHintWhenInputsChanged(t *testing.T) {
 		require.ErrorIs(t, err, boom)
 	})
 	assert.NotContains(t, out, "inputs unchanged")
-	assert.Empty(t, res.Hint)
+	assert.Empty(t, res.HintID)
 }
 
 // TestRunNoHintAfterSuccess verifies a passing step's recorded descriptor is never
@@ -1071,5 +1071,5 @@ func TestRunNoHintAfterSuccess(t *testing.T) {
 	})
 	assert.False(t, res.Hit, "SkipReplay must take the miss path for this to test anything")
 	assert.NotContains(t, out, "inputs unchanged")
-	assert.Empty(t, res.Hint)
+	assert.Empty(t, res.HintID)
 }

@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `magus query output` that reads it. Nothing is replayed and nothing is skipped: the
   target executes exactly as before, and the line is context rather than a verdict. It
   fires once per cache key, so an edit that moves the inputs speaks again; `-s` keeps it
-  and `--no-hints` drops it. The result record carries `"hint": "unchanged-failure"` in
+  and `--no-hints` drops it. The result record carries `"hint_id": "unchanged-failure"` in
   `-o jsonl`, a stable id to count instead of the wording.
 - **A lease's declared boundary is enforced, not merely recorded.** Under a lease with a
   live ledger row, the agent guard now denies a write outside every entry in that row's

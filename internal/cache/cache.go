@@ -235,10 +235,10 @@ type Result struct {
 	// an entry written before the manifest carried a duration: the same understatement
 	// SavedMs carries, for the same reason.
 	Saved time.Duration
-	// Hint is the stable id of the advisory line this step printed, "" when it printed
-	// none; today only [HintUnchangedFailure]. It rides the result the way Ref does so a
-	// consumer counting a hint's uptake never has to match on its wording.
-	Hint string
+	// HintID is the stable id of the advisory line this step printed, "" when it
+	// printed none; today only [HintUnchangedFailure]. It rides the result the way Ref
+	// does so a consumer counting a hint's uptake never has to match on its wording.
+	HintID string
 }
 
 type runCtx struct {
@@ -591,7 +591,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		return result, err
 	}
 
-	result.Hint = c.emitUnchangedFailureHint(hash)
+	result.HintID = c.emitUnchangedFailureHint(hash)
 
 	// Taken here rather than threaded out of hashStep, to leave that pinned hot path
 	// alone; the files were just hashed, so the mtime fast-path makes this a stat sweep.
@@ -743,7 +743,7 @@ func exportReadLockCacheFrom(ctx context.Context) *Cache {
 }
 
 // HintUnchangedFailure is the stable id of the line a step prints when its inputs are
-// unchanged since a recorded failure. Carried on [Result.Hint] so a consumer counts the
+// unchanged since a recorded failure. Carried on [Result.HintID] so a consumer counts the
 // hint's uptake by id rather than by matching its wording, which is free to change.
 const HintUnchangedFailure = "unchanged-failure"
 

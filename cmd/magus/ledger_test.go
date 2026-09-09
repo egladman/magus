@@ -91,11 +91,13 @@ func TestLeaseGraphEvidenceTakesOnlyAnExactNode(t *testing.T) {
 	g.AddNode(types.KnowledgeNode{ID: "dir:cmd/magus", Kind: types.KindDir, Label: "cmd/magus"})
 	g.AddNode(types.KnowledgeNode{ID: "file:internal/ledger/brief.go", Kind: types.KindFile, Label: "brief.go"})
 
-	assert.Equal(t, []ledger.BriefEvidence{{Path: "cmd/magus", Node: "dir:cmd/magus"}},
-		pathEvidence(g, "cmd/magus"))
+	got, ok := pathEvidence(g, "cmd/magus")
+	require.True(t, ok)
+	assert.Equal(t, ledger.BriefEvidence{Path: "cmd/magus", Node: "dir:cmd/magus"}, got)
 	// "brief.go" resolves to file:internal/ledger/brief.go by name. It is a match and not
 	// evidence: the lease declared a path at the workspace root, and this node is not it.
-	assert.Empty(t, pathEvidence(g, "brief.go"), "a fuzzy match is not evidence")
+	_, ok = pathEvidence(g, "brief.go")
+	assert.False(t, ok, "a fuzzy match is not evidence")
 }
 
 // The footer is the workspace's, including owning none: a workspace with no template

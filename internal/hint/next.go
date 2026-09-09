@@ -2,6 +2,7 @@ package hint
 
 import (
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -115,16 +116,32 @@ func NextForFiles(files []types.FileEntry) []Next {
 		}
 	}
 	for _, f := range files {
-		if len(f.OutputOf) > 0 {
+		if project := regeneratingProject(f); project != "" {
 			next = append(next, Next{
 				ID:  "file-regenerate",
-				Run: Run.With("generate:rw", f.OutputOf[0]),
+				Run: Run.With("generate:rw", project),
 				Why: "a declared output is never hand-edited: change the source of truth and regenerate it into the same commit.",
 			})
 			break
 		}
 	}
 	return capNext(next)
+}
+
+// regeneratingProject names the project whose target writes f, or "" when nothing
+// declares it. The DECLARER, not the owner: OutputOf follows the tree the file lands
+// in, and for a cross-project output only the declaring project's generate target
+// produces it (see types.FileClaim).
+func regeneratingProject(f types.FileEntry) string {
+	for _, c := range f.Claims {
+		if c.Role == "output" {
+			return c.Project
+		}
+	}
+	if len(f.OutputOf) > 0 {
+		return f.OutputOf[0]
+	}
+	return ""
 }
 
 // NextForAffected breadcrumbs the affected listing: the shard plan for target over
@@ -220,7 +237,7 @@ func firstSymbol(matches []types.KnowledgeMatch) (string, bool) {
 func heaviestNeighbor(out types.KnowledgeExplainOutput) (string, bool) {
 	counts := make(map[string]int)
 	var order []string
-	for _, e := range append(append([]types.KnowledgeEdgeRef{}, out.Out...), out.In...) {
+	for _, e := range slices.Concat(out.Out, out.In) {
 		if e.Other == "" || e.Other == out.Node.ID {
 			continue
 		}

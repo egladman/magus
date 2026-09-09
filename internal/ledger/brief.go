@@ -50,9 +50,13 @@ type BriefEvidence struct {
 	BlastRadius int    `json:"blast_radius" yaml:"blast_radius"`
 }
 
-// BriefBind renders the binding command for a lease id. One function so the brief, its
-// golden test, and any caller quoting the line cannot drift.
-func BriefBind(id string) string { return hint.SessionLease.With(id) }
+// NewBrief starts the brief for one row with the fields the row alone determines. The
+// bind line is rendered here and nowhere else, so the brief, its golden test, and any
+// caller quoting the line cannot drift; evidence and the footer are the caller's to
+// add, since they need a graph and a workspace.
+func NewBrief(row types.Lease) Brief {
+	return Brief{Lease: row, Bind: hint.SessionLease.With(row.ID)}
+}
 
 // BriefTemplatePath is where a workspace keeps the brief footer, relative to its root.
 // It sits with the other agent-integration templates so the guide that documents it and
@@ -65,13 +69,13 @@ const BriefTemplatePath = "docs/guides/integrations/agents/brief.md.tmpl"
 //
 // Errors carry the template path, because the reader who has to fix one is editing that
 // file and not this code.
-func RenderBriefFooter(tmpl string, u types.Lease) (string, error) {
+func RenderBriefFooter(tmpl string, row types.Lease) (string, error) {
 	t, err := template.New("brief").Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("ledger: parse %s: %w", BriefTemplatePath, err)
 	}
 	var out strings.Builder
-	if err := t.Execute(&out, u); err != nil {
+	if err := t.Execute(&out, row); err != nil {
 		return "", fmt.Errorf("ledger: render %s: %w", BriefTemplatePath, err)
 	}
 	return out.String(), nil

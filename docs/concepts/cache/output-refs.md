@@ -334,7 +334,7 @@ Nothing is replayed and nothing is skipped: the target runs exactly as it would 
 and the line is context rather than a verdict. It appears once per cache key, so an
 edit that moves the inputs mints a different ref and the hint speaks again; `-s` keeps
 it, and `--no-hints` drops it with every other hint. The target's result record carries
-`"hint": "unchanged-failure"` in `-o jsonl`, which is the stable id to count rather than
+`"hint_id": "unchanged-failure"` in `-o jsonl`, which is the stable id to count rather than
 the wording above.
 
 ## Tips and tricks

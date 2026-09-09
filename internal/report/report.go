@@ -49,8 +49,8 @@ type TargetResult struct {
 	Hash       string `json:"hash,omitempty"`
 	DurationMs int64  `json:"duration_ms,omitempty"`
 	Error      string `json:"error,omitempty"`
-	Ref        string `json:"ref,omitempty"`  // per-execution output reference id, so a consumer can fetch this target's captured output by ref
-	Hint       string `json:"hint,omitempty"` // stable id of the advisory line this target printed, so a hint's uptake is countable without matching its wording
+	Ref        string `json:"ref,omitempty"`     // per-execution output reference id, so a consumer can fetch this target's captured output by ref
+	HintID     string `json:"hint_id,omitempty"` // stable id of the advisory line this target printed, so a hint's uptake is countable without matching its wording
 	// Next carries the breadcrumbs for a FAILED result: the ref that holds the whole
 	// captured output, and the target's own graph node. Absent on a pass, and absent
 	// rather than empty when a failure minted neither, so a consumer counting uptake
@@ -195,7 +195,7 @@ func RunOptions(w *Writer) []cache.RunOption {
 				Hash:       r.Hash,
 				DurationMs: r.Duration.Milliseconds(),
 				Ref:        r.Ref,
-				Hint:       r.Hint,
+				HintID:     r.HintID,
 			}
 			if err != nil {
 				tr.Status = "failed"

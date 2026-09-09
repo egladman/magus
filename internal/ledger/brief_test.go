@@ -38,14 +38,11 @@ func TestBriefRendersTheGolden(t *testing.T) {
 	footer, err := RenderBriefFooter(string(tmpl), briefRow())
 	require.NoError(t, err)
 
-	b := Brief{
-		Lease: briefRow(),
-		Bind:  BriefBind(briefRow().ID),
-		Evidence: []BriefEvidence{
-			{Path: "internal/ledger", Node: "dir:internal/ledger", BlastRadius: 4},
-		},
-		Footer: footer,
+	b := NewBrief(briefRow())
+	b.Evidence = []BriefEvidence{
+		{Path: "internal/ledger", Node: "dir:internal/ledger", BlastRadius: 4},
 	}
+	b.Footer = footer
 	want, err := os.ReadFile(filepath.Join("testdata", "brief.golden"))
 	require.NoError(t, err)
 	assert.Equal(t, string(want), b.Text())
@@ -57,7 +54,8 @@ func TestBriefRendersTheGolden(t *testing.T) {
 func TestBriefNamesAColdGraphOnce(t *testing.T) {
 	t.Parallel()
 
-	b := Brief{Lease: briefRow(), Bind: BriefBind(briefRow().ID), GraphCold: true}
+	b := NewBrief(briefRow())
+	b.GraphCold = true
 	assert.Equal(t, 1, strings.Count(b.Text(), "the knowledge graph is cold"))
 }
 
@@ -68,7 +66,7 @@ func TestBriefRendersOnlyTheRow(t *testing.T) {
 
 	row := briefRow()
 	row.Goal, row.DependsOn, row.ForbiddenPaths = "", nil, nil
-	got := Brief{Lease: row, Bind: BriefBind(row.ID)}.Text()
+	got := NewBrief(row).Text()
 
 	assert.NotContains(t, got, "goal")
 	assert.NotContains(t, got, "depends on")

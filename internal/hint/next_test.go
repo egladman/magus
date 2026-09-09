@@ -92,6 +92,18 @@ func TestNextForFiles(t *testing.T) {
 	}, runs(next))
 }
 
+// A cross-project output lands in the owner's tree but only the declaring project's
+// target regenerates it, so the breadcrumb names the declarer.
+func TestNextForFilesRegeneratesFromTheDeclarer(t *testing.T) {
+	next := NextForFiles([]types.FileEntry{{
+		Path:     "docs/gen/index.html",
+		OutputOf: []string{"docs"},
+		Claims:   []types.FileClaim{{Project: "tools/site", Target: "render", Role: "output", Glob: "docs/gen/**"}},
+	}})
+
+	assert.Equal(t, [][2]string{{"file-regenerate", "magus run generate:rw tools/site"}}, runs(next))
+}
+
 func TestNextForAffected(t *testing.T) {
 	next := NextForAffected("ci", []string{"libs/gopherbuzz", "docs"})
 
