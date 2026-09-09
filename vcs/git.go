@@ -1957,6 +1957,12 @@ const preservedRefPrefix = "refs/magus/preserved/"
 //
 // Keyed on the ref's COMMITTER date, which is when the capture was taken - not the
 // author date, which commit-tree copies from the environment and a caller can set.
+//
+// The commit's SUBJECT has to be Preserve's too. A namespace is not a signature: nothing
+// stops anyone writing into refs/magus/preserved, and this runs unasked inside every
+// Preserve, so "it is under our prefix" is not grounds to delete a commit magus did not
+// make. Same rule as the hg backend's, where a user can land on a magus-shaped shelf name
+// by accident.
 func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
 	run := func(args ...string) (string, error) {
 		cmd := vcsExec(ctx, "git", args...)
@@ -1965,17 +1971,20 @@ func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time
 		out, err := cmd.Output()
 		return strings.TrimSpace(string(out)), err
 	}
+	// The subject is LAST in the format because it is the only field that can hold a
+	// space, which is what makes a three-way split unambiguous.
 	listed, err := run("for-each-ref", "--sort=committerdate",
-		"--format=%(refname) %(committerdate:unix)", preservedRefPrefix)
+		"--format=%(refname) %(committerdate:unix) %(contents:subject)", preservedRefPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("git prune-preserved: for-each-ref: %w", err)
 	}
 	var dropped []string
 	for _, line := range strings.Split(listed, "\n") {
-		name, unix, ok := strings.Cut(strings.TrimSpace(line), " ")
-		if !ok {
+		fields := strings.SplitN(strings.TrimSpace(line), " ", 3)
+		if len(fields) < 3 {
 			continue
 		}
+		name, unix, subject := fields[0], fields[1], fields[2]
 		secs, convErr := strconv.ParseInt(unix, 10, 64)
 		if convErr != nil {
 			continue
@@ -1983,6 +1992,9 @@ func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time
 		// Sorted ascending, so the first ref at or after the cutoff ends the scan.
 		if !time.Unix(secs, 0).Before(before) {
 			break
+		}
+		if subject != preserveMessage {
+			continue
 		}
 		if _, err := run("update-ref", "-d", name); err != nil {
 			return dropped, fmt.Errorf("git prune-preserved: update-ref -d %s: %w", name, err)

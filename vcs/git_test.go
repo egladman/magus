@@ -885,3 +885,78 @@ func TestBranchChangesReportsABranchAndItsTrackingCopyOnce(t *testing.T) {
 	require.Len(t, theirs, 1, "one line of work, reported once")
 	assert.True(t, theirs[0].Local, "the local side wins: it is current, the tracking copy is not")
 }
+
+// gitCapture runs one git command in dir with extra environment and returns its trimmed
+// stdout. It covers the two things gitRun cannot: reading a result back, and setting
+// GIT_COMMITTER_DATE, which is the only way to mint a ref that is genuinely old.
+func gitCapture(t *testing.T, dir string, env []string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(gitEnv(), env...)
+	out, err := cmd.Output()
+	require.NoErrorf(t, err, "git %s", strings.Join(args, " "))
+	return strings.TrimSpace(string(out))
+}
+
+// TestGitPrunePreservedSparesARefMagusDidNotWrite holds the same line the hg backend
+// holds: what makes an object magus's is the MESSAGE Preserve wrote on it, not where it
+// sits. refs/magus/preserved is a namespace, and a namespace is not a signature; anyone
+// can update-ref into it, and this pruner runs unasked inside every Preserve.
+func TestGitPrunePreservedSparesARefMagusDidNotWrite(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+
+	tree := gitCapture(t, dir, nil, "rev-parse", "HEAD^{tree}")
+	foreign := gitCapture(t, dir, nil, "commit-tree", tree, "-p", "HEAD", "-m", "a snapshot someone else took")
+	gitRun(t, dir, "update-ref", preservedRefPrefix+foreign, foreign)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
+	handle, err := gitVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, handle)
+
+	dropped, err := gitVCS{}.PrunePreserved(t.Context(), dir, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{handle}, dropped, "pruning reported something other than its own capture")
+	refs := gitListPreserved(t, dir)
+	assert.Contains(t, refs, foreign, "pruning deleted a ref magus did not write")
+	assert.NotContains(t, refs, handle, "pruning reported a handle it did not delete")
+}
+
+// TestGitPreserveRetentionBoundaryIsThirtyDays exercises preserveRetention itself, which
+// no test did: the suite only ever passed cutoffs an hour either side of now, so the
+// constant could be set to thirty SECONDS and every assertion stayed green.
+//
+// Both sides of the window are asserted, because only the survival half pins the length.
+// It runs through Preserve rather than calling PrunePreserved with a cutoff of its own,
+// since a cutoff the test chose would say nothing about the one the code applies.
+//
+// The two ages are LITERAL days rather than preserveRetention plus or minus a day. Written
+// against the constant they move with it, and 29 days either side of thirty seconds is
+// still one on each side, so the test passes whatever the constant says: measured, by
+// setting it to thirty seconds and watching this stay green.
+func TestGitPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	tree := gitCapture(t, dir, nil, "rev-parse", "HEAD^{tree}")
+
+	// Aged through the committer date, which is what PrunePreserved keys on.
+	aged := func(days int) string {
+		when := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Format(time.RFC3339)
+		sha := gitCapture(t, dir, []string{"GIT_COMMITTER_DATE=" + when, "GIT_AUTHOR_DATE=" + when},
+			"commit-tree", tree, "-p", "HEAD", "-m", preserveMessage)
+		gitRun(t, dir, "update-ref", preservedRefPrefix+sha, sha)
+		return sha
+	}
+	inside := aged(29)
+	outside := aged(31)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
+	_, err := gitVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+
+	refs := gitListPreserved(t, dir)
+	assert.Contains(t, refs, inside, "dropped a capture still inside the retention window")
+	assert.NotContains(t, refs, outside, "kept a capture past the retention window")
+}

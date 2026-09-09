@@ -970,7 +970,7 @@ func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	}
 	// The shelf EXISTS from here, so a failed restore reports the handle rather than
 	// discarding it, and NAMES the files so the state is actionable.
-	if err := hgFamilyRestorePending(ctx, "hg", dir, pending); err != nil {
+	if err := hgFamilyRestorePending(ctx, "hg", pending); err != nil {
 		return name, fmt.Errorf("hg preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
 			name, pending.unknown, pending.missing, err)
 	}
@@ -983,15 +983,22 @@ func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 
 // PrunePreserved deletes the magus shelves older than before.
 //
-// Only shelves whose name shelfName minted, read back from the name itself: `hg shelve
-// --list` prints ages as prose and takes no template, so the mint time travels in the
-// name rather than through Mercurial's human output. A shelf a person made by hand does
-// not carry the prefix and is never in scope.
+// TWO things have to agree before a shelf is in scope: the name shelfName minted, which
+// carries the mint time, and the MESSAGE Preserve wrote. The name alone is not authority
+// to delete, because a user can produce one without trying. `hg shelve` with no --name
+// derives the shelf name from the active bookmark, so a bookmark called
+// magus-1234567890-wip in a repository named magus yields a shelf shelfMinted accepts,
+// and a plain `hg shelve` REVERTS the working copy, which makes that shelf the only copy
+// of the work. Deleting it would be magus destroying a user's only copy during
+// housekeeping it ran without being asked.
+//
+// The mint time still travels in the name rather than through Mercurial's output: `hg
+// shelve --list` prints ages as prose ("2m ago") and takes no template, so a retention
+// pass that read it would be parsing a UI string.
 func (v hgVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
-	// --quiet prints bare names, one per line. Without it the name runs straight into the
-	// age when it overflows the column ("magus-...(1s ago)"), so there is no separator to
-	// split on.
-	cmd := vcsExec(ctx, "hg", "--config", "extensions.shelve=", "shelve", "--list", "--quiet")
+	// Not --quiet, which prints bare names and so cannot say who wrote a shelf. The full
+	// listing is "<name>(<age>)<spaces><message>", parsed by hgShelfListing.
+	cmd := vcsExec(ctx, "hg", "--config", "extensions.shelve=", "shelve", "--list")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -1002,8 +1009,10 @@ func (v hgVCS) PrunePreserved(ctx context.Context, dir string, before time.Time)
 		minted time.Time
 	}
 	var stale []shelf
-	for _, line := range strings.Split(string(out), "\n") {
-		name := strings.TrimSpace(line)
+	for name, message := range hgShelfListing(string(out)) {
+		if message != preserveMessage {
+			continue
+		}
 		minted, ok := shelfMinted(name)
 		if !ok || !minted.Before(before) {
 			continue
@@ -1024,4 +1033,31 @@ func (v hgVCS) PrunePreserved(ctx context.Context, dir string, before time.Time)
 		dropped = append(dropped, name)
 	}
 	return dropped, nil
+}
+
+// hgShelfListing reads `hg shelve --list` into name -> message.
+//
+// The line is "<name>(<age>)<spaces><message>", and the AGE is what separates the two
+// fields: there is no space before the "(" when the name overflows the column, and no
+// other delimiter anywhere. Splitting on whitespace instead would read a name as its own
+// message, which for a pruner that trusts the message is the failure that matters.
+//
+// A line that does not carry an age is skipped rather than guessed at, because a shelf
+// whose message cannot be read is a shelf magus has no grounds to delete.
+func hgShelfListing(out string) map[string]string {
+	shelves := make(map[string]string)
+	for line := range strings.SplitSeq(out, "\n") {
+		name, rest, ok := strings.Cut(strings.TrimSpace(line), "(")
+		if !ok {
+			continue
+		}
+		_, message, ok := strings.Cut(rest, ")")
+		if !ok {
+			continue
+		}
+		if name = strings.TrimSpace(name); name != "" {
+			shelves[name] = strings.TrimSpace(message)
+		}
+	}
+	return shelves
 }

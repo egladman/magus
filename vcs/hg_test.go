@@ -1,10 +1,12 @@
 package vcs
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -91,4 +93,82 @@ func TestBaseNamesTheMainlineNotTip(t *testing.T) {
 	require.NoError(t, err, "ChangedFiles against the default base")
 	assert.Contains(t, got, "a.txt",
 		"a committed branch change reported nothing affected; affected would build nothing")
+}
+
+// TestHgPrunePreservedSparesAShelfMagusDidNotWrite is the line between housekeeping and
+// data loss.
+//
+// A magus-shaped NAME is not proof magus wrote it. `hg shelve` with no --name derives the
+// shelf name from the active bookmark, so a bookmark called magus-1234567890-wip yields a
+// name shelfMinted accepts, and a plain `hg shelve` REVERTS the working copy, which can
+// leave that shelf as the only copy of the work. PrunePreserved runs unasked inside every
+// Preserve, so deleting on a name match alone destroyed a user's only copy during work
+// they never asked for.
+func TestHgPrunePreservedSparesAShelfMagusDidNotWrite(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+
+	// The user's shelf, shaped exactly like a mint (prefix, unix seconds, suffix). Only
+	// the message tells the two apart.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("half a refactor\n"), 0o644))
+	vcsTestRun(t, dir, "hg", "--config", "extensions.shelve=", "shelve",
+		"--keep", "--name", "magus-1234567890-wip", "--message", "half of a refactor")
+
+	// And a real capture, so the test cannot pass by pruning nothing at all.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
+	handle, err := hgVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, handle)
+
+	dropped, err := hgVCS{}.PrunePreserved(t.Context(), dir, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{handle}, dropped, "pruning reported something other than its own capture")
+	names := hgListPreserved(t, dir)
+	assert.Contains(t, names, "magus-1234567890-wip", "pruning deleted a shelf the user wrote")
+	assert.NotContains(t, names, handle, "pruning reported a handle it did not delete")
+}
+
+// TestHgPreserveRetentionBoundaryIsThirtyDays exercises preserveRetention itself, which
+// no test did: the suite only ever passed cutoffs an hour either side of now, so the
+// constant could be set to thirty SECONDS and every assertion stayed green.
+//
+// Both sides of the window are asserted, because only the survival half pins the length.
+// It runs through Preserve rather than calling PrunePreserved with a cutoff of its own,
+// since a cutoff the test chose would say nothing about the one the code applies.
+//
+// The two ages are LITERAL days rather than preserveRetention plus or minus a day. Written
+// against the constant they move with it, and 29 days either side of thirty seconds is
+// still one on each side, so the test passes whatever the constant says: measured, by
+// setting it to thirty seconds and watching this stay green.
+func TestHgPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+
+	// Aged by the only thing that dates an hg shelf: the timestamp shelfName writes into
+	// the name.
+	aged := func(days int, suffix string) string {
+		age := time.Duration(days) * 24 * time.Hour
+		name := fmt.Sprintf("%s%d-%s", shelfPrefix, time.Now().Add(-age).Unix(), suffix)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte(name+"\n"), 0o644))
+		vcsTestRun(t, dir, "hg", "--config", "extensions.shelve=", "shelve",
+			"--keep", "--name", name, "--message", preserveMessage)
+		return name
+	}
+	inside := aged(29, "inside")
+	outside := aged(31, "outside")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("current\n"), 0o644))
+	_, err := hgVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+
+	names := hgListPreserved(t, dir)
+	assert.Contains(t, names, inside, "dropped a capture still inside the retention window")
+	assert.NotContains(t, names, outside, "kept a capture past the retention window")
 }
