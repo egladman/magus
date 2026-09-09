@@ -389,6 +389,24 @@ This is the graph's only non-deterministic input, so it is quarantined: a distin
 shard, excluded from remote export, derived from local run records rather than
 workspace sources.
 
+## Agent contact (`@session`)
+
+Once `magus session load` has folded an agent host's transcript into the per-repo
+session store, the `@session` shard rolls those events up onto the file and
+directory nodes the graph already holds: `agent_sessions` (how many distinct
+sessions touched it), `agent_reads`, `agent_writes`, `agent_denials`, and
+`agent_last_touched` (the host's own event time, not the load time). That answers
+"which code do agents actually touch" and "where do refusals concentrate" from a
+node, with no second query. Events themselves never become nodes: merge is a set
+union, so repeated contact would collapse to one edge, losing the count, which is
+the whole signal. A denial is credited only to an event that carries a path;
+a refused shell command names no file, so crediting it to the directory the session
+happened to be working in would invent attribution. A path that matches no node is
+counted and dropped, never minted. Like `@coverage`, the shard loads with the
+symbol layer rather than the default graph, because the file nodes it annotates are
+the symbol shards' own; like `@runtime`, it is local-only, never pushed to a remote
+cache, and stripped from `magus graph export --reproducible`.
+
 ## Code symbols (SCIP ingestion)
 
 magus never parses source code. To bring code symbols into the graph, it ingests a

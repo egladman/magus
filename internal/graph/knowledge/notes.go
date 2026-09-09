@@ -32,7 +32,7 @@ const privateNotesShardName = "@notes/private"
 // the remote cache. Kept as one predicate so a new local shard is added in a single place
 // rather than at every push site.
 func isLocalShard(name string) bool {
-	return isRuntimeShard(name) || isCoverageShard(name) || name == privateNotesShardName
+	return isRuntimeShard(name) || isCoverageShard(name) || isSessionShard(name) || name == privateNotesShardName
 }
 
 // attrScope distinguishes a note the team committed from one only this machine has, so

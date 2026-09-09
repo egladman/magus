@@ -92,6 +92,12 @@ type Inputs struct {
 	// ratio onto the file (and, via SCIP def lines, symbol) nodes rather than churning
 	// the deterministic @symbols shards it annotates.
 	Coverage []FileCoverage
+	// AgentContacts carries the agent-session events `magus session load` folded into the
+	// per-repo session store, reduced to the path contacts the @session overlay counts.
+	// Observed and machine-local like Coverage, and lazily loaded for the same reason:
+	// the file nodes it annotates are the symbol shards'. Empty on a workspace that has
+	// never loaded a transcript, which is the default.
+	AgentContacts []AgentContact
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -101,6 +107,12 @@ type Shard struct {
 	Name  string
 	Nodes []types.KnowledgeNode
 	Edges []types.KnowledgeEdge
+
+	// Dropped counts inputs the assembler could not attach to any node, so an overlay
+	// that resolved nothing is legible instead of silently empty. It is DIAGNOSTIC, not
+	// content: fingerprintShardContent never reads it, so it cannot make an unchanged
+	// shard look dirty. Sync logs it; only @session sets it today.
+	Dropped int
 }
 
 // AssembleShards builds every shard from the gathered inputs: the registry shard
@@ -275,6 +287,17 @@ func AssembleShards(in Inputs) []Shard {
 			if io := assembleIO(in.Graph.Projects, own); len(io.Edges) > 0 {
 				shards[i].Edges = append(shards[i].Edges, io.Edges...)
 			}
+		}
+	}
+	// The agent-contact overlay runs after every path-bearing shard AND after both dir
+	// passes, because it resolves against nodes rather than paths: a file node minted by a
+	// symbols shard and a dir node minted by that shard's own roll-up are both targets it
+	// must be able to see, or it would drop them as unresolved. Recomputing the known set
+	// is gated on there being contacts at all, so a workspace that never loaded a
+	// transcript pays nothing.
+	if len(in.AgentContacts) > 0 {
+		if sess := assembleSession(in.AgentContacts, knownNodeIDs(shards, in.Graph)); len(sess.Nodes) > 0 || sess.Dropped > 0 {
+			shards = append(shards, sess)
 		}
 	}
 	// Prose staleness runs LAST, over the finished shard set: it needs a doc or note from

@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5329,
-  "edge_count": 9477,
+  "node_count": 5330,
+  "edge_count": 9478,
   "relations": [
     {
       "id": "annotates",
@@ -1227,7 +1227,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "587",
+        "dir_files": "588",
         "dir_languages": "markdown,md#1-built-in-command-spells-import-maguscharm,md#2-workspace-spells--magusfiles-import-charm,md#3-raw-rfc-6902-data-the-lowest-level,md#4-function-targets--ops-branch-in-code,md#a-bypass-fails-closed,md#a-gap-worth-knowing,md#a-known-leak-a-multi"
       }
     },
@@ -10713,6 +10713,16 @@
       "attrs": {
         "anchor": "linters-never-gate-on-generated-output",
         "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/concepts/knowledge.md#agent-contact-session",
+      "kind": "docsection",
+      "label": "Agent contact (@session)",
+      "source": "docs/concepts/knowledge.md#agent-contact-session",
+      "attrs": {
+        "anchor": "agent-contact-session",
+        "level": "2"
       }
     },
     {
@@ -83871,6 +83881,14 @@
     {
       "source": "docsection:docs/concepts/knowledge.md#human-authored-notes",
       "target": "docsection:docs/concepts/knowledge.md#where-a-note-goes-and-what-that-means",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge.md"
+    },
+    {
+      "source": "docsection:docs/concepts/knowledge.md#knowledge-graph",
+      "target": "docsection:docs/concepts/knowledge.md#agent-contact-session",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
