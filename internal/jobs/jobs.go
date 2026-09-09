@@ -25,6 +25,7 @@ const (
 	NameSyncGraph        = "sync-graph"
 	NameRotateActivities = "rotate-activities"
 	NameRotateLogs       = "rotate-logs"
+	NamePrunePreserved   = "prune-preserved"
 	NameClearCache       = "clear-cache"
 	NameCheckReview      = "check-review"
 )
@@ -56,6 +57,11 @@ var registry = []Job{
 		Name: NameRotateLogs,
 		Desc: "trim the invocation run-log journals back to their cap",
 		Argv: []string{"server", NameRotateLogs},
+	},
+	{
+		Name: NamePrunePreserved,
+		Desc: "drop the working-copy captures vcs checkpoint --preserve minted past their retention",
+		Argv: []string{"server", NamePrunePreserved},
 	},
 	{
 		Name: NameClearCache,

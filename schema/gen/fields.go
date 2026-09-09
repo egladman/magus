@@ -229,6 +229,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS",
 	},
 	{
+		GoPath:   "Daemon.Maintenance.PrunePreserved",
+		YamlPath: "daemon.maintenance.prune_preserved",
+		EnvVar:   "MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED",
+		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-prune-preserved"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED: PrunePreserved drops the working-copy captures 'vcs checkpoint --preserve' minted once they outlive the thirty days t...",
+	},
+	{
 		GoPath:   "Daemon.Maintenance.SyncGraph",
 		YamlPath: "daemon.maintenance.sync_graph",
 		EnvVar:   "MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH",

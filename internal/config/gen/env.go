@@ -136,6 +136,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Daemon.Maintenance.RotateLogs = d
 		}
 	}
+	if v := getenv("MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Daemon.Maintenance.PrunePreserved = d
+		}
+	}
 	if v := getenv("MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Daemon.Maintenance.SyncGraph = d

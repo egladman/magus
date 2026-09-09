@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/egladman/magus/types"
 )
@@ -65,6 +66,30 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preser
 		}
 	}
 	return cp, nil
+}
+
+// PrunePreserved drops every capture --preserve minted in dir that has outlived the
+// retention its handle promises, and reports the handles it dropped.
+//
+// It exists because that promise needs a SCHEDULE behind it. Preserve prunes too, but only
+// a caller who preserves AGAIN can reach that pass, so a repository preserved once keeps
+// its capture for good and the thirty days the flag advertises never arrive. This is the
+// entry point a periodic run calls; the retention itself stays here rather than travelling
+// through a caller, because a cutoff the caller chose would enforce a window nothing else
+// in magus has promised.
+//
+// The backends disagree and the disagreement is not an error to report: Sapling drops
+// nothing (its snapshot is a hidden commit no Sapling command removes) and Jujutsu mints
+// nothing to drop, so both answer with an empty list.
+func PrunePreserved(ctx context.Context, dir string, res types.VCSResolution) ([]string, error) {
+	if res.VCS == nil {
+		return nil, errors.New("vcs prune-preserved: no VCS resolved for this workspace; there is nothing to prune")
+	}
+	dropped, err := res.VCS.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
+	if err != nil {
+		return nil, fmt.Errorf("vcs prune-preserved: %w", err)
+	}
+	return dropped, nil
 }
 
 // untrackedDigest fingerprints the untracked files' paths and content, "" when there are

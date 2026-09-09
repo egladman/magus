@@ -14,11 +14,13 @@ func TestBuildSchedule_SkipsDisabledAndResolvesArgv(t *testing.T) {
 	m := config.Maintenance{
 		RotateActivities: 24 * time.Hour,
 		RotateLogs:       0, // disabled
+		PrunePreserved:   24 * time.Hour,
 		SyncGraph:        6 * time.Hour,
 	}
 
 	require.Equal(t, []scheduledJob{
 		{argv: []string{"server", "rotate-activities"}, interval: 24 * time.Hour, action: "server rotate-activities"},
+		{argv: []string{"server", "prune-preserved"}, interval: 24 * time.Hour, action: "server prune-preserved"},
 		{argv: []string{"graph", "build"}, interval: 6 * time.Hour, action: "graph build"},
 	}, buildSchedule(m))
 }

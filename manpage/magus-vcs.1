@@ -48,8 +48,13 @@ git, a kept shelf for Mercurial, a commit Sapling keeps hidden, and for Jujutsu 
 working\-copy commit it already holds. The working copy is untouched either way.
 .PP
 Retention differs, so it is stated per backend rather than promised once. On git
-and Mercurial a capture is dropped once it is 30 days old, and that pass runs
-inside every preserve. On Sapling it is not: magus mints a hidden commit there and
+and Mercurial a capture is dropped once it is 30 days old. Two passes enforce
+that, because either alone leaves a gap: every preserve prunes, which bounds a
+repository nothing schedules against; and the daemon's prune\-preserved job prunes
+on its own, which is what reaches a repository preserved once and never again.
+That job is a no\-op with no daemon running, so the standalone spelling on a
+machine that runs none is magus server prune\-preserved.
+On Sapling neither pass drops anything: magus mints a hidden commit there and
 no Sapling command removes one without discarding the working copy, so those stay
 until you remove them; list them with sl log \-\-hidden \-r "desc('magus preserved
 working copy')". Jujutsu mints nothing, so it accumulates nothing.

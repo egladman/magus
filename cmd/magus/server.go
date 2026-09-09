@@ -53,6 +53,8 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverRotateActivities(ctx, root, rest)
 	case jobs.NameRotateLogs:
 		return serverRotateLogs(ctx, root, rest)
+	case jobs.NamePrunePreserved:
+		return serverPrunePreserved(ctx, root, rest)
 	case jobs.NameCheckReview:
 		return serverCheckReview(ctx, root, rest)
 	default:
@@ -787,6 +789,46 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	}
 	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
+	return nil
+}
+
+// serverPrunePreserved is the worker for the prune-preserved job: it drops the working-copy
+// captures `vcs checkpoint --preserve` minted once they outlive the retention that flag
+// promises. It runs inside the daemon when dispatched as a job and works standalone too.
+// Normally reached via `server job prune-preserved`.
+//
+// The failure is RETURNED here, where Preserve's own prune deliberately discards it. The
+// two are not the same call: a housekeeping failure reported out of Preserve would send a
+// caller looking for work that is safely stored, while a pass whose only job IS the
+// housekeeping has nothing else to report, and a store nobody can prune any more has to be
+// visible somewhere. Here that is the job's outcome in the activity trail.
+func serverPrunePreserved(ctx context.Context, root string, args []string) error {
+	if _, err := cmdParse("server "+jobs.NamePrunePreserved, args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus server prune-preserved")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Drop the working-copy captures `magus vcs checkpoint --preserve` minted")
+			fmt.Fprintln(os.Stderr, "once they are past their retention. Sapling keeps its captures whatever")
+			fmt.Fprintln(os.Stderr, "this does, and Jujutsu mints none. This is the worker for")
+			fmt.Fprintln(os.Stderr, "`"+hint.ServerJob.With(jobs.NamePrunePreserved)+"`; prefer that form.")
+		}
+	}); err != nil {
+		return err
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return fmt.Errorf("server %s: %w", jobs.NamePrunePreserved, err)
+	}
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil {
+		return fmt.Errorf("server %s: %w", jobs.NamePrunePreserved, err)
+	}
+	dropped, err := vcs.PrunePreserved(ctx, m.Root(), res)
+	if err != nil {
+		return fmt.Errorf("server %s: %w", jobs.NamePrunePreserved, err)
+	}
+	slog.InfoContext(ctx, "pruned preserved captures",
+		slog.Int("dropped", len(dropped)), slog.String("vcs", res.Name))
 	return nil
 }
 

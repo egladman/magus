@@ -66,8 +66,8 @@ type VCSDriver interface {
 	// namespace magus owns is not proof: a user can land on a magus-shaped shelf name
 	// without trying, and anyone can write into a magus ref prefix. What identifies an
 	// object is the message Preserve left on it, so an implementation reads that before
-	// deleting. This runs unasked inside every Preserve, so the cost of guessing wrong
-	// is a user's only copy of their work.
+	// deleting. This runs unasked inside every Preserve AND on a schedule the user never
+	// typed, so the cost of guessing wrong is a user's only copy of their work.
 	//
 	// Returning no handles means one of two things, and they are not the same. A backend
 	// that mints nothing has nothing to drop. A backend that mints something it cannot

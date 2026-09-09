@@ -101,6 +101,7 @@ var commandsWithoutOutput = map[string]bool{
 	"notes capture":            true,
 	"notes edit":               true,
 	"notes promote":            true,
+	"server prune-preserved":   true,
 	"server reload":            true,
 	"server rotate-activities": true,
 	"server rotate-logs":       true,
