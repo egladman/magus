@@ -194,8 +194,13 @@ magus\project({
         // (internal/interp/bindings/target.go) yields the limiter slot and the isolation
         // lease around a needs dispatch but NOT the machine claim, so a composing target
         // keeps holding machine-wide memory while blocked on the children it is composing.
-        // STILL OPEN. The scanners were innocent. Keep the timeout on its own merits - the
-        // network reach is real - but do not read it as covering a hang.
+        //
+        // FIXED, and not by yielding: a step admitted beneath one already holding a claim
+        // now takes none of its own (internal/cache.admit), because Step.MemoryMB already
+        // covers every target it composes and a re-acquire is fallible. The parent still
+        // holds while blocked, which is now harmless. The scanners were innocent. Keep the
+        // timeout on its own merits - the network reach is real - but do not read it as
+        // covering a hang.
         "security": {
             "skip_cache": "depends on trivy's license classifier version, which no cache key can see",
             "timeout": "15m",
