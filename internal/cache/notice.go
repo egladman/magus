@@ -82,7 +82,7 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 	matched := false
 	for i, line := range lines {
 		switch {
-		case structuralFailureLine.MatchString(line):
+		case structuralFailureLine.MatchString(line), findingLine.MatchString(line):
 			mark(i, structuralFailure)
 			matched = true
 		case diagnosticLine.MatchString(line):
@@ -146,3 +146,14 @@ var diagnosticLine = regexp.MustCompile(
 // parent), a panic, and go test's own terminal "FAIL" line (bare, or the
 // package-and-duration summary "FAIL\t<pkg>\t<dur>").
 var structuralFailureLine = regexp.MustCompile(`^\s*(--- FAIL: |panic: |FAIL(\s|$))`)
+
+// findingLine matches the file:line:col: form every compiler and linter emits, which
+// carries no keyword at all: a golangci-lint finding says "comment uses ... write a
+// colon instead", a tsc one says "Type 'x' is not assignable to 'y'". Neither trips
+// diagnosticLine, so a lint failure used to match NOTHING and fall back to a tail,
+// which showed whichever tool happened to run last rather than the finding.
+//
+// Anchored, and the extension must be letters, so a timestamp ("13:21:11.393-04:00")
+// and a bare host:port cannot match. The trailing ": " is what separates a real
+// finding from a path someone mentioned in a sentence.
+var findingLine = regexp.MustCompile(`^\s*\S+\.[A-Za-z]+:\d+(:\d+)?: `)
