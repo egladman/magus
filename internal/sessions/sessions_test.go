@@ -479,7 +479,7 @@ func writeRaw(t *testing.T, dir, session string, records []Record) {
 
 func loadable(session, host, ref string, at int64) LoadEvent {
 	return LoadEvent{Session: session, Event: AgentEvent{
-		Host: host, Event: EventFileRead, Ref: ref, At: at, Text: ref + ".go",
+		Host: host, Kind: EventFileRead, Ref: ref, AtMs: at, Text: ref + ".go",
 	}}
 }
 
@@ -551,7 +551,7 @@ func TestValidEventKind(t *testing.T) {
 }
 
 func TestValidSessionIDRefusesAPathSeparator(t *testing.T) {
-	require.NoError(t, ValidSessionID("8f1c-2d4e_9"))
-	require.Error(t, ValidSessionID("../escape"))
-	require.Error(t, ValidSessionID(""))
+	assert.True(t, ValidSessionID("8f1c-2d4e_9"))
+	assert.False(t, ValidSessionID("../escape"))
+	assert.False(t, ValidSessionID(""))
 }

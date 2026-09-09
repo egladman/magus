@@ -31,10 +31,10 @@ func sessionNode(t *testing.T, s Shard, id string) types.KnowledgeNode {
 func TestAssembleSessionFoldsOntoFileAndRollsUpToDirs(t *testing.T) {
 	const path = "internal/graph/knowledge/store.go"
 	s := assembleSession([]AgentContact{
-		{Session: "s1", Path: path, Read: true, At: 100},
-		{Session: "s1", Path: path, Write: true, At: 300},
-		{Session: "s2", Path: path, Read: true, At: 200},
-		{Session: "s2", Path: path, Write: true, Denied: true, At: 250},
+		{Session: "s1", Path: path, Read: true, AtMs: 100},
+		{Session: "s1", Path: path, Write: true, AtMs: 300},
+		{Session: "s2", Path: path, Read: true, AtMs: 200},
+		{Session: "s2", Path: path, Write: true, Denied: true, AtMs: 250},
 	}, sessionKnown())
 
 	require.Zero(t, s.Dropped)
@@ -61,9 +61,9 @@ func TestAssembleSessionFoldsOntoFileAndRollsUpToDirs(t *testing.T) {
 
 func TestAssembleSessionCountsUnresolvedRatherThanMinting(t *testing.T) {
 	s := assembleSession([]AgentContact{
-		{Session: "s1", Path: "internal/gone.go", Read: true, At: 100},
-		{Session: "s1", Path: "", Denied: true, At: 110},
-		{Session: "s1", Path: "internal/graph/knowledge/store.go", Read: true, At: 120},
+		{Session: "s1", Path: "internal/gone.go", Read: true, AtMs: 100},
+		{Session: "s1", Path: "", Denied: true, AtMs: 110},
+		{Session: "s1", Path: "internal/graph/knowledge/store.go", Read: true, AtMs: 120},
 	}, sessionKnown())
 
 	assert.Equal(t, 2, s.Dropped, "a deleted path and a path-less command are both counted")
@@ -77,8 +77,8 @@ func TestAssembleSessionCountsUnresolvedRatherThanMinting(t *testing.T) {
 // reach no node at all, not the directories the session happened to be working in.
 func TestAssembleSessionDoesNotAttributePathlessDenials(t *testing.T) {
 	s := assembleSession([]AgentContact{
-		{Session: "s1", Path: "", Denied: true, At: 100},
-		{Session: "s1", Path: "internal/graph/knowledge/store.go", Read: true, At: 200},
+		{Session: "s1", Path: "", Denied: true, AtMs: 100},
+		{Session: "s1", Path: "internal/graph/knowledge/store.go", Read: true, AtMs: 200},
 	}, sessionKnown())
 
 	assert.Equal(t, 1, s.Dropped)
@@ -96,7 +96,7 @@ func TestAssembleSessionEmptyInput(t *testing.T) {
 func TestSessionShardIsLocalAndLazy(t *testing.T) {
 	assert.True(t, isSessionShard(sessionShardName))
 	assert.False(t, isSessionShard(coverageShardName))
-	assert.True(t, isLocalShard(sessionShardName), "loaded transcripts must never reach a remote cache")
+	assert.True(t, isMachineLocalShard(sessionShardName), "loaded transcripts must never reach a remote cache")
 	assert.True(t, isLazyShard(sessionShardName), "its file and dir nodes are the symbol shards'")
 }
 
@@ -105,8 +105,8 @@ func TestSessionShardIsLocalAndLazy(t *testing.T) {
 // omits would survive stripUnreproducible and land in the committed export.
 func TestSessionAttrsCoversAssembled(t *testing.T) {
 	s := assembleSession([]AgentContact{
-		{Session: "s1", Path: "internal/graph/knowledge/store.go", Read: true, At: 100},
-		{Session: "s2", Path: "internal/graph/knowledge/store.go", Write: true, Denied: true, At: 200},
+		{Session: "s1", Path: "internal/graph/knowledge/store.go", Read: true, AtMs: 100},
+		{Session: "s2", Path: "internal/graph/knowledge/store.go", Write: true, Denied: true, AtMs: 200},
 	}, sessionKnown())
 
 	emitted := map[string]bool{}
@@ -131,7 +131,7 @@ func TestSessionContactsStayOutOfTheDefaultGraph(t *testing.T) {
 	in := sampleInputs()
 	before := mergeAll(AssembleShards(in)).Output()
 
-	in.AgentContacts = []AgentContact{{Session: "s1", Path: "internal/graph/knowledge/store.go", Read: true, At: 100}}
+	in.AgentContacts = []AgentContact{{Session: "s1", Path: "internal/graph/knowledge/store.go", Read: true, AtMs: 100}}
 	shards := AssembleShards(in)
 
 	var merged []Shard

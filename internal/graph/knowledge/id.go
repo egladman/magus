@@ -305,8 +305,9 @@ const (
 	// when zero, so a read-only file is distinguishable from an unwritten one.
 	AttrAgentReads  = "agent_reads"
 	AttrAgentWrites = "agent_writes"
-	// AttrAgentDenials is how many events against this node today's guard rules deny.
-	// Only path-bearing events are counted; see assembleSession's attribution rule.
+	// AttrAgentDenials is how many events against this node the HOST recorded as
+	// refused. Only path-bearing events are counted; see assembleSession's
+	// attribution rule.
 	AttrAgentDenials = "agent_denials"
 	// AttrAgentLastTouched is the newest HOST event time in unix milliseconds, not the
 	// time magus loaded it: a transcript loaded today may be months old.

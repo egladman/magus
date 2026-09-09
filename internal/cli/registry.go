@@ -1358,7 +1358,7 @@ file.write, skill.load, hook.output, spawn, or magus.call, and any other kind
 is rejected with a diagnostic naming the set. cwd, ts, text, transcript and
 outcome are optional.
 
-Events are keyed on (host, session, ref), so re-running a recipe over the same
+Events are keyed on (host, session, kind, ref), so re-running a recipe over the same
 transcript loads nothing twice: a recipe re-reads whole files instead of
 tracking where it stopped. Events whose cwd belongs to another repository are
 dropped, and worktrees of this one are kept. A checkout that no longer exists

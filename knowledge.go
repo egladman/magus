@@ -411,39 +411,25 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 		}
 		// A file event carries its path in Text; a shell command's Text is never
 		// stored, so it arrives path-less and the assembler counts it as dropped.
+		// Denied is the host's own record of a refusal, the only denial a file event
+		// carries: the re-judged Verdict exists on shell commands alone, which have
+		// no path to land on.
+		//
+		// compat(until: no session store holds an absolute file path, which `magus
+		// session show -o json` would list under files_read or files_written): loads
+		// store the checkout-relative path, and only events loaded before they did
+		// still need reducing here.
 		out = append(out, knowledge.AgentContact{
 			Session: rec.Session,
-			Path:    contactPath(ev.Text),
-			Read:    ev.Event == sessions.EventFileRead,
-			Write:   ev.Event == sessions.EventFileWrite,
-			At:      ev.At,
-			Denied:  ev.Verdict == guardVerdictDeny,
+			Path:    repoid.CheckoutRelative(ev.Text),
+			Read:    ev.Kind == sessions.EventFileRead,
+			Write:   ev.Kind == sessions.EventFileWrite,
+			AtMs:    ev.AtMs,
+			Denied:  ev.Denied,
 		})
 	}
 	return out
 }
-
-// contactPath reduces a stored file path to the checkout-relative form graph file
-// nodes are keyed by. Loads now store that form; events loaded before they did
-// hold the host's absolute path, in whichever checkout of this repository the
-// session ran, and the nearest checkout above the file is the prefix to drop. A
-// path whose checkout is gone stays absolute and counts as dropped.
-func contactPath(p string) string {
-	if !filepath.IsAbs(p) {
-		return p
-	}
-	if root := repoid.CheckoutRoot(filepath.Dir(p)); root != "" {
-		if rel, err := filepath.Rel(root, p); err == nil {
-			return filepath.ToSlash(rel)
-		}
-	}
-	return p
-}
-
-// guardVerdictDeny is the [sessions.AgentEvent.Verdict] value meaning today's guard rules
-// refuse the re-judged command. Named because a mistyped literal would silently count
-// zero denials rather than fail.
-const guardVerdictDeny = "deny"
 
 // declaredSpellSet is the union of every project's declared `spells:` list, the spells
 // this workspace opts into, as opposed to the compiled-in builtins that are merely

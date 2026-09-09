@@ -607,34 +607,3 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 	assert.Equal(t, want, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()),
 		"a file in the old shape must miss, not decode as zeros")
 }
-
-// TestContactPathReducesHostPathsToCheckoutRelative pins the join between loaded
-// session events and graph file nodes: a host names files absolutely, nodes are
-// keyed inside the checkout, and a sibling worktree of the same repository shares
-// that layout.
-func TestContactPathReducesHostPathsToCheckoutRelative(t *testing.T) {
-	base := t.TempDir()
-	main := filepath.Join(base, "main")
-	linked := filepath.Join(main, "wt", "x-1")
-	elsewhere := filepath.Join(base, "elsewhere")
-	for _, d := range []string{filepath.Join(main, ".git"), filepath.Join(linked, "internal"), filepath.Join(main, "internal"), filepath.Join(elsewhere, "internal")} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// A linked worktree marks itself with a .git FILE, and it lives under the main
-	// checkout, so the nearest checkout above the file must win over the outer one.
-	if err := os.WriteFile(filepath.Join(linked, ".git"), []byte("gitdir: elsewhere\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct{ in, want string }{
-		{"internal/a.go", "internal/a.go"},
-		{filepath.Join(main, "internal", "a.go"), "internal/a.go"},
-		{filepath.Join(linked, "internal", "a.go"), "internal/a.go"},
-		{filepath.Join(elsewhere, "internal", "a.go"), filepath.Join(elsewhere, "internal", "a.go")},
-	} {
-		if got := contactPath(tc.in); got != tc.want {
-			t.Errorf("contactPath(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}

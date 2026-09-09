@@ -406,3 +406,23 @@ func CheckoutRoot(dir string) string {
 	}
 	return ""
 }
+
+// CheckoutRelative reduces an absolute file path to its slash-separated path inside
+// the nearest checkout above it, the form every checkout of one repository shares and
+// graph file nodes are keyed by. A relative path is returned as given; an absolute
+// path with no checkout above it stays absolute, which a caller can read as "this
+// checkout is gone".
+func CheckoutRelative(p string) string {
+	if !filepath.IsAbs(p) {
+		return p
+	}
+	root := CheckoutRoot(filepath.Dir(p))
+	if root == "" {
+		return p
+	}
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return p
+	}
+	return filepath.ToSlash(rel)
+}

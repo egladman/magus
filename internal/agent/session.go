@@ -14,6 +14,12 @@ package agent
 // RECORDS. A host can be fully guarded and observe almost nothing, or the other
 // way round, so the two contracts move independently.
 
+import (
+	"slices"
+
+	"github.com/egladman/magus/internal/sessions"
+)
+
 // SessionSchemaVersion is the version of the event line every recipe emits.
 // Bump it only when an existing field changes MEANING; adding a kind or a
 // dimension is not a bump. A bump invalidates every installed recipe at once,
@@ -38,20 +44,15 @@ var sessionDimensions = []string{"commands", "exit", "skills", "hook-output", "s
 // does not.
 var sessionStances = []string{"yes", "none"}
 
-// sessionKinds is every event kind a line may carry. shell.command is the one
-// that gets re-judged offline against the current rules; magus.call is a direct
-// tool call to magus, which never appears as a shell command and so would
-// otherwise be invisible to the audit.
-var sessionKinds = []string{
-	"shell.command", "file.read", "file.write",
-	"skill.load", "hook.output", "spawn", "magus.call",
-}
-
 // SessionDimensions returns every dimension a recipe declares coverage for.
-func SessionDimensions() []string { return append([]string(nil), sessionDimensions...) }
+func SessionDimensions() []string { return slices.Clone(sessionDimensions) }
 
 // SessionStances returns every stance a coverage declaration may take.
-func SessionStances() []string { return append([]string(nil), sessionStances...) }
+func SessionStances() []string { return slices.Clone(sessionStances) }
 
-// SessionKinds returns every event kind a session line may carry.
-func SessionKinds() []string { return append([]string(nil), sessionKinds...) }
+// SessionKinds returns every event kind a session line may carry: the set the store
+// validates against, so a recipe's parity check and the loader read one list.
+// shell.command is the one that gets re-judged offline against the current rules;
+// magus.call is a direct tool call to magus, which never appears as a shell command
+// and so would otherwise be invisible to the audit.
+func SessionKinds() []string { return slices.Clone(sessions.EventKinds) }

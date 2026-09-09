@@ -284,7 +284,7 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 
 // isLazyShard reports whether a shard is persisted but held out of the default graph,
 // loaded only when a query reaches for it. One predicate rather than a disjunction at
-// each site, for the reason isLocalShard gives: the exclusion must be added in one place
+// each site, for the reason isMachineLocalShard gives: the exclusion must be added in one place
 // or a new lazy shard leaks into the default graph through whichever site was missed.
 //
 // The @symbols shards are lazy for SCALE (they can dwarf the domain graph); the overlays
@@ -503,7 +503,7 @@ const remotePushTimeout = 15 * time.Second
 // content fingerprint, so teammates and CI can restore it. A remote error or slow
 // backend is logged and dropped: the local write already succeeded.
 func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
-	if s.remote == nil || isLocalShard(name) {
+	if s.remote == nil || isMachineLocalShard(name) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, remotePushTimeout)

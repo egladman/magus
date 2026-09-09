@@ -35,7 +35,7 @@ const sessionShardName = "@session"
 func isSessionShard(name string) bool { return name == sessionShardName }
 
 // AgentContact is one loaded agent event reduced to what the overlay reads: which
-// session touched which path, when, and whether today's guard rules deny it.
+// session touched which path, when, and whether the host refused it.
 //
 // It mirrors FileCoverage: the composition root decodes the session store and hands this
 // package a plain slice, so internal/graph/knowledge keeps depending only on types. Read
@@ -48,8 +48,8 @@ type AgentContact struct {
 	Path    string
 	Read    bool
 	Write   bool
-	At      int64 // unix milliseconds, when the HOST recorded the event
-	Denied  bool
+	AtMs    int64 // unix milliseconds, when the HOST recorded the event
+	Denied  bool  // the HOST refused the event; the re-judged verdict never reaches here
 }
 
 // assembleSession builds the @session overlay: a partial file node per contacted path
@@ -106,8 +106,8 @@ func assembleSession(contacts []AgentContact, known map[string]bool) Shard {
 		if c.Denied {
 			a.denials++
 		}
-		if c.At > a.lastAt {
-			a.lastAt = c.At
+		if c.AtMs > a.lastAt {
+			a.lastAt = c.AtMs
 		}
 	}
 

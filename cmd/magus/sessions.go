@@ -6,12 +6,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
@@ -196,7 +197,7 @@ func renderSessionsText(ctx context.Context, root string, summaries []sessions.S
 			s.Facts,
 			// A dash rather than a zero: no loaded events is the ordinary state, and a
 			// column of zeros reads as a producer that broke.
-			orDash(loadedEvents(s.Events)),
+			orDash(strconv.Itoa(s.Events)),
 			orDash(summarizeTargets(s.Targets)))
 	}
 	if err := tw.Flush(); err != nil {
@@ -353,15 +354,10 @@ func summarizeTargets(targets []sessions.TargetResult) string {
 	return strings.Join(out, ", ")
 }
 
-func loadedEvents(n int) string {
-	if n == 0 {
-		return ""
-	}
-	return strconv.Itoa(n)
-}
-
+// orDash renders an empty or zero column as a dash, so a table reads "nothing here"
+// rather than "a producer wrote nothing".
 func orDash(s string) string {
-	if s == "" {
+	if strings.TrimSpace(s) == "" || s == "0" {
 		return "-"
 	}
 	return s
@@ -457,12 +453,13 @@ const loadHookTextCap = 2000
 const loadRejectsShown = 5
 
 type sessionLoadSummary struct {
-	Loaded   int            `json:"loaded"`
-	Deduped  int            `json:"deduped"`
-	Dropped  int            `json:"dropped_other_repo"`
-	Rejected int            `json:"rejected"`
-	ByKind   map[string]int `json:"by_kind,omitempty"`
-	Store    string         `json:"store"`
+	Loaded  int `json:"loaded"`
+	Deduped int `json:"deduped"`
+	Dropped int `json:"dropped_other_repo"`
+	// Rejects is one line per input line that was not loaded, with the reason.
+	Rejects []string       `json:"rejects,omitempty"`
+	ByKind  map[string]int `json:"by_kind,omitempty"`
+	Store   string         `json:"store"`
 }
 
 func sessionLoadUsage(fs *flag.FlagSet) func() {
@@ -473,7 +470,7 @@ func sessionLoadUsage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "store: one JSON object per line, host vocabulary already mapped onto magus's.")
 		fmt.Fprintln(os.Stderr, "Every line needs host, session, kind and ref; kind is one of "+strings.Join(sessions.EventKinds, ", ")+".")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, ref), so re-running a recipe over the same")
+		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running a recipe over the same")
 		fmt.Fprintln(os.Stderr, "transcript loads nothing twice. Events whose cwd belongs to another repository")
 		fmt.Fprintln(os.Stderr, "are dropped; worktrees of this one are kept.")
 		fmt.Fprintln(os.Stderr, "")
@@ -517,7 +514,7 @@ func sessionLoad(root string, args []string) error {
 		in = f
 	}
 
-	events, summary, rejects, err := readLoadStream(in, dir)
+	events, summary, err := readLoadStream(in, dir)
 	if err != nil {
 		return err
 	}
@@ -541,9 +538,9 @@ func sessionLoad(root string, args []string) error {
 	} else if err := emitFormatted(opts, summary); err != nil {
 		return err
 	}
-	if len(rejects) > 0 {
+	if len(summary.Rejects) > 0 {
 		return fmt.Errorf("magus session load: %d line(s) rejected and not loaded:\n  %s",
-			len(rejects), strings.Join(rejects[:min(len(rejects), loadRejectsShown)], "\n  "))
+			len(summary.Rejects), strings.Join(summary.Rejects[:min(len(summary.Rejects), loadRejectsShown)], "\n  "))
 	}
 	return nil
 }
@@ -551,54 +548,65 @@ func sessionLoad(root string, args []string) error {
 // readLoadStream decodes the stream, judges what it must, and returns the events
 // worth storing alongside the counts and the per-line diagnostics.
 //
-// A rejected line does not stop the read. A recipe emitting one bad shape emits it
-// for a whole transcript, and loading the rest is what lets the reader fix the
-// recipe and re-run without losing what already worked.
-func readLoadStream(in io.Reader, dir string) ([]sessions.LoadEvent, sessionLoadSummary, []string, error) {
+// A rejected line does not stop the read, and neither does an overlong one. A recipe
+// emitting one bad shape emits it for a whole transcript, and loading the rest is what
+// lets the reader fix the recipe and re-run without losing what already worked.
+func readLoadStream(in io.Reader, dir string) ([]sessions.LoadEvent, sessionLoadSummary, error) {
 	var summary sessionLoadSummary
 	var events []sessions.LoadEvent
-	var rejects []string
+	reject := func(line int, format string, args ...any) {
+		summary.Rejects = append(summary.Rejects, fmt.Sprintf("line %d: ", line)+fmt.Sprintf(format, args...))
+	}
 
 	sameRepo := repoScope(dir)
-	rootOf := checkoutRoots()
-	sc := bufio.NewScanner(in)
-	sc.Buffer(make([]byte, 0, 64*1024), loadMaxLineBytes)
-	for line := 1; sc.Scan(); line++ {
-		raw := strings.TrimSpace(sc.Text())
-		if raw == "" {
-			continue
+	r := bufio.NewReaderSize(in, 64*1024)
+	for line := 1; ; line++ {
+		raw, err := r.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, summary, fmt.Errorf("magus session load: read stream: %w", err)
 		}
-		var ev loadEvent
-		if err := json.Unmarshal([]byte(raw), &ev); err != nil {
-			rejects = append(rejects, fmt.Sprintf("line %d: not a JSON object: %v", line, err))
-			continue
-		}
-		if reason := validateLoadEvent(ev); reason != "" {
-			rejects = append(rejects, fmt.Sprintf("line %d: %s", line, reason))
-			continue
-		}
-		if ev.Cwd != "" && !sameRepo(ev.Cwd) {
-			summary.Dropped++
-			continue
-		}
-		// A host names files by absolute path; graph file nodes are keyed by the
-		// path inside the checkout, and every worktree of one repository shares
-		// that layout. Storing the checkout-relative path is what lets the
-		// @session shard land the event on a node.
-		if (ev.Kind == sessions.EventFileRead || ev.Kind == sessions.EventFileWrite) && filepath.IsAbs(ev.Text) {
-			if root := rootOf(ev.Cwd); root != "" {
-				if rel, err := filepath.Rel(root, ev.Text); err == nil && !strings.HasPrefix(rel, "..") {
-					ev.Text = filepath.ToSlash(rel)
-				}
+		last := errors.Is(err, io.EOF)
+		switch raw = strings.TrimSpace(raw); {
+		case raw == "":
+		case len(raw) > loadMaxLineBytes:
+			reject(line, "%d bytes, longer than any event (%d)", len(raw), loadMaxLineBytes)
+		default:
+			if ev, reason := decodeLoadEvent(raw, sameRepo); reason != "" {
+				reject(line, "%s", reason)
+			} else if ev != nil {
+				events = append(events, *ev)
+			} else {
+				summary.Dropped++
 			}
 		}
-		events = append(events, sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev)})
+		if last {
+			return events, summary, nil
+		}
 	}
-	if err := sc.Err(); err != nil {
-		return nil, summary, rejects, fmt.Errorf("magus session load: read stream: %w", err)
+}
+
+// decodeLoadEvent turns one line into the event to store. A line that fails validation
+// returns the reason; a well-formed line from another repository returns neither an
+// event nor a reason, which is the dropped case.
+func decodeLoadEvent(raw string, sameRepo func(string) bool) (*sessions.LoadEvent, string) {
+	var ev loadEvent
+	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
+		return nil, fmt.Sprintf("not a JSON object: %v", err)
 	}
-	summary.Rejected = len(rejects)
-	return events, summary, rejects, nil
+	if reason := validateLoadEvent(ev); reason != "" {
+		return nil, reason
+	}
+	if ev.Cwd != "" && !sameRepo(ev.Cwd) {
+		return nil, ""
+	}
+	// A host names files by absolute path; graph file nodes are keyed by the path
+	// inside the checkout, and every worktree of one repository shares that layout.
+	// Storing the checkout-relative path is what lets the @session shard land the
+	// event on a node.
+	if ev.Kind == sessions.EventFileRead || ev.Kind == sessions.EventFileWrite {
+		ev.Text = repoid.CheckoutRelative(ev.Text)
+	}
+	return &sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev)}, ""
 }
 
 func validateLoadEvent(ev loadEvent) string {
@@ -612,8 +620,8 @@ func validateLoadEvent(ev loadEvent) string {
 	case !sessions.ValidEventKind(ev.Kind):
 		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(sessions.EventKinds, ", "))
 	}
-	if err := sessions.ValidSessionID(ev.Session); err != nil {
-		return err.Error()
+	if !sessions.ValidSessionID(ev.Session) {
+		return fmt.Sprintf("session id %q must be alphanumeric with - and _ (it names the session file)", ev.Session)
 	}
 	return ""
 }
@@ -624,9 +632,9 @@ func validateLoadEvent(ev loadEvent) string {
 func storedEvent(ev loadEvent) sessions.AgentEvent {
 	out := sessions.AgentEvent{
 		Host:        ev.Host,
-		Event:       ev.Kind,
+		Kind:        ev.Kind,
 		Ref:         ev.Ref,
-		At:          ev.Ts,
+		AtMs:        ev.Ts,
 		Transcript:  ev.Transcript,
 		Exit:        ev.Outcome.Exit,
 		Denied:      ev.Outcome.Denied,
@@ -664,11 +672,11 @@ func rejudgeCommand(text string) (program, verdict, rule string) {
 	v := evaluateBashGuard(text)
 	switch {
 	case v.Deny != "":
-		return program, "deny", string(v.Rule.Name)
+		return program, sessions.VerdictDeny, string(v.Rule.Name)
 	case v.Context != "":
-		return program, "advise", string(v.Kind)
+		return program, sessions.VerdictAdvise, string(v.Kind)
 	}
-	return program, "pass", ""
+	return program, sessions.VerdictPass, ""
 }
 
 // commandProgram names the program a line runs, wrappers already peeled. A line
@@ -711,60 +719,51 @@ func repoScope(dir string) func(string) bool {
 // the file is the only channel a worker's shell and the host's hook both see. One
 // line in a worker's brief (`magus session lease <id>`) is then what puts every
 // lease-scoped rule in force for it, instead of a paragraph of prohibitions.
+//
+// The report reads the marker through ledger.LeaseFromMarker, so what it prints is what
+// the guard and the sandbox act on: a marker holding something other than a lease id
+// reports as no lease, because that is what it binds.
 func sessionLease(root string, args []string) error {
-	if len(args) > 1 {
+	rest, err := cmdParse("session lease", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus session lease [<lease-id>]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Bind a ledger lease to this checkout, or print the one bound. Every")
+			fmt.Fprintln(os.Stderr, "lease-scoped guard and sandbox rule then reads that lease's row here.")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) > 1 {
 		return usagef("magus session lease: takes at most one lease id")
+	}
+	root = resolveRootOrEmpty(root)
+	if root == "" {
+		return fmt.Errorf("magus session lease: no workspace here: the marker lives in a checkout's cache dir, so run from inside one or pass --root <path>")
 	}
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return fmt.Errorf("magus session lease: %w", err)
 	}
-	marker := filepath.Join(cacheDir, leaseMarkerName)
-	if len(args) == 0 {
-		raw, err := os.ReadFile(marker)
-		if os.IsNotExist(err) {
+	if len(rest) == 0 {
+		if id := ledger.LeaseFromMarker(cacheDir); id != "" {
+			fmt.Println(id)
+		} else {
 			fmt.Println("no lease is bound to this checkout")
-			return nil
 		}
-		if err != nil {
-			return fmt.Errorf("magus session lease: %w", err)
-		}
-		fmt.Println(strings.TrimSpace(string(raw)))
 		return nil
 	}
-	id := args[0]
-	if !types.ValidLeaseID(id) {
-		return usagef("magus session lease: %q is not a lease id (letters, digits and -_./: only)", id)
-	}
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := ledger.BindLease(cacheDir, rest[0]); err != nil {
 		return fmt.Errorf("magus session lease: %w", err)
 	}
-	if err := os.WriteFile(marker, []byte(id+"\n"), 0o644); err != nil {
-		return fmt.Errorf("magus session lease: %w", err)
-	}
-	fmt.Printf("lease %s bound to %s; the guard now applies its ledger row to every hook here\n", id, root)
+	fmt.Printf("lease %s bound to %s; the guard now applies its ledger row to every hook here\n", rest[0], root)
 	return nil
-}
-
-// checkoutRoots resolves a cwd to the checkout that contains it: the nearest
-// ancestor holding a .git entry, which is a file in a worktree and a directory
-// in the main checkout. Memoized for the same reason repoScope is. Empty when
-// nothing above the cwd is a checkout.
-func checkoutRoots() func(string) string {
-	seen := map[string]string{}
-	return func(cwd string) string {
-		if root, ok := seen[cwd]; ok {
-			return root
-		}
-		root := repoid.CheckoutRoot(cwd)
-		seen[cwd] = root
-		return root
-	}
 }
 
 func renderLoadSummary(w io.Writer, s sessionLoadSummary) {
 	fmt.Fprintf(w, "loaded %d, deduped %d, dropped %d (another repository), rejected %d\n",
-		s.Loaded, s.Deduped, s.Dropped, s.Rejected)
+		s.Loaded, s.Deduped, s.Dropped, len(s.Rejects))
 	for _, kind := range sessions.EventKinds {
 		if n := s.ByKind[kind]; n > 0 {
 			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
@@ -785,33 +784,33 @@ type countedName struct {
 // commandGroup is one program a session ran, with what today's rules say about
 // the commands it ran under that name.
 //
-// Deny counts what the rules WOULD refuse now; Denied counts what the host
+// WouldDeny counts what the rules WOULD refuse now; HostDenied counts what the host
 // recorded as actually refused. The gap between them is the audit: a command the
 // rules deny that ran anyway was never judged, because the guard was not wired,
 // was too old to judge, or the rule arrived after the command did.
 type commandGroup struct {
-	Program string   `json:"program"`
-	Count   int      `json:"count"`
-	Pass    int      `json:"pass"`
-	Advise  int      `json:"advise"`
-	Deny    int      `json:"deny"`
-	Denied  int      `json:"denied"`
-	Rules   []string `json:"rules,omitempty"`
+	Program    string   `json:"program"`
+	Count      int      `json:"count"`
+	Pass       int      `json:"pass"`
+	Advise     int      `json:"advise"`
+	WouldDeny  int      `json:"would_deny"`
+	HostDenied int      `json:"host_denied"`
+	Rules      []string `json:"rules,omitempty"`
 }
 
 type sessionShowOutput struct {
-	Session     string         `json:"session"`
-	Host        string         `json:"host,omitempty"`
-	Events      int            `json:"events"`
-	FirstMs     int64          `json:"first_ms,omitempty"`
-	LastMs      int64          `json:"last_ms,omitempty"`
-	ByKind      map[string]int `json:"by_kind,omitempty"`
-	Commands    []commandGroup `json:"commands,omitempty"`
-	Skills      []countedName  `json:"skills,omitempty"`
-	Read        []countedName  `json:"files_read,omitempty"`
-	Written     []countedName  `json:"files_written,omitempty"`
-	HookOutputs int            `json:"hook_outputs"`
-	Transcript  string         `json:"transcript,omitempty"`
+	Session      string         `json:"session"`
+	Host         string         `json:"host,omitempty"`
+	Events       int            `json:"events"`
+	FirstMs      int64          `json:"first_ms,omitempty"`
+	LastMs       int64          `json:"last_ms,omitempty"`
+	ByKind       map[string]int `json:"by_kind,omitempty"`
+	Commands     []commandGroup `json:"commands,omitempty"`
+	Skills       []countedName  `json:"skills,omitempty"`
+	FilesRead    []countedName  `json:"files_read,omitempty"`
+	FilesWritten []countedName  `json:"files_written,omitempty"`
+	HookOutputs  int            `json:"hook_outputs"`
+	Transcript   string         `json:"transcript,omitempty"`
 }
 
 // sessionShow implements `magus session show <id>`.
@@ -873,22 +872,22 @@ func summarizeSession(session string, events []sessions.AgentEvent) sessionShowO
 	skills, read, written := map[string]int{}, map[string]int{}, map[string]int{}
 
 	for _, ev := range events {
-		out.ByKind[ev.Event]++
+		out.ByKind[ev.Kind]++
 		if out.Host == "" {
 			out.Host = ev.Host
 		}
 		if out.Transcript == "" {
 			out.Transcript = ev.Transcript
 		}
-		if ev.At > 0 {
-			if out.FirstMs == 0 || ev.At < out.FirstMs {
-				out.FirstMs = ev.At
+		if ev.AtMs > 0 {
+			if out.FirstMs == 0 || ev.AtMs < out.FirstMs {
+				out.FirstMs = ev.AtMs
 			}
-			if ev.At > out.LastMs {
-				out.LastMs = ev.At
+			if ev.AtMs > out.LastMs {
+				out.LastMs = ev.AtMs
 			}
 		}
-		switch ev.Event {
+		switch ev.Kind {
 		case sessions.EventShellCommand:
 			g := byProgram[ev.Program]
 			if g == nil {
@@ -897,15 +896,15 @@ func summarizeSession(session string, events []sessions.AgentEvent) sessionShowO
 			}
 			g.Count++
 			switch ev.Verdict {
-			case "deny":
-				g.Deny++
-			case "advise":
+			case sessions.VerdictDeny:
+				g.WouldDeny++
+			case sessions.VerdictAdvise:
 				g.Advise++
 			default:
 				g.Pass++
 			}
 			if ev.Denied {
-				g.Denied++
+				g.HostDenied++
 			}
 			if ev.Rule != "" && !slices.Contains(g.Rules, ev.Rule) {
 				g.Rules = append(g.Rules, ev.Rule)
@@ -931,7 +930,7 @@ func summarizeSession(session string, events []sessions.AgentEvent) sessionShowO
 		}
 		return strings.Compare(a.Program, b.Program)
 	})
-	out.Skills, out.Read, out.Written = counted(skills), counted(read), counted(written)
+	out.Skills, out.FilesRead, out.FilesWritten = counted(skills), counted(read), counted(written)
 	return out
 }
 
@@ -975,7 +974,7 @@ func renderSessionShow(w io.Writer, s sessionShowOutput) {
 		fmt.Fprintln(w, "\nCommands by program, judged against today's rules:")
 		for _, g := range s.Commands {
 			fmt.Fprintf(w, "  %-12s %4d  pass %d  advise %d  deny %d  (host recorded %d denied)",
-				orDash(g.Program), g.Count, g.Pass, g.Advise, g.Deny, g.Denied)
+				orDash(g.Program), g.Count, g.Pass, g.Advise, g.WouldDeny, g.HostDenied)
 			if len(g.Rules) > 0 {
 				fmt.Fprintf(w, "  %s", strings.Join(g.Rules, ", "))
 			}
@@ -983,8 +982,8 @@ func renderSessionShow(w io.Writer, s sessionShowOutput) {
 		}
 	}
 	renderCounted(w, "Skills loaded", s.Skills)
-	renderCounted(w, "Files read", s.Read)
-	renderCounted(w, "Files written", s.Written)
+	renderCounted(w, "Files read", s.FilesRead)
+	renderCounted(w, "Files written", s.FilesWritten)
 	fmt.Fprintf(w, "\nhook outputs: %d\n", s.HookOutputs)
 }
 

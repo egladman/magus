@@ -45,6 +45,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -189,7 +190,7 @@ type Writer struct {
 // A session id that already has a file is RESUMED rather than restarted: see
 // [Writer.resume].
 func Open(dir, session string, start SessionStart) (*Writer, error) {
-	if !sessionRE.MatchString(session) {
+	if !ValidSessionID(session) {
 		return nil, fmt.Errorf("sessions: session id %q must be alphanumeric with - and _ (it names the session file); mint one with journal.NewInvocationID", session)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -525,14 +526,16 @@ var EventKinds = []string{
 }
 
 // ValidEventKind reports whether kind is one magus stores.
-func ValidEventKind(kind string) bool {
-	for _, k := range EventKinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
-}
+func ValidEventKind(kind string) bool { return slices.Contains(EventKinds, kind) }
+
+// The verdicts a re-judged shell command carries in [AgentEvent.Verdict]: what today's
+// guard rules say about it. One set here so the loader that writes them and the readers
+// that count them cannot drift on a literal.
+const (
+	VerdictPass   = "pass"
+	VerdictAdvise = "advise"
+	VerdictDeny   = "deny"
+)
 
 // AgentEvent is the payload of a [KindAgentEvent] record: one thing a host
 // observed its session do.
@@ -548,24 +551,24 @@ func ValidEventKind(kind string) bool {
 // output, all of which magus either printed itself or already records elsewhere.
 type AgentEvent struct {
 	Host string `json:"host"`
-	// Event is one of [EventKinds]. Named Event rather than Kind because Kind is
-	// already the record's own field one level up.
-	Event string `json:"event"`
+	// Kind is one of [EventKinds]. The wire name stays "event" so the payloads already
+	// in a store keep decoding.
+	Kind string `json:"event"`
 	// Ref is the host's id for the thing this event is about, and the dedup key
-	// together with Host, the session and Event. Event is part of the key because a
+	// together with Host, the session and Kind. Kind is part of the key because a
 	// hook.output shares its ref with the shell.command it judged: the recipe emits
 	// both from one host record. It is what makes a re-run of a recipe idempotent.
 	Ref string `json:"ref"`
-	// At is when the HOST saw the event, in unix milliseconds. The record's own Ts is
-	// when the load ran, which is a different fact and the wrong one to age against.
-	At         int64  `json:"at"`
+	// AtMs is when the HOST saw the event, in unix milliseconds. The record's own Ts
+	// is when the load ran, which is a different fact and the wrong one to age against.
+	AtMs       int64  `json:"at"`
 	Text       string `json:"text,omitempty"`
 	Transcript string `json:"transcript,omitempty"`
 	// Program is the command's resolved program name, arguments dropped.
 	Program string `json:"program,omitempty"`
-	// Verdict is what today's guard rules say about the command: pass, advise or
-	// deny. It is re-judged at load time rather than read off the transcript, so it
-	// answers whether the CURRENT rules would have caught a past command.
+	// Verdict is what today's guard rules say about the command, one of the Verdict
+	// constants. It is re-judged at load time rather than read off the transcript, so
+	// it answers whether the CURRENT rules would have caught a past command.
 	Verdict string `json:"verdict,omitempty"`
 	// Rule names the deny rule or the advisory kind behind Verdict. The rule's own
 	// argument is deliberately absent: it renders the resolved argv, which is the
@@ -598,7 +601,7 @@ type LoadResult struct {
 }
 
 // LoadEvents appends every event dir does not already hold, keyed on
-// (host, session, ref), and reports how many it wrote and how many it skipped.
+// (session, host, kind, ref), and reports how many it wrote and how many it skipped.
 //
 // Loading the same stream twice is therefore a no-op, which is the property the
 // recipes are built on: a recipe re-reads whole transcript files rather than
@@ -614,12 +617,12 @@ func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult,
 	if err != nil {
 		return LoadResult{}, err
 	}
-	seen := loadedRefs(fold)
+	seen := loadedKeys(fold)
 
 	result := LoadResult{ByKind: map[string]int{}}
 	writers := map[string]*Writer{}
 	for _, ev := range events {
-		key := eventKey(ev.Session, ev.Event.Host, ev.Event.Event, ev.Event.Ref)
+		key := eventKey(ev.Session, ev.Event)
 		if seen[key] {
 			result.Deduped++
 			continue
@@ -638,28 +641,43 @@ func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult,
 		}
 		seen[key] = true
 		result.Loaded++
-		result.ByKind[ev.Event.Event]++
+		result.ByKind[ev.Event.Kind]++
 	}
 	return result, nil
 }
 
-// loadedRefs is the dedup set: every (session, host, kind, ref) the store already holds.
-func loadedRefs(fold Fold) map[string]bool {
+// loadedKeys is the dedup set: the eventKey of every event the store already holds.
+func loadedKeys(fold Fold) map[string]bool {
 	seen := make(map[string]bool)
-	for _, rec := range fold.Records {
-		if rec.Kind != KindAgentEvent {
-			continue
-		}
-		var ev AgentEvent
-		if json.Unmarshal(rec.Payload, &ev) == nil {
-			seen[eventKey(rec.Session, ev.Host, ev.Event, ev.Ref)] = true
-		}
+	for session, ev := range agentEvents(fold) {
+		seen[eventKey(session, ev)] = true
 	}
 	return seen
 }
 
-func eventKey(session, host, kind, ref string) string {
-	return session + "\x00" + host + "\x00" + kind + "\x00" + ref
+// eventKey is the identity a load dedups on: (session, host, kind, ref).
+func eventKey(session string, ev AgentEvent) string {
+	return session + "\x00" + ev.Host + "\x00" + ev.Kind + "\x00" + ev.Ref
+}
+
+// agentEvents yields every loaded event in the fold with its session, in fold order.
+// A payload this build cannot decode is skipped, the tolerance every reader of the
+// store applies to a record it does not understand.
+func agentEvents(fold Fold) iter.Seq2[string, AgentEvent] {
+	return func(yield func(string, AgentEvent) bool) {
+		for _, rec := range fold.Records {
+			if rec.Kind != KindAgentEvent {
+				continue
+			}
+			var ev AgentEvent
+			if json.Unmarshal(rec.Payload, &ev) != nil {
+				continue
+			}
+			if !yield(rec.Session, ev) {
+				return
+			}
+		}
+	}
 }
 
 // AgentEvents returns the loaded events for one session, in the order the fold
@@ -668,12 +686,8 @@ func eventKey(session, host, kind, ref string) string {
 // every other reader of this store.
 func AgentEvents(fold Fold, session string) []AgentEvent {
 	var out []AgentEvent
-	for _, rec := range fold.Records {
-		if rec.Kind != KindAgentEvent || rec.Session != session {
-			continue
-		}
-		var ev AgentEvent
-		if json.Unmarshal(rec.Payload, &ev) == nil {
+	for s, ev := range agentEvents(fold) {
+		if s == session {
 			out = append(out, ev)
 		}
 	}
@@ -681,19 +695,13 @@ func AgentEvents(fold Fold, session string) []AgentEvent {
 }
 
 // NewestEventMs is the newest host timestamp any loaded event carries, or zero
-// when nothing has been loaded. It reads [AgentEvent.At] rather than the record's
+// when nothing has been loaded. It reads [AgentEvent.AtMs] rather than the record's
 // Ts, so a store loaded today from a month-old transcript reports the month-old
 // event, which is the age a staleness check is asking about.
 func NewestEventMs(fold Fold) int64 {
 	var newest int64
-	for _, rec := range fold.Records {
-		if rec.Kind != KindAgentEvent {
-			continue
-		}
-		var ev AgentEvent
-		if json.Unmarshal(rec.Payload, &ev) == nil && ev.At > newest {
-			newest = ev.At
-		}
+	for _, ev := range agentEvents(fold) {
+		newest = max(newest, ev.AtMs)
 	}
 	return newest
 }
@@ -702,9 +710,4 @@ func NewestEventMs(fold Fold) int64 {
 // loader can refuse a host id before writing half a stream. The rule is the file
 // name's, which is why it is strict: an id that could contain a separator could
 // escape the store directory.
-func ValidSessionID(id string) error {
-	if !sessionRE.MatchString(id) {
-		return fmt.Errorf("session id %q must be alphanumeric with - and _ (it names the session file)", id)
-	}
-	return nil
-}
+func ValidSessionID(id string) bool { return sessionRE.MatchString(id) }

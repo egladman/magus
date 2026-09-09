@@ -238,3 +238,28 @@ func TestAdoptIsANoOpWithNothingToMove(t *testing.T) {
 	require.NoError(t, Adopt(dir, dir))
 	assert.NoDirExists(t, dir, "adoption never creates a store; the store's own writer does")
 }
+
+// TestCheckoutRelativeReducesHostPathsToTheCheckout pins the join between loaded
+// session events and graph file nodes: a host names files absolutely, nodes are keyed
+// inside the checkout, and a sibling worktree of the same repository shares that layout.
+func TestCheckoutRelativeReducesHostPathsToTheCheckout(t *testing.T) {
+	base := t.TempDir()
+	main := filepath.Join(base, "main")
+	linked := filepath.Join(main, "wt", "x-1")
+	elsewhere := filepath.Join(base, "elsewhere")
+	for _, d := range []string{filepath.Join(main, ".git"), filepath.Join(linked, "internal"), filepath.Join(main, "internal"), filepath.Join(elsewhere, "internal")} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	// A linked worktree marks itself with a .git FILE, and it lives under the main
+	// checkout, so the nearest checkout above the file must win over the outer one.
+	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"), []byte("gitdir: elsewhere\n"), 0o644))
+
+	for _, tc := range []struct{ in, want string }{
+		{"internal/a.go", "internal/a.go"},
+		{filepath.Join(main, "internal", "a.go"), "internal/a.go"},
+		{filepath.Join(linked, "internal", "a.go"), "internal/a.go"},
+		{filepath.Join(elsewhere, "internal", "a.go"), filepath.Join(elsewhere, "internal", "a.go")},
+	} {
+		assert.Equal(t, tc.want, CheckoutRelative(tc.in), tc.in)
+	}
+}
