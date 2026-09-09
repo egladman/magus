@@ -624,3 +624,66 @@ func TestRunAllDependentFailureDoesNotSpendTheBudget(t *testing.T) {
 	assert.False(t, ran["B"], "B's dependency failed, so it must not run")
 	assert.True(t, ran["C"], "C is independent and B's cascade must not have spent the budget")
 }
+
+// TestExclusiveStepStaysExclusiveAcrossItsFanOut is the half TestRunAllExclusiveRunsAlone
+// cannot see. That test's exclusive step just sleeps, so it never reaches the yield - and
+// the yield is where exclusivity was being given away.
+//
+// A step that dispatches ctx.needs goes through YieldRunIsolation so its children can be
+// admitted. For a SHARED holder that release is necessary and harmless. For an EXCLUSIVE
+// one it released the write lock for the whole fan-out, which is most of such a step's
+// life: this repo's own `generate` is skip_cache + exclusive and its entire body is
+// ctx.needs over every *-generate sibling. So the one step declared to run alone ran
+// alongside everything, including the drift gate it exists to isolate.
+func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
+	root, c := openCache(t)
+
+	steps := []Step{
+		{ProjectPath: "exclusive", WorkspaceRoot: root, Target: "gen", Exclusive: true},
+	}
+	for i := range 6 {
+		steps = append(steps, Step{
+			ProjectPath: "p" + string(rune('0'+i)), WorkspaceRoot: root, Target: "build",
+		})
+	}
+
+	var (
+		mu         sync.Mutex
+		inFlight   int
+		violations []string
+	)
+	_, err := c.RunAll(context.Background(), steps, func(ctx context.Context, s Step) error {
+		mu.Lock()
+		inFlight++
+		if s.Exclusive && inFlight != 1 {
+			violations = append(violations, "exclusive step started alongside another")
+		}
+		mu.Unlock()
+
+		body := func() {
+			time.Sleep(20 * time.Millisecond)
+			mu.Lock()
+			if s.Exclusive && inFlight != 1 {
+				violations = append(violations, "another step ran during the exclusive step's fan-out")
+			}
+			mu.Unlock()
+		}
+		if s.Exclusive {
+			// What a ctx.needs dispatch does: hand the children a context and wait.
+			require.NoError(t, YieldRunIsolation(ctx, func(context.Context) error {
+				body()
+				return nil
+			}))
+		} else {
+			body()
+		}
+
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return nil
+	}, WithLimiter(NewLimiter(8)))
+	require.NoError(t, err, "RunAll")
+
+	assert.Empty(t, violations)
+}

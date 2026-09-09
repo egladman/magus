@@ -1722,7 +1722,12 @@ var guardTemplateBasenames = []string{
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository
 	// where nobody ever stopped mid-task.
-	"magus-pause.sh",
+	//
+	// This entry named magus-pause.sh for the whole life of the rename that produced
+	// magus-checkpoint.sh, so the one check written to catch a silently stale copy
+	// could not match the only name a config ever carries. TestGuardTemplateBasenames
+	// AreShipped is what makes the next rename fail loudly instead.
+	"magus-checkpoint.sh",
 }
 
 // guardWiringCandidates are the config locations a shipped host glue installs

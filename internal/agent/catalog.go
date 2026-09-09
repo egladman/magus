@@ -91,7 +91,19 @@ import (
 // the `skill-variant:` stamp value, `--skill-form`, and the published pages. An
 // installed file's stamp changes from `simple` to `short`, so every tree grades
 // stale until it is reinstalled.
-const SkillVersion = 53
+// 54: magus-vcs-hygiene teaches how to get back to a recorded state, which nothing
+// on the agent surface said. A checkpoint holds a revision and a patch DIGEST, so it
+// can say whether a tree is the same one and can never give uncommitted work back;
+// the skill now says that, says to commit before parking, and gives the inspect-out-
+// of-place and restore-per-file commands instead of the whole-tree ones the guard
+// denies. Its DESCRIPTION now names all four backends magus drives, because a
+// description is what a host matches on to decide whether to load a skill at all, and
+// naming only git meant the safety skill never loaded in an hg, sl or jj repository.
+// 55: magus-test-design's body gets the blank lines markdownlint wants around a heading
+// and a fence. A template action on its own line reads as a paragraph, so `{{if .Full}}`
+// flush against a heading left it with nothing above it. The skill has never passed lint
+// since it landed; the gate had not completed in between to say so.
+const SkillVersion = 55
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -166,13 +178,18 @@ type AgentSkill struct {
 // and it pointed authors at the one part of the page they should not touch.
 type Variant int
 
-// The words are SHORT and FULL, one each, everywhere: the Go constants, the wire
-// strings, the installed stamp, the CLI flag, and the published pages. This axis used to
-// answer to three names for its shorter end - simple in the type and the stamp, concise
-// on the flag, short on the website - so a reader passed --skill-form=concise, got a file
-// stamped simple, and read a page about the short form. internal/prompt.Variant is the
-// same concept for prose and already says Short; the twin directory and 232 body
-// templates already say full; these are those two words.
+// The words are SHORT and FULL, one each: the Go constants, the wire strings, the
+// installed stamp value, and the published pages. The shorter end had drifted to three
+// spellings across those surfaces - simple, concise, short - which is one word per
+// surface a reader crosses, and nothing to tell them the three name one thing.
+//
+// Why these two words rather than any other pair: internal/prompt.Variant is the same
+// concept for prose and already says Short, and the full end cannot move at all - `full`
+// is the installed twin's directory name and the branch every skill body's {{if .Full}}
+// already takes.
+//
+// The `skill-variant:` stamp KEY keeps its own name on purpose: it records which body a
+// file holds, which is a Variant, not the Form an install was asked for.
 const (
 	// VariantShort sheds ENUMERATION and keeps JUDGMENT, for the most capable readers -
 	// not the least. A capable reader can re-derive the mechanical steps from the tool
@@ -379,7 +396,7 @@ var skillSources = []skillSource{
 	{name: "magus-query", description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.", bodyPath: "skills/magus-query/SKILL.md"},
 	{name: "magus-run", description: "Run builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with magusfile.buzz at the root - a target covers the work, and the raw tool bypasses the cache, the sandbox, and affected tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (magus affected ci).", bodyPath: "skills/magus-run/SKILL.md"},
 	{name: "magus-sdk", description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks \"can I use magus without the binary\". Also use to audit the SDK surface itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture-review).", bodyPath: "skills/magus-sdk/SKILL.md"},
-	{name: "magus-vcs-hygiene", description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, or git clean, and when reading git status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.", bodyPath: "skills/magus-vcs-hygiene/SKILL.md"},
+	{name: "magus-vcs-hygiene", description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root). magus drives git, Mercurial, Sapling and Jujutsu. Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, git clean, or the hg/sl/jj equivalents (shelve, revert --all, update --clean, goto --clean, purge), and when reading status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.", bodyPath: "skills/magus-vcs-hygiene/SKILL.md"},
 }
 
 // Catalog binds the skill source assets embedded by the application to the
@@ -877,7 +894,12 @@ func (c *Catalog) gradeDest(dir, dest string) Status {
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
 		if err != nil {
-			continue
+			// A skill magus cannot READ is not a skill magus can vouch for. Continuing here
+			// graded the location up to date while an installed file sat unreadable, which
+			// is the one answer that stops a reader looking. The anchor path already reports
+			// this; the per-skill loop was the half that stayed quiet.
+			return Status{Location: dest, Installed: true, Stale: true,
+				Detail: name + ": cannot read it (" + err.Error() + "), so its provenance cannot be checked; " + reinstall}
 		}
 		// Not ours to grade: a workspace's own skill sits here by design, and grading it
 		// reported drift no reinstall could clear, since install writes only the names

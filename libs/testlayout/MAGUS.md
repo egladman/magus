@@ -84,6 +84,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `image-login` | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider. |
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
 | `security` | Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. |
+| `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `bindings-generate` | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations. |
 | `magusfile-api-generate` | Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. |
 | `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime. |
@@ -110,7 +111,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `serve` |  |
 | `image-build` | Two axes, one charm each. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
-| `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
 | `langservice-generate` | Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads. |
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in internal/agent/skills. |

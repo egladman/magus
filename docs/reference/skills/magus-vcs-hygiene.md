@@ -1,15 +1,15 @@
 ---
 title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
-description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
+description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 8132
-skill_short_bytes: 5992
+skill_full_bytes: 9788
+skill_short_bytes: 6950
 ---
 
 # magus-vcs-hygiene
 
-Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, or git clean, and when reading git status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.
+Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root). magus drives git, Mercurial, Sapling and Jujutsu. Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, git clean, or the hg/sl/jj equivalents (shelve, revert --all, update --clean, goto --clean, purge), and when reading status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `53` |
+| `agent-skill-version` | `55` |
 | `knowledge-schema-version` | `11` |
-| `skill-content` | `4525466a7e42` |
+| `skill-content` | `c68041ff00b7` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -171,6 +171,27 @@ build without committing." Build in place; a
 whole-tree revert destroys a concurrent agent's untracked work. If you truly need a
 pristine tree (e.g. to diff regenerated output), use a throwaway
 `git worktree add`, never the live tree.
+
+## Getting back to a recorded state
+
+A checkpoint RECORDS a position; it never MINTS one. It holds a revision, a branch,
+and a DIGEST of the uncommitted patch - not the patch. So a dirty checkpoint tells you
+whether a tree is the same one, and cannot give the work back.
+
+Commit before you park. Uncommitted work that is not committed is not recoverable from
+anything magus recorded.
+
+ASK magus for the commands rather than composing them: `magus session` names the
+revision and prints the inspect command for THIS workspace's backend, already
+substituted. magus drives git, Mercurial, Sapling and Jujutsu, so a command you compose
+from memory is a guess about which of the four you are in.
+
+Then, whatever the backend:
+
+1. INSPECT out of place, never restore in place. A scratch checkout of the recorded
+   revision answers "what changed" without touching a tree that may hold a concurrent
+   agent's untracked work.
+2. Restore PER FILE, never whole-tree.
 
 `magus_affected_explain` {project} answers why a specific project is in the
 affected set.
@@ -328,6 +349,36 @@ require committing first. A whole-tree revert also unrecoverably
 destroys any untracked work a concurrent agent is writing. If you truly need a
 pristine tree (e.g. to diff regenerated output), use a throwaway
 `git worktree add`, never the live tree.
+
+## Getting back to a recorded state
+
+A checkpoint RECORDS a position; it never MINTS one. It holds a revision, a branch,
+and a DIGEST of the uncommitted patch - not the patch. So a dirty checkpoint tells you
+whether a tree is the same one, and cannot give the work back. The digest is
+a hash of the diff and the text is discarded; untracked files are not even hashed.
+Nothing in magus reads a stored checkpoint except the `magus session` listing. Treat
+"revert to my last checkpoint" as a request magus cannot serve, and say so rather than
+reaching for a whole-tree command that would make it worse.
+
+Commit before you park. Uncommitted work that is not committed is not recoverable from
+anything magus recorded.
+
+ASK magus for the commands rather than composing them: `magus session` names the
+revision and prints the inspect command for THIS workspace's backend, already
+substituted. magus drives git, Mercurial, Sapling and Jujutsu, so a command you compose
+from memory is a guess about which of the four you are in. `magus affected
+--explain` prints the same pair (CLI and GUI) for the affected changeset. Both come from
+one driver method, so they are correct per backend by construction rather than by
+whichever one you happened to learn.
+
+Then, whatever the backend:
+
+1. INSPECT out of place, never restore in place. A scratch checkout of the recorded
+   revision answers "what changed" without touching a tree that may hold a concurrent
+   agent's untracked work.
+2. Restore PER FILE, never whole-tree. The scoped form is what the guard
+   advises on; the whole-tree forms it denies, because that untracked work is in no
+   commit to recover from.
 
 `magus_affected_explain` {project} answers why a specific project is in the
 affected set (the changed files and dependency chains that pulled it in) when

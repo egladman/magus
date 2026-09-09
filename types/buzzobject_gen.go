@@ -500,11 +500,12 @@ func (v DiffReviewed) BuzzObject() BuzzObject {
 
 func (v VCSCheckpoint) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"revision":    v.Revision,
-		"branch":      v.Branch,
-		"dirty":       v.Dirty,
-		"patchDigest": v.PatchDigest,
-		"vcs":         v.VCS,
+		"revision":        v.Revision,
+		"branch":          v.Branch,
+		"dirty":           v.Dirty,
+		"patchDigest":     v.PatchDigest,
+		"untrackedDigest": v.UntrackedDigest,
+		"vcs":             v.VCS,
 	}
 }
 

@@ -88,11 +88,18 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   session's, and it is in no commit to recover from. Reading a stash is exempt
   (`git stash list`, `git stash show`), as is `git stash create`, which returns a
   commit object without touching the working tree or the stash stack.
-  These rules are git-shaped.
-  magus also drives Mercurial and Jujutsu, where recoverability differs - jj
-  snapshots the working copy and keeps an operation log, so its nearest
-  equivalents are undoable and would not meet this bar. Their commands are not
-  matched today.
+  Every backend magus drives is covered, in its own spelling: `hg purge` and
+  `hg clean` (and Sapling's), `hg revert --all`, `hg update --clean`, `sl goto
+  --clean`, `jj abandon`, `jj restore` with no paths, and `jj workspace forget`.
+  Naming paths is what separates a scoped revert from a whole-tree one in every
+  dialect, and the scoped form advises rather than denies.
+
+  This list read "these rules are git-shaped ... their commands are not matched
+  today" until 2026-09-08, excused by jj keeping an operation log that makes its
+  equivalents undoable. That is true of jj and was generalized to Mercurial
+  without argument: hg has no operation log, and `hg purge` deletes untracked
+  files with no backup at all. So the users with no protection were the ones
+  whose backend gave them the least.
 - **Raw language tools**: `go test`, `go build`, `go mod tidy`, `cargo build`,
   `gofmt -w`, `prettier --write`, and the rest. The match is the base PROGRAM a
   registered spell op renders plus the leading argv it renders with it, so the

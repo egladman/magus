@@ -923,6 +923,7 @@ func buzzValueMagusVCSCheckpoint(v types.VCSCheckpoint) vm.Value {
 	out.MapSet("branch", vm.StrValue(v.Branch))
 	out.MapSet("dirty", vm.BoolValue(v.Dirty))
 	out.MapSet("patchDigest", vm.StrValue(v.PatchDigest))
+	out.MapSet("untrackedDigest", vm.StrValue(v.UntrackedDigest))
 	out.MapSet("vcs", vm.StrValue(v.VCS))
 	return out
 }

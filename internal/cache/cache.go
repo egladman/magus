@@ -839,7 +839,16 @@ func reproTarget(s Step) string {
 // Factored out of RunAll so that work running OUTSIDE the batch can be accounted the
 // same way rather than through a second, quietly divergent bookkeeping path - see
 // [Cache.RunAside].
-func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), error) {
+// machineClaimHeldKey marks a context whose step already holds a machine-wide claim, so
+// anything admitted beneath it takes none of its own.
+type machineClaimHeldKey struct{}
+
+func machineClaimHeld(ctx context.Context) bool {
+	held, _ := ctx.Value(machineClaimHeldKey{}).(bool)
+	return held
+}
+
+func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Context, int, func(), error) {
 	// A heavy step can request extra slots (Step.Slots) to throttle parallel work
 	// around itself. Clamp to [1, budget]: 0 means one slot, and a request above the
 	// budget would exceed capacity and error, so cap it. A request >= the budget holds
@@ -855,7 +864,7 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), e
 		slots = budget
 	}
 	if err := lim.AcquireN(ctx, slots); err != nil {
-		return 0, nil, err
+		return ctx, 0, nil, err
 	}
 	// The machine-wide half of the same admission, taken after the local slot so
 	// in-process ordering is unchanged: a step the machine cannot seat queues here,
@@ -869,16 +878,33 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), e
 	// wait here. Acquiring the machine budget first would trade that for a worse one -
 	// the step would hold machine-wide memory while waiting for a local lock, which is
 	// the resource that spans every worktree rather than just this run.
-	releaseMachine, machineErr := c.machine.acquire(ctx, types.MachineClaim{
-		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
-		MemoryMB: s.MemoryMB, Slots: slots,
-		PID: os.Getpid(), Dir: workingDir(),
-		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
-	})
-	if machineErr != nil {
-		lim.ReleaseN(slots)
-		c.logPool(ctx, lim)
-		return 0, nil, machineErr
+	//
+	// A step admitted BENEATH one that already holds a claim takes none. Step.MemoryMB is
+	// documented as including every target it composes, so the ancestor's figure already
+	// covers this one: a second claim double-counts the same memory, and the ancestor -
+	// blocked in dispatch waiting for this step - cannot release it, so the child queues
+	// forever behind its own parent. Measured 2026-09-08: `magus affected ci` sat 27
+	// minutes at 13s of CPU with no child process running.
+	//
+	// Covering rather than yielding, because a machine claim's re-acquire is FALLIBLE: it
+	// re-queues behind strangers and can be refused, so a parent that released and retook
+	// could fail after its children had already run. The limiter still bounds how many of
+	// these run at once inside this process.
+	releaseMachine := func() {}
+	if !machineClaimHeld(ctx) {
+		release, machineErr := c.machine.acquire(ctx, types.MachineClaim{
+			Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
+			MemoryMB: s.MemoryMB, Slots: slots,
+			PID: os.Getpid(), Dir: workingDir(),
+			Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
+		})
+		if machineErr != nil {
+			lim.ReleaseN(slots)
+			c.logPool(ctx, lim)
+			return ctx, 0, nil, machineErr
+		}
+		releaseMachine = release
+		ctx = context.WithValue(ctx, machineClaimHeldKey{}, true)
 	}
 	// Report occupancy as it changes, so an interactive run can show a live pool
 	// counter. Emitted on both edges of the slot's life: once here (this step is now
@@ -892,7 +918,7 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), e
 	doneInflight := c.inflight.start(s.ProjectPath, s.Target)
 	prog := ProgressFromContext(ctx)
 	prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "running"})
-	return slots, func() {
+	return ctx, slots, func() {
 		doneInflight()
 		// The machine claim goes back BEFORE the slot, because freeing the slot is what
 		// wakes a local waiter: releasing in the other order lets that waiter ask the
@@ -928,6 +954,10 @@ type runIsolationLeaseKey struct{}
 type runIsolationLease struct {
 	isolation *runIsolation
 	exclusive bool
+	// inherited marks a lease a step is running UNDER rather than holding: an exclusive
+	// ancestor kept its write lock across a dispatch, so this step is already inside the
+	// region and has nothing to acquire or release.
+	inherited bool
 }
 
 // WithRunScope attaches the isolation gate shared by a top-level invocation and
@@ -952,6 +982,19 @@ func isolationLeaseFrom(ctx context.Context) *runIsolationLease {
 
 func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, func()) {
 	ctx = WithRunScope(ctx)
+	// Inside an exclusive ancestor's region there is nothing to take: a shared lease is
+	// redundant and an exclusive one is already satisfied. Either would block forever
+	// behind the ancestor's write lock.
+	//
+	// An exclusive step admitted here does NOT exclude its siblings, and that is Step's
+	// stated contract rather than a shortcut: Exclusive is "RunAll only ... no other BATCH
+	// step runs concurrently (ignored by Run, which has no batch)", and a dynamically
+	// dispatched needs child arrives through RunAside, which runs outside a batch by
+	// definition. It is already excluded from every batch peer by the ancestor holding the
+	// write lock, which is the whole of what the policy promises.
+	if lease := isolationLeaseFrom(ctx); lease != nil && lease.inherited {
+		return ctx, func() {}
+	}
 	isolation := isolationFrom(ctx)
 	if exclusive {
 		isolation.mu.Lock()
@@ -971,21 +1014,31 @@ func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, 
 	}
 }
 
-// YieldRunIsolation releases the caller's RunAll or RunAside isolation lease
-// while fn admits a dynamically dispatched child, then restores that lease
-// before returning. It is deliberately a no-op outside an admitted cache step.
+// YieldRunIsolation lets fn admit dynamically dispatched children under the caller's
+// RunAll or RunAside isolation lease. A shared holder releases its read lock for the
+// duration and retakes it before returning; an exclusive holder keeps its write lock and
+// the children run inside its region, taking no lease of their own. It is deliberately a
+// no-op outside an admitted cache step.
 func YieldRunIsolation(ctx context.Context, fn func(context.Context) error) error {
 	lease := isolationLeaseFrom(ctx)
-	if lease == nil {
+	if lease == nil || lease.inherited {
 		return fn(ctx)
 	}
 	if lease.exclusive {
-		lease.isolation.mu.Unlock()
-		defer lease.isolation.mu.Lock()
-	} else {
-		lease.isolation.mu.RUnlock()
-		defer lease.isolation.mu.RLock()
+		// Keep the write lock. Releasing it here would make an exclusive step shareable for
+		// exactly the part of its life where it fans out, which for a body that is only
+		// ctx.needs is nearly all of it. The children cannot take leases behind this write
+		// lock, so they are marked as inside the region and acquireRunIsolation hands them
+		// none.
+		inherited := *lease
+		inherited.inherited = true
+		return fn(context.WithValue(ctx, runIsolationLeaseKey{}, &inherited))
 	}
+	// A shared holder releases: a child may need an exclusive lease, which the read lock
+	// would block, and RWMutex parks a new reader behind any waiting writer, so a parent
+	// that held would deadlock on its own child.
+	lease.isolation.mu.RUnlock()
+	defer lease.isolation.mu.RLock()
 	return fn(context.WithValue(ctx, runIsolationLeaseKey{}, nil))
 }
 
@@ -1000,7 +1053,7 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	}
 	ctx, releaseIsolation := acquireRunIsolation(ctx, s.Exclusive)
 	defer releaseIsolation()
-	slots, release, err := c.admit(ctx, s, lim)
+	ctx, slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
@@ -1143,7 +1196,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}
-			slots, release, admitErr := c.admit(stepCtx, s, lim)
+			stepCtx, slots, release, admitErr := c.admit(stepCtx, s, lim)
 			if admitErr != nil {
 				// A machine refusal is an independent finding: nothing upstream failed and
 				// the batch was not cancelled, the machine refused this step on its own

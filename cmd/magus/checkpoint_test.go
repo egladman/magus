@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -87,7 +88,7 @@ func TestRenderCheckpointsBoundsTheListAndPointsAtTheRest(t *testing.T) {
 	}
 
 	var b strings.Builder
-	renderCheckpoints(&b, records)
+	renderCheckpoints(context.Background(), "", &b, records)
 	got := b.String()
 
 	assert.Contains(t, got, "on one")
@@ -99,7 +100,7 @@ func TestRenderCheckpointsBoundsTheListAndPointsAtTheRest(t *testing.T) {
 
 func TestRenderCheckpointsShowsTheHostPointersWhenThereAreAny(t *testing.T) {
 	var b strings.Builder
-	renderCheckpoints(&b, []sessions.CheckpointRecord{{
+	renderCheckpoints(context.Background(), "", &b, []sessions.CheckpointRecord{{
 		Checkpoint: sessions.Checkpoint{
 			Host:        "codex",
 			HostSession: "01a07dab-240a",
@@ -121,6 +122,6 @@ func TestRenderCheckpointsShowsTheHostPointersWhenThereAreAny(t *testing.T) {
 // case of a repository where every session finished what it started.
 func TestRenderCheckpointsIsSilentWithNothingRecorded(t *testing.T) {
 	var b strings.Builder
-	renderCheckpoints(&b, nil)
+	renderCheckpoints(context.Background(), "", &b, nil)
 	assert.Empty(t, b.String())
 }

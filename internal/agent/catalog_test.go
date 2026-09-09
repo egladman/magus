@@ -584,3 +584,25 @@ func TestStampNamesTheVariantButSharesTheDigest(t *testing.T) {
 	assert.Contains(t, string(short), "skill-content: "+digest[1],
 		"one source body, one digest - the forms version together")
 }
+
+// TestGradeDestReportsAnUnreadableSkill: a skill magus cannot read is one it cannot
+// vouch for, and the loop used to skip it and grade the location up to date. chmod 000
+// any installed SKILL.md and doctor said everything was current, which is the one answer
+// that stops a reader looking.
+func TestGradeDestReportsAnUnreadableSkill(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	dest := ".claude/skills"
+	_, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	require.NoError(t, err)
+
+	blocked := filepath.Join(dir, dest, "magus-run", "SKILL.md")
+	require.NoError(t, os.Chmod(blocked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0o644) })
+
+	got := catalog.gradeDest(dir, dest)
+
+	assert.True(t, got.Stale, "an unreadable installed skill graded as current")
+	assert.Contains(t, got.Detail, "magus-run")
+	assert.Contains(t, got.Detail, "cannot read it")
+}

@@ -157,6 +157,14 @@
           "name": "changelog-generate",
           "declared": "changelog_generate",
           "doc": "CHANGELOG.md is a root artifact.",
+          "dependencies": [
+            "spells-generate"
+          ],
+          "chain": [
+            {
+              "target": "spells-generate"
+            }
+          ],
           "reads_files": [
             {
               "project": ".",

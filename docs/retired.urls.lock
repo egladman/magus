@@ -1,9 +1,11 @@
 # URLs intentionally removed from the site, exempt from the abandoned-link gate
 # (see abandonedLinkCheck in magusfile.buzz). One clean URL per line.
 #
-# Retirement is the only option now: the per-skill `aliases:` redirect went with
-# formerNames, because a renamed skill kept its old name alive in a second place and
-# magus is pre-1.0. A rename breaks its old URL, and the break is recorded here once.
+# Prefer a redirect over retirement when an old link should still land somewhere: a
+# hand-written page takes `aliases:` in its frontmatter. What GENERATED skill pages lost
+# is only the generator's own per-skill alias, which kept a renamed skill's old name
+# alive in a second place; magus is pre-1.0, so a renamed skill breaks its old URL and
+# the break is recorded here once.
 guides/download/
 guides/download/container-image/
 guides/download/docker/
@@ -285,3 +287,4 @@ reference/skills/magus-delegate-ultra/
 reference/skills/magus-docs/
 reference/skills/magus-handoff-journal/
 reference/skills/magus-vcs/
+tags/journal/

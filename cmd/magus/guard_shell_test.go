@@ -31,6 +31,11 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// that share a sentence, and rewording one churned the table.
 		rule    denyRule
 		context string // "" for none, else a substring the context must carry
+		// denySays and denyOmits are the exception to the rule above: the scope note is
+		// not a rule identity, it is prose whose PRESENCE is the contract, so it is
+		// asserted as a substring on both sides.
+		denySays  string
+		denyOmits string
 	}{
 		{command: "git stash", rule: wholeTree("git stash")},
 		{command: "git stash push -u", rule: wholeTree("git stash")},
@@ -113,6 +118,38 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git clean -n -fd"},
 		{command: "git clean -ndx"},
 		{command: "git commit -m 'x'", context: "magus-vcs-hygiene"},
+		// A deny refuses the whole line, so it says so when the line held more than the
+		// one command that earned it. The reason text was always right about the construct
+		// and always silent about the blast radius, and a reader who fixes the named
+		// command and assumes the rest ran is the failure this closes.
+		{command: "echo hi && git stash", rule: wholeTree("git stash"), denySays: "NOTHING on this line ran"},
+		{command: "git stash", rule: wholeTree("git stash"), denyOmits: "NOTHING on this line ran"},
+
+		// Every OTHER backend magus drives, which had no rules at all until 2026-09-08.
+		// The guard doc justified that by saying jj "snapshots the working copy and keeps
+		// an operation log, so its nearest equivalents are undoable" - true of jj, and
+		// generalized to Mercurial without argument. hg has no operation log, and hg purge
+		// deletes untracked files with no backup, which is git clean -f's blast radius
+		// exactly. So an hg user had none of a git user's protection.
+		{command: "hg purge", rule: wholeTree("hg purge")},
+		{command: "hg clean", rule: wholeTree("hg clean")},
+		{command: "sl purge", rule: wholeTree("sl purge")},
+		{command: "hg revert --all", rule: wholeTree("hg revert --all")},
+		{command: "hg update -C", rule: wholeTree("hg update --clean")},
+		{command: "sl goto --clean", rule: wholeTree("sl goto --clean")},
+		{command: "jj abandon", rule: wholeTree("jj abandon")},
+		{command: "jj restore", rule: wholeTree("jj restore")},
+		// SCOPED forms stay allowed, matching the git rules: naming paths is the
+		// difference between discarding a tree and discarding what you enumerated.
+		{command: "hg revert internal/agent/catalog.go"},
+		{command: "jj restore internal/agent/catalog.go"},
+		{command: "hg update default"},
+		{command: "hg status"},
+		{command: "jj log"},
+		// Prose, not a command: the parsed path is why these do not match, and it is the
+		// same reason gitGuard stopped pattern-matching.
+		{command: "echo 'run hg purge to clean up'"},
+
 		// Push, not commit: committing mid-mess is ordinary, publishing is the
 		// moment the work stops being yours alone.
 		{command: "git push origin HEAD", context: "magus affected ci"},
@@ -398,6 +435,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 			// carry a reason for the reader from passing.
 			assert.NotEmpty(t, v.Deny, "%q must deny", tt.command)
 			assert.Empty(t, v.Context, "%q denies, no context", tt.command)
+			if tt.denySays != "" {
+				assert.Contains(t, v.Deny, tt.denySays, "%q must say how much of the line was refused", tt.command)
+			}
+			if tt.denyOmits != "" {
+				assert.NotContains(t, v.Deny, tt.denyOmits, "%q is one command; the multi-command note would be false", tt.command)
+			}
 			continue
 		}
 		cmds, _ := parseGuardCommands(tt.command)

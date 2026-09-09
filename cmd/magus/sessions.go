@@ -12,6 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // sessionsDefaultLimit bounds the default listing to a session or two of scrollback.
@@ -39,7 +41,7 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		sessionUsage()
 		return nil
 	case "ls":
-		return sessionList(root, rest)
+		return sessionList(ctx, root, rest)
 	case "attention":
 		return attentionList(root, rest)
 	case "dispose":
@@ -75,7 +77,7 @@ func sessionUsage() {
 
 // sessionList shows what recent magus sessions did, folded across every worktree of
 // this repository.
-func sessionList(root string, args []string) error {
+func sessionList(ctx context.Context, root string, args []string) error {
 	var limit int
 	var since string
 	rest, err := cmdParse("session", args, func(fs *flag.FlagSet) {
@@ -120,7 +122,7 @@ func sessionList(root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputText:
-		return renderSessionsText(summaries, fold, dir, !cutoff.IsZero())
+		return renderSessionsText(ctx, root, summaries, fold, dir, !cutoff.IsZero())
 	case outputName:
 		for _, s := range summaries {
 			fmt.Println(s.Session)
@@ -138,8 +140,8 @@ func sessionList(root string, args []string) error {
 // filtered says a --since cutoff was applied, which is what separates an empty store
 // from a store whose sessions are all older than the window. Reporting the second as the
 // first sends a person looking for a broken producer.
-func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
-	renderCheckpoints(os.Stdout, sessions.LatestCheckpoints(fold))
+func renderSessionsText(ctx context.Context, root string, summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
+	renderCheckpoints(ctx, root, os.Stdout, sessions.LatestCheckpoints(fold))
 	if len(summaries) == 0 {
 		if filtered {
 			fmt.Fprintf(os.Stdout, "no sessions in that window; %s holds %d session file(s)\n", dir, fold.Sessions)
@@ -191,9 +193,14 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 	return nil
 }
 
-// checkpointsShown bounds the block. Unfinished work does not expire - a checkpoint from
-// three weeks ago is still where that work sits - so the list is bounded by count rather
-// than by age, and the tail is pointed at rather than dropped silently.
+// checkpointsShown bounds the block. A checkpoint from three weeks ago is still where that
+// work sits, so the list is bounded by count rather than by age, and the tail is pointed at
+// rather than dropped silently.
+//
+// It is NOT unbounded in time, whatever this comment used to say: sessions.Prune drops a
+// whole session file 30 days after its newest record, with an exemption for open attention
+// requests and none for checkpoints. A line of work parked for a month loses every
+// checkpoint it had, silently. Either that exemption is owed or this block should say so.
 const checkpointsShown = 3
 
 // renderCheckpoints prints unfinished work above the history, because "where was I" is
@@ -202,7 +209,7 @@ const checkpointsShown = 3
 // It is deliberately not filtered by --since. That flag bounds what RAN recently; a
 // checkpoint records what has not finished, and hiding an old one would hide the case
 // this exists for.
-func renderCheckpoints(w io.Writer, checkpoints []sessions.CheckpointRecord) {
+func renderCheckpoints(ctx context.Context, root string, w io.Writer, checkpoints []sessions.CheckpointRecord) {
 	if len(checkpoints) == 0 {
 		return
 	}
@@ -222,7 +229,39 @@ func renderCheckpoints(w io.Writer, checkpoints []sessions.CheckpointRecord) {
 	if extra := len(checkpoints) - checkpointsShown; extra > 0 {
 		fmt.Fprintf(w, "  and %d more; `%s` lists them all\n", extra, hint.Session.With("-o", "json"))
 	}
+	printCheckpointInspect(ctx, root, w, checkpoints[0].Checkpoint)
 	fmt.Fprintln(w)
+}
+
+// printCheckpointInspect prints the command that shows what changed since the newest
+// checkpoint, already substituted, for THIS repository's backend.
+//
+// Composed by the DRIVER, never here. magus drives git, Mercurial, Sapling and Jujutsu,
+// and each spells this differently; a reader who assembles one from memory is guessing
+// which of the four they are in, and the same guess is what a skill hardcoding `git
+// diff` teaches them to make. DiffCommands is the one method that already knows, and
+// until now it had a single caller.
+//
+// Best-effort and silent on failure: a revisionless checkpoint has no base to diff from,
+// and a listing that refuses to print because a VCS probe failed would be worse than one
+// that prints what it has. Only for the newest, because that is the one a reader acts on
+// and each call costs a subprocess.
+func printCheckpointInspect(ctx context.Context, root string, w io.Writer, c sessions.Checkpoint) {
+	if root == "" || c.Tree.Revision == "" {
+		return
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return
+	}
+	hints, err := res.VCS.DiffCommands(ctx, root, c.Tree.Revision)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "  what changed since the newest:\n    %s\n", hints.CLI)
+	if hints.GUI != "" {
+		fmt.Fprintf(w, "    %s\n", hints.GUI)
+	}
 }
 
 // checkpointWhere reads one back as a phrase. The revision leads because it is the fact

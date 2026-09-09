@@ -355,8 +355,9 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // unclaimed ground would block a lease from a file nobody is competing for.
 func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeGrade {
 	// BEFORE the path checks, because an unregistered lease should not be writing anywhere -
-	// not merely outside its lane. A checkpoint is what makes its work recoverable and what says
-	// which base the work applies to, and both facts are worth nothing recorded afterwards.
+	// not merely outside its lane. A checkpoint is what says which base the work applies to and
+	// what makes its diff locatable afterwards - it records a revision and a patch DIGEST, so it
+	// never makes the work recoverable - and both facts are worth nothing recorded afterwards.
 	//
 	// This is the one rule here that enforces a PROCEDURE rather than a boundary, and it is a deny
 	// rather than an advisory for the reason the skill was not enough: an instruction an agent can

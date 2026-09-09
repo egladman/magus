@@ -92,8 +92,9 @@ func RegistrationAdvice(u types.Lease) string {
 	case types.BaseRevisionMatch:
 		return fmt.Sprintf("registered lease %s on revision %s, which IS the revision it was handed,"+
 			" but the uncommitted patch is not: the checkpoint digest is %s and yours is %s."+
-			" A checkpoint is a revision plus a dirty-patch digest, so you share the commit and not the working tree."+
-			" Materialize the files you touch from the checkpoint, or have the orchestrator re-cut the checkpoint"+
+			" A checkpoint is a revision plus a dirty-patch DIGEST, so you share the commit and not the working tree."+
+			" The digest cannot give the patch back, so there is nothing here to restore from:"+
+			" have the orchestrator commit the work the lease was cut against, or re-cut the checkpoint"+
 			" against the tree you are on.",
 			u.ID, baseRevision(u.ReportedBase), patchDigestOf(u.Checkpoint), patchDigestOf(u.ReportedBase))
 

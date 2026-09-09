@@ -154,6 +154,36 @@ whole-tree revert destroys a concurrent agent's untracked work.{{end}} If you tr
 pristine tree (e.g. to diff regenerated output), use a throwaway
 `git worktree add`, never the live tree.
 
+## Getting back to a recorded state
+
+A checkpoint RECORDS a position; it never MINTS one. It holds a revision, a branch,
+and a DIGEST of the uncommitted patch - not the patch. So a dirty checkpoint tells you
+whether a tree is the same one, and cannot give the work back.{{if .Full}} The digest is
+a hash of the diff and the text is discarded; untracked files are not even hashed.
+Nothing in magus reads a stored checkpoint except the `magus session` listing. Treat
+"revert to my last checkpoint" as a request magus cannot serve, and say so rather than
+reaching for a whole-tree command that would make it worse.{{end}}
+
+Commit before you park. Uncommitted work that is not committed is not recoverable from
+anything magus recorded.
+
+ASK magus for the commands rather than composing them: `magus session` names the
+revision and prints the inspect command for THIS workspace's backend, already
+substituted. magus drives git, Mercurial, Sapling and Jujutsu, so a command you compose
+from memory is a guess about which of the four you are in.{{if .Full}} `magus affected
+--explain` prints the same pair (CLI and GUI) for the affected changeset. Both come from
+one driver method, so they are correct per backend by construction rather than by
+whichever one you happened to learn.{{end}}
+
+Then, whatever the backend:
+
+1. INSPECT out of place, never restore in place. A scratch checkout of the recorded
+   revision answers "what changed" without touching a tree that may hold a concurrent
+   agent's untracked work.
+2. Restore PER FILE, never whole-tree.{{if .Full}} The scoped form is what the guard
+   advises on; the whole-tree forms it denies, because that untracked work is in no
+   commit to recover from.{{end}}
+
 `magus_affected_explain` {project} answers why a specific project is in the
 affected set{{if .Full}} (the changed files and dependency chains that pulled it in) when
 the result surprises you{{end}}.

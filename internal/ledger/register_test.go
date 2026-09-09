@@ -25,6 +25,7 @@ func TestStoreRegister(t *testing.T) {
 		reported   string
 		want       types.LeaseBaseVerdict
 		says       []string
+		saysNot    []string
 	}{
 		{
 			name:       "the same token is a match",
@@ -39,7 +40,14 @@ func TestStoreRegister(t *testing.T) {
 			want:       types.BaseRevisionMatch,
 			// Naming BOTH digests is the point: the revision agreeing is what makes this
 			// confusing, so the reading has to show the half that did not.
-			says: []string{baseA, "00112233445566778899aabbccddeeff", "none (clean tree)", "Materialize the files you touch"},
+			// "have the orchestrator commit", NOT the "Materialize the files you touch from
+			// the checkpoint" this pinned until 2026-09-08. A revision-match means the same
+			// commit and a DIFFERENT uncommitted patch, and a checkpoint carries only that
+			// patch's digest - so there was nothing to materialize from and the advice told
+			// a worker to perform an impossible recovery. The negative assertion below is
+			// what keeps a restore promise from coming back.
+			says:    []string{baseA, "00112233445566778899aabbccddeeff", "none (clean tree)", "have the orchestrator commit"},
+			saysNot: []string{"Materialize"},
 		},
 		{
 			name:       "a different revision is a divergence",
@@ -78,6 +86,10 @@ func TestStoreRegister(t *testing.T) {
 			assert.Contains(t, advice, "u1")
 			for _, want := range tt.says {
 				assert.Contains(t, advice, want)
+			}
+			for _, never := range tt.saysNot {
+				assert.NotContains(t, advice, never,
+					"the advice offers a recovery the record cannot support")
 			}
 
 			// Stored, not just returned: the orchestrator reading the plan later sees the

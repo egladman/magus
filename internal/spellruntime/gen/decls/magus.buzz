@@ -169,6 +169,7 @@ export object VCSCheckpoint {
     branch: str = "",
     dirty: bool = false,
     patchDigest: str = "",
+    untrackedDigest: str = "",
     vcs: str = "",
 }
 

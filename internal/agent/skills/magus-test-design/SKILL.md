@@ -138,6 +138,7 @@ Hand execution to `magus-run`; this skill chooses the proof and does not bypass
 Magus with raw language test commands.
 
 {{if .Full}}
+
 ## Evidence gate for delegated work
 
 Do not label a test unit, integration, or end-to-end until the behavior and at
@@ -231,4 +232,5 @@ Execution and gaps:
   owning test target -> affected CI
   complementary coverage / residual risk:
 ```
+
 {{end}}

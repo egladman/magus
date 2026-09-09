@@ -99,7 +99,7 @@ var guardSurfaces = []string{"command", "path"}
 // could-not-judge firings, 99% of them same-session repeats, and one session took 913. A
 // copy that predates this keeps sending all of them, and a reader who has learned to skip
 // the notice skips the one that mattered too.
-const GuardTemplateVersion = 10
+const GuardTemplateVersion = 11
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

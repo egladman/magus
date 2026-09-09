@@ -115,7 +115,22 @@ magus\project({
         // No ctx.writesFiles for gen/site: declared output globs are what EnsureMergeDriver
         // writes into .gitattributes, and an ignored path can never conflict.
         "deploy-generate": {"skip_cache": "assembles a gitignored deploy tree that is never snapshotted"},
-        "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
+        // NOT exclusive, and it never actually was. The engine released an exclusive
+        // step's lease for the whole of its ctx.needs fan-out, and this target's body IS
+        // that fan-out, so the flag bought nothing for as long as it has been here. Once
+        // the engine started honouring it (see YieldRunIsolation), the cost arrived
+        // without the benefit: every other ci member reaches generate, so all of them
+        // serialized behind its entire codegen chain, and because a declared timeout
+        // wraps a target's whole body - dependency waits included - lint, build, test and
+        // security each burned their 15m ceiling waiting and were killed. Measured: those
+        // four ran 15m52s apiece in one gate; security alone finishes in 14s.
+        //
+        // What the drift check actually needs isolation for is its hash-before against
+        // hash-after comparison, not for running the generators. Declaring it over the
+        // whole target asks for far more than that and is what made it unaffordable. The
+        // comparison is racy without it, which it has been all along; narrowing the
+        // exclusive region to the measurement is the fix, and it is not this line.
+        "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
         // Both render the WHOLE graph, but only the magusfiles are keyable inputs, so any
         // other change leaves the key unmoved and a hit reverts the committed file.
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
@@ -168,10 +183,19 @@ magus\project({
         // dependency would replay the OLD verdict against unchanged sources.
         // timeout because this target is the one that reaches the network: govulncheck
         // pulls the vulnerability database and trivy its license data, and neither has an
-        // output-capturing failure mode when the far end stops answering. On 2026-09-04 a
-        // gate sat for 65 minutes holding three project locks with zero slots in use and
-        // nothing running, and the scanners were the only candidates. 15m against a worst
-        // recorded run of 44s over 14 runs: a guard, not a budget.
+        // output-capturing failure mode when the far end stops answering. 15m against a
+        // worst recorded run of 44s over 14 runs: a guard, not a budget.
+        //
+        // It is NOT what ended the 2026-09-04 hang this comment used to credit it with -
+        // a gate sitting 65 minutes holding project locks with nothing running, blamed on
+        // the scanners because they were the only candidates anyone looked at. The same
+        // signature recurred on 2026-09-08 WITH this timeout in place and security held
+        // past it, which is what finally named the real cause: buzzDispatchViaPool
+        // (internal/interp/bindings/target.go) yields the limiter slot and the isolation
+        // lease around a needs dispatch but NOT the machine claim, so a composing target
+        // keeps holding machine-wide memory while blocked on the children it is composing.
+        // STILL OPEN. The scanners were innocent. Keep the timeout on its own merits - the
+        // network reach is real - but do not read it as covering a hang.
         "security": {
             "skip_cache": "depends on trivy's license classifier version, which no cache key can see",
             "timeout": "15m",
@@ -903,6 +927,15 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
 // reverse docs -> root output edge while letting docs publication depend on the same
 // execution stage.
 export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // This target COMPILES the module (`go run ./cmd/magus-utils`), and internal/spellruntime
+    // go:embeds files spells-generate writes. Without the edge the two race inside generate's
+    // fan-out and the compile fails with "pattern gen/types/<name>.buzz: no matching files
+    // found" naming whichever file was mid-rewrite - a different one each run, and a message
+    // that reads as a missing file rather than a concurrent one.
+    //
+    // It was latent for as long as machine-budget contention happened to serialize the two.
+    // Nothing declared that ordering, so nothing kept it.
+    ctx.needs(spells_generate);
     ctx.readsFiles("releases/*.yaml", "cmd/magus-utils/**/*.go", "internal/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum");
     ctx.modifiesExistingFiles("CHANGELOG.md");
