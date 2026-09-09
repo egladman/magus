@@ -325,8 +325,18 @@ func CeilingExceededError(ctx context.Context, err error, target string, ceiling
 	if errors.As(err, &d) && d.Code == TargetCeilingExceeded {
 		return err
 	}
-	msg := fmt.Sprintf("target %q exceeded its declared timeout of %s after %s; its process tree was killed",
+	msg := fmt.Sprintf("target %q exceeded its declared timeout of %s after %s",
 		target, ceiling, elapsed.Round(time.Second))
+	// A ceiling covers the body's ctx.needs waits as well as its own work, so the elapsed
+	// time alone accuses the target of being slow when it may have been queued the whole
+	// time behind something else. Splitting it is what makes the difference actionable:
+	// own work at the ceiling means tune the target, dependency time at the ceiling means
+	// look upstream at what serialized.
+	if waited := DependencyWait(ctx); waited > 0 {
+		msg += fmt.Sprintf(", %s of it on the targets it composes and %s on its own work",
+			waited.Round(time.Second), max(elapsed-waited, 0).Round(time.Second))
+	}
+	msg += "; its process tree was killed"
 	if log := CaptureLog(ctx); log != "" {
 		msg += "; captured output: " + log
 	}

@@ -517,6 +517,10 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 	if len(names) == 0 {
 		return nil
 	}
+	// Everything below is time the CALLING body spends on targets other than itself, and
+	// its ceiling is running throughout. Recorded so a ceiling that expires can say which
+	// half of the elapsed time was its own work; see types.TrackDependencyWait.
+	defer func(started time.Time) { types.AddDependencyWait(callCtx, time.Since(started)) }(time.Now())
 	// These are dependencies (ctx.needs), so a service op among them is supervised
 	// in the background rather than blocked on (see runCommand). The directly-run
 	// target is dispatched without this marker, so it still foregrounds.

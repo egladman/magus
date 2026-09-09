@@ -1,7 +1,9 @@
 package types
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,4 +142,57 @@ func TestValidateCharmName(t *testing.T) {
 	for _, n := range []string{"", "read:write", "a b", "fast@v2"} {
 		assert.Errorf(t, ValidateCharmName(n), "ValidateCharmName(%q) should error", n)
 	}
+}
+
+// expiredCeiling is a context already past its deadline, which is the only state
+// CeilingExceededError reports on.
+func expiredCeiling(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithDeadline(TrackDependencyWait(context.Background()), time.Now().Add(-time.Second))
+	t.Cleanup(cancel)
+	return ctx
+}
+
+// The split is the whole point of the message: elapsed time alone reads as "this target is
+// slow", which is wrong exactly when it matters most - a target queued behind a
+// serialization upstream, doing seconds of its own work.
+func TestCeilingExceededErrorSplitsWaitingFromOwnWork(t *testing.T) {
+	ctx := expiredCeiling(t)
+	AddDependencyWait(ctx, 14*time.Minute)
+
+	err := CeilingExceededError(ctx, nil, "ci", 15*time.Minute, 15*time.Minute+52*time.Second)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `target "ci" exceeded its declared timeout of 15m0s after 15m52s`)
+	assert.Contains(t, err.Error(), "14m0s of it on the targets it composes and 1m52s on its own work")
+}
+
+// A leaf target composes nothing, so there is no split to report and the clause is
+// omitted rather than printed as a pair of zeroes.
+func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
+	err := CeilingExceededError(expiredCeiling(t), nil, "build", time.Minute, 90*time.Second)
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "on its own work")
+	assert.Contains(t, err.Error(), "its process tree was killed")
+}
+
+// A body's own dependency time is its own: a composed target's ctx.needs must not land on
+// the parent's accumulator, which already counts that whole child as one span.
+func TestTrackDependencyWaitIsPerBody(t *testing.T) {
+	parent := TrackDependencyWait(context.Background())
+	AddDependencyWait(parent, time.Minute)
+	child := TrackDependencyWait(parent)
+	AddDependencyWait(child, 30*time.Second)
+
+	assert.Equal(t, time.Minute, DependencyWait(parent), "a child's dependency time reached its parent twice")
+	assert.Equal(t, 30*time.Second, DependencyWait(child))
+}
+
+// Outside a target body there is no accumulator, and recording against one must not panic:
+// runBuzzDependencies also runs under `magus buzz` and the REPL, where nothing armed a
+// ceiling.
+func TestAddDependencyWaitOutsideABodyIsANoOp(t *testing.T) {
+	assert.NotPanics(t, func() { AddDependencyWait(context.Background(), time.Minute) })
+	assert.Zero(t, DependencyWait(context.Background()))
 }

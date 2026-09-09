@@ -36,7 +36,12 @@ func withDeclaredCeiling(ctx context.Context, dir, target string) (context.Conte
 	if d <= 0 {
 		return ctx, func() {}, 0
 	}
-	c, cancel := context.WithTimeout(ctx, d)
+	// The accumulator rides the same scope as the deadline, because it exists to explain
+	// that deadline: a ceiling covers the ctx.needs waits inside the body, so a target can
+	// exceed one having done almost none of its own work. Reporting the elapsed time alone
+	// blames the target, and four targets once reported an identical 15m52s timeout that
+	// one serialization upstream had caused.
+	c, cancel := context.WithTimeout(types.TrackDependencyWait(ctx), d)
 	return c, cancel, d
 }
 
