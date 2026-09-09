@@ -388,6 +388,13 @@ func shelfName() string {
 
 // shelfMinted reads back the time shelfName stamped, and reports false for any name it
 // did not mint.
+//
+// It also reports false for the "magus-<hex>" names an earlier shelfName minted on this
+// branch (6cb9aa2ef, replaced by dd221b2ed before either reached a release), because
+// those carry no mint time at all. Nothing keeps them working on purpose: a name with no
+// stamp cannot be judged against a retention window without guessing, and guessing is
+// what PrunePreserved must never do. The cost is that a developer who ran an intermediate
+// build has shelves that leak, cleaned up by hand with `hg shelve --delete`.
 func shelfMinted(name string) (time.Time, bool) {
 	rest, ok := strings.CutPrefix(name, shelfPrefix)
 	if !ok {
@@ -412,22 +419,53 @@ func shelfMinted(name string) (time.Time, bool) {
 // that does not restore leaves the user with files staged for a commit they never made
 // and a deletion scheduled they never asked for.
 type hgFamilyPending struct {
+	// root is the repository root, and both the directory the paths below are relative to
+	// and the only directory putting them back may run in; see hgFamilyRoot.
+	root    string
 	unknown []string
 	missing []string
+}
+
+// hgFamilyRoot resolves the repository root, which is where every step of the
+// pending-state dance has to run.
+//
+// `hg status` answers in ROOT-relative paths while `hg revert` and `hg forget` resolve
+// their arguments against the CWD, so the same string names two different files whenever
+// the caller passes a subdirectory. Measured 2026-09-09 on Mercurial 7.2.3: `hg revert
+// --no-backup -- sub/tracked.txt` run inside sub/ prints "no such file in rev" and exits
+// ZERO, leaving the file scheduled for removal that the user never asked for. Anchoring
+// both halves at the root makes the two agree; Sapling needs it for the mirror-image
+// reason, since its status is CWD-relative from a subdirectory and root-relative here.
+func hgFamilyRoot(ctx context.Context, prog, dir string) (string, error) {
+	cmd := vcsExec(ctx, prog, "root")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("%s root: %w", prog, err)
+	}
+	root := strings.TrimSpace(string(out))
+	if root == "" {
+		return "", fmt.Errorf("%s root: no repository root for %s", prog, dir)
+	}
+	return root, nil
 }
 
 // hgFamilyReadPending reads that state. It must run BEFORE the capture, since the capture
 // is what changes it.
 func hgFamilyReadPending(ctx context.Context, prog, dir string) (hgFamilyPending, error) {
-	unknown, err := hgFamilyStatusPaths(ctx, prog, dir, "--unknown")
+	root, err := hgFamilyRoot(ctx, prog, dir)
 	if err != nil {
 		return hgFamilyPending{}, err
 	}
-	missing, err := hgFamilyStatusPaths(ctx, prog, dir, "--deleted")
+	unknown, err := hgFamilyStatusPaths(ctx, prog, root, "--unknown")
 	if err != nil {
 		return hgFamilyPending{}, err
 	}
-	return hgFamilyPending{unknown: unknown, missing: missing}, nil
+	missing, err := hgFamilyStatusPaths(ctx, prog, root, "--deleted")
+	if err != nil {
+		return hgFamilyPending{}, err
+	}
+	return hgFamilyPending{root: root, unknown: unknown, missing: missing}, nil
 }
 
 // hgFamilyRestorePending returns the working copy to the state hgFamilyReadPending saw.
@@ -436,20 +474,20 @@ func hgFamilyReadPending(ctx context.Context, prog, dir string) (hgFamilyPending
 // it scheduled (measured), and only revert clears it - which also writes the file back, so
 // it is deleted again immediately after. The bytes restored are the committed ones the
 // user had already deleted, so nothing of theirs is at risk in between.
-func hgFamilyRestorePending(ctx context.Context, prog, dir string, p hgFamilyPending) error {
+func hgFamilyRestorePending(ctx context.Context, prog string, p hgFamilyPending) error {
 	if len(p.unknown) > 0 {
-		if err := hgFamilyRun(ctx, prog, dir, append([]string{"forget", "--"}, p.unknown...)); err != nil {
+		if err := hgFamilyRun(ctx, prog, p.root, append([]string{"forget", "--"}, p.unknown...)); err != nil {
 			return err
 		}
 	}
 	if len(p.missing) == 0 {
 		return nil
 	}
-	if err := hgFamilyRun(ctx, prog, dir, append([]string{"revert", "--no-backup", "--"}, p.missing...)); err != nil {
+	if err := hgFamilyRun(ctx, prog, p.root, append([]string{"revert", "--no-backup", "--"}, p.missing...)); err != nil {
 		return err
 	}
 	for _, rel := range p.missing {
-		if err := os.Remove(filepath.Join(dir, filepath.FromSlash(rel))); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(filepath.Join(p.root, filepath.FromSlash(rel))); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("%s: re-delete %s: %w", prog, rel, err)
 		}
 	}
