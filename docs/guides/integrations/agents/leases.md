@@ -40,11 +40,11 @@ that skill writes to and reads from.
 
 Only one thing in that table enforces, and it is not the ledger. The ledger is a
 declaration, the checkpoint is a reading, and the Plan surface renders both. The
-[guard](guard.md) is what reads the declaration back: on a file write it denies a
-lease that never registered its base, a path the lease itself declared forbidden,
-and a path another live lease owns. It grades only a worker that named its lease,
-so the last step below - the actual diff against the checkpoint - is still what
-catches a write nobody could attribute.
+[guard](guard.md) is what reads the declaration back, on every file write and
+every command: see [what the guard enforces under a
+lease](#what-the-guard-enforces-under-a-lease). It grades only a worker that named
+its lease, so the last step below - the actual diff against the checkpoint - is
+still what catches a write nobody could attribute.
 
 <!--diagram:lease-loop-->
 
@@ -114,18 +114,15 @@ tree; `base_verdict`, the store's comparison of that against the row's
 
 Three properties are worth stating plainly.
 
-**Owned and forbidden paths are declared here and enforced elsewhere.** This
-store gates nothing: it records the text an orchestrator put in a worker's
-prompt, where a human can read it. The [agent guard](guard.md) is the one reader
-that turns it into a verdict, and on a file write it DENIES three things - a
-lease that has not registered the base it landed on, a path covered by that
-lease's own `forbidden_paths`, and a path covered by another live lease's
-`owned_paths`. It advises on a fourth: your own path, written from a base that
-`base_verdict` says is not the checkpoint you were handed. Everything else
-passes, and every uncertainty fails open with at most an advisory - no ledger, an
-unreadable one, a writer that named no lease - because this is a seatbelt for a
-harness that opted in and not a sandbox. Which is why the diff since each lease's
-checkpoint, the last step below, is still where ownership is finally checked.
+**A declared boundary is enforced elsewhere.** This store gates nothing: it
+records the text an orchestrator put in a worker's prompt, where a human can read
+it. The [agent guard](guard.md) is the one reader that turns it into a verdict;
+what it refuses is listed under [what the guard enforces under a
+lease](#what-the-guard-enforces-under-a-lease) below. Every uncertainty there
+fails open with at most an advisory - no ledger, an unreadable one, a writer that
+named no lease - because this is a seatbelt for a harness that opted in and not a
+sandbox. Which is why the diff since each lease's checkpoint, the last step
+below, is still where ownership is finally checked.
 
 **Every row ends in `pass`, `fail`, or `no_return`.** `no_return` is not a
 failure. A lease that failed came back and said so; a lease that died, stalled, or
@@ -207,6 +204,33 @@ never exported the variable is graded as an editor magus cannot attribute, which
 is an advisory rather than a deny and leaves every rule above it inert. A wrapper
 that builds its own argv can pass `magus session hook --lease <id>` instead; an
 explicit flag wins over the environment.
+
+## What the guard enforces under a lease
+
+Once a worker names a live lease, the [guard](guard.md) reads that row on every
+file write and every command. It denies:
+
+| the guard refuses                                              | the row field that decided it |
+| -------------------------------------------------------------- | ----------------------------- |
+| any write, before the worker registers the base it landed on   | `registered`                  |
+| any write, by a lease that gathers evidence and writes nothing | `read_only`                   |
+| a write covered by this lease's own forbidden list             | `forbidden_paths`             |
+| a write covered by another live lease's owned list             | `owned_paths` (that lease's)  |
+| a write outside every entry in this lease's own owned list     | `owned_paths`                 |
+| a command running the `ci` gate                                | `validation`                  |
+
+It advises on one more: your own path, written from a base that `base_verdict`
+says is not the checkpoint you were handed.
+
+The last row is the one that surprises people. The gate runs ONCE per branch, in
+the orchestrator's tree, after every unit lands; a worker's `validation` is the
+narrow target it was assigned, so a worker that reaches for the whole pipeline is
+refused and handed its own check instead. A row whose `validation` names `ci`
+owns the gate and is not refused.
+
+Two absences are boundaries nobody declared rather than boundaries of size zero,
+and both scope nothing: an empty `owned_paths` on a row that is not `read_only`,
+and an empty `validation`.
 
 ## Watch it: Dashboard's Lease plan
 

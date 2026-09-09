@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, bound fan-out depth, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 21839
-skill_short_bytes: 16102
+skill_full_bytes: 22169
+skill_short_bytes: 16321
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `56` |
+| `agent-skill-version` | `57` |
 | `knowledge-schema-version` | `11` |
-| `skill-content` | `0f9c8a1b2b78` |
+| `skill-content` | `b04109b01ad4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -113,6 +113,10 @@ Assign validation from the pipeline the workspace composed, not from convention:
 so a lease gets the narrowest target from that decomposition and the integrator
 re-runs the described order, with `magus affected ci` re-proving the whole
 composition.
+
+A lease's validation is that narrow target and never the gate; the guard reads
+the row and denies `ci` to any worker whose validation names something else. The
+root gates ONCE, in its own tree, after every unit lands.
 
 Decide each lease's validation PLANE with its target. A worker environment that
 cannot execute magus at all - an isolated tree with no usable binary, or a
@@ -454,6 +458,12 @@ re-runs the described order, with `magus affected ci` re-proving the whole
 composition. A worker hand-sequencing lint, format, and test is re-deriving an
 order the magusfile already owns, and the step it forgets fails silently by
 omission.
+
+A lease's validation is that narrow target and never the gate; the guard reads
+the row and denies `ci` to any worker whose validation names something else. The
+root gates ONCE, in its own tree, after every unit lands, which is
+what stops seven fanned-out workers from each running the whole pipeline
+concurrently on one machine.
 
 Decide each lease's validation PLANE with its target. A worker environment that
 cannot execute magus at all - an isolated tree with no usable binary, or a

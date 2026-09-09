@@ -118,6 +118,34 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 		assert.Contains(t, got.Reason, "lease-b")
 		assert.Contains(t, got.Reason, "cmd/magus/gen/**", "the denial must quote the declaration it matched")
 	})
+
+	t.Run("outside the acting lease's own owned paths", func(t *testing.T) {
+		// Ground nobody else claims. The lane the orchestrator handed out is still the
+		// lane, and a worker that widens its own is what the declaration exists to catch.
+		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "README.md"))
+		require.Equal(t, "deny", got.Decision)
+		assert.Contains(t, got.Reason, "lease-b")
+		assert.Contains(t, got.Reason, "README.md")
+		assert.Contains(t, got.Reason, "owned_paths", "the denial must name the field that decided it")
+		assert.Contains(t, got.Reason, "cmd/magus/**", "the denial must list the lane it was measured against")
+	})
+
+	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
+		leases := append(fleetLeases(), types.Lease{
+			ID:       "scout",
+			Goal:     "inventory the guard rules",
+			ReadOnly: true,
+			State:    types.StateRunning,
+		})
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, "scout", filepath.Join(root, "README.md"))
+		require.Equal(t, "deny", got.Decision)
+		assert.Contains(t, got.Reason, "read_only", "the denial must name the field that decided it")
+		assert.Contains(t, got.Reason, "scout")
+		// Ahead of the registration rule: this row never registered, and being told to
+		// checkpoint first would be a second refusal for one mistake.
+		assert.NotContains(t, got.Reason, "checkpoint")
+	})
 }
 
 // TestGradeLeasedWritePasses covers the silences. Each is a case where the guard has
@@ -130,9 +158,12 @@ func TestGradeLeasedWritePasses(t *testing.T) {
 		assert.Empty(t, gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "cmd/magus/agent.go")).Decision)
 	})
 
-	t.Run("ground no live lease claims", func(t *testing.T) {
-		// An orchestrator's owned set is a plan, not a census. Denying here would block a
-		// lease from a file nobody is competing for.
+	t.Run("a lease that declared no owned paths", func(t *testing.T) {
+		// An empty owned set is a boundary nobody wrote, not a lane of size zero, so it
+		// scopes nothing. read_only is what says a lease writes nothing on purpose.
+		leases := fleetLeases()
+		leases[1].OwnedPaths, leases[1].ForbiddenPaths = nil, nil
+		ctx, root := fleetFixture(t, leases...)
 		assert.Empty(t, gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "README.md")).Decision)
 	})
 

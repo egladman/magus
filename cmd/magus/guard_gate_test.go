@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -172,4 +177,109 @@ func TestWorkspaceRunsDirDefaultsToTheWorkspaceCache(t *testing.T) {
 
 	require.NoError(t, os.MkdirAll(filepath.Join(root, ".magus", "runs"), 0o755))
 	assert.Equal(t, filepath.Join(".magus", "runs"), workspaceRunsDir(""))
+}
+
+// narrowLease is a delegated worker assigned one package's tests: the shape the
+// multi-agent skill hands out, and the shape the gate deny is scoped to.
+func narrowLease() types.Lease {
+	return types.Lease{
+		ID:         "harness/lease-scoped-deny",
+		Goal:       "lease-scoped denies in the guard",
+		OwnedPaths: []string{"cmd/magus/**"},
+		Validation: "magus run go::go-test . -- ./internal/ledger/",
+		State:      types.StateRunning,
+		Registered: 1,
+	}
+}
+
+// TestDenyLeaseScopedGate pins the refusal and what it has to carry: the lease, the
+// command, and the row field that decided it, so a reader can repair the row instead
+// of routing around the guard.
+func TestDenyLeaseScopedGate(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+
+	for _, command := range []string{
+		"./magus affected ci --no-default-charms",
+		"magus run ci .",
+		"mise exec -- ./magus affected ci",
+	} {
+		reason := denyLeaseScopedGate(ctx, "harness/lease-scoped-deny", command)
+		require.NotEmpty(t, reason, "%q", command)
+		assert.Contains(t, reason, "harness/lease-scoped-deny", "the denial must name the lease")
+		assert.Contains(t, reason, command, "the denial must name what it refused")
+		assert.Contains(t, reason, "validation", "the denial must name the field that decided it")
+		assert.Contains(t, reason, "./internal/ledger/", "the denial must hand back the check to run instead")
+	}
+}
+
+// TestDenyLeaseScopedGateStaysQuiet covers every silence. The rule is a seatbelt for
+// harnesses that opt in: each of these is a case where nothing declared the gate to be
+// out of scope, and a guard that cannot evaluate a rule must not block a tool call.
+func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+
+	t.Run("no lease", func(t *testing.T) {
+		assert.Empty(t, denyLeaseScopedGate(ctx, "", "./magus affected ci"))
+	})
+
+	t.Run("a lease with no row", func(t *testing.T) {
+		assert.Empty(t, denyLeaseScopedGate(ctx, "harness/absent", "./magus affected ci"))
+	})
+
+	t.Run("a terminal row", func(t *testing.T) {
+		lease := narrowLease()
+		lease.State = types.StatePass
+		done, _ := fleetFixture(t, lease)
+		assert.Empty(t, denyLeaseScopedGate(done, lease.ID, "./magus affected ci"))
+	})
+
+	t.Run("a row that declared no validation", func(t *testing.T) {
+		lease := narrowLease()
+		lease.Validation = ""
+		undeclared, _ := fleetFixture(t, lease)
+		assert.Empty(t, denyLeaseScopedGate(undeclared, lease.ID, "./magus affected ci"))
+	})
+
+	t.Run("a row whose validation names the gate", func(t *testing.T) {
+		for _, validation := range []string{"ci", "magus affected ci", "magus run ci ."} {
+			lease := narrowLease()
+			lease.Validation = validation
+			owns, _ := fleetFixture(t, lease)
+			assert.Empty(t, denyLeaseScopedGate(owns, lease.ID, "./magus affected ci"), "%q", validation)
+		}
+	})
+
+	t.Run("a command that is not the gate", func(t *testing.T) {
+		assert.Empty(t, denyLeaseScopedGate(ctx, "harness/lease-scoped-deny", "./magus run go-build ."))
+		assert.Empty(t, denyLeaseScopedGate(ctx, "harness/lease-scoped-deny", "./magus run go::go-test . -- -run Ci ./cmd/magus/"))
+	})
+
+	t.Run("no trail location", func(t *testing.T) {
+		// Pinned EMPTY rather than left unpinned, so the case cannot reach the developer's
+		// own ledger and grade against whatever plan they are really running.
+		nowhere := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+		assert.Empty(t, denyLeaseScopedGate(nowhere, "harness/lease-scoped-deny", "./magus affected ci"))
+	})
+}
+
+// TestHookCmdDeniesTheGateUnderANarrowLease proves the WIRING. The rule itself is covered
+// above; what this pins is that hookCmd reaches it, because a rule nothing calls never
+// fires however well it is tested.
+func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
+	global = globalFlags{}
+	// The hook falls back to the environment for the lease, so a developer or CI job that
+	// exported one would decide the control case below.
+	t.Setenv(trail.EnvBaggage, "")
+	ctx, _ := fleetFixture(t, narrowLease())
+	command := "./magus affected ci --no-default-charms"
+
+	var denied bytes.Buffer
+	err := hookCmd(ctx, strings.NewReader(command), &denied,
+		[]string{"--lease", "harness/lease-scoped-deny", "-o", "name"})
+	require.Error(t, err, "a deny that exits 0 blocks nothing: the host runs the command anyway")
+	assert.Equal(t, "deny\n", denied.String())
+
+	var unleased bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader(command), &unleased, []string{"-o", "name"}))
+	assert.Equal(t, "pass\n", unleased.String(), "a caller naming no lease is scoped by nobody's row")
 }

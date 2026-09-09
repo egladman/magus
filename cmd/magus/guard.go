@@ -285,6 +285,14 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				verdict.Context = held
 			}
 		}
+		// The lease ledger's half of the command surface. Ranked BELOW the rules above,
+		// unlike the write arm where it speaks first: those refuse a command whoever runs
+		// it, and a sibling checkout's gate is the wrong tree before it is the wrong scope.
+		if verdict.Decision != "deny" {
+			if reason := denyLeaseScopedGate(ctx, actingLease, input.Value); reason != "" {
+				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
+			}
+		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
 		// advisory's own answer is to run a narrower target, and firing on that
 		// narrower target argues with the caller for doing what it asked. The narrow

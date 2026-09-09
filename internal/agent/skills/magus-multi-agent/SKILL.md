@@ -90,6 +90,12 @@ composition{{if .Full}}. A worker hand-sequencing lint, format, and test is re-d
 order the magusfile already owns, and the step it forgets fails silently by
 omission{{end}}.
 
+A lease's validation is that narrow target and never the gate; the guard reads
+the row and denies `ci` to any worker whose validation names something else. The
+root gates ONCE, in its own tree, after every unit lands{{if .Full}}, which is
+what stops seven fanned-out workers from each running the whole pipeline
+concurrently on one machine{{end}}.
+
 Decide each lease's validation PLANE with its target. A worker environment that
 cannot execute magus at all - an isolated tree with no usable binary, or a
 guard that routes raw language tools back to targets it cannot run - cannot

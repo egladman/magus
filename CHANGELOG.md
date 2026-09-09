@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   fires once per cache key, so an edit that moves the inputs speaks again; `-s` keeps it
   and `--no-hints` drops it. The result record carries `"hint": "unchanged-failure"` in
   `-o jsonl`, a stable id to count instead of the wording.
+- **A lease's declared boundary is enforced, not merely recorded.** Under a lease with a
+  live ledger row, the agent guard now denies a write outside every entry in that row's
+  `owned_paths`, any write at all by a `read_only` row, and a command running the `ci`
+  gate when the row's `validation` names something narrower. Each denial names the lease,
+  the path or command, and the row field that decided it, so a reader can repair the row.
+  An empty `owned_paths` on a row that is not `read_only`, an empty `validation`, a caller
+  naming no lease, and a lease with no live row are all unaffected: an absent declaration
+  is a boundary nobody wrote rather than one of size zero, and the guard stays a seatbelt
+  for a harness that opted in.
 
 ### Fixed
 

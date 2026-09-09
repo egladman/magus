@@ -350,10 +350,21 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // gradeAgainstOwnLease judges a write made by a lease that IS in the live set.
 //
 // Forbidden beats owned, because a forbidden entry inside an owned tree is the more
-// specific of two declarations the same orchestrator wrote. A write that no live lease
-// claims passes: an orchestrator's owned set is a plan, not a census, and denying on
-// unclaimed ground would block a lease from a file nobody is competing for.
+// specific of two declarations the same orchestrator wrote. A write outside a DECLARED
+// owned set is denied whether or not another lease claims the path: the set is the lane
+// the orchestrator handed out, and a worker that widens its own lane is the failure the
+// declaration exists to catch. An EMPTY owned set is not a lane of size zero, it is a
+// boundary nobody declared, so it scopes nothing.
 func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeGrade {
+	// Ahead of the registration rule below: a read-only lease has no base to register for
+	// a write it is not supposed to be making, so asking it to checkpoint first and then
+	// denying the write anyway would be two refusals for one mistake.
+	if me.ReadOnly {
+		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+			"magus workspace: report what you found to the orchestrator instead of writing it, or have it clear read_only and declare owned_paths for lease %s with the "+hint.ToolLedger.String()+" tool, then retry.\n"+
+				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
+			me.ID, me.ID, goalLine(me), rel)}
+	}
 	// BEFORE the path checks, because an unregistered lease should not be writing anywhere,
 	// not merely outside its lane. A checkpoint is what says which base the work applies to and
 	// what makes its diff locatable afterwards (it records a revision and a patch DIGEST, so it
@@ -406,7 +417,13 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the lease ledger exists to make visible; this guard is where the declaration gets read.",
 			owner.ID, rel, owner.ID, goalLine(owner), owner.State, me.ID)}
 	}
-	return writeGrade{}
+	if len(me.OwnedPaths) == 0 {
+		return writeGrade{}
+	}
+	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+		"magus workspace: write inside the paths lease %s was given (%s), or ask the orchestrator to widen owned_paths with the "+hint.ToolLedger.String()+" tool, then retry.\n"+
+			"%s is outside every entry in the owned_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
+		me.ID, strings.Join(me.OwnedPaths, ", "), rel, me.ID, goalLine(me))}
 }
 
 // liveLeases are the rows a write can still collide with: declared and running.

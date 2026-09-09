@@ -106,7 +106,11 @@ import (
 // 56: magus-architecture-review gains "Say when not to build it". It already applied
 // that test to a graph kind, which earns its place only by answering a question the
 // others cannot; nothing applied it to a mechanism that ACTS.
-const SkillVersion = 56
+// 57: magus-multi-agent says what a lease's validation is FOR. The field declared a
+// narrow target and enforced nothing, so seven fanned-out workers each ran the whole
+// pipeline concurrently; the guard now denies the gate under a lease that declared
+// something narrower, and the skill is where a worker learns why before it is refused.
+const SkillVersion = 57
 
 const skillLicense = "GPL-3.0-or-later"
 

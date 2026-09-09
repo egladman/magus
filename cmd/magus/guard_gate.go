@@ -2,15 +2,18 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/types"
 )
 
@@ -196,4 +199,67 @@ func gateRepeatAdvice(runs int, spent time.Duration) string {
 func gateRepeatBrief(runs int, spent time.Duration) string {
 	return fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock. `%s` lists narrower targets.\n",
 		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second), hint.LsTargets.With("<project>"))
+}
+
+// denyLeaseScopedGate refuses the gate to a lease that was handed a narrower check, and
+// returns "" for everybody else.
+//
+// The gate runs ONCE per branch, in the orchestrator's tree, after every unit lands. A
+// delegated worker's `validation` is the narrow target it was assigned, and until this
+// rule the field declared that and enforced nothing: seven workers each ran the whole
+// pipeline concurrently on one machine because every brief ended with it (2026-09-09).
+// Gate redundancy cannot catch that, since it keys on identical tree content and seven
+// worktrees are seven trees.
+//
+// Same seatbelt contract gradeLeasedWrite documents. A caller naming no lease, a lease
+// with no live row, an unreadable ledger, and a row that declared no validation all pass:
+// the last of those is a boundary nobody wrote, not a narrow one. A person running their
+// own gate names no lease and never reaches this rule.
+func denyLeaseScopedGate(ctx context.Context, actingLease, command string) string {
+	if actingLease == "" || !commandRunsGate(command) {
+		return ""
+	}
+	me, ok := actingLiveLease(ctx, actingLease)
+	if !ok || me.Validation == "" || validationNamesGate(me.Validation) {
+		return ""
+	}
+	return fmt.Sprintf(
+		"magus workspace: run `%s` instead, which is the check lease %s was assigned. The orchestrator gates once, in its own tree, after every unit lands.\n"+
+			"`%s` runs the `%s` gate, and the validation field on lease %s's ledger row reads %q, which does not name it. If this lease really owns the gate, widen that field with the "+hint.ToolLedger.String()+" tool and retry.",
+		me.Validation, me.ID, command, types.TargetCI, me.ID, me.Validation)
+}
+
+// actingLiveLease reads the acting lease's own live row, reporting none whenever the
+// ledger cannot answer. An unreadable ledger and an id nobody declared are one silence
+// here: both leave nothing to judge against, and a rule the guard cannot evaluate must
+// not block a tool call.
+func actingLiveLease(ctx context.Context, actingLease string) (types.Lease, bool) {
+	if !types.ValidLeaseID(actingLease) {
+		return types.Lease{}, false
+	}
+	location := hookActivityTrail(ctx)
+	if location.base == "" {
+		return types.Lease{}, false
+	}
+	leases, err := ledger.NewStore(ledger.Location{CacheDir: location.base, Root: location.workspace}).List()
+	if err != nil {
+		return types.Lease{}, false
+	}
+	return liveLease(liveLeases(leases), actingLease)
+}
+
+// validationNamesGate reports whether a lease's declared validation IS the gate, in which
+// case the lease owns it and nothing is refused.
+//
+// Read as words rather than through parseGuardCommands: the field is a declaration a
+// person wrote, and `ci`, `magus run ci` and `affected ci` are all things they write. A
+// stray `ci` elsewhere in the field reads as ownership and clears the deny, which is the
+// direction this rule fails in on purpose.
+func validationNamesGate(validation string) bool {
+	for _, word := range strings.Fields(validation) {
+		if t, err := types.ParseTarget(word); err == nil && t.Name == types.TargetCI {
+			return true
+		}
+	}
+	return false
 }

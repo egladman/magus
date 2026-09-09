@@ -212,6 +212,14 @@ disarmed the guard for that call, and magus now sends it nothing.
   dependency graph knows whether the two are genuinely independent, which is why
   this advises rather than denies.
 
+- The `ci` gate, under a lease whose ledger row declares a narrower
+  `validation`: the gate runs once per branch, in the orchestrator's tree, after
+  every unit lands, and the deny hands back the narrow target this worker was
+  assigned. A caller naming no lease, a lease with no live row, a row that
+  declared no validation, and a row whose validation names `ci` are all
+  unaffected. See
+  [what the guard enforces under a lease](leases.md#what-the-guard-enforces-under-a-lease).
+
 Everything else about the command itself passes. Two rules then read state
 outside the command line, and speak only into the silence the rules above leave:
 
@@ -264,10 +272,12 @@ against what concurrent leases declared they own (see
 file is wasteful rather than destructive; the other two deny, on the provenance
 trigger and on a collision no later rule can outrank.
 
-The lease rule denies only where two DECLARED boundaries collide - an enrolled
-lease writing onto another live lease's owned paths, onto its own forbidden
-paths, or writing at all before it has registered the base it landed on. Four
-cases it cannot decide that way advise instead:
+The lease rule denies only what a DECLARATION settles - an enrolled lease writing
+onto another live lease's owned paths, onto its own forbidden paths, outside
+every entry in its own owned paths, at all when its row is `read_only`, or at all
+before it has registered the base it landed on. An empty owned list on a row that
+is not `read_only` is a boundary nobody wrote rather than one of size zero, and
+scopes nothing. Four cases the rule cannot decide that way advise instead:
 
 - The ledger exists but will not parse. It says no boundary was checked rather
   than blocking on a file it cannot read, because a lease whose boundary

@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5330,
-  "edge_count": 9478,
+  "node_count": 5331,
+  "edge_count": 9479,
   "relations": [
     {
       "id": "annotates",
@@ -16602,6 +16602,16 @@
       "source": "docs/guides/integrations/agents/leases.md#what-magus-never-does-here",
       "attrs": {
         "anchor": "what-magus-never-does-here",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/leases.md#what-the-guard-enforces-under-a-lease",
+      "kind": "docsection",
+      "label": "What the guard enforces under a lease",
+      "source": "docs/guides/integrations/agents/leases.md#what-the-guard-enforces-under-a-lease",
+      "attrs": {
+        "anchor": "what-the-guard-enforces-under-a-lease",
         "level": "2"
       }
     },
@@ -88209,6 +88219,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#what-magus-never-does-here",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#what-the-guard-enforces-under-a-lease",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
