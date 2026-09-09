@@ -152,6 +152,10 @@ func leaseWorkspace(t *testing.T, row types.Lease) (root, cacheDir string) {
 	root = filesystem.ResolveRulePath(t.TempDir())
 	cacheDir = t.TempDir()
 	t.Setenv("TMPDIR", cacheDir)
+	// The ledger lives in the per-repository state dir, and NarrowToLease resolves it
+	// through the environment, so without this the fixture's rows land in the
+	// developer's own ledger and the store under test is the real one.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	for _, dir := range []string{"pkg/a/gen", "pkg/a/keep", "pkg/b"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755))
 	}
