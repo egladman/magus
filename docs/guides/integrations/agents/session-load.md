@@ -14,7 +14,7 @@ own session log is the independent witness for all three.
 magus does not read that log. Extraction is yours, one recipe per host, exactly
 as the [guard hook templates](guard-templates.md) are yours: files you download,
 edit, and own from then on.
-[Doctrine](../../doctrine.md#the-host-wiring-is-yours) records that trade and
+[Doctrine](../../../doctrine.md#the-host-wiring-is-yours) records that trade and
 what it costs you. The reason is narrower than it sounds. Only OpenCode publishes
 an export contract; the other two formats are de-facto and versioned per record,
 so a parser inside magus would make every host format change a magus release.
