@@ -452,14 +452,18 @@ const loadHookTextCap = 2000
 // emits one bad line emits thousands, and the first few say which field is wrong.
 const loadRejectsShown = 5
 
+// sessionLoadSummary is what a load reports, and the JSON shape `-o json` emits. The
+// events themselves ride on it between the read and the store write, and stay out of
+// the report: a load prints what it did, never the stream back.
 type sessionLoadSummary struct {
 	Loaded  int `json:"loaded"`
 	Deduped int `json:"deduped"`
 	Dropped int `json:"dropped_other_repo"`
 	// Rejects is one line per input line that was not loaded, with the reason.
-	Rejects []string       `json:"rejects,omitempty"`
-	ByKind  map[string]int `json:"by_kind,omitempty"`
-	Store   string         `json:"store"`
+	Rejects []string             `json:"rejects,omitempty"`
+	ByKind  map[string]int       `json:"by_kind,omitempty"`
+	Store   string               `json:"store"`
+	Events  []sessions.LoadEvent `json:"-"`
 }
 
 func sessionLoadUsage(fs *flag.FlagSet) func() {
@@ -514,11 +518,11 @@ func sessionLoad(root string, args []string) error {
 		in = f
 	}
 
-	events, summary, err := readLoadStream(in, dir)
+	summary, err := readLoadStream(in, dir)
 	if err != nil {
 		return err
 	}
-	result, err := sessions.LoadEvents(dir, events, sessions.SessionStart{
+	result, err := sessions.LoadEvents(dir, summary.Events, sessions.SessionStart{
 		Workspace: root,
 		Command:   "session load",
 		Version:   version,
@@ -546,14 +550,13 @@ func sessionLoad(root string, args []string) error {
 }
 
 // readLoadStream decodes the stream, judges what it must, and returns the events
-// worth storing alongside the counts and the per-line diagnostics.
+// worth storing on the summary, with the counts and the per-line diagnostics.
 //
 // A rejected line does not stop the read, and neither does an overlong one. A recipe
 // emitting one bad shape emits it for a whole transcript, and loading the rest is what
 // lets the reader fix the recipe and re-run without losing what already worked.
-func readLoadStream(in io.Reader, dir string) ([]sessions.LoadEvent, sessionLoadSummary, error) {
+func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
 	var summary sessionLoadSummary
-	var events []sessions.LoadEvent
 	reject := func(line int, format string, args ...any) {
 		summary.Rejects = append(summary.Rejects, fmt.Sprintf("line %d: ", line)+fmt.Sprintf(format, args...))
 	}
@@ -563,7 +566,7 @@ func readLoadStream(in io.Reader, dir string) ([]sessions.LoadEvent, sessionLoad
 	for line := 1; ; line++ {
 		raw, err := r.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
-			return nil, summary, fmt.Errorf("magus session load: read stream: %w", err)
+			return summary, fmt.Errorf("magus session load: read stream: %w", err)
 		}
 		last := errors.Is(err, io.EOF)
 		switch raw = strings.TrimSpace(raw); {
@@ -574,13 +577,13 @@ func readLoadStream(in io.Reader, dir string) ([]sessions.LoadEvent, sessionLoad
 			if ev, reason := decodeLoadEvent(raw, sameRepo); reason != "" {
 				reject(line, "%s", reason)
 			} else if ev != nil {
-				events = append(events, *ev)
+				summary.Events = append(summary.Events, *ev)
 			} else {
 				summary.Dropped++
 			}
 		}
 		if last {
-			return events, summary, nil
+			return summary, nil
 		}
 	}
 }
