@@ -2,11 +2,16 @@ package interp
 
 import (
 	"context"
+	"log/slog"
 	"path/filepath"
 	"time"
 
 	"github.com/egladman/magus/types"
 )
+
+// levelTrace mirrors config.LevelTrace (slog.LevelDebug-4), duplicated for the reason
+// internal/cache duplicates it: config imports this tree, so it cannot be imported back.
+const levelTrace slog.Level = slog.LevelDebug - 4
 
 // withDeclaredCeiling bounds one magusfile target body by the timeout its magusfile
 // declared, and is a pass-through for a target that declares none.
@@ -74,4 +79,22 @@ func projectAt(ws types.WorkspaceReader, dir string) *types.Project {
 		}
 	}
 	return nil
+}
+
+// logCeiling reports where a ceiling-bearing body's time went, at trace level.
+//
+// Emitted on every such body, not only the ones that expire. A ceiling that fires already
+// reports this split in its error, but the number worth having comes from the runs that
+// PASS: whether a declared timeout is measuring the target or measuring the queue is a
+// question about the steady state, and by the time one expires the answer arrives too late
+// to be a measurement.
+func logCeiling(ctx context.Context, target string, ceiling, elapsed time.Duration) {
+	if ceiling <= 0 || !slog.Default().Enabled(ctx, levelTrace) {
+		return
+	}
+	waited := types.DependencyWait(ctx)
+	slog.LogAttrs(ctx, levelTrace, "target.ceiling",
+		slog.String("target", target), slog.Duration("ceiling", ceiling),
+		slog.Duration("elapsed", elapsed), slog.Duration("composed", waited),
+		slog.Duration("own", max(elapsed-waited, 0)))
 }
