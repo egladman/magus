@@ -17,10 +17,20 @@ model=$5
 effort=$6
 
 # The session inherits nothing it was not given. Arms that need a lever pass its
-# name through RUNNER_ENV_EXTRA, which run.sh fills from arms/<arm>/env.
+# name through RUNNER_ENV_EXTRA, which run.sh fills from arms/<arm>/env, or
+# export it from the worktree's .benchmark/env.sh, which provision.sh writes per
+# run (the pinned binary on PATH, the isolated CLAUDE_CONFIG_DIR, rotation off).
+# Every name that file exports rides through the scrub.
 env_keep=(HOME PATH USER LOGNAME SHELL TERM TMPDIR LANG LC_ALL ANTHROPIC_API_KEY ANTHROPIC_BASE_URL)
 # shellcheck disable=SC2206 # RUNNER_ENV_EXTRA is a space-separated name list
 env_keep+=(${RUNNER_ENV_EXTRA:-})
+if [[ -f $wt/.benchmark/env.sh ]]; then
+    # shellcheck disable=SC1091 # written per run by the arm's provision.sh
+    . "$wt/.benchmark/env.sh"
+    while IFS= read -r name; do
+        env_keep+=("$name")
+    done < <(grep -o '^[A-Z_][A-Z0-9_]*=' "$wt/.benchmark/env.sh" | tr -d '=')
+fi
 
 env_args=()
 for name in "${env_keep[@]}"; do
