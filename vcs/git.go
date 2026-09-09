@@ -1878,17 +1878,17 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	if !dirty {
 		return "", nil
 	}
-	idx, err := os.CreateTemp("", "magus-preserve-index-")
+	// A private DIRECTORY rather than a temp file: git writes the index itself, so handing
+	// it a path means creating a name and stepping back off it, and on a shared tmpdir
+	// anyone can take that name in between. Only magus can write inside a 0700 directory
+	// it just minted, so the fixed name within it cannot be occupied by anyone else.
+	// RemoveAll takes the whole thing on every return, git's file included.
+	idxDir, err := os.MkdirTemp("", "magus-preserve-index-")
 	if err != nil {
 		return "", fmt.Errorf("git preserve: temp index: %w", err)
 	}
-	idxPath := idx.Name()
-	// Created only for its NAME: git writes this file itself, and an open handle would
-	// block that on Windows. Both errors are deliberately dropped - the file is about to
-	// be recreated by git, and the defer below removes it either way.
-	_ = idx.Close()
-	_ = os.Remove(idxPath)
-	defer os.Remove(idxPath)
+	defer os.RemoveAll(idxDir)
+	idxPath := filepath.Join(idxDir, "index")
 
 	run := func(args ...string) (string, error) {
 		cmd := vcsExec(ctx, "git", args...)
@@ -1972,19 +1972,19 @@ func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time
 		return strings.TrimSpace(string(out)), err
 	}
 	// The subject is LAST in the format because it is the only field that can hold a
-	// space, which is what makes a three-way split unambiguous.
+	// space, which is what makes the split unambiguous.
 	listed, err := run("for-each-ref", "--sort=committerdate",
-		"--format=%(refname) %(committerdate:unix) %(contents:subject)", preservedRefPrefix)
+		"--format=%(refname) %(objectname) %(committerdate:unix) %(contents:subject)", preservedRefPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("git prune-preserved: for-each-ref: %w", err)
 	}
 	var dropped []string
 	for _, line := range strings.Split(listed, "\n") {
-		fields := strings.SplitN(strings.TrimSpace(line), " ", 3)
-		if len(fields) < 3 {
+		fields := strings.SplitN(strings.TrimSpace(line), " ", 4)
+		if len(fields) < 4 {
 			continue
 		}
-		name, unix, subject := fields[0], fields[1], fields[2]
+		name, sha, unix, subject := fields[0], fields[1], fields[2], fields[3]
 		secs, convErr := strconv.ParseInt(unix, 10, 64)
 		if convErr != nil {
 			continue
@@ -1996,7 +1996,10 @@ func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time
 		if subject != preserveMessage {
 			continue
 		}
-		if _, err := run("update-ref", "-d", name); err != nil {
+		// Deleted against the SHA that passed the checks above, so a ref another process
+		// moved in between is refused rather than dropped on the strength of a listing
+		// that no longer describes it.
+		if _, err := run("update-ref", "-d", name, sha); err != nil {
 			return dropped, fmt.Errorf("git prune-preserved: update-ref -d %s: %w", name, err)
 		}
 		dropped = append(dropped, strings.TrimPrefix(name, preservedRefPrefix))

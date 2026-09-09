@@ -960,3 +960,74 @@ func TestGitPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
 	assert.Contains(t, refs, inside, "dropped a capture still inside the retention window")
 	assert.NotContains(t, refs, outside, "kept a capture past the retention window")
 }
+
+// gitShimMovingARefOnce puts a `git` ahead of the real one on PATH that passes every
+// command through and, the first time it sees a for-each-ref, moves ref to sha behind the
+// caller's back. It is the only seam that opens the window between the listing
+// PrunePreserved vets a ref on and the delete it issues afterwards.
+func gitShimMovingARefOnce(t *testing.T, dir, ref, sha string) {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	require.NoError(t, err)
+	shimDir := t.TempDir()
+	marker := filepath.Join(shimDir, "moved")
+	script := fmt.Sprintf(`#!/bin/sh
+saw=
+for a in "$@"; do
+	if [ "$a" = for-each-ref ]; then saw=1; fi
+done
+%q "$@"
+status=$?
+if [ -n "$saw" ] && [ ! -e %q ]; then
+	: > %q
+	%q -C %q update-ref %q %q >/dev/null 2>&1
+fi
+exit $status
+`, real, marker, marker, real, dir, ref, sha)
+	require.NoError(t, os.WriteFile(filepath.Join(shimDir, "git"), []byte(script), 0o755))
+	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// TestGitPrunePreservedRefusesARefThatMoved pins the delete to the SHA the listing vetted.
+// The name, the date and the subject all describe the commit a ref pointed at when
+// for-each-ref answered, and `update-ref -d <ref>` with no old value deletes whatever it
+// points at when the delete lands. Between the two, a capture magus would never have
+// chosen is deletable, and this is user work with no other copy.
+func TestGitPrunePreservedRefusesARefThatMoved(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	tree := gitCapture(t, dir, nil, "rev-parse", "HEAD^{tree}")
+
+	when := time.Now().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+	stale := gitCapture(t, dir, []string{"GIT_COMMITTER_DATE=" + when, "GIT_AUTHOR_DATE=" + when},
+		"commit-tree", tree, "-p", "HEAD", "-m", preserveMessage)
+	gitRun(t, dir, "update-ref", preservedRefPrefix+stale, stale)
+	// Today's capture, which passes no check the pruner makes and must survive.
+	fresh := gitCapture(t, dir, nil, "commit-tree", tree, "-p", "HEAD", "-m", preserveMessage)
+
+	gitShimMovingARefOnce(t, dir, preservedRefPrefix+stale, fresh)
+	_, err := gitVCS{}.PrunePreserved(t.Context(), dir, time.Now().Add(-time.Hour))
+
+	require.Error(t, err, "deleted a ref that moved after it was vetted")
+	assert.Equal(t, fresh, gitCapture(t, dir, nil, "rev-parse", preservedRefPrefix+stale),
+		"the capture the ref moved to is gone")
+}
+
+// TestGitPreserveLeavesNoTempIndexBehind holds the cleanup half of the scratch index:
+// git creates the file, so nothing in the working tree records that it existed and only
+// Preserve's own removal bounds it.
+func TestGitPreserveLeavesNoTempIndexBehind(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
+	handle, err := gitVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, handle)
+
+	left, err := filepath.Glob(filepath.Join(tmp, "magus-preserve-index-*"))
+	require.NoError(t, err)
+	assert.Empty(t, left, "left the scratch index behind in the shared tmpdir")
+}
