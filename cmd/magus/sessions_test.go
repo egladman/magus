@@ -234,7 +234,6 @@ func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
 	assert.Contains(t, out, "invOld", "a session inside the window is still listed")
 }
 
-
 // loadStream writes lines to a file and loads them, returning what the command
 // printed. --file rather than stdin because the flag is the path a recipe uses and
 // swapping os.Stdin would test the plumbing rather than the load.

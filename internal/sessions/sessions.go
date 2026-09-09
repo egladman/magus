@@ -493,7 +493,6 @@ func Summarize(fold Fold) []Summary {
 	return out
 }
 
-
 // The second producer of this store, beside the run path: a host transcript,
 // normalized outside magus and loaded through `magus session load`. It is what
 // closes the join [SessionStart.Host] names as missing, because a loaded session

@@ -70,7 +70,7 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 	case "notify":
 		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, show, load, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
+		return usagef("magus session: unknown subcommand %q (want ls, show, load, lease, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
 	}
 }
 
@@ -409,7 +409,6 @@ func sessionsSince(summaries []sessions.Summary, cutoff time.Time) []sessions.Su
 	}
 	return out
 }
-
 
 // `magus session load` and `magus session show`: the read and write sides of a
 // host transcript loaded into the session store.

@@ -56,15 +56,15 @@ same metrics.jsonl and seed produce byte-identical analysis.json.
 
 One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
 
-| File | Read for |
-| --- | --- |
-| `meta.json` | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason |
-| `transcript.jsonl` | tokens, dollars, turns, tool calls, file reads, tool-result bytes |
-| `final.diff` | invariant violations |
-| `check.exit` | success |
-| `timing.json` | wall_ms, time_to_first_edit_ms, time_to_done_ms |
-| `activity/events.jsonl` | guard events (optional) |
-| `check.txt`, `probe.txt` | kept for the human, not parsed |
+| File                     | Read for                                                                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `meta.json`              | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason |
+| `transcript.jsonl`       | tokens, dollars, turns, tool calls, file reads, tool-result bytes                                                                   |
+| `final.diff`             | invariant violations                                                                                                                |
+| `check.exit`             | success                                                                                                                             |
+| `timing.json`            | wall_ms, time_to_first_edit_ms, time_to_done_ms                                                                                     |
+| `activity/events.jsonl`  | guard events (optional)                                                                                                             |
+| `check.txt`, `probe.txt` | kept for the human, not parsed                                                                                                      |
 
 ## Metric definitions
 

@@ -477,7 +477,6 @@ func writeRaw(t *testing.T, dir, session string, records []Record) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, session+fileExt), []byte(b.String()), 0o644))
 }
 
-
 func loadable(session, host, ref string, at int64) LoadEvent {
 	return LoadEvent{Session: session, Event: AgentEvent{
 		Host: host, Event: EventFileRead, Ref: ref, At: at, Text: ref + ".go",

@@ -14,10 +14,10 @@ in the memory store.
 
 ## Arms
 
-| Arm | What the worktree gets |
-| --- | --- |
+| Arm       | What the worktree gets                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------- |
 | `rampant` | magus binary and a magusfile, no agent surface: no skills, no hooks, no MCP, no MAGUS.md, a minimal CLAUDE.md |
-| `full` | everything `magus agent install` ships, plus hook wiring, MCP and the real routing index |
+| `full`    | everything `magus agent install` ships, plus hook wiring, MCP and the real routing index                      |
 
 The arms differ only in provisioning. Model, effort, prompt, permission mode,
 budget caps, worktree layout and fixture SHA are identical.
@@ -78,16 +78,16 @@ itself. Override with `BENCH_FIXTURE_REPO` only for runner self-tests.
 
 `results/<run-id>/`, where run-id is `<arm>-<task>-r<rep>-<utc-stamp>`:
 
-| File | Contents |
-| --- | --- |
-| `meta.json` | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason |
-| `transcript.jsonl` | the raw stream-json, unmodified |
-| `final.diff` | `git diff` of the worktree after the run, untracked files included |
-| `check.txt`, `check.exit` | acceptance-check output and exit code (0 = pass) |
-| `timing.json` | wall_ms, time_to_first_edit_ms, time_to_done_ms |
-| `activity/` | copy of the worktree's `.magus/activity/`, when the arm produced one |
-| `probe.txt` | arm-verification output, pass or fail |
-| `prompt.md`, `agent.log`, `setup.log` | the prompt as given, agent stderr, seed/provision output |
+| File                                  | Contents                                                                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `meta.json`                           | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason |
+| `transcript.jsonl`                    | the raw stream-json, unmodified                                                                                                     |
+| `final.diff`                          | `git diff` of the worktree after the run, untracked files included                                                                  |
+| `check.txt`, `check.exit`             | acceptance-check output and exit code (0 = pass)                                                                                    |
+| `timing.json`                         | wall_ms, time_to_first_edit_ms, time_to_done_ms                                                                                     |
+| `activity/`                           | copy of the worktree's `.magus/activity/`, when the arm produced one                                                                |
+| `probe.txt`                           | arm-verification output, pass or fail                                                                                               |
+| `prompt.md`, `agent.log`, `setup.log` | the prompt as given, agent stderr, seed/provision output                                                                            |
 
 `exit_reason` is one of `ok`, `timeout`, `agent_error`, `seed_failed`,
 `provision_failed`, `probe_failed`, `control_error`, or a control verdict
