@@ -62,8 +62,8 @@ var machineWaiterSeq atomic.Int64
 const ExitCodeMachineBusy = 75
 
 // ExitCodeMachineDeclaration is what a PERMANENT machine refusal asks for: 78, EX_CONFIG.
-// Both refusals that carry it name the thing to change - a declaration that exceeds the
-// whole budget, or an environment variable a nested magus was started without - so they
+// Both refusals that carry it name the thing to change (a declaration that exceeds the
+// whole budget, or an environment variable a nested magus was started without), so they
 // are configuration answers rather than timing ones.
 const ExitCodeMachineDeclaration = 78
 
@@ -284,9 +284,9 @@ func machineWaitingMessage(c types.MachineClaim, v types.MachineVerdict) string 
 // matching everywhere it already did.
 type machineRefusal struct {
 	error
-	// exit is per refusal, because they are not the same kind of answer. EX_TEMPFAIL says
-	// "try again"; a declaration that cannot fit and a nested magus that lost its ancestry
-	// will both answer the same way forever, and a wrapper that retries on 75 loops on them.
+	// exit is per refusal. EX_TEMPFAIL says "try again"; a declaration that cannot fit and
+	// a nested magus that lost its ancestry both answer the same way forever, so a wrapper
+	// retrying on 75 would loop on them.
 	exit int
 }
 
@@ -306,19 +306,17 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
 // machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit
 // in the whole budget, so an empty machine would refuse it too.
 //
-// PERMANENT on purpose, where Buck2 clamps an oversized request down to the machine and
-// Bazel runs one anyway while nothing else is running. Both are right for what they
-// arbitrate and wrong for this. Buck2's permits are an abstract share, so capping one
-// changes a scheduling number and nothing physical; a claim here is megabytes of resident
-// memory with a measured ground truth in MGS1030, and clamping 26 GiB to 24 GiB does not
-// make the process use less. It moves the arbiter from this gate to the OOM killer, which
-// picks its victim from the whole machine rather than from the offender. Bazel's idle rule
-// ends the same way and costs one thing more here: a claim admitted over the budget is a
-// floor that freeSlot then seats another claim on top of, and the !Fits early return that
-// keeps a free seat from being a waiver stops firing for exactly the claims it exists for.
-//
-// So over-admission stays where freeSlot left it: at most one claim per stalled ancestor,
-// and never a claim larger than the whole budget.
+// PERMANENT on purpose, where Buck2 clamps an oversized request to the machine and Bazel
+// runs one anyway while nothing else is running. Buck2's permits are an abstract share,
+// so capping one moves a scheduling number; a claim here is megabytes of resident memory
+// with a measured ground truth in MGS1030, and clamping 26 GiB to 24 GiB does not make
+// the process use less. It moves the arbiter from this gate to the OOM killer, which
+// picks its victim from the whole machine rather than from the offender. Bazel's idle
+// rule ends the same way and costs one thing more: a claim admitted over the budget is a
+// floor that freeSlot seats another claim on top of, and the !Fits early return that
+// keeps a free seat from being a waiver stops firing for exactly the claims it exists
+// for. So over-admission stays where freeSlot left it: at most one claim per stalled
+// ancestor, and never a claim larger than the whole budget.
 func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error {
 	return machineRefusal{exit: ExitCodeMachineDeclaration, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; %s",
@@ -337,10 +335,10 @@ var machineBudgetPercent = int(mem.UsableFraction * 100)
 // has nothing to check.
 func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
 	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
-		return fmt.Sprintf("that budget is %d%% of the memory available here, and the remainder is not spare capacity but the OS and everything else on the machine. Run `magus doctor` and read MGS1030, which holds this declaration against the peak memory magus has measured for the target: correct the declaration if it has drifted, and if it is honest this needs a bigger machine.",
+		return fmt.Sprintf("that budget is %d%% of the memory available here; the rest runs the OS and everything else. Run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
 			machineBudgetPercent)
 	}
-	return fmt.Sprintf("this machine has %d slots in total, so no state of it seats a step taking %d. Correct the declaration if it is wrong, or run this on a bigger machine.",
+	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",
 		v.BudgetSlots, max(c.Slots, 1))
 }
 

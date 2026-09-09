@@ -808,8 +808,8 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 			fmt.Fprintln(os.Stderr, "usage: magus server prune-preserved")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Drop the working-copy captures `magus vcs checkpoint --preserve` minted")
-			fmt.Fprintln(os.Stderr, "once they are past their retention. Sapling keeps its captures whatever")
-			fmt.Fprintln(os.Stderr, "this does, and Jujutsu mints none. This is the worker for")
+			fmt.Fprintln(os.Stderr, "once they are past their retention. Sapling captures survive this pass;")
+			fmt.Fprintln(os.Stderr, "Jujutsu mints none. This is the worker for")
 			fmt.Fprintln(os.Stderr, "`"+hint.ServerJob.With(jobs.NamePrunePreserved)+"`; prefer that form.")
 		}
 	}); err != nil {

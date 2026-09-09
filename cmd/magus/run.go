@@ -157,7 +157,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// on the way past, so there is already an exact handle for anything
 		// worth reading afterwards.
 		interactive.Emit(os.Stderr, fmt.Sprintf(
-			"running quietly; output refs print as targets finish, and `%s` reads any of them",
+			"running quietly; targets print an output ref as they finish, and `%s` reads one",
 			hint.QueryOutput.With("<ref>")))
 	}
 
