@@ -176,4 +176,3 @@ func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
 	assert.NotContains(t, err.Error(), "on its own work")
 	assert.Contains(t, err.Error(), "its process tree was killed")
 }
-
