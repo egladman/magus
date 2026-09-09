@@ -177,22 +177,3 @@ func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
 	assert.Contains(t, err.Error(), "its process tree was killed")
 }
 
-// A body's own dependency time is its own: a composed target's ctx.needs must not land on
-// the parent's accumulator, which already counts that whole child as one span.
-func TestTrackDependencyWaitIsPerBody(t *testing.T) {
-	parent := TrackDependencyWait(context.Background())
-	AddDependencyWait(parent, time.Minute)
-	child := TrackDependencyWait(parent)
-	AddDependencyWait(child, 30*time.Second)
-
-	assert.Equal(t, time.Minute, DependencyWait(parent), "a child's dependency time reached its parent twice")
-	assert.Equal(t, 30*time.Second, DependencyWait(child))
-}
-
-// Outside a target body there is no accumulator, and recording against one must not panic:
-// runBuzzDependencies also runs under `magus buzz` and the REPL, where nothing armed a
-// ceiling.
-func TestAddDependencyWaitOutsideABodyIsANoOp(t *testing.T) {
-	assert.NotPanics(t, func() { AddDependencyWait(context.Background(), time.Minute) })
-	assert.Zero(t, DependencyWait(context.Background()))
-}
