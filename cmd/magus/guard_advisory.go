@@ -39,6 +39,7 @@ const (
 	advisorySkillSource   advisoryKind = "skill-source"
 	advisoryRegenSource   advisoryKind = "regen-source"
 	advisoryGraphStale    advisoryKind = "graph-stale"
+	advisoryGateRepeat    advisoryKind = "gate-repeat"
 )
 
 const (

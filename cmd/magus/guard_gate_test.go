@@ -123,7 +123,9 @@ func TestAdviseRepeatGateIgnoresCheapRepeats(t *testing.T) {
 	for i := range 6 {
 		writeRun(t, dir, fmt.Sprintf("inv%d", i), now.Add(-time.Duration(i)*time.Minute), 2*time.Second, "affected", "ci")
 	}
-	assert.Empty(t, adviseRepeatGate(dir, now), "six cached gates cost seconds")
+	full, brief := adviseRepeatGate(dir, now)
+	assert.Empty(t, full, "six cached gates cost seconds")
+	assert.Empty(t, brief)
 }
 
 func TestAdviseRepeatGateFiresOnceItHasCost(t *testing.T) {
@@ -132,10 +134,17 @@ func TestAdviseRepeatGateFiresOnceItHasCost(t *testing.T) {
 	for i := range 3 {
 		writeRun(t, dir, fmt.Sprintf("inv%d", i), now.Add(-time.Duration(i*10)*time.Minute), 150*time.Second, "affected", "ci")
 	}
-	got := adviseRepeatGate(dir, now)
+	got, brief := adviseRepeatGate(dir, now)
 	assert.Contains(t, got, "3 times")
 	assert.Contains(t, got, "7m30s")
 	assert.Contains(t, got, "magus ls targets", "the advisory must not name a target")
+
+	// The repeat keeps the two facts that moved since the caller last read the full text,
+	// and the command that acts on them. A repeat nobody can act on is just noise.
+	assert.Contains(t, brief, "3 times")
+	assert.Contains(t, brief, "7m30s")
+	assert.Contains(t, brief, "magus ls targets")
+	assert.Less(t, len(brief), len(got)/2, "the repeat form must be substantially shorter than the full text")
 }
 
 // A single run is the practice working, not something to interrupt.
@@ -144,13 +153,16 @@ func TestAdviseRepeatGateIsSilentForOneRun(t *testing.T) {
 	now := time.Now()
 	writeRun(t, dir, "inv1", now.Add(-time.Minute), 10*time.Minute, "affected", "ci")
 
-	assert.Empty(t, adviseRepeatGate(dir, now))
+	full, _ := adviseRepeatGate(dir, now)
+	assert.Empty(t, full)
 }
 
 // No run log is no data, not zero runs.
 func TestAdviseRepeatGateIsSilentWithoutARunLog(t *testing.T) {
-	assert.Empty(t, adviseRepeatGate("", time.Now()))
-	assert.Empty(t, adviseRepeatGate(filepath.Join(t.TempDir(), "absent"), time.Now()))
+	absent, _ := adviseRepeatGate("", time.Now())
+	assert.Empty(t, absent)
+	missing, _ := adviseRepeatGate(filepath.Join(t.TempDir(), "absent"), time.Now())
+	assert.Empty(t, missing)
 }
 
 func TestWorkspaceRunsDirDefaultsToTheWorkspaceCache(t *testing.T) {
