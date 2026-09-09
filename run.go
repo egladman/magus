@@ -27,6 +27,7 @@ import (
 	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/observability"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
@@ -2203,6 +2204,15 @@ func charmedTarget(target string, charms []string) string {
 func attributeRun(ctx context.Context) context.Context {
 	if journal.InvocationIDFromContext(ctx) != "" {
 		return ctx
+	}
+	// Adopt the ancestry a parent magus passed down BEFORE appending self, the way
+	// cmd/magus/main.go does at its entry point. Appending self to an empty list leaves a
+	// one-element list that ancestorInvocations strips straight back to empty, and the
+	// fallbacks that read the environment fire only when ctx carries none
+	// (internal/cache/machinegate.go, lock.go): stamping first silences them and leaves
+	// the run blind to the very ancestor this identity exists to recognize.
+	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
+		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
 	}
 	id := journal.NewInvocationID()
 	return types.AppendInvocationAncestor(journal.WithInvocationID(ctx, id), os.Getpid(), id)

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,6 +64,23 @@ func TestAttributeRunNamesAnAnonymousRun(t *testing.T) {
 	require.NotEmpty(t, id, "a run reached the engine with no invocation identity")
 	assert.True(t, types.HasInvocationAncestor(ctx, os.Getpid(), id),
 		"the run is not its own ancestor, so a descendant cannot recognize the resources it holds")
+}
+
+// A library caller inside a magus process tree carries its ancestry in the environment and
+// nowhere else. Stamping only self leaves a one-element list, which reads as "this run
+// minted everything it knows" and strips to empty at the consumer, so the machine budget
+// refuses against a parent claim it can no longer excuse and the project lock can no longer
+// report MGS3007. Both fallbacks fire only on an empty ctx, so the adopt must come first.
+func TestAttributeRunAdoptsAncestryFromTheEnvironment(t *testing.T) {
+	parent := "4242:invparent"
+	t.Setenv(procrun.AncestorsEnvVar, parent)
+
+	ctx := attributeRun(context.Background())
+
+	refs := types.InvocationAncestorsFromContext(ctx)
+	require.Len(t, refs, 2, "the parent's ancestry was dropped, so this run reads as its own root")
+	assert.Equal(t, parent, refs[0], "the adopted ancestor must stay ahead of self")
+	assert.True(t, types.HasInvocationAncestor(ctx, os.Getpid(), journal.InvocationIDFromContext(ctx)))
 }
 
 // An identity already on the context is the CLI's or the daemon's, and taking a second one
