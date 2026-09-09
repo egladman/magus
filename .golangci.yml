@@ -103,12 +103,14 @@ linters:
     - testlayout
 
     # commentdash reports a comment spelling an em-dash with a spaced hyphen, which
-    # this repo bans in prose. It is compiled into ./custom-gcl and declared below,
-    # but deliberately NOT enabled: the tree carries 4513 of them, so turning it on
-    # ahead of the sweep that clears them makes `magus run lint` red on the first
-    # run. Uncomment the line below once the sweep lands. The reasoning and the
-    # per-exemption measurements are in libs/commentdash/readme.md.
-    # - commentdash
+    # this repo bans in prose. The reasoning and the per-exemption measurements are
+    # in libs/commentdash/readme.md.
+    #
+    # It only ever fires on new prose: the 4513 asides this tree carried, and the 211
+    # that wrap onto a second line, were cleared before it was enabled. What the rule
+    # exempts is therefore load-bearing rather than cosmetic, and the gofmt doc-list
+    # bullet in particular: flag one of those and the linter fights the formatter.
+    - commentdash
 
   settings:
     custom:
@@ -126,9 +128,10 @@ linters:
         original-url: github.com/egladman/magus/libs/commentdash
         settings:
           # The wrapped half is the same aside with its second clause on the next
-          # line, 281 more lines in this tree. Its fix rewraps a paragraph rather
-          # than editing one line, so it is worth a sweep of its own.
-          wrapped: false
+          # line. It is a separate setting because its fix can move a clause across
+          # a line break rather than swapping one character, which reviews as a
+          # different kind of edit.
+          wrapped: true
 
     sloglint:
       # all, not scope: EVERY slog call must take a context. `scope` would only catch a
