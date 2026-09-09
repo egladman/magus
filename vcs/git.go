@@ -1893,8 +1893,9 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 		// cmd.Dir decides the repository. Inheriting them lets an exported GIT_DIR send every
 		// command here, and the ref, into a different repository.
 		cmd.Env = append(gitEnviron(), "GIT_INDEX_FILE="+idxPath)
+		cmd.Env = append(cmd.Env, preserveIdentity...)
 		out, err := cmd.Output()
-		return strings.TrimSpace(string(out)), err
+		return strings.TrimSpace(string(out)), gitStderr(err)
 	}
 	// Seed from HEAD where there is one, so the snapshot reads as a change against the
 	// checked-out commit rather than an initial import. An unborn HEAD has nothing to read
@@ -1944,6 +1945,30 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 // and is not pushed without an explicit refspec.
 const preservedRefPrefix = "refs/magus/preserved/"
 
+// preserveIdentity is who every capture is minted as, in place of whoever configured the
+// box.
+//
+// commit-tree refuses a name or email it had to guess, so a checkout with no configured
+// identity could not capture at all: a CI runner, a container, a fresh clone, which is
+// where losing uncommitted work costs the most. Whose work a capture holds is the tree,
+// not the header, and the ref never leaves the repository. The .invalid TLD is reserved
+// (RFC 2606), so the address cannot reach anyone.
+var preserveIdentity = []string{
+	"GIT_AUTHOR_NAME=magus", "GIT_AUTHOR_EMAIL=magus@magus.invalid",
+	"GIT_COMMITTER_NAME=magus", "GIT_COMMITTER_EMAIL=magus@magus.invalid",
+}
+
+// gitStderr appends what git actually said to an exit-status error. cmd.Output captures
+// stderr into ExitError and nothing reads it, so a failure surfaces as a bare `exit status
+// 128` that names neither the command's complaint nor a way to act on it.
+func gitStderr(err error) error {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+	}
+	return err
+}
+
 // PrunePreserved deletes the refs Preserve anchored whose commit predates before.
 //
 // Keyed on the ref's COMMITTER date, which is when the capture was taken. The author date
@@ -1958,7 +1983,7 @@ func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time
 		cmd.Dir = dir
 		cmd.Env = gitEnviron()
 		out, err := cmd.Output()
-		return strings.TrimSpace(string(out)), err
+		return strings.TrimSpace(string(out)), gitStderr(err)
 	}
 	// The subject is LAST in the format because it is the only field that can hold a
 	// space, which is what makes the split unambiguous.

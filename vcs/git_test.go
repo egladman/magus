@@ -1022,3 +1022,36 @@ func TestGitPreserveLeavesNoTempIndexBehind(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, left, "left the scratch index behind in the shared tmpdir")
 }
+
+// TestGitPreserveNeedsNoConfiguredIdentity reproduces the split that hid every preserve
+// failure until CI: commit-tree refuses a name or email it guessed, so the whole feature
+// worked on a developer box and could not run on a runner, where no gitconfig names
+// anyone.
+//
+// user.useConfigOnly is what makes that reproducible anywhere. Emptying the config alone
+// does not: git then guesses user@hostname and only REFUSES the guess where it cannot
+// build a fully qualified one, so the same test passes on a laptop and fails on a runner,
+// which is the split being fixed rather than a test of it.
+func TestGitPreserveNeedsNoConfiguredIdentity(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(cfg, []byte("[user]\n\tuseConfigOnly = true\n"), 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	// Unset, not blanked: git rejects an empty ident with a different error, which would
+	// pass this test for a reason it is not about.
+	for _, name := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"} {
+		if was, ok := os.LookupEnv(name); ok {
+			t.Cleanup(func() { _ = os.Setenv(name, was) })
+			require.NoError(t, os.Unsetenv(name))
+		}
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
+	handle, err := gitVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, handle)
+	assert.Equal(t, "two", gitCapture(t, dir, nil, "show", handle+":a.txt"),
+		"the capture does not hold the uncommitted work")
+}
