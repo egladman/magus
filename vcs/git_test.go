@@ -214,11 +214,10 @@ func TestParseChangesByCommit(t *testing.T) {
 	assert.Equal(t, []types.FileChange{{Path: "web/app.ts", Status: types.ChangeDeleted}}, got[1].Files)
 }
 
-// TestParseChangesByCommitRename is the case -M exists for: a rename arrives as ONE
-// entry carrying both names, so churn can follow the file instead of splitting across
-// the two paths. A copy is deliberately NOT lineage - both files survive it, so
-// crediting the new path with the old one's history would attribute edits it never
-// received - and it is recorded as a plain add.
+// TestParseChangesByCommitRename is the case -M exists for: a rename arrives as ONE entry
+// carrying both names, so churn can follow the file instead of splitting across the two paths.
+// A copy is deliberately NOT lineage (both files survive it, so crediting the new path with the
+// old one's history would attribute edits it never received); it is recorded as a plain add.
 func TestParseChangesByCommitRename(t *testing.T) {
 	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\n" +
 		"R096\tinternal/old.go\tinternal/new.go\n" +
@@ -248,9 +247,9 @@ func TestParseChangesByCommitMalformed(t *testing.T) {
 }
 
 // A "?" is the letter a non-git driver emits for a status IT could not translate (see
-// jjChurnTemplate). Skipping it is the whole point: recorded as an edit - which the
-// default branch would have done - the driver's uncertainty reads back as a fact about
-// the file, and churn attributes work to a path that may not have changed at all.
+// jjChurnTemplate). Skipping it is the whole point: recorded as an edit (which the default
+// branch would have done), the driver's uncertainty reads back as a fact about the file, and
+// churn attributes work to a path that may not have changed at all.
 func TestParseChangesByCommitSkipsAnUntranslatedStatus(t *testing.T) {
 	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\n?\tmystery.go\t mystery.go\nM\tgood.go\n"
 
@@ -275,7 +274,7 @@ func TestParseChangesByCommitEmpty(t *testing.T) {
 //
 // Returning the count matters more than it looks. A caller that wants "the full history"
 // would otherwise shell out to `git rev-list --count HEAD`, walking every object in the
-// repository to re-measure a number this function already determined - and that walk is
+// repository to re-measure a number this function already determined, and that walk is
 // the most object-hungry thing in these tests. It failed once in CI with
 //
 //	error: Could not read <sha>
@@ -285,9 +284,9 @@ func TestParseChangesByCommitEmpty(t *testing.T) {
 // read back (reproduced exactly by deleting one file from .git/objects). Nothing in the
 // test touches the origin between building it and counting it, the shallow clone provably
 // leaves the origin's .git unchanged, and a redirected GIT_OBJECT_DIRECTORY reports
-// different errors - so the surviving explanation is the runner losing a write under
-// load, on the shard this repo has already measured at 7.5GB+6.1GB on a 16GB box. No
-// assertion can make that correct; not depending on those objects is the available fix.
+// different errors. The surviving explanation is the runner losing a write under load, on the
+// shard this repo has already measured at 7.5GB+6.1GB on a 16GB box. No assertion can make
+// that correct; not depending on those objects is the available fix.
 //
 // The trunk is what makes a bounded clone measurable. With a short shared history, any
 // fetch deep enough to reach the branch point also reaches the root, so the repository
@@ -372,8 +371,8 @@ func gitCommitCount(t *testing.T, dir string) int {
 // TestDiffRecoversMergeBaseInShallowClone is the regression for the silent full build:
 // before Diff recovered, a shallow CI checkout made `git merge-base` fail, which affected
 // reports as MGS1010 and answers by selecting every project. The changed files must come
-// back from a clone that never had the merge base to begin with - and the recovery must
-// stay bounded rather than quietly turning into `git fetch --unshallow`.
+// back from a clone that never had the merge base to begin with; the recovery must stay
+// bounded rather than quietly turning into `git fetch --unshallow`.
 func TestDiffRecoversMergeBaseInShallowClone(t *testing.T) {
 	origin, full := gitDivergedOrigin(t, 40)
 	clone := gitCloneShallow(t, origin, 1)
@@ -430,10 +429,9 @@ func TestRecoverMergeBaseSkipsFullClone(t *testing.T) {
 		"the guard must return before any ref is fetched")
 }
 
-// TestRecoverMergeBaseUnusableBase covers the two bases with nothing to fetch from: one
-// with no remote segment at all, and one naming a remote this repository does not have.
-// Neither may be guessed at, because the segment reaches `git fetch` as a repository
-// argument - a URL sink.
+// TestRecoverMergeBaseUnusableBase covers the two bases with nothing to fetch from: one with
+// no remote segment at all, and one naming a remote this repository does not have. Neither may
+// be guessed at, because the segment reaches `git fetch` as a repository argument: a URL sink.
 func TestRecoverMergeBaseUnusableBase(t *testing.T) {
 	shortOrigin, _ := gitDivergedOrigin(t, 3)
 	clone := gitCloneShallow(t, shortOrigin, 1)
@@ -480,7 +478,7 @@ func TestTrackedFiles(t *testing.T) {
 
 // TestGitEnvironStripsRedirectsAndKeepsTransport pins the split gitEnviron is built on: the
 // GIT_* prefix covers two unrelated categories, and only the repository-selecting one is
-// removed. The "keeps" half is the load-bearing one - a blanket prefix strip would pass a
+// removed. The "keeps" half is the load-bearing one: a blanket prefix strip would pass a
 // test that only checked the "strips" half, then break fetch authentication in the field.
 func TestGitEnvironStripsRedirectsAndKeepsTransport(t *testing.T) {
 	strip := map[string]string{
@@ -590,8 +588,8 @@ func TestStartMergeFailsOnUnknownRef(t *testing.T) {
 }
 
 // TestGitStatusPaths pins the porcelain parse, which lives beside the driver that produces
-// those lines. It is a unit table rather than a live-git test because the shapes it covers -
-// a rename, a C-quoted name, both status columns - are awkward to provoke on demand and easy
+// those lines. It is a unit table rather than a live-git test because the shapes it covers
+// (a rename, a C-quoted name, both status columns) are awkward to provoke on demand and easy
 // to state exactly.
 func TestGitStatusPaths(t *testing.T) {
 	for name, tc := range map[string]struct {
@@ -614,7 +612,7 @@ func TestGitStatusPaths(t *testing.T) {
 		"quoted name with a space": {[]string{` M "docs/a file.md"`}, []string{"docs/a file.md"}},
 
 		// strconv.Unquote also accepts Go raw-string and rune literals, so the unquoting is
-		// gated on git's own form - a file literally named `x` must keep its backquotes.
+		// gated on git's own form: a file literally named `x` must keep its backquotes.
 		"backquoted name is left alone": {[]string{" M `x`"}, []string{"`x`"}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -627,10 +625,10 @@ func TestGitStatusPaths(t *testing.T) {
 //
 // An ANNOTATED tag's %(objectname) is the tag OBJECT's id, not the commit it points at,
 // while a lightweight tag's is the commit. types.VCSTag.ID promises "the revision
-// identifier the tag resolves to", so recording objectname made every annotated tag - the
-// kind `git tag -a` and most release tooling creates - report an id matching no commit. A
-// caller asking "is this release tagged at HEAD?" got no match for exactly the tags a
-// release process creates.
+// identifier the tag resolves to", so recording objectname made every annotated tag (the kind
+// `git tag -a` and most release tooling creates) report an id matching no commit. A caller
+// asking "is this release tagged at HEAD?" got no match for exactly the tags a release
+// process creates.
 func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
 	repo := t.TempDir()
 	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
@@ -719,7 +717,7 @@ func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
 }
 
 // The switch is per-backend and the wrong one is silently useless, so each is pinned here
-// rather than left to the parity suite alone - that suite skips a backend whose binary is
+// rather than left to the parity suite alone: that suite skips a backend whose binary is
 // absent, which is most CI machines for three of these four.
 //
 // git is the odd one out on purpose: it has no global --color flag (only a per-subcommand
@@ -736,7 +734,7 @@ func TestUncoloredUsesEachBackendsOwnSwitch(t *testing.T) {
 	got := uncolored("hg", []string{"-R", "/repo", "log"})
 	assert.Equal(t, "--color=never", got[0])
 
-	// An unknown backend is passed through untouched rather than guessed at - inventing a
+	// An unknown backend is passed through untouched rather than guessed at: inventing a
 	// flag for it would break every invocation instead of merely leaving color on.
 	assert.Equal(t, []string{"diff"}, uncolored("fossil", []string{"diff"}))
 }
@@ -804,7 +802,7 @@ func TestBranchChangesHonorsTheLimit(t *testing.T) {
 
 // The remote is not always called "origin". Trimming that literal prefix left an `upstream/feat/x`
 // with its prefix intact, so it never matched the reader's own branch name and was reported as
-// somebody else editing the exact files the reader had open - the worst possible false alarm from
+// somebody else editing the exact files the reader had open: the worst possible false alarm from
 // a feature whose whole job is warning about collisions.
 func TestBranchChangesExcludesTheReadersBranchOnAnyRemote(t *testing.T) {
 	repo := t.TempDir()

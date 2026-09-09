@@ -16,7 +16,7 @@ import (
 // This file asserts the invariants every backend must share, as one table run against all
 // four. It exists because the per-backend files cannot: a rule stated only in git_test.go
 // is a rule the next backend is free to break, and three of the defects it now pins shipped
-// exactly that way - each backend was tested against its own behavior rather than against
+// exactly that way: each backend was tested against its own behavior rather than against
 // the contract.
 //
 // A backend whose binary is absent SKIPS rather than failing, so the suite still means
@@ -110,7 +110,7 @@ func eachBackend(t *testing.T, fn func(t *testing.T, b parityBackend)) {
 }
 
 // Every backend implements RevisionFileReader, and "" means the committed revision in each
-// backend's own spelling - HEAD, `.`, `.`, `@`. A caller asking for the committed side has
+// backend's own spelling: HEAD, `.`, `.`, `@`. A caller asking for the committed side has
 // no way to name that portably, so the empty default is the portability, and a backend that
 // resolved "" to something else would silently hand back the wrong content.
 //
@@ -167,10 +167,10 @@ func TestParityReadFileAtMissingPathErrors(t *testing.T) {
 	})
 }
 
-// DirtyFiles returns PATHS, not the backend's status lines. Each backend prints a
-// different prefix - git two columns, hg and sl one, jj none - and callers hand the result
-// straight to glob matching and staging, so a line that keeps its "M " matches nothing and
-// the file is silently treated as undeclared.
+// DirtyFiles returns PATHS, not the backend's status lines. Each backend prints a different
+// prefix (git two columns, hg and sl one, jj none), and callers hand the result straight to
+// glob matching and staging, so a line that keeps its "M " matches nothing and the file is
+// silently treated as undeclared.
 func TestParityDirtyFilesReturnsPaths(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -186,7 +186,7 @@ func TestParityDirtyFilesReturnsPaths(t *testing.T) {
 
 // Every backend reports paths relative to the REPOSITORY ROOT, whatever directory the
 // probe runs in. Callers stamp the root as the base (std/vcs.go, std/magus.go), so a
-// cwd-relative answer names a different file that frequently exists - there is nothing to
+// cwd-relative answer names a different file that frequently exists: there is nothing to
 // error on, the wrong file is simply read.
 //
 // This is the single most valuable assertion in the file: sl and jj BOTH failed it, in
@@ -212,7 +212,7 @@ func TestParityPathsAreRepositoryRelative(t *testing.T) {
 // A commit on linear history has exactly one parent. Reporting none makes it read as a
 // root commit at the Buzz boundary, and makes len(Parents) > 1 merge detection permanently
 // false. hg failed this: its `parents` template keyword filters through meaningfulparents
-// and emits nothing off a merge, while sl's same-named keyword does not - so the two
+// and emits nothing off a merge, while sl's same-named keyword does not, so the two
 // backends sharing one template disagreed, and only hg was wrong.
 func TestParityLinearCommitHasOneParent(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
@@ -252,12 +252,12 @@ func TestParityMetadataReportsRevisionAndDirt(t *testing.T) {
 
 // A path outside ASCII survives the round trip. git renders one C-quoted
 // ("uni/caf\303\251.md") unless core.quotePath is off, and a quoted name matches no
-// project glob - so the project owning that file is never rebuilt, with no diagnostic.
+// project glob, so the project owning that file is never rebuilt, with no diagnostic.
 //
-// This covers DirtyFiles on every backend. The sibling defect in git's ChangedFiles - the
-// one probe in the package that omitted the flag - is pinned by
-// git_test.go's TestChangedFilesKeepsNonASCIIPathsRaw, because ChangedFiles needs a base
-// ref and the per-backend way to produce one does not belong in this table.
+// This covers DirtyFiles on every backend. The sibling defect in git's ChangedFiles (the
+// one probe in the package that omitted the flag) is pinned by git_test.go's
+// TestChangedFilesKeepsNonASCIIPathsRaw, because ChangedFiles needs a base ref and the
+// per-backend way to produce one does not belong in this table.
 func TestParityNonASCIIPathsSurvive(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -294,7 +294,7 @@ func TestParityDirtyAgreesWithDirtyFiles(t *testing.T) {
 	})
 }
 
-// TrackedFiles must answer, not fail, when NONE of the given paths are tracked - that is
+// TrackedFiles must answer, not fail, when NONE of the given paths are tracked: that is
 // the ordinary answer, and the question the capability exists for. `sl files` exits 1 in
 // exactly that case where git's ls-files exits 0, so the driver has to absorb it; because
 // the call is batched, getting it wrong fails only for some inputs.
@@ -341,8 +341,8 @@ func TestParityIgnoredFilesEchoesTheGivenPaths(t *testing.T) {
 
 // A backend's two ignore reporters must agree. IgnoredFileReporter.IgnoredFiles and
 // ConflictResolver.IgnoredPaths are names one letter apart on the same type answering
-// nearly the same question in different shapes - and git's gave OPPOSITE answers for a
-// path that is tracked AND matches an ignore rule, because only one passed --no-index.
+// nearly the same question in different shapes; git's gave OPPOSITE answers for a path
+// that is tracked AND matches an ignore rule, because only one passed --no-index.
 // Reaching for the wrong one of two near-identical names is not a compile error, so this is
 // the only thing that catches it.
 func TestParityIgnoreReportersAgree(t *testing.T) {
@@ -355,7 +355,7 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 		if !ok {
 			t.Skipf("%s does not implement ConflictResolver", b.name)
 		}
-		// keep.log is TRACKED and matches an ignore rule - the case the two disagreed on.
+		// keep.log is TRACKED and matches an ignore rule: the case the two disagreed on.
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"keep.log": "x\n"})
 		name, body := ignoreRule(b, "*.log")
@@ -383,7 +383,7 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 // ignoreRule returns the ignore file a backend reads and the content expressing pattern in
 // its syntax. Mercurial is the odd one: .hgignore patterns are REGULAR EXPRESSIONS unless
 // the file opens with a "syntax: glob" line, so a bare "*.log" there is not merely
-// ineffective - hg rejects it as an invalid pattern and every subsequent command aborts.
+// ineffective; hg rejects it as an invalid pattern and every subsequent command aborts.
 // git, sl and jj all read a .gitignore of plain globs.
 func ignoreRule(b parityBackend, pattern string) (name, body string) {
 	if b.name == "hg" {
@@ -393,7 +393,7 @@ func ignoreRule(b parityBackend, pattern string) (name, body string) {
 }
 
 // AbortMerge refuses when there is no merge to abort. It is reached on failure paths,
-// which is exactly when there may be nothing in progress - and sl's implementation is a
+// which is exactly when there may be nothing in progress; sl's implementation is a
 // whole-tree revert that exits 0 either way, so without the guard the error path silently
 // discards the developer's uncommitted work.
 func TestParityAbortMergeRefusesWithNoMergeInProgress(t *testing.T) {
@@ -430,7 +430,7 @@ func commitAll(t *testing.T, b parityBackend, dir, msg string) {
 		// jj snapshots the working copy automatically, so `describe` is the commit. It
 		// deliberately does NOT run `jj new` afterwards: that would leave @ pointing at a
 		// fresh EMPTY change, and a test asking about "the commit I just made" via
-		// FindCommit(dir, "") would resolve that empty one instead - passing without ever
+		// FindCommit(dir, "") would resolve that empty one instead, passing without ever
 		// touching the commit it built.
 		vcsTestRun(t, dir, "jj", "describe", "-m", msg)
 	}
@@ -451,7 +451,7 @@ func addPath(t *testing.T, b parityBackend, dir, path string) {
 
 // DirtyFiles and DirtyDiff must answer about the SAME change. A gate that names an output
 // as drifted and then shows an empty diff sends its reader to reproduce the run to learn
-// what the two calls already knew - and it fires in CI, where nobody can look at the tree.
+// what the two calls already knew, and it fires in CI, where nobody can look at the tree.
 //
 // git was the one backend that could disagree: a bare `git diff` is working tree against
 // the INDEX, so a STAGED change was reported by DirtyFiles and invisible to DirtyDiff. hg,
@@ -476,7 +476,7 @@ func TestParityDirtyDiffCoversWhatDirtyFilesNames(t *testing.T) {
 }
 
 // stagePath stages a path where the backend has an index to stage into. Only git does; for
-// the other three this is a no-op, which is the point - they cannot reach the state that
+// the other three this is a no-op, which is the point: they cannot reach the state that
 // made git's two probes disagree.
 func stagePath(t *testing.T, b parityBackend, dir, path string) {
 	t.Helper()
@@ -505,7 +505,7 @@ func TestParityDirtyDiffOnRepoWithNoCommits(t *testing.T) {
 // A GLOB pathspec matches, on every backend. This is the assertion the suite was missing,
 // and its absence hid the worst defect the VCS work produced: magus.diagnoseDrift hands
 // DirtyFiles a project's declared output globs verbatim, and an hg pathspec defaults to a
-// LITERAL path - so "gen/**" matched nothing, hg wrote "No such file or directory" to
+// LITERAL path, so "gen/**" matched nothing, hg wrote "No such file or directory" to
 // stderr, exited 0 with empty stdout, and the generate drift gate reported every project
 // clean having checked nothing. In CI, with no diagnostic. sl inherited it; git and jj
 // handle the glob natively, which is exactly why a per-backend test would not have found it.
@@ -529,7 +529,7 @@ func TestParityGlobPathspecMatches(t *testing.T) {
 
 // Every churn reporter names the files a commit touched AND what it did to each. The status
 // half is what lets attribution tell a rename from a delete plus an add, and each backend
-// reaches it through a different log format - git tags every path, hg and sl group paths by
+// reaches it through a different log format: git tags every path, hg and sl group paths by
 // what happened to them, jj spells its statuses as words. Only a shared parser reads all
 // three, so a backend whose log stops matching that parser reports a commit with NO files:
 // no error, no diagnostic, just a churn heatmap that goes quiet. hg and sl shipped exactly
@@ -591,7 +591,7 @@ func forceColor(t *testing.T, b parityBackend, dir string) {
 		writeRepoFile(t, dir, ".hg/hgrc", "[ui]\ncolor = always\n")
 	case "sl":
 		// Sapling's repo config is .sl/config, NOT .sl/hgrc, and slInitRepo has already
-		// written a username into it - so this appends. Pointing at the hg path instead
+		// written a username into it, so this appends. Pointing at the hg path instead
 		// makes this helper do nothing, and the subtest then passes without ever forcing
 		// color, which is exactly how it first went green against a colorizing Sapling.
 		appendRepoFile(t, dir, ".sl/config", "\n[ui]\ncolor = always\n")
@@ -603,12 +603,12 @@ func forceColor(t *testing.T, b parityBackend, dir string) {
 // A colorized diff is not a cosmetic problem: the escape sequence lands in FRONT of the
 // `diff --git` header, so the header no longer begins a line and every reader of the patch
 // misses the file entirely. Measured before the fix, with `color.ui = always` in an ordinary
-// gitconfig: `magus diff` listed the untracked files - which magus synthesizes itself, and
-// so never colorizes - and silently dropped every tracked modification, at exit 0.
+// gitconfig: `magus diff` listed the untracked files (which magus synthesizes itself, and so
+// never colorizes) and silently dropped every tracked modification, at exit 0.
 //
 // Each backend needs a DIFFERENT switch and they are not interchangeable: NO_COLOR loses to
 // git's explicit config, and Sapling ignores HGPLAIN even though Mercurial honors it. That is
-// what this test is really pinning - one switch per backend, verified against the real binary
+// what this test is really pinning: one switch per backend, verified against the real binary
 // rather than assumed from the family.
 func TestParityDirtyDiffIsNeverColorized(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
@@ -639,8 +639,8 @@ func vcsMove(t *testing.T, b parityBackend, dir, from, to string) {
 
 // A rename must not arrive as a delete plus an add. Mercurial's own diff format renders one
 // exactly that way, so a renamed 2000-line file reached this tool as 4000 changed lines whose
-// content nobody touched - and every consumer treats DirtyDiff as "what a person has to
-// review", so that inflates the ranking, the counts, and the hunks a read receipt is keyed by.
+// content nobody touched; every consumer treats DirtyDiff as "what a person has to review",
+// so that inflates the ranking, the counts, and the hunks a read receipt is keyed by.
 //
 // Asserted on CONTENT rather than on the word "rename", because the backends spell the header
 // differently and the property that matters is the absence of churn, not the spelling.
