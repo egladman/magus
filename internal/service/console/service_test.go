@@ -66,6 +66,12 @@ func TestServiceGraphSkeleton(t *testing.T) {
 	assert.Equal(t, types.RelationDependsOn, out.Links[0].Relation)
 	assert.True(t, out.Directed)
 	assert.Equal(t, types.KnowledgeSchemaVersion, out.SchemaVersion)
+	// Stamped together or not at all: the schema version is what a consumer reads to decide
+	// whether it can resolve a predicate on its own, so claiming the version while carrying
+	// no vocabulary is the one combination that misleads.
+	assert.Equal(t, types.KnowledgeRelationDefinitions(), out.Relations)
+	assert.Equal(t, types.KnowledgeRelationFingerprint(), out.RelationFingerprint)
+	assert.NotEmpty(t, out.RelationFingerprint)
 }
 
 func TestServiceTargetGraph(t *testing.T) {
