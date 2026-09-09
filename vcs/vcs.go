@@ -354,9 +354,11 @@ func trimStatusColumns(lines []string, width int) []string {
 // what put it there before they wonder what they did.
 const preserveMessage = "magus preserved working copy"
 
-// preserveRetention is how long a preserved state stays resolvable. Enforced by every
-// Preserve rather than by a schedule, so the bound holds on a machine that never runs a
-// maintenance target and the store cannot grow without one.
+// preserveRetention is how long a preserved state stays resolvable. Enforced from two
+// sides, and it needs both: every Preserve prunes, so the bound holds on a machine that
+// never runs a maintenance job; and the prune-preserved job calls [PrunePreserved] on a
+// schedule, so it also holds in a repository that preserved once and never again, which
+// the Preserve-side pass alone can never reach.
 //
 // Thirty days because the handle's whole job is to survive the gap between handing work
 // out and someone coming back to it, and that gap is measured in days. Short enough that
@@ -494,18 +496,30 @@ func hgFamilyRestorePending(ctx context.Context, prog string, p hgFamilyPending)
 	return nil
 }
 
-// hgFamilyStatusPaths lists the paths in one status class, bare.
+// hgFamilyStatusPaths lists the paths in one status class, NUL-delimited.
+//
+// The template is what makes the list unambiguous, and it closes the same hole
+// hgFamilyRoot closed one layer up. A newline is a legal character in a filename, so a
+// line-split parse turns "we\nird.txt" into two paths that name nothing: measured
+// 2026-09-09 on Mercurial 7.2.3, `hg revert --no-backup -- we` prints "no such file in
+// rev" and exits ZERO, so the restore reports success while the user's file stays
+// scheduled for a removal they never asked for. Trimming compounds it, since a leading
+// space is legal too and a trimmed path names a different file again.
+//
+// Sapling takes the same template (measured on 0.2.20260811-150444) and additionally
+// refuses a newline in a name outright, skipping it with a warning on stderr, so the two
+// backends need one spelling rather than two.
 func hgFamilyStatusPaths(ctx context.Context, prog, dir, class string) ([]string, error) {
-	cmd := vcsExec(ctx, prog, "status", class, "--no-status")
+	cmd := vcsExec(ctx, prog, "status", class, "--no-status", "-T", `{path}\0`)
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("%s status %s: %w", prog, class, err)
 	}
 	var files []string
-	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			files = append(files, line)
+	for path := range strings.SplitSeq(string(out), "\x00") {
+		if path != "" {
+			files = append(files, path)
 		}
 	}
 	return files, nil

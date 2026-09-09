@@ -172,3 +172,46 @@ func TestHgPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
 	assert.Contains(t, names, inside, "dropped a capture still inside the retention window")
 	assert.NotContains(t, names, outside, "kept a capture past the retention window")
 }
+
+// TestHgPreserveRestoresAPathCarryingWhitespace is the regression test for the status
+// parse, and the failure it pins is silent.
+//
+// A leading space is legal in a filename and the old parse trimmed it, so restoring a
+// deleted " leading.txt" ran `hg revert --no-backup -- leading.txt`. Measured 2026-09-09
+// on Mercurial 7.2.3, that prints "no such file in rev" and exits ZERO: the restore
+// reported success while the file stayed scheduled for a removal the user never asked
+// for, and Preserve returned a handle and a nil error over the top of it. The assertion
+// is on hg's own status rather than on the parse, because the parse looked right.
+//
+// A newline is the other name the old parse split apart, and it is checked one layer
+// down: hg refuses to track a name carrying one (`add` and `addremove` both abort with
+// "'\n' and '\r' disallowed in filenames"), so it can reach the unknown class and never
+// the missing one.
+func TestHgPreserveRestoresAPathCarryingWhitespace(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{" leading.txt": "l\n", "tracked.txt": "one\n"})
+
+	require.NoError(t, os.Remove(filepath.Join(dir, " leading.txt")))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("two\n"), 0o644))
+
+	handle, err := hgVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, handle)
+
+	status := vcsTestOutput(t, dir, "hg", "status")
+	assert.NotContains(t, status, "R  leading.txt",
+		"preserving left a deleted file scheduled for removal; the working copy is not what the user had")
+	assert.Contains(t, status, "!  leading.txt",
+		"the file the user deleted should still read as missing, not as restored")
+
+	t.Run("an unknown path carrying a newline stays one path", func(t *testing.T) {
+		weird := "we\nird.txt"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, weird), []byte("x\n"), 0o644))
+		got, err := hgFamilyStatusPaths(t.Context(), "hg", dir, "--unknown")
+		require.NoError(t, err)
+		assert.Equal(t, []string{weird}, got, "a newline in a name split one path into two")
+	})
+}
