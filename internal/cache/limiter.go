@@ -107,19 +107,18 @@ func (l *Limiter) ReleaseN(n int) {
 	}
 }
 
-// Yield releases the caller's slots for the duration of fn, then re-acquires them
-// before returning. It releases every slot the caller holds (SlotsHeld(ctx), at
-// least 1): a weighted step holds more than one, and releasing only one would leave
-// it pinning slots that fn's own AcquireN then blocks on forever. Re-acquire uses a
-// non-cancellable context so the caller always returns with its slots held (RunAll
-// releases unconditionally; a slotless return would panic). The re-acquire re-enters
-// the FIFO queue, so a yielding goroutine goes to the back.
+// Yield releases the caller's slots for the duration of fn and re-acquires them before
+// returning. It releases every slot the caller holds (SlotsHeld(ctx), floored at 1): a
+// weighted step that released only one would pin the rest while fn's own AcquireN blocks
+// on them. Re-acquire uses a non-cancellable context so the caller always returns holding
+// its slots (RunAll releases unconditionally; a slotless return would panic), and it
+// re-enters the FIFO queue at the back.
 //
-// The floor of 1 is the contract for a caller holding a slot the CONTEXT does not
-// name, which proc's server does at both of its Yield sites: it takes its admission
-// slot with a raw Acquire, so an unmarked ctx there means one slot held, not none.
-// Callers holding nothing at all (magus.go's spell fan-out, proc.RunChildSync) check
-// SlotHeld and never reach here, which is what keeps the floor from over-releasing.
+// The floor of 1 is the contract for a caller holding a slot the CONTEXT does not name,
+// which proc's server does at both of its Yield sites: it takes its admission slot with a
+// raw Acquire, so an unmarked ctx there means one slot held, not none. Callers holding
+// nothing (magus.go's spell fan-out, proc.RunChildSync) check SlotHeld and never reach
+// here, which is what keeps the floor from over-releasing.
 //
 // Trade-off: the non-cancellable re-acquire can block a returning yield on a saturated
 // limiter even after ctx is cancelled, slowing shutdown until peers free the slots.
@@ -152,24 +151,20 @@ func (l *Limiter) Snapshot() LimiterStats {
 	}
 }
 
-// logPool emits one cache.pool event carrying the limiter's current
-// occupancy. It is the feed behind the interactive pool status line.
+// logPool emits one cache.pool event carrying the limiter's current occupancy, the feed
+// behind the interactive pool status line.
 //
-// The numbers are a point-in-time sample, not a transaction: peers are
-// acquiring and releasing while this reads them, so a reader may see a
-// count that never existed at any single instant. That is the right
-// trade for a status line, which wants to be cheap and current rather
-// than exact, and it is why nothing downstream should compute from these
-// values -- the authoritative view is [Limiter.Snapshot] on the pool
-// inspector's own request.
+// The numbers are a point-in-time sample: peers acquire and release while this reads
+// them, so a reader may see a count that never existed at any single instant. Cheap and
+// current is the right trade for a status line, and it is why nothing downstream should
+// compute from these values; [Limiter.Snapshot] is the authoritative view.
 func (c *Cache) logPool(ctx context.Context, lim *Limiter) {
 	if lim == nil {
 		return
 	}
-	// Only a handler with a live region can show this. Emitting regardless
-	// would put two events per step into JSON output (which goes to
-	// stdout, where machine consumers read results) and into CI logs,
-	// where they would bury the actual results.
+	// Only a handler with a live region can show this. Emitting regardless would put two
+	// events per step into JSON output on stdout, where machine consumers read results,
+	// and would bury the results in CI logs.
 	ph, ok := c.log.Handler().(*PrettyHandler)
 	if !ok || !ph.RendersBand() {
 		return

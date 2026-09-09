@@ -830,15 +830,14 @@ func reproTarget(s Step) string {
 	return s.Target + ":" + strings.Join(s.Charms, ",")
 }
 
-// stepSlots is the limiter weight one step takes.
+// stepSlots is the limiter weight one step takes: Step.Slots clamped to [1, budget], so
+// a heavy step can throttle the parallel work around itself.
 //
-// A heavy step can request extra slots (Step.Slots) to throttle parallel work
-// around itself. Clamp to [1, budget]: 0 means one slot, and a request above the
-// budget would exceed capacity and error, so cap it. A request >= the budget holds
-// every slot, so no peer can enter fn while it runs (it does not take the isolation
-// lock, so unlike an exclusive step it does not also serialize replays). On an
-// unlimited limiter (budget <= 0) there is nothing to throttle against, so the
-// request is a no-op: AcquireN returns immediately.
+// 0 means one slot, and a request above the budget would exceed capacity and error, so
+// it caps. A request >= the budget holds every slot and no peer can enter fn while it
+// runs; it takes no isolation lock, so unlike an exclusive step it does not also
+// serialize replays. On an unlimited limiter (budget <= 0) there is nothing to throttle
+// against and AcquireN returns immediately.
 func stepSlots(s Step, lim *Limiter) int {
 	slots := s.Slots
 	if slots < 1 {
@@ -852,42 +851,30 @@ func stepSlots(s Step, lim *Limiter) int {
 
 // claimMachine takes the machine-wide half of a step's admission: the concurrency slot
 // and the declared memory arbitrated across every magus on the host. It returns ctx
-// marked as holding the claim and the release that hands it back.
+// marked as holding the claim, plus the release that hands it back.
 //
-// It is the FIRST seat a step takes, ahead of both the run-isolation lease and the
-// local limiter slot, because it is the only one whose wait is other processes' to end.
-// Queued here under the isolation lock it is uninterruptible: this wait is ctx-aware
-// but sync.RWMutex is not, so a shared peer that yielded its read lock to fan out parks
-// re-taking it behind the queued step's pending write lock, and the claim that step
-// waits for is the one the parked peer would have released. Neither goroutine is then
-// anywhere it can notice a cancelled context, so Ctrl-C reaches neither.
+// It is the FIRST seat a step takes, ahead of the run-isolation lease and the local
+// limiter slot, because it is the only one whose wait is other processes' to end. Queued
+// under the isolation lock that wait is uninterruptible: it is ctx-aware but sync.RWMutex
+// is not, so a shared peer that yielded its read lock to fan out parks re-taking it
+// behind the queued step's pending write lock while holding the claim that step waits
+// for, and Ctrl-C reaches neither goroutine. Taking it first instead means a step holds
+// machine-wide memory while it waits for a local lock or slot, a wait that ends on its
+// own: the isolation-lock holder took its claim first and can run to completion. The
+// claim goes back LAST, after the slot and the lease.
 //
-// Taking it first costs the throttling the other order bought: a step now holds
-// machine-wide memory while it waits for a local lock or slot. That wait ends on its
-// own, because whoever holds the isolation lock took its claim before the lock and can
-// run to completion.
+// A step admitted BENEATH one that already holds a claim takes none, because the ancestor
+// is the one thing that cannot release: it is blocked in dispatch waiting for this step,
+// so a second claim queued behind it would wait forever. Measured 2026-09-08: `magus
+// affected ci` sat 27 minutes at 13s of CPU with no child process running.
 //
-// The claim also goes back LAST, after the slot and the lease. That used to matter:
-// freeing the slot is what wakes a local waiter, and a waiter woken while this step's
-// claim was still held queued behind memory the run had already returned. A waiter now
-// asks the budget before it waits for a slot, so there is nobody in that position.
-//
-// A step admitted BENEATH one that already holds a claim takes none, because the
-// ancestor is the one thing that cannot release: it is blocked in dispatch waiting
-// for this step, so a second claim queued behind it would wait forever. Measured
-// 2026-09-08: `magus affected ci` sat 27 minutes at 13s of CPU with no child process
-// running.
-//
-// The cover is a floor, not an exact figure. Step.MemoryMB folds a chain by MAXIMUM,
-// and one ctx.needs(a, b, c) runs its members concurrently, so three 4 GB members are
-// covered by a 4 GB claim; see types.ChainMemoryMB for why the recorded chain cannot
-// yet tell a concurrent needs from a sequential one. Inside this process the limiter
-// still bounds how many run at once; the machine budget does not see them at all.
-//
-// Covering rather than yielding, because a machine claim's re-acquire is FALLIBLE: it
-// re-queues behind strangers and can be refused, so a parent that released and retook
-// could fail after its children had already run. The limiter still bounds how many of
-// these run at once inside this process.
+// The cover is a floor. Step.MemoryMB folds a chain by MAXIMUM and one ctx.needs(a, b, c)
+// runs its members concurrently, so three 4 GB members are covered by a 4 GB claim; see
+// types.ChainMemoryMB for why the recorded chain cannot yet tell a concurrent needs from
+// a sequential one. Covering rather than yielding, because a machine claim's re-acquire
+// is FALLIBLE: it re-queues behind strangers and can be refused, so a parent that
+// released and retook could fail after its children had already run. The limiter still
+// bounds how many run at once inside this process; the machine budget does not see them.
 func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Context, func(), error) {
 	held := admissionFrom(ctx)
 	if held.machineClaim {
@@ -907,25 +894,22 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 }
 
 // admit takes the in-process seats a step needs before it executes and puts it on the
-// record every observer reads: the local limiter slots, the inflight set a killed run
-// is reported from, and the invocation heartbeat the stall watchdog compares against.
-// The machine-wide claim `magus status` prints by project and target is already held by
-// the time a step reaches here; claimMachine says why it cannot be taken under the
-// isolation lease. It returns the clamped slot count and one release that gives the
-// seats back.
+// record every observer reads: the local limiter slots, the inflight set a killed run is
+// reported from, and the invocation heartbeat the stall watchdog compares against. A step
+// reaches here already holding its machine claim; claimMachine says why that one cannot
+// be taken under the isolation lease. It returns the clamped slot count and one release
+// that gives the seats back.
 //
-// Factored out of RunAll so that work running OUTSIDE the batch can be accounted the
-// same way rather than through a second, quietly divergent bookkeeping path; see
-// [Cache.RunAside].
+// Factored out of RunAll so work running OUTSIDE the batch is accounted the same way
+// rather than through a second, quietly divergent path; see [Cache.RunAside].
 func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), error) {
 	slots := stepSlots(s, lim)
 	if err := lim.AcquireN(ctx, slots); err != nil {
 		return 0, nil, err
 	}
-	// Report occupancy as it changes, so an interactive run can show a live pool
-	// counter. Emitted on both edges of the slot's life: once here (this step is now
-	// running) and once after release (the slot is free again). Handlers that do not
-	// render a status line ignore the event, so piped and CI output are unchanged.
+	// Report occupancy on both edges of the slot's life, so an interactive run can show a
+	// live pool counter. Handlers that render no status line ignore the event, so piped
+	// and CI output are unchanged.
 	c.logPool(ctx, lim)
 	// Record the target as running BEFORE fn and clear it after, so a magus that is
 	// killed outright leaves the set behind for the next run to report (see inflight).
@@ -942,19 +926,8 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), e
 	}, nil
 }
 
-// RunAside runs one step OUTSIDE a batch under the same accounting a batch step gets:
-// [Cache.admit]'s limiter slots, machine claim, inflight record and heartbeat, wrapped
-// around [Cache.Run]'s captured log, output ref and journal result event.
-//
-// It exists because post-batch work is still work. A re-run dispatched straight at the
-// interpreter claims nothing, appears in no inflight set and emits no journal event, so
-// every observer reports an idle machine while the invocation still holds every project
-// lock - which is exactly how a settle pass wedged a gate for over an hour on
-// 2026-09-04 with `magus status` reporting 0 slots in use and nothing running.
-//
-// Concurrency is the caller's to arrange: unlike RunAll there is no dependency
-// barrier. It still joins the invocation's isolation scope, so an exclusive
-// off-batch step cannot overlap either a batch step or another dynamic child.
+// runIsolation serializes Step.Exclusive steps against the rest of one invocation: an
+// exclusive step takes the write lock, every other step takes the read lock.
 type runIsolation struct {
 	mu sync.RWMutex
 }
@@ -988,15 +961,14 @@ func isolationFrom(ctx context.Context) *runIsolation {
 func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, func()) {
 	ctx = WithRunScope(ctx)
 	// Inside an exclusive ancestor's region there is nothing to take: a shared lease is
-	// redundant and an exclusive one is already satisfied. Either would block forever
+	// redundant and an exclusive one is already satisfied, and either would block forever
 	// behind the ancestor's write lock.
 	//
-	// An exclusive step admitted here does NOT exclude its siblings, and that is Step's
-	// stated contract rather than a shortcut: Exclusive is "RunAll only ... no other BATCH
-	// step runs concurrently (ignored by Run, which has no batch)", and a dynamically
-	// dispatched needs child arrives through RunAside, which runs outside a batch by
-	// definition. It is already excluded from every batch peer by the ancestor holding the
-	// write lock, which is the whole of what the policy promises.
+	// An exclusive step admitted here therefore does not exclude its siblings, which is
+	// Step's stated contract rather than a shortcut: Exclusive is "RunAll only ... no
+	// other BATCH step runs concurrently", and a dynamically dispatched needs child
+	// arrives through RunAside, outside any batch. The ancestor's write lock already
+	// excludes it from every batch peer, which is the whole of what the policy promises.
 	if lease := admissionFrom(ctx).isolation; lease != nil && lease.inherited {
 		return ctx, func() {}
 	}
@@ -1030,11 +1002,10 @@ func YieldRunIsolation(ctx context.Context, fn func(context.Context) error) erro
 		return fn(ctx)
 	}
 	if lease.exclusive {
-		// Keep the write lock. Releasing it here would make an exclusive step shareable for
+		// Keep the write lock. Releasing it would make an exclusive step shareable for
 		// exactly the part of its life where it fans out, which for a body that is only
-		// ctx.needs is nearly all of it. The children cannot take leases behind this write
-		// lock, so they are marked as inside the region and acquireRunIsolation hands them
-		// none.
+		// ctx.needs is nearly all of it. Children cannot take leases behind this write lock,
+		// so they are marked as inside the region and acquireRunIsolation hands them none.
 		inherited := *lease
 		inherited.inherited = true
 		held.isolation = &inherited
@@ -1049,6 +1020,19 @@ func YieldRunIsolation(ctx context.Context, fn func(context.Context) error) erro
 	return fn(held.on(ctx))
 }
 
+// RunAside runs one step OUTSIDE a batch under the same accounting a batch step gets:
+// [Cache.admit]'s limiter slots, machine claim, inflight record and heartbeat, wrapped
+// around [Cache.Run]'s captured log, output ref and journal result event.
+//
+// It exists because post-batch work is still work. A re-run dispatched straight at the
+// interpreter claims nothing, appears in no inflight set and emits no journal event, so
+// every observer reports an idle machine while the invocation still holds every project
+// lock: exactly how a settle pass wedged a gate for over an hour on 2026-09-04 with
+// `magus status` reporting 0 slots in use and nothing running.
+//
+// Concurrency is the caller's to arrange; unlike RunAll there is no dependency barrier.
+// The step still joins the invocation's isolation scope, so an exclusive off-batch step
+// cannot overlap a batch step or another dynamic child.
 func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) error, opts ...RunOption) (Result, error) {
 	rc := &runCtx{}
 	for _, o := range opts {
@@ -1198,9 +1182,9 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := barrier.waitForDeps(gctx, s); err != nil {
 				return fail(err)
 			}
-			// The machine budget comes before the isolation lease and the slot, so a
-			// step queues for it holding nothing a peer needs in order to finish;
-			// claimMachine carries the interleaving that ordering answers.
+			// The machine budget comes before the isolation lease and the slot, so a step
+			// queues for it holding nothing a peer needs in order to finish; claimMachine
+			// carries the interleaving that ordering answers.
 			machineCtx, releaseMachine, machineErr := c.claimMachine(gctx, s, stepSlots(s, lim))
 			if machineErr != nil {
 				// A machine refusal is an independent finding: nothing upstream failed and
@@ -1214,11 +1198,10 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			defer releaseMachine()
 			stepCtx, releaseIsolation := acquireRunIsolation(machineCtx, s.Exclusive)
 			defer releaseIsolation()
-			// acquireIsolation's Lock/RLock is not ctx-aware, so a goroutine can
-			// park there uninterruptibly while a sibling fails. Re-check after it
-			// returns and bail before running fn. lim.Acquire below would catch a
-			// cancelled gctx too, except on an unlimited limiter, where it returns
-			// nil without consulting ctx.
+			// acquireRunIsolation's Lock/RLock is not ctx-aware, so a goroutine can park
+			// there uninterruptibly while a sibling fails. Re-check after it returns and
+			// bail before running fn. lim.Acquire below would catch a cancelled gctx too,
+			// except on an unlimited limiter, where it returns nil without consulting ctx.
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}

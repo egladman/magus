@@ -3,23 +3,22 @@ package cache
 import "context"
 
 // admission is everything a step holds while it runs: its limiter slots, its
-// machine-wide claim, and its run-isolation lease. It travels as ONE context value so a
-// site dispatching child work states the whole hold in one place.
+// machine-wide claim, and its run-isolation lease. One context value, so a site
+// dispatching child work states the whole hold in one place.
 //
-// Three independent markers is the shape that produced two bugs on 2026-09-08, both a
-// child context carrying the wrong SUBSET of what its parent held. A needs child took a
-// second machine claim the parent's figure already covered and then queued forever
-// behind the parent that was blocked waiting for it; an exclusive step's fan-out dropped
-// its write lock and stopped excluding anything. Neither site looked wrong, because
-// nothing named what a step was supposed to be carrying.
+// Three independent markers produced two bugs on 2026-09-08, each a child context
+// carrying the wrong SUBSET of the parent's hold. A needs child took a second machine
+// claim the parent's figure already covered, then queued forever behind the parent
+// blocked waiting for it. An exclusive step's fan-out dropped its write lock and
+// excluded nothing.
 //
 // The zero value holds nothing, which is the right reading for work dispatched outside
 // a step: an unmarked context has taken no seat anywhere.
 type admission struct {
 	// slots is how many limiter slots the step holds. A hand-back site (Yield,
-	// os.with_slots, archive.*) must release exactly this many so it gives back its
-	// whole hold, not one slot: a weighted step holds more than one, and releasing only
-	// one would leave it pinning slots it then blocks trying to re-reserve.
+	// os.with_slots, archive.*) must release exactly this many: a weighted step holds
+	// more than one, and releasing a single slot leaves it pinning the rest, then
+	// blocking to re-reserve them.
 	slots int
 	// machineClaim says a claim on the machine budget is held, so anything admitted
 	// beneath this step takes none of its own.
