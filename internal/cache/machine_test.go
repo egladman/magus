@@ -560,12 +560,24 @@ func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	_, tooBig := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 64_000, PID: 300})
 	require.Error(t, tooBig)
 
-	for _, err := range []error{busy, tooBig, fmt.Errorf("run: %w", busy)} {
+	// The code is per REFUSAL, not per package. A busy machine is EX_TEMPFAIL because the
+	// same command succeeds later; a declaration that exceeds the whole budget answers the
+	// same way forever, and telling a retry wrapper it was temporary loops it.
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{busy, ExitCodeMachineBusy},
+		{fmt.Errorf("run: %w", busy), ExitCodeMachineBusy},
+		{tooBig, ExitCodeMachineDeclaration},
+	} {
 		var stated interface{ ExitCode() int }
-		require.ErrorAs(t, err, &stated, "%v must state its exit code across the socket", err)
-		assert.Equal(t, ExitCodeMachineBusy, stated.ExitCode())
-		assert.True(t, errors.Is(err, types.MachineBudgetExhausted), "and stay matchable by its code")
+		require.ErrorAs(t, tc.err, &stated, "%v must state its exit code across the socket", tc.err)
+		assert.Equal(t, tc.want, stated.ExitCode(), "%v", tc.err)
+		assert.True(t, errors.Is(tc.err, types.MachineBudgetExhausted), "and stay matchable by its code")
 	}
+	assert.NotEqual(t, ExitCodeMachineBusy, ExitCodeMachineDeclaration,
+		"a permanent refusal that shares EX_TEMPFAIL is a retry loop")
 }
 
 // TestLocalAdmitterWithoutABudgetFailsOpen covers C12: a registry built with no budget
