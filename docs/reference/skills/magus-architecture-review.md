@@ -3,8 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 6322
-skill_short_bytes: 5123
+skill_full_bytes: 6820
+skill_short_bytes: 5519
 ---
 
 # magus-architecture-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `55` |
+| `agent-skill-version` | `56` |
 | `knowledge-schema-version` | `11` |
-| `skill-content` | `e4b75fa969de` |
+| `skill-content` | `9a71f870b7ce` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -153,6 +153,15 @@ Confirm each smell against the source before acting on it:
 
 A kind or edge earns its place only if it answers a question the others cannot;
 prefer folding into an existing mechanism over adding one. Ground every claim in a query, exactly as for a layout proposal.
+
+## Say when not to build it
+
+A mechanism that ACTS (a guard, a refusal, a cancellation, an auto-fix) is judged on
+its wrong firings. Name the two cases its predicate cannot separate and the cost of
+guessing each wrong; when it cannot separate them, do not build it.
+
+Wrong firings are the expensive direction: a gap gets noticed, while a check that cries
+wolf teaches people to route around it.
 
 ## Verify the change
 
@@ -290,6 +299,16 @@ Confirm each smell against the source before acting on it:
 A kind or edge earns its place only if it answers a question the others cannot;
 prefer folding into an existing mechanism over adding one (pre-1.0: break
 freely). Ground every claim in a query, exactly as for a layout proposal.
+
+## Say when not to build it
+
+A mechanism that ACTS (a guard, a refusal, a cancellation, an auto-fix) is judged on
+its wrong firings. Name the two cases its predicate cannot separate and the cost of
+guessing each wrong; when it cannot separate them, do not build it, and say so rather
+than shipping a rule that fires on the wrong one.
+
+Wrong firings are the expensive direction: a gap gets noticed, while a check that cries
+wolf teaches people to route around it, taking the real findings with it.
 
 ## Verify the change
 
