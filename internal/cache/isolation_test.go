@@ -12,7 +12,7 @@ import (
 func TestYieldRunIsolationLetsExclusiveChildRun(t *testing.T) {
 	ctx, releaseParent := acquireRunIsolation(WithRunScope(context.Background()), false)
 	t.Cleanup(releaseParent)
-	parentLease := isolationLeaseFrom(ctx)
+	parentLease := admissionFrom(ctx).isolation
 
 	childAcquired := make(chan struct{})
 	releaseChild := make(chan struct{})
@@ -26,7 +26,7 @@ func TestYieldRunIsolationLetsExclusiveChildRun(t *testing.T) {
 	}()
 
 	err := YieldRunIsolation(ctx, func(yielded context.Context) error {
-		if got := isolationLeaseFrom(yielded); got != nil {
+		if got := admissionFrom(yielded).isolation; got != nil {
 			t.Errorf("yielded context retained lease: %#v", got)
 		}
 		select {
@@ -45,7 +45,7 @@ func TestYieldRunIsolationLetsExclusiveChildRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("YieldRunIsolation: %v", err)
 	}
-	if got := isolationLeaseFrom(ctx); got != parentLease {
+	if got := admissionFrom(ctx).isolation; got != parentLease {
 		t.Fatalf("parent lease after yield = %#v, want %#v", got, parentLease)
 	}
 }

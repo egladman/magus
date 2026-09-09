@@ -839,15 +839,6 @@ func reproTarget(s Step) string {
 // Factored out of RunAll so that work running OUTSIDE the batch can be accounted the
 // same way rather than through a second, quietly divergent bookkeeping path - see
 // [Cache.RunAside].
-// machineClaimHeldKey marks a context whose step already holds a machine-wide claim, so
-// anything admitted beneath it takes none of its own.
-type machineClaimHeldKey struct{}
-
-func machineClaimHeld(ctx context.Context) bool {
-	held, _ := ctx.Value(machineClaimHeldKey{}).(bool)
-	return held
-}
-
 func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Context, int, func(), error) {
 	// A heavy step can request extra slots (Step.Slots) to throttle parallel work
 	// around itself. Clamp to [1, budget]: 0 means one slot, and a request above the
@@ -891,7 +882,7 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 	// could fail after its children had already run. The limiter still bounds how many of
 	// these run at once inside this process.
 	releaseMachine := func() {}
-	if !machineClaimHeld(ctx) {
+	if held := admissionFrom(ctx); !held.machineClaim {
 		release, machineErr := c.machine.acquire(ctx, types.MachineClaim{
 			Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 			MemoryMB: s.MemoryMB, Slots: slots,
@@ -904,7 +895,8 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 			return ctx, 0, nil, machineErr
 		}
 		releaseMachine = release
-		ctx = context.WithValue(ctx, machineClaimHeldKey{}, true)
+		held.machineClaim = true
+		ctx = held.on(ctx)
 	}
 	// Report occupancy as it changes, so an interactive run can show a live pool
 	// counter. Emitted on both edges of the slot's life: once here (this step is now
@@ -949,7 +941,6 @@ type runIsolation struct {
 }
 
 type runIsolationKey struct{}
-type runIsolationLeaseKey struct{}
 
 type runIsolationLease struct {
 	isolation *runIsolation
@@ -975,11 +966,6 @@ func isolationFrom(ctx context.Context) *runIsolation {
 	return isolation
 }
 
-func isolationLeaseFrom(ctx context.Context) *runIsolationLease {
-	lease, _ := ctx.Value(runIsolationLeaseKey{}).(*runIsolationLease)
-	return lease
-}
-
 func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, func()) {
 	ctx = WithRunScope(ctx)
 	// Inside an exclusive ancestor's region there is nothing to take: a shared lease is
@@ -992,7 +978,7 @@ func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, 
 	// dispatched needs child arrives through RunAside, which runs outside a batch by
 	// definition. It is already excluded from every batch peer by the ancestor holding the
 	// write lock, which is the whole of what the policy promises.
-	if lease := isolationLeaseFrom(ctx); lease != nil && lease.inherited {
+	if lease := admissionFrom(ctx).isolation; lease != nil && lease.inherited {
 		return ctx, func() {}
 	}
 	isolation := isolationFrom(ctx)
@@ -1001,10 +987,9 @@ func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, 
 	} else {
 		isolation.mu.RLock()
 	}
-	ctx = context.WithValue(ctx, runIsolationLeaseKey{}, &runIsolationLease{
-		isolation: isolation,
-		exclusive: exclusive,
-	})
+	held := admissionFrom(ctx)
+	held.isolation = &runIsolationLease{isolation: isolation, exclusive: exclusive}
+	ctx = held.on(ctx)
 	return ctx, func() {
 		if exclusive {
 			isolation.mu.Unlock()
@@ -1020,7 +1005,8 @@ func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, 
 // the children run inside its region, taking no lease of their own. It is deliberately a
 // no-op outside an admitted cache step.
 func YieldRunIsolation(ctx context.Context, fn func(context.Context) error) error {
-	lease := isolationLeaseFrom(ctx)
+	held := admissionFrom(ctx)
+	lease := held.isolation
 	if lease == nil || lease.inherited {
 		return fn(ctx)
 	}
@@ -1032,14 +1018,16 @@ func YieldRunIsolation(ctx context.Context, fn func(context.Context) error) erro
 		// none.
 		inherited := *lease
 		inherited.inherited = true
-		return fn(context.WithValue(ctx, runIsolationLeaseKey{}, &inherited))
+		held.isolation = &inherited
+		return fn(held.on(ctx))
 	}
 	// A shared holder releases: a child may need an exclusive lease, which the read lock
 	// would block, and RWMutex parks a new reader behind any waiting writer, so a parent
 	// that held would deadlock on its own child.
 	lease.isolation.mu.RUnlock()
 	defer lease.isolation.mu.RLock()
-	return fn(context.WithValue(ctx, runIsolationLeaseKey{}, nil))
+	held.isolation = nil
+	return fn(held.on(ctx))
 }
 
 func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) error, opts ...RunOption) (Result, error) {
