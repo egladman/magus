@@ -1,0 +1,6 @@
+# benchmarks/.gitignore already excludes results/ everywhere below it; a
+# negation cannot reach inside an excluded DIRECTORY, so the directory itself is
+# re-included here before its contents are excluded again.
+!results/
+results/*
+!results/.gitkeep
