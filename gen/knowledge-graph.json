@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5365,
-  "edge_count": 9522,
+  "node_count": 5406,
+  "edge_count": 9564,
   "relations": [
     {
       "id": "annotates",
@@ -1147,8 +1147,8 @@
       "label": "benchmarks",
       "source": "benchmarks",
       "attrs": {
-        "dir_files": "71",
-        "dir_languages": "buzz,markdown,md#agent-harness-effectiveness-benchmark,md#analysis-image,md#arms,md#benchmark-analysis,md#budget-caps,md#caveats,md#claudemd,md#confounds,md#controls,md#cost--tuning,md#environment,md#fixture-go-n50,md#fixtures,md#headline-metric,md#how-mag"
+        "dir_files": "106",
+        "dir_languages": "buzz,markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-corpus,md#agent-harness-effectiveness-benchmark,md#analysis-image,md#answer,md#answer-format,md#arms,md#behavior-change,md#benchmark-analysis,md#budget-caps,md#catc"
       }
     },
     {
@@ -1157,8 +1157,8 @@
       "label": "benchmarks/agent",
       "source": "benchmarks/agent",
       "attrs": {
-        "dir_files": "31",
-        "dir_languages": "markdown,md#agent-harness-effectiveness-benchmark,md#analysis-image,md#arms,md#benchmark-analysis,md#budget-caps,md#claudemd,md#confounds,md#controls,md#headline-metric,md#inputs,md#invocations,md#metric-definitions,md#not-built-yet,md#results-schema,md#ru"
+        "dir_files": "64",
+        "dir_languages": "markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-corpus,md#agent-harness-effectiveness-benchmark,md#analysis-image,md#answer,md#answer-format,md#arms,md#behavior-change,md#benchmark-analysis,md#budget-caps,md#catch-me-"
       }
     },
     {
@@ -1187,8 +1187,8 @@
       "label": "benchmarks/agent/tasks",
       "source": "benchmarks/agent/tasks",
       "attrs": {
-        "dir_files": "2",
-        "dir_languages": "markdown"
+        "dir_files": "35",
+        "dir_languages": "markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-corpus,md#answer,md#answer-format,md#behavior-change,md#catch-me-up-on-what-landed-since-release-2,md#changing-a-task-invalidates-prior-numbers,md#query-strings-come-out"
       }
     },
     {
@@ -1202,13 +1202,93 @@
       }
     },
     {
+      "id": "dir:benchmarks/agent/tasks/add-metrics-percentile",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/add-metrics-percentile",
+      "source": "benchmarks/agent/tasks/add-metrics-percentile",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown,md#add-a-percentile-helper-to-packagesplatformmetrics"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks/changes-since-baseline",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/changes-since-baseline",
+      "source": "benchmarks/agent/tasks/changes-since-baseline",
+      "attrs": {
+        "dir_files": "4",
+        "dir_languages": "markdown,md#answer,md#behavior-change,md#catch-me-up-on-what-landed-since-release-2"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks/config-change-rebuild-set",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/config-change-rebuild-set",
+      "source": "benchmarks/agent/tasks/config-change-rebuild-set",
+      "attrs": {
+        "dir_files": "3",
+        "dir_languages": "markdown,md#answer,md#which-apps-have-to-be-rebuilt-if-packagesplatformconfig-changes"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks/merge-config-falsy",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/merge-config-falsy",
+      "source": "benchmarks/agent/tasks/merge-config-falsy",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown,md#turning-an-option-off-has-no-effect"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks/platform-http-consumers",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/platform-http-consumers",
+      "source": "benchmarks/agent/tasks/platform-http-consumers",
+      "attrs": {
+        "dir_files": "3",
+        "dir_languages": "markdown,md#answer,md#which-feature-libraries-end-up-using-packagesplatformhttp"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks/regenerate-api-summaries",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/regenerate-api-summaries",
+      "source": "benchmarks/agent/tasks/regenerate-api-summaries",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown,md#the-api-summaries-are-out-of-step-with-the-source"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks/rename-logger-factory",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/rename-logger-factory",
+      "source": "benchmarks/agent/tasks/rename-logger-factory",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown,md#rename-createlogger-to-makelogger"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/tasks/url-query-encoding",
+      "kind": "dir",
+      "label": "benchmarks/agent/tasks/url-query-encoding",
+      "source": "benchmarks/agent/tasks/url-query-encoding",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown,md#query-strings-come-out-malformed"
+      }
+    },
+    {
       "id": "dir:benchmarks/large-monorepo",
       "kind": "dir",
       "label": "benchmarks/large-monorepo",
       "source": "benchmarks/large-monorepo",
       "attrs": {
-        "dir_files": "15",
-        "dir_languages": "buzz,markdown,md#cost--tuning,md#how-magus-is-wired,md#large-monorepo-benchmark-magus-vs-turbo--nx--lage,md#large-monorepo-dependency-graph,md#layout,md#prerequisites,md#run,md#scenarios,md#verified-behavior,md#what-is-and-isnt-measured,md#why-no-fork-and-"
+        "dir_files": "17",
+        "dir_languages": "buzz,markdown,md#cost--tuning,md#how-magus-is-wired,md#large-monorepo-benchmark-magus-vs-turbo--nx--lage,md#large-monorepo-dependency-graph,md#layout,md#prerequisites,md#run,md#scenarios,md#the-enrichment-and-who-it-is-for,md#verified-behavior,md#what-is-a"
       }
     },
     {
@@ -1217,7 +1297,7 @@
       "label": "benchmarks/large-monorepo/spells",
       "source": "benchmarks/large-monorepo/spells",
       "attrs": {
-        "dir_files": "2",
+        "dir_files": "3",
         "dir_languages": "buzz"
       }
     },
@@ -2699,10 +2779,91 @@
       }
     },
     {
+      "id": "doc:benchmarks/agent/tasks/README.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/README.md",
+      "source": "benchmarks/agent/tasks/README.md",
+      "attrs": {
+        "role": "readme"
+      }
+    },
+    {
       "id": "doc:benchmarks/agent/tasks/_placeholder/task.md",
       "kind": "doc",
       "label": "benchmarks/agent/tasks/_placeholder/task.md",
       "source": "benchmarks/agent/tasks/_placeholder/task.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/add-metrics-percentile/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/add-metrics-percentile/task.md",
+      "source": "benchmarks/agent/tasks/add-metrics-percentile/task.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/changes-since-baseline/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/changes-since-baseline/task.md",
+      "source": "benchmarks/agent/tasks/changes-since-baseline/task.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/config-change-rebuild-set/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/config-change-rebuild-set/task.md",
+      "source": "benchmarks/agent/tasks/config-change-rebuild-set/task.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/merge-config-falsy/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/merge-config-falsy/task.md",
+      "source": "benchmarks/agent/tasks/merge-config-falsy/task.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/platform-http-consumers/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/platform-http-consumers/task.md",
+      "source": "benchmarks/agent/tasks/platform-http-consumers/task.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/regenerate-api-summaries/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/regenerate-api-summaries/task.md",
+      "source": "benchmarks/agent/tasks/regenerate-api-summaries/task.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/rename-logger-factory/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/rename-logger-factory/task.md",
+      "source": "benchmarks/agent/tasks/rename-logger-factory/task.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:benchmarks/agent/tasks/url-query-encoding/task.md",
+      "kind": "doc",
+      "label": "benchmarks/agent/tasks/url-query-encoding/task.md",
+      "source": "benchmarks/agent/tasks/url-query-encoding/task.md",
       "attrs": {
         "role": "doc"
       }
@@ -8201,6 +8362,166 @@
       }
     },
     {
+      "id": "docsection:benchmarks/agent/tasks/README.md#agent-benchmark-task-corpus",
+      "kind": "docsection",
+      "label": "Agent-benchmark task corpus",
+      "source": "benchmarks/agent/tasks/README.md#agent-benchmark-task-corpus",
+      "attrs": {
+        "anchor": "agent-benchmark-task-corpus",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/README.md#answer-format",
+      "kind": "docsection",
+      "label": "Answer format",
+      "source": "benchmarks/agent/tasks/README.md#answer-format",
+      "attrs": {
+        "anchor": "answer-format",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/README.md#changing-a-task-invalidates-prior-numbers",
+      "kind": "docsection",
+      "label": "Changing a task invalidates prior numbers",
+      "source": "benchmarks/agent/tasks/README.md#changing-a-task-invalidates-prior-numbers",
+      "attrs": {
+        "anchor": "changing-a-task-invalidates-prior-numbers",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/README.md#task-validity-and-outcome-validity",
+      "kind": "docsection",
+      "label": "Task validity and outcome validity",
+      "source": "benchmarks/agent/tasks/README.md#task-validity-and-outcome-validity",
+      "attrs": {
+        "anchor": "task-validity-and-outcome-validity",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/add-metrics-percentile/task.md#add-a-percentile-helper-to-packagesplatformmetrics",
+      "kind": "docsection",
+      "label": "Add a percentile helper to packages/platform/metrics",
+      "source": "benchmarks/agent/tasks/add-metrics-percentile/task.md#add-a-percentile-helper-to-packagesplatformmetrics",
+      "attrs": {
+        "anchor": "add-a-percentile-helper-to-packagesplatformmetrics",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/changes-since-baseline/task.md#answer",
+      "kind": "docsection",
+      "label": "Answer",
+      "source": "benchmarks/agent/tasks/changes-since-baseline/task.md#answer",
+      "attrs": {
+        "anchor": "answer",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/changes-since-baseline/task.md#behavior-change",
+      "kind": "docsection",
+      "label": "Behavior change",
+      "source": "benchmarks/agent/tasks/changes-since-baseline/task.md#behavior-change",
+      "attrs": {
+        "anchor": "behavior-change",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/changes-since-baseline/task.md#catch-me-up-on-what-landed-since-release-2",
+      "kind": "docsection",
+      "label": "Catch me up on what landed since release-2",
+      "source": "benchmarks/agent/tasks/changes-since-baseline/task.md#catch-me-up-on-what-landed-since-release-2",
+      "attrs": {
+        "anchor": "catch-me-up-on-what-landed-since-release-2",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/config-change-rebuild-set/task.md#answer",
+      "kind": "docsection",
+      "label": "Answer",
+      "source": "benchmarks/agent/tasks/config-change-rebuild-set/task.md#answer",
+      "attrs": {
+        "anchor": "answer",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/config-change-rebuild-set/task.md#which-apps-have-to-be-rebuilt-if-packagesplatformconfig-changes",
+      "kind": "docsection",
+      "label": "Which apps have to be rebuilt if packages/platform/config changes?",
+      "source": "benchmarks/agent/tasks/config-change-rebuild-set/task.md#which-apps-have-to-be-rebuilt-if-packagesplatformconfig-changes",
+      "attrs": {
+        "anchor": "which-apps-have-to-be-rebuilt-if-packagesplatformconfig-changes",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/merge-config-falsy/task.md#turning-an-option-off-has-no-effect",
+      "kind": "docsection",
+      "label": "Turning an option off has no effect",
+      "source": "benchmarks/agent/tasks/merge-config-falsy/task.md#turning-an-option-off-has-no-effect",
+      "attrs": {
+        "anchor": "turning-an-option-off-has-no-effect",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/platform-http-consumers/task.md#answer",
+      "kind": "docsection",
+      "label": "Answer",
+      "source": "benchmarks/agent/tasks/platform-http-consumers/task.md#answer",
+      "attrs": {
+        "anchor": "answer",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/platform-http-consumers/task.md#which-feature-libraries-end-up-using-packagesplatformhttp",
+      "kind": "docsection",
+      "label": "Which feature libraries end up using packages/platform/http?",
+      "source": "benchmarks/agent/tasks/platform-http-consumers/task.md#which-feature-libraries-end-up-using-packagesplatformhttp",
+      "attrs": {
+        "anchor": "which-feature-libraries-end-up-using-packagesplatformhttp",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/regenerate-api-summaries/task.md#the-api-summaries-are-out-of-step-with-the-source",
+      "kind": "docsection",
+      "label": "The api summaries are out of step with the source",
+      "source": "benchmarks/agent/tasks/regenerate-api-summaries/task.md#the-api-summaries-are-out-of-step-with-the-source",
+      "attrs": {
+        "anchor": "the-api-summaries-are-out-of-step-with-the-source",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/rename-logger-factory/task.md#rename-createlogger-to-makelogger",
+      "kind": "docsection",
+      "label": "Rename createLogger to makeLogger",
+      "source": "benchmarks/agent/tasks/rename-logger-factory/task.md#rename-createlogger-to-makelogger",
+      "attrs": {
+        "anchor": "rename-createlogger-to-makelogger",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/agent/tasks/url-query-encoding/task.md#query-strings-come-out-malformed",
+      "kind": "docsection",
+      "label": "Query strings come out malformed",
+      "source": "benchmarks/agent/tasks/url-query-encoding/task.md#query-strings-come-out-malformed",
+      "attrs": {
+        "anchor": "query-strings-come-out-malformed",
+        "level": "1"
+      }
+    },
+    {
       "id": "docsection:benchmarks/large-monorepo/README.md#cost--tuning",
       "kind": "docsection",
       "label": "Cost / tuning",
@@ -8268,6 +8589,16 @@
       "attrs": {
         "anchor": "scenarios",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:benchmarks/large-monorepo/README.md#the-enrichment-and-who-it-is-for",
+      "kind": "docsection",
+      "label": "The enrichment, and who it is for",
+      "source": "benchmarks/large-monorepo/README.md#the-enrichment-and-who-it-is-for",
+      "attrs": {
+        "anchor": "the-enrichment-and-who-it-is-for",
+        "level": "3"
       }
     },
     {
@@ -35430,6 +35761,15 @@
       }
     },
     {
+      "id": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "kind": "file",
+      "label": "benchmarks/large-monorepo/spells/jsmod.buzz",
+      "source": "benchmarks/large-monorepo/spells/jsmod.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:benchmarks/large-monorepo/spells/nextjs.buzz",
       "kind": "file",
       "label": "benchmarks/large-monorepo/spells/nextjs.buzz",
@@ -37486,6 +37826,57 @@
       "label": "whole_percent",
       "doc": "whole_percent reads a figure's integer part (\"56.8\" -> 56). std\\parseInt returns null on non-numeric input, which we turn into a clear error so a bad figure fails loudly instead of rendering wrong.",
       "source": "badge.buzz:29"
+    },
+    {
+      "id": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_getName",
+      "kind": "function",
+      "label": "mgs_getName",
+      "source": "benchmarks/large-monorepo/spells/jsmod.buzz:7",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_getVersionProbe",
+      "kind": "function",
+      "label": "mgs_getVersionProbe",
+      "source": "benchmarks/large-monorepo/spells/jsmod.buzz:15",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_listProvidedGlobs",
+      "kind": "function",
+      "label": "mgs_listProvidedGlobs",
+      "source": "benchmarks/large-monorepo/spells/jsmod.buzz:13",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_listRequiredGlobs",
+      "kind": "function",
+      "label": "mgs_listRequiredGlobs",
+      "source": "benchmarks/large-monorepo/spells/jsmod.buzz:9",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_listTargets",
+      "kind": "function",
+      "label": "mgs_listTargets",
+      "source": "benchmarks/large-monorepo/spells/jsmod.buzz:19",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:benchmarks/large-monorepo/spells/jsmod.buzz:noop",
+      "kind": "function",
+      "label": "noop",
+      "source": "benchmarks/large-monorepo/spells/jsmod.buzz:17"
     },
     {
       "id": "function:benchmarks/large-monorepo/spells/nextjs.buzz:mgs_getName",
@@ -52369,12 +52760,148 @@
       "provenance": "benchmarks/agent/tasks/_placeholder"
     },
     {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/add-metrics-percentile",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/add-metrics-percentile"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/changes-since-baseline",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/changes-since-baseline"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/config-change-rebuild-set",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/config-change-rebuild-set"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/merge-config-falsy",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/merge-config-falsy"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/platform-http-consumers",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/platform-http-consumers"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/regenerate-api-summaries",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/regenerate-api-summaries"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/rename-logger-factory",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/rename-logger-factory"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "dir:benchmarks/agent/tasks/url-query-encoding",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/url-query-encoding"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks",
+      "target": "doc:benchmarks/agent/tasks/README.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/README.md"
+    },
+    {
       "source": "dir:benchmarks/agent/tasks/_placeholder",
       "target": "doc:benchmarks/agent/tasks/_placeholder/task.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "benchmarks/agent/tasks/_placeholder/task.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/add-metrics-percentile",
+      "target": "doc:benchmarks/agent/tasks/add-metrics-percentile/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/add-metrics-percentile/task.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/changes-since-baseline",
+      "target": "doc:benchmarks/agent/tasks/changes-since-baseline/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/changes-since-baseline/task.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/config-change-rebuild-set",
+      "target": "doc:benchmarks/agent/tasks/config-change-rebuild-set/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/config-change-rebuild-set/task.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/merge-config-falsy",
+      "target": "doc:benchmarks/agent/tasks/merge-config-falsy/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/merge-config-falsy/task.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/platform-http-consumers",
+      "target": "doc:benchmarks/agent/tasks/platform-http-consumers/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/platform-http-consumers/task.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/regenerate-api-summaries",
+      "target": "doc:benchmarks/agent/tasks/regenerate-api-summaries/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/regenerate-api-summaries/task.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/rename-logger-factory",
+      "target": "doc:benchmarks/agent/tasks/rename-logger-factory/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/rename-logger-factory/task.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/tasks/url-query-encoding",
+      "target": "doc:benchmarks/agent/tasks/url-query-encoding/task.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/url-query-encoding/task.md"
     },
     {
       "source": "dir:benchmarks/large-monorepo",
@@ -52399,6 +52926,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "benchmarks/large-monorepo/dependency-graph.md"
+    },
+    {
+      "source": "dir:benchmarks/large-monorepo/spells",
+      "target": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/large-monorepo/spells/jsmod.buzz"
     },
     {
       "source": "dir:benchmarks/large-monorepo/spells",
@@ -58423,6 +58958,78 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "benchmarks/agent/arms/repo-description.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/README.md",
+      "target": "docsection:benchmarks/agent/tasks/README.md#agent-benchmark-task-corpus",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/README.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/add-metrics-percentile/task.md",
+      "target": "docsection:benchmarks/agent/tasks/add-metrics-percentile/task.md#add-a-percentile-helper-to-packagesplatformmetrics",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/add-metrics-percentile/task.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/changes-since-baseline/task.md",
+      "target": "docsection:benchmarks/agent/tasks/changes-since-baseline/task.md#catch-me-up-on-what-landed-since-release-2",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/changes-since-baseline/task.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/config-change-rebuild-set/task.md",
+      "target": "docsection:benchmarks/agent/tasks/config-change-rebuild-set/task.md#which-apps-have-to-be-rebuilt-if-packagesplatformconfig-changes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/config-change-rebuild-set/task.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/merge-config-falsy/task.md",
+      "target": "docsection:benchmarks/agent/tasks/merge-config-falsy/task.md#turning-an-option-off-has-no-effect",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/merge-config-falsy/task.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/platform-http-consumers/task.md",
+      "target": "docsection:benchmarks/agent/tasks/platform-http-consumers/task.md#which-feature-libraries-end-up-using-packagesplatformhttp",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/platform-http-consumers/task.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/regenerate-api-summaries/task.md",
+      "target": "docsection:benchmarks/agent/tasks/regenerate-api-summaries/task.md#the-api-summaries-are-out-of-step-with-the-source",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/regenerate-api-summaries/task.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/rename-logger-factory/task.md",
+      "target": "docsection:benchmarks/agent/tasks/rename-logger-factory/task.md#rename-createlogger-to-makelogger",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/rename-logger-factory/task.md"
+    },
+    {
+      "source": "doc:benchmarks/agent/tasks/url-query-encoding/task.md",
+      "target": "docsection:benchmarks/agent/tasks/url-query-encoding/task.md#query-strings-come-out-malformed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/url-query-encoding/task.md"
     },
     {
       "source": "doc:benchmarks/large-monorepo/README.md",
@@ -82385,6 +82992,70 @@
       "provenance": "benchmarks/agent/arms/README.md"
     },
     {
+      "source": "docsection:benchmarks/agent/tasks/README.md#agent-benchmark-task-corpus",
+      "target": "docsection:benchmarks/agent/tasks/README.md#answer-format",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/tasks/README.md#agent-benchmark-task-corpus",
+      "target": "docsection:benchmarks/agent/tasks/README.md#changing-a-task-invalidates-prior-numbers",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/tasks/README.md#agent-benchmark-task-corpus",
+      "target": "docsection:benchmarks/agent/tasks/README.md#task-validity-and-outcome-validity",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/README.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/tasks/changes-since-baseline/task.md#catch-me-up-on-what-landed-since-release-2",
+      "target": "docsection:benchmarks/agent/tasks/changes-since-baseline/task.md#answer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/changes-since-baseline/task.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/tasks/changes-since-baseline/task.md#catch-me-up-on-what-landed-since-release-2",
+      "target": "docsection:benchmarks/agent/tasks/changes-since-baseline/task.md#behavior-change",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/changes-since-baseline/task.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/tasks/config-change-rebuild-set/task.md#which-apps-have-to-be-rebuilt-if-packagesplatformconfig-changes",
+      "target": "docsection:benchmarks/agent/tasks/config-change-rebuild-set/task.md#answer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/config-change-rebuild-set/task.md"
+    },
+    {
+      "source": "docsection:benchmarks/agent/tasks/platform-http-consumers/task.md#which-feature-libraries-end-up-using-packagesplatformhttp",
+      "target": "docsection:benchmarks/agent/tasks/platform-http-consumers/task.md#answer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/tasks/platform-http-consumers/task.md"
+    },
+    {
+      "source": "docsection:benchmarks/large-monorepo/README.md#how-magus-is-wired",
+      "target": "docsection:benchmarks/large-monorepo/README.md#the-enrichment-and-who-it-is-for",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/large-monorepo/README.md"
+    },
+    {
       "source": "docsection:benchmarks/large-monorepo/README.md#how-magus-is-wired",
       "target": "docsection:benchmarks/large-monorepo/README.md#verified-behavior",
       "relation": "contains",
@@ -101567,6 +102238,62 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "badge.buzz"
+    },
+    {
+      "source": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "target": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_getName",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/large-monorepo/spells/jsmod.buzz"
+    },
+    {
+      "source": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "target": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_getVersionProbe",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/large-monorepo/spells/jsmod.buzz"
+    },
+    {
+      "source": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "target": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_listProvidedGlobs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/large-monorepo/spells/jsmod.buzz"
+    },
+    {
+      "source": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "target": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_listRequiredGlobs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/large-monorepo/spells/jsmod.buzz"
+    },
+    {
+      "source": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "target": "function:benchmarks/large-monorepo/spells/jsmod.buzz:mgs_listTargets",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/large-monorepo/spells/jsmod.buzz"
+    },
+    {
+      "source": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "target": "function:benchmarks/large-monorepo/spells/jsmod.buzz:noop",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/large-monorepo/spells/jsmod.buzz"
+    },
+    {
+      "source": "file:benchmarks/large-monorepo/spells/jsmod.buzz",
+      "target": "import:magus/spell",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "benchmarks/large-monorepo/spells/jsmod.buzz"
     },
     {
       "source": "file:benchmarks/large-monorepo/spells/nextjs.buzz",
