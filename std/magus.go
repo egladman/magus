@@ -900,11 +900,12 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 	return report, nil
 }
 
-// ledgerCacheDir is the structural seam for the one capability types.WorkspaceRepository
-// does not carry that opening a lease-ledger Store needs: the workspace's cache
-// directory. Satisfied by the real *magus.Magus the same way std.Analyzer is, recovered
-// by assertion so std and root magus name neither each other.
-type ledgerCacheDir interface {
+// workspaceCacheDir is the structural seam for the one capability
+// types.WorkspaceRepository does not carry that opening a lease-ledger Store needs: the
+// workspace's cache directory, which the ledger adopts its pre-move rows from. Satisfied
+// by the real *magus.Magus the same way std.Analyzer is, recovered by assertion so std
+// and root magus name neither each other.
+type workspaceCacheDir interface {
 	CacheDir() string
 }
 
@@ -924,7 +925,7 @@ func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, 
 			"magus\\%s: no workspace on the context - the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. The `magus ledger` subcommand only reads, so it is no fallback for a write; run from inside the workspace instead",
 			member)
 	}
-	cd, ok := ws.(ledgerCacheDir)
+	cd, ok := ws.(workspaceCacheDir)
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}

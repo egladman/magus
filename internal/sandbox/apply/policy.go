@@ -191,10 +191,11 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 }
 
 // NarrowToLease reduces policy's filesystem WRITE grant to the boundary the lease leaseID
-// names declared in the workspace ledger. It returns policy untouched when there is no
-// boundary to derive one from: no lease id, no row, a terminal row, a ROOT lease (a row
-// with no parent is the orchestrator, and it owns the whole checkout), or a row that
-// declared no owned paths.
+// names declared in the ledger at loc. It returns policy untouched when there is no
+// boundary to derive one from: no lease id, no row, a row that is not live, a ROOT lease
+// (a row with no parent is the orchestrator, and it owns the whole checkout), or a row
+// that declared no owned paths and is not read-only. A read-only row narrows the grant
+// to nothing but the cache dir and $TMPDIR, the same answer the guard gives its writes.
 //
 // The grant is DERIVED from the row rather than declared a second time in magus.yaml,
 // because a boundary written twice is a boundary that disagrees with itself. The agent
@@ -214,11 +215,11 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 //
 // An unreadable ledger fails OPEN with a warning, matching the guard: a lease id that
 // stops resolving must not brick the checkout a person is working in.
-func NarrowToLease(ctx context.Context, policy *sandbox.Policy, root, cacheDir, leaseID string) *sandbox.Policy {
-	if policy == nil || root == "" || leaseID == "" {
+func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc ledger.Location, leaseID string) *sandbox.Policy {
+	if policy == nil || loc.Root == "" || leaseID == "" {
 		return policy
 	}
-	rows, err := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := ledger.NewStore(loc).List()
 	if err != nil {
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
 			"lease ledger unreadable; sandbox running with the workspace write grant"),
@@ -230,7 +231,10 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, root, cacheDir, 
 		return policy
 	}
 
-	granted := grantedPaths(root, row.OwnedPaths, row.ForbiddenPaths)
+	var granted []string
+	if !row.ReadOnly {
+		granted = grantedPaths(loc.Root, row.OwnedPaths, row.ForbiddenPaths)
+	}
 	rules := make([]filesystem.Rule, 0, len(policy.FS.Rules)+len(granted)+2)
 	for _, r := range policy.FS.Rules {
 		r.Write = false
@@ -239,7 +243,7 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, root, cacheDir, 
 	for _, p := range granted {
 		rules = append(rules, filesystem.Rule{Path: p, Read: true, Write: true})
 	}
-	for _, p := range []string{cacheDir, os.TempDir()} {
+	for _, p := range []string{loc.CacheDir, os.TempDir()} {
 		if p == "" {
 			continue
 		}
@@ -254,19 +258,16 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, root, cacheDir, 
 	return &narrowed
 }
 
-// workerLease returns the live worker row leaseID names. A root lease, a terminal row, and
-// a row with no declared owned paths all report false: none of them states a boundary
-// narrower than the workspace.
+// workerLease returns the live worker row leaseID names. A root lease, a row that is not
+// live, and a writable row with no declared owned paths all report false: none of them
+// states a boundary narrower than the workspace. Liveness is types.LeaseState.Live, the
+// same test the guard applies, so a row the guard ignores is one the sandbox ignores.
 func workerLease(rows []types.Lease, leaseID string) (types.Lease, bool) {
 	for _, l := range rows {
 		if l.ID != leaseID {
 			continue
 		}
-		if l.Parent == "" || len(l.OwnedPaths) == 0 {
-			return types.Lease{}, false
-		}
-		switch l.State {
-		case types.StatePass, types.StateFail, types.StateNoReturn:
+		if l.Parent == "" || !l.State.Live() || (len(l.OwnedPaths) == 0 && !l.ReadOnly) {
 			return types.Lease{}, false
 		}
 		return l, true
@@ -305,7 +306,7 @@ func grantedPaths(root string, owned, forbidden []string) []string {
 	matched = slices.Compact(matched)
 	out := make([]string, 0, len(matched))
 	for _, m := range matched {
-		if len(out) > 0 && under(m, out[len(out)-1]) {
+		if len(out) > 0 && filesystem.Under(m, out[len(out)-1]) {
 			continue
 		}
 		out = append(out, m)
@@ -324,10 +325,10 @@ func grantedPaths(root string, owned, forbidden []string) []string {
 func splitAroundForbidden(abs string, forbidden []string) []string {
 	holds := false
 	for _, f := range forbidden {
-		if under(abs, f) {
+		if filesystem.Under(abs, f) {
 			return nil
 		}
-		holds = holds || under(f, abs)
+		holds = holds || filesystem.Under(f, abs)
 	}
 	if !holds {
 		return []string{abs}
@@ -343,9 +344,4 @@ func splitAroundForbidden(abs string, forbidden []string) []string {
 		out = append(out, splitAroundForbidden(filepath.Join(abs, e.Name()), forbidden)...)
 	}
 	return out
-}
-
-// under reports whether child is at or beneath parent; both must be absolute and clean.
-func under(child, parent string) bool {
-	return child == parent || strings.HasPrefix(child, parent+string(filepath.Separator))
 }

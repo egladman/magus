@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -116,13 +117,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if err != nil {
 		return err
 	}
-	// The bound value, which envDefault has already filled from the environment when no
-	// --lease was passed, so an explicit flag still wins.
+	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
+	// two tiers cannot disagree about who is acting (see ledger.LeaseMarkerName).
 	actingLease := hf.Lease
-	// The checkout's own marker is the last resort, and the one a worker in its own
-	// worktree actually reaches the hook through: see leaseMarkerName.
 	if actingLease == "" {
-		actingLease = leaseFromTree(ctx)
+		actingLease = ledger.ActingLease(hookActivityTrail(ctx).base)
 	}
 
 	input, hasInput, readErr := readGuardInput(in)
@@ -293,13 +292,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// The lease ledger's half of the command surface. Ranked BELOW the rules above,
 		// unlike the write arm where it speaks first: those refuse a command whoever runs
 		// it, and a sibling checkout's gate is the wrong tree before it is the wrong scope.
-		if verdict.Decision != "deny" {
-			if reason := denyLeaseScopedGate(ctx, actingLease, input.Value); reason != "" {
-				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
+		for _, rule := range []func(context.Context, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS} {
+			if verdict.Decision == "deny" {
+				break
 			}
-		}
-		if verdict.Decision != "deny" {
-			if reason := denyLeaseScopedVCS(ctx, actingLease, input.Value); reason != "" {
+			if reason := rule(ctx, actingLease, input.Value); reason != "" {
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
 			}
 		}

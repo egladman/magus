@@ -175,7 +175,7 @@ func TestNarrowToLeaseGrantsOnlyTheOwnedPaths(t *testing.T) {
 		OwnedPaths: []string{"pkg/a/**"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), root, cacheDir, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -197,7 +197,7 @@ func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
 		OwnedPaths: []string{"pkg/**"}, ForbiddenPaths: []string{"pkg/a/gen"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), root, cacheDir, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "gen", "x.txt")))
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "keep", "x.txt")))
@@ -214,7 +214,7 @@ func TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing(t *testing.T) {
 		OwnedPaths: []string{"pkg/nowhere/**"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), root, cacheDir, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -233,19 +233,35 @@ func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 		{"root lease", types.Lease{ID: "fleet/root", State: types.StateRunning, OwnedPaths: []string{"pkg/a/**"}}, "fleet/root"},
 		{"no row", types.Lease{}, "fleet/w1"},
 		{"no lease claimed", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, OwnedPaths: []string{"pkg/a/**"}}, ""},
-		{"empty owned paths", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, ReadOnly: true}, "fleet/w1"},
+		{"empty owned paths", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning}, "fleet/w1"},
 		{"terminal row", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StatePass, OwnedPaths: []string{"pkg/a/**"}}, "fleet/w1"},
+		{"no state", types.Lease{ID: "fleet/w1", Parent: "fleet/root", OwnedPaths: []string{"pkg/a/**"}}, "fleet/w1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, cacheDir := leaseWorkspace(t, tc.row)
 			base := FromConfig(t.Context(), root, config.Config{})
 
-			p := NarrowToLease(t.Context(), base, root, cacheDir, tc.acted)
+			p := NarrowToLease(t.Context(), base, ledger.Location{CacheDir: cacheDir, Root: root}, tc.acted)
 
 			assert.Same(t, base, p)
 			assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "b", "x.txt")))
 		})
 	}
+}
+
+// TestNarrowToLeaseGrantsAReadOnlyRowNoWrites matches the guard, which refuses every
+// write under a read-only lease: the sandbox keeps only the cache dir and $TMPDIR.
+func TestNarrowToLeaseGrantsAReadOnlyRowNoWrites(t *testing.T) {
+	root, cacheDir := leaseWorkspace(t, types.Lease{
+		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, ReadOnly: true,
+	})
+
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+
+	assert.Equal(t, "fleet/w1", p.Lease)
+	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
+	assert.NoError(t, p.CheckRead(filepath.Join(root, "pkg", "a", "x.txt")))
+	assert.NoError(t, p.CheckWrite(filepath.Join(cacheDir, "out")))
 }
 
 // TestApplyAttachesANarrowedPolicy runs the narrowed policy through the process-wide apply
@@ -256,7 +272,7 @@ func TestApplyAttachesANarrowedPolicy(t *testing.T) {
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
 		OwnedPaths: []string{"pkg/a/**"},
 	})
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), root, cacheDir, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 	MarkAppliedExternally(p.Fingerprint())
 
 	ctx, err := Apply(t.Context(), p, root)

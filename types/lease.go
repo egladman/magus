@@ -61,6 +61,13 @@ func (s LeaseState) terminal() bool {
 	return s == StatePass || s == StateFail || s == StateNoReturn
 }
 
+// Live reports whether the lease can still act on its paths: declared or running. A
+// row with no state is not live, it has not said it is; that is the one rule the guard
+// and the sandbox both scope a worker by, so it lives here rather than in either.
+func (s LeaseState) Live() bool {
+	return s == StateDeclared || s == StateRunning
+}
+
 // MaxLeaseIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
 // enough that the id stays a correlation key rather than a payload riding every event
 // line.

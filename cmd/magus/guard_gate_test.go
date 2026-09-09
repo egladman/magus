@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -284,19 +285,20 @@ func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
 	assert.Equal(t, "pass\n", unleased.String(), "a caller naming no lease is scoped by nobody's row")
 }
 
-// TestLeaseFromTree pins the channel a worker in its own worktree reaches the hook
-// through: a marker in the checkout's cache dir, honored only when it holds a lease id.
-func TestLeaseFromTree(t *testing.T) {
+// TestActingLeaseFromMarker pins the channel a worker in its own worktree reaches the
+// hook through: a marker in the checkout's cache dir, honored only when it holds a lease
+// id, and read by the same ledger.ActingLease the sandbox resolves through.
+func TestActingLeaseFromMarker(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	base := hookActivityTrail(ctx).base
 
-	assert.Empty(t, leaseFromTree(ctx), "no marker, no lease")
+	assert.Empty(t, ledger.ActingLease(base), "no marker, no lease")
 
-	require.NoError(t, os.WriteFile(filepath.Join(base, leaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
-	assert.Equal(t, "harness/lease-scoped-deny", leaseFromTree(ctx))
+	require.NoError(t, os.WriteFile(filepath.Join(base, ledger.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
+	assert.Equal(t, "harness/lease-scoped-deny", ledger.ActingLease(base))
 
-	require.NoError(t, os.WriteFile(filepath.Join(base, leaseMarkerName), []byte("not a lease id!\n"), 0o644))
-	assert.Empty(t, leaseFromTree(ctx), "a malformed marker binds nothing rather than something")
+	require.NoError(t, os.WriteFile(filepath.Join(base, ledger.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	assert.Empty(t, ledger.ActingLease(base), "a malformed marker binds nothing rather than something")
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
@@ -315,6 +317,11 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git clean -fd",
 		"git worktree remove ../x",
 		"git checkout .",
+		"git restore .",
+		"git revert HEAD",
+		"git rebase main",
+		"git merge main",
+		"git cherry-pick abc123",
 		"cd sub && git commit -m done",
 	} {
 		reason := denyLeaseScopedVCS(ctx, worker.ID, command)
@@ -327,6 +334,9 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git status --short",
 		"git diff --stat",
 		"git checkout -- go.mod",
+		"git restore -- go.mod",
+		"git stash list",
+		"git stash show -p",
 		"git log --oneline -3",
 		"./magus run go::go-test . -- -run Guard ./cmd/magus/",
 	} {

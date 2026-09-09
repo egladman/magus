@@ -265,28 +265,17 @@ func validationNamesGate(validation string) bool {
 	return false
 }
 
-// leaseMarkerName is the checkout-bound lease marker; the definition and the reason
-// it exists live beside the ledger (ledger.MarkerName), because the sandbox reads
-// the same file and the two tiers must not disagree about who is acting.
-const leaseMarkerName = ledger.MarkerName
-
-// leaseFromTree reads the lease bound to the checkout the hook is judging, or "".
-func leaseFromTree(ctx context.Context) string {
-	return ledger.LeaseFromMarker(hookActivityTrail(ctx).base)
-}
-
 // denyLeaseScopedVCS refuses version-control mutation under a WORKER lease: a row with
 // a parent. The orchestrator lands every unit from the worker's tree, so a worker that
 // commits, pushes, stashes or reverts edits the state it is being integrated from, and a
 // whole-tree revert destroys a sibling's uncommitted work. A root lease, a lease with no
 // row, and no lease at all are untouched: a boundary nobody declared is not one of size
 // zero, the same rule the gate and the write arms follow.
+//
+// The command is parsed before the ledger is read: every tool call under a bound lease
+// reaches this rule, and most of them are not git.
 func denyLeaseScopedVCS(ctx context.Context, actingLease, command string) string {
 	if actingLease == "" {
-		return ""
-	}
-	me, ok := actingLiveLease(ctx, actingLease)
-	if !ok || me.Parent == "" {
 		return ""
 	}
 	cmds, ok := parseGuardCommands(command)
@@ -297,6 +286,10 @@ func denyLeaseScopedVCS(ctx context.Context, actingLease, command string) string
 		op := vcsMutation(c)
 		if op == "" {
 			continue
+		}
+		me, ok := actingLiveLease(ctx, actingLease)
+		if !ok || me.Parent == "" {
+			return ""
 		}
 		return fmt.Sprintf(
 			"magus workspace: leave version control to the orchestrator: report your worktree path and `git status --short`, and it lands the work from there.\n"+
@@ -309,7 +302,11 @@ func denyLeaseScopedVCS(ctx context.Context, actingLease, command string) string
 // vcsMutation names the git operation a parsed command performs when it is one a
 // worker must leave to the orchestrator, or "" for anything else. Global options
 // before the subcommand (-C <dir>, -c k=v) are skipped so a relocated commit is still a
-// commit.
+// commit. Only git is read: the guard's command grammar knows no other VCS, and a
+// name here that promised more would be a rule nothing enforces.
+//
+// `git stash list` and `git stash show` read the stash rather than moving work onto
+// it, so they pass; every other stash form is a mutation.
 func vcsMutation(c guardCommand) string {
 	if c.Name != "git" {
 		return ""
@@ -328,15 +325,20 @@ func vcsMutation(c guardCommand) string {
 		break
 	}
 	switch sub {
-	case "commit", "push", "stash", "reset", "clean":
+	case "commit", "push", "reset", "clean", "revert", "rebase", "merge", "cherry-pick":
 		return "git " + sub
+	case "stash":
+		if len(rest) > 0 && (rest[0] == "list" || rest[0] == "show") {
+			return ""
+		}
+		return "git stash"
 	case "worktree":
 		if slices.Contains(rest, "remove") {
 			return "git worktree remove"
 		}
-	case "checkout":
+	case "checkout", "restore":
 		if slices.Contains(rest, ".") {
-			return "git checkout ."
+			return "git " + sub + " ."
 		}
 	}
 	return ""

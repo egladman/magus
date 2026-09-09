@@ -62,6 +62,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/repoid"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -160,6 +161,9 @@ func leasesPath(loc Location) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("ledger: %w", err)
 	}
+	// compat(until: no checkout's cache dir still holds a ledger/ directory; observe
+	// with `find ~ -path '*/.magus/cache/ledger' -maxdepth 6` returning nothing):
+	// carries forward the rows an older magus kept per checkout.
 	if loc.CacheDir != "" {
 		if err := repoid.Adopt(filepath.Join(loc.CacheDir, "ledger"), dir); err != nil {
 			return "", fmt.Errorf("ledger: %w", err)
@@ -550,14 +554,25 @@ func (s *Store) write(f ledgerFile) error {
 	return file.WriteFileAtomic(s.path, append(raw, '\n'), 0o644)
 }
 
-// MarkerName is the file, in a checkout's cache dir, that binds a lease to THAT
-// checkout (`magus session lease <id>` writes it). It exists because the
-// environment cannot carry a lease into a hook: a host runs its hooks with its own
+// LeaseMarkerName is the file, in a checkout's cache dir, that binds a lease to THAT
+// checkout (`magus session lease <id>` writes it through BindLease). It exists because
+// the environment cannot carry a lease into a hook: a host runs its hooks with its own
 // environment, so a worker exporting BAGGAGE for its shell is invisible to the guard
 // judging its commands. A worker with its own worktree has one checkout, and a file
 // in it is the one channel the worker's shell, the host's hook and the sandbox all
 // read. BAGGAGE and an explicit --lease still win; the marker is the last resort.
-const MarkerName = "lease"
+const LeaseMarkerName = "lease"
+
+// ActingLease is the lease the current process acts under, for the checkout whose cache
+// dir is cacheDir: the W3C baggage a worker inherits, else the marker BindLease wrote,
+// else "". The guard hook and the sandbox both resolve through this one function so the
+// two enforcement tiers cannot disagree about who is acting.
+func ActingLease(cacheDir string) string {
+	if lease := trail.LeaseFromEnv(); lease != "" {
+		return lease
+	}
+	return LeaseFromMarker(cacheDir)
+}
 
 // LeaseFromMarker reads the lease bound to the checkout whose cache dir is cacheDir,
 // or "" when none is bound or the marker does not hold a lease id.
@@ -565,7 +580,7 @@ func LeaseFromMarker(cacheDir string) string {
 	if cacheDir == "" {
 		return ""
 	}
-	raw, err := os.ReadFile(filepath.Join(cacheDir, MarkerName))
+	raw, err := os.ReadFile(filepath.Join(cacheDir, LeaseMarkerName))
 	if err != nil {
 		return ""
 	}
@@ -574,4 +589,20 @@ func LeaseFromMarker(cacheDir string) string {
 		return ""
 	}
 	return id
+}
+
+// BindLease writes the marker binding lease id to the checkout whose cache dir is
+// cacheDir, creating the dir if needed. An id ValidLeaseID rejects is refused, so the
+// marker never holds a value LeaseFromMarker would read back as nothing.
+func BindLease(cacheDir, id string) error {
+	if !types.ValidLeaseID(id) {
+		return fmt.Errorf("ledger: %q is not a lease id (letters, digits and -_./: only)", id)
+	}
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return fmt.Errorf("ledger: bind lease: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte(id+"\n"), 0o644); err != nil {
+		return fmt.Errorf("ledger: bind lease: %w", err)
+	}
+	return nil
 }

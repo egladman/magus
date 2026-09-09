@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxapply "github.com/egladman/magus/internal/sandbox/apply"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -23,31 +22,16 @@ import (
 // or returns ctx unchanged when this workspace's config leaves the sandbox off. Callers
 // outside a target run (a `magus buzz` script) go through here so a script and a target
 // are confined by the same policy; Run calls it too, so there is one condition rather
-// than a copy per entry point.
+// than a copy per entry point. The write grant is narrowed to the acting lease's row,
+// resolved by ledger.ActingLease exactly as the guard hook resolves it.
 func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if !m.cfg.Sandbox.Enabled {
 		return ctx, nil
 	}
-	return m.applySandbox(ctx)
-}
-
-func (m *Magus) applySandbox(ctx context.Context) (context.Context, error) {
+	loc := ledger.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
 	p := sandboxapply.FromConfig(ctx, m.ws.Root, m.cfg)
-	p = sandboxapply.NarrowToLease(ctx, p, m.ws.Root, m.CacheDir(), m.actingLease())
+	p = sandboxapply.NarrowToLease(ctx, p, loc, ledger.ActingLease(loc.CacheDir))
 	return sandboxapply.Apply(ctx, p, m.ws.Root)
-}
-
-// actingLease is the ledger lease this process claims to be acting as: the W3C
-// baggage a worker inherits, else the marker `magus session lease` bound to this
-// checkout. A host runs its hooks with its own environment, so the marker is the
-// channel a worker in its own worktree actually reaches the guard AND the sandbox
-// through; both read it through this one function so the two tiers cannot
-// disagree about who is acting.
-func (m *Magus) actingLease() string {
-	if lease := trail.LeaseFromEnv(); lease != "" {
-		return lease
-	}
-	return ledger.LeaseFromMarker(m.CacheDir())
 }
 
 // ApplyUnionSandbox unions the landlock policies of every workspace root and
