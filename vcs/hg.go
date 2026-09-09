@@ -943,12 +943,12 @@ func (v hgVCS) AbortMerge(ctx context.Context, root string) error {
 	return nil
 }
 
-// Preserve shelves with --keep, which is Mercurial's own answer: --unknown stores
-// untracked files, --addremove records deletions, and --keep leaves the working directory
-// alone. A plain `hg shelve` REVERTS the tree, which is what makes it unusable here.
+// Preserve shelves with --keep: --unknown stores untracked files, --addremove records
+// deletions, and --keep leaves the working directory alone. A plain `hg shelve` REVERTS
+// the tree, which is what makes it unusable here.
 //
-// Storing costs working-copy state - unknown files come back added, missing files come
-// back scheduled for removal - so that state is read first and put back after.
+// Storing costs working-copy state (unknown files come back added, missing files come back
+// scheduled for removal), so that state is read first and put back after.
 func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	dirty, err := v.Dirty(ctx, dir, nil)
 	if err != nil {
@@ -974,9 +974,8 @@ func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 		return name, fmt.Errorf("hg preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
 			name, pending.unknown, pending.missing, err)
 	}
-	// Pruned after the shelf exists, and its error dropped: preserving succeeded, and a
-	// housekeeping failure reported as a preserve failure sends a caller looking for work
-	// that is safely stored.
+	// Pruned after the shelf exists, and its error dropped: a housekeeping failure reported
+	// as a preserve failure sends a caller looking for work that is safely stored.
 	_, _ = v.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
 	return name, nil
 }
@@ -987,14 +986,9 @@ func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 // carries the mint time, and the MESSAGE Preserve wrote. The name alone is not authority
 // to delete, because a user can produce one without trying. `hg shelve` with no --name
 // derives the shelf name from the active bookmark, so a bookmark called
-// magus-1234567890-wip in a repository named magus yields a shelf shelfMinted accepts,
-// and a plain `hg shelve` REVERTS the working copy, which makes that shelf the only copy
-// of the work. Deleting it would be magus destroying a user's only copy during
-// housekeeping it ran without being asked.
-//
-// The mint time still travels in the name rather than through Mercurial's output: `hg
-// shelve --list` prints ages as prose ("2m ago") and takes no template, so a retention
-// pass that read it would be parsing a UI string.
+// magus-1234567890-wip in a repository named magus yields a shelf shelfMinted accepts, and
+// a plain `hg shelve` REVERTS the working copy, making that shelf the only copy of the
+// work.
 func (v hgVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
 	// Not --quiet, which prints bare names and so cannot say who wrote a shelf. The full
 	// listing is "<name>(<age>)<spaces><message>", parsed by hgShelfListing.
@@ -1037,13 +1031,12 @@ func (v hgVCS) PrunePreserved(ctx context.Context, dir string, before time.Time)
 
 // hgShelfListing reads `hg shelve --list` into name -> message.
 //
-// The line is "<name>(<age>)<spaces><message>", and the AGE is what separates the two
-// fields: there is no space before the "(" when the name overflows the column, and no
-// other delimiter anywhere. Splitting on whitespace instead would read a name as its own
-// message, which for a pruner that trusts the message is the failure that matters.
+// The line is "<name>(<age>)<spaces><message>", and the AGE is the only delimiter: a name
+// that overflows the column leaves no space before the "(". Splitting on whitespace would
+// read part of a name as its message, and this pruner trusts the message.
 //
-// A line that does not carry an age is skipped rather than guessed at, because a shelf
-// whose message cannot be read is a shelf magus has no grounds to delete.
+// A line carrying no age is skipped rather than guessed at: a shelf whose message cannot
+// be read is one magus has no grounds to delete.
 func hgShelfListing(out string) map[string]string {
 	shelves := make(map[string]string)
 	for line := range strings.SplitSeq(out, "\n") {

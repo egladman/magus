@@ -1860,16 +1860,13 @@ func writeTarEntry(tr *tar.Reader, target string, hdr *tar.Header) error {
 // Preserve builds a commit object holding the working copy's uncommitted state and
 // anchors it under refs/magus/preserved/, so nothing can garbage-collect it.
 //
-// `git stash create` is the obvious call and it is the WRONG one: measured 2026-09-08, it
-// captures TRACKED changes only, which DirtyDiff already gives us, and untracked files
-// are precisely the work that is in no commit and so the work a whole-tree revert
-// destroys irrecoverably. It is a wrapper over this plumbing anyway.
+// Not `git stash create`: measured 2026-09-08, it captures TRACKED changes only, and
+// untracked files are the work that is in no commit and so the work a whole-tree revert
+// destroys irrecoverably. It wraps this same plumbing anyway.
 //
-// A TEMPORARY index is what keeps the invariant. GIT_INDEX_FILE points add at a scratch
-// file, so the developer's real index - which may hold a half-staged commit they are in
-// the middle of - is never read or written, and neither is the working tree. Paths come
-// from DirtyFiles rather than `add -A`, so the set is explicit and an ignored file cannot
-// ride along.
+// A TEMPORARY index keeps the invariant. GIT_INDEX_FILE points add at a scratch file, so
+// the developer's real index, which may hold a half-staged commit, is never read or
+// written, and neither is the working tree.
 func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	dirty, err := v.Dirty(ctx, dir, nil)
 	if err != nil {
@@ -1880,9 +1877,8 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	}
 	// A private DIRECTORY rather than a temp file: git writes the index itself, so handing
 	// it a path means creating a name and stepping back off it, and on a shared tmpdir
-	// anyone can take that name in between. Only magus can write inside a 0700 directory
-	// it just minted, so the fixed name within it cannot be occupied by anyone else.
-	// RemoveAll takes the whole thing on every return, git's file included.
+	// anyone can take that name in between. Nobody else can write inside a 0700 directory
+	// magus just minted. RemoveAll takes the whole thing, git's file included.
 	idxDir, err := os.MkdirTemp("", "magus-preserve-index-")
 	if err != nil {
 		return "", fmt.Errorf("git preserve: temp index: %w", err)
@@ -1894,27 +1890,25 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 		cmd := vcsExec(ctx, "git", args...)
 		cmd.Dir = dir
 		// gitEnviron, never os.Environ: it strips GIT_DIR, GIT_WORK_TREE and the rest, so
-		// cmd.Dir decides the repository. Inheriting them let an exported GIT_DIR send every
-		// command here - and the ref - into a different repository entirely.
+		// cmd.Dir decides the repository. Inheriting them lets an exported GIT_DIR send every
+		// command here, and the ref, into a different repository.
 		cmd.Env = append(gitEnviron(), "GIT_INDEX_FILE="+idxPath)
 		out, err := cmd.Output()
 		return strings.TrimSpace(string(out)), err
 	}
 	// Seed from HEAD where there is one, so the snapshot reads as a change against the
-	// checked-out commit rather than as an initial import. An unborn HEAD has nothing to
-	// read and starts from an empty index, which is correct for a repository with no
-	// commits.
+	// checked-out commit rather than an initial import. An unborn HEAD has nothing to read
+	// and starts from an empty index instead.
 	born := v.hasCommits(ctx, dir)
 	if born {
 		if _, err := run("read-tree", "HEAD"); err != nil {
 			return "", fmt.Errorf("git preserve: read-tree: %w", err)
 		}
 	}
-	// -A over an explicit path list. The list came from DirtyFiles, which keeps only the
-	// NEW side of a rename, so the temp index seeded from HEAD kept the OLD path too and
-	// the snapshot tree held both - a tree that was never the working copy. -A also still
-	// honours .gitignore (measured), which is what the explicit list was wrongly credited
-	// with.
+	// -A rather than an explicit path list: DirtyFiles keeps only the NEW side of a rename,
+	// so an index seeded from HEAD would keep the OLD path too and the tree would hold
+	// both, a tree that was never the working copy. -A still honours .gitignore (measured),
+	// so nothing ignored rides along.
 	if _, err := run("add", "-A"); err != nil {
 		return "", fmt.Errorf("git preserve: add: %w", err)
 	}
@@ -1930,20 +1924,17 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("git preserve: commit-tree: %w", err)
 	}
-	// Anchored, because a commit no ref points at is unreachable and gc will reap it, which
-	// would make the handle resolve today and not next week.
-	//
-	// refs/magus/ is off every branch and not pushed without an explicit refspec, but it is
-	// NOT invisible: `git log --all`, `rev-list --all` and `clone --mirror` all see it, and
-	// each ref pins the ancestry it was taken on. PrunePreserved below is what keeps that
-	// bounded.
+	// Anchored because gc reaps a commit no ref points at, which would make the handle
+	// resolve today and not next week. refs/magus/ is off every branch and not pushed
+	// without an explicit refspec, but it is NOT invisible: `git log --all`,
+	// `rev-list --all` and `clone --mirror` all see it, and each ref pins the ancestry it
+	// was taken on. PrunePreserved below keeps that bounded.
 	if _, err := run("update-ref", preservedRefPrefix+sha, sha); err != nil {
 		return "", fmt.Errorf("git preserve: update-ref: %w", err)
 	}
 	// Pruned AFTER the new ref exists, so a failure here costs the old refs their cleanup
-	// and never costs this capture its anchor. The error is dropped for the same reason:
-	// preserving succeeded, and reporting a housekeeping failure as a preserve failure
-	// would send a caller looking for work that is safely stored.
+	// and never this capture its anchor. The error is dropped because reporting a
+	// housekeeping failure as a preserve failure sends a caller looking for stored work.
 	_, _ = v.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
 	return sha, nil
 }
@@ -1955,14 +1946,12 @@ const preservedRefPrefix = "refs/magus/preserved/"
 
 // PrunePreserved deletes the refs Preserve anchored whose commit predates before.
 //
-// Keyed on the ref's COMMITTER date, which is when the capture was taken - not the
-// author date, which commit-tree copies from the environment and a caller can set.
+// Keyed on the ref's COMMITTER date, which is when the capture was taken. The author date
+// is not: commit-tree copies it from the environment, where a caller can set it.
 //
-// The commit's SUBJECT has to be Preserve's too. A namespace is not a signature: nothing
-// stops anyone writing into refs/magus/preserved, and this runs unasked inside every
-// Preserve, so "it is under our prefix" is not grounds to delete a commit magus did not
-// make. Same rule as the hg backend's, where a user can land on a magus-shaped shelf name
-// by accident.
+// The commit's SUBJECT has to be Preserve's too. Anyone can write into
+// refs/magus/preserved, and this runs unasked inside every Preserve, so the prefix alone
+// is not grounds to delete a commit magus did not make.
 func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
 	run := func(args ...string) (string, error) {
 		cmd := vcsExec(ctx, "git", args...)
@@ -1997,8 +1986,7 @@ func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time
 			continue
 		}
 		// Deleted against the SHA that passed the checks above, so a ref another process
-		// moved in between is refused rather than dropped on the strength of a listing
-		// that no longer describes it.
+		// moved in between is refused rather than dropped on a stale listing.
 		if _, err := run("update-ref", "-d", name, sha); err != nil {
 			return dropped, fmt.Errorf("git prune-preserved: update-ref -d %s: %w", name, err)
 		}

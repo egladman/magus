@@ -95,15 +95,10 @@ func TestBaseNamesTheMainlineNotTip(t *testing.T) {
 		"a committed branch change reported nothing affected; affected would build nothing")
 }
 
-// TestHgPrunePreservedSparesAShelfMagusDidNotWrite is the line between housekeeping and
-// data loss.
-//
-// A magus-shaped NAME is not proof magus wrote it. `hg shelve` with no --name derives the
+// A magus-shaped NAME is not proof magus wrote it: `hg shelve` with no --name derives the
 // shelf name from the active bookmark, so a bookmark called magus-1234567890-wip yields a
-// name shelfMinted accepts, and a plain `hg shelve` REVERTS the working copy, which can
-// leave that shelf as the only copy of the work. PrunePreserved runs unasked inside every
-// Preserve, so deleting on a name match alone destroyed a user's only copy during work
-// they never asked for.
+// name shelfMinted accepts. Plain `hg shelve` also REVERTS the working copy, so that shelf
+// can be the only copy of the work, and PrunePreserved runs unasked inside every Preserve.
 func TestHgPrunePreservedSparesAShelfMagusDidNotWrite(t *testing.T) {
 	if _, err := exec.LookPath("hg"); err != nil {
 		t.Skip("hg not available")
@@ -111,13 +106,12 @@ func TestHgPrunePreservedSparesAShelfMagusDidNotWrite(t *testing.T) {
 	dir := t.TempDir()
 	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
 
-	// The user's shelf, shaped exactly like a mint (prefix, unix seconds, suffix). Only
-	// the message tells the two apart.
+	// A user shelf shaped exactly like a mint; only the message tells the two apart.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("half a refactor\n"), 0o644))
 	vcsTestRun(t, dir, "hg", "--config", "extensions.shelve=", "shelve",
 		"--keep", "--name", "magus-1234567890-wip", "--message", "half of a refactor")
 
-	// And a real capture, so the test cannot pass by pruning nothing at all.
+	// A real capture too, so the test cannot pass by pruning nothing at all.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
 	handle, err := hgVCS{}.Preserve(t.Context(), dir)
 	require.NoError(t, err)
@@ -132,18 +126,14 @@ func TestHgPrunePreservedSparesAShelfMagusDidNotWrite(t *testing.T) {
 	assert.NotContains(t, names, handle, "pruning reported a handle it did not delete")
 }
 
-// TestHgPreserveRetentionBoundaryIsThirtyDays exercises preserveRetention itself, which
-// no test did: the suite only ever passed cutoffs an hour either side of now, so the
-// constant could be set to thirty SECONDS and every assertion stayed green.
+// Cutoffs an hour either side of now leave preserveRetention itself untested: the constant
+// could be thirty SECONDS and every assertion stays green. So this runs through Preserve
+// rather than passing PrunePreserved a cutoff of its own, and asserts both sides of the
+// window, since only the survival half pins the length.
 //
-// Both sides of the window are asserted, because only the survival half pins the length.
-// It runs through Preserve rather than calling PrunePreserved with a cutoff of its own,
-// since a cutoff the test chose would say nothing about the one the code applies.
-//
-// The two ages are LITERAL days rather than preserveRetention plus or minus a day. Written
-// against the constant they move with it, and 29 days either side of thirty seconds is
-// still one on each side, so the test passes whatever the constant says: measured, by
-// setting it to thirty seconds and watching this stay green.
+// The two ages are LITERAL days, not preserveRetention plus or minus a day: written against
+// the constant they move with it, and 29 either side of thirty seconds is still one on each
+// side. Measured by setting the constant to thirty seconds.
 func TestHgPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
 	if _, err := exec.LookPath("hg"); err != nil {
 		t.Skip("hg not available")
@@ -151,8 +141,7 @@ func TestHgPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
 	dir := t.TempDir()
 	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
 
-	// Aged by the only thing that dates an hg shelf: the timestamp shelfName writes into
-	// the name.
+	// The timestamp shelfName writes into the name is the only thing dating an hg shelf.
 	aged := func(days int, suffix string) string {
 		age := time.Duration(days) * 24 * time.Hour
 		name := fmt.Sprintf("%s%d-%s", shelfPrefix, time.Now().Add(-age).Unix(), suffix)
@@ -173,20 +162,16 @@ func TestHgPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
 	assert.NotContains(t, names, outside, "kept a capture past the retention window")
 }
 
-// TestHgPreserveRestoresAPathCarryingWhitespace is the regression test for the status
-// parse, and the failure it pins is silent.
+// A leading space is legal in a filename, and trimming it off a status line fails
+// silently: restoring a deleted " leading.txt" runs `hg revert --no-backup -- leading.txt`,
+// which prints "no such file in rev" and exits ZERO (Mercurial 7.2.3, 2026-09-09), so
+// Preserve returns a handle and a nil error while the file stays scheduled for a removal
+// the user never asked for. The assertion is on hg's own status rather than on the parse,
+// because the parse looked right.
 //
-// A leading space is legal in a filename and the old parse trimmed it, so restoring a
-// deleted " leading.txt" ran `hg revert --no-backup -- leading.txt`. Measured 2026-09-09
-// on Mercurial 7.2.3, that prints "no such file in rev" and exits ZERO: the restore
-// reported success while the file stayed scheduled for a removal the user never asked
-// for, and Preserve returned a handle and a nil error over the top of it. The assertion
-// is on hg's own status rather than on the parse, because the parse looked right.
-//
-// A newline is the other name the old parse split apart, and it is checked one layer
-// down: hg refuses to track a name carrying one (`add` and `addremove` both abort with
-// "'\n' and '\r' disallowed in filenames"), so it can reach the unknown class and never
-// the missing one.
+// A newline is checked one layer down: hg refuses to track a name carrying one (`add` and
+// `addremove` both abort with "'\n' and '\r' disallowed in filenames"), so it can reach the
+// unknown class and never the missing one.
 func TestHgPreserveRestoresAPathCarryingWhitespace(t *testing.T) {
 	if _, err := exec.LookPath("hg"); err != nil {
 		t.Skip("hg not available")

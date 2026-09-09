@@ -133,10 +133,9 @@ func TestPatchDigest(t *testing.T) {
 	}
 }
 
-// The preserve flag is the only thing about a checkpoint that MINTS, so it is asserted
-// on both sides: off, nothing is captured and nothing exists to capture it into; on, the
-// handle resolves to the working copy including the untracked file, which is the whole
-// reason a digest is not enough.
+// The preserve flag is the only thing about a checkpoint that MINTS, so both sides are
+// asserted: off leaves no handle and no ref, on gives a handle that resolves to the
+// untracked file, which is why a digest alone is not enough.
 func TestCheckpointPreservesOnlyWhenAsked(t *testing.T) {
 	dir, res := checkpointRepo(t)
 	ctx := context.Background()
@@ -163,10 +162,9 @@ func TestCheckpointPreservesOnlyWhenAsked(t *testing.T) {
 	assert.Equal(t, plain.UntrackedDigest, kept.UntrackedDigest)
 }
 
-// preserveFailsAfterMinting is a driver whose Preserve returns a handle AND an error,
-// which is the shape hg and sl deliberately produce: the shelf or the snapshot commit
-// exists from that point on, and only the handle can reach it. Everything else is the real
-// git driver, so nothing else about the checkpoint is faked.
+// preserveFailsAfterMinting is a driver whose Preserve returns a handle AND an error, the
+// shape hg and sl deliberately produce: the shelf or the snapshot commit exists from that
+// point on, and only the handle can reach it. Everything else is the real git driver.
 type preserveFailsAfterMinting struct {
 	types.VCSDriver
 }
@@ -175,10 +173,9 @@ func (preserveFailsAfterMinting) Preserve(context.Context, string) (string, erro
 	return "e5e5e5e5", errors.New("recorded e5e5e5e5, but the working copy still shows [scratch.txt] added")
 }
 
-// TestCheckpointKeepsTheHandleWhenPreservingFails is the counterpart to those two
-// drivers' contract. A capture that half-succeeded has already minted an object in the
-// user's repository; returning a zero checkpoint alongside the error threw away the only
-// thing that reaches it, which turns a recoverable failure into an orphan.
+// A capture that half-succeeded has already minted an object in the user's repository, so
+// returning a zero checkpoint alongside the error throws away the only thing that reaches
+// it, turning a recoverable failure into an orphan.
 func TestCheckpointKeepsTheHandleWhenPreservingFails(t *testing.T) {
 	dir, res := checkpointRepo(t)
 	writeFile(t, dir, "scratch.txt", "unfinished\n")

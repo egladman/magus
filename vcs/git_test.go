@@ -898,10 +898,9 @@ func gitCapture(t *testing.T, dir string, env []string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// TestGitPrunePreservedSparesARefMagusDidNotWrite holds the same line the hg backend
-// holds: what makes an object magus's is the MESSAGE Preserve wrote on it, not where it
-// sits. refs/magus/preserved is a namespace, and a namespace is not a signature; anyone
-// can update-ref into it, and this pruner runs unasked inside every Preserve.
+// What makes an object magus's is the MESSAGE Preserve wrote on it, not where it sits.
+// refs/magus/preserved is a namespace, not a signature: anyone can update-ref into it, and
+// this pruner runs unasked inside every Preserve.
 func TestGitPrunePreservedSparesARefMagusDidNotWrite(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
@@ -924,18 +923,14 @@ func TestGitPrunePreservedSparesARefMagusDidNotWrite(t *testing.T) {
 	assert.NotContains(t, refs, handle, "pruning reported a handle it did not delete")
 }
 
-// TestGitPreserveRetentionBoundaryIsThirtyDays exercises preserveRetention itself, which
-// no test did: the suite only ever passed cutoffs an hour either side of now, so the
-// constant could be set to thirty SECONDS and every assertion stayed green.
+// Cutoffs an hour either side of now leave preserveRetention itself untested: the constant
+// could be thirty SECONDS and every assertion stays green. So this runs through Preserve
+// rather than passing PrunePreserved a cutoff of its own, and asserts both sides of the
+// window, since only the survival half pins the length.
 //
-// Both sides of the window are asserted, because only the survival half pins the length.
-// It runs through Preserve rather than calling PrunePreserved with a cutoff of its own,
-// since a cutoff the test chose would say nothing about the one the code applies.
-//
-// The two ages are LITERAL days rather than preserveRetention plus or minus a day. Written
-// against the constant they move with it, and 29 days either side of thirty seconds is
-// still one on each side, so the test passes whatever the constant says: measured, by
-// setting it to thirty seconds and watching this stay green.
+// The two ages are LITERAL days, not preserveRetention plus or minus a day: written against
+// the constant they move with it, and 29 either side of thirty seconds is still one on each
+// side. Measured by setting the constant to thirty seconds.
 func TestGitPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
@@ -988,11 +983,10 @@ exit $status
 	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// TestGitPrunePreservedRefusesARefThatMoved pins the delete to the SHA the listing vetted.
 // The name, the date and the subject all describe the commit a ref pointed at when
-// for-each-ref answered, and `update-ref -d <ref>` with no old value deletes whatever it
-// points at when the delete lands. Between the two, a capture magus would never have
-// chosen is deletable, and this is user work with no other copy.
+// for-each-ref answered, while `update-ref -d <ref>` with no old value deletes whatever it
+// points at when the delete lands. In between, a capture magus would never have chosen is
+// deletable, and it is user work with no other copy.
 func TestGitPrunePreservedRefusesARefThatMoved(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
@@ -1013,9 +1007,8 @@ func TestGitPrunePreservedRefusesARefThatMoved(t *testing.T) {
 		"the capture the ref moved to is gone")
 }
 
-// TestGitPreserveLeavesNoTempIndexBehind holds the cleanup half of the scratch index:
-// git creates the file, so nothing in the working tree records that it existed and only
-// Preserve's own removal bounds it.
+// git creates the scratch index, so nothing in the working tree records that it existed
+// and only Preserve's own removal bounds it.
 func TestGitPreserveLeavesNoTempIndexBehind(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})

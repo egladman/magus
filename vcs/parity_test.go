@@ -32,20 +32,17 @@ type parityBackend struct {
 	drv  types.VCSDriver
 	// init creates a repository in dir holding files, with everything committed.
 	init func(t *testing.T, dir string, files map[string]string)
-	// readback returns what a Preserve handle holds for one path. It is per backend
-	// because a handle is per backend and nothing in VCSDriver resolves one - which is
-	// exactly why it belongs in the test: without it, a Preserve that returned a constant
-	// would satisfy every other assertion here.
+	// readback returns what a Preserve handle holds for one path. Nothing in VCSDriver
+	// resolves a handle, and without this a Preserve returning a constant would satisfy
+	// every other assertion here.
 	readback func(t *testing.T, dir, handle, path string) string
-	// listPreserved names what MAGUS has minted in dir, in this backend's own store. It
-	// is what makes PrunePreserved checkable: a pruner that reports the right handles and
-	// deletes nothing passes every other assertion.
+	// listPreserved names what MAGUS has minted in dir, in this backend's own store. A
+	// pruner that reports the right handles and deletes nothing passes without it.
 	listPreserved func(t *testing.T, dir string) []string
-	// mints says whether Preserve leaves an object behind at all, and prunes whether
-	// magus can then drop it. They are separate fields because sl is the case where they
-	// differ, and collapsing them is what let the suite assert a false fact: sl was listed
-	// as minting nothing, so every prune assertion compared nil to nil while Preserve was
-	// in fact minting a hidden commit per call that nothing ever removes.
+	// mints says whether Preserve leaves an object behind at all, and prunes whether magus
+	// can then drop it. They are separate fields because sl is the case where they differ:
+	// collapse them and sl reads as minting nothing, so every prune assertion compares nil
+	// to nil while Preserve mints a hidden commit per call that nothing ever removes.
 	mints  bool
 	prunes bool
 }
@@ -661,13 +658,11 @@ func TestParityRenameIsNotDeletePlusAdd(t *testing.T) {
 	})
 }
 
-// TestParityCheckpointSeesUntrackedContent is the parity half of the reason
-// UntrackedDigest exists: untracked is where a concurrent agent's unfinished work lives,
-// it is in no commit, and a checkpoint blind to it answered "same tree?" with its most
-// confident yes about the state it could least see. PatchDigest cannot cover it - it is
-// pinned byte-for-byte to internal/diff.PatchDigest so a checkpoint and a review session
-// stay comparable - so a second digest carries it, and it has to work on every backend
-// rather than on git alone.
+// Untracked is where a concurrent agent's unfinished work lives, it is in no commit, and a
+// checkpoint blind to it answers "same tree?" most confidently about the state it can least
+// see. PatchDigest cannot carry it: that one is pinned byte-for-byte to
+// internal/diff.PatchDigest so a checkpoint and a review session stay comparable. Hence a
+// second digest, on every backend rather than on git alone.
 func TestParityCheckpointSeesUntrackedContent(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -687,11 +682,8 @@ func TestParityCheckpointSeesUntrackedContent(t *testing.T) {
 		assert.NotEqual(t, first.UntrackedDigest, second.UntrackedDigest,
 			"%s: editing an untracked file did not move the digest", b.name)
 
-		// PatchDigest's stability under an untracked edit is NOT universal, and this test
-		// asserted it was until jj said otherwise. jj snapshots the whole working copy, so
-		// a file git calls untracked is one jj already tracks: it lands in jj's DirtyDiff
-		// and moves PatchDigest too. That is double coverage, not a gap, and it is why the
-		// only claim made across every backend here is the one about UntrackedDigest.
+		// No claim about PatchDigest here: jj snapshots the whole working copy, so a file
+		// git calls untracked is one jj already tracks, and the edit moves PatchDigest too.
 		// "Untracked" is a git and hg category, not a property of version control.
 	})
 }
@@ -711,14 +703,10 @@ func TestParityCheckpointUntrackedDigestEmptyWhenNoneAreUntracked(t *testing.T) 
 	})
 }
 
-// TestParityPreserveCostsNoState is the invariant Snapshot exists to hold, asserted the
-// same way on every backend: capturing state must never cost state.
-//
-// It is one test rather than four because the guarantee is one guarantee. The mechanisms
-// differ wildly - git builds a commit through a temporary index, hg shelves with --keep,
-// jj has already snapshotted, sl commits and unwinds - and a reader choosing a backend
-// should not have to learn which of those leaks. An implementation that cannot hold this
-// fails here rather than shipping a weaker promise under the same method name.
+// Capturing state must never cost state. One test rather than four because the guarantee is
+// one guarantee: the mechanisms differ wildly (git builds a commit through a temporary
+// index, hg shelves with --keep, jj has already snapshotted, sl commits and unwinds) and a
+// reader choosing a backend should not have to learn which of those leaks.
 func TestParityPreserveCostsNoState(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -726,12 +714,10 @@ func TestParityPreserveCostsNoState(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v2\n"), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("scratch\n"), 0o644))
 
-		// A DELETED tracked file and a STAGED-equivalent rename belong in the fixture
-		// because each breaks a different backend, and neither did until they were added:
-		// sl turned the deletion into a scheduled removal (R), and git left the rename's
-		// old path in the snapshot tree. A fixture of one edit plus one new file is the
-		// happy path, and a happy-path fixture is how an invariant test passes while the
-		// invariant is false.
+		// A DELETED tracked file and a STAGED-equivalent rename each break a different
+		// backend: sl turns the deletion into a scheduled removal (R), git leaves the
+		// rename's old path in the snapshot tree. One edit plus one new file is the happy
+		// path, which is how an invariant test passes while the invariant is false.
 		require.NoError(t, os.Remove(filepath.Join(dir, "deleted.txt")))
 
 		beforeFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
@@ -762,21 +748,18 @@ func TestParityPreserveCostsNoState(t *testing.T) {
 
 		// READ THE HANDLE BACK. Everything above proves the capture cost nothing; only this
 		// proves a capture happened. Without it a Preserve returning a constant passes on
-		// every backend, and `git stash create` - which silently omits untracked files -
+		// every backend, and `git stash create`, which silently omits untracked files,
 		// would have looked correct.
 		assert.Containsf(t, b.readback(t, dir, handle, "untracked.txt"), "scratch",
 			"%s: the handle does not hold the untracked file's content", b.name)
 	})
 }
 
-// TestParityPreserveFromASubdirectoryCostsNoState is the same invariant asserted from the
-// one place every other test in this file avoids: a dir that is NOT the repository root.
-//
-// Every fixture here passed the root, which is what let an asymmetry hide. Mercurial's
-// status answers in ROOT-relative paths while its revert and forget resolve arguments
-// against the CWD, so from a subdirectory the capture read "sub/deleted.txt" and handed
-// that string back to a command that looked for "sub/sub/deleted.txt", found nothing, and
-// exited ZERO. The user was left with a tracked file scheduled for removal they never
+// The same invariant from the one place every other fixture here avoids: a dir that is NOT
+// the repository root. Mercurial's status answers in ROOT-relative paths while its revert
+// and forget resolve arguments against the CWD, so from a subdirectory the capture reads
+// "sub/deleted.txt" and hands that to a command looking for "sub/sub/deleted.txt", which
+// finds nothing and exits ZERO: a tracked file left scheduled for a removal the user never
 // asked for, reported as success.
 func TestParityPreserveFromASubdirectoryCostsNoState(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
@@ -788,8 +771,7 @@ func TestParityPreserveFromASubdirectoryCostsNoState(t *testing.T) {
 		// state whose restore is a path argument the backend has to resolve.
 		require.NoError(t, os.Remove(filepath.Join(dir, "sub", "deleted.txt")))
 
-		// Read from the ROOT on both sides, so the comparison is over one vocabulary
-		// whatever the driver was handed.
+		// Read from the ROOT on both sides, so one path vocabulary spans the comparison.
 		beforeFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
 		require.NoError(t, err)
 		beforeDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
@@ -813,8 +795,8 @@ func TestParityPreserveFromASubdirectoryCostsNoState(t *testing.T) {
 	})
 }
 
-// A clean tree has nothing to capture, and says so with "" rather than an error or a
-// handle to emptiness - matching how PatchDigest already reports "nothing measured".
+// A clean tree has nothing to capture, and says so with "" rather than an error or a handle
+// to emptiness, matching how PatchDigest already reports "nothing measured".
 func TestParityPreserveOfACleanTreeIsEmpty(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -827,8 +809,8 @@ func TestParityPreserveOfACleanTreeIsEmpty(t *testing.T) {
 	})
 }
 
-// The four readbacks. Each asks its own backend what the handle holds, in that backend's
-// spelling, which is the whole reason a handle is documented as opaque.
+// Each readback asks its own backend what the handle holds, in that backend's own spelling,
+// which is why a handle is documented as opaque.
 func gitReadback(t *testing.T, dir, handle, path string) string {
 	t.Helper()
 	return vcsTestOutput(t, dir, "git", "show", handle+":"+path)
@@ -864,19 +846,17 @@ func gitListPreserved(t *testing.T, dir string) []string {
 	return names
 }
 
-// hgListPreserved names the magus shelves, ignoring any a person made by hand.
-//
-// Reads the PLAIN listing and trims the age Mercurial appends, rather than calling the
-// --quiet form the pruner uses. Sharing that call would make this test agree with the
-// pruner by construction: a parser that found nothing would report an empty mint set,
-// and every assertion below would pass over it.
+// hgListPreserved names the magus shelves, ignoring any a person made by hand. It parses
+// the PLAIN listing rather than the --quiet form the pruner uses: sharing that call would
+// make the test agree with the pruner by construction, and a parser that found nothing
+// would report an empty mint set every assertion below passes over.
 func hgListPreserved(t *testing.T, dir string) []string {
 	t.Helper()
 	out := vcsTestOutput(t, dir, "hg", "--config", "extensions.shelve=", "shelve", "--list")
 	var names []string
 	for _, line := range strings.Split(out, "\n") {
-		// "name(1s ago)    message" - and with no space before the "(" when the name
-		// overflows the column, which is why the paren is the cut and whitespace is not.
+		// "name(1s ago)    message", with no space before the "(" when the name overflows
+		// the column, so the paren is the cut and whitespace is not.
 		name, _, _ := strings.Cut(strings.TrimSpace(line), "(")
 		if strings.HasPrefix(name, "magus-") {
 			names = append(names, name)
@@ -885,13 +865,10 @@ func hgListPreserved(t *testing.T, dir string) []string {
 	return names
 }
 
-// slListPreserved names the snapshots sl's Preserve left in Sapling's hidden set.
-//
-// They are reachable only by their message, which is also the only thing that identifies
-// them as magus's, so this is the same query a person would run to find them by hand. It
-// exists because the fixture used to claim sl minted nothing: with an empty mint set,
-// every prune assertion in this file compared nil to nil and could not have noticed that
-// sl accumulates one hidden commit per capture forever.
+// slListPreserved names the snapshots sl's Preserve left in Sapling's hidden set. They are
+// reachable only by their message, which is also the only thing identifying them as
+// magus's. Without this the mint set reads empty, every prune assertion compares nil to
+// nil, and sl accumulating one hidden commit per capture forever goes unnoticed.
 func slListPreserved(t *testing.T, dir string) []string {
 	t.Helper()
 	out := vcsTestOutput(t, dir, "sl", "log", "--hidden",
@@ -905,23 +882,20 @@ func slListPreserved(t *testing.T, dir string) []string {
 	return nodes
 }
 
-// mintsNothing is jj's store of magus-minted state, which is empty by construction: jj
-// has already snapshotted the working copy, so its Preserve reads a commit id and writes
-// nothing. Named rather than inlined so the claim is legible next to the three backends
-// that do mint.
+// mintsNothing is jj's store of magus-minted state, empty by construction: jj has already
+// snapshotted the working copy, so its Preserve reads a commit id and writes nothing. Named
+// rather than inlined so the claim is legible beside the three backends that do mint.
 func mintsNothing(*testing.T, string) []string { return nil }
 
-// TestParityPrunePreservedDropsWhatMagusMinted holds the other half of Preserve's
-// contract: a handle has a LIFETIME, and what ends it is magus deleting its own object
-// and nothing else.
+// The other half of Preserve's contract: a handle has a LIFETIME, and what ends it is magus
+// deleting its own object and nothing else.
 //
-// One test over four backends again, and the split it exposes is the honest one, which
-// is not the same split the fixture used to claim. git and hg mint a named object magus
-// owns and drop it on schedule. jj mints nothing. sl mints a hidden commit and CANNOT
-// drop it, because the only Sapling command that removes a commit is test-only and
-// aborts on the dirty working copy Preserve always runs against (see
-// saplingVCS.PrunePreserved), so the assertion for it is that the capture SURVIVES:
-// the gap stated, rather than a nil compared against nil.
+// One test over four backends, and the split it exposes is the honest one. git and hg mint
+// a named object magus owns and drop it on schedule. jj mints nothing. sl mints a hidden
+// commit and CANNOT drop it, because the only Sapling command that removes a commit is
+// test-only and aborts on the dirty working copy Preserve always runs against (see
+// saplingVCS.PrunePreserved), so sl's assertion is that the capture SURVIVES: the gap
+// stated, rather than a nil compared against nil.
 func TestParityPrunePreservedDropsWhatMagusMinted(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -968,10 +942,8 @@ func TestParityPrunePreservedDropsWhatMagusMinted(t *testing.T) {
 	})
 }
 
-// Every backend names its own read-back command, and no two of them are the same string.
-// The distinctness is the assertion worth making: a driver that returned git's spelling
-// would satisfy "non-empty" while telling an hg user to run a command hg does not have,
-// which is exactly the bug this method was added to fix.
+// Distinctness is the assertion worth making: a driver returning git's spelling would
+// satisfy "non-empty" while telling an hg user to run a command hg does not have.
 func TestParityReviewCommandIsTheBackendsOwn(t *testing.T) {
 	seen := make(map[string]string, len(parityBackends()))
 	for _, b := range parityBackends() {

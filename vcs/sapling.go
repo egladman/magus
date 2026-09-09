@@ -1019,21 +1019,19 @@ func (v saplingVCS) AbortMerge(ctx context.Context, root string) error {
 	return nil
 }
 
-// Preserve commits the working copy and unwinds the commit, which is Sapling's own idiom.
+// Preserve commits the working copy and unwinds the commit.
 //
 // Sapling has no --keep on shelve (measured: -k is rejected and absent from its help), and
-// `sl undo` cannot undo uncommitted working-copy changes, so nothing is already recorded
-// and something has to be minted. Sapling's model - no staging area, cheap commits,
-// history unwound with uncommit - makes a commit the native shape.
+// `sl undo` cannot undo uncommitted working-copy changes, so something has to be minted. A
+// commit is the native shape: no staging area, cheap commits, history unwound by uncommit.
 //
-// commit RECORDS; it does not remove, so every file stays on disk throughout and no
-// content is ever at risk. What storing costs is working-copy STATE: unknown files come
-// back added and missing files come back scheduled for removal, so both are read first
-// and put back after.
+// commit RECORDS and does not remove, so every file stays on disk and no content is ever
+// at risk. What storing costs is working-copy STATE: unknown files come back added and
+// missing files come back scheduled for removal, so both are read first and put back after.
 //
 // Between the commit and the uncommit the working copy is parked on the snapshot and
-// reports clean. A crash there leaves the work committed under a magus message rather
-// than lost, and the error below says so.
+// reports clean; a crash there leaves the work committed under a magus message rather than
+// lost, which the error below says.
 func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	dirty, err := v.Dirty(ctx, dir, nil)
 	if err != nil {
@@ -1069,21 +1067,18 @@ func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	return sha, nil
 }
 
-// PrunePreserved drops nothing, and on this backend that is a GAP rather than a property.
-//
+// PrunePreserved drops nothing, which on this backend is a GAP rather than a property.
 // Preserve MINTS here: the uncommit leaves the snapshot in Sapling's hidden set, so one
-// commit accumulates per capture and no retention ever ends it. That is not the promise
-// git and hg keep, and the CLI says so rather than implying the 30-day bound holds
-// everywhere.
+// commit accumulates per capture and no retention ever ends it. sl captures are permanent,
+// and the CLI says so rather than implying the 30-day bound holds everywhere.
 //
-// Nothing available closes it. `sl debugstrip` is the only command that removes a commit,
-// and it is test-only in the shipped binary: it crashes on an "assert util.istest()"
-// outside Sapling's own test mode (measured 2026-09-09 on 0.2.20260811-150444). Its help
-// also says it aborts on a dirty working copy unless forced, and forcing DISCARDS those
-// changes; a dirty working copy is the only state Preserve ever runs in. Hiding is
-// already what the uncommit did.
+// Nothing available closes the gap. `sl debugstrip` is the only command that removes a
+// commit; the shipped binary crashes it on an "assert util.istest()" outside Sapling's own
+// test mode (measured 2026-09-09 on 0.2.20260811-150444), and its help says it aborts on a
+// dirty working copy unless forced, with forcing DISCARDING the changes that are the only
+// state Preserve runs in.
 //
-// The commits stay reachable by their message, so a person can find them:
+// The commits stay reachable by their message:
 //
 //	sl log --hidden -r "desc('magus preserved working copy')"
 //

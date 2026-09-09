@@ -22,10 +22,9 @@ import (
 // pays only the cost of the probes, and a checkpoint nobody kept has cost nothing.
 // magus emits the facts; whoever holds the ledger decides what they mean.
 //
-// preserve is the one exception, and it is opt-in for exactly that reason: it captures
-// the uncommitted work through [types.VCSDriver.Preserve] and fills VCSCheckpoint.Preserved
-// with a handle that restores it. The working copy is still untouched, but the backend
-// gains an object, so a caller asks for it rather than paying for it by default.
+// preserve is the exception, and opt-in for that reason: it captures the uncommitted work
+// through [types.VCSDriver.Preserve] and fills VCSCheckpoint.Preserved with a handle that
+// restores it. The working copy stays untouched, but the backend gains an object.
 //
 // One Metadata call covers revision, branch and dirtiness, so a clean tree spawns no
 // second round of processes. The patch is read only when the tree is dirty, which is
@@ -54,11 +53,10 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preser
 	cp.PatchDigest = patchDigest(patch)
 	cp.UntrackedDigest = untrackedDigest(ctx, dir, res)
 	if preserve {
-		// The handle is recorded BEFORE the error is weighed, because hg and sl both
-		// return one alongside a failure on purpose: the shelf or the snapshot commit
-		// exists from that point, and on sl the working copy can be parked on it. Dropping
-		// the handle there would leave a minted object with nothing pointing at it, which
-		// is the one outcome preserving exists to prevent.
+		// Recorded BEFORE the error is weighed: hg and sl both return a handle alongside a
+		// failure on purpose, since the shelf or snapshot commit exists from that point and
+		// on sl the working copy can be parked on it. Dropping the handle would leave a
+		// minted object with nothing pointing at it.
 		handle, err := res.VCS.Preserve(ctx, dir)
 		cp.Preserved = handle
 		if err != nil {
@@ -71,16 +69,14 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preser
 // PrunePreserved drops every capture --preserve minted in dir that has outlived the
 // retention its handle promises, and reports the handles it dropped.
 //
-// It exists because that promise needs a SCHEDULE behind it. Preserve prunes too, but only
-// a caller who preserves AGAIN can reach that pass, so a repository preserved once keeps
-// its capture for good and the thirty days the flag advertises never arrive. This is the
-// entry point a periodic run calls; the retention itself stays here rather than travelling
-// through a caller, because a cutoff the caller chose would enforce a window nothing else
-// in magus has promised.
+// Preserve prunes too, but only a caller who preserves AGAIN reaches that pass, so a
+// repository preserved once would keep its capture past the thirty days the flag
+// advertises. This is the entry point a periodic run calls. The retention stays here
+// rather than travelling through a caller, because a caller-chosen cutoff would enforce a
+// window nothing else in magus has promised.
 //
-// The backends disagree and the disagreement is not an error to report: Sapling drops
-// nothing (its snapshot is a hidden commit no Sapling command removes) and Jujutsu mints
-// nothing to drop, so both answer with an empty list.
+// Sapling drops nothing (its snapshot is a hidden commit no Sapling command removes) and
+// Jujutsu mints nothing to drop; both answer with an empty list, which is not an error.
 func PrunePreserved(ctx context.Context, dir string, res types.VCSResolution) ([]string, error) {
 	if res.VCS == nil {
 		return nil, errors.New("vcs prune-preserved: no VCS resolved for this workspace; there is nothing to prune")
@@ -95,16 +91,15 @@ func PrunePreserved(ctx context.Context, dir string, res types.VCSResolution) ([
 // untrackedDigest fingerprints the untracked files' paths and content, "" when there are
 // none or when the backend cannot answer.
 //
-// Derived from two driver methods rather than a new one: DirtyFiles reports every changed
-// path INCLUDING untracked, TrackedFiles says which of those the backend tracks, and the
-// difference is what nothing else in a checkpoint can see. Both are on every backend, so
-// this is agnostic by construction rather than by four parallel implementations.
+// Derived from two existing driver methods rather than a new one: DirtyFiles reports every
+// changed path INCLUDING untracked, TrackedFiles says which of those are tracked, and the
+// difference is the untracked set. Both exist on every backend, so this needs no
+// per-backend implementation.
 //
-// BEST-EFFORT, and that is a real choice. A checkpoint's job is to record where the work
-// is; refusing to record one because an untracked file was deleted mid-probe, or because
-// a backend lacks TrackedFiles, would lose the revision too - and the revision is the
-// half a reader can still act on. A missing digest reads as "not measured", which is what
-// an empty string already means for PatchDigest.
+// BEST-EFFORT: refusing a checkpoint because an untracked file vanished mid-probe, or
+// because a backend lacks TrackedFiles, would lose the revision too, and the revision is
+// the half a reader can still act on. A missing digest reads as "not measured", the same
+// as an empty PatchDigest.
 func untrackedDigest(ctx context.Context, dir string, res types.VCSResolution) string {
 	reporter, ok := res.VCS.(types.TrackedFileReporter)
 	if !ok {
@@ -137,9 +132,8 @@ func untrackedDigest(ctx context.Context, dir string, res types.VCSResolution) s
 
 	h := sha256.New()
 	for _, rel := range untracked {
-		// The PATH is hashed even when its content cannot be read, so a file that appears
-		// and vanishes between the listing and the read still moves the digest rather than
-		// being silently equivalent to absent.
+		// The PATH is hashed even when the content cannot be read, so a file that vanishes
+		// between the listing and the read still moves the digest.
 		fmt.Fprintf(h, "%s\x00", rel)
 		body, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
 		if err != nil {

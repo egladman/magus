@@ -19,9 +19,8 @@ func (v jjVCS) Name() string     { return "jj" }
 func (v jjVCS) Claims() []string { return []string{".jj"} }
 func (v jjVCS) Base() string     { return "trunk()" }
 
-// ReviewCommand diffs @ against its parent. jj has no staging step at all - the working
-// copy IS the change - so there is nothing to record before reading it back, and this
-// answers the same question the other three answer after their staging.
+// ReviewCommand diffs @ against its parent. jj has no staging step at all, its working
+// copy being the change, so there is nothing to record before reading it back.
 func (v jjVCS) ReviewCommand() string { return "jj diff --stat" }
 
 // ParentRef is the first parent of the working-copy commit. jj's working copy is
@@ -747,11 +746,9 @@ func (v jjVCS) AbortMerge(ctx context.Context, root string) error {
 // Preserve returns the working-copy commit id, because jj has already done the work.
 //
 // jj snapshots the working copy on every command and tracks files automatically, so what
-// git calls untracked is already inside @ - verified 2026-09-08, an unknown file appears
-// in `jj diff` with no action taken. There is nothing for magus to mint here, and minting
-// something anyway would add an object the backend's own model makes redundant.
-//
-// The invariant holds trivially: this reads and writes nothing.
+// git calls untracked is already inside @ (verified 2026-09-08: an unknown file appears in
+// `jj diff` with no action taken). Nothing for magus to mint, and this reads and writes
+// nothing, so the no-cost invariant holds trivially.
 func (v jjVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	dirty, err := v.Dirty(ctx, dir, nil)
 	if err != nil {
@@ -771,9 +768,9 @@ func (v jjVCS) Preserve(ctx context.Context, dir string) (string, error) {
 
 // PrunePreserved drops nothing, because Preserve minted nothing.
 //
-// The handle is @'s own commit id. jj keeps it in the operation log, which jj expires on
-// its own schedule; magus deleting from there would be discarding the working-copy
-// history the backend maintains for its own undo.
+// The handle is @'s own commit id, kept in jj's operation log and expired on jj's own
+// schedule; deleting from there would discard the working-copy history the backend
+// maintains for its undo.
 func (v jjVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
 	return nil, nil
 }
