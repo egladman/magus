@@ -12,6 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,4 +93,39 @@ func TestAttributeRunKeepsAnIdentityItWasGiven(t *testing.T) {
 	ctx := attributeRun(journal.WithInvocationID(context.Background(), given))
 
 	assert.Equal(t, given, journal.InvocationIDFromContext(ctx))
+}
+
+// The identity has to reach the WORK, not merely the context runResolved holds: a
+// dispatched step recognizes an ancestor's machine claim by reading the ancestry off the
+// context it is invoked with. Driven through the public Run, because the three tests
+// above call attributeRun themselves and so stay green when nothing calls it.
+func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
+	const spellName = "zzz-invocation-identity-spell"
+	var invoked context.Context
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			invoked = ctx
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}}), "Run")
+	require.NotNil(t, invoked, "the target never ran, so this proves nothing about its context")
+
+	id := journal.InvocationIDFromContext(invoked)
+	require.NotEmpty(t, id, "a library run reached the work anonymous: nothing it dispatches can be attributed")
+	assert.True(t, types.HasInvocationAncestor(invoked, os.Getpid(), id),
+		"the work does not carry this run as an ancestor, so a dispatch takes a second machine claim against the reservation the parent already holds")
 }
