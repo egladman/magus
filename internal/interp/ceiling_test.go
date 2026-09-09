@@ -16,9 +16,9 @@ import (
 // A ceiling-bearing body carries an accumulator, which is what lets its error report a
 // split at all.
 //
-// This does NOT guard the install site. Every body gets an accumulator, ceiling or not,
-// and TestDeclaredCeilingIsAPassThroughWithoutATimeout is what holds that line: this test
-// passes either way, because a declared timeout reaches the tracker on any arrangement.
+// This does NOT guard the install site. Every body gets an accumulator, ceiling or not, and
+// TestDeclaredCeilingIsAPassThroughWithoutATimeout holds that line; this test passes either
+// way, because a declared timeout reaches the tracker on any arrangement.
 func TestDeclaredCeilingTracksDependencyWait(t *testing.T) {
 	ws := &ceilingWorkspace{projects: []*types.Project{{
 		Dir:            "/w/api",

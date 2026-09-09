@@ -53,13 +53,10 @@ func TestYieldRunIsolationLetsExclusiveChildRun(t *testing.T) {
 	}
 }
 
-// TestYieldRunIsolationKeepsAnExclusiveWriteLock proves the property without timing, and
-// proves it against the half-fix as well as the bug.
-//
-// Removing the release alone would pass a test that only watches for overlap, then hang in
-// production the first time a child tried to take a lease behind the parent's write lock.
-// So this admits one INSIDE the yield: it must return immediately, and the write lock must
-// still be held when it does.
+// Proved without timing, and against the half-fix as well as the bug: a test that only
+// watches for overlap passes when the release is removed alone, then hangs in production
+// the first time a child takes a lease behind the parent's write lock. So a child is
+// admitted INSIDE the yield, and it must return immediately with the write lock still held.
 func TestYieldRunIsolationKeepsAnExclusiveWriteLock(t *testing.T) {
 	ctx := WithRunScope(context.Background())
 	isolation := isolationFrom(ctx)
@@ -79,10 +76,9 @@ func TestYieldRunIsolationKeepsAnExclusiveWriteLock(t *testing.T) {
 		admitted = true
 
 		// An EXCLUSIVE child is subsumed too, which is Step.Exclusive's own contract: it
-		// excludes BATCH peers, and a needs child admitted through RunAside has no batch.
-		// The ancestor's write lock already excludes every one of them. Pinned because the
-		// alternative reading - nest a fresh region so it excludes its siblings - is the
-		// change someone will otherwise make on the way past.
+		// excludes BATCH peers, and a needs child admitted through RunAside has no batch,
+		// so the ancestor's write lock already excludes every one of them. Pinned because
+		// nesting a fresh region instead is the change someone will otherwise make.
 		_, exclusiveRelease := acquireRunIsolation(child, true)
 		exclusiveRelease()
 		requireStillWriteLocked(t, isolation, "an exclusive child inside the region took a lease of its own")
@@ -114,9 +110,7 @@ func (a *queueingAdmitter) Request(_ context.Context, waiter string, c types.Mac
 func (a *queueingAdmitter) Release(_ context.Context, id string)  { a.budget.Release(id) }
 func (a *queueingAdmitter) Drop(_ context.Context, waiter string) { a.budget.Drop(waiter) }
 
-// TestRunAllExclusiveStepQueuesForTheMachineWithoutTheLease pins the acquisition order
-// that keeps a saturated machine budget from wedging a batch outright.
-//
+// The acquisition order keeps a saturated machine budget from wedging a batch outright.
 // The cycle it reproduces, with the budget full and the lease taken first:
 //
 //  1. the shared step is admitted and holds the read lock and the whole budget;
@@ -126,9 +120,8 @@ func (a *queueingAdmitter) Drop(_ context.Context, waiter string) { a.budget.Dro
 //  5. the shared step returns and parks re-taking its read lock behind that writer.
 //
 // Neither end can move and neither is anywhere it would see a cancelled context, so the
-// batch hangs until the process is killed. Bounded rather than left to the package
-// timeout: a deadlock a test can only express as a hang reports as an infrastructure
-// failure, in a file nobody attributes to this behavior.
+// batch hangs until the process is killed. Bounded here rather than left to the package
+// timeout, which reports a hang as an infrastructure failure nobody attributes to this.
 func TestRunAllExclusiveStepQueuesForTheMachineWithoutTheLease(t *testing.T) {
 	// Memory-only arbitration (unlimited slots), so the two 9 GB steps are what
 	// saturates the budget and the gate step below never competes for a seat.

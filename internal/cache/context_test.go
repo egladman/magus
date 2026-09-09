@@ -19,12 +19,11 @@ func TestSlotHeld(t *testing.T) {
 	assert.False(t, SlotHeld(released), "WithoutSlotHeld: SlotHeld still true after clearing")
 }
 
-// TestSlotMarkersPreserveTheRestOfTheHold is the thesis of the admission struct: a slot
-// marker changes ONE field of a hold and leaves the other two alone. Rewriting any of
-// them to return a fresh admission compiles, reads correctly, and silently un-fixes both
-// bugs the struct was introduced for (a needs child taking a second machine claim, a
-// fan-out dropping its isolation lease) with nothing to catch it. Whole-struct, so a
-// field added later is covered without anyone remembering to extend this.
+// A slot marker changes ONE field of a hold and leaves the other two alone. Rewriting any
+// of them to return a fresh admission compiles, reads correctly, and silently un-fixes both
+// bugs the struct exists for: a needs child taking a second machine claim, a fan-out
+// dropping its isolation lease. Whole-struct, so a field added later is covered without
+// anyone remembering to extend this.
 func TestSlotMarkersPreserveTheRestOfTheHold(t *testing.T) {
 	lease := &runIsolationLease{isolation: &runIsolation{}, exclusive: true}
 	base := admission{slots: 4, machineClaim: true, isolation: lease}.on(context.Background())

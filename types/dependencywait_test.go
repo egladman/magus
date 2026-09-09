@@ -13,9 +13,9 @@ import (
 // the parent's accumulator, which already counts that whole child as one span.
 //
 // This pins the primitive only. Whether the ENGINE gives every body its own accumulator is
-// a question about the install site, and interp.TestDeclaredCeilingIsAPassThroughWithoutATimeout
-// is what holds that line: an uncapped body once inherited its nearest ceilinged ancestor's,
-// and this test passed throughout.
+// a question about the install site, held by
+// interp.TestDeclaredCeilingIsAPassThroughWithoutATimeout: an uncapped body inheriting its
+// nearest ceilinged ancestor's accumulator passes here regardless.
 func TestTrackDependencyWaitIsPerBody(t *testing.T) {
 	parent := TrackDependencyWait(context.Background())
 	AddDependencyWait(parent, time.Minute)

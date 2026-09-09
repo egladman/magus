@@ -140,7 +140,7 @@ func TestAdviseRepeatGateFiresOnceItHasCost(t *testing.T) {
 	assert.Contains(t, got, "magus ls targets", "the advisory must not name a target")
 
 	// The repeat keeps the two facts that moved since the caller last read the full text,
-	// and the command that acts on them. A repeat nobody can act on is just noise.
+	// and the command that acts on them. A repeat nobody can act on is noise.
 	assert.Contains(t, brief, "3 times")
 	assert.Contains(t, brief, "7m30s")
 	assert.Contains(t, brief, "magus ls targets")

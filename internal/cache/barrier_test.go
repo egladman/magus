@@ -293,14 +293,13 @@ func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 	assert.True(t, ran, "self-dependent step deadlocked instead of running")
 }
 
-// TestRunAllExclusiveRunsAlone verifies the safety half of the Step.Exclusive contract:
-// an exclusive step never executes concurrently with any other step. The sleeps widen
-// every span so a broken lock has room to let a reader land inside the exclusive one.
+// The safety half of the Step.Exclusive contract: an exclusive step never executes
+// concurrently with any other step. The sleeps widen every span so a broken lock has room
+// to let a reader land inside the exclusive one.
 //
-// Sleeps are right for THIS half and wrong for the other. A violation here is something
-// that HAPPENED, so a loaded machine only makes the window easier to catch - it cannot
-// turn a pass into a false failure. The overlap claim is the opposite shape and lives in
-// its own test below.
+// Sleeps are right for THIS half and wrong for the other: a violation here is something
+// that HAPPENED, so a loaded machine only widens the window and cannot turn a pass into a
+// false failure. The overlap claim is the opposite shape and lives in its own test below.
 func TestRunAllExclusiveRunsAlone(t *testing.T) {
 	root, c := openCache(t)
 
@@ -345,21 +344,19 @@ func TestRunAllExclusiveRunsAlone(t *testing.T) {
 	assert.Empty(t, violations, "the exclusivity contract was broken")
 }
 
-// TestRunAllNonExclusiveStepsOverlap is the liveness half: the isolation lock must be
-// SHARED between non-exclusive steps, not a mutex that serializes every replay.
+// The liveness half: the isolation lock must be SHARED between non-exclusive steps, not a
+// mutex that serializes every replay.
 //
 // A rendezvous rather than a sleep, because this claim is about what CAN happen and a
-// sleep-and-observe version measures how busy the host is instead. It failed exactly that
-// way once here, under six packages of parallel tests, and passed alone and at -count=3.
-// Each step now blocks until a second one arrives: correct code passes instantly at any
-// load, and over-serialization reaches the timeout, which reports rather than hangs.
+// sleep-and-observe version measures how busy the host is instead (it failed that way once
+// under six packages of parallel tests, and passed alone and at -count=3). Each step blocks
+// until a second arrives, so correct code passes instantly at any load and
+// over-serialization reaches the timeout, which reports rather than hangs.
 //
-// NO exclusive step in this fixture, and that is not simplification. sync.RWMutex prefers
-// a waiting writer - once an exclusive step is blocked on Lock, further RLock calls queue
-// behind it, which is what stops it starving. So a reader already inside its span cannot
-// be joined by another, and a rendezvous in the presence of a pending exclusive step
-// deadlocks against CORRECT behavior. Asking the two questions in one test asks for a
-// property the lock is designed not to provide.
+// NO exclusive step in this fixture, and that is not simplification: sync.RWMutex prefers a
+// waiting writer, so once one is blocked on Lock further RLock calls queue behind it, which
+// is what stops it starving. A reader already inside its span cannot then be joined by
+// another, so a rendezvous with a pending exclusive step deadlocks against CORRECT behavior.
 func TestRunAllNonExclusiveStepsOverlap(t *testing.T) {
 	root, c := openCache(t)
 
@@ -692,16 +689,15 @@ func TestRunAllDependentFailureDoesNotSpendTheBudget(t *testing.T) {
 	assert.True(t, ran["C"], "C is independent and B's cascade must not have spent the budget")
 }
 
-// TestExclusiveStepStaysExclusiveAcrossItsFanOut is the half TestRunAllExclusiveRunsAlone
-// cannot see. That test's exclusive step just sleeps, so it never reaches the yield - and
-// the yield is where exclusivity was being given away.
+// The half TestRunAllExclusiveRunsAlone cannot see: that test's exclusive step only sleeps,
+// so it never reaches the yield, and the yield is where exclusivity is given away.
 //
 // A step that dispatches ctx.needs goes through YieldRunIsolation so its children can be
-// admitted. For a SHARED holder that release is necessary and harmless. For an EXCLUSIVE
-// one it released the write lock for the whole fan-out, which is most of such a step's
-// life: this repo's own `generate` is skip_cache + exclusive and its entire body is
-// ctx.needs over every *-generate sibling. So the one step declared to run alone ran
-// alongside everything, including the drift gate it exists to isolate.
+// admitted. For a SHARED holder that release is necessary and harmless; for an EXCLUSIVE
+// one it drops the write lock for the whole fan-out, which is most of such a step's life.
+// This repo's own `generate` is skip_cache + exclusive and its entire body is ctx.needs
+// over every *-generate sibling, so the one step declared to run alone would run alongside
+// everything, including the drift gate it exists to isolate.
 func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
 	root, c := openCache(t)
 

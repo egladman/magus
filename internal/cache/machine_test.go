@@ -165,11 +165,10 @@ func TestMachineBudgetExcludesAnAncestorsClaim(t *testing.T) {
 	assert.Empty(t, child.Holders, "an ancestor is not a peer")
 }
 
-// TestMachineBudgetSeatsEveryChildOfAFannedOutParent is the cross-process half of the
-// deadlock eb1c6831e closed inside one process. Four steps of ONE invocation each shell
-// out to a magus of their own; every parent is blocked in exec waiting for its child, so
-// a child excused from one parent claim and queued behind the other three is waiting on
-// the very steps that are waiting on it.
+// The cross-process half of the in-process fan-out deadlock: four steps of ONE invocation
+// each shell out to a magus of their own, and every parent is blocked in exec waiting for
+// its child, so a child excused from one parent claim and queued behind the other three is
+// waiting on the very steps that are waiting on it.
 func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
 	b, _, _ := testBudget(t, 12_000, 16)
 	targets := []string{"build", "test", "lint", "docs"}
@@ -201,16 +200,14 @@ func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
 	assert.True(t, last.Fits, "it would fit on an idle machine, so it queues rather than being refused")
 	assert.Equal(t, 12_000, last.HeldMB, "sibling descendants count; the parents' four claims do not")
 
-	// A queue rather than a deadlock, because what it waits for is running and not
-	// blocked on it.
+	// A queue, not a deadlock: what it waits for is running and not blocked on it.
 	b.Release(first)
 	assert.True(t, b.Request("child-docs", child(3)).Granted, "the queued child is seated once a peer finishes")
 }
 
-// TestMachineBudgetSeatsAChildOfEachStalledRoot is the pair no exclusion can reach: two
-// independent roots, each blocked in exec on a child that needs more than the other root
-// leaves free. Neither parent can release until its child runs, so without make's free
-// slot the machine parks forever.
+// The pair no exclusion can reach: two independent roots, each blocked in exec on a child
+// that needs more than the other root leaves free. Neither parent can release until its
+// child runs, so without make's free slot the machine parks forever.
 func TestMachineBudgetSeatsAChildOfEachStalledRoot(t *testing.T) {
 	b, now, _ := testBudget(t, 12_000, 16)
 
@@ -487,10 +484,9 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 	assert.Contains(t, err.Error(), "Waiting would not help")
 }
 
-// TestMachineRefusalNamesTheFractionAndTheDeclarationCheck covers the refusal an author
-// meets with a 26 GiB target on a 32 GiB machine. magus budgets 0.75 of the machine, so
-// the figure in the message is smaller than the RAM the reader can see, and a refusal
-// that does not say so reads as arithmetic magus got wrong.
+// The refusal an author meets with a 26 GiB target on a 32 GiB machine. magus budgets 0.75
+// of the machine, so the figure in the message is smaller than the RAM the reader can see,
+// and a refusal that does not say so reads as arithmetic magus got wrong.
 func TestMachineRefusalNamesTheFractionAndTheDeclarationCheck(t *testing.T) {
 	b, _, _ := testBudget(t, 4000, 8)
 	g, _, _ := testGate(t, b, false)
@@ -507,9 +503,8 @@ func TestMachineRefusalNamesTheFractionAndTheDeclarationCheck(t *testing.T) {
 		"magus has measured this target's peak, so the author is sent to the check rather than to a guess")
 }
 
-// TestMachineRefusalForTooManySlotsStaysAboutSlots is the other axis. A step declaring
-// more slots than the machine has cores is refused by the same path, and neither the
-// memory fraction nor a memory check has anything to say about it.
+// The other axis: a step declaring more slots than the machine has cores is refused by the
+// same path, and neither the memory fraction nor a memory check has anything to say about it.
 func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
 	b, _, _ := testBudget(t, 32_000, 8)
 	g, _, _ := testGate(t, b, false)
@@ -631,10 +626,9 @@ func TestMachineGateQueuesNormallyWhenNotNested(t *testing.T) {
 	assert.False(t, blindToOwnAncestry(t.Context()), "a top-level run has no ancestry to lose")
 }
 
-// The empty-ctx fallback has no producer on the run path: runResolved's first statement
-// is attributeRun, which reads the environment itself and appends this run, so admit
-// always sees a stamped ctx. It stays as the belt to that suspenders, and this pins the
-// contract rather than a caller.
+// The empty-ctx fallback has no producer on the run path: runResolved's first statement is
+// attributeRun, which reads the environment itself and appends this run, so admit always
+// sees a stamped ctx. This pins the contract rather than a caller.
 func TestAncestryFallsBackToTheEnvironmentForAnUnstampedCaller(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
@@ -651,10 +645,9 @@ func TestAncestryFallsBackToTheEnvironmentForAnUnstampedCaller(t *testing.T) {
 		"a stamped ctx is authoritative; the environment is the fallback, not an override")
 }
 
-// The shape a library run actually arrives in. attributeRun leaves ancestry as
-// [parent..., self], and self is stripped by mintedHere, so the answer matches what the
-// environment alone used to give: an SDK consumer is still excused from its parent's
-// claim, by a different branch than the test above.
+// The shape a library run actually arrives in: attributeRun leaves ancestry as
+// [parent..., self], and mintedHere strips self, so an SDK consumer is excused from its
+// parent's claim by a different branch than the test above.
 func TestAncestryStripsThisRunFromWhatAttributeRunStamped(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 
@@ -669,9 +662,9 @@ func TestAncestryStripsThisRunFromWhatAttributeRunStamped(t *testing.T) {
 		"a run that can name its parent is not blind")
 }
 
-// TestLibraryCallerIsExcusedFromItsParentsClaim is the same case end to end through the
-// budget: the parent's claim filled the machine, and the in-process run has to be
-// excused from it or the pair deadlocks - the parent cannot release until this run ends.
+// The same case end to end through the budget: the parent's claim filled the machine, and
+// the in-process run has to be excused from it or the pair deadlocks, since the parent
+// cannot release until this run ends.
 func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
@@ -683,9 +676,8 @@ func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	require.True(t, parent.Granted, "the shard's own run fills the machine")
 
 	// The ctx admit actually sees for an SDK consumer: attributeRun adopted the parent
-	// from the environment and appended this run, and ancestorInvocations strips the self
-	// entry back off. Modelling this as a bare context.Background() tested a shape
-	// runResolved cannot produce.
+	// from the environment and appended this run, which ancestorInvocations strips back
+	// off. A bare context.Background() here is a shape runResolved cannot produce.
 	stamped := types.AppendInvocationAncestor(
 		types.WithInvocationAncestors(context.Background(), []string{"3217:inv-parent"}),
 		os.Getpid(), "inv-self")

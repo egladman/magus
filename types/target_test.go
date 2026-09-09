@@ -154,8 +154,8 @@ func expiredCeiling(t *testing.T) context.Context {
 }
 
 // The split is the whole point of the message: elapsed time alone reads as "this target is
-// slow", which is wrong exactly when it matters most - a target queued behind a
-// serialization upstream, doing seconds of its own work.
+// slow", which is wrong exactly when it matters most, for a target queued behind a
+// serialization upstream while doing seconds of its own work.
 func TestCeilingExceededErrorSplitsWaitingFromOwnWork(t *testing.T) {
 	ctx := expiredCeiling(t)
 	AddDependencyWait(ctx, 14*time.Minute)
@@ -167,12 +167,12 @@ func TestCeilingExceededErrorSplitsWaitingFromOwnWork(t *testing.T) {
 	assert.Contains(t, err.Error(), "14m0s of it on the targets it composes and 1m52s on its own work")
 }
 
-// A leaf target composes nothing, so there is no split to report and the clause is
-// omitted rather than printed as a pair of zeroes.
+// A leaf target composes nothing, so there is no split to report and the clause is omitted
+// rather than printed as a pair of zeroes.
 //
 // Asserted as one contiguous span, not as NotContains on the clause's wording: a negative
-// assertion on emitted prose goes vacuous the moment that prose is reworded, and this has
-// to fail whatever a wrongly-emitted split would have said.
+// assertion on emitted prose goes vacuous the moment that prose is reworded, and this has to
+// fail whatever a wrongly-emitted split would have said.
 func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
 	err := CeilingExceededError(expiredCeiling(t), nil, "build", time.Minute, 90*time.Second)
 
