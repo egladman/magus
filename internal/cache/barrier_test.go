@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -292,10 +293,14 @@ func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 	assert.True(t, ran, "self-dependent step deadlocked instead of running")
 }
 
-// TestRunAllExclusiveRunsAlone verifies the Step.Exclusive contract: an exclusive
-// step never executes concurrently with any other step, while non-exclusive steps
-// still overlap with each other. The sleeps widen the windows so a broken lock
-// would let a reader land inside the exclusive step's span and trip the assertion.
+// TestRunAllExclusiveRunsAlone verifies the safety half of the Step.Exclusive contract:
+// an exclusive step never executes concurrently with any other step. The sleeps widen
+// every span so a broken lock has room to let a reader land inside the exclusive one.
+//
+// Sleeps are right for THIS half and wrong for the other. A violation here is something
+// that HAPPENED, so a loaded machine only makes the window easier to catch - it cannot
+// turn a pass into a false failure. The overlap claim is the opposite shape and lives in
+// its own test below.
 func TestRunAllExclusiveRunsAlone(t *testing.T) {
 	root, c := openCache(t)
 
@@ -311,7 +316,6 @@ func TestRunAllExclusiveRunsAlone(t *testing.T) {
 	var (
 		mu         sync.Mutex
 		inFlight   int
-		peak       int // max concurrent non-exclusive steps; proves readers overlap
 		violations []string
 	)
 	enter := func(s Step) {
@@ -320,9 +324,6 @@ func TestRunAllExclusiveRunsAlone(t *testing.T) {
 		inFlight++
 		if s.Exclusive && inFlight != 1 {
 			violations = append(violations, "exclusive step started while another was in flight")
-		}
-		if !s.Exclusive && inFlight > peak {
-			peak = inFlight
 		}
 	}
 	leave := func(s Step) {
@@ -341,8 +342,74 @@ func TestRunAllExclusiveRunsAlone(t *testing.T) {
 		return nil
 	}, WithLimiter(NewLimiter(8)))
 	require.NoError(t, err, "RunAll")
-	assert.Empty(t, violations, "exclusive step overlapped with others")
-	assert.GreaterOrEqual(t, peak, 2, "non-exclusive steps never overlapped; the read lock is over-serializing")
+	assert.Empty(t, violations, "the exclusivity contract was broken")
+}
+
+// TestRunAllNonExclusiveStepsOverlap is the liveness half: the isolation lock must be
+// SHARED between non-exclusive steps, not a mutex that serializes every replay.
+//
+// A rendezvous rather than a sleep, because this claim is about what CAN happen and a
+// sleep-and-observe version measures how busy the host is instead. It failed exactly that
+// way once here, under six packages of parallel tests, and passed alone and at -count=3.
+// Each step now blocks until a second one arrives: correct code passes instantly at any
+// load, and over-serialization reaches the timeout, which reports rather than hangs.
+//
+// NO exclusive step in this fixture, and that is not simplification. sync.RWMutex prefers
+// a waiting writer - once an exclusive step is blocked on Lock, further RLock calls queue
+// behind it, which is what stops it starving. So a reader already inside its span cannot
+// be joined by another, and a rendezvous in the presence of a pending exclusive step
+// deadlocks against CORRECT behavior. Asking the two questions in one test asks for a
+// property the lock is designed not to provide.
+func TestRunAllNonExclusiveStepsOverlap(t *testing.T) {
+	root, c := openCache(t)
+
+	const wantOverlap = 2
+	var steps []Step
+	for i := range 4 {
+		steps = append(steps, Step{
+			ProjectPath: "p" + string(rune('0'+i)), WorkspaceRoot: root, Target: "build",
+		})
+	}
+
+	var (
+		mu       sync.Mutex
+		inFlight int
+		peak     int
+		timedOut bool
+	)
+	var arrived atomic.Int32
+	var openOnce sync.Once
+	gate := make(chan struct{})
+	open := func() { openOnce.Do(func() { close(gate) }) }
+
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, _ Step) error {
+		mu.Lock()
+		inFlight++
+		peak = max(peak, inFlight)
+		mu.Unlock()
+
+		if arrived.Add(1) >= wantOverlap {
+			open()
+		}
+		select {
+		case <-gate:
+		case <-time.After(5 * time.Second):
+			mu.Lock()
+			timedOut = true
+			mu.Unlock()
+			// Opened so the remaining steps do not each pay the timeout again.
+			open()
+		}
+
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return nil
+	}, WithLimiter(NewLimiter(8)))
+
+	require.NoError(t, err, "RunAll")
+	assert.False(t, timedOut, "a step waited alone for a peer, so the isolation lock is not shared")
+	assert.GreaterOrEqual(t, peak, wantOverlap, "two steps met and the peak did not record it")
 }
 
 // TestRunAllDependencyFailureCancelsDependents verifies that when an upstream
