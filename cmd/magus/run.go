@@ -146,7 +146,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// agent, but a person otherwise has no positive signal that a slow invocation
 	// is alive. Say it once, before any potentially long workspace load, and point
 	// at the existing observer rather than inventing another progress surface.
-	if global.silent {
+	// Only when a person is watching. The liveness signal is the whole point, and a
+	// caller reading a captured transcript gets the finished result instead: Emit dedupes
+	// within a process, so one invocation per tool call repeats it forever, and the line
+	// measured 48KB across four agent sessions that could not act on any of it.
+	if global.silent && isInteractiveTTY() {
 		// Says what arrives and when, rather than sending the reader to poll a
 		// dashboard in another terminal. This run BLOCKS: waiting for it is the
 		// normal thing to do, and every target that runs prints an output ref
