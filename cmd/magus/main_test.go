@@ -682,6 +682,12 @@ func itoa(n int) string {
 // scripts: `exec magus ...` in a .txtar file runs the real CLI in process (via
 // run), so behavior tests exercise the actual command, not a mock.
 func TestMain(m *testing.M) {
+	// A lease in the caller's environment (an orchestrator exporting BAGGAGE for
+	// every magus command it runs) would reach the hook and journal tests, which
+	// assert an empty lease; the same leak MAGUS_LEVEL had.
+	if err := os.Unsetenv("BAGGAGE"); err != nil {
+		panic(err)
+	}
 	testscript.Main(m, map[string]func(){
 		"magus": func() { os.Exit(runCLI()) },
 	})
