@@ -47,7 +47,8 @@ type Graph struct {
 // relation). A second edge with the same key upgrades score/provenance if the
 // newcomer is stronger, so extraction order never changes the result.
 type edgeKey struct {
-	source, target, relation string
+	source, target string
+	relation       types.RelationID
 }
 
 // NewGraph returns an empty graph ready for AddNode/AddEdge/Merge.
@@ -173,6 +174,41 @@ func (g *Graph) Merge(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge) 
 	}
 }
 
+// UndeclaredEdges returns every edge whose relation and endpoint kinds are not a shape
+// types.KnowledgeRelationDefinitions permits, sorted like Edges.
+//
+// It REPORTS rather than dropping, and that is the whole design. Shards load lazily
+// (store.go Merge, five call sites), so there is no moment when the graph is known to
+// be complete and an edge can be judged final: an edge legitimately arrives before the
+// node that gives its endpoint a kind. Rejecting inside AddEdge would therefore discard
+// correct edges by arrival order, silently, which is worse than the undeclared edge it
+// set out to catch.
+//
+// An edge whose endpoints are not both in the graph is SKIPPED, not reported. A missing
+// node means the kind is unknown, and "unknown" is not "wrong" - that is a
+// dangling-reference question, which is not this one.
+//
+// The enforcement point is a test over this workspace's own assembled graph. A producer
+// that starts emitting a shape nobody declared fails there, which is where a closed
+// vocabulary is actually worth having: at the moment someone widens it without saying so.
+func (g *Graph) UndeclaredEdges() []types.KnowledgeEdge {
+	var out []types.KnowledgeEdge
+	for _, e := range g.Edges() {
+		source, ok := g.node(e.Source)
+		if !ok {
+			continue
+		}
+		target, ok := g.node(e.Target)
+		if !ok {
+			continue
+		}
+		if !types.KnowledgeRelationAllows(e.Relation, source.Kind, target.Kind) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // Nodes returns every node sorted by ID (stable, deterministic).
 func (g *Graph) Nodes() []types.KnowledgeNode {
 	out := make([]types.KnowledgeNode, 0, len(g.nodes))
@@ -208,14 +244,16 @@ func (g *Graph) Output() types.KnowledgeGraphOutput {
 	nodes := g.Nodes()
 	edges := g.Edges()
 	return types.KnowledgeGraphOutput{
-		Definition:    types.KnowledgeGraphDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Directed:      true,
-		Multigraph:    false,
-		NodeCount:     len(nodes),
-		EdgeCount:     len(edges),
-		Nodes:         nodes,
-		Links:         edges,
+		Definition:          types.KnowledgeGraphDefinition,
+		SchemaVersion:       types.KnowledgeSchemaVersion,
+		Directed:            true,
+		Multigraph:          false,
+		NodeCount:           len(nodes),
+		EdgeCount:           len(edges),
+		Nodes:               nodes,
+		Links:               edges,
+		Relations:           types.KnowledgeRelationDefinitions(),
+		RelationFingerprint: types.KnowledgeRelationFingerprint(),
 	}
 }
 

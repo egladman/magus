@@ -131,7 +131,7 @@ func TestDelete(t *testing.T) {
 }
 
 // TestCursorWriteIsRetired keeps old console clients from silently overwriting another
-// session's handoff while preserving a read path for an existing legacy cursor.
+// session's entry while preserving a read path for an existing legacy cursor.
 func TestCursorWriteIsRetired(t *testing.T) {
 	s := newTestService(t)
 	ctx := context.Background()

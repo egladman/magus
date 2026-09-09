@@ -325,8 +325,18 @@ func CeilingExceededError(ctx context.Context, err error, target string, ceiling
 	if errors.As(err, &d) && d.Code == TargetCeilingExceeded {
 		return err
 	}
-	msg := fmt.Sprintf("target %q exceeded its declared timeout of %s after %s; its process tree was killed",
+	msg := fmt.Sprintf("target %q exceeded its declared timeout of %s after %s",
 		target, ceiling, elapsed.Round(time.Second))
+	// A ceiling covers the body's ctx.needs waits as well as its own work, so the elapsed
+	// time alone accuses the target of being slow when it may have been queued the whole
+	// time behind something else. Splitting it is what makes the difference actionable:
+	// own work at the ceiling means tune the target, dependency time at the ceiling means
+	// look upstream at what serialized.
+	if waited := DependencyWait(ctx); waited > 0 {
+		msg += fmt.Sprintf(", %s of it on the targets it composes and %s on its own work",
+			waited.Round(time.Second), max(elapsed-waited, 0).Round(time.Second))
+	}
+	msg += "; its process tree was killed"
 	if log := CaptureLog(ctx); log != "" {
 		msg += "; captured output: " + log
 	}
@@ -428,7 +438,16 @@ func (t Target) Key() []string {
 //
 // Without the fold a declaration is INERT for the command people run: only `ci` is
 // scheduled as a step, so the `test` it composes reaches neither the limiter nor
-// machine-wide admission. The MAXIMUM, not the sum, because a chain runs in order.
+// machine-wide admission.
+//
+// The MAXIMUM, not the sum, which makes this a LOWER BOUND rather than a peak. One
+// `ctx.needs(a, b, c)` dispatches all three through the Buzz pool at once and their
+// declarations do add; only separate ctx.needs calls run in order. TargetChains cannot
+// tell the two apart, being a flat list of steps in invocation order with no record of
+// which were dispatched together, and summing is the worse guess of the two available:
+// a sequential chain would then over-declare, and an over-declaration past the whole
+// machine budget is refused outright rather than throttled. Grouping in ChainStep is
+// what would make a true peak computable here.
 //
 // lookup resolves a cross-project step and may return nil, in which case that step
 // contributes nothing rather than a guess. It lives here because admission and

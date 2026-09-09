@@ -442,14 +442,14 @@ func projectSkeleton(tg types.TargetGraphOutput) types.KnowledgeGraphOutput {
 	for _, p := range tg.Projects {
 		nodes = append(nodes, types.KnowledgeNode{
 			ID:    p.Path,
-			Kind:  "project",
+			Kind:  types.KindProject,
 			Label: p.Path,
 		})
 		for _, dep := range p.DependsOn {
 			links = append(links, types.KnowledgeEdge{
 				Source:   p.Path,
 				Target:   dep,
-				Relation: "depends_on",
+				Relation: types.RelationDependsOn,
 			})
 		}
 	}
@@ -462,5 +462,12 @@ func projectSkeleton(tg types.TargetGraphOutput) types.KnowledgeGraphOutput {
 		EdgeCount:     len(links),
 		Nodes:         nodes,
 		Links:         links,
+		// The vocabulary travels with every flavor, because the schema version is what a
+		// consumer reads to decide whether it can resolve a predicate without a matching
+		// binary. Stamping the version while leaving these null tells it the vocabulary is
+		// there and then hands it nothing - worse than an older version, which at least
+		// says to fall back.
+		Relations:           types.KnowledgeRelationDefinitions(),
+		RelationFingerprint: types.KnowledgeRelationFingerprint(),
 	}
 }

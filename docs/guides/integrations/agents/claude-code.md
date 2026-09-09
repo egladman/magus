@@ -20,6 +20,7 @@ event.
 | file surface     | deny and advise both reach the model   |
 | MCP              | [MCP](../mcp.md)                       |
 | attention events | `Notification`, `Stop`, `SubagentStop` |
+| checkpoint       | `Stop`                                 |
 | lease            | `PreToolUse` on the sub-agent tool     |
 
 ## Skills
@@ -31,17 +32,14 @@ magus agent install .claude/skills
 Commit what it writes so every teammate's agent gets the same instructions.
 Claude Code discovers skills when a session starts, so restart the session
 before it can invoke anything new. [Skills](skills.md) covers the install
-surface, the two permutations, and the drift check.
+surface, the two forms, and the drift check.
 
 ## MCP
 
-```sh
-magus server start
-```
-
-The daemon serves MCP on `http://127.0.0.1:7391/mcp`; [MCP](../mcp.md) has the
-token and client setup. Tools are discovered at launch, so a client already
-running when the daemon comes up sees them only after a restart.
+Configure MCP for Claude Code as a host-level integration; [MCP](../mcp.md) has
+the connection and token setup. Tools are discovered at launch, so restart a
+client after changing its MCP configuration. An agent that finds MCP unavailable
+uses the CLI fallback; it does not manually start Magus solely to obtain tools.
 
 ## Guard hook
 
@@ -165,6 +163,35 @@ It exits 0 and swallows its own output on purpose: a notifier that can fail is a
 hook that can break the session it was meant to watch. It opens with the same
 magusfile walk as the lease hook above, for the same reason.
 [Attention hooks](notifications.md) covers the envelope and the outcome vocabulary.
+
+## Recording where the work stands
+
+Wire `Stop` to [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh) and
+each time a turn ends magus records the revision, branch and dirtiness of the
+tree, plus this session's id and transcript path. `magus session` lists it.
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+This is the wiring this repository dogfoods, in `.claude/settings.json` beside
+the three guard hooks. It is not a guard: it judges nothing, prints nothing, and
+exits 0 whatever happens. `magus session checkpoint --note "..."` writes the same
+record by hand, which is the form to reach for when you are the one stopping.
 
 ## Coverage and limits
 

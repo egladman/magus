@@ -44,10 +44,30 @@ clone would settle silently, and why resolve exists as the bulk counterpart.
 checkpoint prints the identity of the working state right now - head revision,
 branch, whether the tree is dirty, and a digest of the uncommitted patch. Record
 one when you hand a piece of work out, so a later reader knows what that work was
-looking at. It RESOLVES AND RECORDS and never MINTS: no tag, no stash, no ref, no
-file, nothing changed anywhere, so a checkpoint nobody keeps has cost nothing.
-Feed the revision to anything that takes one; compare two digests to learn whether
-two workers saw the same uncommitted tree, which the revision alone cannot say.
+looking at. By default it RESOLVES AND RECORDS and never MINTS: no tag, no stash,
+no ref, no file, nothing changed anywhere, so a checkpoint nobody keeps has cost
+nothing. Feed the revision to anything that takes one; compare two digests to learn
+whether two workers saw the same uncommitted tree, which the revision alone cannot
+say.
+
+--preserve is the one thing that mints. An identity says whether two trees match;
+it cannot rebuild either one. --preserve additionally captures the uncommitted
+work - tracked edits and untracked files alike - and prints a handle that gets it
+back, using each backend's own mechanism: a commit under refs/magus/preserved for
+git, a kept shelf for Mercurial, a commit Sapling keeps hidden, and for Jujutsu the
+working-copy commit it already holds. The working copy is untouched either way.
+
+Retention differs per backend. On git and Mercurial a capture is dropped at 30
+days, by two passes that cover each other's gap: every preserve prunes, which
+bounds a repository nothing schedules against, and the daemon's prune-preserved
+job prunes on its own, which reaches a repository preserved once and never
+again. That job is a no-op with no daemon running, so on a machine that runs
+none the standalone spelling is magus server prune-preserved.
+
+Sapling drops nothing either way: magus mints a hidden commit there, and no
+Sapling command removes one without discarding the working copy, so those stay
+until you remove them. List them with sl log --hidden -r "desc('magus preserved
+working copy')". Jujutsu mints nothing, so nothing accumulates.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.
@@ -65,6 +85,11 @@ base in yourself on the others, then run resolve.
 **--against** *ref*
 : Merge this \`ref\` first, then settle what it conflicts with
 
+### vcs checkpoint options
+
+**--preserve**
+: Also capture the uncommitted work and print a handle that restores it
+
 ## Subcommands
 
 **add**
@@ -74,7 +99,7 @@ base in yourself on the others, then run resolve.
 : Settle an in-progress merge's conflicted generated files, then regenerate once
 
 **checkpoint**
-: Print the working state's identity, for recording what a lease was handed; writes nothing
+: Print the working state's identity, for recording what a lease was handed; writes nothing unless --preserve
 
 **merge-driver**
 : The per-file merge driver git and hg invoke; you do not run this by hand
@@ -121,6 +146,12 @@ magus vcs checkpoint
 
 ```sh
 magus vcs checkpoint -o name
+```
+
+*Capture the uncommitted work too, before something risky*
+
+```sh
+magus vcs checkpoint --preserve
 ```
 
 ## See Also

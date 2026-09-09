@@ -35,7 +35,7 @@ of it runs an arbitrary command or writes into your working tree:
 - `POST /api/v1/share`, which opens the time-boxed LAN listener described under
   [what the console serves](#what-the-console-serves). It requires a loopback
   peer as well as the bearer token, so only the local console can trigger it.
-- `magus.memory.v1alpha1.MemoryService`, which edits your own handoff journal
+- `magus.memory.v1alpha1.MemoryService`, which edits your own memory
   ([`magus memory`](manpage/magus-memory.md)). That journal lives in the user
   state directory outside the repository, so it is not workspace state either.
 
@@ -128,7 +128,7 @@ Separate from the read routes above, the daemon hosts a **mutating** Connect
 service, `magus.job.v1alpha1.JobService`, so a browser client (or the CLI) can trigger
 background maintenance without an open action endpoint. It is the only surface
 that changes anything magus computed - the others record a person's own review
-state, open a share listener, or edit their handoff journal - and it is bounded:
+state, open a share listener, or edit their memory - and it is bounded:
 it submits a fixed set of named jobs, never an arbitrary command.
 
 The service exposes two RPCs, not one per job: `RunJob(name)` submits any

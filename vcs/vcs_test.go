@@ -644,6 +644,18 @@ func TestMetadataReportsDirtyAcrossBackends(t *testing.T) {
 
 // vcsTestRun runs one VCS command in dir, skipping the test when the tool refuses to
 // initialize (a sandbox with no writable config home, say) rather than failing.
+// vcsTestOutput runs a backend command and returns its stdout. Unlike vcsTestRun it
+// FAILS rather than skips: its callers are reading back something a driver just claimed
+// to have written, so a command that will not run is a result, not a missing tool.
+func vcsTestOutput(t *testing.T, dir, bin string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoErrorf(t, err, "%s %v", bin, args)
+	return string(out)
+}
+
 func vcsTestRun(t *testing.T, dir, bin string, args ...string) {
 	t.Helper()
 	cmd := exec.Command(bin, args...)

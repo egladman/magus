@@ -28,6 +28,10 @@ Ded = "Ded"
 # splits hex on digit/letter boundaries, and this hash happened to contain "ba" at one.
 # A future hash rotation could hit it again, so accept the fragment rather than the value.
 ba = "ba"
+# It did hit again: a994a438baed reads as "baed" -> "based". Same cause, same remedy. Two
+# rotations in, the lesson is that any hash this gate can see will eventually spell
+# something, and the entries below cost less than excluding the row that proves drift.
+baed = "baed"
 # Yarn PnP (Plug'n'Play) is a product name the nx guide names. typos splits it on the
 # case boundary and "corrects" the leading fragment to "On", which would rename the
 # feature; the accepted word is that fragment, as with "Ded" above.

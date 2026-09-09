@@ -74,11 +74,14 @@ A cache hit on a target means **its body never runs** - so any `magus\needs`
 calls inside that body never dispatch either, on a hit. This has two
 consequences worth stating plainly:
 
-- **`needs` children are not independently cached.** On a miss, the parent
-  target's body runs as an ordinary function call, not through `cache.Run` -
-  there is no separate cache entry, hit, or miss for the child dispatch
-  itself. The child's own target (if selected directly, elsewhere) has its
-  own cache entry; the _call from inside this parent_ does not.
+- **Cacheable `needs` children of an uncached parent are independently
+  cached.** An uncached parent (including `skip_cache`) always enters its
+  body, so each cacheable same-project child it actually reaches through
+  `needs` runs through its own cache entry. The runtime call decides the branch
+  and glob result first, then the child gets its own hit, miss, snapshot, and
+  remote push. Children of an ordinary cacheable parent still run inside that
+  parent's entry on a miss; on its hit the body never runs and they are not
+  dispatched at all.
 - **The key is protected by project-wide source globs, so this is
   safe-but-coarse** (see [cache.md](cache.md#granularity-project-wide-vs-per-target)).
   `baseStep` seeds every target's sources with the union of every bound

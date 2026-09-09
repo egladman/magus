@@ -681,7 +681,7 @@ var (
 	// ADVISE, never deny: reading the revision is legitimate, and checkpoint is a
 	// strict SUPERSET rather than a substitute, so there is nothing to block. That
 	// also rules out the third deny trigger, which needs an exact equivalent.
-	checkpointGuardContext = "magus workspace: `" + hint.VCSCheckpoint.String() + "` identifies the working state (`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty) and records it on the activity trail, so a later reader knows what the work was looking at.\n" +
+	checkpointGuardContext = "magus workspace: `" + hint.VCSCheckpoint.String() + "` identifies the working state (`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty), so a later reader knows what the work was looking at. It PRINTS; the value reaches a store only when you register it with a lease or record it with `magus session checkpoint`.\n" +
 		"A revision alone cannot identify a DIRTY tree: two workers on the same commit with different uncommitted work read as identical, and the patch digest is what separates them. checkpoint RESOLVES AND RECORDS with no tag, no stash, no ref, and no file, so one nobody keeps has cost nothing."
 
 	// ADVISE, never deny: re-resolving dependencies is legitimate work with no
@@ -728,10 +728,24 @@ func denySharedStash(verb string) bashGuardVerdict {
 // one - in the reason and, for the same reason as above, in the rule.
 func denyWholeTree(op string) bashGuardVerdict {
 	return bashGuardVerdict{
-		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use a throwaway git worktree.\n" +
+		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use " + scratchCheckoutFor(op) + ".\n" +
 			"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill.",
 		Rule: denyRule{Name: denyRuleWholeTree, Arg: op},
 	}
+}
+
+// scratchCheckoutFor names the disposable checkout for the backend op belongs to. This
+// line used to say "a throwaway git worktree" unconditionally, which is advice an hg or
+// sl user cannot follow - and the guard now denies their commands too, so it would be the
+// first thing they were told and it would be wrong.
+//
+// Only git gets a verb, because only git has one for this. Naming `hg share` would point
+// at an extension that may not be enabled; a clone is what always works.
+func scratchCheckoutFor(op string) string {
+	if strings.HasPrefix(op, "git ") {
+		return "a throwaway `git worktree add`"
+	}
+	return "a throwaway clone"
 }
 
 // magusInvokes reports whether any resolved command runs magus carrying all of the given
@@ -927,6 +941,23 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 // so hookCmd can pass one scoped from the knowledge manifest while the verdict
 // stays a pure function of what was handed in.
 func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerdict {
+	v := evaluateBashGuardRules(command, hints)
+	// A deny refuses the WHOLE line, and the reason only ever discusses the one construct
+	// that earned it. On a line holding several commands that reads as a partial refusal:
+	// the writer fixes the named command and assumes the others ran. They did not.
+	//
+	// Measured 2026-09-08: five times in one session an edit was chained ahead of a magus
+	// call carrying a redirect, the redirect denied, and the edit silently never happened -
+	// each caught only when a later step failed for an unrelated-looking reason. The reason
+	// text was correct and complete about the redirect every time. What it never said was
+	// how much else went with it.
+	if cmds, parsed := parseGuardCommands(command); v.Deny != "" && parsed && len(cmds) > 1 {
+		v.Deny += fmt.Sprintf("\n\nNOTHING on this line ran, including the other %d command(s) in it. Re-issue those separately.", len(cmds)-1)
+	}
+	return v
+}
+
+func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE - a pipe, a redirect, a cd before a magus
 	// call - rather than which program runs.
@@ -969,6 +1000,16 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	}
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {
+			if v.Deny != "" {
+				return v
+			}
+			advisory = v
+		}
+		// Same bar, the other backends. Only the parsed path: their verbs have no unanchored
+		// fallback because clean, update, revert, goto, restore and abandon are ordinary English
+		// that a commit message or a skill body would carry, and matching prose is the
+		// false positive gitGuard's own doc says the AST exists to avoid.
+		if v, matched := nonGitVCSGuard(cmds); matched {
 			if v.Deny != "" {
 				return v
 			}

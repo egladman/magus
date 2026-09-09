@@ -19,27 +19,10 @@ import (
 // (the exact token to pass to the next explain), so one rendering serves humans,
 // agents that read, and the man pages. `-o json` remains the structured opt-in.
 
-// relationPhrase maps an edge relation to its natural-language rendering in each
-// direction: [active, passive]. Active is used when the focus node is the edge
-// source (an out edge); passive when it is the target (an in edge). So an
-// `op --uses--> tool` edge reads "uses" from the op and "used by" from the tool.
-var relationPhrase = map[string][2]string{
-	types.RelationUses:         {"uses", "used by"},
-	types.RelationDependsOn:    {"depends on", "required by"},
-	types.RelationContains:     {"contains", "part of"},
-	types.RelationReferences:   {"references", "referenced by"},
-	types.RelationDocuments:    {"documents", "documented by"},
-	types.RelationCalls:        {"calls", "called by"},
-	types.RelationImports:      {"imports", "imported by"},
-	types.RelationEmits:        {"emits", "emitted by"},
-	types.RelationOwns:         {"owns", "owned by"},
-	types.RelationDefines:      {"defines", "defined by"},
-	types.RelationRationaleFor: {"explains", "explained by"},
-	types.RelationProduces:     {"produces", "produced by"},
-	types.RelationConsumes:     {"consumes", "consumed by"},
-	types.RelationAuthored:     {"authored", "authored by"},
-	types.RelationAnnotates:    {"is about", "NOTE"},
-}
+// The labels live in types.KnowledgeRelationDefinitions, not here. This file used to
+// carry its own copy of all fifteen forward/reverse pairs, which made the registry's
+// claim to be the one source of truth false in the one place a person actually reads a
+// relation: two tables, free to disagree, and only the wrong one visible on screen.
 
 // proseFirst are the in-edges hoisted above every other group on a node's card.
 //
@@ -49,22 +32,23 @@ var relationPhrase = map[string][2]string{
 // unreadable in practice. Delivery is the whole problem this store has: prose nobody meets
 // at the moment they need it may as well not be written, so the one group that carries it
 // goes first.
-var proseFirst = map[string]bool{types.RelationAnnotates: true}
+var proseFirst = map[types.RelationID]bool{types.RelationAnnotates: true}
 
-// phraseFor returns the natural-language verb for a relation in the given
-// direction, falling back to the raw relation name (with an "-> "/"<- " marker for
-// an unknown relation so the direction is never lost).
-func phraseFor(relation string, active bool) string {
-	if p, ok := relationPhrase[relation]; ok {
-		if active {
-			return p[0]
-		}
-		return p[1]
+// phraseFor returns the natural-language verb for a relation in the given direction,
+// read from the relation registry.
+//
+// An UNDECLARED relation still renders, as its own name with a "-> "/"<- " marker so
+// the direction survives. That is deliberate: a graph on disk can carry an edge this
+// binary's vocabulary does not know - an older store, or a shard a newer magus wrote -
+// and a reader meeting it should see the edge, not a blank.
+func phraseFor(relation types.RelationID, active bool) string {
+	if d, ok := types.KnowledgeRelation(relation); ok {
+		return d.Label(active)
 	}
 	if active {
-		return relation + " ->"
+		return string(relation) + " ->"
 	}
-	return "<- " + relation
+	return "<- " + string(relation)
 }
 
 // wrapCol is the target line width for wrapped ID lists.
@@ -142,7 +126,7 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 
 type relationGroup struct {
 	header   string
-	relation string
+	relation types.RelationID
 	ids      []string
 }
 
@@ -153,8 +137,8 @@ type relationGroup struct {
 // Explain already produces.
 func relationGroups(out types.KnowledgeExplainOutput) []relationGroup {
 	build := func(edges []types.KnowledgeEdgeRef, active bool) []relationGroup {
-		var order []string
-		byRel := map[string][]string{}
+		var order []types.RelationID
+		byRel := map[types.RelationID][]string{}
 		for _, e := range edges {
 			if _, seen := byRel[e.Relation]; !seen {
 				order = append(order, e.Relation)

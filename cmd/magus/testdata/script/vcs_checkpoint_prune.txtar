@@ -1,0 +1,59 @@
+# The 30-day retention `magus vcs checkpoint --preserve` promises has to run without a
+# second preserve, and for a long time it could not: the only pruning pass lived inside
+# Preserve, so a repository preserved ONCE kept that capture for good while the usage text
+# said it was dropped at 30 days.
+#
+# prune-preserved is the pass that has no such precondition. The daemon schedules it; this
+# script drives the worker the schedule submits, which is also the standalone spelling for
+# a machine that runs no daemon.
+#
+# The other half is the line pruning must not cross: a namespace is not a signature, so a
+# ref under refs/magus/preserved that magus did not write is not magus's to delete, and a
+# scheduled pass makes that more pressing rather than less.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git config commit.gpgsign false
+exec git checkout -b main
+exec git add magus.yaml magusfile.buzz src/a.txt
+exec git commit -m initial
+
+# Two refs under magus's namespace, both dated well past the retention window: one magus
+# wrote, one it did not. Only the subject tells them apart.
+env GIT_COMMITTER_DATE=2020-01-01T00:00:00Z
+env GIT_AUTHOR_DATE=2020-01-01T00:00:00Z
+exec git commit --allow-empty -m 'magus preserved working copy'
+exec git update-ref refs/magus/preserved/0000000000000000000000000000000000000001 HEAD
+exec git reset --hard HEAD~1
+exec git commit --allow-empty -m 'a snapshot someone else took'
+exec git update-ref refs/magus/preserved/0000000000000000000000000000000000000002 HEAD
+exec git reset --hard HEAD~1
+env GIT_COMMITTER_DATE=
+env GIT_AUTHOR_DATE=
+
+# The job is one a running binary carries, which is what a schedule can reach at all. The
+# listing goes to stderr, like the rest of `server job`'s usage.
+exec magus server job
+stderr 'prune-preserved'
+
+# The worker drops the aged capture. Nothing preserved anything here: that is the whole
+# point, since the pass inside Preserve can only run when someone preserves again.
+exec magus server prune-preserved
+exec git for-each-ref --format='%(refname) %(contents:subject)' refs/magus/preserved/
+! stdout 'magus preserved working copy'
+stdout -count=1 'a snapshot someone else took'
+
+-- magus.yaml --
+concurrency: 2
+-- .gitignore --
+.magus/
+.gitignore
+-- magusfile.buzz --
+import "magus";
+magus\project({
+    "name": "acme-root",
+    "sources": ["magusfile.buzz", "src/**"],
+});
+-- src/a.txt --
+source one

@@ -15,6 +15,7 @@ config daemon.address
 config daemon.enabled
 config daemon.idle_ttl
 config daemon.maintenance.check_review
+config daemon.maintenance.prune_preserved
 config daemon.maintenance.rotate_activities
 config daemon.maintenance.rotate_logs
 config daemon.maintenance.sync_graph
@@ -99,6 +100,7 @@ flag agent/dry-run
 flag agent/force
 flag agent/global
 flag agent/prune
+flag agent/skill-form
 flag agent/tar
 flag buzz/C
 flag buzz/e

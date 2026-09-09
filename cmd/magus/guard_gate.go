@@ -47,12 +47,12 @@ const (
 // counted and reported as having run "here". The run log is per-workspace, one file
 // per invocation, carrying the argv and real wall clock, so the count is a fact
 // rather than a reconstruction from per-spell samples.
-func adviseRepeatGate(runsDir string, now time.Time) string {
+func adviseRepeatGate(runsDir string, now time.Time) (full, brief string) {
 	runs, spent := recentGateRuns(runsDir, now)
 	if runs < gateRepeatMinRuns || spent < gateRepeatMinSpent {
-		return ""
+		return "", ""
 	}
-	return gateRepeatAdvice(runs, spent)
+	return gateRepeatAdvice(runs, spent), gateRepeatBrief(runs, spent)
 }
 
 // workspaceRunsDir is where this workspace logs its invocations, or "" when there is
@@ -184,8 +184,16 @@ func isGateCommand(args []string) bool {
 // lists them rather than guessing.
 func gateRepeatAdvice(runs int, spent time.Duration) string {
 	return fmt.Sprintf(
-		"magus workspace: the `%s` gate has already run %d times in this workspace in the last %s, about %s of wall clock. It is the most expensive target by construction, because it runs everything the diff reaches.\n",
+		"magus workspace: the `%s` gate has run %d times in this workspace in the last %s, about %s of wall clock. It runs everything the diff reaches, so it is the most expensive target here.\n",
 		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second)) +
-		"During iteration a narrower target answers the same question faster. `" + hint.LsTargets.With("<project>") + "` lists what this workspace calls them, and `" + hint.Affected.With("--plan") + "` shows what the gate would actually run.\n" +
-		"Save the full gate for the end, before you commit. That is the moment it is for."
+		"While you iterate, a narrower target answers the same question faster. `" + hint.LsTargets.With("<project>") + "` lists what this workspace calls them, and `" + hint.Affected.With("--plan") + "` shows what the gate would run.\n" +
+		"Save the full gate for the commit."
+}
+
+// gateRepeatBrief is the repeat form, and it keeps the running cost rather than going
+// quiet: the count and the wall clock are the whole argument, and they are the part that
+// has changed since the caller last read the full text.
+func gateRepeatBrief(runs int, spent time.Duration) string {
+	return fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock. `%s` lists narrower targets.\n",
+		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second), hint.LsTargets.With("<project>"))
 }

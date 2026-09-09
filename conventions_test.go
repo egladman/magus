@@ -357,6 +357,7 @@ var templatePage = map[string]string{
 	"magus-guard-command.sh": "docs/guides/integrations/agents/guard-templates.md",
 	"magus-guard-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
 	"magus-guard-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.sh":    "docs/guides/integrations/agents/guard-templates.md",
 	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
 	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
 	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
@@ -370,11 +371,12 @@ var templatePage = map[string]string{
 var hookTemplates = []string{
 	"magus-guard-command.sh",
 	"magus-guard-path.sh",
-	// The one template that carries no verdict: it records a path an agent
-	// reached and judges nothing, so it declares no guard coverage and owes no
-	// parity row. See the note at the top of the file for why that absence is
-	// deliberate rather than a hole.
+	// The two templates that carry no verdict: one records a path an agent reached,
+	// the other where the work stood when a session stopped, and neither judges
+	// anything. So they declare no guard coverage and owe no parity row. See the note
+	// at the top of each for why that absence is deliberate rather than a hole.
 	"magus-guard-observe.sh",
+	"magus-checkpoint.sh",
 	"codex-hooks.json",
 	"cursor-guard.sh",
 	"opencode-plugin.ts",
@@ -1611,4 +1613,83 @@ func TestEveryDiagnosticCodeHasARaiseSite(t *testing.T) {
 			"condition will be reported under it. Raise it where the condition is detected, or\n"+
 			"remove it from types.allDiagnosticCodes.\n\nunraised:\n%s",
 		strings.Join(unraised, "\n"))
+}
+
+// vcsDriverSpellings maps each driver's Name() to how a human-facing surface may spell
+// it. Unmapped names FAIL rather than pass, so adding a fifth backend forces a decision
+// here instead of shipping a surface that silently covers four of five.
+var vcsDriverSpellings = map[string][]string{
+	"git": {"git"},
+	"hg":  {"Mercurial", "hg"},
+	"sl":  {"Sapling", "sl"},
+	"jj":  {"Jujutsu", "jj"},
+}
+
+// TestAgentSurfaceNamesEveryVCSDriver keeps the agent surface at parity with the drivers.
+//
+// vcs/parity_test.go already pins parity for nineteen DRIVER METHODS across all four
+// backends, so the repo has decided this matters. That enforcement stopped at the driver
+// and never reached the surfaces a reader meets - and the gap was not theoretical: the
+// magus-vcs-hygiene DESCRIPTION named git and only git, and a description is what a host
+// matches on to decide whether to load a skill at all. An agent in a Mercurial repo about
+// to run `hg purge` would never have loaded the skill that exists to stop it.
+//
+// The driver list is READ FROM THE SOURCE rather than restated, so this cannot drift from
+// what magus actually drives.
+func TestAgentSurfaceNamesEveryVCSDriver(t *testing.T) {
+	names := vcsDriverNames(t)
+	require.NotEmpty(t, names, "found no VCS drivers; the Name() scan below stopped matching")
+
+	catalog, err := os.ReadFile(filepath.Join("internal", "agent", "catalog.go"))
+	require.NoError(t, err)
+	desc := vcsHygieneDescription(t, string(catalog))
+
+	for _, name := range names {
+		spellings, ok := vcsDriverSpellings[name]
+		require.Truef(t, ok, "vcs driver %q has no entry in vcsDriverSpellings; decide how the agent surface should spell it", name)
+		assert.Truef(t, containsAny(desc, spellings),
+			"the magus-vcs-hygiene description never names the %q backend (any of %v), so a host will not load it for that repository", name, spellings)
+	}
+}
+
+// vcsDriverNames reads each driver's Name() return straight out of vcs/*.go.
+func vcsDriverNames(t *testing.T) []string {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join("vcs", "*.go"))
+	require.NoError(t, err)
+	re := regexp.MustCompile(`func \(v \w+VCS\) Name\(\) string\s*{\s*return "([^"]+)"`)
+	var names []string
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(f)
+		require.NoError(t, err)
+		for _, m := range re.FindAllStringSubmatch(string(body), -1) {
+			names = append(names, m[1])
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// vcsHygieneDescription pulls the one description line the skill catalog registers.
+func vcsHygieneDescription(t *testing.T, catalog string) string {
+	t.Helper()
+	for line := range strings.SplitSeq(catalog, "\n") {
+		if strings.Contains(line, `name: "magus-vcs-hygiene"`) {
+			return line
+		}
+	}
+	t.Fatal("magus-vcs-hygiene is not registered in internal/agent/catalog.go")
+	return ""
+}
+
+func containsAny(haystack string, needles []string) bool {
+	for _, n := range needles {
+		if strings.Contains(haystack, n) {
+			return true
+		}
+	}
+	return false
 }

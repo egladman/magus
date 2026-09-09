@@ -2,11 +2,16 @@ package interp
 
 import (
 	"context"
+	"log/slog"
 	"path/filepath"
 	"time"
 
 	"github.com/egladman/magus/types"
 )
+
+// levelTrace mirrors config.LevelTrace (slog.LevelDebug-4), duplicated for the reason
+// internal/cache duplicates it: config imports this tree, so it cannot be imported back.
+const levelTrace slog.Level = slog.LevelDebug - 4
 
 // withDeclaredCeiling bounds one magusfile target body by the timeout its magusfile
 // declared, and is a pass-through for a target that declares none.
@@ -24,6 +29,12 @@ import (
 // rather than an error: there is no magusfile policy to consult, and refusing to run
 // a script because nobody declared a ceiling would be a strange thing to do.
 func withDeclaredCeiling(ctx context.Context, dir, target string) (context.Context, context.CancelFunc, time.Duration) {
+	// Every body gets its own accumulator, ceiling or not. Scoping it to the deadline
+	// instead leaves an uncapped body writing into its nearest ceilinged ancestor, whose
+	// own ctx.needs span already counts that whole child once: `ci` composes lint, format
+	// and generate, none of which declare a timeout, so each level re-adds time the level
+	// above already has. Composed then exceeds elapsed and own prints 0s.
+	ctx = types.TrackDependencyWait(ctx)
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return ctx, func() {}, 0
@@ -36,6 +47,10 @@ func withDeclaredCeiling(ctx context.Context, dir, target string) (context.Conte
 	if d <= 0 {
 		return ctx, func() {}, 0
 	}
+	// A ceiling covers the ctx.needs waits inside the body, so a target can exceed one
+	// having done almost none of its own work. Reporting the elapsed time alone blames the
+	// target, and four targets once reported an identical 15m52s timeout that one
+	// serialization upstream had caused.
 	c, cancel := context.WithTimeout(ctx, d)
 	return c, cancel, d
 }
@@ -69,4 +84,22 @@ func projectAt(ws types.WorkspaceReader, dir string) *types.Project {
 		}
 	}
 	return nil
+}
+
+// logCeiling reports where a ceiling-bearing body's time went, at trace level.
+//
+// Emitted on every such body, not only the ones that expire. A ceiling that fires already
+// reports this split in its error, but the number worth having comes from the runs that
+// PASS: whether a declared timeout is measuring the target or measuring the queue is a
+// question about the steady state, and by the time one expires the answer arrives too late
+// to be a measurement.
+func logCeiling(ctx context.Context, target string, ceiling, elapsed time.Duration) {
+	if ceiling <= 0 || !slog.Default().Enabled(ctx, levelTrace) {
+		return
+	}
+	waited := types.DependencyWait(ctx)
+	slog.LogAttrs(ctx, levelTrace, "target.ceiling",
+		slog.String("target", target), slog.Duration("ceiling", ceiling),
+		slog.Duration("elapsed", elapsed), slog.Duration("composed", waited),
+		slog.Duration("own", max(elapsed-waited, 0)))
 }

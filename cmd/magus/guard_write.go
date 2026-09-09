@@ -355,8 +355,9 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // unclaimed ground would block a lease from a file nobody is competing for.
 func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeGrade {
 	// BEFORE the path checks, because an unregistered lease should not be writing anywhere -
-	// not merely outside its lane. A checkpoint is what makes its work recoverable and what says
-	// which base the work applies to, and both facts are worth nothing recorded afterwards.
+	// not merely outside its lane. A checkpoint is what says which base the work applies to and
+	// what makes its diff locatable afterwards - it records a revision and a patch DIGEST, so it
+	// never makes the work recoverable - and both facts are worth nothing recorded afterwards.
 	//
 	// This is the one rule here that enforces a PROCEDURE rather than a boundary, and it is a deny
 	// rather than an advisory for the reason the skill was not enough: an instruction an agent can
@@ -573,8 +574,8 @@ func adviseMemoryWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the handoff journal too: `" + hint.MemoryPut.With("<name>") + "`.\n" +
-		"This file is per-host and per-checkout, so a second worktree or a different agent host never sees it. Host instructions belong right where you are writing them; workspace decisions outlive the file. Load the magus-handoff-journal skill if not already loaded."
+	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the repository's memory too: `" + hint.MemoryPut.With("<name>") + "`.\n" +
+		"This file is per-host and per-checkout, so a second worktree or a different agent host never sees it. Host instructions belong right where you are writing them; workspace decisions outlive the file. Load the magus-memory skill if not already loaded."
 }
 
 // adviseInstalledSkillWrite explains that an installed skill is generated, or
@@ -649,7 +650,7 @@ var agentSurfaceSources = []string{
 // maintains it, or returns "" for every other path.
 //
 // The gap it closes is the one the authoring method itself names: both failures here are
-// silent. A skill body is a text/template rendered per permutation, so a passage added
+// silent. A skill body is a text/template rendered per form, so a passage added
 // outside a branch changes both and a passage added inside one changes neither - and
 // nothing about the file says so. A content change without a SkillVersion bump leaves
 // every install reporting itself up to date while carrying the previous bytes.
@@ -664,7 +665,7 @@ func adviseAgentSurfaceWrite(path string) string {
 		return ""
 	}
 	return "magus workspace: load the magus-skill-authoring skill before editing this. It is hand-authored, committed beside the installed skills, and it holds the method these files are maintained by.\n" +
-		rel + " is a SOURCE of what agents are taught. Both ways to get it wrong here are silent: a skill body is a template, so a passage lands in one permutation, both, or neither depending on the branch it sits in, and a content change with no SkillVersion bump leaves every install reporting itself up to date while carrying the old bytes.\n" +
+		rel + " is a SOURCE of what agents are taught. Both ways to get it wrong here are silent: a skill body is a template, so a passage lands in one form, both, or neither depending on the branch it sits in, and a content change with no SkillVersion bump leaves every install reporting itself up to date while carrying the old bytes.\n" +
 		"Verify against a freshly built binary rather than against the docs. That is the method's first rule, and it is there because the registry once advertised a dry run that regenerated files."
 }
 

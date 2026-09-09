@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,6 +36,11 @@ func (v hgVCS) Claims() []string { return []string{".hg"} }
 // was wrong, and for work committed straight onto default the two are equivalent, since
 // both then name the same commit.
 func (v hgVCS) Base() string { return "default" }
+
+// ReviewCommand diffs the working copy against its parent. Mercurial has no index, so
+// what is about to be committed IS the working copy, `hg add` having only marked the file
+// tracked rather than recorded its content.
+func (v hgVCS) ReviewCommand() string { return "hg diff --stat" }
 
 // ParentRef is the first parent of the working directory. `p1(.)` names it
 // explicitly; a bare `.^` is p1 too but reads as a typo next to git's form.
@@ -935,4 +941,116 @@ func (v hgVCS) AbortMerge(ctx context.Context, root string) error {
 		return fmt.Errorf("hg merge --abort: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// Preserve shelves with --keep: --unknown stores untracked files, --addremove records
+// deletions, and --keep leaves the working directory alone. A plain `hg shelve` REVERTS
+// the tree, which is what makes it unusable here.
+//
+// Storing costs working-copy state (unknown files come back added, missing files come back
+// scheduled for removal), so that state is read first and put back after.
+func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
+	dirty, err := v.Dirty(ctx, dir, nil)
+	if err != nil {
+		return "", fmt.Errorf("hg preserve: %w", err)
+	}
+	if !dirty {
+		return "", nil
+	}
+	pending, err := hgFamilyReadPending(ctx, "hg", dir)
+	if err != nil {
+		return "", fmt.Errorf("hg preserve: %w", err)
+	}
+	name := shelfName()
+	cmd := vcsExec(ctx, "hg", "--config", "extensions.shelve=",
+		"shelve", "--keep", "--unknown", "--addremove", "--name", name, "--message", preserveMessage)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("hg preserve: shelve: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	// The shelf EXISTS from here, so a failed restore reports the handle rather than
+	// discarding it, and NAMES the files so the state is actionable.
+	if err := hgFamilyRestorePending(ctx, "hg", pending); err != nil {
+		return name, fmt.Errorf("hg preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
+			name, pending.unknown, pending.missing, err)
+	}
+	// Pruned after the shelf exists, and its error dropped: a housekeeping failure reported
+	// as a preserve failure sends a caller looking for work that is safely stored.
+	_, _ = v.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
+	return name, nil
+}
+
+// PrunePreserved deletes the magus shelves older than before.
+//
+// TWO things have to agree before a shelf is in scope: the name shelfName minted, which
+// carries the mint time, and the MESSAGE Preserve wrote. The name alone is not authority
+// to delete, because a user can produce one without trying. `hg shelve` with no --name
+// derives the shelf name from the active bookmark, so a bookmark called
+// magus-1234567890-wip in a repository named magus yields a shelf shelfMinted accepts, and
+// a plain `hg shelve` REVERTS the working copy, making that shelf the only copy of the
+// work.
+func (v hgVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
+	// Not --quiet, which prints bare names and so cannot say who wrote a shelf. The full
+	// listing is "<name>(<age>)<spaces><message>", parsed by hgShelfListing.
+	cmd := vcsExec(ctx, "hg", "--config", "extensions.shelve=", "shelve", "--list")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("hg prune-preserved: shelve --list: %w", err)
+	}
+	type shelf struct {
+		name   string
+		minted time.Time
+	}
+	var stale []shelf
+	for name, message := range hgShelfListing(string(out)) {
+		if message != preserveMessage {
+			continue
+		}
+		minted, ok := shelfMinted(name)
+		if !ok || !minted.Before(before) {
+			continue
+		}
+		stale = append(stale, shelf{name: name, minted: minted})
+	}
+	// Oldest first, as the contract says, and by the stamped time rather than the listing
+	// order: `hg shelve --list` prints newest first.
+	slices.SortFunc(stale, func(a, b shelf) int { return a.minted.Compare(b.minted) })
+	var dropped []string
+	for _, s := range stale {
+		name := s.name
+		del := vcsExec(ctx, "hg", "--config", "extensions.shelve=", "shelve", "--delete", name)
+		del.Dir = dir
+		if delOut, err := del.CombinedOutput(); err != nil {
+			return dropped, fmt.Errorf("hg prune-preserved: shelve --delete %s: %w: %s", name, err, strings.TrimSpace(string(delOut)))
+		}
+		dropped = append(dropped, name)
+	}
+	return dropped, nil
+}
+
+// hgShelfListing reads `hg shelve --list` into name -> message.
+//
+// The line is "<name>(<age>)<spaces><message>", and the AGE is the only delimiter: a name
+// that overflows the column leaves no space before the "(". Splitting on whitespace would
+// read part of a name as its message, and this pruner trusts the message.
+//
+// A line carrying no age is skipped rather than guessed at: a shelf whose message cannot
+// be read is one magus has no grounds to delete.
+func hgShelfListing(out string) map[string]string {
+	shelves := make(map[string]string)
+	for line := range strings.SplitSeq(out, "\n") {
+		name, rest, ok := strings.Cut(strings.TrimSpace(line), "(")
+		if !ok {
+			continue
+		}
+		_, message, ok := strings.Cut(rest, ")")
+		if !ok {
+			continue
+		}
+		if name = strings.TrimSpace(name); name != "" {
+			shelves[name] = strings.TrimSpace(message)
+		}
+	}
+	return shelves
 }

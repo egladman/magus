@@ -112,6 +112,15 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 	// graph that has none. The cross-project cycle it might otherwise have caught is
 	// the key below's job.
 	rctx = buzz.WithAncestors(rctx, nil)
+	// And the interceptor, for the third time the same reason: it is bound to ONE project.
+	// The closure the caller installed captured its own project, so a needs inside the
+	// remote target minted a step against the CALLER - the remote project's work cached
+	// under the caller's key, re-run by the caller's edits and never by its own. Nothing
+	// errors; buildStep is map lookups, so it mints a plausible entry and moves on.
+	//
+	// Stripped rather than rebuilt for the remote project: without one, that target's own
+	// needs run inline and uncached, which is what run.go does for a cacheable member too.
+	rctx = buzz.WithoutTargetInterceptor(rctx)
 	rctx = withCrossAncestor(rctx, key)
 	// e.done is the publication point: e.err is written before close, and a waiter
 	// only reads it after <-e.done, so the write is visible without a data race.

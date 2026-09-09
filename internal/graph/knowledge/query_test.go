@@ -157,7 +157,7 @@ func TestExplainByID(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, types.KindTarget, out.Node.Kind)
 
-	outRel := func(edges []types.KnowledgeEdgeRef, rel, other string) bool {
+	outRel := func(edges []types.KnowledgeEdgeRef, rel types.RelationID, other string) bool {
 		for _, e := range edges {
 			if e.Relation == rel && e.Other == other {
 				return true

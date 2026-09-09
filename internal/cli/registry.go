@@ -1224,10 +1224,30 @@ clone would settle silently, and why resolve exists as the bulk counterpart.
 checkpoint prints the identity of the working state right now - head revision,
 branch, whether the tree is dirty, and a digest of the uncommitted patch. Record
 one when you hand a piece of work out, so a later reader knows what that work was
-looking at. It RESOLVES AND RECORDS and never MINTS: no tag, no stash, no ref, no
-file, nothing changed anywhere, so a checkpoint nobody keeps has cost nothing.
-Feed the revision to anything that takes one; compare two digests to learn whether
-two workers saw the same uncommitted tree, which the revision alone cannot say.
+looking at. By default it RESOLVES AND RECORDS and never MINTS: no tag, no stash,
+no ref, no file, nothing changed anywhere, so a checkpoint nobody keeps has cost
+nothing. Feed the revision to anything that takes one; compare two digests to learn
+whether two workers saw the same uncommitted tree, which the revision alone cannot
+say.
+
+--preserve is the one thing that mints. An identity says whether two trees match;
+it cannot rebuild either one. --preserve additionally captures the uncommitted
+work - tracked edits and untracked files alike - and prints a handle that gets it
+back, using each backend's own mechanism: a commit under refs/magus/preserved for
+git, a kept shelf for Mercurial, a commit Sapling keeps hidden, and for Jujutsu the
+working-copy commit it already holds. The working copy is untouched either way.
+
+Retention differs per backend. On git and Mercurial a capture is dropped at 30
+days, by two passes that cover each other's gap: every preserve prunes, which
+bounds a repository nothing schedules against, and the daemon's prune-preserved
+job prunes on its own, which reaches a repository preserved once and never
+again. That job is a no-op with no daemon running, so on a machine that runs
+none the standalone spelling is magus server prune-preserved.
+
+Sapling drops nothing either way: magus mints a hidden commit there, and no
+Sapling command removes one without discarding the working copy, so those stay
+until you remove them. List them with sl log --hidden -r "desc('magus preserved
+working copy')". Jujutsu mints nothing, so nothing accumulates.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.`,
@@ -1255,7 +1275,10 @@ base in yourself on the others, then run resolve.`,
 		},
 		{
 			Name:  "checkpoint",
-			Short: "Print the working state's identity, for recording what a lease was handed; writes nothing",
+			Short: "Print the working state's identity, for recording what a lease was handed; writes nothing unless --preserve",
+			Flags: []Flag{
+				{Name: "preserve", Kind: FlagBool, Doc: "Also capture the uncommitted work and print a handle that restores it"},
+			},
 		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
@@ -1267,6 +1290,7 @@ base in yourself on the others, then run resolve.`,
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
 		{"Record what a lease was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
+		{"Capture the uncommitted work too, before something risky", "magus vcs checkpoint --preserve"},
 	},
 }
 
@@ -1391,6 +1415,46 @@ no lease in it declared or running, nothing is graded and nothing is read.`,
 			},
 		},
 		{
+			Name:        "checkpoint",
+			Short:       "Record where the work stands, so it can be picked up later",
+			Description: "Record one checkpoint for this repository: the revision the work sits on, and a note saying where it stands.",
+			Long: `Record where the work stands, so whoever comes back to it - you tomorrow,
+or another session - does not have to reconstruct it.
+
+Work stops for ordinary reasons. A day ends, a branch gets parked, an agent
+host hits a usage limit or is simply closed. In every case the work sits
+exactly where it was and nothing says so, and the next person starts by
+rediscovering what the last one already knew.
+
+` + "`magus vcs checkpoint`" + ` works out the same position and prints it; this one
+records it and keeps it, with a note. The note is what makes it worth keeping,
+so the position arrives with the reason someone stopped at it.
+
+Run it by hand before you put something down, or wire it to an agent host's
+stop hook. Only ` + "`--note`" + ` is worth typing: the workspace is where you ran it,
+and the revision, branch and dirtiness are read from the tree. A tree with no
+revision to report - one before its first commit, or under no VCS - still
+records a usable checkpoint.
+
+A host's hook envelope on stdin supplies the two pointers only a host knows, its
+session id and its transcript path, so a wrapper needs no JSON tool on the
+critical path. Nothing in that payload becomes the note: a host's closing message
+is the model's prose, and a note is written by whoever stopped working. The read
+is bounded, so this never blocks waiting for input that is not coming.
+
+--agent-name is an opaque label the caller chooses, exactly as on the guard's
+hook. magus does not know which tools exist, which model any of them ran, or how
+to start one; it records what it was told and reports it to a person. Read the
+result with ` + "`magus session`" + `.`,
+			Usage: "magus session checkpoint [--note <text>] [flags]",
+			Flags: []Flag{
+				{Name: "note", Kind: FlagString, Doc: "A sentence on where the work stands"},
+				{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this session ran on, when one did (attribution only)"},
+				{Name: "session", Kind: FlagString, Doc: "The host's own session id for this session"},
+				{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
+			},
+		},
+		{
 			Name:        "notify",
 			Short:       "Normalize an attention event and optionally notify the local desktop",
 			Description: "Raise one canonical attention event from plain text or a JSON envelope, and optionally surface it as an operating-system notification.",
@@ -1440,9 +1504,9 @@ none. This is the only command that opens one.`,
 var memoryCommand = Command{
 	Name:        "memory",
 	Short:       "Durable cross-session project memory",
-	Description: "Manage the per-repository handoff journal that lives outside the checkout: named entries people and agents can read across sessions and worktrees.",
-	Tags:        []string{"cli", "magus memory", "handoff", "journal", "agents"},
-	Long: `Manage the per-repository handoff journal, which is stored outside the
+	Description: "Manage the per-repository memory that lives outside the checkout: named entries people and agents can read across sessions and worktrees.",
+	Tags:        []string{"cli", "magus memory", "memory", "decisions", "agents"},
+	Long: `Manage the per-repository memory, which is stored outside the
 checkout so it survives worktrees and branch switches.
 
 Entries are visible to people and to agents across sessions. They are NOT
@@ -1779,6 +1843,7 @@ a pattern no graph verb fits.`,
 		{Name: "dry-run", Kind: FlagBool, Doc: "Print what would be written and removed without touching the filesystem (agent install)"},
 		{Name: "tar", Kind: FlagBool, Doc: "Stream a tar archive to stdout instead of writing files (agent install)"},
 		{Name: "global", Kind: FlagBool, Doc: "Allow absolute destination paths in write mode (agent install)"},
+		{Name: "skill-form", Kind: FlagString, Default: "both", Doc: "Skill form to install: both (default), short, or full (agent install)"},
 	},
 	Examples: []Example{
 		{"Install into a repo's agent skills directory", "magus agent install .claude/skills"},

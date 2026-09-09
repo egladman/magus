@@ -1,7 +1,10 @@
 package types
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -54,7 +57,18 @@ import (
 // v9 store on disk, whose doc shards were extracted before headings were indexed and whose
 // source markdown has not changed, so only a version mismatch forces the rebuild that adds
 // the sections.
-const KnowledgeSchemaVersion = 10
+// v11 makes the edge vocabulary part of the exported schema. Each relation has one
+// canonical definition - description, the labels a reader sees in either direction, and
+// the exact endpoint-kind pairs it may connect - and an export carries those definitions
+// plus a fingerprint of them, so a consumer meeting an unfamiliar predicate can look it
+// up instead of guessing, and two exports built against different vocabularies say so.
+//
+// The set is closed but not enforced at write time, deliberately: shards load lazily, so
+// an edge legitimately arrives before the node that gives its endpoint a kind, and
+// rejecting inside AddEdge would discard correct edges by arrival order.
+// Graph.UndeclaredEdges reports violations instead, and a test over this workspace's own
+// graph is what fails when a producer widens the vocabulary without declaring it.
+const KnowledgeSchemaVersion = 11
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -141,29 +155,200 @@ const (
 	KindPackage = "package"
 )
 
+// RelationID is a stable directed predicate in the knowledge graph. It is string-backed
+// for JSON/YAML/protobuf compatibility, but distinct from arbitrary prose so builders
+// and consumers cannot accidentally supply an unchecked label as a relation.
+type RelationID string
+
 // Knowledge edge relations. Values are stable wire strings.
 const (
-	RelationDependsOn    = "depends_on"    // project->project, target->target, project->package
-	RelationContains     = "contains"      // project->target, spell->op, project->file/doc
-	RelationUses         = "uses"          // target->op
-	RelationReferences   = "references"    // charm->target/project; reused for file->symbol (SCIP)
-	RelationDocuments    = "documents"     // doc->spell/diagnostic/module (phase 4)
-	RelationCalls        = "calls"         // function->function (buzz); symbol->symbol, from a SCIP index (v8)
-	RelationImports      = "imports"       // file->file / file->import (phase 4)
-	RelationRationaleFor = "rationale_for" // rationale->function (phase 4)
-	RelationEmits        = "emits"         // target->diagnostic, runtime (phase 8)
-	RelationOwns         = "owns"          // owner->project/file, from CODEOWNERS
-	RelationDefines      = "defines"       // file->symbol, from a SCIP index
-	RelationProduces     = "produces"      // target->file/doc, from magus.outputs (v5)
-	RelationConsumes     = "consumes"      // target->file/doc, from magus.inputs (v5)
-	RelationAuthored     = "authored"      // author->file, from git history (v6)
+	RelationDependsOn    RelationID = "depends_on"    // project->project/package; target->target
+	RelationContains     RelationID = "contains"      // structural containment; see KnowledgeRelationDefinitions
+	RelationUses         RelationID = "uses"          // target->spell/op; spell/op->tool
+	RelationReferences   RelationID = "references"    // charm->target; file->symbol; doc->doc
+	RelationDocuments    RelationID = "documents"     // doc->spell/diagnostic/module
+	RelationCalls        RelationID = "calls"         // function->function; symbol->symbol
+	RelationImports      RelationID = "imports"       // file->file/import
+	RelationRationaleFor RelationID = "rationale_for" // rationale->function/file
+	RelationEmits        RelationID = "emits"         // project/target->diagnostic, runtime
+	RelationOwns         RelationID = "owns"          // owner->project/file, from CODEOWNERS
+	RelationDefines      RelationID = "defines"       // file->symbol, from a SCIP index
+	RelationProduces     RelationID = "produces"      // target->file/doc, from magus.outputs
+	RelationConsumes     RelationID = "consumes"      // target->file/doc, from magus.inputs
+	RelationAuthored     RelationID = "authored"      // author->file, from git history
 	// RelationAnnotates completes the trio for the three ways knowledge attaches to code, kept
 	// distinct because their provenance differs: documents is doc->entity, rationale_for is
 	// an in-code marker->function, and annotates is a human note->entity. A note attaches to
 	// an ENTITY and never to a position inside one, which is what lets its breakage be
 	// reported rather than silently drifting.
-	RelationAnnotates = "annotates" // note->symbol/file/project/target/note, from the notes store
+	RelationAnnotates RelationID = "annotates" // note->any known entity, from the notes store
 )
+
+// KnowledgeEndpointShape is one permitted subject/object-kind pair for a relation.
+// These are validation shapes in the closed-world sense: unlike OWL domain/range
+// axioms, they do not infer a node's kind; they reject an edge whose already-known
+// endpoint kinds are not explicitly listed.
+type KnowledgeEndpointShape struct {
+	SourceKind string `json:"source_kind" yaml:"source_kind"`
+	TargetKind string `json:"target_kind" yaml:"target_kind"`
+}
+
+// KnowledgeRelationDefinition is the canonical meaning and presentation of one
+// directed relation. InverseOf names another real predicate only when both directions
+// are independently assertable; ReverseLabel is presentation for walking this edge
+// backward and does not invent an inverse edge. Symmetric is true only when the same
+// asserted predicate has identical meaning in either direction.
+type KnowledgeRelationDefinition struct {
+	ID           RelationID               `json:"id" yaml:"id"`
+	Description  string                   `json:"description" yaml:"description"`
+	ForwardLabel string                   `json:"forward_label" yaml:"forward_label"`
+	ReverseLabel string                   `json:"reverse_label" yaml:"reverse_label"`
+	Shapes       []KnowledgeEndpointShape `json:"shapes" yaml:"shapes"`
+	InverseOf    RelationID               `json:"inverse_of,omitempty" yaml:"inverse_of,omitempty"`
+	Symmetric    bool                     `json:"symmetric,omitempty" yaml:"symmetric,omitempty"`
+}
+
+// Label returns the canonical readable predicate in the direction an edge is walked.
+func (d KnowledgeRelationDefinition) Label(forward bool) string {
+	if forward {
+		return d.ForwardLabel
+	}
+	return d.ReverseLabel
+}
+
+// Arrow returns the presentation arrow for an asserted edge in the direction it is
+// walked. The text label remains required; this glyph is a visual cue, not semantics.
+func (d KnowledgeRelationDefinition) Arrow(forward bool) string {
+	if d.Symmetric {
+		return "↔"
+	}
+	if forward {
+		return "→"
+	}
+	return "←"
+}
+
+func endpointShapes(source string, targets ...string) []KnowledgeEndpointShape {
+	out := make([]KnowledgeEndpointShape, len(targets))
+	for i, target := range targets {
+		out[i] = KnowledgeEndpointShape{SourceKind: source, TargetKind: target}
+	}
+	return out
+}
+
+func joinEndpointShapes(groups ...[]KnowledgeEndpointShape) []KnowledgeEndpointShape {
+	var out []KnowledgeEndpointShape
+	for _, group := range groups {
+		out = append(out, group...)
+	}
+	return out
+}
+
+// knowledgeRelationDefinitions is the closed relation vocabulary. It is intentionally
+// data rather than parallel switches: validation, structured output, fingerprints, and
+// human rendering all read this same registry.
+var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
+	{ID: RelationDependsOn, Description: "declares a build or package dependency", ForwardLabel: "depends on", ReverseLabel: "required by", Shapes: joinEndpointShapes(
+		endpointShapes(KindProject, KindProject, KindPackage), endpointShapes(KindTarget, KindTarget))},
+	{ID: RelationContains, Description: "structurally contains an entity", ForwardLabel: "contains", ReverseLabel: "part of", Shapes: joinEndpointShapes(
+		endpointShapes(KindProject, KindTarget, KindDir, KindFile, KindDoc),
+		endpointShapes(KindDir, KindDir, KindFile, KindDoc),
+		endpointShapes(KindSpell, KindOp), endpointShapes(KindModule, KindMethod),
+		endpointShapes(KindFile, KindFunction), endpointShapes(KindDoc, KindDocSection),
+		endpointShapes(KindDocSection, KindDocSection))},
+	{ID: RelationUses, Description: "invokes or executes an operation, spell, or program", ForwardLabel: "uses", ReverseLabel: "used by", Shapes: joinEndpointShapes(
+		endpointShapes(KindTarget, KindSpell, KindOp), endpointShapes(KindSpell, KindTool), endpointShapes(KindOp, KindTool))},
+	{ID: RelationReferences, Description: "names another entity without invoking or containing it", ForwardLabel: "references", ReverseLabel: "referenced by", Shapes: joinEndpointShapes(
+		endpointShapes(KindCharm, KindTarget), endpointShapes(KindFile, KindSymbol), endpointShapes(KindDoc, KindDoc))},
+	{ID: RelationDocuments, Description: "provides documentation for a domain entity", ForwardLabel: "documents", ReverseLabel: "documented by", Shapes: endpointShapes(KindDoc, KindSpell, KindDiagnostic, KindModule)},
+	{ID: RelationCalls, Description: "invokes another callable", ForwardLabel: "calls", ReverseLabel: "called by", Shapes: joinEndpointShapes(
+		endpointShapes(KindFunction, KindFunction), endpointShapes(KindSymbol, KindSymbol))},
+	{ID: RelationImports, Description: "imports another source file or unresolved import", ForwardLabel: "imports", ReverseLabel: "imported by", Shapes: endpointShapes(KindFile, KindFile, KindImport)},
+	{ID: RelationRationaleFor, Description: "records source-local rationale for code", ForwardLabel: "explains", ReverseLabel: "explained by", Shapes: endpointShapes(KindRationale, KindFunction, KindFile)},
+	{ID: RelationEmits, Description: "has emitted a diagnostic in an observed run", ForwardLabel: "emits", ReverseLabel: "emitted by", Shapes: joinEndpointShapes(
+		endpointShapes(KindProject, KindDiagnostic), endpointShapes(KindTarget, KindDiagnostic))},
+	{ID: RelationOwns, Description: "declares ownership through CODEOWNERS", ForwardLabel: "owns", ReverseLabel: "owned by", Shapes: endpointShapes(KindOwner, KindProject, KindFile)},
+	{ID: RelationDefines, Description: "defines an indexed code symbol", ForwardLabel: "defines", ReverseLabel: "defined by", Shapes: endpointShapes(KindFile, KindSymbol)},
+	{ID: RelationProduces, Description: "declares a generated file or document output", ForwardLabel: "produces", ReverseLabel: "produced by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
+	{ID: RelationConsumes, Description: "declares a file or document input", ForwardLabel: "consumes", ReverseLabel: "consumed by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
+	{ID: RelationAuthored, Description: "attributes a file to a git contributor", ForwardLabel: "authored", ReverseLabel: "authored by", Shapes: endpointShapes(KindAuthor, KindFile)},
+	{ID: RelationAnnotates, Description: "attaches a human-authored note to an existing entity", ForwardLabel: "is about", ReverseLabel: "NOTE", Shapes: endpointShapes(KindNote,
+		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
+		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir,
+		KindFunction, KindImport, KindRationale, KindOwner, KindSymbol, KindAuthor,
+		KindNote, KindPackage)},
+}
+
+// KnowledgeRelationDefinitions returns a deep copy of the canonical relation
+// vocabulary in stable ID order. Callers may safely sort or mutate the result.
+func KnowledgeRelationDefinitions() []KnowledgeRelationDefinition {
+	out := make([]KnowledgeRelationDefinition, len(knowledgeRelationDefinitions))
+	copy(out, knowledgeRelationDefinitions)
+	for i := range out {
+		out[i].Shapes = slices.Clone(out[i].Shapes)
+	}
+	slices.SortFunc(out, func(a, b KnowledgeRelationDefinition) int {
+		return strings.Compare(string(a.ID), string(b.ID))
+	})
+	return out
+}
+
+// KnowledgeRelation resolves one canonical relation definition.
+func KnowledgeRelation(id RelationID) (KnowledgeRelationDefinition, bool) {
+	for _, definition := range knowledgeRelationDefinitions {
+		if definition.ID == id {
+			definition.Shapes = slices.Clone(definition.Shapes)
+			return definition, true
+		}
+	}
+	return KnowledgeRelationDefinition{}, false
+}
+
+// KnowledgeRelationAllows reports whether an edge of this relation may run between
+// these two node kinds.
+//
+// An UNDECLARED relation answers false: the set is closed, so a predicate nothing
+// declares has no permitted shape rather than every shape.
+func KnowledgeRelationAllows(id RelationID, sourceKind, targetKind string) bool {
+	for _, definition := range knowledgeRelationDefinitions {
+		if definition.ID != id {
+			continue
+		}
+		return slices.ContainsFunc(definition.Shapes, func(s KnowledgeEndpointShape) bool {
+			return s.SourceKind == sourceKind && s.TargetKind == targetKind
+		})
+	}
+	return false
+}
+
+// KnowledgeRelationFingerprint identifies the exact relation vocabulary independently
+// of graph content. It changes when a label, endpoint shape, or characteristic changes.
+func KnowledgeRelationFingerprint() string {
+	h := sha256.New()
+	for _, definition := range KnowledgeRelationDefinitions() {
+		_, _ = h.Write([]byte(definition.ID))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(definition.Description))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(definition.ForwardLabel))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(definition.ReverseLabel))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(definition.InverseOf))
+		if definition.Symmetric {
+			_, _ = h.Write([]byte{1})
+		} else {
+			_, _ = h.Write([]byte{0})
+		}
+		for _, shape := range definition.Shapes {
+			_, _ = h.Write([]byte(shape.SourceKind))
+			_, _ = h.Write([]byte{0})
+			_, _ = h.Write([]byte(shape.TargetKind))
+			_, _ = h.Write([]byte{0})
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)[:8])
+}
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
 // 1.0); inferred edges come from a documented rubric (fuzzy doc mentions, etc.)
@@ -478,12 +663,12 @@ type KnowledgeNode struct {
 // node IDs. The JSON keys (source/target) match the node-link convention that
 // external graph tools consume, so an exported graph opens in Gephi/yEd/etc.
 type KnowledgeEdge struct {
-	Source     string  `json:"source"               yaml:"source"`
-	Target     string  `json:"target"               yaml:"target"`
-	Relation   string  `json:"relation"             yaml:"relation"`
-	Confidence string  `json:"confidence"           yaml:"confidence"`
-	Score      float64 `json:"score"                yaml:"score"`
-	Provenance string  `json:"provenance,omitempty" yaml:"provenance,omitempty"`
+	Source     string     `json:"source"               yaml:"source"`
+	Target     string     `json:"target"               yaml:"target"`
+	Relation   RelationID `json:"relation"             yaml:"relation"`
+	Confidence string     `json:"confidence"           yaml:"confidence"`
+	Score      float64    `json:"score"                yaml:"score"`
+	Provenance string     `json:"provenance,omitempty" yaml:"provenance,omitempty"`
 }
 
 // Retrieval-subcommand definitions (query/explain/path). These complement describe
@@ -731,7 +916,7 @@ const (
 // the other end (with kind + label for readability), the direction relative to
 // the focus, and the edge's provenance.
 type KnowledgeEdgeRef struct {
-	Relation   string        `json:"relation"             yaml:"relation"`
+	Relation   RelationID    `json:"relation"             yaml:"relation"`
 	Direction  EdgeDirection `json:"direction"            yaml:"direction"`
 	Other      string        `json:"other"                yaml:"other"`
 	OtherKind  string        `json:"other_kind"           yaml:"other_kind"`
@@ -755,10 +940,10 @@ type KnowledgeExplainOutput struct {
 // Forward reports whether the underlying edge's own direction is From -> To
 // (false means the path traversed the edge against its direction).
 type KnowledgePathStep struct {
-	From     string `json:"from"     yaml:"from"`
-	To       string `json:"to"       yaml:"to"`
-	Relation string `json:"relation" yaml:"relation"`
-	Forward  bool   `json:"forward"  yaml:"forward"`
+	From     string     `json:"from"     yaml:"from"`
+	To       string     `json:"to"       yaml:"to"`
+	Relation RelationID `json:"relation" yaml:"relation"`
+	Forward  bool       `json:"forward"  yaml:"forward"`
 }
 
 // KnowledgePathOutput is the result of `magus path a b`: the resolved endpoints
@@ -893,6 +1078,13 @@ type KnowledgeGraphOutput struct {
 	Multigraph    bool   `json:"multigraph"    yaml:"multigraph"`
 	NodeCount     int    `json:"node_count"    yaml:"node_count"`
 	EdgeCount     int    `json:"edge_count"    yaml:"edge_count"`
+	// Relations is the closed edge vocabulary this graph was built against, and
+	// RelationFingerprint identifies that vocabulary independently of graph content.
+	// A consumer reading an unfamiliar relation can look it up here rather than
+	// guessing from the predicate, and two exports with different fingerprints were
+	// built against different vocabularies even where the edges look alike.
+	Relations           []KnowledgeRelationDefinition `json:"relations"           yaml:"relations"`
+	RelationFingerprint string                        `json:"relation_fingerprint" yaml:"relation_fingerprint"`
 	// SourceBaseURL is the workspace's repo blob base (e.g.
 	// "https://github.com/owner/repo/blob/main"), derived from the VCS remote, so a
 	// viewer can turn a node's relative `source` path into a link to the RIGHT repo.

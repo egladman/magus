@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -164,28 +165,136 @@ func TestMachineBudgetExcludesAnAncestorsClaim(t *testing.T) {
 	assert.Empty(t, child.Holders, "an ancestor is not a peer")
 }
 
-// TestMachineBudgetExcusesOneClaimPerAncestor is C6: an invocation is not a step. A
-// parent running several steps at once holds several claims, and excusing all of them
-// would make its child blind to genuine peers and re-admit the oversubscription this
-// whole mechanism exists to stop.
-func TestMachineBudgetExcusesOneClaimPerAncestor(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
-	for _, target := range []string{"test", "lint", "docs"} {
-		v := b.Request("parent-"+target, types.MachineClaim{
+// The cross-process half of the in-process fan-out deadlock: four steps of ONE invocation
+// each shell out to a magus of their own, and every parent is blocked in exec waiting for
+// its child, so a child excused from one parent claim and queued behind the other three is
+// waiting on the very steps that are waiting on it.
+func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
+	b, _, _ := testBudget(t, 12_000, 16)
+	targets := []string{"build", "test", "lint", "docs"}
+	for _, target := range targets {
+		require.True(t, b.Request("parent-"+target, types.MachineClaim{
 			Project: ".", Target: target, MemoryMB: 3000, Slots: 1, PID: 100, Invocation: "100:aaa",
-		})
-		require.True(t, v.Granted, target)
+		}).Granted, target)
 	}
 
-	// One of those three spawned this child. Excusing all three would show it an empty
-	// machine and seat it; excusing one leaves 6000 held, so its 5000 does not fit.
-	child := types.MachineClaim{
-		Project: ".", Target: "build", MemoryMB: 5000, Slots: 1, PID: 200, Ancestors: []string{"100:aaa"},
+	child := func(i int) types.MachineClaim {
+		return types.MachineClaim{
+			Project: ".", Target: targets[i], MemoryMB: 4000, Slots: 1, PID: 200 + i,
+			Invocation: fmt.Sprintf("%d:bbb", 200+i), Ancestors: []string{"100:aaa"},
+		}
 	}
-	v := b.Request("child", child)
-	assert.False(t, v.Granted, "only the parent STEP is excused, not every step its invocation runs")
-	assert.Equal(t, 6000, v.HeldMB, "two of the parent's three claims still count")
-	assert.Len(t, v.Holders, 2)
+	first := ""
+	for i := range 3 {
+		v := b.Request("child-"+targets[i], child(i))
+		require.True(t, v.Granted, targets[i])
+		if first == "" {
+			first = v.ID
+		}
+	}
+
+	// Still a budget: the fourth child is a peer of the three now running, not of the
+	// parents it is excused from, and 16 GB of concurrent declarations do not fit in 12.
+	last := b.Request("child-docs", child(3))
+	assert.False(t, last.Granted, "a fourth concurrent 4 GB child does not fit in 12 GB")
+	assert.True(t, last.Fits, "it would fit on an idle machine, so it queues rather than being refused")
+	assert.Equal(t, 12_000, last.HeldMB, "sibling descendants count; the parents' four claims do not")
+
+	// A queue, not a deadlock: what it waits for is running and not blocked on it.
+	b.Release(first)
+	assert.True(t, b.Request("child-docs", child(3)).Granted, "the queued child is seated once a peer finishes")
+}
+
+// The pair no exclusion can reach: two independent roots, each blocked in exec on a child
+// that needs more than the other root leaves free. Neither parent can release until its
+// child runs, so without make's free slot the machine parks forever.
+func TestMachineBudgetSeatsAChildOfEachStalledRoot(t *testing.T) {
+	b, now, _ := testBudget(t, 12_000, 16)
+
+	rootA := b.Request("a", types.MachineClaim{
+		Project: "a", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100, Invocation: "100:aaa",
+	})
+	require.True(t, rootA.Granted)
+	rootB := b.Request("b", types.MachineClaim{
+		Project: "b", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:bbb",
+	})
+	require.True(t, rootB.Granted)
+
+	*now = now.Add(time.Second)
+	childA := b.Request("child-a", types.MachineClaim{
+		Project: "a", Target: "test", MemoryMB: 7000, Slots: 1, PID: 300,
+		Invocation: "300:ccc", Ancestors: []string{"100:aaa"},
+	})
+	assert.True(t, childA.Granted, "the bottom of a stalled chain always has a seat")
+
+	// The control. A top-level run has no stalled ancestor to charge a seat to, so this
+	// cannot become a way past a full machine.
+	*now = now.Add(time.Second)
+	stranger := types.MachineClaim{Project: "c", Target: "build", MemoryMB: 7000, Slots: 1, PID: 400}
+	v := b.Request("stranger", stranger)
+	assert.False(t, v.Granted, "a stranger does not get a seat out of somebody else's stall")
+	assert.True(t, v.Fits, "it would fit on an idle machine, so it queues rather than being refused")
+
+	*now = now.Add(time.Second)
+	childB := b.Request("child-b", types.MachineClaim{
+		Project: "b", Target: "test", MemoryMB: 7000, Slots: 1, PID: 500,
+		Invocation: "500:ddd", Ancestors: []string{"200:bbb"},
+	})
+	assert.True(t, childB.Granted, "the symmetric root is seated too, so both chains finish")
+
+	b.Release(childA.ID)
+	b.Release(rootA.ID)
+	b.Release(childB.ID)
+	b.Release(rootB.ID)
+	assert.True(t, b.Request("stranger", stranger).Granted, "and the machine drains")
+}
+
+// TestMachineBudgetFreeSeatsOneChildPerStalledAncestor is the bound. Make's tokens are
+// unit-sized, so a seat per requester costs it little; a claim here is megabytes, and
+// four seats under one parent would put 28 GB of children on a 12 GB machine.
+func TestMachineBudgetFreeSeatsOneChildPerStalledAncestor(t *testing.T) {
+	b, now, _ := testBudget(t, 12_000, 16)
+	stranger := b.Request("stranger", types.MachineClaim{
+		Project: "other", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100,
+	})
+	require.True(t, stranger.Granted)
+	require.True(t, b.Request("parent", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:bbb",
+	}).Granted)
+
+	child := func(i int) types.MachineClaim {
+		return types.MachineClaim{
+			Project: ".", Target: fmt.Sprintf("t%d", i), MemoryMB: 7000, Slots: 1, PID: 300 + i,
+			Invocation: fmt.Sprintf("%d:ccc", 300+i), Ancestors: []string{"200:bbb"},
+		}
+	}
+	first := b.Request("child-0", child(0))
+	require.True(t, first.Granted, "one child of a stalled parent is seated over budget")
+
+	*now = now.Add(time.Second)
+	for i := 1; i < 4; i++ {
+		v := b.Request(fmt.Sprintf("child-%d", i), child(i))
+		assert.False(t, v.Granted, "the parent's one seat is spent on a child that IS running")
+		assert.True(t, v.Fits)
+	}
+	assert.Equal(t, 19_000, b.Snapshot().HeldMB, "one claim over a full machine, which is make's own bound")
+
+	b.Release(stranger.ID)
+	b.Release(first.ID)
+	assert.True(t, b.Request("child-1", child(1)).Granted, "a queued sibling is seated as peers release")
+}
+
+func TestMachineBudgetFreeSeatIsNotABypassForWhatCanNeverFit(t *testing.T) {
+	b, _, _ := testBudget(t, 4000, 8)
+	require.True(t, b.Request("parent", types.MachineClaim{
+		Project: ".", Target: "ci", MemoryMB: 1000, Slots: 1, PID: 100, Invocation: "100:aaa",
+	}).Granted)
+
+	v := b.Request("child", types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 64_000, Slots: 1, PID: 200, Ancestors: []string{"100:aaa"},
+	})
+	assert.False(t, v.Granted)
+	assert.False(t, v.Fits, "a seat is room for a claim this machine can hold, not a waiver of the budget")
 }
 
 func TestMachineSnapshotReportsHoldersAndWaiters(t *testing.T) {
@@ -210,7 +319,10 @@ func TestMachineSnapshotReportsHoldersAndWaiters(t *testing.T) {
 	// Snapshot retires nothing, so a corpse is filtered out of the report rather than
 	// shown to a reader who would go looking for a process that has gone.
 	alive[100] = false
-	assert.Empty(t, b.Snapshot().Holders, "a dead holder is not reported")
+	dead := b.Snapshot()
+	assert.Empty(t, dead.Holders, "a dead holder is not reported")
+	assert.Zero(t, dead.HeldMB, "and it is not billed either; the ci gate reads these totals as saturation")
+	assert.Zero(t, dead.HeldSlots)
 }
 
 // fakeAdmitter is a MachineAdmitter whose answers a test writes. It records every
@@ -372,6 +484,40 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 	assert.Contains(t, err.Error(), "Waiting would not help")
 }
 
+// The refusal an author meets with a 26 GiB target on a 32 GiB machine. magus budgets 0.75
+// of the machine, so the figure in the message is smaller than the RAM the reader can see,
+// and a refusal that does not say so reads as arithmetic magus got wrong.
+func TestMachineRefusalNamesTheFractionAndTheDeclarationCheck(t *testing.T) {
+	b, _, _ := testBudget(t, 4000, 8)
+	g, _, _ := testGate(t, b, false)
+
+	_, err := g.acquire(t.Context(), types.MachineClaim{
+		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "3.9 GiB", "the budget it did not fit in")
+	assert.Contains(t, err.Error(), "declares 25.4 GiB", "and the declaration held against it")
+	assert.Contains(t, err.Error(), "75% of the memory available here",
+		"a budget smaller than the machine reads as a miscount unless the share is named")
+	assert.Contains(t, err.Error(), "MGS1030",
+		"magus has measured this target's peak, so the author is sent to the check rather than to a guess")
+}
+
+// The other axis: a step declaring more slots than the machine has cores is refused by the
+// same path, and neither the memory fraction nor a memory check has anything to say about it.
+func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
+	b, _, _ := testBudget(t, 32_000, 8)
+	g, _, _ := testGate(t, b, false)
+
+	_, err := g.acquire(t.Context(), types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 1000, Slots: 32, PID: 100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "8 slots in total")
+	assert.NotContains(t, err.Error(), "MGS1030", "a core count is not a declaration MGS1030 measures")
+	assert.NotContains(t, err.Error(), "75%", "and the memory share is not why this was refused")
+}
+
 func TestMachineGateAdmitsWhenTheArbiterIsGone(t *testing.T) {
 	b, _, _ := testBudget(t, 10_000, 8)
 	g, adm, said := testGate(t, b, false)
@@ -480,18 +626,15 @@ func TestMachineGateQueuesNormallyWhenNotNested(t *testing.T) {
 	assert.False(t, blindToOwnAncestry(t.Context()), "a top-level run has no ancestry to lose")
 }
 
-// TestAncestryFallsBackToTheEnvironmentForALibraryCaller is the SDK case, and the one
-// that broke CI. A Go test driving magus in-process passes a plain context.Background():
-// only the CLI and the daemon stamp ancestry onto ctx, so reading ctx alone made every
-// library consumer inside a magus process tree look like a nested run that had lost its
-// ancestry - refused against the very claim its own parent was holding, with the
-// variable sitting in the process environment the whole time.
-func TestAncestryFallsBackToTheEnvironmentForALibraryCaller(t *testing.T) {
+// The empty-ctx fallback has no producer on the run path: runResolved's first statement is
+// attributeRun, which reads the environment itself and appends this run, so admit always
+// sees a stamped ctx. This pins the contract rather than a caller.
+func TestAncestryFallsBackToTheEnvironmentForAnUnstampedCaller(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
 
 	assert.Equal(t, []string{"3217:inv-parent"}, ancestorInvocations(context.Background()),
-		"the environment is the only carrier an SDK consumer has")
+		"the environment is the only carrier an unstamped caller has")
 	assert.False(t, blindToOwnAncestry(context.Background()),
 		"a consumer that CAN name its ancestors is not blind, whatever stamped ctx")
 
@@ -502,9 +645,26 @@ func TestAncestryFallsBackToTheEnvironmentForALibraryCaller(t *testing.T) {
 		"a stamped ctx is authoritative; the environment is the fallback, not an override")
 }
 
-// TestLibraryCallerIsExcusedFromItsParentsClaim is the same case end to end through the
-// budget: the parent's claim filled the machine, and the in-process run has to be
-// excused from it or the pair deadlocks - the parent cannot release until this run ends.
+// The shape a library run actually arrives in: attributeRun leaves ancestry as
+// [parent..., self], and mintedHere strips self, so an SDK consumer is excused from its
+// parent's claim by a different branch than the test above.
+func TestAncestryStripsThisRunFromWhatAttributeRunStamped(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+
+	stamped := types.AppendInvocationAncestor(
+		types.WithInvocationAncestors(context.Background(), []string{"3217:inv-parent"}),
+		os.Getpid(), "inv-self")
+
+	assert.Equal(t, []string{"3217:inv-parent"}, ancestorInvocations(stamped),
+		"a run must not count itself among the claims it is excused from")
+	assert.Equal(t, fmt.Sprintf("%d:inv-self", os.Getpid()), selfInvocation(stamped))
+	assert.False(t, blindToOwnAncestry(stamped),
+		"a run that can name its parent is not blind")
+}
+
+// The same case end to end through the budget: the parent's claim filled the machine, and
+// the in-process run has to be excused from it or the pair deadlocks, since the parent
+// cannot release until this run ends.
 func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
@@ -515,11 +675,16 @@ func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	})
 	require.True(t, parent.Granted, "the shard's own run fills the machine")
 
-	// What RunAll builds for an SDK consumer: no ancestry on ctx, resolved from the env.
+	// The ctx admit actually sees for an SDK consumer: attributeRun adopted the parent
+	// from the environment and appended this run, which ancestorInvocations strips back
+	// off. A bare context.Background() here is a shape runResolved cannot produce.
+	stamped := types.AppendInvocationAncestor(
+		types.WithInvocationAncestors(context.Background(), []string{"3217:inv-parent"}),
+		os.Getpid(), "inv-self")
 	g, _, _ := testGate(t, b, false)
-	release, err := g.acquire(context.Background(), types.MachineClaim{
+	release, err := g.acquire(stamped, types.MachineClaim{
 		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: 4000,
-		Ancestors: ancestorInvocations(context.Background()),
+		Ancestors: ancestorInvocations(stamped),
 	})
 	require.NoError(t, err, "an in-process run must be excused from the claim its own parent holds")
 	require.NotNil(t, release)
@@ -560,12 +725,24 @@ func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	_, tooBig := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 64_000, PID: 300})
 	require.Error(t, tooBig)
 
-	for _, err := range []error{busy, tooBig, fmt.Errorf("run: %w", busy)} {
+	// The code is per REFUSAL, not per package. A busy machine is EX_TEMPFAIL because the
+	// same command succeeds later; a declaration that exceeds the whole budget answers the
+	// same way forever, and telling a retry wrapper it was temporary loops it.
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{busy, ExitCodeMachineBusy},
+		{fmt.Errorf("run: %w", busy), ExitCodeMachineBusy},
+		{tooBig, ExitCodeMachineDeclaration},
+	} {
 		var stated interface{ ExitCode() int }
-		require.ErrorAs(t, err, &stated, "%v must state its exit code across the socket", err)
-		assert.Equal(t, ExitCodeMachineBusy, stated.ExitCode())
-		assert.True(t, errors.Is(err, types.MachineBudgetExhausted), "and stay matchable by its code")
+		require.ErrorAs(t, tc.err, &stated, "%v must state its exit code across the socket", tc.err)
+		assert.Equal(t, tc.want, stated.ExitCode(), "%v", tc.err)
+		assert.True(t, errors.Is(tc.err, types.MachineBudgetExhausted), "and stay matchable by its code")
 	}
+	assert.NotEqual(t, ExitCodeMachineBusy, ExitCodeMachineDeclaration,
+		"a permanent refusal that shares EX_TEMPFAIL is a retry loop")
 }
 
 // TestLocalAdmitterWithoutABudgetFailsOpen covers C12: a registry built with no budget

@@ -1,10 +1,12 @@
 package vcs
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -91,4 +93,110 @@ func TestBaseNamesTheMainlineNotTip(t *testing.T) {
 	require.NoError(t, err, "ChangedFiles against the default base")
 	assert.Contains(t, got, "a.txt",
 		"a committed branch change reported nothing affected; affected would build nothing")
+}
+
+// A magus-shaped NAME is not proof magus wrote it: `hg shelve` with no --name derives the
+// shelf name from the active bookmark, so a bookmark called magus-1234567890-wip yields a
+// name shelfMinted accepts. Plain `hg shelve` also REVERTS the working copy, so that shelf
+// can be the only copy of the work, and PrunePreserved runs unasked inside every Preserve.
+func TestHgPrunePreservedSparesAShelfMagusDidNotWrite(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+
+	// A user shelf shaped exactly like a mint; only the message tells the two apart.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("half a refactor\n"), 0o644))
+	vcsTestRun(t, dir, "hg", "--config", "extensions.shelve=", "shelve",
+		"--keep", "--name", "magus-1234567890-wip", "--message", "half of a refactor")
+
+	// A real capture too, so the test cannot pass by pruning nothing at all.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
+	handle, err := hgVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, handle)
+
+	dropped, err := hgVCS{}.PrunePreserved(t.Context(), dir, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{handle}, dropped, "pruning reported something other than its own capture")
+	names := hgListPreserved(t, dir)
+	assert.Contains(t, names, "magus-1234567890-wip", "pruning deleted a shelf the user wrote")
+	assert.NotContains(t, names, handle, "pruning reported a handle it did not delete")
+}
+
+// Cutoffs an hour either side of now leave preserveRetention itself untested: the constant
+// could be thirty SECONDS and every assertion stays green. So this runs through Preserve
+// rather than passing PrunePreserved a cutoff of its own, and asserts both sides of the
+// window, since only the survival half pins the length.
+//
+// The two ages are LITERAL days, not preserveRetention plus or minus a day: written against
+// the constant they move with it, and 29 either side of thirty seconds is still one on each
+// side. Measured by setting the constant to thirty seconds.
+func TestHgPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+
+	// The timestamp shelfName writes into the name is the only thing dating an hg shelf.
+	aged := func(days int, suffix string) string {
+		age := time.Duration(days) * 24 * time.Hour
+		name := fmt.Sprintf("%s%d-%s", shelfPrefix, time.Now().Add(-age).Unix(), suffix)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte(name+"\n"), 0o644))
+		vcsTestRun(t, dir, "hg", "--config", "extensions.shelve=", "shelve",
+			"--keep", "--name", name, "--message", preserveMessage)
+		return name
+	}
+	inside := aged(29, "inside")
+	outside := aged(31, "outside")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("current\n"), 0o644))
+	_, err := hgVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+
+	names := hgListPreserved(t, dir)
+	assert.Contains(t, names, inside, "dropped a capture still inside the retention window")
+	assert.NotContains(t, names, outside, "kept a capture past the retention window")
+}
+
+// A leading space is legal in a filename, and trimming it off a status line fails
+// silently: restoring a deleted " leading.txt" runs `hg revert --no-backup -- leading.txt`,
+// which prints "no such file in rev" and exits ZERO (Mercurial 7.2.3, 2026-09-09), so
+// Preserve returns a handle and a nil error while the file stays scheduled for a removal
+// the user never asked for. The assertion is on hg's own status rather than on the parse,
+// because the parse looked right.
+//
+// A newline is checked one layer down: hg refuses to track a name carrying one (`add` and
+// `addremove` both abort with "'\n' and '\r' disallowed in filenames"), so it can reach the
+// unknown class and never the missing one.
+func TestHgPreserveRestoresAPathCarryingWhitespace(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{" leading.txt": "l\n", "tracked.txt": "one\n"})
+
+	require.NoError(t, os.Remove(filepath.Join(dir, " leading.txt")))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("two\n"), 0o644))
+
+	handle, err := hgVCS{}.Preserve(t.Context(), dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, handle)
+
+	status := vcsTestOutput(t, dir, "hg", "status")
+	assert.NotContains(t, status, "R  leading.txt",
+		"preserving left a deleted file scheduled for removal; the working copy is not what the user had")
+	assert.Contains(t, status, "!  leading.txt",
+		"the file the user deleted should still read as missing, not as restored")
+
+	t.Run("an unknown path carrying a newline stays one path", func(t *testing.T) {
+		weird := "we\nird.txt"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, weird), []byte("x\n"), 0o644))
+		got, err := hgFamilyStatusPaths(t.Context(), "hg", dir, "--unknown")
+		require.NoError(t, err)
+		assert.Equal(t, []string{weird}, got, "a newline in a name split one path into two")
+	})
 }

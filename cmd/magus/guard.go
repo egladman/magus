@@ -291,8 +291,8 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// case is also the common one, so a rule that speaks there is a rule the
 		// reader learns to skip.
 		if verdict.Decision == "pass" && commandRunsGate(input.Value) {
-			notice := adviseRepeatGate(workspaceRunsDir(globalCfg.Cache.Dir), time.Now())
-			if notice != "" {
+			full, brief := adviseRepeatGate(workspaceRunsDir(globalCfg.Cache.Dir), time.Now())
+			if notice := gate.onceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
 			}

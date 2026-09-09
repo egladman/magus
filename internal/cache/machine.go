@@ -60,8 +60,8 @@ type machineEntry struct {
 }
 
 // NewMachineBudget returns a budget of budgetMB megabytes and budgetSlots concurrency
-// slots. A non-positive figure leaves that half unlimited, which is what a host magus
-// cannot measure falls back to.
+// slots. A non-positive figure leaves that half unlimited, the fallback for a host magus
+// cannot measure.
 func NewMachineBudget(budgetMB, budgetSlots int) *MachineBudget {
 	return &MachineBudget{
 		budgetMB:    budgetMB,
@@ -122,7 +122,7 @@ func (b *MachineBudget) Request(waiter string, c types.MachineClaim) types.Machi
 	// and starves the claim this exists for: a ci gate reserving 10GB would sit behind
 	// an unbroken stream of one-slot runs forever.
 	reserveMB, reserveSlots := b.headReservation(waiter, c.Ancestors)
-	if !b.fits(c, heldMB+reserveMB, heldSlots+reserveSlots) {
+	if !b.fits(c, heldMB+reserveMB, heldSlots+reserveSlots) && !b.freeSlot(c.Ancestors) {
 		v.Ahead = b.ahead(waiter)
 		return v
 	}
@@ -152,10 +152,16 @@ func (b *MachineBudget) Drop(waiter string) {
 	delete(b.waiters, waiter)
 }
 
-// Snapshot reports the whole budget. Read-only: it retires nothing, so a status
-// command can ask what the machine is doing without moving a queue. Entries whose
-// process is gone are FILTERED rather than deleted, so the report never shows a corpse
-// the next Request would retire anyway.
+// Snapshot reports the whole budget. Read-only: it retires nothing, so a status command
+// can ask what the machine is doing without moving a queue. Entries whose process is
+// gone are FILTERED out of the lists AND out of the totals rather than deleted, so the
+// report never shows a corpse the next Request would retire anyway.
+//
+// held carries the same liveness skip as claimants for this caller alone; Request cannot
+// tell the difference, since reap has already run by the time it asks. Filtering only
+// the lists left the two halves answering different questions, and the arithmetic is
+// what the ci gate reads as saturation, so a hard-killed run refused every gate on an
+// idle machine.
 func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -187,24 +193,27 @@ func (b *MachineBudget) reap() {
 }
 
 // held sums what counts against a claim with these ancestors: every live claim except
-// the one each ancestor invocation is holding on this claim's behalf.
+// the ones its ancestor invocations hold.
 //
 // The ancestor exclusion is what makes a nested magus possible. A target whose suite
 // runs `magus run test .` is a descendant of a run already holding that target's
 // declaration, and counting it would refuse its own child. The memory is not doubled
 // either, since the ancestor is blocked in exec.
 //
-// ONE claim per ancestor invocation, not all of them. An invocation is not a step: a
-// parent running four steps concurrently, one of which spawned this child, holds four
-// claims, and excluding all four would make the child blind to three genuine peers and
-// re-admit the oversubscription this exists to stop. The largest is the one excluded,
-// because the parent step blocked in exec waiting for this child is at most that, and
-// under-excluding is the direction that deadlocks: the child would queue behind memory
-// its own parent cannot release until the child finishes.
+// EVERY claim an ancestor invocation holds, not just the largest. A parent running four
+// steps at once holds four claims, and a child excused from only one queues behind three
+// that nobody can return until this child has run: under-excluding hangs, where
+// over-excluding only blinds a child to its parent's concurrent siblings. Sibling
+// DESCENDANTS still count against each other, so a fan-out stays bounded, and a
+// declaration larger than the whole budget is still refused.
+//
+// Two INDEPENDENT roots whose children each need more than the other root leaves free
+// are past what any exclusion here can reach, since a holder does not report whether it
+// is blocked. freeSlot answers that pair structurally.
 func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 	excused := b.excusedClaims(ancestors)
 	for id, e := range b.claims {
-		if excused[id] {
+		if excused[id] || !b.live(e.claim.PID) {
 			continue
 		}
 		mb += e.claim.MemoryMB
@@ -213,27 +222,66 @@ func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 	return mb, slots
 }
 
-// excusedClaims picks the one claim per ancestor invocation that does not count against
-// a descendant: that invocation's largest, by the reasoning on held.
+// excusedClaims is every claim an ancestor invocation holds; none of them counts
+// against a descendant, by the reasoning on held. It shares isMachineAncestor with
+// headReservation so the granted and the queued halves of the exclusion cannot drift.
 func (b *MachineBudget) excusedClaims(ancestors []string) map[string]bool {
 	if len(ancestors) == 0 {
 		return nil
 	}
-	biggest := make(map[string]string, len(ancestors)) // invocation -> claim id
+	out := map[string]bool{}
 	for id, e := range b.claims {
-		inv := e.claim.Invocation
-		if inv == "" || !slices.Contains(ancestors, inv) {
-			continue
+		if isMachineAncestor(e.claim.Invocation, ancestors) {
+			out[id] = true
 		}
-		if cur, ok := biggest[inv]; !ok || b.claims[cur].claim.MemoryMB < e.claim.MemoryMB {
-			biggest[inv] = id
-		}
-	}
-	out := make(map[string]bool, len(biggest))
-	for _, id := range biggest {
-		out[id] = true
 	}
 	return out
+}
+
+// freeSlot reports whether a claim that does not otherwise fit may be seated anyway.
+//
+// It is GNU Make's jobserver rule: every make instance may run one job without holding
+// a token, so the bottom of every chain can always run and recursive make cannot wedge
+// however it nests. The entitlement belongs to the blocked ANCESTOR, and only while
+// nothing under that ancestor is running.
+//
+// Both halves of that are load-bearing. Make's tokens are unit-sized, so seating one
+// free job per REQUESTER over-admits by a bounded amount; a claim here is megabytes, and
+// one parent fanning four cross-process children of 4000 MB each would free-seat all
+// four on a 12000 MB machine. Charging the seat to the stalled ancestor caps
+// over-admission at one claim per stalled ancestor, which is make's own bound.
+//
+// The running-descendant test keeps a fan-out a queue rather than a stampede: a child
+// queued behind its own siblings is waiting for steps that are running, not for steps
+// waiting on it, so it needs no seat. The pair this DOES answer is two independent roots
+// blocked in exec on children that each need more than the other root leaves free. Each
+// child has an ancestor holding a claim with nothing running beneath it, so each is
+// seated and both roots finish.
+//
+// Nothing is stored. A released or reaped claim stops counting as its ancestor's running
+// descendant, so the seat comes back through the same pid-liveness path as any other
+// claim. A claim with no ancestor holding anything gets no seat, so a stranger cannot
+// jump the queue with this, and a declaration larger than the whole budget is refused
+// before Request reaches here.
+func (b *MachineBudget) freeSlot(ancestors []string) bool {
+	if len(ancestors) == 0 {
+		return false
+	}
+	holding, running := map[string]bool{}, map[string]bool{}
+	for _, e := range b.claims {
+		if e.claim.Invocation != "" {
+			holding[e.claim.Invocation] = true
+		}
+		for _, a := range e.claim.Ancestors {
+			running[a] = true
+		}
+	}
+	for _, a := range ancestors {
+		if holding[a] && !running[a] {
+			return true
+		}
+	}
+	return false
 }
 
 // fits reports whether c still fits once mb and slots are spoken for. A non-positive
@@ -283,9 +331,8 @@ func (b *MachineBudget) headReservation(waiter string, ancestors []string) (mb, 
 // it stands.
 //
 // Ties count as ahead: two waiters minted in the same clock tick each report the other,
-// so the figure can exceed the true queue depth by the size of the tie. It is a
-// progress indicator in a sentence, not a position anything schedules on, and rounding
-// it up reads as the more honest error.
+// so the figure can exceed the true queue depth by the size of the tie. It feeds a wait
+// notice and nothing schedules on it, so rounding up is the honest error.
 func (b *MachineBudget) ahead(waiter string) int {
 	me, ok := b.waiters[waiter]
 	if !ok {

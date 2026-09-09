@@ -3571,24 +3571,29 @@ a code {
   outline-offset: -2px;
 }
 /* :has() rather than the ~ sibling combinator: the inputs live in <header> now, so
-   no combinator reaches the panels from them. */
+   no combinator reaches the panels from them.
+
+   Matched by POSITION, not by id. This was a pair of selectors per tab set, naming
+   every id on the site, so a new tab strip anywhere meant editing this file - which
+   is a stylesheet edit charged for adding CONTENT, and the reason the skills pages
+   could not reuse the pattern. nth-of-type counts per element type, so
+   `header > input:nth-of-type(2)` is the second radio however many labels sit
+   between them, and any group of up to four tabs now works untouched. */
 .landing-tabpanel {
   display: none;
 }
-.landing-tabs:has(#ci-tab-neutral:checked) .landing-tabpanel:nth-of-type(1),
-.landing-tabs:has(#ci-tab-gha:checked) .landing-tabpanel:nth-of-type(2),
-.landing-tabs:has(#ci-tab-glab:checked) .landing-tabpanel:nth-of-type(3),
-.landing-tabs:has(#os-tab-unix:checked) .landing-tabpanel:nth-of-type(1),
-.landing-tabs:has(#os-tab-windows:checked) .landing-tabpanel:nth-of-type(2),
-.landing-tabs:has(#os-tab-mise:checked) .landing-tabpanel:nth-of-type(3),
-.landing-tabs:has(#os-tab-container:checked) .landing-tabpanel:nth-of-type(4) {
+.landing-tabs:has(> header > input:nth-of-type(1):checked) .landing-tabpanel:nth-of-type(1),
+.landing-tabs:has(> header > input:nth-of-type(2):checked) .landing-tabpanel:nth-of-type(2),
+.landing-tabs:has(> header > input:nth-of-type(3):checked) .landing-tabpanel:nth-of-type(3),
+.landing-tabs:has(> header > input:nth-of-type(4):checked) .landing-tabpanel:nth-of-type(4) {
   display: block;
 }
 
-/* The install page's panels are markdown, so they carry ordinary prose rather than the
-   terminal frames the CI panels use. Trim the leading margin the first block would
-   otherwise inherit, so a panel starts flush against its tab strip. */
-#install-tabs .landing-tabpanel > :first-child {
+/* A panel whose content is markdown carries ordinary prose rather than the terminal
+   frames the CI panels use. Trim the leading margin the first block would otherwise
+   inherit, so a panel starts flush against its tab strip. Unscoped for the same reason
+   the switching rule above is: it applies to the shape, not to one page's id. */
+.landing-tabpanel > :first-child {
   margin-top: 0;
 }
 .landing-tab-note {

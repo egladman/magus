@@ -696,7 +696,7 @@ export fun renderFile(rel: str, site: Site) > void !> any {
     // Optional size comparison for an agent-skill page, from the byte counts the
     // skill generator states in frontmatter.
     html = insertSizeRatio(html, fm.q("skill_full_bytes").integer(),
-        fm.q("skill_simple_bytes").integer());
+        fm.q("skill_short_bytes").integer());
 
     // Description: frontmatter, else first paragraph, else site default - always non-empty
     // so the meta tag fires.

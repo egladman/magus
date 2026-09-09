@@ -26,16 +26,18 @@ it prints the managed magus block when your `AGENTS.md` is missing it or
 carrying a stale one, and you paste it in. [Skills](skills.md) covers the block,
 its stamp, and the drift check that grades it.
 
+Because Cursor has no Agent Skills surface, it cannot enforce a short-versus-full
+skill-form choice. Keep that repository guidance explicit and user-owned in
+`AGENTS.md`; do not claim a model or provider setting selects it automatically.
+
 The nudges an `advise` verdict would carry live in that guidance, because Cursor
 cannot deliver them at the moment the command runs.
 
 ## MCP
 
-```sh
-magus server start
-```
-
-See [MCP](../mcp.md) for the client configuration and token.
+Configure MCP for Cursor as a host-level integration; see [MCP](../mcp.md) for
+the client configuration and token. An agent uses the CLI fallback when MCP is
+unavailable; it does not manually start Magus solely to obtain tools.
 
 ## Guard hook
 
@@ -233,6 +235,21 @@ exit 0
 
 Cursor can run a command on its agent hook surface. Shape the event into the
 canonical envelope and pipe it to `magus session notify`; see [Attention hooks](notifications.md).
+
+## Recording where the work stands
+
+Run [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh) from the same
+hook surface, on whichever event fires when a turn ends, with
+`GUARD_AGENT_NAME=cursor`. It records the revision, branch and dirtiness of the
+tree; `magus session` lists it.
+
+Cursor's event does not have to carry a session id or a transcript path for this
+to be worth wiring. Those two are pointers magus records and never opens, and a
+checkpoint without them still says where the work sits, which is the part a
+person coming back needs. Pass `--session` and `--transcript` if Cursor's payload
+spells them differently.
+
+`magus session checkpoint --note "..."` writes the same record by hand.
 
 ## Coverage and limits
 

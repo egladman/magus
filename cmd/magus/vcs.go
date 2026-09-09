@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -268,7 +269,7 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "regeneration completed"))
 	}
-	fmt.Printf("\nrecorded %d path(s); review before continuing: git diff --cached --stat\n", len(staged))
+	fmt.Printf("\nrecorded %d path(s); review before continuing: %s\n", len(staged), driver.ReviewCommand())
 	// Named, never silent: a path magus settled and could not record is one the caller has
 	// to look at, and the count above would otherwise be the only sign it existed.
 	if len(dropped) > 0 {
@@ -553,20 +554,33 @@ func vcsCheckpointUsage(w io.Writer) {
 	fmt.Fprintln(w, "do not keep costs nothing either. Record it when you hand work out, so a")
 	fmt.Fprintln(w, "later reader knows what that work was looking at.")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "--preserve is the exception, and the reason it is a flag. An identity tells")
+	fmt.Fprintln(w, "you whether two trees match; it cannot rebuild either one. --preserve also")
+	fmt.Fprintln(w, "captures the uncommitted work, tracked edits and untracked files alike, and")
+	fmt.Fprintln(w, "prints a handle that restores it. The working copy is untouched either way.")
+	fmt.Fprintln(w, "On git and Mercurial a capture is dropped at 30 days, by the next preserve")
+	fmt.Fprintln(w, "and by the daemon's `"+hint.ServerJob.With("prune-preserved")+"`. Without a daemon")
+	fmt.Fprintln(w, "that job is a no-op; run `magus server prune-preserved` instead. On Sapling a")
+	fmt.Fprintln(w, "capture is a hidden commit no Sapling command can drop, so it stays until you")
+	fmt.Fprintln(w, "remove it. Jujutsu mints nothing, so nothing accumulates.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Feed the revision to anything that takes one ("+hint.GraphDiff.With("--rev", "<rev>")+").")
 	fmt.Fprintln(w, "Compare two digests to learn whether two workers saw the same uncommitted")
 	fmt.Fprintln(w, "tree, which the revision alone cannot tell you: a dirty tree's revision is")
 	fmt.Fprintln(w, "the same one everybody else has.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
+	fmt.Fprintln(w, "  --preserve capture the uncommitted work too, and print a handle for it")
 	fmt.Fprintln(w, "  -o name    the citable token: the revision, or <revision>+<digest> when dirty")
 	fmt.Fprintln(w, "  -o json    the whole record (global flag; yaml, jsonl and template too)")
 }
 
 // vcsCheckpointCmd reads the working state's identity and prints it.
 func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
+	var flags *gen.VCSCheckpointFlags
 	pos, err := cmdParse("vcs checkpoint", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() { vcsCheckpointUsage(os.Stderr) }
+		flags = gen.BindVCSCheckpoint(fs)
 	})
 	if err != nil {
 		return err
@@ -588,8 +602,20 @@ func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("vcs checkpoint: %w", err)
 	}
-	cp, err := vcs.Checkpoint(ctx, wsRoot, res)
+	cp, err := vcs.Checkpoint(ctx, wsRoot, res, flags.Preserve)
 	if err != nil {
+		// A failed --preserve can still have MINTED. Mercurial's shelf and Sapling's
+		// snapshot commit both exist before the step that reports the failure, and the
+		// handle in cp is the only thing that reaches the object, so it is rendered before
+		// the failure is returned: the record on stdout, the reason on stderr, and an exit
+		// status that still says the command failed. git returns no handle on any of its
+		// failure paths, so it never arrives here.
+		if cp.Preserved == "" {
+			return err
+		}
+		if emitErr := emitCheckpoint(cp); emitErr != nil {
+			return errors.Join(err, emitErr)
+		}
 		return err
 	}
 	return emitCheckpoint(cp)
@@ -625,9 +651,15 @@ func checkpointToken(cp types.VCSCheckpoint) string {
 }
 
 // checkpointLine is the human reading: "<rev> <branch> clean" or "<rev> <branch> dirty
-// <digest>". The field count is fixed through the dirty word, so a branchless revision (a
-// detached head, jj's usual anonymous change) renders "-" rather than collapsing the
-// column and silently shifting everything after it.
+// <digest>", with " preserved <handle>" appended when --preserve minted one. The field
+// count is fixed through the dirty word, so a branchless revision (a detached head, jj's
+// usual anonymous change) renders "-" rather than collapsing the column and silently
+// shifting everything after it.
+//
+// The handle is on this line because --preserve promises to print one and this is the
+// default rendering. Without it the two spellings of the command produced identical
+// output while one of them left an object in the user's repository, and the only way back
+// to that object was a format flag nobody was told to pass.
 func checkpointLine(cp types.VCSCheckpoint) string {
 	branch := cp.Branch
 	if branch == "" {
@@ -636,7 +668,11 @@ func checkpointLine(cp types.VCSCheckpoint) string {
 	if !cp.Dirty {
 		return fmt.Sprintf("%s %s clean", cp.Revision, branch)
 	}
-	return fmt.Sprintf("%s %s dirty %s", cp.Revision, branch, cp.PatchDigest)
+	line := fmt.Sprintf("%s %s dirty %s", cp.Revision, branch, cp.PatchDigest)
+	if cp.Preserved != "" {
+		line += " preserved " + cp.Preserved
+	}
+	return line
 }
 
 // -------------------------------------------------------------------- vcs add
@@ -788,7 +824,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 		}
 		verdict.Staged, dropped = staged, gone
 	}
-	return emitStaging(verdict, dropped, af.Untracked, globalCfg.DryRun)
+	return emitStaging(verdict, dropped, af.Untracked, globalCfg.DryRun, res.VCS.ReviewCommand())
 }
 
 // workspaceRelPaths turns the paths you typed into workspace-relative ones.
@@ -852,7 +888,11 @@ func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []s
 
 // reportStaging renders the verdict as prose. It reads the value and prints; it decides
 // nothing, so the terminal and `-o json` cannot disagree about what happened.
-func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) {
+//
+// review is the backend's own read-back command (VCSDriver.ReviewCommand), passed in
+// rather than composed: this line used to say `git diff --cached --stat` to everyone, and
+// three of the four backends have no index to read.
+func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, review string) {
 	verb := "staged"
 	if dryRun {
 		verb = "would stage"
@@ -899,7 +939,7 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 		}
 	}
 	if len(v.Staged) > 0 {
-		fmt.Println("\nreview before committing: git diff --cached --stat")
+		fmt.Println("\nreview before committing: " + review)
 	}
 }
 
@@ -964,7 +1004,7 @@ func stagePaths(ctx context.Context, root, vcsName string, recorder types.Confli
 // emitStaging renders the verdict: the structured formats get the value itself, and the
 // terminal gets the prose. One decision, several audiences - which is the whole reason
 // the verdict is a value. `-o json` used to be accepted here and answer in text.
-func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) error {
+func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, review string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -977,7 +1017,7 @@ func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) 
 		// are deliberately absent: this is the list a caller feeds forward.
 		return emitNames(v.Staged)
 	}
-	reportStaging(v, dropped, untracked, dryRun)
+	reportStaging(v, dropped, untracked, dryRun, review)
 	return nil
 }
 

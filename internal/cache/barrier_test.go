@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -53,11 +54,11 @@ func (r *orderRecorder) doneBefore(p string) bool {
 	return r.finished[p]
 }
 
-func openCache(t *testing.T) (root string, c *Cache) {
+func openCache(t *testing.T, opts ...Option) (root string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir, WithMutable(true))
+	c, err := Open(t.Context(), cdir, append([]Option{WithMutable(true)}, opts...)...)
 	require.NoError(t, err, "cache.Open")
 	return root, c
 }
@@ -292,10 +293,13 @@ func TestRunAllSelfDependencyDoesNotDeadlock(t *testing.T) {
 	assert.True(t, ran, "self-dependent step deadlocked instead of running")
 }
 
-// TestRunAllExclusiveRunsAlone verifies the Step.Exclusive contract: an exclusive
-// step never executes concurrently with any other step, while non-exclusive steps
-// still overlap with each other. The sleeps widen the windows so a broken lock
-// would let a reader land inside the exclusive step's span and trip the assertion.
+// The safety half of the Step.Exclusive contract: an exclusive step never executes
+// concurrently with any other step. The sleeps widen every span so a broken lock has room
+// to let a reader land inside the exclusive one.
+//
+// Sleeps are right for THIS half and wrong for the other: a violation here is something
+// that HAPPENED, so a loaded machine only widens the window and cannot turn a pass into a
+// false failure. The overlap claim is the opposite shape and lives in its own test below.
 func TestRunAllExclusiveRunsAlone(t *testing.T) {
 	root, c := openCache(t)
 
@@ -311,7 +315,6 @@ func TestRunAllExclusiveRunsAlone(t *testing.T) {
 	var (
 		mu         sync.Mutex
 		inFlight   int
-		peak       int // max concurrent non-exclusive steps; proves readers overlap
 		violations []string
 	)
 	enter := func(s Step) {
@@ -320,9 +323,6 @@ func TestRunAllExclusiveRunsAlone(t *testing.T) {
 		inFlight++
 		if s.Exclusive && inFlight != 1 {
 			violations = append(violations, "exclusive step started while another was in flight")
-		}
-		if !s.Exclusive && inFlight > peak {
-			peak = inFlight
 		}
 	}
 	leave := func(s Step) {
@@ -341,8 +341,72 @@ func TestRunAllExclusiveRunsAlone(t *testing.T) {
 		return nil
 	}, WithLimiter(NewLimiter(8)))
 	require.NoError(t, err, "RunAll")
-	assert.Empty(t, violations, "exclusive step overlapped with others")
-	assert.GreaterOrEqual(t, peak, 2, "non-exclusive steps never overlapped; the read lock is over-serializing")
+	assert.Empty(t, violations, "the exclusivity contract was broken")
+}
+
+// The liveness half: the isolation lock must be SHARED between non-exclusive steps, not a
+// mutex that serializes every replay.
+//
+// A rendezvous rather than a sleep, because this claim is about what CAN happen and a
+// sleep-and-observe version measures how busy the host is instead (it failed that way once
+// under six packages of parallel tests, and passed alone and at -count=3). Each step blocks
+// until a second arrives, so correct code passes instantly at any load and
+// over-serialization reaches the timeout, which reports rather than hangs.
+//
+// NO exclusive step in this fixture, and that is not simplification: sync.RWMutex prefers a
+// waiting writer, so once one is blocked on Lock further RLock calls queue behind it, which
+// is what stops it starving. A reader already inside its span cannot then be joined by
+// another, so a rendezvous with a pending exclusive step deadlocks against CORRECT behavior.
+func TestRunAllNonExclusiveStepsOverlap(t *testing.T) {
+	root, c := openCache(t)
+
+	const wantOverlap = 2
+	var steps []Step
+	for i := range 4 {
+		steps = append(steps, Step{
+			ProjectPath: "p" + string(rune('0'+i)), WorkspaceRoot: root, Target: "build",
+		})
+	}
+
+	var (
+		mu       sync.Mutex
+		inFlight int
+		peak     int
+		timedOut bool
+	)
+	var arrived atomic.Int32
+	var openOnce sync.Once
+	gate := make(chan struct{})
+	open := func() { openOnce.Do(func() { close(gate) }) }
+
+	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, _ Step) error {
+		mu.Lock()
+		inFlight++
+		peak = max(peak, inFlight)
+		mu.Unlock()
+
+		if arrived.Add(1) >= wantOverlap {
+			open()
+		}
+		select {
+		case <-gate:
+		case <-time.After(5 * time.Second):
+			mu.Lock()
+			timedOut = true
+			mu.Unlock()
+			// Opened so the remaining steps do not each pay the timeout again.
+			open()
+		}
+
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return nil
+	}, WithLimiter(NewLimiter(8)))
+
+	require.NoError(t, err, "RunAll")
+	assert.False(t, timedOut, "a step waited alone for a peer, so the isolation lock is not shared")
+	assert.GreaterOrEqual(t, peak, wantOverlap, "two steps met and the peak did not record it")
 }
 
 // TestRunAllDependencyFailureCancelsDependents verifies that when an upstream
@@ -623,4 +687,66 @@ func TestRunAllDependentFailureDoesNotSpendTheBudget(t *testing.T) {
 	defer mu.Unlock()
 	assert.False(t, ran["B"], "B's dependency failed, so it must not run")
 	assert.True(t, ran["C"], "C is independent and B's cascade must not have spent the budget")
+}
+
+// The half TestRunAllExclusiveRunsAlone cannot see: that test's exclusive step only sleeps,
+// so it never reaches the yield, and the yield is where exclusivity is given away.
+//
+// A step that dispatches ctx.needs goes through YieldRunIsolation so its children can be
+// admitted. For a SHARED holder that release is necessary and harmless; for an EXCLUSIVE
+// one it drops the write lock for the whole fan-out, which is most of such a step's life.
+// This repo's own `generate` is skip_cache + exclusive and its entire body is ctx.needs
+// over every *-generate sibling, so the one step declared to run alone would run alongside
+// everything, including the drift gate it exists to isolate.
+func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
+	root, c := openCache(t)
+
+	steps := []Step{
+		{ProjectPath: "exclusive", WorkspaceRoot: root, Target: "gen", Exclusive: true},
+	}
+	for i := range 6 {
+		steps = append(steps, Step{
+			ProjectPath: "p" + string(rune('0'+i)), WorkspaceRoot: root, Target: "build",
+		})
+	}
+
+	var (
+		mu         sync.Mutex
+		inFlight   int
+		violations []string
+	)
+	_, err := c.RunAll(context.Background(), steps, func(ctx context.Context, s Step) error {
+		mu.Lock()
+		inFlight++
+		if s.Exclusive && inFlight != 1 {
+			violations = append(violations, "exclusive step started alongside another")
+		}
+		mu.Unlock()
+
+		body := func() {
+			time.Sleep(20 * time.Millisecond)
+			mu.Lock()
+			if s.Exclusive && inFlight != 1 {
+				violations = append(violations, "another step ran during the exclusive step's fan-out")
+			}
+			mu.Unlock()
+		}
+		if s.Exclusive {
+			// What a ctx.needs dispatch does: hand the children a context and wait.
+			require.NoError(t, YieldRunIsolation(ctx, func(context.Context) error {
+				body()
+				return nil
+			}))
+		} else {
+			body()
+		}
+
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return nil
+	}, WithLimiter(NewLimiter(8)))
+	require.NoError(t, err, "RunAll")
+
+	assert.Empty(t, violations)
 }

@@ -132,7 +132,7 @@ func TestLongPromptAddsRationaleAndNothingElse(t *testing.T) {
 
 	in.Variant = prompt.Short
 	short := Prompt(in)
-	in.Variant = prompt.Long
+	in.Variant = prompt.Full
 	long := Prompt(in)
 
 	assert.Greater(t, len(long), len(short))

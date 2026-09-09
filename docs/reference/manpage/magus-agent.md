@@ -59,6 +59,9 @@ a pattern no graph verb fits.
 **--prune**
 : Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)
 
+**--skill-form** *string* (default: both)
+: Skill form to install: both (default), short, or full (agent install)
+
 **--tar**
 : Stream a tar archive to stdout instead of writing files (agent install)
 

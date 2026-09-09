@@ -47,7 +47,6 @@ enabled = true
 ```
 
 ```sh
-magus server start
 export MAGUS_MCP_TOKEN="$(magus config token print)"
 codex mcp list
 magus status --probe=liveness,mcp
@@ -55,19 +54,24 @@ magus status --probe=liveness,mcp
 
 `codex mcp list` confirms configuration; the probe confirms the endpoint is
 serving. [MCP](../mcp.md) covers dedicated connector tokens, the ChatGPT desktop
-app, and what to do when `mcp.address` changes.
+app, and what to do when `mcp.address` changes. This is user-owned host setup;
+an agent that cannot reach MCP uses the CLI fallback and does not manually start
+Magus solely to obtain tools.
 
 ## Guard hook
 
-Hooks are experimental and off by default. Turn them on in `~/.codex/config.toml`:
+Check that hooks are on before wiring anything:
 
-```toml
-[features]
-codex_hooks = true
+```sh
+codex features list
 ```
 
-Then save this as `~/.codex/hooks.json` (or `.codex/hooks.json`), with the paths
-pointing at wherever you put your copies of the two templates:
+The `hooks` row reports the stage and whether it is enabled. It is stable and on
+by default as of codex-cli 0.145.0; older builds gated it behind a feature flag
+in `~/.codex/config.toml`, so read the row rather than trusting this paragraph.
+
+Save this as `~/.codex/hooks.json` (or `.codex/hooks.json`), with the paths
+pointing at wherever you put your copies of the templates:
 
 ```json
 {
@@ -93,15 +97,32 @@ pointing at wherever you put your copies of the two templates:
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "statusMessage": "magus: recording where the work stands"
+          }
+        ]
+      }
     ]
   }
 }
 ```
 
 `GUARD_AGENT_NAME` labels the observation magus records; it cannot change a
-verdict. Everything else about the two scripts is described in
+verdict. Everything else about the three scripts is described in
 [Guard hook templates](guard-templates.md), including the variables that let one
 implementation serve several hosts.
+
+The `Stop` entry is not a guard. It records where the work stands each time a
+turn ends, which is worth having here in particular: a Codex session that runs
+out of usage stops mid-task, and the transcript it leaves behind is addressed by
+a session id nobody wrote down. `magus session` lists what it recorded, and
+`magus session checkpoint --note "..."` is the same record made by hand.
 
 ## Notifications
 

@@ -2,10 +2,13 @@ package vcs
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -344,4 +347,184 @@ func trimStatusColumns(lines []string, width int) []string {
 		}
 	}
 	return out
+}
+
+// preserveMessage is what Preserve leaves on the object it mints, so a reader meeting the
+// commit or shelf in their own history knows what put it there. PrunePreserved reads it
+// back as the proof that magus wrote the object.
+const preserveMessage = "magus preserved working copy"
+
+// preserveRetention is how long a preserved state stays resolvable. Both enforcement sides
+// are needed: every Preserve prunes, so the bound holds on a machine that runs no
+// maintenance job, and the prune-preserved job calls [PrunePreserved] on a schedule, so it
+// also holds in a repository that preserved once and never again.
+//
+// Thirty days: long enough that a handle recorded in a ledger still resolves when someone
+// reads that ledger, short enough that a busy repository does not accumulate a year of
+// snapshots.
+const preserveRetention = 30 * 24 * time.Hour
+
+// shelfPrefix marks a shelf as magus's. PrunePreserved deletes only these, so a shelf a
+// person made by hand is never in scope.
+const shelfPrefix = "magus-"
+
+// shelfName mints the name Mercurial stores a shelf under: the prefix, the mint time in
+// unix seconds, then random bytes.
+//
+// Random, because two preserved copies of one tree are distinct events that a
+// content-derived name would collapse into one. Timestamped, because `hg shelve --list`
+// prints ages as prose ("2m ago") and takes no template, so a retention pass reading it
+// would be parsing a UI string.
+func shelfName() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// A snapshot that cannot be named is worse than one named predictably.
+		return fmt.Sprintf("%s%d-%d", shelfPrefix, time.Now().Unix(), time.Now().UnixNano())
+	}
+	return fmt.Sprintf("%s%d-%s", shelfPrefix, time.Now().Unix(), hex.EncodeToString(b[:]))
+}
+
+// shelfMinted reads back the time shelfName stamped, and reports false for any name it
+// did not mint.
+//
+// A "magus-" name carrying no stamp reports false too: it cannot be judged against a
+// retention window without guessing, and PrunePreserved must never guess. Such a shelf
+// leaks until someone runs `hg shelve --delete`.
+func shelfMinted(name string) (time.Time, bool) {
+	rest, ok := strings.CutPrefix(name, shelfPrefix)
+	if !ok {
+		return time.Time{}, false
+	}
+	secs, _, ok := strings.Cut(rest, "-")
+	if !ok {
+		return time.Time{}, false
+	}
+	n, err := strconv.ParseInt(secs, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(n, 0), true
+}
+
+// hgFamilyPending is the working-copy state preserving consumes and has to put
+// back: the files the backend calls unknown, and the tracked files missing from disk.
+//
+// Mercurial and Sapling capture unknown files by ADDING them and missing files by marking
+// them REMOVED, so a capture that does not restore leaves the user with files staged for a
+// commit they never made and a deletion they never scheduled.
+type hgFamilyPending struct {
+	// root is the repository root, and both the directory the paths below are relative to
+	// and the only directory putting them back may run in; see hgFamilyRoot.
+	root    string
+	unknown []string
+	missing []string
+}
+
+// hgFamilyRoot resolves the repository root, where reading the pending state and putting
+// it back both have to run.
+//
+// `hg status` answers in ROOT-relative paths while `hg revert` and `hg forget` resolve
+// their arguments against the CWD, so the same string names two files whenever the caller
+// passes a subdirectory. Measured 2026-09-09 on Mercurial 7.2.3: `hg revert --no-backup
+// -- sub/tracked.txt` run inside sub/ prints "no such file in rev" and exits ZERO, leaving
+// the file scheduled for a removal the user never asked for. Sapling needs the anchor for
+// the mirror-image reason, its status being CWD-relative from a subdirectory.
+//
+// The capture itself (hg's shelve, Sapling's commit --addremove) carries no pathspec and
+// acts on the whole repository, so it runs unanchored in the caller's dir.
+//
+// The root comes back with symlinks RESOLVED, so a repository reached through a symlink
+// gets its real path here and every command anchored on it reports that path back.
+func hgFamilyRoot(ctx context.Context, prog, dir string) (string, error) {
+	cmd := vcsExec(ctx, prog, "root")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("%s root: %w", prog, err)
+	}
+	root := strings.TrimSpace(string(out))
+	if root == "" {
+		return "", fmt.Errorf("%s root: no repository root for %s", prog, dir)
+	}
+	return root, nil
+}
+
+// hgFamilyReadPending reads that state. It must run BEFORE the capture, since the capture
+// is what changes it.
+func hgFamilyReadPending(ctx context.Context, prog, dir string) (hgFamilyPending, error) {
+	root, err := hgFamilyRoot(ctx, prog, dir)
+	if err != nil {
+		return hgFamilyPending{}, err
+	}
+	unknown, err := hgFamilyStatusPaths(ctx, prog, root, "--unknown")
+	if err != nil {
+		return hgFamilyPending{}, err
+	}
+	missing, err := hgFamilyStatusPaths(ctx, prog, root, "--deleted")
+	if err != nil {
+		return hgFamilyPending{}, err
+	}
+	return hgFamilyPending{root: root, unknown: unknown, missing: missing}, nil
+}
+
+// hgFamilyRestorePending returns the working copy to the state hgFamilyReadPending saw.
+//
+// forget un-adds, which is exact. A removal has no un-mark: `add` and `forget` both leave
+// it scheduled (measured), and only revert clears it, which writes the file back, so it is
+// deleted again immediately after. Those bytes are the committed ones the user had already
+// deleted, so nothing of theirs is at risk in between.
+func hgFamilyRestorePending(ctx context.Context, prog string, p hgFamilyPending) error {
+	if len(p.unknown) > 0 {
+		if err := hgFamilyRun(ctx, prog, p.root, append([]string{"forget", "--"}, p.unknown...)); err != nil {
+			return err
+		}
+	}
+	if len(p.missing) == 0 {
+		return nil
+	}
+	if err := hgFamilyRun(ctx, prog, p.root, append([]string{"revert", "--no-backup", "--"}, p.missing...)); err != nil {
+		return err
+	}
+	for _, rel := range p.missing {
+		if err := os.Remove(filepath.Join(p.root, filepath.FromSlash(rel))); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("%s: re-delete %s: %w", prog, rel, err)
+		}
+	}
+	return nil
+}
+
+// hgFamilyStatusPaths lists the paths in one status class, NUL-delimited.
+//
+// The template is what makes the list unambiguous. A newline is legal in a filename, so a
+// line-split parse turns "we\nird.txt" into two paths that name nothing: measured
+// 2026-09-09 on Mercurial 7.2.3, `hg revert --no-backup -- we` prints "no such file in
+// rev" and exits ZERO, so the restore reports success while the user's file stays
+// scheduled for a removal they never asked for. Trimming compounds it, a leading space
+// being legal too.
+//
+// Sapling takes the same template (measured on 0.2.20260811-150444) and refuses a newline
+// in a name outright, so one spelling covers both backends.
+func hgFamilyStatusPaths(ctx context.Context, prog, dir, class string) ([]string, error) {
+	cmd := vcsExec(ctx, prog, "status", class, "--no-status", "-T", `{path}\0`)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s status %s: %w", prog, class, err)
+	}
+	var files []string
+	for path := range strings.SplitSeq(string(out), "\x00") {
+		if path != "" {
+			files = append(files, path)
+		}
+	}
+	return files, nil
+}
+
+func hgFamilyRun(ctx context.Context, prog, dir string, args []string) error {
+	cmd := vcsExec(ctx, prog, args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s %s: %w: %s", prog, args[0], err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

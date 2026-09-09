@@ -354,3 +354,107 @@ func isDeletingClean(args []string) bool {
 	}
 	return deletes
 }
+
+// nonGitVCSGuard is gitGuard for every other backend magus drives: Mercurial and
+// Sapling, which are one dialect, and Jujutsu, which is its own.
+//
+// These were unmatched, and the guard doc justified that by saying magus "also drives
+// Mercurial and Jujutsu, where recoverability differs - jj snapshots the working copy and
+// keeps an operation log, so its nearest equivalents are undoable". That reasoning is
+// TRUE OF JJ AND ONLY JJ, and it was generalized to Mercurial without argument. hg has no
+// operation log: `hg rollback` only ever undid the last transaction and is gone, `hg
+// revert` writes .orig backups for modified TRACKED files alone (and --no-backup drops
+// even those), and `hg purge` deletes untracked files with no backup at all - the same
+// blast radius as `git clean -f`, which denies. So an hg or sl user had none of the
+// protection a git user has, for operations that are just as irrecoverable.
+//
+// jj was exempt too, on the same sentence's reasoning that its operation log makes these
+// undoable. That exemption is gone. Undoable-IN-PRINCIPLE is a weaker guarantee than this
+// bar: it needs someone to know `jj undo` exists and to reach for it before later
+// operations bury the entry. And recoverability was never the whole test - the worktree
+// rule denies because it destroys ANOTHER session's work, which `jj abandon` on a shared
+// working copy does just as thoroughly.
+//
+// SCOPED forms stay allowed, matching the git rules: `hg revert <paths>` names what it
+// touches, and only the whole-tree flags below discard a tree the caller did not enumerate.
+func nonGitVCSGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
+	for _, c := range cmds {
+		if len(c.Args) == 0 {
+			continue
+		}
+		sub, rest := c.Args[0], c.Args[1:]
+		if c.Name == "jj" {
+			if v, matched := jjRule(c.Name, sub, rest); matched {
+				return v, true
+			}
+			continue
+		}
+		if c.Name != "hg" && c.Name != "sl" {
+			continue
+		}
+		switch sub {
+		// Deletes UNTRACKED files outright. No backup, no undo, and untracked is exactly
+		// where a concurrent agent's unfinished work lives.
+		case "purge", "clean":
+			return denyWholeTree(c.Name + " " + sub), true
+		case "revert":
+			if hasAnyFlag(rest, "--all", "-a") {
+				return denyWholeTree(c.Name + " revert --all"), true
+			}
+		// `-C`/`--clean` discards uncommitted changes on the way to another revision,
+		// with no .orig backup. sl spells the verb goto; hg accepts update, up and co.
+		case "update", "up", "goto", "co":
+			if hasAnyFlag(rest, "--clean", "-C") {
+				return denyWholeTree(c.Name + " " + sub + " --clean"), true
+			}
+		}
+	}
+	return bashGuardVerdict{}, false
+}
+
+// jjRule is the Jujutsu arm. Its verbs share no spelling with the others, so it reads as
+// its own switch rather than another arm of one that would then be a lookup table.
+func jjRule(prog, sub string, rest []string) (bashGuardVerdict, bool) {
+	switch sub {
+	// Abandons the changes in a revision, defaulting to the working copy.
+	case "abandon":
+		return denyWholeTree(prog + " abandon"), true
+	// With paths it is the scoped restore the git rules also allow; with none it discards
+	// every change in the working copy.
+	case "restore":
+		if !hasPositional(rest) {
+			return denyWholeTree(prog + " restore"), true
+		}
+	case "workspace":
+		if len(rest) > 0 && rest[0] == "forget" {
+			return bashGuardVerdict{
+				Deny: "Check it is clean first, then forget the workspace from a session that owns it.\n" +
+					"jj workspace forget drops that workspace's working copy, which in a repo running several is routinely another session's.",
+				Rule: denyRule{Name: denyRuleWorktreeRemove},
+			}, true
+		}
+	}
+	return bashGuardVerdict{}, false
+}
+
+// hasPositional reports whether args carries a non-flag argument, which for a restore is
+// the difference between naming what to touch and taking the whole tree.
+func hasPositional(args []string) bool {
+	for _, a := range args {
+		if a != "--" && !strings.HasPrefix(a, "-") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasAnyFlag reports whether args carries any of the given flags as its own token, so a
+// PATH that merely contains one does not match.
+func hasAnyFlag(args []string, flags ...string) bool {
+	for _, a := range args {
+		if slices.Contains(flags, a) {
+			return true
+		}
+	}
+	return false
+}

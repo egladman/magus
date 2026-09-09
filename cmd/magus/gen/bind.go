@@ -39,6 +39,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.DurationVar(&cfg.Daemon.IdleTTL, "daemon-idle-ttl", cfg.Daemon.IdleTTL, "MAGUS_DAEMON_IDLE_TTL: IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.")
 	fs.DurationVar(&cfg.Daemon.Maintenance.RotateActivities, "daemon-maintenance-rotate-activities", cfg.Daemon.Maintenance.RotateActivities, "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES: RotateActivities is how often the daemon trims the activity trail.")
 	fs.DurationVar(&cfg.Daemon.Maintenance.RotateLogs, "daemon-maintenance-rotate-logs", cfg.Daemon.Maintenance.RotateLogs, "MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS")
+	fs.DurationVar(&cfg.Daemon.Maintenance.PrunePreserved, "daemon-maintenance-prune-preserved", cfg.Daemon.Maintenance.PrunePreserved, "MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED: PrunePreserved drops the working-copy captures 'vcs checkpoint --preserve' minted once they outlive the thirty days t...")
 	fs.DurationVar(&cfg.Daemon.Maintenance.SyncGraph, "daemon-maintenance-sync-graph", cfg.Daemon.Maintenance.SyncGraph, "MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH")
 	fs.DurationVar(&cfg.Daemon.Maintenance.CheckReview, "daemon-maintenance-check-review", cfg.Daemon.Maintenance.CheckReview, "MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW: CheckReview notices a merge or a new remark on a review this tree took part in.")
 	fs.StringVar(&cfg.VCS.Name, "vcs-name", cfg.VCS.Name, "MAGUS_VCS_NAME")

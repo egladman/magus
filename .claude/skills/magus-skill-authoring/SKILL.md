@@ -49,33 +49,33 @@ the gap where it will be found (the plans doc, a task, magus_memory).
 - Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the
   live tools. A skill that mentions this repo's specifics is a bug.
 
-## 3b. Two permutations from one body: mark the why, then shorten the rest
+## 3b. Two forms from one body: mark the why, then shorten the rest
 
-A skill body is a `text/template` rendered against the variant, so a permutation
-is an ordinary `{{if}}`. Three forms, and that is the whole vocabulary:
+A skill body is a `text/template` rendered against the variant, so a form is an
+ordinary `{{if}}`. Three constructs, and that is the whole vocabulary:
 
 ```markdown
 Run the target first{{if .Full}}, because a raw tool bypasses the cache{{end}}.
 
-{{if .Simple}}Full explains this at length below.{{end}}
+{{if .Short}}Full explains this at length below.{{end}}
 
 Read `llms.txt` first{{if .Full}}, because guessing a URL wastes a fetch and the
 index is authoritative{{else}} - it is the index{{end}}.
 ```
 
-Unconditional text is in both permutations.
+Unconditional text is in both forms.
 
 Dropping the `{{else}}` means "full says more here". Reaching for it means "both
-permutations say this, at different lengths", and that is the ONLY construct that
-can shorten something both must express. A bare `{{if .Simple}}` means "simple
-says this and full says nothing", which is almost always a mistake worth catching
-in review.
+forms say this, at different lengths", and that is the ONLY construct that can
+shorten something both must express. A bare `{{if .Short}}` means "short says this
+and full says nothing", which is almost always a mistake worth catching in
+review.
 
 Measured 2026-07-31: the ten shipped skills have 137 full-only branches and only
 28 `{{else}}` arms. Most distinctions are still deletion rather than re-wording;
-reach for `{{else}}` whenever a passage survives into simple at full length.
+reach for `{{else}}` whenever a passage survives into short at full length.
 
-A third permutation costs a constant, not a new markup convention:
+A third form costs a constant, not a new markup convention:
 
 ```markdown
 {{if .Is "minimal"}}bare imperative{{else if .Full}}the long version{{else}}the short one{{end}}
@@ -95,18 +95,18 @@ this:
 Getting it wrong is a loud failure at install (a parse error for an unknown
 function, an execute error for an unknown field), never a silently mangled file.
 
-### Who simple is FOR, and therefore what it cuts
+### Who the short form is FOR, and therefore what it cuts
 
-Simple is not the beginner permutation. It is installed for the most capable
-readers - the models that can re-derive an imperative from the tool surface and
-do not need it spelled out. That inverts the obvious instinct, so state the
-consequence plainly: **simple sheds ENUMERATION and keeps JUDGMENT.** It is not
-"the steps without the why". A permutation that keeps the steps and drops the
-why hands its strongest reader the half it could have reconstructed and takes
-away the half it could not.
+Short is not the beginner form. It is installed for the most capable readers -
+the models that can re-derive an imperative from the tool surface and do not need
+it spelled out. That inverts the obvious instinct, so state the consequence
+plainly: **short sheds ENUMERATION and keeps JUDGMENT.** It is not "the steps
+without the why". A form that keeps the steps and drops the why hands its
+strongest reader the half it could have reconstructed and takes away the half it
+could not.
 
 Ask of every branch: could a capable reader work this out from `magus describe`,
-`-h`, or the docs? Then it is enumeration, and simple can lose it. Could they
+`-h`, or the docs? Then it is enumeration, and short can lose it. Could they
 only learn it by making the mistake? Then it is judgment, and it stays.
 
 Not every rule tolerates losing its rationale, and the split is not stylistic.
@@ -117,11 +117,11 @@ Not every rule tolerates losing its rationale, and the split is not stylistic.
 - JUDGMENT rules ask the reader to recognize an instance nobody enumerated.
   `never a whole-tree git op to verify a build` is one: the why (a concurrent
   agent's untracked work dies) is what lets a reader generalize to a case the
-  rule never listed. Keep a short form of the why in simple via an `{{else}}`
+  rule never listed. Keep a terse version of the why in short via an `{{else}}`
   arm rather than dropping it.
 
 The sharpest test is silence. A failure that ANNOUNCES itself teaches the reader
-on its own and needs no rationale in simple; a failure that is silent - an edit
+on its own and needs no rationale in short; a failure that is silent - an edit
 that stops existing, a guard that fails open, a pipe that turns a failing gate
 into exit 0 - can only arrive as text, because nothing in the session will ever
 say it.
@@ -143,11 +143,11 @@ less, not by writing badly. Plain sentences, ordinary punctuation, in both arms.
 Rules:
 
 - Never put the LOAD-BEARING instruction inside `{{if .Full}}` - the one command
-  or path without which simple cannot act, or the CORRECT half of a
-  WRONG/CORRECT pair. Simple must still be able to do the thing.
-- An EXHAUSTIVE enumeration is different, and it is exactly what simple sheds:
+  or path without which short cannot act, or the CORRECT half of a
+  WRONG/CORRECT pair. Short must still be able to do the thing.
+- An EXHAUSTIVE enumeration is different, and it is exactly what short sheds:
   every flag of a command, every kind in a table, every variant of a form. Put
-  it in `{{if .Full}}` and have simple name where to get it (`-h`, `magus
+  it in `{{if .Full}}` and have short name where to get it (`-h`, `magus
   describe <thing>`, a docs URL) rather than carrying the list. That is
   progressive disclosure, and it is the intended shape - a capable reader
   fetches an enumeration far more cheaply than it recovers a judgment.
@@ -155,16 +155,16 @@ Rules:
   `{{if .Full}}`. The why of a judgment rule does NOT: shorten it into an
   `{{else}}` arm instead.
 - Keep the imperative grammatical after the cut. `foo{{if .Full}} - because
-  bar{{end}}.` reads as `foo.` in simple; a mid-clause cut reads as damage.
+  bar{{end}}.` reads as `foo.` in short; a mid-clause cut reads as damage.
 - A malformed template is a parse or execute error at install, which also catches
   typos the old scheme let through as literal text.
-- A passage that survives into simple at full length is a candidate for an
+- A passage that survives into short at full length is a candidate for an
   `{{else}}` arm, not evidence the ceiling has been reached.
-- `TestEveryEmbeddedSkillHasBothPermutations` fails for any skill whose
-  permutations are byte-identical, so a skill with no marked rationale is
-  caught rather than silently making the simple permutation a lie for that one.
-  (There is no `--simple` flag any more: install always writes the simple form
-  as the primary plus a `<name>-full` twin.)
+- `TestEveryEmbeddedSkillHasBothForms` fails for any skill whose two forms are
+  byte-identical, so a skill with no marked rationale is caught rather than
+  silently making the short form a lie for that one. `--skill-form` picks what an
+  install writes: `both` (the default: the short body under each skill's own name
+  plus a `<name>-full` twin), `short`, or `full`.
 
 ## 4. Breadcrumbs are load-bearing
 

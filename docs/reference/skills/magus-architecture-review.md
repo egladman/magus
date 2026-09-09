@@ -3,10 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-aliases:
-  - reference/skills/magus-architecture
 skill_full_bytes: 6322
-skill_simple_bytes: 5123
+skill_short_bytes: 5123
 ---
 
 # magus-architecture-review
@@ -30,16 +28,154 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `51` |
-| `knowledge-schema-version` | `10` |
+| `agent-skill-version` | `55` |
+| `knowledge-schema-version` | `11` |
 | `skill-content` | `e4b75fa969de` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
+The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
-## Full form
+## The two forms
 
-Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
+Both are hand-authored from one source body. The short form is the always-loaded primary - the enumeration dropped, the judgment kept, for the most capable readers rather than the least. The full form is its `<name>-full` twin, loaded by name when a reader wants the rationale. The bar above shows how much shorter the primary is; switch between them here to see exactly what it gave up. See [Skills](../../guides/integrations/agents/skills.md) for how to choose.
+
+<article class="landing-tabs">
+<header>
+<input type="radio" name="magus-architecture-review-variant" id="magus-architecture-review-tab-short" checked>
+<label for="magus-architecture-review-tab-short">Short form</label>
+<input type="radio" name="magus-architecture-review-variant" id="magus-architecture-review-tab-full">
+<label for="magus-architecture-review-tab-full">Full form</label>
+</header>
+
+<section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-architecture-review/SKILL.md
+```
+
+````markdown
+# Architecture decisions from the graph
+
+magus already measured the workspace: what depends on what, what changes
+together, where churn and complexity concentrate, who owns what. Query those
+facts before proposing structure; a proposal citing graph evidence is
+checkable, one from intuition is not.
+
+## Survey before proposing
+
+Run these and read them together:
+
+```sh
+magus graph stats            # god nodes (structural risk), orphans, doc coverage
+magus_insight lens=hotspots  # churn x complexity per project, with blast radius
+magus_insight lens=affinity  # projects that change together: hidden coupling
+magus_insight lens=ownership # author concentration, bus factor, abandonment
+magus graph deps -o tree     # the declared project DAG
+```
+
+MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
+ground. Weight affinity most: changing
+together with no declared edge is back-door coupling.
+
+## Then survey the opposite: what is too THIN to justify a boundary
+
+Every lens above finds something too big, too central, or too churned. None find
+the inverse, and over-abstraction is the more common failure in a young codebase.
+Ask it explicitly, because nothing prompts it for you:
+
+A boundary is not free: in
+Go, splitting a package forces exports, widening the surface you meant to shrink.
+No churn or coupling metric records that cost.
+
+The shapes worth flagging, in rough order of how clearly they are wrong:
+
+| Shape | Why it is suspect |
+|---|---|
+| Imported only from inside its own subtree | It is a parent's implementation, not a boundary |
+| Exactly one importer, and no encapsulation behind it | A file in the wrong place |
+| Single file, single exported symbol | The package name is a second name for one function |
+
+Note the third column that is NOT there: size. Small is not the same as needless.
+Check what a package HIDES before proposing a merge - one exported function over
+four unexported helpers is real encapsulation at any line count, and two importers
+in different trees means merging makes one depend on the other.
+
+`magus graph stats` reports orphans (zero importers), which is adjacent but not
+the same question: the expensive cases have one importer, not none.
+
+WRONG: proposing a merge because a package is under N lines.
+CORRECT: proposing a merge because its importers all live inside its own parent,
+and nothing it exports would need to be exported once merged.
+
+## Sizing a specific refactor
+
+1. Blast radius of a node: `magus explain <node>` shows its edges and how many
+   nodes reach it.
+2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
+   referencing file:line from the SCIP index. Run it before moving or renaming
+   any exported symbol. An empty result carries a
+   verdict; `unknown` means an index is missing, not that nothing uses it.
+3. How two things relate: `magus path <a> <b>` gives the shortest edge chain.
+4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
+   review a move needs.
+
+## Match the existing conventions
+
+Derive the pattern from the graph rather than imposing one: where similar code
+already lives (`magus query kind=<kind> <term>`), which modules import which
+(`relation=imports`), how existing projects segment (`magus graph deps`). State the observed convention in the proposal, with the query
+that shows it.
+
+## Audit the domain model itself
+
+Census the kinds, then read the stats for smells:
+
+```sh
+magus graph stats                    # god nodes, orphans, doc coverage
+for k in project target spell op tool charm module method diagnostic doc file \
+         function symbol import owner; do
+  printf "%-11s %s\n" "$k" "$(magus query "kind=$k" -o json | jq length)"
+done                                  # population per abstraction
+magus explain "<node>"               # compare a kind's edges against a neighbor's
+```
+
+Confirm each smell against the source before acting on it:
+
+- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
+  kind, or fold into an attr on an existing one?
+- Two kinds with near-identical population AND edge shape may be one concept
+  under two names. Keep them distinct only if their PROVENANCE differs (the kind
+  doctrine in `types/knowledge.go`).
+- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
+  which.
+- A NODE LABEL that varies by checkout (a worktree name where a stable module
+  name belongs) is an identity smell.
+
+A kind or edge earns its place only if it answers a question the others cannot;
+prefer folding into an existing mechanism over adding one. Ground every claim in a query, exactly as for a layout proposal.
+
+## Verify the change
+
+After restructuring, show the impact in graph terms: `magus graph diff --rev
+<base> -o markdown` lists the nodes and edges the change added, removed, or
+altered. Then run
+`magus affected ci` to prove the affected projects still pass.
+
+## Do not render the graph yourself
+
+magus emits; it does not render. To look at structure, offer an export
+(`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
+browser graph tool.
+````
+
+
+</section>
+
+<section class="landing-tabpanel">
+
+```sh
+magus agent install --tar | tar -xO -f - magus-architecture-review-full/SKILL.md
+```
 
 ````markdown
 # Architecture decisions from the graph
@@ -169,127 +305,7 @@ magus emits; it does not render. To look at structure, offer an export
 browser graph tool - do not hand-draw diagrams of what the graph already knows.
 ````
 
-## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Skills](../../guides/integrations/agents/skills.md) for the difference.
+</section>
 
-<details>
-<summary>Show the short form</summary>
-
-````markdown
-# Architecture decisions from the graph
-
-magus already measured the workspace: what depends on what, what changes
-together, where churn and complexity concentrate, who owns what. Query those
-facts before proposing structure; a proposal citing graph evidence is
-checkable, one from intuition is not.
-
-## Survey before proposing
-
-Run these and read them together:
-
-```sh
-magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus_insight lens=hotspots  # churn x complexity per project, with blast radius
-magus_insight lens=affinity  # projects that change together: hidden coupling
-magus_insight lens=ownership # author concentration, bus factor, abandonment
-magus graph deps -o tree     # the declared project DAG
-```
-
-MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
-ground. Weight affinity most: changing
-together with no declared edge is back-door coupling.
-
-## Then survey the opposite: what is too THIN to justify a boundary
-
-Every lens above finds something too big, too central, or too churned. None find
-the inverse, and over-abstraction is the more common failure in a young codebase.
-Ask it explicitly, because nothing prompts it for you:
-
-A boundary is not free: in
-Go, splitting a package forces exports, widening the surface you meant to shrink.
-No churn or coupling metric records that cost.
-
-The shapes worth flagging, in rough order of how clearly they are wrong:
-
-| Shape | Why it is suspect |
-|---|---|
-| Imported only from inside its own subtree | It is a parent's implementation, not a boundary |
-| Exactly one importer, and no encapsulation behind it | A file in the wrong place |
-| Single file, single exported symbol | The package name is a second name for one function |
-
-Note the third column that is NOT there: size. Small is not the same as needless.
-Check what a package HIDES before proposing a merge - one exported function over
-four unexported helpers is real encapsulation at any line count, and two importers
-in different trees means merging makes one depend on the other.
-
-`magus graph stats` reports orphans (zero importers), which is adjacent but not
-the same question: the expensive cases have one importer, not none.
-
-WRONG: proposing a merge because a package is under N lines.
-CORRECT: proposing a merge because its importers all live inside its own parent,
-and nothing it exports would need to be exported once merged.
-
-## Sizing a specific refactor
-
-1. Blast radius of a node: `magus explain <node>` shows its edges and how many
-   nodes reach it.
-2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
-   referencing file:line from the SCIP index. Run it before moving or renaming
-   any exported symbol. An empty result carries a
-   verdict; `unknown` means an index is missing, not that nothing uses it.
-3. How two things relate: `magus path <a> <b>` gives the shortest edge chain.
-4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
-   review a move needs.
-
-## Match the existing conventions
-
-Derive the pattern from the graph rather than imposing one: where similar code
-already lives (`magus query kind=<kind> <term>`), which modules import which
-(`relation=imports`), how existing projects segment (`magus graph deps`). State the observed convention in the proposal, with the query
-that shows it.
-
-## Audit the domain model itself
-
-Census the kinds, then read the stats for smells:
-
-```sh
-magus graph stats                    # god nodes, orphans, doc coverage
-for k in project target spell op tool charm module method diagnostic doc file \
-         function symbol import owner; do
-  printf "%-11s %s\n" "$k" "$(magus query "kind=$k" -o json | jq length)"
-done                                  # population per abstraction
-magus explain "<node>"               # compare a kind's edges against a neighbor's
-```
-
-Confirm each smell against the source before acting on it:
-
-- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
-  kind, or fold into an attr on an existing one?
-- Two kinds with near-identical population AND edge shape may be one concept
-  under two names. Keep them distinct only if their PROVENANCE differs (the kind
-  doctrine in `types/knowledge.go`).
-- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
-  which.
-- A NODE LABEL that varies by checkout (a worktree name where a stable module
-  name belongs) is an identity smell.
-
-A kind or edge earns its place only if it answers a question the others cannot;
-prefer folding into an existing mechanism over adding one. Ground every claim in a query, exactly as for a layout proposal.
-
-## Verify the change
-
-After restructuring, show the impact in graph terms: `magus graph diff --rev
-<base> -o markdown` lists the nodes and edges the change added, removed, or
-altered. Then run
-`magus affected ci` to prove the affected projects still pass.
-
-## Do not render the graph yourself
-
-magus emits; it does not render. To look at structure, offer an export
-(`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
-browser graph tool.
-````
-
-
-</details>
+</article>

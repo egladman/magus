@@ -164,7 +164,7 @@ func TestExplainNodeMapsEdgesWithDirectionAndProvenance(t *testing.T) {
 	require.NotEmpty(t, msg.GetIn())
 	var dep *graphv1.EdgeRef
 	for _, e := range msg.GetIn() {
-		if e.GetRelation() == types.RelationDependsOn {
+		if e.GetRelation() == string(types.RelationDependsOn) {
 			dep = e
 		}
 	}

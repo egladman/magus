@@ -25,6 +25,10 @@ func (v gitVCS) Name() string     { return "git" }
 func (v gitVCS) Claims() []string { return []string{".git"} }
 func (v gitVCS) Base() string     { return "origin/main" }
 
+// ReviewCommand reads the INDEX, which is git's alone: it is the only one of the four
+// with a staging area between the working copy and a commit.
+func (v gitVCS) ReviewCommand() string { return "git diff --cached --stat" }
+
 // ParentRef is the first parent of the checked-out commit. `^` rather than `~1`:
 // they are the same for a linear commit and differ on a merge, where `^` is the
 // branch being merged INTO - which is the side a CI run wants to measure from.
@@ -1851,4 +1855,167 @@ func writeTarEntry(tr *tar.Reader, target string, hdr *tar.Header) error {
 		return fmt.Errorf("write %q: %w", hdr.Name, err)
 	}
 	return nil
+}
+
+// Preserve builds a commit object holding the working copy's uncommitted state and
+// anchors it under refs/magus/preserved/, so nothing can garbage-collect it.
+//
+// Not `git stash create`: measured 2026-09-08, it captures TRACKED changes only, and
+// untracked files are the work that is in no commit and so the work a whole-tree revert
+// destroys irrecoverably. It wraps this same plumbing anyway.
+//
+// A TEMPORARY index keeps the invariant. GIT_INDEX_FILE points add at a scratch file, so
+// the developer's real index, which may hold a half-staged commit, is never read or
+// written, and neither is the working tree.
+func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
+	dirty, err := v.Dirty(ctx, dir, nil)
+	if err != nil {
+		return "", fmt.Errorf("git preserve: %w", err)
+	}
+	if !dirty {
+		return "", nil
+	}
+	// A private DIRECTORY rather than a temp file: git writes the index itself, so handing
+	// it a path means creating a name and stepping back off it, and on a shared tmpdir
+	// anyone can take that name in between. Nobody else can write inside a 0700 directory
+	// magus just minted. RemoveAll takes the whole thing, git's file included.
+	idxDir, err := os.MkdirTemp("", "magus-preserve-index-")
+	if err != nil {
+		return "", fmt.Errorf("git preserve: temp index: %w", err)
+	}
+	defer os.RemoveAll(idxDir)
+	idxPath := filepath.Join(idxDir, "index")
+
+	run := func(args ...string) (string, error) {
+		cmd := vcsExec(ctx, "git", args...)
+		cmd.Dir = dir
+		// gitEnviron, never os.Environ: it strips GIT_DIR, GIT_WORK_TREE and the rest, so
+		// cmd.Dir decides the repository. Inheriting them lets an exported GIT_DIR send every
+		// command here, and the ref, into a different repository.
+		cmd.Env = append(gitEnviron(), "GIT_INDEX_FILE="+idxPath)
+		cmd.Env = append(cmd.Env, preserveIdentity...)
+		out, err := cmd.Output()
+		return strings.TrimSpace(string(out)), gitStderr(err)
+	}
+	// Seed from HEAD where there is one, so the snapshot reads as a change against the
+	// checked-out commit rather than an initial import. An unborn HEAD has nothing to read
+	// and starts from an empty index instead.
+	born := v.hasCommits(ctx, dir)
+	if born {
+		if _, err := run("read-tree", "HEAD"); err != nil {
+			return "", fmt.Errorf("git preserve: read-tree: %w", err)
+		}
+	}
+	// -A rather than an explicit path list: DirtyFiles keeps only the NEW side of a rename,
+	// so an index seeded from HEAD would keep the OLD path too and the tree would hold
+	// both, a tree that was never the working copy. -A still honours .gitignore (measured),
+	// so nothing ignored rides along.
+	if _, err := run("add", "-A"); err != nil {
+		return "", fmt.Errorf("git preserve: add: %w", err)
+	}
+	tree, err := run("write-tree")
+	if err != nil {
+		return "", fmt.Errorf("git preserve: write-tree: %w", err)
+	}
+	commitArgs := []string{"commit-tree", tree, "-m", preserveMessage}
+	if born {
+		commitArgs = append(commitArgs, "-p", "HEAD")
+	}
+	sha, err := run(commitArgs...)
+	if err != nil {
+		return "", fmt.Errorf("git preserve: commit-tree: %w", err)
+	}
+	// Anchored because gc reaps a commit no ref points at, which would make the handle
+	// resolve today and not next week. refs/magus/ is off every branch and not pushed
+	// without an explicit refspec, but it is NOT invisible: `git log --all`,
+	// `rev-list --all` and `clone --mirror` all see it, and each ref pins the ancestry it
+	// was taken on. PrunePreserved below keeps that bounded.
+	if _, err := run("update-ref", preservedRefPrefix+sha, sha); err != nil {
+		return "", fmt.Errorf("git preserve: update-ref: %w", err)
+	}
+	// Pruned AFTER the new ref exists, so a failure here costs the old refs their cleanup
+	// and never this capture its anchor. The error is dropped because reporting a
+	// housekeeping failure as a preserve failure sends a caller looking for stored work.
+	_, _ = v.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
+	return sha, nil
+}
+
+// preservedRefPrefix is the namespace Preserve anchors under. Under refs/magus/ rather
+// than refs/heads/ or refs/tags/ so it shows up in neither `git branch` nor `git tag`,
+// and is not pushed without an explicit refspec.
+const preservedRefPrefix = "refs/magus/preserved/"
+
+// preserveIdentity is who every capture is minted as, in place of whoever configured the
+// box.
+//
+// commit-tree refuses a name or email it had to guess, so a checkout with no configured
+// identity could not capture at all: a CI runner, a container, a fresh clone, which is
+// where losing uncommitted work costs the most. Whose work a capture holds is the tree,
+// not the header, and the ref never leaves the repository. The .invalid TLD is reserved
+// (RFC 2606), so the address cannot reach anyone.
+var preserveIdentity = []string{
+	"GIT_AUTHOR_NAME=magus", "GIT_AUTHOR_EMAIL=magus@magus.invalid",
+	"GIT_COMMITTER_NAME=magus", "GIT_COMMITTER_EMAIL=magus@magus.invalid",
+}
+
+// gitStderr appends what git actually said to an exit-status error. cmd.Output captures
+// stderr into ExitError and nothing reads it, so a failure surfaces as a bare `exit status
+// 128` that names neither the command's complaint nor a way to act on it.
+func gitStderr(err error) error {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+	}
+	return err
+}
+
+// PrunePreserved deletes the refs Preserve anchored whose commit predates before.
+//
+// Keyed on the ref's COMMITTER date, which is when the capture was taken. The author date
+// is not: commit-tree copies it from the environment, where a caller can set it.
+//
+// The commit's SUBJECT has to be Preserve's too. Anyone can write into
+// refs/magus/preserved, and this runs unasked inside every Preserve, so the prefix alone
+// is not grounds to delete a commit magus did not make.
+func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
+	run := func(args ...string) (string, error) {
+		cmd := vcsExec(ctx, "git", args...)
+		cmd.Dir = dir
+		cmd.Env = gitEnviron()
+		out, err := cmd.Output()
+		return strings.TrimSpace(string(out)), gitStderr(err)
+	}
+	// The subject is LAST in the format because it is the only field that can hold a
+	// space, which is what makes the split unambiguous.
+	listed, err := run("for-each-ref", "--sort=committerdate",
+		"--format=%(refname) %(objectname) %(committerdate:unix) %(contents:subject)", preservedRefPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("git prune-preserved: for-each-ref: %w", err)
+	}
+	var dropped []string
+	for _, line := range strings.Split(listed, "\n") {
+		fields := strings.SplitN(strings.TrimSpace(line), " ", 4)
+		if len(fields) < 4 {
+			continue
+		}
+		name, sha, unix, subject := fields[0], fields[1], fields[2], fields[3]
+		secs, convErr := strconv.ParseInt(unix, 10, 64)
+		if convErr != nil {
+			continue
+		}
+		// Sorted ascending, so the first ref at or after the cutoff ends the scan.
+		if !time.Unix(secs, 0).Before(before) {
+			break
+		}
+		if subject != preserveMessage {
+			continue
+		}
+		// Deleted against the SHA that passed the checks above, so a ref another process
+		// moved in between is refused rather than dropped on a stale listing.
+		if _, err := run("update-ref", "-d", name, sha); err != nil {
+			return dropped, fmt.Errorf("git prune-preserved: update-ref -d %s: %w", name, err)
+		}
+		dropped = append(dropped, strings.TrimPrefix(name, preservedRefPrefix))
+	}
+	return dropped, nil
 }

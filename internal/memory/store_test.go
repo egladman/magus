@@ -5,25 +5,53 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/repoid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestRepoIdentityWorktree proves every worktree of one repo resolves to the same
-// identity, so they share one memory directory - the reason the key is not the checkout
-// path.
-func TestRepoIdentityWorktree(t *testing.T) {
-	main := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(main, ".git"), 0o755))
+// TestDirIsSharedByEveryCloneOfARepo proves the property the store's name promises:
+// two checkouts of one repository read and write one memory. repoid owns how identity
+// is derived; what is pinned here is that memory keys on it.
+func TestDirIsSharedByEveryCloneOfARepo(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	a, b := gitClone(t, "git@github.com:egladman/magus.git"), gitClone(t, "https://github.com/egladman/magus.git")
 
-	wt := t.TempDir()
-	gitfile := "gitdir: " + filepath.Join(main, ".git", "worktrees", "feature-x") + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte(gitfile), 0o644))
+	dirA, err := Dir(a)
+	require.NoError(t, err)
+	dirB, err := Dir(b)
+	require.NoError(t, err)
 
-	assert.Equal(t, main, repoIdentity(main), "a plain checkout identifies as itself")
-	assert.Equal(t, main, repoIdentity(wt), "a linked worktree identifies as the main repo")
-	bare := t.TempDir()
-	assert.Equal(t, bare, repoIdentity(bare), "no .git: the root is the identity")
+	assert.Equal(t, dirA, dirB)
+}
+
+// TestDirAdoptsAPathKeyedStore covers the upgrade: records an older binary wrote under
+// the checkout-path key are still there after the key becomes the remote.
+func TestDirAdoptsAPathKeyedStore(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	root := gitClone(t, "git@github.com:egladman/magus.git")
+
+	legacy := repoid.LegacyDir(state, "memory", root)
+	require.NoError(t, os.MkdirAll(filepath.Join(legacy, recordsSubdir), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacy, recordsSubdir, "kept.md"), []byte("---\nname: kept\ntype: pointer\nrefs: []\ncreated: 1\n---\n"), 0o644))
+
+	dir, err := Dir(root)
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(dir, recordsSubdir, "kept.md"))
+	assert.NoDirExists(t, legacy)
+}
+
+// gitClone writes a plain checkout whose origin is url, so Dir keys on a remote rather
+// than falling back to the temp path.
+func gitClone(t *testing.T, url string) string {
+	t.Helper()
+	root := t.TempDir()
+	git := filepath.Join(root, ".git")
+	require.NoError(t, os.MkdirAll(git, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(git, "config"), []byte("[remote \"origin\"]\n\turl = "+url+"\n"), 0o644))
+	return root
 }
 
 func TestDirIsOutsideRepoAndStable(t *testing.T) {

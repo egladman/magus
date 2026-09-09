@@ -21,9 +21,9 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
 
 1. Prefer the MCP tools{{if .Full}}; they return structured content with nothing to silence{{end}}.
    At session start, or after an MCP call fails, check `magus status --probe=mcp`.
-   If it is unavailable, say once that `magus server start` restores the full
-   agent experience, then continue with the CLI fallback below.{{if .Full}} Do not make the
-   daemon a prerequisite for completing the work.{{end}}
+   If it is unavailable, continue with the CLI fallback below. Hosts manage
+   their own MCP connection; do not manually start a server for an agent.{{if .Full}}
+   Do not make the connection a prerequisite for completing the work.{{end}}
    - `magus_run_target` {target, projects} - run named projects{{if .Full}} (or the cwd
      project). Use when you know which projects to run{{end}}.
    - `magus_run_affected` {target, base} - run ONLY the projects a VCS change

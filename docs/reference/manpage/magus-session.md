@@ -80,6 +80,20 @@ still working stays listed however long ago it began.
 **--transcript** *string*
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
 
+### session checkpoint options
+
+**--agent-name** *string*
+: Name of the agent host this session ran on, when one did (attribution only)
+
+**--note** *string*
+: A sentence on where the work stands
+
+**--session** *string*
+: The host's own session id for this session
+
+**--transcript** *string*
+: Path to the host's own log of this session, recorded as a pointer; magus never opens it
+
 ### session notify options
 
 **--desktop**
@@ -101,6 +115,9 @@ still working stays listed however long ago it began.
 
 **hook**
 : Evaluate one shell command or file path against the magus guard rules
+
+**checkpoint**
+: Record where the work stands, so it can be picked up later
 
 **notify**
 : Normalize an attention event and optionally notify the local desktop

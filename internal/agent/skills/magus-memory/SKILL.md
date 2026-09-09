@@ -1,11 +1,11 @@
-# Handoff journal
+# Repository memory
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
-handoff journal.{{if .Full}} It lives outside the repo, is shared by its worktrees, and is
+memory.{{if .Full}} It lives outside the repo, is shared by its worktrees, and is
 visible in the console.{{end}} It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
 
-The graph remains the source of truth.{{if .Full}} A journal entry links back to the query,
+The graph remains the source of truth.{{if .Full}} An entry links back to the query,
 node, output, command, or document that a later reader should reopen.{{end}}
 
 Ref kinds (the closed set a ref may point at):
@@ -38,8 +38,8 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Read and write deliberately
 
-- At a handoff or session start, use `magus_memory` `{op: "list"}` or
-  `magus memory ls`.{{if .Full}} Empty is normal; do not manufacture journal entries.{{end}}
+- When picking work up, use `magus_memory` `{op: "list"}` or
+  `magus memory ls`.{{if .Full}} Empty is normal; do not manufacture entries.{{end}}
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to
@@ -95,4 +95,4 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Records live outside the repo, keyed by repository identity.{{if .Full}} The console,
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one
-  session erase another's handoff.{{else}} Console, CLI and MCP all show the same entries.{{end}}
+  session erase another's entry.{{else}} Console, CLI and MCP all show the same entries.{{end}}

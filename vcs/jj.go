@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/types"
 )
@@ -17,6 +18,10 @@ type jjVCS struct{}
 func (v jjVCS) Name() string     { return "jj" }
 func (v jjVCS) Claims() []string { return []string{".jj"} }
 func (v jjVCS) Base() string     { return "trunk()" }
+
+// ReviewCommand diffs @ against its parent. jj has no staging step at all, its working
+// copy being the change, so there is nothing to record before reading it back.
+func (v jjVCS) ReviewCommand() string { return "jj diff --stat" }
 
 // ParentRef is the first parent of the working-copy commit. jj's working copy is
 // itself a commit, so the interesting comparison is against @-, not @.
@@ -736,4 +741,36 @@ func (v jjVCS) AbortMerge(ctx context.Context, root string) error {
 		return fmt.Errorf("jj abandon @: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// Preserve returns the working-copy commit id, because jj has already done the work.
+//
+// jj snapshots the working copy on every command and tracks files automatically, so what
+// git calls untracked is already inside @ (verified 2026-09-08: an unknown file appears in
+// `jj diff` with no action taken). Nothing for magus to mint, and this reads and writes
+// nothing, so the no-cost invariant holds trivially.
+func (v jjVCS) Preserve(ctx context.Context, dir string) (string, error) {
+	dirty, err := v.Dirty(ctx, dir, nil)
+	if err != nil {
+		return "", fmt.Errorf("jj preserve: %w", err)
+	}
+	if !dirty {
+		return "", nil
+	}
+	cmd := vcsExec(ctx, "jj", "log", "-r", "@", "--no-graph", "-T", "commit_id")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("jj preserve: log: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// PrunePreserved drops nothing, because Preserve minted nothing.
+//
+// The handle is @'s own commit id, kept in jj's operation log and expired on jj's own
+// schedule; deleting from there would discard the working-copy history the backend
+// maintains for its undo.
+func (v jjVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
+	return nil, nil
 }

@@ -73,7 +73,7 @@ func nodeByID(out types.KnowledgeGraphOutput, id string) (types.KnowledgeNode, b
 	return types.KnowledgeNode{}, false
 }
 
-func hasEdge(out types.KnowledgeGraphOutput, source, target, relation string) bool {
+func hasEdge(out types.KnowledgeGraphOutput, source, target string, relation types.RelationID) bool {
 	for _, e := range out.Links {
 		if e.Source == source && e.Target == target && e.Relation == relation {
 			return true
@@ -83,7 +83,7 @@ func hasEdge(out types.KnowledgeGraphOutput, source, target, relation string) bo
 }
 
 // findEdge returns the edge matching (source, target, relation), or ok=false.
-func findEdge(out types.KnowledgeGraphOutput, source, target, relation string) (types.KnowledgeEdge, bool) {
+func findEdge(out types.KnowledgeGraphOutput, source, target string, relation types.RelationID) (types.KnowledgeEdge, bool) {
 	for _, e := range out.Links {
 		if e.Source == source && e.Target == target && e.Relation == relation {
 			return e, true
@@ -505,4 +505,157 @@ func TestContainsChainRefusesEscape(t *testing.T) {
 		assert.True(t, workspaceContainsPath(n.Source), "minted dir %q stays inside the workspace", n.Source)
 	}
 	assert.NotEmpty(t, edges)
+}
+
+// fullInputs is sampleInputs plus every assembly input it deliberately omits, over a
+// real workspace on disk. It exists for the two vocabulary tests below and nothing else:
+// sampleInputs stays minimal because every other test in this file asserts against
+// exactly what it produces, and a Root alone switches on the docs and buzz extractors
+// under all of them.
+//
+// Each addition here is the smallest thing that makes one declared relation reachable.
+// The comments say which, because otherwise the next person trimming this fixture cannot
+// tell the load-bearing parts from the scenery.
+func fullInputs(t *testing.T) Inputs {
+	t.Helper()
+	in := sampleInputs()
+	root := t.TempDir()
+	in.Root = root
+
+	write := func(rel, body string) {
+		full := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
+		require.NoError(t, os.WriteFile(full, []byte(body), 0o644))
+	}
+
+	// A Buzz source under pkg/a gives the file node the rest of the fixture hangs off, and
+	// carries three relations itself: rationale_for (the WHY marker), imports (the import
+	// line), and calls (helper, reached from build's body).
+	write("pkg/a/magusfile.buzz", `import "std";
+
+// WHY: b generates what a compiles against, so a builds second.
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    helper();
+}
+
+fun helper() > void {
+}
+`)
+	// documents: a spell page under a "spells" segment, stemmed to a spell the registry
+	// knows (see spellFromPath).
+	write("docs/spells/go.md", "# go\n\nThe go spell.\n")
+	// owns: CODEOWNERS is read from the root and matched against the path-bearing nodes.
+	write("CODEOWNERS", "pkg/a @platform\n")
+
+	// produces and consumes: both resolve a target's declared globs against the file and
+	// doc nodes already minted, so each glob here names a path written above.
+	in.Graph.Projects[0].Nodes[0].WritesFiles = []types.OutputRef{{Glob: "../../docs/spells/go.md"}}
+	in.Graph.Projects[0].Nodes[0].ReadsFiles = []types.InputRef{{Project: "pkg/a", Glob: "magusfile.buzz"}}
+
+	// defines and calls, from a SCIP index rather than the Buzz walk: the two relations
+	// have producers on both sides, and this is the one a foreign indexer drives.
+	in.Symbols = map[string][]types.KnowledgeSymbol{"pkg/a": {
+		{Key: "go/pkg-a/Build", Label: "Build", Language: "go", SymbolKind: "function",
+			Source: "pkg/a/build.go:10", Defs: []string{"pkg/a/build.go"},
+			Calls: []types.KnowledgeSymbolCall{{Key: "go/pkg-a/helper", Count: 1}}},
+		{Key: "go/pkg-a/helper", Label: "helper", Language: "go", SymbolKind: "function",
+			Source: "pkg/a/build.go:20", Defs: []string{"pkg/a/build.go"}},
+	}}
+	// depends_on, in its project -> package shape, which no other input produces.
+	in.Packages = map[string][]types.KnowledgePackage{"pkg/a": {
+		{Manager: "go", Name: "github.com/example/dep", Version: "v1.2.3"},
+	}}
+	// authored: history folds onto the buzz file node, and the author nodes and edges are
+	// gated on VCSAuthorship.
+	in.VCS = []types.KnowledgeVCS{{
+		Path: "pkg/a/magusfile.buzz", LastCommit: "abc123", LastAuthor: "dev",
+		Authors: []string{"dev"}, Commits: 2,
+	}}
+	in.VCSAuthorship = true
+	// emits: a diagnostic observed in run history, which is the only producer of the edge.
+	in.Runtime = []types.DiagnosticEvent{{Code: types.SandboxPolicyMismatch, Unit: "pkg/a:build"}}
+	// annotates: anchored to a project, which knownNodeIDs always contains. An anchor the
+	// graph does not model is dropped rather than made into an edge, so an unknown one
+	// would fail the coverage assertion for a reason that is not about the vocabulary.
+	in.Notes = []types.KnowledgeNote{{
+		Name: "why-pkg-a", Title: "Why pkg/a exists", Path: "notes/why-pkg-a.md",
+		Anchors: []string{"project:pkg/a"},
+	}}
+	return in
+}
+
+// TestAssembledEdgesAreAllDeclared is the enforcement point for the closed relation
+// vocabulary. types.KnowledgeRelationDefinitions declares which endpoint kinds each
+// predicate may connect; nothing checks that at write time, because shards load lazily
+// and an edge can arrive before the node that gives its endpoint a kind.
+//
+// So the check lives here, over a fully assembled graph. A producer that starts emitting
+// a shape nobody declared fails at this line, which is the moment worth catching: the
+// vocabulary is closed precisely so widening it is a decision someone makes on purpose
+// rather than a side effect of a new extractor.
+func TestAssembledEdgesAreAllDeclared(t *testing.T) {
+	g := mergeAll(AssembleShards(fullInputs(t)))
+
+	undeclared := g.UndeclaredEdges()
+
+	for _, e := range undeclared {
+		source, _ := g.node(e.Source)
+		target, _ := g.node(e.Target)
+		t.Errorf("undeclared edge shape: %s(%s) --%s--> %s(%s); declare it in types.KnowledgeRelationDefinitions or stop emitting it",
+			e.Source, source.Kind, e.Relation, e.Target, target.Kind)
+	}
+}
+
+// TestEveryDeclaredRelationIsExercised is what makes the check above worth anything. It
+// reads only the shapes the fixture happens to produce, so a declared relation nothing
+// emits is a vocabulary entry no test has ever seen - and the two that were missing when
+// this was written, annotates and rationale_for, are exactly the two whose inputs the
+// fixture did not supply.
+//
+// A relation that genuinely cannot be produced from an assembly input does not belong in
+// the vocabulary, so there is no exemption list here on purpose: the way to satisfy this
+// is to feed the extractor, or to stop declaring the relation.
+func TestEveryDeclaredRelationIsExercised(t *testing.T) {
+	g := mergeAll(AssembleShards(fullInputs(t)))
+
+	seen := make(map[types.RelationID]bool)
+	for _, e := range g.Edges() {
+		seen[e.Relation] = true
+	}
+
+	for _, d := range types.KnowledgeRelationDefinitions() {
+		assert.Truef(t, seen[d.ID], "no assembly input produces %s, so nothing checks its declared shapes", d.ID)
+	}
+}
+
+// A relation nobody declared permits no shape at all: the set is closed, so an unknown
+// predicate is rejected rather than waved through for lack of a rule to break.
+func TestUndeclaredRelationPermitsNothing(t *testing.T) {
+	assert.False(t, types.KnowledgeRelationAllows("teleports_to", types.KindProject, types.KindTarget))
+	assert.True(t, types.KnowledgeRelationAllows(types.RelationContains, types.KindProject, types.KindTarget))
+	assert.False(t, types.KnowledgeRelationAllows(types.RelationContains, types.KindTarget, types.KindProject),
+		"contains is directed; the reverse shape is not declared")
+}
+
+// An edge whose endpoints are not both present is unknown, not wrong. Reporting it here
+// would turn a dangling-reference question into a vocabulary one.
+func TestUndeclaredEdgesSkipsADanglingEdge(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "project:a", Kind: types.KindProject})
+	g.AddEdge(types.KnowledgeEdge{
+		Source: "project:a", Target: "project:gone", Relation: types.RelationDependsOn,
+		Confidence: types.ConfidenceExtracted, Score: 1,
+	})
+
+	assert.Empty(t, g.UndeclaredEdges())
+}
+
+// The export carries the vocabulary it was built against, so a consumer meeting an
+// unfamiliar predicate can resolve it without a matching binary.
+func TestOutputCarriesTheRelationVocabulary(t *testing.T) {
+	out := mergeAll(AssembleShards(sampleInputs())).Output()
+
+	assert.Equal(t, types.KnowledgeRelationDefinitions(), out.Relations)
+	assert.Equal(t, types.KnowledgeRelationFingerprint(), out.RelationFingerprint)
+	assert.NotEmpty(t, out.RelationFingerprint)
 }

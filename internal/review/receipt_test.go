@@ -40,7 +40,17 @@ func TestReceiptCarriesNoIdentity(t *testing.T) {
 	for i := range ct.NumField() {
 		checkpoint = append(checkpoint, ct.Field(i).Name)
 	}
-	assert.Equal(t, []string{"Revision", "Branch", "Dirty", "PatchDigest", "VCS"}, checkpoint,
+	// UntrackedDigest joined the struct on 2026-09-08 and is admitted on the same test the
+	// rest pass: it is a hash of paths and content, so it answers "which tree" and cannot
+	// answer "whose". A field that named an author would fail here, which is the point.
+	//
+	// Preserved is admitted on the same ground and is worth arguing separately, because it
+	// is the one field a checkpoint MINTS rather than reads. It is a backend-native handle
+	// to a captured tree - a commit id, a shelf name - so it identifies CONTENT. The commit
+	// object behind a git handle does carry an author, but that is the repository's own
+	// identity in the repository's own store, which every commit already carries and this
+	// package neither adds to nor publishes. What lands in a receipt is the handle.
+	assert.Equal(t, []string{"Revision", "Branch", "Dirty", "PatchDigest", "UntrackedDigest", "VCS", "Preserved"}, checkpoint,
 		"a receipt embeds this: it must keep naming a revision and never a person")
 }
 

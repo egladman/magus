@@ -42,8 +42,6 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -57,6 +55,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/repoid"
 )
 
 // SchemaVersion stamps every record written by this build. It exists so a reader
@@ -147,45 +146,21 @@ const fileExt = ".jsonl"
 // <XDG state>/magus/sessions/<repo-basename>-<hash12>.
 //
 // The hash keys on repository IDENTITY rather than the checkout path, which is the
-// whole point: every git worktree of one repo resolves to the same directory, so a
-// session started in one worktree is visible from another. This mirrors
-// internal/memory.Dir, deliberately - both answer "state that belongs to the repo,
-// not to the checkout", and they must not drift into disagreeing about what a repo
-// is.
+// whole point: every worktree AND every clone of one repo resolves to the same
+// directory, so a session started in one is visible from another. Both this and
+// internal/memory.Dir key through repoid, deliberately - they answer "state that
+// belongs to the repo, not to the checkout", and must not drift into disagreeing
+// about what a repo is.
 func Dir(root string) (string, error) {
 	base, err := config.UserStateDir()
 	if err != nil {
 		return "", fmt.Errorf("sessions: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
 	}
-	id := repoIdentity(root)
-	sum := sha256.Sum256([]byte(id))
-	return filepath.Join(base, "magus", "sessions", filepath.Base(id)+"-"+hex.EncodeToString(sum[:])[:12]), nil
-}
-
-// repoIdentity returns the path identifying the repository behind root. A linked
-// worktree's .git is a FILE holding "gitdir: <main>/.git/worktrees/<n>"; resolving
-// it back to <main> is what makes worktrees share one store. Anything else (a plain
-// checkout, or no git at all) identifies as root itself.
-//
-// Duplicated from internal/memory rather than shared: the original is unexported
-// there, and lifting it into a common package would move a decision that belongs to
-// each store into a place neither owns. If a third copy appears, extract it then.
-func repoIdentity(root string) string {
-	b, err := os.ReadFile(filepath.Join(root, ".git"))
+	dir, err := repoid.StateDir(base, "sessions", root)
 	if err != nil {
-		return root
+		return "", fmt.Errorf("sessions: %w", err)
 	}
-	gitdir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
-	if gitdir == "" {
-		return root
-	}
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(root, gitdir)
-	}
-	if i := strings.Index(filepath.ToSlash(gitdir), "/.git/worktrees/"); i >= 0 {
-		return filepath.Clean(gitdir[:i])
-	}
-	return filepath.Clean(gitdir)
+	return dir, nil
 }
 
 // Writer appends facts for one session. It is safe for concurrent use.

@@ -24,6 +24,14 @@ type VCSDriver interface {
 	// ref that builds itself, where Base - that ref's own tip - would compare a
 	// commit against itself and report nothing affected.
 	ParentRef() string
+	// ReviewCommand names this backend's command for summarizing what is about to be
+	// committed. magus prints it after recording paths, so the reader can check the
+	// record before it becomes a commit.
+	//
+	// Constant per backend, like Base and ParentRef, since the question takes no
+	// argument. The spellings do not interchange: git reads its INDEX, hg and Sapling
+	// diff the working copy against its parent, and jj has no staging area at all.
+	ReviewCommand() string
 	// Root, ChangedFiles, and Metadata operate on the repository containing dir. An empty
 	// dir uses the process working directory. Passing an explicit dir is required
 	// for correctness when work runs concurrently, since the process cwd is global.
@@ -31,6 +39,36 @@ type VCSDriver interface {
 	ChangedFiles(ctx context.Context, dir, base string) ([]string, error)
 	Bisect(ctx context.Context, dir string, opts BisectOptions) (Culprit, error)
 	DiffCommands(ctx context.Context, dir, base string) (DiffCommandHints, error)
+	// Preserve captures the working copy's uncommitted state, TRACKED changes and
+	// UNTRACKED files alike, and returns a backend-native handle for it. A clean tree
+	// returns "" and no error.
+	//
+	// Capturing must not COST state: when Preserve returns, every file on disk is
+	// byte-for-byte what it was and the backend still reports the same paths as modified
+	// and unknown. An implementation that cannot hold that returns an error instead of a
+	// handle, since a caller cannot tell a lossy capture from a lossless one.
+	//
+	// The handle is OPAQUE: each backend returns its own kind of name, only that backend
+	// resolves it, and nothing here reads one back.
+	//
+	// A handle stays resolvable until it outlives the retention PrunePreserved enforces,
+	// on every backend whose PrunePreserved can enforce one. Sapling's cannot, so its
+	// captures accumulate.
+	Preserve(ctx context.Context, dir string) (string, error)
+	// PrunePreserved drops every state Preserve minted in dir before the given time,
+	// and reports the handles it dropped, oldest first.
+	//
+	// An implementation deletes only what it can PROVE Preserve minted, which is the
+	// message Preserve left on the object and never a name in a namespace magus owns: a
+	// user can land on a magus-shaped shelf name without trying, and anyone can write
+	// into a magus ref prefix. This runs unasked inside every Preserve AND on a schedule
+	// the user never typed, so the cost of guessing wrong is a user's only copy of their
+	// work.
+	//
+	// Returning no handles means one of two things. A backend that mints nothing has
+	// nothing to drop. A backend that mints something it cannot remove has a GAP, and
+	// its implementation says so where a reader will meet it.
+	PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error)
 	Metadata(ctx context.Context, dir string) (VCSMeta, error)
 	// Dirty reports whether the working tree has uncommitted changes. When paths
 	// is non-empty the probe is scoped to those pathspecs (interpreted relative to
@@ -865,14 +903,29 @@ type VCSCheckpoint struct {
 	// PatchDigest fingerprints the uncommitted patch, empty when the tree is clean.
 	//
 	// It covers exactly what the backend's DirtyDiff covers, which is TRACKED content
-	// against the checked-out revision. Untracked files make Dirty true and leave no
-	// mark here, so two trees differing only in untracked files share a digest. Stated
-	// rather than papered over: a digest that silently changed with build residue would
-	// answer "did we see the same tree" wrong in the commoner direction.
+	// against the checked-out revision. Untracked files are UntrackedDigest's subject:
+	// this digest matches internal/diff.PatchDigest byte for byte, so a checkpoint and a
+	// review session over one tree produce the same string, and folding anything else in
+	// would break that.
 	PatchDigest string `json:"patch_digest,omitempty" yaml:"patch_digest,omitempty"`
+	// UntrackedDigest fingerprints the untracked files' paths AND content, empty when
+	// there are none.
+	//
+	// Untracked files sit in no commit, so they are the work a whole-tree revert destroys
+	// irrecoverably, and a checkpoint blind to them answers "same tree?" wrong in the
+	// direction that costs most. Content and not only paths, because an edit to an
+	// untracked file is invisible in a path-only fingerprint.
+	UntrackedDigest string `json:"untracked_digest,omitempty" yaml:"untracked_digest,omitempty"`
 	// VCS is the resolved backend name (git, hg, jj), so a reader knows whose revision
 	// syntax Revision is written in.
 	VCS string `json:"vcs,omitempty" yaml:"vcs,omitempty"`
+	// Preserved is the handle to a capture of the uncommitted work, empty unless one was
+	// asked for and the tree was dirty.
+	//
+	// The only field a checkpoint MINTS: the digests say whether two trees match, this
+	// one gets a tree back. Opaque and backend-native (see VCSDriver.Preserve), so only
+	// the backend VCS names can read it.
+	Preserved string `json:"preserved,omitempty" yaml:"preserved,omitempty"`
 }
 
 // DriftResultRecord is the boundary mirror cmd/magus-utils types reflects over; see

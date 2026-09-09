@@ -517,6 +517,10 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 	if len(names) == 0 {
 		return nil
 	}
+	// Everything below is time the CALLING body spends on targets other than itself, and
+	// its ceiling is running throughout. Recorded so a ceiling that expires can say which
+	// half of the elapsed time was its own work; see types.TrackDependencyWait.
+	defer func(started time.Time) { types.AddDependencyWait(callCtx, time.Since(started)) }(time.Now())
 	// These are dependencies (ctx.needs), so a service op among them is supervised
 	// in the background rather than blocked on (see runCommand). The directly-run
 	// target is dispatched without this marker, so it still foregrounds.
@@ -558,7 +562,25 @@ func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) erro
 	ancestors := buzz.AncestorsFromContext(ctx)
 	return proc.RunChildSync(ctx, lim, func() error {
 		childCtx := cache.WithoutSlotHeld(ctx)
-		return p.Dispatch(childCtx, names, ancestors)
+		if !buzz.HasTargetInterceptor(ctx) {
+			return p.Dispatch(childCtx, names, ancestors)
+		}
+		// Pool.Dispatch may fan names out concurrently. Yield once around that whole
+		// fan-out rather than once per intercepted target: the caller owns one
+		// isolation lease, and only its dispatcher may release it.
+		//
+		// INSIDE the slot yield, not around it. Two locks are released here - the
+		// limiter slot and the isolation lease - and releasing them in one order
+		// while re-acquiring them in the other is a lock-order inversion. Held the
+		// other way round it deadlocks at saturated concurrency: an exclusive step
+		// holding the isolation write lock waits for a slot, while this dispatcher
+		// holds a slot and waits to re-read the isolation lock behind it. Neither
+		// re-acquisition is cancellable - Limiter.Yield restores under
+		// context.WithoutCancel and sync.RWMutex takes no context - so Ctrl-C cannot
+		// break the cycle. Nested this way the two are strictly LIFO.
+		return cache.YieldRunIsolation(childCtx, func(c context.Context) error {
+			return p.Dispatch(c, names, ancestors)
+		})
 	})
 }
 

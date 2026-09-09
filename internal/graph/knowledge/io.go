@@ -40,7 +40,7 @@ func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]strin
 	// pattern matches. provenance attributes the edge to the consuming/producing
 	// project. Shared by outputs (project-relative globs joined to the project path
 	// first) and inputs (each already workspace-relative via its owning project).
-	linkPat := func(targetNode, provenance, relation string, pats []string) {
+	linkPat := func(targetNode, provenance string, relation types.RelationID, pats []string) {
 		for _, pat := range pats {
 			var matched []string
 			for _, p := range paths {

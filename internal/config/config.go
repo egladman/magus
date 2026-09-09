@@ -387,7 +387,16 @@ type Maintenance struct {
 	// keep one, so a hook-fed trail would be bounded by nothing at all.
 	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 1h (its only bound)
 	RotateLogs       time.Duration `json:"rotate_logs" yaml:"rotate_logs"`             // trim the run-log journals; default 7d (their only bound, so weekly)
-	SyncGraph        time.Duration `json:"sync_graph" yaml:"sync_graph"`               // reconcile the graph; default 6h (a safety net behind the VCS hook)
+	// PrunePreserved drops the working-copy captures `vcs checkpoint --preserve` minted
+	// once they outlive the thirty days that flag promises.
+	//
+	// Preserve prunes on its own call too, but only a repository preserved a SECOND time
+	// ever reaches that pass, so this is what makes the promise true for one preserved
+	// once. Daily, because the window it enforces is thirty days: a capture surviving an
+	// extra day costs nothing, and the pass is one listing on a repository that has never
+	// preserved anything.
+	PrunePreserved time.Duration `json:"prune_preserved" yaml:"prune_preserved"`
+	SyncGraph      time.Duration `json:"sync_graph" yaml:"sync_graph"` // reconcile the graph; default 6h (a safety net behind the VCS hook)
 	// CheckReview notices a merge or a new remark on a review this tree took part in. The only
 	// scheduled job that leaves the machine, so its default is the longest here: a pull request
 	// merges once, and a remark waiting fifteen minutes costs nobody anything.
@@ -629,6 +638,7 @@ func Defaults() Config {
 			Maintenance: Maintenance{
 				RotateActivities: time.Hour,          // the trail's only bound; cheap to run often (one stat when small)
 				RotateLogs:       7 * 24 * time.Hour, // run-logs have no other bound, so trim weekly
+				PrunePreserved:   24 * time.Hour,     // enforces a thirty-day window; a day's lag costs nothing
 				SyncGraph:        6 * time.Hour,      // safety net behind the VCS refresh hook
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},

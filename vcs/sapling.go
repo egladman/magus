@@ -50,6 +50,10 @@ func (v saplingVCS) Claims() []string { return []string{".sl"} }
 // newest locally, which after any commit of your own is your own.
 func (v saplingVCS) Base() string { return "remote/main" }
 
+// ReviewCommand diffs against the parent, for the same reason as Mercurial's: Sapling
+// has no index either.
+func (v saplingVCS) ReviewCommand() string { return "sl diff --stat" }
+
 // ParentRef is the first parent of the working copy, in Sapling's Mercurial-inherited
 // revset syntax.
 func (v saplingVCS) ParentRef() string { return "p1(.)" }
@@ -1013,4 +1017,73 @@ func (v saplingVCS) AbortMerge(ctx context.Context, root string) error {
 		return fmt.Errorf("sl goto --clean: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// Preserve commits the working copy and unwinds the commit.
+//
+// Sapling has no --keep on shelve (measured: -k is rejected and absent from its help), and
+// `sl undo` cannot undo uncommitted working-copy changes, so something has to be minted. A
+// commit is the native shape: no staging area, cheap commits, history unwound by uncommit.
+//
+// commit RECORDS and does not remove, so every file stays on disk and no content is ever
+// at risk. What storing costs is working-copy STATE: unknown files come back added and
+// missing files come back scheduled for removal, so both are read first and put back after.
+//
+// Between the commit and the uncommit the working copy is parked on the snapshot and
+// reports clean; a crash there leaves the work committed under a magus message rather than
+// lost, which the error below says.
+func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
+	dirty, err := v.Dirty(ctx, dir, nil)
+	if err != nil {
+		return "", fmt.Errorf("sl preserve: %w", err)
+	}
+	if !dirty {
+		return "", nil
+	}
+	pending, err := hgFamilyReadPending(ctx, "sl", dir)
+	if err != nil {
+		return "", fmt.Errorf("sl preserve: %w", err)
+	}
+	run := func(args ...string) (string, error) {
+		cmd := vcsExec(ctx, "sl", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	if out, err := run("commit", "--addremove", "-m", preserveMessage); err != nil {
+		return "", fmt.Errorf("sl preserve: commit: %w: %s", err, out)
+	}
+	sha, err := run("log", "-r", ".", "--template", "{node}")
+	if err != nil {
+		return "", fmt.Errorf("sl preserve: log: %w", err)
+	}
+	if out, err := run("uncommit"); err != nil {
+		return sha, fmt.Errorf("sl preserve: recorded %s but uncommit failed, so the working copy is parked on it: %w: %s", sha, err, out)
+	}
+	if err := hgFamilyRestorePending(ctx, "sl", pending); err != nil {
+		return sha, fmt.Errorf("sl preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
+			sha, pending.unknown, pending.missing, err)
+	}
+	return sha, nil
+}
+
+// PrunePreserved drops nothing, which on this backend is a GAP rather than a property.
+// Preserve MINTS here: the uncommit leaves the snapshot in Sapling's hidden set, so one
+// commit accumulates per capture and no retention ever ends it. sl captures are permanent,
+// and the CLI says so rather than implying the 30-day bound holds everywhere.
+//
+// Nothing available closes the gap. `sl debugstrip` is the only command that removes a
+// commit; the shipped binary crashes it on an "assert util.istest()" outside Sapling's own
+// test mode (measured 2026-09-09 on 0.2.20260811-150444), and its help says it aborts on a
+// dirty working copy unless forced, with forcing DISCARDING the changes that are the only
+// state Preserve runs in.
+//
+// The commits stay reachable by their message:
+//
+//	sl log --hidden -r "desc('magus preserved working copy')"
+//
+// Revisit when Sapling ships a non-debug command that drops a hidden commit without
+// touching the working copy; the check is that the log above comes back empty after it.
+func (v saplingVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
+	return nil, nil
 }

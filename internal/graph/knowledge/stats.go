@@ -226,7 +226,7 @@ func (g *Graph) docCoverage(kind string) []types.KnowledgeDocCoverage {
 	return out
 }
 
-func (g *Graph) hasInRel(id, rel string) bool {
+func (g *Graph) hasInRel(id string, rel types.RelationID) bool {
 	for _, e := range g.in[id] {
 		if e.Relation == rel {
 			return true

@@ -1,7 +1,9 @@
 package types
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,4 +142,41 @@ func TestValidateCharmName(t *testing.T) {
 	for _, n := range []string{"", "read:write", "a b", "fast@v2"} {
 		assert.Errorf(t, ValidateCharmName(n), "ValidateCharmName(%q) should error", n)
 	}
+}
+
+// expiredCeiling is a context already past its deadline, which is the only state
+// CeilingExceededError reports on.
+func expiredCeiling(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithDeadline(TrackDependencyWait(context.Background()), time.Now().Add(-time.Second))
+	t.Cleanup(cancel)
+	return ctx
+}
+
+// The split is the whole point of the message: elapsed time alone reads as "this target is
+// slow", which is wrong exactly when it matters most, for a target queued behind a
+// serialization upstream while doing seconds of its own work.
+func TestCeilingExceededErrorSplitsWaitingFromOwnWork(t *testing.T) {
+	ctx := expiredCeiling(t)
+	AddDependencyWait(ctx, 14*time.Minute)
+
+	err := CeilingExceededError(ctx, nil, "ci", 15*time.Minute, 15*time.Minute+52*time.Second)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `target "ci" exceeded its declared timeout of 15m0s after 15m52s`)
+	assert.Contains(t, err.Error(), "14m0s of it on the targets it composes and 1m52s on its own work")
+}
+
+// A leaf target composes nothing, so there is no split to report and the clause is omitted
+// rather than printed as a pair of zeroes.
+//
+// Asserted as one contiguous span, not as NotContains on the clause's wording: a negative
+// assertion on emitted prose goes vacuous the moment that prose is reworded, and this has to
+// fail whatever a wrongly-emitted split would have said.
+func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
+	err := CeilingExceededError(expiredCeiling(t), nil, "build", time.Minute, 90*time.Second)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(),
+		`target "build" exceeded its declared timeout of 1m0s after 1m30s; its process tree was killed`)
 }

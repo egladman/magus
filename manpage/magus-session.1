@@ -72,6 +72,21 @@ The host's own session id for this invocation
 \fB\-\-transcript\fR \fIstring\fR
 Path to the host's own log of this session, recorded as a pointer; magus never opens it
 .RE
+.SS session checkpoint options
+.RS
+.TP
+\fB\-\-agent\-name\fR \fIstring\fR
+Name of the agent host this session ran on, when one did (attribution only)
+.TP
+\fB\-\-note\fR \fIstring\fR
+A sentence on where the work stands
+.TP
+\fB\-\-session\fR \fIstring\fR
+The host's own session id for this session
+.TP
+\fB\-\-transcript\fR \fIstring\fR
+Path to the host's own log of this session, recorded as a pointer; magus never opens it
+.RE
 .SS session notify options
 .RS
 .TP
@@ -95,6 +110,9 @@ Close one open request by id or unambiguous id prefix
 .TP
 \fBhook\fR
 Evaluate one shell command or file path against the magus guard rules
+.TP
+\fBcheckpoint\fR
+Record where the work stands, so it can be picked up later
 .TP
 \fBnotify\fR
 Normalize an attention event and optionally notify the local desktop

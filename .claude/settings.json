@@ -31,6 +31,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

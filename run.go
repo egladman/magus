@@ -27,6 +27,7 @@ import (
 	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/observability"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
@@ -153,6 +154,7 @@ func (e redactedError) Unwrap() error { return e.err }
 // runResolved groups targets by name and executes them with already-applied
 // options. Shared by Run and the read-only RunCI entry point.
 func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
+	ctx = attributeRun(ctx)
 	type targetGroup struct {
 		name    string
 		targets []types.Target
@@ -361,6 +363,12 @@ type stage struct {
 	target   string
 	handler  TargetHandler
 	projects []*types.Project
+}
+
+type targetInterceptorFunc func(context.Context, string, func(context.Context) error) error
+
+func (f targetInterceptorFunc) InterceptTarget(ctx context.Context, name string, invoke func(context.Context) error) error {
+	return f(ctx, name, invoke)
 }
 
 // raceForcesNoCache reports whether o requires bypassing the cache so race
@@ -1383,6 +1391,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		svcSession.ReleaseAll(shutdownCtx)
 	}()
 	ctx = service.WithSession(ctx, svcSession)
+	// The pre-run composed gates and RunAll's batch steps share one isolation
+	// scope. A dynamically admitted needs child temporarily yields its parent's
+	// lease, so its own exclusive policy is enforced without holding the parent
+	// slot or lock across the child scheduler.
+	ctx = cache.WithRunScope(ctx)
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err
 	}
@@ -1404,6 +1417,38 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// completes, giving the reader a checklist of what ran in place of the wall.
 		if m.cache.Collapsing() {
 			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label})
+		}
+		if s.NoCache {
+			// An uncached composer still executes its body, so this is the runtime
+			// boundary at which a same-project ctx.needs target can become an
+			// independently admitted cache step. GopherBuzz resolves the actual
+			// branch and glob first, claims its TargetMemo, then delegates the
+			// already-memoed execution here.
+			spanCtx = buzz.WithTargetInterceptor(spanCtx, targetInterceptorFunc(func(memberCtx context.Context, name string, invoke func(context.Context) error) error {
+				member := newStep(p, name)
+				member.SkipReplay = opts.NoCache
+				if raceForcesNoCache(opts) {
+					member.NoCache = true
+				}
+				// A cache hit skips the member's body, so repair any skip_cache
+				// target it composes before replaying it. The helper asks whether
+				// the member is fresh first, so a miss still runs its chain once.
+				if !member.NoCache {
+					if err := m.runComposedSkipCacheGates(memberCtx, []cache.Step{member}, newStep, cacheOpts); err != nil {
+						return err
+					}
+				}
+				_, err := m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
+					if !member.NoCache {
+						// A cacheable member is now the lexical cache boundary: its
+						// own needs calls remain inline on a miss and do not acquire
+						// extra entries.
+						workerCtx = buzz.WithoutTargetInterceptor(workerCtx)
+					}
+					return invoke(workerCtx)
+				}, cacheOpts...)
+				return err
+			}))
 		}
 		var err error
 		if raceRT != nil {
@@ -2137,4 +2182,44 @@ func charmedTarget(target string, charms []string) string {
 		return target
 	}
 	return target + ":" + strings.Join(charms, ",")
+}
+
+// attributeRun gives a run an invocation identity when nothing upstream gave it one, so
+// the work it dispatches can recognize the resources this run already holds.
+//
+// The CLI's run and affected paths call BeginInvocation, which does this and opens the
+// event journal besides. Every other entry point reaches runResolved without either -
+// `magus x`, the MCP run and run_affected tools, and any embedder calling Run or
+// RunAffected directly - and an anonymous run is not merely unlogged. Ancestry is how a
+// descendant recognizes an ancestor's machine claim and its locks: with an empty
+// ancestors list, a cross-project dispatch takes a SECOND claim against memory the parent
+// already reserved, then queues behind the parent that is blocked waiting for it. That is
+// the deadlock measured on 2026-09-08, reachable from every entry point but the two the
+// CLI covers.
+//
+// Deliberately NOT a journal. The journal is the CLI's to own: it fans out live handlers
+// and session facts this has no way to reproduce, and it has a second half this shape
+// cannot carry at all, since a journal needs its finish, flush and close and all this
+// returns is a ctx. Identity is the half that is a correctness property rather than an
+// observability one.
+//
+// The consequence, and it is accepted: every non-CLI run carries an invocation id that
+// resolves to no journal file, while lock sidecars and machine claims record that id. A
+// reader who follows one there finds nothing, and the id is still doing its job, which is
+// to let a descendant recognize this run's claims.
+func attributeRun(ctx context.Context) context.Context {
+	if journal.InvocationIDFromContext(ctx) != "" {
+		return ctx
+	}
+	// Adopt the ancestry a parent magus passed down BEFORE appending self, the way
+	// cmd/magus/main.go does at its entry point. Appending self to an empty list leaves a
+	// one-element list that ancestorInvocations strips straight back to empty, and the
+	// fallbacks that read the environment fire only when ctx carries none
+	// (internal/cache/machinegate.go, lock.go): stamping first silences them and leaves
+	// the run blind to the very ancestor this identity exists to recognize.
+	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
+		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
+	}
+	id := journal.NewInvocationID()
+	return types.AppendInvocationAncestor(journal.WithInvocationID(ctx, id), os.Getpid(), id)
 }

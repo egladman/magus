@@ -299,7 +299,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
 	}
 	fmt.Println("\nedges by relation:")
-	for _, kv := range countBy(len(out.Links), func(i int) string { return out.Links[i].Relation }) {
+	for _, kv := range countBy(len(out.Links), func(i int) string { return string(out.Links[i].Relation) }) {
 		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
 	}
 	fmt.Println("\nRun with -o json (node-link) or -o graphml for the full graph.")

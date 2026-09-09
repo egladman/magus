@@ -1,8 +1,8 @@
 ---
 title: magus memory
 generated_from: internal/cli/registry.go
-description: "Manage the per-repository handoff journal that lives outside the checkout: named entries people and agents can read across sessions and worktrees."
-tags: [cli, magus memory, handoff, journal, agents]
+description: "Manage the per-repository memory that lives outside the checkout: named entries people and agents can read across sessions and worktrees."
+tags: [cli, magus memory, memory, decisions, agents]
 ---
 
 # magus-memory
@@ -15,7 +15,7 @@ Durable cross-session project memory
 
 ## Description
 
-Manage the per-repository handoff journal, which is stored outside the
+Manage the per-repository memory, which is stored outside the
 checkout so it survives worktrees and branch switches.
 
 Entries are visible to people and to agents across sessions. They are NOT

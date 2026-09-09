@@ -43,7 +43,7 @@ func memoryCmd(ctx context.Context, root string, args []string) error {
 func memoryUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus memory <subcommand> [flags]")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Manage the per-repository handoff journal outside the checkout. Entries are")
+	fmt.Fprintln(os.Stderr, "Manage this repository's memory, kept outside the checkout. Entries are")
 	fmt.Fprintln(os.Stderr, "visible to people and agents across sessions and worktrees; they are not")
 	fmt.Fprintln(os.Stderr, "automatic model memory.")
 	fmt.Fprintln(os.Stderr, "")
@@ -68,7 +68,7 @@ func memoryList(root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus memory ls [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "List handoff-journal entries. Warnings identify stale entries without hiding them.")
+			fmt.Fprintln(os.Stderr, "List memory entries. Warnings identify stale entries without hiding them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -103,7 +103,7 @@ func memoryList(root string, args []string) error {
 		return memoryIssuesError(issues)
 	}
 	if len(recs) == 0 {
-		fmt.Println("No handoff entries. Add an explicit decision or plan with `" + hint.MemoryPut.String() + "`.")
+		fmt.Println("No memory entries. Add an explicit decision or plan with `" + hint.MemoryPut.String() + "`.")
 	} else {
 		for _, rec := range recs {
 			status := rec.Status
@@ -121,7 +121,7 @@ func memoryGet(root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus memory get <name> [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Show one named handoff-journal entry.")
+			fmt.Fprintln(os.Stderr, "Show one named memory entry.")
 			fs.PrintDefaults()
 		}
 	})
@@ -170,7 +170,7 @@ func memoryPut(root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus memory put <name> --type <pointer|decision|plan|elimination> --ref 'kind: target' [--ref ...] [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Create a visible handoff entry. Use refs for things magus can re-open;")
+			fmt.Fprintln(os.Stderr, "Create a visible memory entry. Use refs for things magus can re-open;")
 			fmt.Fprintln(os.Stderr, "a pointer carries no prose, and every other type takes a short why in --body.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "On an entry that already exists this writes only the flags you pass; the rest")
@@ -221,7 +221,7 @@ func memoryPut(root string, args []string) error {
 	if opts.Format != outputText {
 		return emitFormatted(opts, rec)
 	}
-	fmt.Printf("Saved handoff entry %q. Verify it with `%s`.\n", rec.Name, hint.MemoryVerify)
+	fmt.Printf("Saved memory entry %q. Verify it with `%s`.\n", rec.Name, hint.MemoryVerify)
 	return nil
 }
 
@@ -230,7 +230,7 @@ func memoryDelete(root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus memory delete <name> [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Remove one handoff-journal entry. This is strict: a missing name is likely a typo.")
+			fmt.Fprintln(os.Stderr, "Remove one memory entry. This is strict: a missing name is likely a typo.")
 			fs.PrintDefaults()
 		}
 	})
@@ -256,7 +256,7 @@ func memoryDelete(root string, args []string) error {
 	if opts.Format != outputText {
 		return emitFormatted(opts, out)
 	}
-	fmt.Printf("Deleted handoff entry %q.\n", pos[0])
+	fmt.Printf("Deleted memory entry %q.\n", pos[0])
 	return nil
 }
 
@@ -311,7 +311,7 @@ func memoryVerify(ctx context.Context, root string, args []string) error {
 		return memoryIssuesError(report.Issues)
 	}
 	if len(report.Issues) == 0 {
-		fmt.Printf("[pass] handoff journal: %d entries verified\n", report.Records)
+		fmt.Printf("[pass] memory: %d entries verified\n", report.Records)
 		return nil
 	}
 	return printMemoryIssues(report.Issues)
@@ -375,7 +375,7 @@ func memoryIssuesError(issues []store.Issue) error {
 		}
 	}
 	if failures != 0 {
-		return fmt.Errorf("magus memory verify: %d invalid handoff entr%s", failures, pluralSuffix(failures, "y", "ies"))
+		return fmt.Errorf("magus memory verify: %d invalid memory entr%s", failures, pluralSuffix(failures, "y", "ies"))
 	}
 	return nil
 }

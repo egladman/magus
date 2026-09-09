@@ -1,0 +1,93 @@
+# `magus vcs checkpoint --preserve` is the deliberate INVERSE of the law
+# vcs_checkpoint.txtar holds: this one MINTS, and it is a flag for exactly that reason.
+#
+# Three things need asserting after the command, because none of them is visible in the
+# output. It captured ONE object per call and no more. It printed the handle that reaches
+# it, which is the only thing that makes the capture recoverable. And it did not touch the
+# working copy, tracked edit and untracked file alike.
+#
+# The fourth is the one that separates housekeeping from data loss. Preserve prunes on
+# every call, so a foreign object living under magus's own ref namespace has to survive
+# it: a namespace is not a signature, and a commit magus did not write is not magus's to
+# delete.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git config commit.gpgsign false
+exec git checkout -b main
+exec git add magus.yaml magusfile.buzz src/a.txt
+exec git commit -m initial
+
+# A ref under magus's namespace that magus did not write, dated well past the 30-day
+# retention window so a pruner keyed on age alone would take it on the first capture.
+env GIT_COMMITTER_DATE=2020-01-01T00:00:00Z
+env GIT_AUTHOR_DATE=2020-01-01T00:00:00Z
+exec git commit --allow-empty -m 'a snapshot someone else took'
+exec git update-ref refs/magus/preserved/0000000000000000000000000000000000000001 HEAD
+exec git reset --hard HEAD~1
+env GIT_COMMITTER_DATE=
+env GIT_AUTHOR_DATE=
+
+# The tree as a handoff finds it: one tracked edit, one untracked file.
+cp src/a.new.txt src/a.txt
+cp src/a.new.txt scratch.txt
+
+# Without the flag nothing is minted, so the namespace still holds only the planted ref.
+exec magus vcs checkpoint
+stdout '^[0-9a-f]{40} main dirty [0-9a-f]{32}$'
+exec git for-each-ref --format='%(refname) %(contents:subject)' refs/magus/preserved/
+! stdout 'magus preserved working copy'
+
+# With it, the handle is printed on the default line. Without that the two spellings of
+# the command are byte-identical while one of them left an object behind.
+exec magus vcs checkpoint --preserve
+stdout '^[0-9a-f]{40} main dirty [0-9a-f]{32} preserved [0-9a-f]{40}$'
+cp stdout first.txt
+
+# ONE capture per call, and the ref anchors it so gc cannot reap it.
+exec git for-each-ref --format='%(refname) %(contents:subject)' refs/magus/preserved/
+stdout -count=1 'magus preserved working copy'
+stdout -count=1 '^refs/magus/preserved/[0-9a-f]{40} magus preserved working copy$'
+
+# The working copy is untouched: still dirty, and the untracked file is still untracked
+# rather than swept into the index by the capture.
+exec git status --porcelain
+stdout '^ M src/a\.txt$'
+stdout '^\?\? scratch\.txt$'
+
+# -o json carries the same handle, since a caller scripting this reads the record.
+exec magus vcs checkpoint --preserve -o json
+stdout '"preserved": "[0-9a-f]{40}"'
+
+# Different content is a different capture, not a reuse of the first one.
+cp src/a.newer.txt src/a.txt
+exec magus vcs checkpoint --preserve
+! cmp stdout first.txt
+exec git for-each-ref --format='%(refname) %(contents:subject)' refs/magus/preserved/
+stdout -count=3 'magus preserved working copy'
+
+# THE LINE. Three prunes have run by now, one inside each capture, and the ref nobody
+# here wrote is still there.
+stdout -count=1 'a snapshot someone else took'
+
+-- magus.yaml --
+concurrency: 2
+-- .gitignore --
+.magus/
+.gitignore
+*.new.txt
+*.newer.txt
+first.txt
+-- magusfile.buzz --
+import "magus";
+magus\project({
+    "name": "acme-root",
+    "sources": ["magusfile.buzz", "src/**"],
+});
+-- src/a.txt --
+source one
+-- src/a.new.txt --
+source two
+-- src/a.newer.txt --
+source three

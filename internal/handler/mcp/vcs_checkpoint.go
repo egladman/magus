@@ -16,7 +16,9 @@ import (
 //
 // It takes no parameters. A checkpoint is about THIS workspace at THIS moment, and
 // there is nothing to narrow: a path would scope the dirtiness probe and quietly make
-// the digest mean something else.
+// the digest mean something else. It does not preserve either - `magus vcs checkpoint
+// --preserve` is where that lives, because minting an object in someone's repository is
+// a thing to ask for rather than a thing a read tool does on the way past.
 //
 // types.WorkspaceReader is the whole dependency - Root and VCSOptions - which is also
 // what makes it obviously read-only.
@@ -32,7 +34,7 @@ func (t *vcsCheckpointTool) Invoke(ctx context.Context, _ spells.InvokeRequest) 
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	cp, err := vcs.Checkpoint(ctx, root, res)
+	cp, err := vcs.Checkpoint(ctx, root, res, false)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}

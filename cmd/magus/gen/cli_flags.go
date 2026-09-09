@@ -73,6 +73,8 @@ const (
 	FlagAgentGlobal = "global"
 	// agent: --prune
 	FlagAgentPrune = "prune"
+	// agent: --skill-form
+	FlagAgentSkillForm = "skill-form"
 	// agent: --tar
 	FlagAgentTar = "tar"
 	// buzz: --C
@@ -357,6 +359,14 @@ const (
 	FlagServerStopServices = "services"
 	// server stop: --socket
 	FlagServerStopSocket = "socket"
+	// session checkpoint: --agent-name
+	FlagSessionCheckpointAgentName = "agent-name"
+	// session checkpoint: --note
+	FlagSessionCheckpointNote = "note"
+	// session checkpoint: --session
+	FlagSessionCheckpointSession = "session"
+	// session checkpoint: --transcript
+	FlagSessionCheckpointTranscript = "transcript"
 	// session dispose: --reason
 	FlagSessionDisposeReason = "reason"
 	// session hook: --agent-name
@@ -401,6 +411,8 @@ const (
 	FlagVCSAddReason = "reason"
 	// vcs add: --untracked
 	FlagVCSAddUntracked = "untracked"
+	// vcs checkpoint: --preserve
+	FlagVCSCheckpointPreserve = "preserve"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
 	// version: --client
@@ -922,6 +934,18 @@ func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	return &f
 }
 
+// VCSCheckpointFlags are the flags declared for `magus vcs checkpoint`.
+type VCSCheckpointFlags struct {
+	Preserve bool // --preserve
+}
+
+// BindVCSCheckpoint registers `magus vcs checkpoint`'s flags on fs and returns the destination.
+func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
+	var f VCSCheckpointFlags
+	fs.BoolVar(&f.Preserve, FlagVCSCheckpointPreserve, false, "Also capture the uncommitted work and print a handle that restores it")
+	return &f
+}
+
 // DoctorFlags are the flags declared for `magus doctor`.
 type DoctorFlags struct {
 	Probe bool // --probe
@@ -1117,6 +1141,24 @@ func BindSessionHook(fs *flag.FlagSet) *SessionHookFlags {
 	return &f
 }
 
+// SessionCheckpointFlags are the flags declared for `magus session checkpoint`.
+type SessionCheckpointFlags struct {
+	Note       string // --note
+	AgentName  string // --agent-name
+	Session    string // --session
+	Transcript string // --transcript
+}
+
+// BindSessionCheckpoint registers `magus session checkpoint`'s flags on fs and returns the destination.
+func BindSessionCheckpoint(fs *flag.FlagSet) *SessionCheckpointFlags {
+	var f SessionCheckpointFlags
+	fs.StringVar(&f.Note, FlagSessionCheckpointNote, "", "A sentence on where the work stands")
+	fs.StringVar(&f.AgentName, FlagSessionCheckpointAgentName, "", "Name of the agent host this session ran on, when one did (attribution only)")
+	fs.StringVar(&f.Session, FlagSessionCheckpointSession, "", "The host's own session id for this session")
+	fs.StringVar(&f.Transcript, FlagSessionCheckpointTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
+	return &f
+}
+
 // SessionNotifyFlags are the flags declared for `magus session notify`.
 type SessionNotifyFlags struct {
 	Outcome string // --outcome
@@ -1304,12 +1346,13 @@ func BindInit(fs *flag.FlagSet) *InitFlags {
 
 // AgentFlags are the flags declared for `magus agent`.
 type AgentFlags struct {
-	Dir    string // --dir
-	Force  bool   // --force
-	Prune  bool   // --prune
-	DryRun bool   // --dry-run
-	Tar    bool   // --tar
-	Global bool   // --global
+	Dir       string // --dir
+	Force     bool   // --force
+	Prune     bool   // --prune
+	DryRun    bool   // --dry-run
+	Tar       bool   // --tar
+	Global    bool   // --global
+	SkillForm string // --skill-form
 }
 
 // BindAgent registers `magus agent`'s flags on fs and returns the destination.
@@ -1321,6 +1364,7 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")
+	fs.StringVar(&f.SkillForm, FlagAgentSkillForm, "both", "Skill form to install: both (default), short, or full (agent install)")
 	return &f
 }
 

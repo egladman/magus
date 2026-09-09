@@ -179,12 +179,14 @@ func TestGuardWiringCandidates(t *testing.T) {
 		filepath.Join("/repo", ".claude", "settings.json"),
 		filepath.Join("/repo", ".cursor", "hooks.json"),
 		filepath.Join("/repo", ".opencode", "plugins"),
+		filepath.Join("/repo", ".codex", "hooks.json"),
+		filepath.Join("/home/dev", ".codex", "hooks.json"),
 		filepath.Join("/home/dev", ".codex", "config.toml"),
 		filepath.Join("/home/dev", ".config", "opencode", "plugins"),
 	}, withHome)
 
 	// os.UserHomeDir can fail, and the workspace-relative candidates still apply.
-	assert.Len(t, guardWiringCandidates("/repo", ""), 3)
+	assert.Len(t, guardWiringCandidates("/repo", ""), 4)
 }
 
 func TestGuardReferencedTemplates(t *testing.T) {
@@ -486,4 +488,24 @@ func TestPrunedPrefixIgnoresARelativePrefix(t *testing.T) {
 	dir, ok := prunedPrefix("../gen/*.go")
 	require.True(t, ok)
 	assert.Equal(t, "gen", dir)
+}
+
+// TestGuardTemplateBasenamesAreShipped pins the list against the templates that actually
+// exist, because for the whole life of one rename it named magus-pause.sh - a file the
+// same commit had renamed to magus-checkpoint.sh.
+//
+// The cost of that is total and silent: guardReferencedTemplates only inspects a config
+// for basenames in this list, so the one check written to catch a silently stale hook
+// could not match the only name a config ever carries. A wired host graded healthy while
+// running a script that invoked a subcommand magus no longer has.
+//
+// Membership is deliberately NOT asserted in the other direction: a template a host
+// discovers by placing it in a directory is graded in checkGuardWiring's directory
+// branch and correctly absent here (magus-guard-observe.sh is the standing example).
+func TestGuardTemplateBasenamesAreShipped(t *testing.T) {
+	dir := filepath.Join("..", "..", "docs", "guides", "integrations", "agents")
+	for _, base := range guardTemplateBasenames {
+		assert.FileExistsf(t, filepath.Join(dir, base),
+			"guardTemplateBasenames names %q, which this repo does not ship; a config can never carry that name, so the check silently matches nothing", base)
+	}
 }

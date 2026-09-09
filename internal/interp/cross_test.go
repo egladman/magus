@@ -137,3 +137,37 @@ func TestCrossDispatchDistinct(t *testing.T) {
 	_ = cd.Dispatch(context.Background(), "/ws/a", "test")
 	assert.Equal(t, int32(3), runs.Load(), "distinct keys should each run")
 }
+
+// TestCrossDispatchResetsTargetInterceptor is the third per-project identity the boundary
+// has to drop, after the memo and the ancestor stack.
+//
+// An interceptor is bound to the project whose run installed it: its closure resolves a
+// step against THAT project. Carried across, a needs inside the remote target minted a
+// step for the caller instead, so the remote project's work cached under the caller's key
+// and was re-run by the caller's edits rather than its own. Nothing failed; buildStep is
+// map lookups, so it produced a plausible entry and the run went green.
+func TestCrossDispatchResetsTargetInterceptor(t *testing.T) {
+	var sawInterceptor atomic.Bool
+
+	cd := NewCrossDispatch()
+	cd.run = func(ctx context.Context, _, _ string) error {
+		// The same question bindings.buzzDispatchViaPool asks before deciding whether a
+		// needs is intercepted or run inline.
+		sawInterceptor.Store(buzz.HasTargetInterceptor(ctx))
+		return nil
+	}
+
+	ctx := buzz.WithTargetInterceptor(context.Background(), stubInterceptor{})
+	require.NoError(t, cd.Dispatch(ctx, "/ws/sub", "build"))
+
+	assert.False(t, sawInterceptor.Load(),
+		"the caller's interceptor crossed the project boundary, so the remote project's needs mint steps against the caller")
+}
+
+// stubInterceptor stands in for the caller's project-bound interceptor. Its body is never
+// meant to run: the point is whether it CROSSES.
+type stubInterceptor struct{}
+
+func (stubInterceptor) InterceptTarget(ctx context.Context, _ string, invoke func(context.Context) error) error {
+	return invoke(ctx)
+}

@@ -157,6 +157,14 @@
           "name": "changelog-generate",
           "declared": "changelog_generate",
           "doc": "CHANGELOG.md is a root artifact.",
+          "dependencies": [
+            "spells-generate"
+          ],
+          "chain": [
+            {
+              "target": "spells-generate"
+            }
+          ],
           "reads_files": [
             {
               "project": ".",
@@ -326,6 +334,9 @@
               "glob": ".claude/skills/magus-architecture-review*/**"
             },
             {
+              "glob": ".claude/skills/magus-test-design*/**"
+            },
+            {
               "glob": ".claude/skills/magus-buzz-review*/**"
             },
             {
@@ -344,7 +355,7 @@
               "glob": ".claude/skills/magus-docs-lookup*/**"
             },
             {
-              "glob": ".claude/skills/magus-handoff-journal*/**"
+              "glob": ".claude/skills/magus-memory*/**"
             },
             {
               "glob": ".claude/skills/magus-multi-agent*/**"
@@ -368,6 +379,9 @@
               "glob": ".agents/skills/magus-architecture-review*/**"
             },
             {
+              "glob": ".agents/skills/magus-test-design*/**"
+            },
+            {
               "glob": ".agents/skills/magus-buzz-review*/**"
             },
             {
@@ -386,7 +400,7 @@
               "glob": ".agents/skills/magus-docs-lookup*/**"
             },
             {
-              "glob": ".agents/skills/magus-handoff-journal*/**"
+              "glob": ".agents/skills/magus-memory*/**"
             },
             {
               "glob": ".agents/skills/magus-multi-agent*/**"
@@ -410,6 +424,9 @@
               "glob": ".opencode/skills/magus-architecture-review*/**"
             },
             {
+              "glob": ".opencode/skills/magus-test-design*/**"
+            },
+            {
               "glob": ".opencode/skills/magus-buzz-review*/**"
             },
             {
@@ -428,7 +445,7 @@
               "glob": ".opencode/skills/magus-docs-lookup*/**"
             },
             {
-              "glob": ".opencode/skills/magus-handoff-journal*/**"
+              "glob": ".opencode/skills/magus-memory*/**"
             },
             {
               "glob": ".opencode/skills/magus-multi-agent*/**"

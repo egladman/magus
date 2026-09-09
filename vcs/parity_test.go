@@ -4,7 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -14,7 +16,7 @@ import (
 // This file asserts the invariants every backend must share, as one table run against all
 // four. It exists because the per-backend files cannot: a rule stated only in git_test.go
 // is a rule the next backend is free to break, and three of the defects it now pins shipped
-// exactly that way - each backend was tested against its own behavior rather than against
+// exactly that way: each backend was tested against its own behavior rather than against
 // the contract.
 //
 // A backend whose binary is absent SKIPS rather than failing, so the suite still means
@@ -30,14 +32,27 @@ type parityBackend struct {
 	drv  types.VCSDriver
 	// init creates a repository in dir holding files, with everything committed.
 	init func(t *testing.T, dir string, files map[string]string)
+	// readback returns what a Preserve handle holds for one path. Nothing in VCSDriver
+	// resolves a handle, and without this a Preserve returning a constant would satisfy
+	// every other assertion here.
+	readback func(t *testing.T, dir, handle, path string) string
+	// listPreserved names what MAGUS has minted in dir, in this backend's own store. A
+	// pruner that reports the right handles and deletes nothing passes without it.
+	listPreserved func(t *testing.T, dir string) []string
+	// mints says whether Preserve leaves an object behind at all, and prunes whether magus
+	// can then drop it. They are separate fields because sl is the case where they differ:
+	// collapse them and sl reads as minting nothing, so every prune assertion compares nil
+	// to nil while Preserve mints a hidden commit per call that nothing ever removes.
+	mints  bool
+	prunes bool
 }
 
 func parityBackends() []parityBackend {
 	return []parityBackend{
-		{"git", "git", gitVCS{}, gitInitRepo},
-		{"hg", "hg", hgVCS{}, hgInitRepo},
-		{"sl", "sl", saplingVCS{}, slInitRepo},
-		{"jj", "jj", jjVCS{}, jjInitRepo},
+		{"git", "git", gitVCS{}, gitInitRepo, gitReadback, gitListPreserved, true, true},
+		{"hg", "hg", hgVCS{}, hgInitRepo, hgReadback, hgListPreserved, true, true},
+		{"sl", "sl", saplingVCS{}, slInitRepo, slReadback, slListPreserved, true, false},
+		{"jj", "jj", jjVCS{}, jjInitRepo, jjReadback, mintsNothing, false, false},
 	}
 }
 
@@ -95,7 +110,7 @@ func eachBackend(t *testing.T, fn func(t *testing.T, b parityBackend)) {
 }
 
 // Every backend implements RevisionFileReader, and "" means the committed revision in each
-// backend's own spelling - HEAD, `.`, `.`, `@`. A caller asking for the committed side has
+// backend's own spelling: HEAD, `.`, `.`, `@`. A caller asking for the committed side has
 // no way to name that portably, so the empty default is the portability, and a backend that
 // resolved "" to something else would silently hand back the wrong content.
 //
@@ -152,10 +167,10 @@ func TestParityReadFileAtMissingPathErrors(t *testing.T) {
 	})
 }
 
-// DirtyFiles returns PATHS, not the backend's status lines. Each backend prints a
-// different prefix - git two columns, hg and sl one, jj none - and callers hand the result
-// straight to glob matching and staging, so a line that keeps its "M " matches nothing and
-// the file is silently treated as undeclared.
+// DirtyFiles returns PATHS, not the backend's status lines. Each backend prints a different
+// prefix (git two columns, hg and sl one, jj none), and callers hand the result straight to
+// glob matching and staging, so a line that keeps its "M " matches nothing and the file is
+// silently treated as undeclared.
 func TestParityDirtyFilesReturnsPaths(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -171,7 +186,7 @@ func TestParityDirtyFilesReturnsPaths(t *testing.T) {
 
 // Every backend reports paths relative to the REPOSITORY ROOT, whatever directory the
 // probe runs in. Callers stamp the root as the base (std/vcs.go, std/magus.go), so a
-// cwd-relative answer names a different file that frequently exists - there is nothing to
+// cwd-relative answer names a different file that frequently exists: there is nothing to
 // error on, the wrong file is simply read.
 //
 // This is the single most valuable assertion in the file: sl and jj BOTH failed it, in
@@ -197,7 +212,7 @@ func TestParityPathsAreRepositoryRelative(t *testing.T) {
 // A commit on linear history has exactly one parent. Reporting none makes it read as a
 // root commit at the Buzz boundary, and makes len(Parents) > 1 merge detection permanently
 // false. hg failed this: its `parents` template keyword filters through meaningfulparents
-// and emits nothing off a merge, while sl's same-named keyword does not - so the two
+// and emits nothing off a merge, while sl's same-named keyword does not, so the two
 // backends sharing one template disagreed, and only hg was wrong.
 func TestParityLinearCommitHasOneParent(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
@@ -237,12 +252,12 @@ func TestParityMetadataReportsRevisionAndDirt(t *testing.T) {
 
 // A path outside ASCII survives the round trip. git renders one C-quoted
 // ("uni/caf\303\251.md") unless core.quotePath is off, and a quoted name matches no
-// project glob - so the project owning that file is never rebuilt, with no diagnostic.
+// project glob, so the project owning that file is never rebuilt, with no diagnostic.
 //
-// This covers DirtyFiles on every backend. The sibling defect in git's ChangedFiles - the
-// one probe in the package that omitted the flag - is pinned by
-// git_test.go's TestChangedFilesKeepsNonASCIIPathsRaw, because ChangedFiles needs a base
-// ref and the per-backend way to produce one does not belong in this table.
+// This covers DirtyFiles on every backend. The sibling defect in git's ChangedFiles (the
+// one probe in the package that omitted the flag) is pinned by git_test.go's
+// TestChangedFilesKeepsNonASCIIPathsRaw, because ChangedFiles needs a base ref and the
+// per-backend way to produce one does not belong in this table.
 func TestParityNonASCIIPathsSurvive(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir := t.TempDir()
@@ -279,7 +294,7 @@ func TestParityDirtyAgreesWithDirtyFiles(t *testing.T) {
 	})
 }
 
-// TrackedFiles must answer, not fail, when NONE of the given paths are tracked - that is
+// TrackedFiles must answer, not fail, when NONE of the given paths are tracked: that is
 // the ordinary answer, and the question the capability exists for. `sl files` exits 1 in
 // exactly that case where git's ls-files exits 0, so the driver has to absorb it; because
 // the call is batched, getting it wrong fails only for some inputs.
@@ -326,8 +341,8 @@ func TestParityIgnoredFilesEchoesTheGivenPaths(t *testing.T) {
 
 // A backend's two ignore reporters must agree. IgnoredFileReporter.IgnoredFiles and
 // ConflictResolver.IgnoredPaths are names one letter apart on the same type answering
-// nearly the same question in different shapes - and git's gave OPPOSITE answers for a
-// path that is tracked AND matches an ignore rule, because only one passed --no-index.
+// nearly the same question in different shapes; git's gave OPPOSITE answers for a path
+// that is tracked AND matches an ignore rule, because only one passed --no-index.
 // Reaching for the wrong one of two near-identical names is not a compile error, so this is
 // the only thing that catches it.
 func TestParityIgnoreReportersAgree(t *testing.T) {
@@ -340,7 +355,7 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 		if !ok {
 			t.Skipf("%s does not implement ConflictResolver", b.name)
 		}
-		// keep.log is TRACKED and matches an ignore rule - the case the two disagreed on.
+		// keep.log is TRACKED and matches an ignore rule: the case the two disagreed on.
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"keep.log": "x\n"})
 		name, body := ignoreRule(b, "*.log")
@@ -368,7 +383,7 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 // ignoreRule returns the ignore file a backend reads and the content expressing pattern in
 // its syntax. Mercurial is the odd one: .hgignore patterns are REGULAR EXPRESSIONS unless
 // the file opens with a "syntax: glob" line, so a bare "*.log" there is not merely
-// ineffective - hg rejects it as an invalid pattern and every subsequent command aborts.
+// ineffective; hg rejects it as an invalid pattern and every subsequent command aborts.
 // git, sl and jj all read a .gitignore of plain globs.
 func ignoreRule(b parityBackend, pattern string) (name, body string) {
 	if b.name == "hg" {
@@ -378,7 +393,7 @@ func ignoreRule(b parityBackend, pattern string) (name, body string) {
 }
 
 // AbortMerge refuses when there is no merge to abort. It is reached on failure paths,
-// which is exactly when there may be nothing in progress - and sl's implementation is a
+// which is exactly when there may be nothing in progress; sl's implementation is a
 // whole-tree revert that exits 0 either way, so without the guard the error path silently
 // discards the developer's uncommitted work.
 func TestParityAbortMergeRefusesWithNoMergeInProgress(t *testing.T) {
@@ -415,7 +430,7 @@ func commitAll(t *testing.T, b parityBackend, dir, msg string) {
 		// jj snapshots the working copy automatically, so `describe` is the commit. It
 		// deliberately does NOT run `jj new` afterwards: that would leave @ pointing at a
 		// fresh EMPTY change, and a test asking about "the commit I just made" via
-		// FindCommit(dir, "") would resolve that empty one instead - passing without ever
+		// FindCommit(dir, "") would resolve that empty one instead, passing without ever
 		// touching the commit it built.
 		vcsTestRun(t, dir, "jj", "describe", "-m", msg)
 	}
@@ -436,7 +451,7 @@ func addPath(t *testing.T, b parityBackend, dir, path string) {
 
 // DirtyFiles and DirtyDiff must answer about the SAME change. A gate that names an output
 // as drifted and then shows an empty diff sends its reader to reproduce the run to learn
-// what the two calls already knew - and it fires in CI, where nobody can look at the tree.
+// what the two calls already knew, and it fires in CI, where nobody can look at the tree.
 //
 // git was the one backend that could disagree: a bare `git diff` is working tree against
 // the INDEX, so a STAGED change was reported by DirtyFiles and invisible to DirtyDiff. hg,
@@ -461,7 +476,7 @@ func TestParityDirtyDiffCoversWhatDirtyFilesNames(t *testing.T) {
 }
 
 // stagePath stages a path where the backend has an index to stage into. Only git does; for
-// the other three this is a no-op, which is the point - they cannot reach the state that
+// the other three this is a no-op, which is the point: they cannot reach the state that
 // made git's two probes disagree.
 func stagePath(t *testing.T, b parityBackend, dir, path string) {
 	t.Helper()
@@ -490,7 +505,7 @@ func TestParityDirtyDiffOnRepoWithNoCommits(t *testing.T) {
 // A GLOB pathspec matches, on every backend. This is the assertion the suite was missing,
 // and its absence hid the worst defect the VCS work produced: magus.diagnoseDrift hands
 // DirtyFiles a project's declared output globs verbatim, and an hg pathspec defaults to a
-// LITERAL path - so "gen/**" matched nothing, hg wrote "No such file or directory" to
+// LITERAL path, so "gen/**" matched nothing, hg wrote "No such file or directory" to
 // stderr, exited 0 with empty stdout, and the generate drift gate reported every project
 // clean having checked nothing. In CI, with no diagnostic. sl inherited it; git and jj
 // handle the glob natively, which is exactly why a per-backend test would not have found it.
@@ -514,7 +529,7 @@ func TestParityGlobPathspecMatches(t *testing.T) {
 
 // Every churn reporter names the files a commit touched AND what it did to each. The status
 // half is what lets attribution tell a rename from a delete plus an add, and each backend
-// reaches it through a different log format - git tags every path, hg and sl group paths by
+// reaches it through a different log format: git tags every path, hg and sl group paths by
 // what happened to them, jj spells its statuses as words. Only a shared parser reads all
 // three, so a backend whose log stops matching that parser reports a commit with NO files:
 // no error, no diagnostic, just a churn heatmap that goes quiet. hg and sl shipped exactly
@@ -576,7 +591,7 @@ func forceColor(t *testing.T, b parityBackend, dir string) {
 		writeRepoFile(t, dir, ".hg/hgrc", "[ui]\ncolor = always\n")
 	case "sl":
 		// Sapling's repo config is .sl/config, NOT .sl/hgrc, and slInitRepo has already
-		// written a username into it - so this appends. Pointing at the hg path instead
+		// written a username into it, so this appends. Pointing at the hg path instead
 		// makes this helper do nothing, and the subtest then passes without ever forcing
 		// color, which is exactly how it first went green against a colorizing Sapling.
 		appendRepoFile(t, dir, ".sl/config", "\n[ui]\ncolor = always\n")
@@ -588,12 +603,12 @@ func forceColor(t *testing.T, b parityBackend, dir string) {
 // A colorized diff is not a cosmetic problem: the escape sequence lands in FRONT of the
 // `diff --git` header, so the header no longer begins a line and every reader of the patch
 // misses the file entirely. Measured before the fix, with `color.ui = always` in an ordinary
-// gitconfig: `magus diff` listed the untracked files - which magus synthesizes itself, and
-// so never colorizes - and silently dropped every tracked modification, at exit 0.
+// gitconfig: `magus diff` listed the untracked files (which magus synthesizes itself, and so
+// never colorizes) and silently dropped every tracked modification, at exit 0.
 //
 // Each backend needs a DIFFERENT switch and they are not interchangeable: NO_COLOR loses to
 // git's explicit config, and Sapling ignores HGPLAIN even though Mercurial honors it. That is
-// what this test is really pinning - one switch per backend, verified against the real binary
+// what this test is really pinning: one switch per backend, verified against the real binary
 // rather than assumed from the family.
 func TestParityDirtyDiffIsNeverColorized(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
@@ -624,8 +639,8 @@ func vcsMove(t *testing.T, b parityBackend, dir, from, to string) {
 
 // A rename must not arrive as a delete plus an add. Mercurial's own diff format renders one
 // exactly that way, so a renamed 2000-line file reached this tool as 4000 changed lines whose
-// content nobody touched - and every consumer treats DirtyDiff as "what a person has to
-// review", so that inflates the ranking, the counts, and the hunks a read receipt is keyed by.
+// content nobody touched; every consumer treats DirtyDiff as "what a person has to review",
+// so that inflates the ranking, the counts, and the hunks a read receipt is keyed by.
 //
 // Asserted on CONTENT rather than on the word "rename", because the backends spell the header
 // differently and the property that matters is the absence of churn, not the spelling.
@@ -641,4 +656,303 @@ func TestParityRenameIsNotDeletePlusAdd(t *testing.T) {
 		assert.NotContains(t, patch, "+alpha", "content re-added means the rename was lost")
 		assert.NotContains(t, patch, "-alpha", "content removed means the rename was lost")
 	})
+}
+
+// Untracked is where a concurrent agent's unfinished work lives, it is in no commit, and a
+// checkpoint blind to it answers "same tree?" most confidently about the state it can least
+// see. PatchDigest cannot carry it: that one is pinned byte-for-byte to
+// internal/diff.PatchDigest so a checkpoint and a review session stay comparable. Hence a
+// second digest, on every backend rather than on git alone.
+func TestParityCheckpointSeesUntrackedContent(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
+		res := types.VCSResolution{VCS: b.drv, Name: b.name}
+
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "scratch.txt"), []byte("one\n"), 0o644))
+		first, err := Checkpoint(t.Context(), dir, res, false)
+		require.NoError(t, err)
+		require.NotEmpty(t, first.UntrackedDigest, "%s: an untracked file left no mark", b.name)
+
+		// CONTENT, not just the path: the file name is unchanged, so a path-only
+		// fingerprint would call these two trees identical.
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "scratch.txt"), []byte("two\n"), 0o644))
+		second, err := Checkpoint(t.Context(), dir, res, false)
+		require.NoError(t, err)
+		assert.NotEqual(t, first.UntrackedDigest, second.UntrackedDigest,
+			"%s: editing an untracked file did not move the digest", b.name)
+
+		// No claim about PatchDigest here: jj snapshots the whole working copy, so a file
+		// git calls untracked is one jj already tracks, and the edit moves PatchDigest too.
+		// "Untracked" is a git and hg category, not a property of version control.
+	})
+}
+
+// A tree with nothing untracked reports no digest rather than a hash of emptiness, so ""
+// keeps meaning "nothing to measure" the way it does for PatchDigest.
+func TestParityCheckpointUntrackedDigestEmptyWhenNoneAreUntracked(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("edited\n"), 0o644))
+
+		cp, err := Checkpoint(t.Context(), dir, types.VCSResolution{VCS: b.drv, Name: b.name}, false)
+		require.NoError(t, err)
+
+		assert.Empty(t, cp.UntrackedDigest, "%s: reported an untracked digest with nothing untracked", b.name)
+	})
+}
+
+// Capturing state must never cost state. One test rather than four because the guarantee is
+// one guarantee: the mechanisms differ wildly (git builds a commit through a temporary
+// index, hg shelves with --keep, jj has already snapshotted, sl commits and unwinds) and a
+// reader choosing a backend should not have to learn which of those leaks.
+func TestParityPreserveCostsNoState(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n", "deleted.txt": "gone\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v2\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("scratch\n"), 0o644))
+
+		// A DELETED tracked file and a STAGED-equivalent rename each break a different
+		// backend: sl turns the deletion into a scheduled removal (R), git leaves the
+		// rename's old path in the snapshot tree. One edit plus one new file is the happy
+		// path, which is how an invariant test passes while the invariant is false.
+		require.NoError(t, os.Remove(filepath.Join(dir, "deleted.txt")))
+
+		beforeFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
+		require.NoError(t, err)
+		beforeDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+
+		handle, err := b.drv.Preserve(t.Context(), dir)
+		require.NoErrorf(t, err, "%s: Preserve failed", b.name)
+		require.NotEmptyf(t, handle, "%s: a dirty tree produced no handle", b.name)
+
+		// CONTENT: every byte on disk is what it was.
+		tracked, err := os.ReadFile(filepath.Join(dir, "tracked.txt"))
+		require.NoError(t, err)
+		assert.Equalf(t, "v2\n", string(tracked), "%s: Preserve changed a tracked file", b.name)
+		untracked, err := os.ReadFile(filepath.Join(dir, "untracked.txt"))
+		require.NoErrorf(t, err, "%s: Preserve removed the untracked file, which is the work it exists to protect", b.name)
+		assert.Equalf(t, "scratch\n", string(untracked), "%s: Preserve changed an untracked file", b.name)
+
+		// VCS VIEW: the backend still reports the same paths and the same diff. This is
+		// what catches sl's uncommit handing untracked files back as added.
+		afterFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
+		require.NoError(t, err)
+		assert.ElementsMatchf(t, beforeFiles, afterFiles, "%s: Preserve changed which paths report dirty", b.name)
+		afterDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+		assert.Equalf(t, beforeDiff, afterDiff, "%s: Preserve changed the uncommitted diff", b.name)
+
+		// READ THE HANDLE BACK. Everything above proves the capture cost nothing; only this
+		// proves a capture happened. Without it a Preserve returning a constant passes on
+		// every backend, and `git stash create`, which silently omits untracked files,
+		// would have looked correct.
+		assert.Containsf(t, b.readback(t, dir, handle, "untracked.txt"), "scratch",
+			"%s: the handle does not hold the untracked file's content", b.name)
+	})
+}
+
+// The same invariant from the one place every other fixture here avoids: a dir that is NOT
+// the repository root. Mercurial's status answers in ROOT-relative paths while its revert
+// and forget resolve arguments against the CWD, so from a subdirectory the capture reads
+// "sub/deleted.txt" and hands that to a command looking for "sub/sub/deleted.txt", which
+// finds nothing and exits ZERO: a tracked file left scheduled for a removal the user never
+// asked for, reported as success.
+func TestParityPreserveFromASubdirectoryCostsNoState(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"sub/tracked.txt": "v1\n", "sub/deleted.txt": "gone\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "tracked.txt"), []byte("v2\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "untracked.txt"), []byte("scratch\n"), 0o644))
+		// The deleted tracked file is the fixture's whole point: it is the only pending
+		// state whose restore is a path argument the backend has to resolve.
+		require.NoError(t, os.Remove(filepath.Join(dir, "sub", "deleted.txt")))
+
+		// Read from the ROOT on both sides, so one path vocabulary spans the comparison.
+		beforeFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
+		require.NoError(t, err)
+		beforeDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+
+		handle, err := b.drv.Preserve(t.Context(), filepath.Join(dir, "sub"))
+		require.NoErrorf(t, err, "%s: Preserve failed from a subdirectory", b.name)
+		require.NotEmptyf(t, handle, "%s: a dirty tree produced no handle", b.name)
+
+		afterFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
+		require.NoError(t, err)
+		assert.ElementsMatchf(t, beforeFiles, afterFiles,
+			"%s: Preserve from a subdirectory changed which paths report dirty", b.name)
+		afterDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+		assert.Equalf(t, beforeDiff, afterDiff,
+			"%s: Preserve from a subdirectory changed the uncommitted diff", b.name)
+		untracked, err := os.ReadFile(filepath.Join(dir, "sub", "untracked.txt"))
+		require.NoErrorf(t, err, "%s: Preserve removed the untracked file", b.name)
+		assert.Equalf(t, "scratch\n", string(untracked), "%s: Preserve changed an untracked file", b.name)
+	})
+}
+
+// A clean tree has nothing to capture, and says so with "" rather than an error or a handle
+// to emptiness, matching how PatchDigest already reports "nothing measured".
+func TestParityPreserveOfACleanTreeIsEmpty(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
+
+		handle, err := b.drv.Preserve(t.Context(), dir)
+
+		require.NoErrorf(t, err, "%s: a clean tree is a state, not a failure", b.name)
+		assert.Emptyf(t, handle, "%s: a clean tree produced a handle", b.name)
+	})
+}
+
+// Each readback asks its own backend what the handle holds, in that backend's own spelling,
+// which is why a handle is documented as opaque.
+func gitReadback(t *testing.T, dir, handle, path string) string {
+	t.Helper()
+	return vcsTestOutput(t, dir, "git", "show", handle+":"+path)
+}
+
+func hgReadback(t *testing.T, dir, handle, path string) string {
+	t.Helper()
+	// A shelf is not a revision, so its content is read as the patch it stores.
+	return vcsTestOutput(t, dir, "hg", "--config", "extensions.shelve=", "shelve", "--patch", handle)
+}
+
+func slReadback(t *testing.T, dir, handle, path string) string {
+	t.Helper()
+	return vcsTestOutput(t, dir, "sl", "cat", "-r", handle, path)
+}
+
+func jjReadback(t *testing.T, dir, handle, path string) string {
+	t.Helper()
+	return vcsTestOutput(t, dir, "jj", "file", "show", "-r", handle, path)
+}
+
+// gitListPreserved names the refs Preserve anchored.
+func gitListPreserved(t *testing.T, dir string) []string {
+	t.Helper()
+	out := vcsTestOutput(t, dir, "git", "for-each-ref", "--format=%(refname)", "refs/magus/preserved/")
+	var names []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		names = append(names, strings.TrimPrefix(line, "refs/magus/preserved/"))
+	}
+	return names
+}
+
+// hgListPreserved names the magus shelves, ignoring any a person made by hand. It parses
+// the PLAIN listing rather than the --quiet form the pruner uses: sharing that call would
+// make the test agree with the pruner by construction, and a parser that found nothing
+// would report an empty mint set every assertion below passes over.
+func hgListPreserved(t *testing.T, dir string) []string {
+	t.Helper()
+	out := vcsTestOutput(t, dir, "hg", "--config", "extensions.shelve=", "shelve", "--list")
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		// "name(1s ago)    message", with no space before the "(" when the name overflows
+		// the column, so the paren is the cut and whitespace is not.
+		name, _, _ := strings.Cut(strings.TrimSpace(line), "(")
+		if strings.HasPrefix(name, "magus-") {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// slListPreserved names the snapshots sl's Preserve left in Sapling's hidden set. They are
+// reachable only by their message, which is also the only thing identifying them as
+// magus's. Without this the mint set reads empty, every prune assertion compares nil to
+// nil, and sl accumulating one hidden commit per capture forever goes unnoticed.
+func slListPreserved(t *testing.T, dir string) []string {
+	t.Helper()
+	out := vcsTestOutput(t, dir, "sl", "log", "--hidden",
+		"-r", "desc('"+preserveMessage+"')", "--template", "{node}\n")
+	var nodes []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			nodes = append(nodes, line)
+		}
+	}
+	return nodes
+}
+
+// mintsNothing is jj's store of magus-minted state, empty by construction: jj has already
+// snapshotted the working copy, so its Preserve reads a commit id and writes nothing. Named
+// rather than inlined so the claim is legible beside the three backends that do mint.
+func mintsNothing(*testing.T, string) []string { return nil }
+
+// The other half of Preserve's contract: a handle has a LIFETIME, and what ends it is magus
+// deleting its own object and nothing else.
+//
+// One test over four backends, and the split it exposes is the honest one. git and hg mint
+// a named object magus owns and drop it on schedule. jj mints nothing. sl mints a hidden
+// commit and CANNOT drop it, because the only Sapling command that removes a commit is
+// test-only and aborts on the dirty working copy Preserve always runs against (see
+// saplingVCS.PrunePreserved), so sl's assertion is that the capture SURVIVES: the gap
+// stated, rather than a nil compared against nil.
+func TestParityPrunePreservedDropsWhatMagusMinted(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v2\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("scratch\n"), 0o644))
+
+		_, err := b.drv.Preserve(t.Context(), dir)
+		require.NoErrorf(t, err, "%s: Preserve failed", b.name)
+		minted := b.listPreserved(t, dir)
+		if b.mints {
+			require.NotEmptyf(t, minted, "%s: Preserve left nothing in the store this test could watch", b.name)
+		} else {
+			require.Emptyf(t, minted, "%s: a backend documented to mint nothing left an object behind", b.name)
+		}
+
+		// A cutoff OLDER than the capture drops nothing. Without this the test passes for a
+		// pruner that ignores its argument and deletes everything it finds.
+		dropped, err := b.drv.PrunePreserved(t.Context(), dir, time.Now().Add(-time.Hour))
+		require.NoErrorf(t, err, "%s: PrunePreserved failed", b.name)
+		assert.Emptyf(t, dropped, "%s: dropped a capture newer than the cutoff", b.name)
+		assert.ElementsMatchf(t, minted, b.listPreserved(t, dir),
+			"%s: the store changed under a cutoff that matched nothing", b.name)
+
+		dropped, err = b.drv.PrunePreserved(t.Context(), dir, time.Now().Add(time.Hour))
+		require.NoErrorf(t, err, "%s: PrunePreserved failed", b.name)
+		if b.prunes {
+			assert.ElementsMatchf(t, minted, dropped, "%s: reported the wrong handles", b.name)
+			assert.Emptyf(t, b.listPreserved(t, dir), "%s: reported handles it did not delete", b.name)
+		} else {
+			assert.Emptyf(t, dropped, "%s: reported dropping what it cannot drop", b.name)
+			assert.ElementsMatchf(t, minted, b.listPreserved(t, dir),
+				"%s: the store lost a capture nothing here is able to remove", b.name)
+		}
+
+		// Pruning is still not allowed to cost working-copy state, for the same reason
+		// capturing is not: it runs inside Preserve, on a tree somebody is working in.
+		tracked, err := os.ReadFile(filepath.Join(dir, "tracked.txt"))
+		require.NoError(t, err)
+		assert.Equalf(t, "v2\n", string(tracked), "%s: PrunePreserved changed a tracked file", b.name)
+		untracked, err := os.ReadFile(filepath.Join(dir, "untracked.txt"))
+		require.NoErrorf(t, err, "%s: PrunePreserved removed an untracked file", b.name)
+		assert.Equalf(t, "scratch\n", string(untracked), "%s: PrunePreserved changed an untracked file", b.name)
+	})
+}
+
+// Distinctness is the assertion worth making: a driver returning git's spelling would
+// satisfy "non-empty" while telling an hg user to run a command hg does not have.
+func TestParityReviewCommandIsTheBackendsOwn(t *testing.T) {
+	seen := make(map[string]string, len(parityBackends()))
+	for _, b := range parityBackends() {
+		cmd := b.drv.ReviewCommand()
+		require.NotEmptyf(t, cmd, "%s: no review command", b.name)
+		assert.Truef(t, strings.HasPrefix(cmd, b.name+" "), "%s: review command is not this backend's: %q", b.name, cmd)
+		if other, dup := seen[cmd]; dup {
+			t.Errorf("%s and %s share a review command: %q", other, b.name, cmd)
+		}
+		seen[cmd] = b.name
+	}
 }

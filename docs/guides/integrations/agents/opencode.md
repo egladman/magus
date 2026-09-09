@@ -31,11 +31,9 @@ install surface.
 
 ## MCP
 
-```sh
-magus server start
-```
-
-See [MCP](../mcp.md) for the client configuration and token.
+Configure MCP for OpenCode as a host-level integration; see [MCP](../mcp.md)
+for the client configuration and token. An agent uses the CLI fallback when MCP
+is unavailable; it does not manually start Magus solely to obtain tools.
 
 ## Guard hook
 
@@ -318,6 +316,20 @@ brew, asdf, `~/.local/bin`), set `GUARD_MAGUS_BIN` to an absolute path.
 
 Invoke `magus session notify` from the plugin with the same envelope every other host
 uses; see [Attention hooks](notifications.md).
+
+## Recording where the work stands
+
+Invoke `magus session checkpoint --agent-name opencode` from the plugin when a
+session ends, or run [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh)
+with `GUARD_AGENT_NAME=opencode` if you would rather not reimplement the binary
+lookup. Either records the revision, branch and dirtiness of the tree, which
+`magus session` then lists.
+
+The plugin has the session id and transcript path to hand, so pass them as
+`--session` and `--transcript`; both are pointers magus records and never opens.
+A checkpoint without them is still worth writing.
+
+`magus session checkpoint --note "..."` writes the same record by hand.
 
 ## Coverage and limits
 

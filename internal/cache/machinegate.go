@@ -12,6 +12,7 @@ import (
 	"time"
 
 	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/types"
 )
 
@@ -59,6 +60,12 @@ var machineWaiterSeq atomic.Int64
 // (lockContendedExit). Two independent decisions that agree, not one shared setting:
 // coupling them would make a change to either silently move the other.
 const ExitCodeMachineBusy = 75
+
+// ExitCodeMachineDeclaration is what a PERMANENT machine refusal asks for: 78, EX_CONFIG.
+// Both refusals that carry it name the thing to change (a declaration that exceeds the
+// whole budget, or an environment variable a nested magus was started without), so they
+// are configuration answers rather than timing ones.
+const ExitCodeMachineDeclaration = 78
 
 // machineGate is the client half of admission: it polls the budget, reports the wait,
 // and hands back the release.
@@ -275,16 +282,22 @@ func machineWaitingMessage(c types.MachineClaim, v types.MachineVerdict) string 
 //
 // It wraps rather than replaces, so errors.Is against the diagnostic code keeps
 // matching everywhere it already did.
-type machineRefusal struct{ error }
+type machineRefusal struct {
+	error
+	// exit is per refusal. EX_TEMPFAIL says "try again"; a declaration that cannot fit and
+	// a nested magus that lost its ancestry both answer the same way forever, so a wrapper
+	// retrying on 75 would loop on them.
+	exit int
+}
 
-func (machineRefusal) ExitCode() int { return ExitCodeMachineBusy }
+func (e machineRefusal) ExitCode() int { return e.exit }
 
 func (e machineRefusal) Unwrap() error { return e.error }
 
 // machineBusyError is the fail-fast answer: the machine is full right now, the same
 // command will succeed later, and the caller asked not to queue.
 func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
-	return machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted,
+	return machineRefusal{exit: ExitCodeMachineBusy, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this machine's build budget is full and MAGUS_NO_WAIT is set; %s, and %s. %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
@@ -292,18 +305,48 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
 
 // machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit
 // in the whole budget, so an empty machine would refuse it too.
+//
+// PERMANENT on purpose, where Buck2 clamps an oversized request to the machine and Bazel
+// runs one anyway while nothing else is running. Buck2's permits are an abstract share,
+// so capping one moves a scheduling number; a claim here is megabytes of resident memory
+// with a measured ground truth in MGS1030, and clamping 26 GiB to 24 GiB does not make
+// the process use less. It moves the arbiter from this gate to the OOM killer, which
+// picks its victim from the whole machine rather than from the offender. Bazel's idle
+// rule ends the same way and costs one thing more: a claim admitted over the budget is a
+// floor that freeSlot seats another claim on top of, and the !Fits early return that
+// keeps a free seat from being a waiver stops firing for exactly the claims it exists
+// for. So over-admission stays where freeSlot left it: at most one claim per stalled
+// ancestor, and never a claim larger than the whole budget.
 func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error {
-	return machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; correct the declaration if it is wrong, or run this on a bigger machine.",
+	return machineRefusal{exit: ExitCodeMachineDeclaration, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
+		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		FormatMB(v.BudgetMB), v.BudgetSlots)}
+		FormatMB(v.BudgetMB), v.BudgetSlots, describeMachineOversize(c, v))}
+}
+
+// machineBudgetPercent is mem.UsableFraction as a whole number, so a refusal can name the
+// share instead of restating it as prose that drifts the day the constant moves. A reader
+// who does not know about the fraction reads the budget as a miscount of their own RAM.
+var machineBudgetPercent = int(mem.UsableFraction * 100)
+
+// describeMachineOversize says what to change, which is not the same sentence for the two
+// axes. A memory figure is a declaration magus has already measured against, so the reader
+// is sent to that check rather than to a guess; a slot count is bounded by the cores and
+// has nothing to check.
+func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
+	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
+		return fmt.Sprintf("that budget is %d%% of the memory available here; the rest runs the OS and everything else. Run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
+			machineBudgetPercent)
+	}
+	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",
+		v.BudgetSlots, max(c.Slots, 1))
 }
 
 // machineBlindError is the refusal for a nested magus that cannot name its ancestors.
 // It says what to fix, because the cause is a magusfile clearing the environment rather
 // than anything about the machine.
 func machineBlindError(c types.MachineClaim, v types.MachineVerdict) error {
-	return machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted,
+	return machineRefusal{exit: ExitCodeMachineDeclaration, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this magus runs underneath another one but was started without %s, so it cannot tell its own parent's claim from a stranger's and will not queue behind a run that is waiting for it; %s. %s."+
 			" Pass that variable through to nested magus invocations, or let magus set it by not clearing the environment.",
 		displayProject(c.Project), c.Target, runPkg.AncestorsEnvVar,

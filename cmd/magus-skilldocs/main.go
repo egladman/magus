@@ -1,5 +1,5 @@
 // Command magus-skilldocs generates the agent-skill reference: one page per
-// embedded skill showing both curated permutations, plus an index.
+// embedded skill showing both curated forms, plus an index.
 //
 //	go run ./cmd/magus-skilldocs -out ./docs/reference/skills
 //
@@ -65,24 +65,24 @@ func run(outDir string) error {
 		return err
 	}
 	full := make([]agent.AgentSkill, 0, len(defs))
-	simple := make([]agent.AgentSkill, 0, len(defs))
+	short := make([]agent.AgentSkill, 0, len(defs))
 	for _, def := range defs {
 		f, err := cat.Render(def, agent.VariantFull)
 		if err != nil {
 			return err
 		}
-		s, err := cat.Render(def, agent.VariantSimple)
+		s, err := cat.Render(def, agent.VariantShort)
 		if err != nil {
 			return err
 		}
 		full = append(full, f)
-		simple = append(simple, s)
+		short = append(short, s)
 		page := renderSkill(cat, f, s)
 		if err := emit.File(filepath.Join(outDir, f.Name+".md"), []byte(page)); err != nil {
 			return err
 		}
 	}
-	if err := emit.File(filepath.Join(outDir, "index.md"), []byte(renderIndex(full, simple))); err != nil {
+	if err := emit.File(filepath.Join(outDir, "index.md"), []byte(renderIndex(full, short))); err != nil {
 		return err
 	}
 	return prune(outDir, full)
@@ -123,34 +123,19 @@ func prune(outDir string, shipped []agent.AgentSkill) error {
 	return nil
 }
 
-// renderSkill writes one skill's page: what it is for, then both permutations
+// renderSkill writes one skill's page: what it is for, then both forms
 // fenced verbatim.
 //
-// The full form comes first and unwrapped because it is the default install; the
-// simple form follows in a <details> so the page does not read as two walls of
-// near-identical text. Only the simple one is collapsed - the comparison a reader
-// wants is "what did the short one drop", and that reads better by expanding the
-// short one against the long one already on screen.
-func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
+// The two bodies share one position on the page, behind a tab strip, so the reader
+// flips between them rather than scrolling from one to the other - see writeVariants.
+func renderSkill(cat *agent.Catalog, full, short agent.AgentSkill) string {
 	var b strings.Builder
 	// The two byte counts are stated as FACTS; the SSG turns them into a percentage
 	// and a <progress> bar (engine/meta.buzz:insertSizeRatio). Presentation is the
 	// renderer's job, and a generated page hands it data rather than markup.
-	var aliases string
-	// A renamed skill keeps its old page URL working. The rename is recorded on the
-	// catalog row rather than in a redirect list beside the site, so the page that
-	// carries the redirect is generated from the same fact that caused it.
-	// One block, however many names: a second `aliases:` key is a duplicate mapping key
-	// and the frontmatter parser refuses the whole page.
-	if former := agent.FormerNames(full.Name); len(former) > 0 {
-		aliases = "aliases:\n"
-		for _, old := range former {
-			aliases += fmt.Sprintf("  - reference/skills/%s\n", old)
-		}
-	}
-	fmt.Fprintf(&b, "---\ntitle: %s\ngenerated_from: internal/agent/skills/%s/SKILL.md\ndescription: %q\ntags: [agents, skills, %s]\n%s"+
-		"skill_full_bytes: %d\nskill_simple_bytes: %d\n---\n\n",
-		full.Name, full.Name, firstSentence(full.Description), full.Name, aliases, len(full.Body), len(simple.Body))
+	fmt.Fprintf(&b, "---\ntitle: %s\ngenerated_from: internal/agent/skills/%s/SKILL.md\ndescription: %q\ntags: [agents, skills, %s]\n"+
+		"skill_full_bytes: %d\nskill_short_bytes: %d\n---\n\n",
+		full.Name, full.Name, firstSentence(full.Description), full.Name, len(full.Body), len(short.Body))
 	fmt.Fprintf(&b, "# %s\n\n", full.Name)
 	fmt.Fprintf(&b, "%s\n\n", full.Description)
 	fmt.Fprintf(&b, "Install it, rather than copying from this page:\n\n")
@@ -160,18 +145,66 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 
 	writeStampTable(&b, cat, full)
 
-	b.WriteString("## Full form\n\nEvery mechanical step spelled out, plus the rationale for each. Installed as the " +
-		"`<name>-full` twin: loaded by name rather than always, so a reader who needs the long " +
-		"form can ask for it without every session carrying it.\n\n")
-	writeFenced(&b, full.Body)
-	fmt.Fprintf(&b, "## Short form\n\nThe enumeration dropped, the judgment kept - for the most "+
-		"capable readers, not the least; the bar under the heading above shows by how much. This is "+
-		"the always-loaded primary. Both are hand-authored from one source body; see "+
-		"[Skills](../../guides/integrations/agents/skills.md) for the difference.\n\n")
-	b.WriteString("<details>\n<summary>Show the short form</summary>\n\n")
-	writeFenced(&b, simple.Body)
-	b.WriteString("\n</details>\n")
+	writeVariants(&b, full, short)
 	return b.String()
+}
+
+// writeVariants writes both forms into one tab strip, so the reader flips
+// between them in place rather than scrolling from one to the other.
+//
+// The comparison a reader wants is "what did the short one drop", and two walls of
+// near-identical text answer that badly however they are stacked: the previous shape
+// printed the full body and hid the short one in a <details>, which meant the two
+// bodies were never in the same position on screen and the difference had to be held
+// in the head. Swapping one for the other at a fixed position makes the diff a
+// flicker.
+//
+// No script. The strip is the site's existing radio-and-label pattern: the input is
+// visually hidden, its label is the tab, and the stylesheet shows the panel whose
+// input is checked. Every tab set on the site shares those rules, so a page adds
+// markup and no CSS.
+//
+// The ids are per skill because a radio GROUP is per name and an id is per document:
+// two strips sharing either would fight, and every skill page is its own document
+// only until someone assembles them onto one.
+func writeVariants(b *strings.Builder, full, short agent.AgentSkill) {
+	b.WriteString("## The two forms\n\nBoth are hand-authored from one source body. The short form " +
+		"is the always-loaded primary - the enumeration dropped, the judgment kept, for the most " +
+		"capable readers rather than the least. The full form is its `<name>-full` twin, loaded by " +
+		"name when a reader wants the rationale. The bar above shows how much shorter the primary " +
+		"is; switch between them here to see exactly what it gave up. See " +
+		"[Skills](../../guides/integrations/agents/skills.md) for how to choose.\n\n")
+
+	shortTab, fullTab := full.Name+"-tab-short", full.Name+"-tab-full"
+	fmt.Fprintf(b, "<article class=\"landing-tabs\">\n<header>\n"+
+		"<input type=\"radio\" name=%q id=%q checked>\n<label for=%q>Short form</label>\n"+
+		"<input type=\"radio\" name=%q id=%q>\n<label for=%q>Full form</label>\n</header>\n\n",
+		full.Name+"-variant", shortTab, shortTab, full.Name+"-variant", fullTab, fullTab)
+
+	// A blank line after the opening tag hands the block back to the Markdown parser,
+	// which is what lets a fence render inside it; the same trick the <details> blocks
+	// in the prose pages use.
+	writeVariantPanel(b, full.Name, short.Body)
+	writeVariantPanel(b, full.Name+"-full", full.Body)
+	b.WriteString("</article>\n")
+}
+
+// writeVariantPanel writes one tab panel: how to read that exact variant from the
+// binary, then its body.
+//
+// The command is per PANEL, not per page, because the two variants are two entries in
+// the archive and the reader wants the one they are looking at. `-O` writes to stdout:
+// this reads a skill, it does not install one, so it puts nothing in the reader's
+// working tree and needs no destination to be chosen first.
+//
+// It is also the honest form of "do not copy from this page". Text copied out of a
+// browser carries no provenance stamp; these bytes come out of the binary with theirs,
+// which is what `magus doctor` grades later.
+func writeVariantPanel(b *strings.Builder, dir, body string) {
+	b.WriteString("<section class=\"landing-tabpanel\">\n\n")
+	fmt.Fprintf(b, "```sh\nmagus agent install --tar | tar -xO -f - %s/SKILL.md\n```\n\n", dir)
+	writeFenced(b, body)
+	b.WriteString("\n</section>\n\n")
 }
 
 // writeFenced wraps body in a code fence LONGER than any backtick run inside it.
@@ -202,38 +235,62 @@ func writeFenced(w *strings.Builder, body string) {
 }
 
 // renderIndex is the section landing: a table of every skill with what each
-// permutation costs, so the choice can be made on numbers rather than vibes.
-func renderIndex(full, simple []agent.AgentSkill) string {
+// form costs, so the choice can be made on numbers rather than vibes.
+func renderIndex(full, short []agent.AgentSkill) string {
 	var b strings.Builder
 	b.WriteString("---\ntitle: Agent skills\n")
-	b.WriteString("description: \"Every skill magus installs, in both curated permutations, generated from the embedded bodies.\"\n")
+	b.WriteString("description: \"Every skill magus installs, in both curated forms, generated from the embedded bodies.\"\n")
 	b.WriteString("tags: [agents, skills, reference]\npage_type: overview\n---\n\n")
 	b.WriteString("# Agent skills\n\n")
 	b.WriteString("These are the skills `magus agent install` writes, reproduced verbatim from the\n")
-	b.WriteString("bodies embedded in the binary. Each ships in two hand-authored permutations, and\n")
+	b.WriteString("bodies embedded in the binary. Each ships in two hand-authored forms, and\n")
 	b.WriteString("install writes both: the short form is the always-loaded primary, and the full form\n")
 	b.WriteString("is its `<name>-full` twin, loaded by name when a reader needs the rationale.\n")
 	b.WriteString("See [Skills](../../guides/integrations/agents/skills.md) for the difference.\n\n")
 
+	// Cards rather than a table. The row a reader wants is one skill, and a table made
+	// them read across five columns to reach the sentence that says whether it is the
+	// one; the card leads with the name and the sentence, and carries the sizes as a
+	// footnote. It is the site's existing card grid, so this adds markup and no CSS.
 	var tf, ts int
-	b.WriteString("| skill | full | short | saved | what it is for |\n| --- | --- | --- | --- | --- |\n")
+	b.WriteString("<div class=\"grid landing-cards\">\n")
 	for i, f := range full {
-		s := simple[i]
+		s := short[i]
 		tf += len(f.Body)
 		ts += len(s.Body)
-		saved := 0
-		if len(f.Body) > 0 {
-			saved = (len(f.Body) - len(s.Body)) * 100 / len(f.Body)
-		}
-		fmt.Fprintf(&b, "| [%s](%s.md) | %d | %d | %d%% | %s |\n",
-			f.Name, f.Name, len(f.Body), len(s.Body), saved, firstSentence(f.Description))
+		fmt.Fprintf(&b, "  <a class=\"landing-card\" href=\"%s/\">"+
+			"<span class=\"landing-card-title\">%s</span>"+
+			"<span class=\"landing-card-body\">%s</span>"+
+			"<span class=\"landing-card-body\"><small>%s short, %s full - %d%% shorter</small></span></a>\n",
+			f.Name, f.Name, escapeHTML(firstSentence(f.Description)),
+			kb(len(s.Body)), kb(len(f.Body)), percentSaved(len(f.Body), len(s.Body)))
 	}
-	saved := 0
-	if tf > 0 {
-		saved = (tf - ts) * 100 / tf
-	}
-	fmt.Fprintf(&b, "| **all %d** | **%d** | **%d** | **%d%%** | |\n", len(full), tf, ts, saved)
+	b.WriteString("</div>\n\n")
+	fmt.Fprintf(&b, "All %d together are %s installed as the short form, against %s for the full "+
+		"twins: %d%% less always-loaded text.\n", len(full), kb(ts), kb(tf), percentSaved(tf, ts))
 	return b.String()
+}
+
+// percentSaved is how much shorter the short form is, as a whole percent. Zero when
+// there is no full body to measure against, which is a skill that ships one form.
+func percentSaved(full, short int) int {
+	if full <= 0 {
+		return 0
+	}
+	return (full - short) * 100 / full
+}
+
+// kb renders a byte count the way a reader compares two of them. The exact figures stay
+// in each page's frontmatter for the size bar; a listing of fourteen skills wants the
+// magnitude.
+func kb(n int) string {
+	return fmt.Sprintf("%.1f KB", float64(n)/1024)
+}
+
+// escapeHTML makes a description safe inside the card's span. Descriptions are prose
+// with backticks and quotes in them, and one `<` would silently eat the rest of a card.
+func escapeHTML(s string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 }
 
 // firstSentence trims a skill's description to its opening claim, for a table cell
@@ -255,7 +312,7 @@ func firstSentence(s string) string {
 //
 // The values come from the catalog rather than a literal, so the table cannot
 // drift from what install actually writes. skill-content fingerprints THIS skill
-// alone; both of its permutations report the same one, which is why they go
+// alone; both of its forms report the same one, which is why they go
 // stale together and why an edit to a different skill leaves this page alone.
 func writeStampTable(b *strings.Builder, cat *agent.Catalog, skill agent.AgentSkill) {
 	body := string(cat.StampSkill(skill.Name, cat.RenderSkill(skill), agent.VariantFull))
@@ -284,6 +341,6 @@ func writeStampTable(b *strings.Builder, cat *agent.Catalog, skill agent.AgentSk
 			break
 		}
 	}
-	b.WriteString("\nThe `skill-content` digest covers this skill alone, and both permutations below " +
+	b.WriteString("\nThe `skill-content` digest covers this skill alone, and both forms below " +
 		"report it: they go stale together, never one silently, and a change to another skill does not move it.\n\n")
 }

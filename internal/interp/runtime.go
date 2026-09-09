@@ -635,7 +635,14 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 				// user args (the `[str]` second parameter) ride along after.
 				return buzzSess.CallValue(ctx, captured, append([]vm.Value{targetCtxVal}, args...))
 			})
-			return v, types.CeilingExceededError(ctx, err, key, ceiling, time.Since(started))
+			elapsed := time.Since(started)
+			// Emitted on every ceiling-bearing body, not only the ones that expire. A
+			// ceiling that fires reports this split in its error, but the number worth
+			// having is from the runs that PASS: whether a declared timeout is measuring
+			// the target or measuring the queue is a question about the steady state, and
+			// by the time one expires the answer is already too late to be a measurement.
+			logCeiling(ctx, key, ceiling, elapsed)
+			return v, types.CeilingExceededError(ctx, err, key, ceiling, elapsed)
 		}
 	}
 

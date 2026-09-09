@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/spells"
 )
 
-// memoryTool (magus_memory) is the durable handoff journal: a set of
+// memoryTool (magus_memory) is a repository's durable memory: a set of
 // discrete, categorized memory RECORDS that persist across sessions, models, and agent
 // hosts. Each record is one typed pointer into the magus domain (a saved query, a graph
 // node, an output ref, a command, a doc) - the payload is the ref, never free prose;
@@ -137,7 +137,7 @@ func (t *memoryTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 		}
 		return spells.InvokeResponse{Data: map[string]any{
 			"cursor":  content,
-			"warning": "legacy cursor snapshot; use named handoff-journal entries with op=put instead",
+			"warning": "legacy cursor snapshot; use named memory entries with op=put instead",
 		}}, nil
 
 	default:

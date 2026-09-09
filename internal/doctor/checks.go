@@ -1719,6 +1719,15 @@ var guardTemplateBasenames = []string{
 	"magus-guard-command.sh",
 	"magus-guard-path.sh",
 	"cursor-guard.sh",
+	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
+	// the observe template's did: silently, as a store that looks like a repository
+	// where nobody ever stopped mid-task.
+	//
+	// This entry named magus-pause.sh for the whole life of the rename that produced
+	// magus-checkpoint.sh, so the one check written to catch a silently stale copy
+	// could not match the only name a config ever carries. TestGuardTemplateBasenames
+	// AreShipped is what makes the next rename fail loudly instead.
+	"magus-checkpoint.sh",
 }
 
 // guardWiringCandidates are the config locations a shipped host glue installs
@@ -1730,9 +1739,16 @@ func guardWiringCandidates(root, home string) []string {
 		filepath.Join(root, ".claude", "settings.json"),
 		filepath.Join(root, ".cursor", "hooks.json"),
 		filepath.Join(root, ".opencode", "plugins"),
+		filepath.Join(root, ".codex", "hooks.json"),
 	}
 	if home != "" {
 		candidates = append(candidates,
+			// The hook wiring and the settings that enable it are separate files, and
+			// only the second was listed here. So a machine whose hooks were never
+			// installed graded exactly like one whose hooks were installed and
+			// current: measured 2026-09-08, a full day of sessions ran unguarded on
+			// this machine and no check anywhere reported it.
+			filepath.Join(home, ".codex", "hooks.json"),
 			filepath.Join(home, ".codex", "config.toml"),
 			filepath.Join(home, ".config", "opencode", "plugins"),
 		)
@@ -1863,6 +1879,99 @@ func guardTemplateMarkerProblem(path string, body []byte) string {
 func (r *runner) checkGuardWiring() types.DoctorCheck {
 	home, _ := os.UserHomeDir()
 	return checkGuardWiring(r.runCtx(), r.ws.Root(), home, guardCanaryBudget)
+}
+
+func (r *runner) checkCheckpointWiring() types.DoctorCheck {
+	home, _ := os.UserHomeDir()
+	return checkCheckpointWiring(r.ws.Root(), home)
+}
+
+// checkCheckpointWiring reports a host that magus is wired into but that records no
+// checkpoint, so nothing says where the work stood when a session stopped.
+//
+// It asks only of a checkout that ALREADY has a host hook config. A machine with no host
+// wiring at all is guard-wiring's finding, and repeating it here would be a second
+// advisory about the same absence. What this catches is the narrower and quieter case: a
+// host set up months ago, guarding correctly, silently recording nothing.
+//
+// Advice rather than a failure. Not every workspace wants this wired, and a doctor that
+// fails over an optional hook teaches people to stop reading it.
+func checkCheckpointWiring(root, home string) types.DoctorCheck {
+	const name = "checkpoint-wiring"
+
+	var hosts, recording []string
+	for _, candidate := range guardWiringCandidates(root, home) {
+		for _, path := range hookConfigFiles(candidate) {
+			body, err := os.ReadFile(path)
+			if err != nil || !bytes.Contains(body, []byte("magus")) {
+				continue
+			}
+			if !bytes.Contains(body, []byte("hook")) && !bytes.Contains(body, []byte(checkpointTemplate)) {
+				continue
+			}
+			hosts = append(hosts, path)
+			// The word alone, not a spelling of the invocation. A plugin calling magus
+			// directly passes its arguments as a list, so "session checkpoint" never
+			// appears as text there, and a detector that demanded it would report every
+			// such host as recording nothing.
+			if bytes.Contains(body, []byte("checkpoint")) {
+				recording = append(recording, path)
+			}
+		}
+	}
+
+	switch {
+	case len(hosts) == 0:
+		return types.DoctorCheck{
+			Name:     name,
+			Status:   types.DoctorOK,
+			Evidence: types.EvidenceUnknown,
+			Message:  "no agent-host hook config in this checkout, so there is nothing to record from; skipped",
+		}
+	case len(recording) == 0:
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorAdvice,
+			Message: fmt.Sprintf("%d host hook config(s) wired, none recording a checkpoint; nothing says where work stood when a session stopped", len(hosts)),
+			Details: append(append([]string{}, hosts...),
+				"wire a stop hook to "+checkpointTemplate+": docs/guides/integrations/agents.md",
+				"or record one by hand: "+hint.SessionCheckpoint.With(`--note "..."`)),
+		}
+	default:
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorOK,
+			Message: fmt.Sprintf("%d of %d host hook config(s) record a checkpoint", len(recording), len(hosts)),
+			Details: recording,
+		}
+	}
+}
+
+// checkpointTemplate is the shipped stop-hook script, named here so the check can spot a
+// config that runs it. A path, which is the one host-specific shape magus owns.
+const checkpointTemplate = "magus-checkpoint.sh"
+
+// hookConfigFiles expands one wiring candidate into the files worth reading: a plugin
+// DIRECTORY contributes its TypeScript, a config file contributes itself.
+func hookConfigFiles(candidate string) []string {
+	info, err := os.Stat(candidate)
+	if err != nil {
+		return nil
+	}
+	if !info.IsDir() {
+		return []string{candidate}
+	}
+	entries, err := os.ReadDir(candidate)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".ts" {
+			out = append(out, filepath.Join(candidate, e.Name()))
+		}
+	}
+	return out
 }
 
 // guardCanaryBudget bounds the canary. Generous for what it runs - one `magus
@@ -2082,7 +2191,10 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 func (r *runner) orphanedSkillDirs(root string, locations []string) []string {
 	var out []string
 	for _, loc := range locations {
-		dirs, err := r.opts.skills.StaleSkillDirs(root, loc)
+		// Dual: doctor grades a tree it did not install and cannot know the form of, so
+		// it asks the permissive question. A twin beside its primary is reported only
+		// when it is a name magus no longer ships at all.
+		dirs, err := r.opts.skills.StaleSkillDirs(root, loc, agent.FormBoth)
 		if err != nil {
 			continue
 		}

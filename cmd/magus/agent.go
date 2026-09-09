@@ -87,6 +87,7 @@ func agentUsage(w io.Writer) {
 		"Only skills magus wrote are candidates - a hand-authored one beside them is never touched")
 	tty.ProseItem(w, tty.SystemProbe, "  --tar          ", "stream a tar archive to stdout instead of writing files")
 	tty.ProseItem(w, tty.SystemProbe, "  --global       ", "allow absolute destination paths in write mode")
+	tty.ProseItem(w, tty.SystemProbe, "  --skill-form   ", "skill form: both (default), short, or full; choose explicitly when one body per skill is wanted")
 }
 
 func agentUsageErr() error {
@@ -118,6 +119,10 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
+	form, err := agent.ParseForm(af.SkillForm)
+	if err != nil {
+		return fmt.Errorf("agent install --skill-form: %w", err)
+	}
 	dests := fset.Args()
 
 	if af.Tar {
@@ -128,7 +133,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		if len(dests) == 1 {
 			prefix = dests[0]
 		}
-		body, err := agentSkills.SkillTar(prefix, agent.VariantSimple)
+		body, err := agentSkills.SkillTar(prefix, form)
 		if err != nil {
 			return err
 		}
@@ -157,12 +162,12 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		// Answers the question --prune is dangerous without: which directories go.
 		// Same two lists the real run reports, nothing touched.
 		if af.DryRun {
-			w, err := agentSkills.PlanSkillTree(base, leaf, agent.VariantSimple)
+			w, err := agentSkills.PlanSkillTree(base, leaf, form)
 			if err != nil {
 				return err
 			}
 			written = append(written, w...)
-			s, err := agentSkills.StaleSkillDirs(base, leaf)
+			s, err := agentSkills.StaleSkillDirs(base, leaf, form)
 			if err != nil {
 				return err
 			}
@@ -173,7 +178,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 			}
 			continue
 		}
-		w, err := agentSkills.WriteSkillTree(base, leaf, af.Force, agent.VariantSimple)
+		w, err := agentSkills.WriteSkillTree(base, leaf, af.Force, form)
 		if err != nil {
 			return err
 		}
@@ -181,14 +186,14 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		// After writing, never before: a prune that ran first would delete a skill
 		// this install then failed to replace.
 		if af.Prune {
-			r, err := agentSkills.PruneSkillTree(base, leaf)
+			r, err := agentSkills.PruneSkillTree(base, leaf, form)
 			if err != nil {
 				return err
 			}
 			removed = append(removed, r...)
 			continue
 		}
-		s, err := agentSkills.StaleSkillDirs(base, leaf)
+		s, err := agentSkills.StaleSkillDirs(base, leaf, form)
 		if err != nil {
 			return err
 		}
@@ -210,13 +215,13 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		}
 		slog.InfoContext(ctx, "agent install: removed skill this binary no longer ships", slog.String("path", p))
 	}
-	printAgentInstallNextSteps(af.Dir, written, stale, agent.VariantSimple, af.DryRun)
+	printAgentInstallNextSteps(af.Dir, written, stale, form, af.DryRun)
 	return nil
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
-func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Variant, dryRun bool) {
+func printAgentInstallNextSteps(dir string, written, stale []string, form agent.Form, dryRun bool) {
 	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
@@ -242,8 +247,8 @@ func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Var
 			len(stale), strings.Join(names, ", ")))
 	}
 	reportContextCost(dir, written)
-	if v == agent.VariantSimple {
-		interactive.Emit(os.Stderr, "each skill also has an always-full <name>-full twin: when you hand work to a smaller model, point it at that name - the primary is the shorter form and bets its reader can re-derive what it drops")
+	if form == agent.FormBoth {
+		interactive.Emit(os.Stderr, "both installs the short body under each skill's own name plus an always-full <name>-full reference; pass --skill-form=short or --skill-form=full when one body per skill is required")
 	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
 	// verbs instead, because a generated index is only true as of its last run.
@@ -305,7 +310,7 @@ func agentSampleCmd() error {
 }
 
 // reportContextCost tells the caller how many bytes of instruction the install
-// just added, and what the other permutation would have cost.
+// just added, and what the other form would have cost.
 //
 // BYTES, not tokens: a token count is only true for one tokenizer, and these
 // files are installed for whatever host the reader uses. Printed at all for

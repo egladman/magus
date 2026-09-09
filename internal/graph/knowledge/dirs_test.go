@@ -12,7 +12,7 @@ import (
 func edgeTriples(edges []types.KnowledgeEdge) map[[3]string]bool {
 	m := map[[3]string]bool{}
 	for _, e := range edges {
-		m[[3]string{e.Source, e.Target, e.Relation}] = true
+		m[[3]string{e.Source, e.Target, string(e.Relation)}] = true
 	}
 	return m
 }
@@ -31,9 +31,9 @@ func TestContainsChain(t *testing.T) {
 		assert.Equal(t, "dir:internal/interp", nodes[1].ID)
 
 		tr := edgeTriples(edges)
-		assert.True(t, tr[[3]string{"project:.", "dir:internal", types.RelationContains}])
-		assert.True(t, tr[[3]string{"dir:internal", "dir:internal/interp", types.RelationContains}])
-		assert.True(t, tr[[3]string{"dir:internal/interp", "file:internal/interp/discovery.go", types.RelationContains}])
+		assert.True(t, tr[[3]string{"project:.", "dir:internal", string(types.RelationContains)}])
+		assert.True(t, tr[[3]string{"dir:internal", "dir:internal/interp", string(types.RelationContains)}])
+		assert.True(t, tr[[3]string{"dir:internal/interp", "file:internal/interp/discovery.go", string(types.RelationContains)}])
 	})
 
 	t.Run("root-level file keeps the direct project edge", func(t *testing.T) {
@@ -49,8 +49,8 @@ func TestContainsChain(t *testing.T) {
 		require.Len(t, nodes, 1)
 		assert.Equal(t, "dir:libs/diagnostics/sub", nodes[0].ID)
 		tr := edgeTriples(edges)
-		assert.True(t, tr[[3]string{"project:libs/diagnostics", "dir:libs/diagnostics/sub", types.RelationContains}])
-		assert.True(t, tr[[3]string{"dir:libs/diagnostics/sub", "file:libs/diagnostics/sub/foo.go", types.RelationContains}])
+		assert.True(t, tr[[3]string{"project:libs/diagnostics", "dir:libs/diagnostics/sub", string(types.RelationContains)}])
+		assert.True(t, tr[[3]string{"dir:libs/diagnostics/sub", "file:libs/diagnostics/sub/foo.go", string(types.RelationContains)}])
 	})
 
 	t.Run("two files in one directory share the dir node ID (dedup by identity)", func(t *testing.T) {

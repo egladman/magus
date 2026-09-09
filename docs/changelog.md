@@ -55,6 +55,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   because it counts its own ancestors' claims as load. Nothing about what counts as
   redundant changed: a green gate for this branch, plus a delta in which every path is
   generated output, prose or a comment-only edit.
+- **An exclusive target is exclusive while it fans out.** A step declared `exclusive`
+  released its isolation lock so its `ctx.needs` children could be admitted, which for a
+  body that is only `ctx.needs` meant it was shareable for nearly its whole life: this
+  repo's own `generate` is exclusive and its body is a fan-out over every `*-generate`
+  sibling, so the drift gate ran alongside everything it exists to be isolated from. It
+  now keeps the lock and its children run inside the region, taking no lease of their own,
+  which is also why they cannot deadlock behind it. A child that declares `exclusive`
+  itself is subsumed rather than nested, matching what the policy already promises: it
+  excludes batch peers, and a dynamically dispatched child has no batch.
+
+- **Every backend can preserve the working copy, in its own idiom, without costing state.**
+  `VCSDriver.Preserve` captures uncommitted work - tracked changes AND untracked files -
+  and returns a handle that resolves it back: git builds a commit through a temporary
+  index and anchors it under a private refs/magus ref namespace, Mercurial shelves with
+  the keep flag, Sapling commits and unwinds, and Jujutsu already snapshotted so it mints
+  nothing. It is on the required interface because no caller has a sensible degraded
+  path: "could not preserve" is not something to shrug at the way a missing remote URL is.
+  The guarantee is identical everywhere and the parity test enforces it: after Preserve,
+  every file is byte-identical and the backend still reports the same paths as modified
+  and unknown. Storing costs working-copy state on the Mercurial family - unknown files
+  come back added, deleted files come back scheduled for removal - so that state is read
+  first and put back, which is the half a by-hand check misses.
+- **A denied command says how much of the line it refused.** A deny kills the whole shell
+  invocation while the reason discusses only the construct that earned it, so a line that
+  chained an edit ahead of a denied command read as a partial refusal: fix the named
+  command, assume the rest ran. They did not. A deny on a multi-command line now says
+  nothing in it ran and how many other commands went with it.
+
+- **The agent surface says how to get back to a recorded state, and stops promising a
+  restore that cannot exist.** A checkpoint records a revision and a DIGEST of the
+  uncommitted patch; the patch text is hashed and discarded, so it can confirm whether a
+  tree is the same one and can never give the work back. Nothing said so, and four
+  places implied otherwise - one told an agent to "materialize the files you touch from
+  the checkpoint", which is impossible. magus-vcs-hygiene now covers it: commit before
+  parking, find the revision with `magus session` and `git reflog`, inspect it out of
+  place with a detached worktree, and restore per file rather than reaching for the
+  whole-tree commands the guard denies.
+
+- **`magus doctor` can see the checkpoint hook template again.** The list of shipped
+  template basenames a config is searched for still named `magus-pause.sh` after that
+  file was renamed to `magus-checkpoint.sh`, and nothing pinned the list. Since the search
+  only matches names on it, the one check written to catch a silently stale hook could not
+  match the only name a config ever carries: a wired host graded healthy while running a
+  script that called a subcommand magus no longer has. Template revision 11 so an
+  unreplaced copy reports itself.
+
+- **The two skill forms answer to one word each: SHORT and FULL.** The shorter end used to
+  have three names - `simple` in the code and in an installed file's `skill-variant:` stamp,
+  `concise` on `--skill-form`, `short` on the website - so a reader could pass
+  `--skill-form=concise`, get a file stamped `simple`, and read a page about the short form.
+  `--skill-form` now takes `both` (the default), `short`, or `full`; the stamp records
+  `short`; and a skill body brackets its shorter wording with `{{if .Short}}`. Nothing
+  answers to the old spellings, and skill version 53 grades every installed tree stale so a
+  reinstall restamps it.
+- **"Handoff journal" is gone from the memory command and the docs.** `magus memory`
+  manages a per-repository MEMORY: that is what the command is called, what the MCP tool
+  is called, and now what its help text, manpage, and every page describing it call the
+  thing it stores. The skill was renamed a release ago and these surfaces were missed.
+- **`RenderedSkills` and the paths that draw from it take a form, not a variant.** A form may
+  name two bodies (`both` writes each skill short plus a full twin) and a variant names one,
+  so the enumerators that plan, archive and write an install now take the form the caller
+  chose. That retires the parallel `*ForForm` methods, whose Variant-taking twins silently
+  added twins for one value and not the other.
+
 - **Watching a CI run is refused.** `gh run watch`, and the `--watch` forms of
   `gh run view` and `gh pr checks`, now deny and name the one board query that answers
   every open pull request at once. Watching costs a wake-up per completion and buys
