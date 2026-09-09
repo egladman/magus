@@ -316,6 +316,25 @@ func TestLimiterYieldNoOverReleaseOnCancel(t *testing.T) {
 	assert.NoError(t, l.AcquireN(context.Background(), 2), "capacity shrank after yield cycles")
 }
 
+// TestLimiterYieldReleasesOneSlotForAnUnmarkedCaller pins Yield's floor of 1, which
+// reads like dead defensive code and is not: proc's server takes its admission slot
+// with a raw Acquire and never marks the context, so an unmarked ctx there means one
+// slot held. Without the floor that slot stays held through the whole forwarded run
+// and every adopted child inflates the shared pool by one.
+func TestLimiterYieldReleasesOneSlotForAnUnmarkedCaller(t *testing.T) {
+	t.Parallel()
+	l := NewLimiter(1)
+	require.NoError(t, l.Acquire(context.Background()))
+
+	inside := -1
+	require.NoError(t, l.Yield(context.Background(), func() error {
+		inside = l.Snapshot().Running
+		return nil
+	}))
+	assert.Equal(t, 0, inside, "an unmarked caller still yields its one slot")
+	assert.Equal(t, 1, l.Snapshot().Running, "and holds it again on return")
+}
+
 // makeTar writes a gzip-compressed tar containing one file of size n bytes.
 func makeTar(t *testing.T, name string, size int64) io.Reader {
 	t.Helper()

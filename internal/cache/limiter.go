@@ -110,11 +110,16 @@ func (l *Limiter) ReleaseN(n int) {
 // Yield releases the caller's slots for the duration of fn, then re-acquires them
 // before returning. It releases every slot the caller holds (SlotsHeld(ctx), at
 // least 1): a weighted step holds more than one, and releasing only one would leave
-// it pinning slots that fn's own AcquireN then blocks on forever. The caller MUST
-// hold a slot; a slotless caller would over-release the semaphore. Re-acquire uses a
+// it pinning slots that fn's own AcquireN then blocks on forever. Re-acquire uses a
 // non-cancellable context so the caller always returns with its slots held (RunAll
 // releases unconditionally; a slotless return would panic). The re-acquire re-enters
 // the FIFO queue, so a yielding goroutine goes to the back.
+//
+// The floor of 1 is the contract for a caller holding a slot the CONTEXT does not
+// name, which proc's server does at both of its Yield sites: it takes its admission
+// slot with a raw Acquire, so an unmarked ctx there means one slot held, not none.
+// Callers holding nothing at all (magus.go's spell fan-out, proc.RunChildSync) check
+// SlotHeld and never reach here, which is what keeps the floor from over-releasing.
 //
 // Trade-off: the non-cancellable re-acquire can block a returning yield on a saturated
 // limiter even after ctx is cancelled, slowing shutdown until peers free the slots.
