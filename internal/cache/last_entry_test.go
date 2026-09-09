@@ -125,7 +125,7 @@ func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
 }
 
 // TestLastRecordedRun_WouldReplayAnOlderKey: an edit and a revert leave the NEWEST entry
-// keyed to the edited tree while the key a run now mints belongs to the first entry -
+// keyed to the edited tree while the key a run now mints belongs to the first entry,
 // which still hits. Reading the verdict off the newest entry alone reports a miss for a
 // run that never executes.
 func TestLastRecordedRun_WouldReplayAnOlderKey(t *testing.T) {

@@ -191,7 +191,7 @@ type Variant int
 // The `skill-variant:` stamp KEY keeps its own name on purpose: it records which body a
 // file holds, which is a Variant, not the Form an install was asked for.
 const (
-	// VariantShort sheds ENUMERATION and keeps JUDGMENT, for the most capable readers -
+	// VariantShort sheds ENUMERATION and keeps JUDGMENT, for the most capable readers,
 	// not the least. A capable reader can re-derive the mechanical steps from the tool
 	// surface on its own; what it cannot re-derive is which failures are silent, what is
 	// load-bearing, and where a judgment call is being asked of it. So short is a bet ON
@@ -367,7 +367,7 @@ func (r SkillRef) String() string { return string(r) }
 // Panicking is right here for the same reason [regexp.MustCompile] does it: every caller passes a
 // literal, the catalog is embedded at build time, so a bad name is a fact about the binary rather
 // than about anything that happened at runtime. Failing at init means a renamed skill breaks the
-// build's own tests instead of silently leaving a reader pointed at a skill they cannot load -
+// build's own tests instead of silently leaving a reader pointed at a skill they cannot load,
 // which is a failure that renders perfectly and helps nobody.
 //
 // The name must be the CANONICAL one. A former name still resolves for an already-installed copy
@@ -938,7 +938,7 @@ func (c *Catalog) installedSkillNames(path string) []string {
 // shipped is the set of directory names an install of form writes.
 //
 // The error is propagated rather than absorbed into an empty set: callers read this
-// as "magus did not write that", and an empty set says it of every skill magus owns -
+// as "magus did not write that", and an empty set says it of every skill magus owns,
 // which would make StaleSkillDirs offer the whole installed tree for deletion.
 //
 // Derived from what the form actually renders rather than asserted here: the set used
@@ -994,7 +994,7 @@ func (c *Catalog) Section() string { return c.agentsSection }
 
 // VariantSize returns the total rendered size of every skill's PRIMARY entry
 // in v, stamp included, so a caller can state the context cost of an install
-// without performing one. Deliberately excludes RenderedSkills' full twins -
+// without performing one. Deliberately excludes RenderedSkills' full twins:
 // reportContextCost uses this to compare "what you have" against "what the other
 // variant would be", and a twin-inclusive total would make VariantSize(VariantShort)
 // larger than VariantSize(VariantFull) precisely because FormBoth installs more

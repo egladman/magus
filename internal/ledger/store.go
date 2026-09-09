@@ -27,7 +27,7 @@
 // vocabulary came from the magus-multi-agent skill, which is also where the row shape is
 // defined (see types.Lease).
 //
-// It is the INTENT layer of three, and naming the other two is what keeps them apart -
+// It is the INTENT layer of three, and naming the other two is what keeps them apart;
 // they are flat stores joined by lease id at render time, never a storage hierarchy:
 //
 //   - intent: this package. What an orchestrating agent SAID it would hand out.

@@ -299,7 +299,7 @@ func (n *Notifier) Clear(key string) error {
 	// Retraction is a MODEL operation, like pinning: a condition that became
 	// false has to stop being true whether or not it is currently on screen.
 	// Guarding on the lease meant a pin recorded when there was no room could
-	// never be cleared, so it would surface the moment the band gained a row -
+	// never be cleared, so it would surface the moment the band gained a row,
 	// long after the thing it described had ended.
 	for i := range n.toasts {
 		if n.toasts[i].key != key {

@@ -192,7 +192,7 @@ func (v saplingVCS) Dirty(ctx context.Context, dir string, paths []string) (bool
 // `git status --porcelain` and `hg status` report from the repository root wherever they
 // run, while `sl status` reports from the CWD. Measured from a subdirectory: git and hg
 // say "sub/a.txt", bare sl says "a.txt". Callers stamp these paths with the repository
-// root as their base (std/vcs.go, std/magus.go), so the bare form addresses <root>/a.txt -
+// root as their base (std/vcs.go, std/magus.go), so the bare form addresses <root>/a.txt,
 // a different file, which frequently exists. Nothing errors; the wrong file is read.
 //
 // During an unfinished merge Sapling appends a "# The repository is in an unfinished
@@ -255,7 +255,7 @@ func (v saplingVCS) FindCommit(ctx context.Context, dir, rev string) (types.Comm
 	}
 	// hgCommitTemplate verbatim: Sapling kept Mercurial's template language, and every
 	// keyword and filter in it ({node}, {person(author)}, {date|rfc3339date}, {parents},
-	// {desc}) was verified to resolve under `sl log`. Sharing the constant is deliberate -
+	// {desc}) was verified to resolve under `sl log`. Sharing the constant is deliberate:
 	// a second copy would be free to drift from the parser both feed.
 	out, err := vcsOutput(ctx, dir, "sl", "log", "-r", rev, "--template", hgCommitTemplate)
 	if err != nil {
@@ -975,7 +975,7 @@ func (v saplingVCS) StartMerge(ctx context.Context, root, ref string) error {
 	if err == nil {
 		return nil
 	}
-	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up -
+	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up;
 	// the conflicts are the payload, reported by Conflicts. Having ruled out a pre-existing
 	// operation above, merge state now means THIS merge began.
 	if underway, uErr := v.mergeInProgress(ctx, root); uErr == nil && underway {
@@ -999,7 +999,7 @@ func (v saplingVCS) mergeInProgress(ctx context.Context, root string) (bool, err
 //
 // The guard is not defensive tidiness, it is the whole method. `sl goto --clean .` is a
 // WHOLE-TREE revert that exits 0 whether or not a merge is underway, so calling it with
-// nothing to abort silently discards every uncommitted edit in the working copy -
+// nothing to abort silently discards every uncommitted edit in the working copy,
 // measured. git's `merge --abort` refuses in that state instead. Callers reach this on a
 // failure path, which is exactly when "there was no merge to abort" is likely, so without
 // the guard the error path eats the user's work.

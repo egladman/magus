@@ -287,7 +287,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server), so
 		// it needs no workspace RESOLUTION and is never forwarded to a daemon. It does
 		// need the config: a script run inside a workspace gets that workspace on its
-		// context (see buzzCmd), and opening one reads magus.yaml and the MAGUS_* env -
+		// context (see buzzCmd), and opening one reads magus.yaml and the MAGUS_* env,
 		// the remote cache's trust set among them. Listed as config-free while it opened
 		// a workspace anyway, it opened it against DEFAULTS, so a wired remote backend
 		// came up with no trust set and the load failed with a message naming the very
@@ -1208,7 +1208,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		// workspace can't be closed under an in-flight build. Close is idempotent.
 		srv.Close()
 		// ctx may already be Done here (the signal path above), and Shutdown's wait
-		// for an in-flight service Start returns immediately once its ctx is done -
+		// for an in-flight service Start returns immediately once its ctx is done,
 		// so passing the cancelled ctx straight through would skip stopping anything
 		// still starting. context.WithoutCancel plus a fresh bound keeps teardown
 		// running (and still cancellable) instead of either hanging forever (the bug

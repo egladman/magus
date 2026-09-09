@@ -35,7 +35,7 @@ const reapGracePeriod = 5 * time.Minute
 // had accumulated 39 dead sockets with zero magus processes running.
 //
 // Discovery is the right place: it already dials every candidate to test liveness, so it
-// knows which are dead and pays nothing extra to say so. Failure is ignored on purpose -
+// knows which are dead and pays nothing extra to say so. Failure is ignored on purpose:
 // a socket another process removed first, or one we cannot unlink, is not worth failing
 // a discovery call over.
 func reapDeadSocket(path string, e os.DirEntry) {
@@ -130,7 +130,7 @@ func DiscoverSockets(ctx context.Context) ([]string, error) {
 		}
 		p := filepath.Join(dir, name)
 		if isSocketLive(ctx, p) {
-			// unix:// URL, matching LookupStableSocket's return format above -
+			// unix:// URL, matching LookupStableSocket's return format above;
 			// functionally inert either way (endpoint.Parse accepts both back-compat),
 			// but a caller comparing addresses across the two branches should not see
 			// two different shapes for the same kind of thing.

@@ -73,7 +73,7 @@ func TestAdviseNewSourceDirIsSilentOnAnExistingDirectory(t *testing.T) {
 }
 
 // Editing the sole file of a one-file package must stay silent. The rule runs BEFORE
-// the write, so a file that already exists means the directory already had it -
+// the write, so a file that already exists means the directory already had it;
 // treating it as absent re-fires the advice on every later edit, forever.
 func TestAdviseNewSourceDirIsSilentEditingASoleFile(t *testing.T) {
 	root := inWorkspace(t)

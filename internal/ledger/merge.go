@@ -104,7 +104,7 @@ func mergeString(params map[string]any, key string) (string, bool, error) {
 
 // mergeList accepts the natural JSON/Buzz array shape as well as the space-separated
 // string the MCP descriptor schema forces on typed clients (magus_describe_file's paths
-// set the precedent). A caller sending a real array must not silently record nothing -
+// set the precedent). A caller sending a real array must not silently record nothing,
 // nor may one element of the wrong type quietly shorten the list, so both are reported.
 func mergeList(params map[string]any, key string) ([]string, bool, error) {
 	v, present := params[key]

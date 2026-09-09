@@ -26,7 +26,7 @@ import (
 // target actually called site-generate. Making it suffix shorthand instead would have it
 // compile to ^.*-site-generate$ and silently exclude nothing, which is the one outcome a
 // subtraction must never produce. Excluding a whole family is still available, spelled the
-// same way it is included: "!*-generate". The include shorthand is deliberately left alone -
+// same way it is included: "!*-generate". The include shorthand is deliberately left alone;
 // widening it to match bare names too would make ctx.glob("generate") match the `generate`
 // target that contains it, turning a convenience into self-recursion.
 //

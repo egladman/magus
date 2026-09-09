@@ -126,7 +126,7 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 				}
 				// Only a genuine absence counts. Treating every stat error as "gone"
 				// means an EACCES after a permissions change, or an EIO on a network
-				// mount, withdraws a live run's exclusivity while it keeps mutating -
+				// mount, withdraws a live run's exclusivity while it keeps mutating:
 				// the precise thing the lock exists to prevent.
 				if _, err := os.Stat(root); err == nil || !errors.Is(err, fs.ErrNotExist) {
 					continue
@@ -695,7 +695,7 @@ func (l *projectLocker) readOwner(projectPath string) processRecord {
 
 // readRecord decodes a sidecar, or returns a zeroed record when there is nothing
 // trustworthy to read. PID == 0 is what every caller already tests for "nothing to
-// say", so an absent, malformed, or unreadable sidecar collapse to one answer here -
+// say", so an absent, malformed, or unreadable sidecar collapse to one answer here,
 // which is safe only because these records are informational. The flock decides
 // exclusion; nothing branches on this being present.
 func readRecord(dir string) processRecord {

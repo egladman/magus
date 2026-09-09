@@ -36,7 +36,7 @@ import (
 //   - ignoreDirs: the issuing spell's own mgs_listIgnoreDirs, so a Command.Sources
 //     expansion inherits them instead of the op re-declaring them.
 //   - refs: op-specific runner-computed values a $NAME token may resolve to, alongside
-//     run.SelfVars. Deliberately separate from env, which can carry a resolved Secret -
+//     run.SelfVars. Deliberately separate from env, which can carry a resolved Secret,
 //     and a Secret must never be reachable through Args.
 type commandOpts struct {
 	op         string // the op name, for error attribution; "" only on paths with no name to give
@@ -139,7 +139,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	//
 	// ONE TAIL PER STREAM, deliberately: os/exec drives stdout and stderr with a copy
 	// goroutine each, so a shared buffer would hold an arbitrary interleaving of two
-	// documents that never existed as one, and would make them compete for one budget -
+	// documents that never existed as one, and would make them compete for one budget,
 	// letting stdout progress chatter evict the stderr error the advice exists to catch.
 	//
 	// The tail is FIRST in each MultiWriter: it cannot fail, and MultiWriter aborts on the

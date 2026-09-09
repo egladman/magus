@@ -137,7 +137,7 @@ func TestDiscardHandler_NeverEnabled(t *testing.T) {
 // TestFileHandlerFlushesEverythingButOutput pins what makes `magus events
 // --follow` able to fire at all: a live follower tails this file, so a result
 // still sitting in the bufio page is a result the subscriber never sees on a run
-// short enough to end before the page fills. Output stays buffered on purpose -
+// short enough to end before the page fills. Output stays buffered on purpose:
 // it is the one high-volume kind, and a follower opts into it.
 func TestFileHandlerFlushesEverythingButOutput(t *testing.T) {
 	var sink bytes.Buffer

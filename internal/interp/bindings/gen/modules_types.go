@@ -42,7 +42,7 @@ type ModuleReg struct {
 	// is the identifier the module binds as (`json`), while Path is what an
 	// import line says (`encoding/json`). Empty means the two are the same.
 	//
-	// It mirrors std.Module.Path, and TestModulesMatchStd checks the two agree -
+	// It mirrors std.Module.Path, and TestModulesMatchStd checks the two agree:
 	// a Path here that std does not declare would register a module at an import
 	// path nothing else in magus knows about.
 	Path string

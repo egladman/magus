@@ -294,7 +294,7 @@ func probeMCPReadiness(ctx context.Context, addr string) int {
 //
 // The body is a fixed generic token ("ok"/"unavailable"), NOT evaluateHealth's reason.
 // These routes are served unguarded (no bearer token, no DNS-rebind check) so a container
-// orchestrator can probe them, which means anyone who can reach the port reads the body -
+// orchestrator can probe them, which means anyone who can reach the port reads the body;
 // and evaluateHealth's reason embeds the daemon PID on the healthy path and, on the
 // unreachable path, a proc-dial error that carries the daemon socket path. A liveness probe
 // only needs UP/DOWN, which the status code already carries (a kubelet reads only the code),

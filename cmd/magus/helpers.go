@@ -54,7 +54,7 @@ type skipMergeDriverRefreshKey struct{}
 
 // withoutMergeDriverRefresh suppresses the merge-driver registration refresh for loads made
 // from inside the merge driver itself. EnsureMergeDriver writes the TRACKED .gitattributes,
-// and the driver runs inside the VCS's own index manipulation, once per conflicted file -
+// and the driver runs inside the VCS's own index manipulation, once per conflicted file,
 // so refreshing there leaves the working tree dirty against what the VCS staged and stops
 // `git rebase --continue` dead, which is the exact failure the driver was rewritten to stop
 // causing. Any other caller still keeps the registration honest.
@@ -219,7 +219,7 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 //
 // 75 is EX_TEMPFAIL from sysexits.h, borrowed the same way. Two failures carry it: a
 // contended no-wait project lock (lockContendedExit) and a step the machine's build
-// budget could not seat (cache.ExitCodeMachineBusy, MGS3009). Neither is named here -
+// budget could not seat (cache.ExitCodeMachineBusy, MGS3009). Neither is named here:
 // each error states its own code and exitCodeOf reads it through proc.ExitCode, which
 // is what lets the daemon report the same status for a run it executed on a client's
 // behalf. A caller that cannot tell either from 1 reads a busy machine as a broken

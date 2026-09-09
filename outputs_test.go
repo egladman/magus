@@ -308,7 +308,7 @@ func TestAllOutputsNeverAliasesProjectOutputs(t *testing.T) {
 //
 // It has to fail at LOAD. Left to the depgraph it surfaced as a bare "graph: dependency
 // cycle" naming neither project nor file, it took down `magus graph` and the whole
-// affected pipeline rather than the two projects involved, and it was scope-dependent -
+// affected pipeline rather than the two projects involved, and it was scope-dependent:
 // a run selecting only the writer never built the full graph, so `magus run build`
 // reported success on a workspace `magus graph deps` refused to load.
 func TestCrossOutputMutualRefIsRejectedAtLoad(t *testing.T) {

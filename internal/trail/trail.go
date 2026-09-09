@@ -631,7 +631,7 @@ func ReadRecent(base string, limit int) ([]Event, error) {
 
 // Rotate keeps the last maxEvents events and deletes blobs that no kept event references.
 // Best-effort: any error leaves the trail as-is, and it only rewrites when the file exceeds the
-// cap. It takes no lock, so a concurrent Append racing the read-rewrite window can be dropped -
+// cap. It takes no lock, so a concurrent Append racing the read-rewrite window can be dropped:
 // acceptable for a best-effort governance trail, and the price of keeping the trail lock-free.
 //
 // It is CHEAP to call on a trail that is already small (see minEventBytes), which is what lets the

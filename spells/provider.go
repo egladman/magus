@@ -36,7 +36,7 @@ const ListProjectsContract = "list_projects"
 // handle, so a provider has only the name to give. Every name must resolve.
 //
 // The record crosses INTO magus as a Buzz object and is marshaled back out as JSON by
-// the provider cache, keyed by the json tags below. Those tags are not decoration -
+// the provider cache, keyed by the json tags below. Those tags are not decoration:
 // without them the cache encoded under Go field names, which musttag could not see. A
 // rename here is a wire change in two directions: regenerate the mirror, and bump
 // providerCacheVersion so existing entries miss.
@@ -79,7 +79,7 @@ type ProvidedProject struct {
 // Secret is what a provider spell's resolve_secret op returns: one resolved credential.
 //
 // A typed return rather than a bare `str`, and the distinction that makes it worth having
-// is narrow but real. Buzz does not check host-call RESULTS or object field literals -
+// is narrow but real. Buzz does not check host-call RESULTS or object field literals,
 // which is why magus\secret.read still hands a magusfile a plain string, and why there is
 // no Buzz-level Secret type there. It DOES check function signatures, so
 // `resolve_secret(...) > Secret` is enforced: a provider that returns something else

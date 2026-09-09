@@ -304,7 +304,7 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 }
 
 // RefNotFoundError reports a ref that resolved in none of the stores consulted, and
-// names them. "Not found" is only actionable if the reader knows where magus looked -
+// names them. "Not found" is only actionable if the reader knows where magus looked;
 // a foreign ref that was never published looks identical to a mistyped one otherwise.
 type RefNotFoundError struct {
 	Ref    string

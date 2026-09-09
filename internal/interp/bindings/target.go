@@ -653,7 +653,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	// they do nothing.
 	c.MapSet(ctxMarker, vm.BoolValue(true))
 	// ctx.withEnv({...}) / ctx.withCwd(".."): a magus\Exec, the EXECUTION-only context,
-	// carrying overrides for the op calls made with it -
+	// carrying overrides for the op calls made with it:
 	// go["go-test"](ctx.withEnv({"CGO_ENABLED": "0"})).
 	//
 	// Named for WHAT DIFFERS, not the act of making it, following context.WithValue /

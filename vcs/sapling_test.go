@@ -44,7 +44,7 @@ func TestParseSaplingConflicts(t *testing.T) {
 // beside parseHgRemovalCandidates instead of reusing it: hg marks the deleted side with an
 // `extra: merge-removal-candidate = yes` line that Sapling never writes. Sapling states it
 // as a null other-side node and a "C" record type. Feeding this output to hg's parser finds
-// nothing, and every modify/delete would be silently classified as a content conflict -
+// nothing, and every modify/delete would be silently classified as a content conflict,
 // which regeneration cannot settle.
 func TestParseSaplingRemovalCandidates(t *testing.T) {
 	const out = `local: f659ed4f11ca57164705271d7b9217cd28bb3edc

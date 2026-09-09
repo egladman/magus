@@ -392,7 +392,7 @@ func TestPlan_oneProjectOverBudgetDoesNotSpin(t *testing.T) {
 func TestMemoryBudget_derivedFromTheHostWithNoKnob(t *testing.T) {
 	t.Parallel()
 	// The default path: no caller sets anything, and a budget still appears on any
-	// host magus can ask. This is the whole point of not exposing a config key -
+	// host magus can ask. This is the whole point of not exposing a config key:
 	// the protection has to be on for people who never heard of it.
 	f := Forecaster{Target: "ci"}
 	got := f.memoryBudget()

@@ -31,7 +31,7 @@ type Touch struct {
 	// last handful is the context that explains the edit, and the whole session's reach is a
 	// different question with a different surface.
 	Read []string `json:"read,omitempty" yaml:"read,omitempty"`
-	// Ran are the PROGRAMS the session ran before the write, most recent first and capped -
+	// Ran are the PROGRAMS the session ran before the write, most recent first and capped:
 	// "go", "grep", "perl", not their arguments.
 	//
 	// Arguments are dropped, and that is the whole point of this field's shape. Carrying the
@@ -130,7 +130,7 @@ func Replay(root, base string, paths []string, limit int) map[string][]Touch {
 
 		// A hook records the path exactly as its host supplied it, which is an ABSOLUTE path
 		// for every host observed so far, while a review speaks workspace-relative. Without
-		// this the two vocabularies never meet and every file reports no history at all -
+		// this the two vocabularies never meet and every file reports no history at all,
 		// which looks identical to "no hook is wired" and is why it was worth a helper rather
 		// than a comparison at each site.
 		reqPath := relativize(root, req.Path)

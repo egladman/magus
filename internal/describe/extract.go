@@ -201,7 +201,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						attributedIO[ast.NodePos(e.Callee)] = true
 						// recognized counts every argument the static read could attribute:
 						// a string literal, or (for inputs) a <alias>.file("lit") cross ref.
-						// recognized < len(args) means a computed argument slipped through -
+						// recognized < len(args) means a computed argument slipped through;
 						// flag it by kind so the load path can reject the footprint ones.
 						recognized := len(globs)
 						switch kind {
@@ -234,7 +234,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									// types/describe.go) despite the identical shape, so this
 									// conversion is the one place that boundary is explicitly and
 									// visibly crossed. If OutputRef ever grows a field InputRef
-									// lacks, this fails to compile instead of silently zeroing it -
+									// lacks, this fails to compile instead of silently zeroing it;
 									// do not collapse it back into a field-by-field struct literal.
 									node.WritesFiles = appendUniq(node.WritesFiles, types.OutputRef(ref))
 								}
@@ -507,7 +507,7 @@ var ctxExecNames = map[string]bool{"withEnv": true, "withCwd": true}
 
 // flagDynamic records that a declaration named `kind` carried something the static read
 // could not attribute, split by which half of the surface it belongs to. The two halves
-// earn different treatment, and no condition over runtime policy can tell them apart -
+// earn different treatment, and no condition over runtime policy can tell them apart:
 // policy is only loaded on the CLI path, so scoping on it made a bare library caller's
 // magus.Open reject a magusfile the CLI accepts.
 //

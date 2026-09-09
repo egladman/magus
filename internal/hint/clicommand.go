@@ -120,7 +120,7 @@ var (
 )
 
 // AllCommands is every canonical command referenced in output, for the drift
-// test to walk. Keep new Command values registered here -
+// test to walk. Keep new Command values registered here:
 // TestAllDeclaredAreRegistered reads this file and fails if a declaration is
 // missing, which is how ServerReload sat outside the guard while serverCmd
 // routed on it.

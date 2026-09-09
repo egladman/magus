@@ -346,7 +346,7 @@ func FsExists(ctx context.Context, path string) (bool, error) {
 		// RAISE the policy error rather than answering "does not exist".
 		//
 		// Reporting false conflated two different facts: "the sandbox will not let me
-		// look" and "there is nothing there". A caller acts on those in opposite ways -
+		// look" and "there is nothing there". A caller acts on those in opposite ways:
 		// `if (!fs\exists(p)) { write(p); }` then attempts a write that is ALSO denied,
 		// and the failure surfaces far from the policy that caused it.
 		//

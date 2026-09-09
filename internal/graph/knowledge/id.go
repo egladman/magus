@@ -292,7 +292,7 @@ const (
 	AttrTotalStmts = "total_stmts"
 )
 
-// attrTestRefs is a symbol's count of referencing files whose path ends in _test.go -
+// attrTestRefs is a symbol's count of referencing files whose path ends in _test.go:
 // the cheap "tested-by" lens derived from the SCIP reference edges already in the
 // @symbols shard (no new data source). A zero count is omitted, so its presence means
 // "some test references this symbol"; absence means none do (a coverage-independent

@@ -20,7 +20,7 @@ import (
 // jargon: Buzz's type system has ObjectType, and cmd/magus-utils types emits
 // `export object Foo` for each mirror, so a Buzz author never has to translate
 // what they typed into some other word this codebase prefers. Named rather
-// than a bare map[string]any so every signature says which projection it is -
+// than a bare map[string]any so every signature says which projection it is:
 // this is NOT the JSON shape and deliberately differs from it (camelCase keys,
 // `buzz:"-"` omissions, timestamps as RFC3339 text).
 type BuzzObject map[string]any

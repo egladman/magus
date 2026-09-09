@@ -113,7 +113,7 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 //
 // There is no caller-class check here on purpose. The service is mounted behind
 // BearerGuard(VerifyCLIBearer) (see internal/daemon), so only the operator tier can
-// reach this method at all, and that tier already dominates both scopes it may mint -
+// reach this method at all, and that tier already dominates both scopes it may mint;
 // there is no escalation to check for. What IS checked is the requested scope, because
 // "operator may mint anything" is not the same claim as "anything may be minted from a
 // browser": OPERATOR is refused because it lives in a file this service never opens, and

@@ -385,7 +385,7 @@ func TestAdvanceOnlyMovesWhatDoesNotFit(t *testing.T) {
 //
 // advance and marquee were covered as pure functions, which proved they could
 // scroll and nothing about whether anything ever CALLED them. The sweeper's
-// timer was armed only from expiry deadlines, and a pinned condition has none -
+// timer was armed only from expiry deadlines, and a pinned condition has none,
 // so the single message in magus long enough to need scrolling woke it zero
 // times. This asserts the wake-up, which is the part that was broken.
 func TestSweeperWakesForAScrollingMessage(t *testing.T) {

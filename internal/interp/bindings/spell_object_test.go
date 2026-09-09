@@ -37,7 +37,7 @@ func TestSpellOptionsApplied(t *testing.T) {
 	// The optional hooks that carry behaviour onto a spell, keyed by the option that
 	// applies each: what a construction path either calls or forgets.
 	// Matched WITH the open paren. Without it "WithVersionProbe" is a substring of
-	// "WithVersionProbeNamed", so the unnamed probe could never fail independently -
+	// "WithVersionProbeNamed", so the unnamed probe could never fail independently;
 	// a mutation test caught this test lying about its own coverage.
 	wantOptions := []string{
 		"WithTools(",

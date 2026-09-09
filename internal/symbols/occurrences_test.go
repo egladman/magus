@@ -340,7 +340,7 @@ func TestSpellingsTakeThePrimaryFromTheIdentifier(t *testing.T) {
 	assert.Equal(t, []string{"Bar"}, spellings("Bar", "Bar"))
 }
 
-// TestParseOccurrencesCollapsesDuplicateSites covers an index that records one site twice -
+// TestParseOccurrencesCollapsesDuplicateSites covers an index that records one site twice,
 // which SCIP permits, and which upstream ships FlattenOccurrences to handle. Duplicated,
 // it is harmless in a count and destructive in an edit plan: applying back-to-front, the
 // second replacement lands on bytes the first already rewrote.

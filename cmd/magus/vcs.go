@@ -804,7 +804,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	}
 	if len(unexplained) > 0 {
 		// inputDirty is false by construction: an output is only unexplained BECAUSE no
-		// declared input of its project moved. So this is ClassifyDrift's second fork -
+		// declared input of its project moved. So this is ClassifyDrift's second fork:
 		// skew against a differently-versioned magus, or a non-deterministic generator.
 		code, msg := types.ClassifyDrift(false, version)
 		verdict.Code, verdict.Message, verdict.URL = string(code), msg, types.CodeURL(code)
@@ -959,7 +959,7 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 // declared outputs, so it is re-deriveable rather than mergeable.
 //
 // The set itself is types.IsMagusMaintained rather than a local one, because
-// `describe file` classifies the same paths and the two answers must not diverge -
+// `describe file` classifies the same paths and the two answers must not diverge,
 // which they did, describe calling .gitattributes unclaimed and suggesting the
 // ignore rules while staging reported it as maintained.
 func splitMaintained(undeclared []string) (maintained, unclaimed []string) {

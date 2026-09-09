@@ -84,7 +84,7 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 	}
 	// core.quotePath=false on BOTH probes, for the reason DirtyFiles sets it: git otherwise
 	// renders a path outside ASCII as a C-quoted, backslash-escaped literal
-	// ("uni/caf\303\251.md"). Omitting it on either probe fails silently in the worst way -
+	// ("uni/caf\303\251.md"). Omitting it on either probe fails silently in the worst way:
 	// project.normalizeFiles only trims and slash-converts, so the quoted string matches no
 	// source glob, and the project owning that file is simply never rebuilt. No diagnostic,
 	// no error; `magus affected` just under-builds forever.
@@ -566,8 +566,8 @@ func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]s
 //
 // The unquoting is NOT made redundant by core.quotePath=false. That setting stops git
 // escaping bytes outside ASCII, and nothing more: a name containing a double quote or a
-// backslash still comes back quoted and escaped ("we\"ird.txt") with the setting off -
-// measured. Left alone it is a path that exists nowhere.
+// backslash still comes back quoted and escaped ("we\"ird.txt") with the setting off
+// (measured). Left alone it is a path that exists nowhere.
 //
 // Only git's own quoting form is unquoted, gated on the leading double quote, because
 // strconv.Unquote also accepts Go rune and raw-string literals; without the gate a file
@@ -1517,7 +1517,7 @@ func (v gitVCS) StartMerge(ctx context.Context, root, ref string) error {
 	if err == nil {
 		return nil
 	}
-	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up -
+	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up;
 	// the conflicts are the payload, reported by Conflicts. Only a merge that never began
 	// is an error. git leaves MERGE_HEAD behind exactly when one is underway.
 	if _, statErr := os.Stat(filepath.Join(root, ".git", "MERGE_HEAD")); statErr == nil {

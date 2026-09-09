@@ -10,7 +10,7 @@ import (
 
 // wantServerInstructions is the exact block every MCP client reads at session
 // start, pinned verbatim. serverInstructions composes it from the hint.Tool*
-// constants; this golden copy is what makes that composition safe to change -
+// constants; this golden copy is what makes that composition safe to change:
 // a constant that renders differently from the prose it replaced fails here
 // rather than reaching a client.
 const wantServerInstructions = `You are connected to a magus workspace.

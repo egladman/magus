@@ -387,7 +387,7 @@ func TestQueryCellEncodingRoundTrip(t *testing.T) {
 }
 
 // TestWriteTargetGraphMarkdownRenderDeterministic confirms that two calls to
-// WriteTargetGraphMarkdown with the same input produce byte-identical output -
+// WriteTargetGraphMarkdown with the same input produce byte-identical output,
 // the property that lets MAGUS.md back a drift gate.
 func TestWriteTargetGraphMarkdownRenderDeterministic(t *testing.T) {
 	const explorerURL = "https://example.com/graph/"

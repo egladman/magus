@@ -139,7 +139,7 @@ func (s *Service) FindPath(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// ok=false is an unresolvable ENDPOINT, which is the caller's mistake and an error.
-	// out.Found=false is two real nodes with no chain between them, which is an answer -
+	// out.Found=false is two real nodes with no chain between them, which is an answer;
 	// collapsing the two would report "no path" for a typo.
 	out, ok := g.Path(from, to)
 	if !ok {

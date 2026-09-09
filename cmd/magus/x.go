@@ -252,7 +252,7 @@ func pickProject(ctx context.Context, root string, all []*types.Project, filters
 
 	opts := tty.PickOptions{Prompt: "project", InitialFilter: ""}
 	// shown is the list the picker last drew. A live query REPLACES the items,
-	// so the index it returns is into whatever the final keystroke produced -
+	// so the index it returns is into whatever the final keystroke produced,
 	// not into `scored`. Recording it is how the label maps back to a project.
 	shown := items
 	if q := graphLookup(ctx, root, byPath); q != nil {

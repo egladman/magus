@@ -20,7 +20,7 @@ import (
 // concrete service, matching insightSource and diffSource above.
 //
 // TargetGraph is the same call `magus describe graph -o json` makes and the same bytes
-// gen/target-graph.json holds, read from the loaded workspace rather than from that file -
+// gen/target-graph.json holds, read from the loaded workspace rather than from that file:
 // a generated snapshot is only as fresh as the last `generate`, and this route reports live.
 type Source interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)

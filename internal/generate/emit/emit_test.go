@@ -199,7 +199,7 @@ func TestRegionTreatsAMarkerInAStringLiteralAsAMarker(t *testing.T) {
 
 // TestRegionRefusesADuplicateEndMarker completes the ambiguity guard. A duplicated
 // BEGIN was already covered; a duplicated END is the more dangerous half, because
-// the first-wins reading would silently truncate everything between the two ends -
+// the first-wins reading would silently truncate everything between the two ends,
 // deleting hand-written content the generator does not own.
 func TestRegionRefusesADuplicateEndMarker(t *testing.T) {
 	m := CommentMarker("#", "list")

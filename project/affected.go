@@ -272,7 +272,7 @@ func (idx *projectIndex) projectForFile(file string) (string, bool) {
 // Three rules, and the order they compose in is the whole design:
 //
 //  1. A project whose DIRECTORY contains the file owns it. Containment is the most
-//     specific claim there is, and it is what makes today's affected sets correct -
+//     specific claim there is, and it is what makes today's affected sets correct:
 //     a broad ANCESTOR glob (the root's "**/*.go" reaches every nested Go file in this
 //     very repo) must not add the ancestor as a second seed on every child edit.
 //  2. Every project that declares the file from OUTSIDE its own tree seeds it too.

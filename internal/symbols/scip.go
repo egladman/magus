@@ -337,7 +337,7 @@ func workspaceRelative(p string) bool {
 //
 // A record rather than a widening return tuple. The parse outcome and the symbol's own
 // properties are different kinds of fact, and returning them as adjacent bools put
-// `callable` and `ok` side by side on a path that already reads `key, _, _, ok :=` -
+// `callable` and `ok` side by side on a path that already reads `key, _, _, ok :=`,
 // where transposing them compiles, vets, and silently reclassifies every unparsable
 // moniker as merely uncallable.
 type monikerInfo struct {

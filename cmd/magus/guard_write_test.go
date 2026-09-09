@@ -621,7 +621,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 
 // TestGradeLeasedWriteRequiresACheckpoint is the rule that turns a skill into a guarantee.
 //
-// The instruction to checkpoint before working lived only in a skill, which an agent can skip -
+// The instruction to checkpoint before working lived only in a skill, which an agent can skip;
 // and the record it was meant to leave is missing exactly when somebody needs to recover from it.
 // This is the enforcement point, and it is a deny because an advisory is the same pinky promise
 // with better wording.

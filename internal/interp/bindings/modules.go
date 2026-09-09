@@ -60,7 +60,7 @@ func magusModules(modules bindinggen.Set) []buzz.Module {
 			Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
 				mod := reg.Register(env.Ctx, s)
 				// http keeps two byte-level companions that no descriptor can yet
-				// declare: byteSize and upload_chunked. crypto no longer needs any -
+				// declare: byteSize and upload_chunked. crypto no longer needs any:
 				// its HMAC and base64 methods became declared std.Module methods once
 				// TypeByteSlice existed, and this hook shrank by one domain as a result.
 				if name == "http" {

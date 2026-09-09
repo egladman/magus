@@ -68,7 +68,7 @@ type StructuredError interface {
 // TypedError is a StructuredError that also names the OBJECT TYPE its caught value
 // should present as, so `catch (e: ffi\FFITypeMismatchError)` matches it.
 //
-// A plain StructuredError becomes a map, and a map satisfies no named type -
+// A plain StructuredError becomes a map, and a map satisfies no named type:
 // `is` compares an object instance's definition name (see buzzIsType). Without
 // this a host module could raise a richly-shaped error that no typed catch could
 // ever select, which is the one thing typed errors exist for. The type is

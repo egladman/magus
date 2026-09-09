@@ -82,7 +82,7 @@ type Anchor struct {
 	// Empty for a kind with no declaration to speak of (a whole file, a project, a target),
 	// and empty on a note stamped before grading existed. Both are ungraded, never a verdict.
 	DeclDigest string `json:"decl_digest,omitempty" yaml:"decl_digest,omitempty"`
-	// Commit is the revision this anchor was last reviewed against. PROVENANCE ONLY -
+	// Commit is the revision this anchor was last reviewed against. PROVENANCE ONLY:
 	// resolution always runs against the working tree. A pinned revision never breaks,
 	// which is precisely why it must never be the anchor: it would go on pointing at
 	// correct-looking frozen content long after the thing it described was deleted.
@@ -339,7 +339,7 @@ func sharedDir(root, declared string) (string, error) {
 	}
 	// The workspace root itself is not a notes store. Allowing it would make every
 	// markdown file in the repo a note (so README.md reports as a malformed one) and,
-	// worse, would make the agent guard treat every path under the root as protected -
+	// worse, would make the agent guard treat every path under the root as protected,
 	// one config line turning a targeted rule into a workspace-wide deny.
 	if clean == "." {
 		return "", fmt.Errorf("notes: %s %q is the workspace root; name a directory inside it", ScopeShared.ConfigKey(), declared)
@@ -693,7 +693,7 @@ func Save(dir string, n Note) error {
 		return fmt.Errorf("notes: save: %w", err)
 	}
 	// Written back to the file it was READ from, so a note whose declared id no longer
-	// matches its filename is updated in place rather than duplicated at the id's path -
+	// matches its filename is updated in place rather than duplicated at the id's path,
 	// which is what re-attestation did, splitting one note into two and leaving the
 	// original's anchors unfingerprinted. A note with no origin is new (Scaffold, a body
 	// piped in), and there its name is what names the file.
@@ -799,7 +799,7 @@ func setMagusNode(doc *yaml.Node, payload notePayload) error {
 
 // declaresMagus reports whether frontmatter is addressed to magus.
 //
-// A boolean rather than an error, because "this is someone else's note" is not a failure -
+// A boolean rather than an error, because "this is someone else's note" is not a failure:
 // it is the majority answer in any vault. Unparsable frontmatter answers false for the
 // same reason: it cannot claim to be a magus note, so magus does not claim it.
 func declaresMagus(frontmatter []byte) (*yaml.Node, bool) {
@@ -835,7 +835,7 @@ func readNoteFile(path, name string) (Note, bool, error) {
 	}
 	var payload notePayload
 	if err := magusNode(doc).Decode(&payload); err != nil {
-		// It claimed the magus key and then would not decode, which IS worth reporting -
+		// It claimed the magus key and then would not decode, which IS worth reporting,
 		// unlike the case above, where the file never addressed magus at all.
 		return Note{}, true, fmt.Errorf("notes: %s: %w", filepath.Base(path), err)
 	}

@@ -35,7 +35,7 @@ import (
 
 // ProviderRunner invokes spellName's list_projects contract against the workspace at
 // root and returns the records it reported, undecoded. It returns the wire record
-// (spells.ProvidedProject) rather than options so the result stays serializable -
+// (spells.ProvidedProject) rather than options so the result stays serializable,
 // which is what lets [AddProvidedProjects] cache it instead of shelling out to the
 // foreign tool on every magus command.
 type ProviderRunner func(ctx context.Context, spellName, root string) ([]spells.ProvidedProject, error)

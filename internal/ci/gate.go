@@ -317,7 +317,7 @@ func (c ChangeClassifier) classify(ctx context.Context, p, role, green string) (
 	}
 	// Comment-only detection needs the language's comment and string syntax,
 	// and every language gets it the same way: a syntax the language's SPELL
-	// declared (mgs_getCommentSyntax), consumed by one string-aware stripper -
+	// declared (mgs_getCommentSyntax), consumed by one string-aware stripper,
 	// Go and Buzz included, so "comment-only" means one thing. A language
 	// whose spell declared nothing classifies as code: guessing delimiters
 	// would trade one false comment-only for trust in every refusal after it.
@@ -371,7 +371,7 @@ func CommentOnlyDeclared(old, cur string, syn spells.CommentSyntax) bool {
 // DIRECTIVE comment (declared prefix on the comment body) is code and stays.
 //
 // A comment span includes the horizontal whitespace immediately before it,
-// and, when the comment is the only thing on its line, the line itself -
+// and, when the comment is the only thing on its line, the line itself,
 // newline included. Indentation of code lines is never touched: that is the
 // no-whitespace-normalization rule, and Python is why it exists.
 func StripComments(src string, syn spells.CommentSyntax) string {

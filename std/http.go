@@ -661,7 +661,7 @@ func (o httpOpts) client(r httpRetry) *http.Client {
 	// func(*http.Response, error) bool: bodyclose's return-type check is a plain
 	// substring match, and that signature's text contains "*net/http.Response",
 	// so a helper returning it gets misread as a call that itself produces an
-	// unclosed response. The real response lifecycle is unaffected either way -
+	// unclosed response. The real response lifecycle is unaffected either way:
 	// shouldRetry only ever inspects resp.StatusCode, never resp.Body, so it has
 	// nothing to close; ownership of Body stays with retryTransport.RoundTrip
 	// (internal/retry/retry.go), which closes it on every attempt it discards,

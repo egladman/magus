@@ -238,7 +238,7 @@ func AssembleShards(in Inputs) []Shard {
 	//
 	// Symbol paths are held OUT of @dirs and aggregated into their project's @symbols
 	// shard. @dirs merges into the default graph and emits a node per directory, so
-	// folding symbol paths in MINTED dir nodes purely because a local SCIP index existed -
+	// folding symbol paths in MINTED dir nodes purely because a local SCIP index existed,
 	// making the committed graph differ between a developer who had run `magus graph build`
 	// and CI, which never does. A shard's contents must be visible exactly when its own
 	// layer is loaded.

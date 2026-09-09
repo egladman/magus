@@ -52,7 +52,7 @@ var guardSurfaces = []string{"command", "path"}
 // every template must be re-stamped or the build fails.
 //
 // 2: docs/guides/integrations/agents/opencode-plugin.ts unconditionally passed
-// the attribution flag, which no released binary accepts (v0.3.0 predates it) -
+// the attribution flag, which no released binary accepts (v0.3.0 predates it):
 // an older binary rejected it, the plugin's judge() got unparsable stdout, and
 // every verdict silently allowed. The sh templates already retried without
 // attribution on exactly this failure (magus-guard-command.sh's guard()); the

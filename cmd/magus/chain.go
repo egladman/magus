@@ -25,7 +25,7 @@ import (
 //	magus run build --then file dist/magus contents
 //	magus run build --then file dist/magus export --path ./out/magus
 //
-// A result is not a string the CLI prints, it is an object the CLI knows verbs for -
+// A result is not a string the CLI prints, it is an object the CLI knows verbs for;
 // and the object needs no return statement, because a target already declared
 // ctx.writesFiles(...) for the cache.
 //

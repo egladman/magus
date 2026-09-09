@@ -344,7 +344,7 @@ func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
 //
 // Re-filing a block that is already open is a no-op reporting opened=false. An agent
 // hook may fire on every prompt, and the queue has to hold one row per block rather than
-// one per attempt. A block that was raised, disposed, and has come back opens again -
+// one per attempt. A block that was raised, disposed, and has come back opens again;
 // see [Attention] for why.
 //
 // start describes the writing invocation; its Command is set here, and the session id is

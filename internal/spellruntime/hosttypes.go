@@ -95,7 +95,7 @@ var ProjectEntrySource string
 //go:embed gen/types/projects.buzz
 var ProjectsSource string
 
-// AffectedSource / GraphSource are magus.affected's and magus.graph's returns -
+// AffectedSource / GraphSource are magus.affected's and magus.graph's returns:
 // the in-process verbs beside ls, which had the same annotation gap Projects did.
 // Ship with "magus".
 //

@@ -628,7 +628,7 @@ func (r *region) dim(s string) string {
 
 // SetTitle puts text into the region's top rule, so a caption costs no row.
 //
-// A status line IS a property of the band, so the frame is where it belongs -
+// A status line IS a property of the band, so the frame is where it belongs,
 // and a titled box is how every other framed UI says so. Held on the region
 // rather than passed per render because it changes on its own clock (a pool
 // sample, an elapsed second) independently of the rows beneath it.

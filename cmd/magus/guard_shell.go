@@ -505,7 +505,7 @@ var (
 
 	// The same advisory reached by a repo-wide search for a file by NAME. Split
 	// from the content arm because the narrowness rule differs: a content search
-	// is admitted on being RECURSIVE, a file-find on asking a NAME question -
+	// is admitted on being RECURSIVE, a file-find on asking a NAME question:
 	// `find . -type d` and `fd -t d` list a tree rather than look a name up, and
 	// stay silent. fd is recursive by default, so its admitting shapes are the
 	// name query itself: an extension flag, a glob flag, or a pattern in the
@@ -556,7 +556,7 @@ var (
 	runGuardContext = "magus covers this exactly and adds cache, sandbox, and affected tracking, so the deny costs you nothing. A raw WRITE (codegen, a formatter with -w/--write/--fix, go mod tidy, build output on a tracked path) also leaves the owning target reporting drift it did not cause, and that half has no exceptions.\n" +
 		"The guard reads the command being RUN, so a launcher, a `VAR=value` prefix, or `bash -c '...'` reaches the same verdict. Run the magus command directly. Load the magus-run skill if not already loaded."
 	// Reverting regenerated output is the wrong default. An agent that did not
-	// hand-edit a gen/ file concludes it is not "its" change and discards it -
+	// hand-edit a gen/ file concludes it is not "its" change and discards it,
 	// but a generate target rewriting its declared outputs is the system working,
 	// and those outputs belong in the same commit as the source that moved them.
 	// The honest test is whether the SOURCE changed, not whether the agent typed
@@ -707,7 +707,7 @@ var (
 	// already answered the question better than the shell can.
 	timedMagusAdvice = "magus times itself: drop `-s` and it prints each target's duration and a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed, which is usually the thing being asked."
 
-	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies -
+	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies;
 	// nothing is unrecoverable, nothing is written, and the equivalent is close but
 	// not exact.
 	timeoutMagusAdvice = "magus has its own: `" + hint.Run.With("<target>", "<project>", "--timeout", "5m") + "` (and the same flag on `" + hint.Affected.String() + "`). It cancels the run rather than signaling the process, so the error names the target (`run ci: timed out after 5m`) and it logs elapsed/remaining heartbeats while the run is still going.\n" +
@@ -947,7 +947,7 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	// the writer fixes the named command and assumes the others ran. They did not.
 	//
 	// Measured 2026-09-08: five times in one session an edit was chained ahead of a magus
-	// call carrying a redirect, the redirect denied, and the edit silently never happened -
+	// call carrying a redirect, the redirect denied, and the edit silently never happened,
 	// each caught only when a later step failed for an unrelated-looking reason. The reason
 	// text was correct and complete about the redirect every time. What it never said was
 	// how much else went with it.

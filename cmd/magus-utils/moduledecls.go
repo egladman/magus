@@ -108,7 +108,7 @@ func renderModuleDecls(mod std.Module) (string, error) {
 		}
 		b.WriteString(decl)
 	}
-	// A Namespace renders as an OBJECT whose members are static extern methods -
+	// A Namespace renders as an OBJECT whose members are static extern methods:
 	// `magus\cache.remote(...)` is member access on a value, not a nested namespace,
 	// which Buzz does not have. Declaring it this way is what makes an unknown member
 	// an error: an object reports one, where a bare value could not.
@@ -413,7 +413,7 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 	}
 	// ARGUMENTS as well as returns. An Arg.Object names a type the declaration
 	// references just as a return does, and emitting only the return side left
-	// http\get's `retry: HttpRetry` pointing at a type the file never declared -
+	// http\get's `retry: HttpRetry` pointing at a type the file never declared,
 	// which the checker rejects, taking the whole module's signatures down with
 	// it. encoding\buildUrl never caught this because its URL argument is also
 	// parseUrl's return, so the type came along by accident.

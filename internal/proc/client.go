@@ -137,7 +137,7 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 	return &reply, nil
 }
 
-// SubmitJob dials the proc server at addr and submits a fire-and-forget background job -
+// SubmitJob dials the proc server at addr and submits a fire-and-forget background job:
 // the daemon runs `magus <args>` asynchronously and this returns as soon as it is
 // accepted, with the job's invocation id (a Dashboard deep-link). It scopes the job to
 // the caller's working directory (computed here, like Forward, so there is no

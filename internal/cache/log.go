@@ -1383,7 +1383,7 @@ func (h *PrettyHandler) ToggleFocus() PaneFocus {
 // SetPreview gives the band a right-hand column: the captured output of
 // whatever is selected. Nil or empty returns it to a single column.
 //
-// This is the "two views, one run" surface. It is deliberately not two PANES -
+// This is the "two views, one run" surface. It is deliberately not two PANES:
 // nothing here manages a terminal, and a caller cannot put arbitrary content in
 // it. Both columns are things this handler already owns, which is the line
 // between showing a reader their run and becoming a multiplexer.
@@ -1574,7 +1574,7 @@ func (h *PrettyHandler) drawnLocked() []Failure {
 // not a row.
 //
 // Drawn order, not arrival order. The ring keeps a failure in the row it was
-// painted into, so once it has wrapped the oldest entry sits in the middle -
+// painted into, so once it has wrapped the oldest entry sits in the middle,
 // and the list has to match the screen, because a reader picks by position.
 func (h *PrettyHandler) Failures() []Failure {
 	h.mu.Lock()

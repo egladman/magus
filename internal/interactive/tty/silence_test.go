@@ -21,7 +21,7 @@ import (
 // the property across the whole surface at once, so a new entry point that
 // forgets to check fails HERE rather than in somebody's CI log.
 //
-// A bytes.Buffer has no Fd(), which is the strongest form of "not a terminal" -
+// A bytes.Buffer has no Fd(), which is the strongest form of "not a terminal",
 // stronger than a probe that says no, because no amount of probe confusion can
 // make one appear.
 func TestNothingIsWrittenToANonTerminal(t *testing.T) {

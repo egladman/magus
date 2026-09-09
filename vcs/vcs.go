@@ -183,7 +183,7 @@ func checkRef(ref string) error {
 // Both sides are symlink-resolved before being related, and that is load-bearing rather
 // than defensive: every backend reports a root with symlinks already resolved, while dir
 // arrives as the caller wrote it. On macOS a path under /var is really /private/var, so
-// relating the two unresolved yields "../../../.." and a prefix that matches nothing -
+// relating the two unresolved yields "../../../.." and a prefix that matches nothing,
 // which silently filters every file out instead of failing. The same happens anywhere a
 // repository is reached through a symlinked parent.
 //
@@ -224,7 +224,7 @@ func repoPathPrefix(ctx context.Context, v types.VCSDriver, dir string) (root, p
 // writing "gen/**: No such file or directory" to STDERR while exiting 0 with empty stdout.
 // The drivers read stdout, so the answer came back "no files changed". Callers pass globs:
 // magus.diagnoseDrift hands DirtyFiles a project's declared output globs verbatim, so under
-// hg and sl the generate drift gate reported every project clean having matched nothing -
+// hg and sl the generate drift gate reported every project clean having matched nothing,
 // in CI, with no diagnostic. git and jj both handle "gen/**" natively, which is why only
 // these two were wrong. Measured on Mercurial 7.x and Sapling 0.2.x.
 //
@@ -333,7 +333,7 @@ func splitTagVersion(name string) (prefix string, version types.SemverVersion) {
 // backend printed it. The driver always knows.
 //
 // A line SHORTER than width is passed through whole rather than sliced away. Slicing
-// would silently turn a short path into "", dropping a changed file from the result -
+// would silently turn a short path into "", dropping a changed file from the result,
 // and a caller cannot tell an empty answer from a clean tree.
 func trimStatusColumns(lines []string, width int) []string {
 	out := make([]string, 0, len(lines))

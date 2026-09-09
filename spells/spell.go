@@ -318,7 +318,7 @@ func WithOpaque() Option {
 // user binds, keeping it out of every surface that enumerates spells.
 //
 // It exists for exactly one registration: `magusfile`. A spell is defined as a
-// library of tool-native ops for ONE TOOLCHAIN (go-build, cargo-clippy, eslint) -
+// library of tool-native ops for ONE TOOLCHAIN (go-build, cargo-clippy, eslint);
 // see docs/concepts/spells.md, whose built-in table has never listed magusfile.
 // The magusfile registration adapts no toolchain and contributes no ops; it reuses
 // the driver interface so a magusfile's own targets dispatch through the same

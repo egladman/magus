@@ -151,7 +151,7 @@ type Ret struct {
 // Namespace is a group of related host functions a module exposes behind one of its
 // members: `magus\cache.remote(...)`, `magus\secret.read(...)`.
 //
-// NOT a nested module: Buzz has no nested namespace, and the call site says so -
+// NOT a nested module: Buzz has no nested namespace, and the call site says so:
 // `magus\cache.remote(x)` is a backslash (namespace access) then a DOT (member access
 // on a value). The group is an OBJECT held by the module, upstream's own shape.
 //
@@ -250,7 +250,7 @@ type Module struct {
 	//
 	// The split exists because Buzz binds a slash-path import under its BASENAME
 	// (gopherbuzz/session.go's resolveImport). The path spells the import line; the
-	// name is what call sites write and what codegen puts in a Go identifier -
+	// name is what call sites write and what codegen puts in a Go identifier:
 	// conflating them would generate RegisterEncoding/json.
 	//
 	// Two modules may not share a Name even under different paths: Register panics,

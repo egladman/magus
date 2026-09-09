@@ -265,7 +265,7 @@ func NewPatchHandler(src patchSource, log *slog.Logger) *PatchHandler {
 }
 
 // diffResponse is the wire shape. Patch carries the whole unified body; Clean says the tree
-// had nothing to review, which is DISTINCT from an empty patch the reader failed to parse -
+// had nothing to review, which is DISTINCT from an empty patch the reader failed to parse;
 // a console that cannot tell those apart renders "no changes" over a bug.
 type diffResponse struct {
 	// Files is the changeset already parsed. The console renders from this and does not read

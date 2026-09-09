@@ -95,7 +95,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 }
 
 // buildMagus builds the tracing `magus` module. It MUST cover the same member
-// surface the real bindings register (internal/interp/bindings: MagusModuleKeys) -
+// surface the real bindings register (internal/interp/bindings: MagusModuleKeys);
 // a magusfile referencing a member this host omits would fail to evaluate. The guard
 // test TestMagusSurfaceMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members

@@ -478,7 +478,7 @@ func (p *parser) parseStmt() (ast.Node, error) {
 				return nil, fmt.Errorf("buzz: line %d:%d: export must name a declaration", t.Line, t.Col)
 			}
 			// `export X as Y;` re-exports a value under a new name. `as` is Buzz's cast
-			// operator, so it parses as an AsExpr whose "type" is really the alias -
+			// operator, so it parses as an AsExpr whose "type" is really the alias,
 			// and the meaning is exactly `export final Y = X`, so it DESUGARS into
 			// one. That reuses the declaration export path whole; a re-export needs no
 			// runtime machinery of its own.
@@ -680,7 +680,7 @@ func (p *parser) skipType() error {
 			}
 		}
 		// A generic instantiation: `Payload::<str, int>` (or the bare `Foo<T>`
-		// spelling). Type arguments are erased, so the identity is the bare name -
+		// spelling). Type arguments are erased, so the identity is the bare name;
 		// the span is recorded for readType to drop, keeping `x is Payload::<str,
 		// int>` a test against `Payload`.
 		if p.check(token.Colon) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind == token.Lt {

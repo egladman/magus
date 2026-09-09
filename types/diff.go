@@ -168,7 +168,7 @@ func (c DiffChurn) NotableRank() bool { return c.Rank > 0 && c.Rank <= NotableRa
 // diff shows what changed; this shows what the change was made in response to.
 //
 // Transcript is a POINTER and magus never opens it. The trail stays a record of paths and
-// timings, and a reader who wants what was actually said opens the host's own log themselves -
+// timings, and a reader who wants what was actually said opens the host's own log themselves,
 // which is what lets a whole session's reach be carried cheaply while the expensive and
 // sensitive detail stays where the host already put it.
 type DiffTouch struct {
@@ -330,7 +330,7 @@ const (
 	// says so, because a reader who is not told will read the new position as the original one.
 	AnchorMoved CommentAnchorRung = "moved"
 	// AnchorDeclaration is the quoted line gone, but the DECLARATION it sat in still present. The
-	// remark keeps its path and moves to that declaration's hunk, saying it lost the exact line -
+	// remark keeps its path and moves to that declaration's hunk, saying it lost the exact line,
 	// which is the rung Gerrit spells "file level", one step narrower.
 	AnchorDeclaration CommentAnchorRung = "declaration"
 	// AnchorLost is the text gone from the file. The remark keeps its path and loses its line,
@@ -675,7 +675,7 @@ type DiffSession struct {
 	// Cursor is where the HUMAN is looking.
 	Cursor DiffCursor `json:"cursor" yaml:"cursor"`
 	// Viewed holds the content digests of hunks the human has marked read. Digests rather
-	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk -
+	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk:
 	// the failing of every viewed-checkbox that resets on force-push.
 	Viewed []string `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
 	// SeenThreads holds the ids of the review's threads the human has actually had on screen.

@@ -176,7 +176,7 @@ type Resolver struct {
 	// endpointTransport overrides the forwarder's round tripper. Written once at
 	// construction and never again, so it is deliberately outside the mutexes. Nil in
 	// production,
-	// where http.DefaultTransport is correct and the upstream scheme is always https -
+	// where http.DefaultTransport is correct and the upstream scheme is always https;
 	// an origin that could be pointed at a plaintext upstream would undo the one
 	// guarantee this design makes about the hop magus controls. Set only by tests, so
 	// they can exercise the real forwarder against a TLS server with a self-signed

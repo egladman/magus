@@ -226,7 +226,7 @@ type TargetGraphNode struct {
 	// against a different credential. The name stays ReadsSecrets because it is a
 	// Buzz-visible describe field (readsSecrets); the concept it records is "uses".
 	ReadsSecrets bool `json:"reads_secrets,omitempty" yaml:"reads_secrets,omitempty"`
-	// SecretRefs are the credential REFERENCES this target names, sorted and deduped -
+	// SecretRefs are the credential REFERENCES this target names, sorted and deduped,
 	// never values, which magus does not have at describe time and would not print if it
 	// did. It answers "which credentials does this target touch" without running it,
 	// which is the question an operator reviewing a magusfile actually has.
@@ -323,7 +323,7 @@ func (s ChainStep) Ref() string {
 }
 
 // InputRef names one file input a target declares via ctx.readsFiles, in a single shape
-// that carries the owning project for both a same-project glob and a cross-project file -
+// that carries the owning project for both a same-project glob and a cross-project file,
 // maximally explicit: a local input's project is simply itself. Project is the owning
 // project's path; Glob is the doublestar glob (or exact file) relative to that root. For a
 // same-project input (ctx.readsFiles("glob")) Project is empty at extraction, meaning "this
@@ -344,7 +344,7 @@ type InputRef struct {
 //
 // A separate type from InputRef despite the identical shape, because the dependency edge
 // each implies runs the OTHER WAY. A cross-project INPUT means "I read you, so I run
-// after you". A cross-project OUTPUT means "I write your tree, so YOU run after ME" -
+// after you". A cross-project OUTPUT means "I write your tree, so YOU run after ME":
 // the owner gains the edge, not the declarer. Sharing one type would let a caller pass
 // an input where an output belongs and silently invert a build order.
 type OutputRef struct {
@@ -612,7 +612,7 @@ type EvaluatedProject struct {
 // BuzzObject is promoted onto EvaluatedProject too, which would satisfy host's boundary view
 // (host/helpers.go) while emitting only the declared half and silently dropping
 // ResolvedSpells/TargetPolicies. EvaluatedProject is not on the Buzz mirror
-// allowlist and no std/ host method returns it today, so nothing calls this yet -
+// allowlist and no std/ host method returns it today, so nothing calls this yet;
 // it exists to keep that latent trap from going live if one ever does. Neither
 // EvaluatedSpell nor Target (whose zero value serves double duty as a per-target
 // policy; see Target's identity-fields comment) has its own BuzzObject, so their
@@ -787,7 +787,7 @@ type FileClaim struct {
 //
 // .gitattributes is the whole list, and it is here rather than in the merge-driver
 // code that writes it because two features have to agree about it: staging
-// (StagingPlan.Maintained) and classification (FileEntry.Role). They disagreed -
+// (StagingPlan.Maintained) and classification (FileEntry.Role). They disagreed:
 // `magus vcs add` reported the file as one magus maintains while `magus describe
 // file` called it unclaimed and suggested checking the ignore rules, for a file
 // magus had just written and needs tracked.

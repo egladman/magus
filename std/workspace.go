@@ -38,9 +38,9 @@ type Analyzer interface {
 // AnalyzerFromContext recovers the analytics surface from the workspace on ctx.
 //
 // Two distinct absences, and the caller wants to tell them apart: no workspace at all (a
-// `magus buzz` script outside one), or a workspace whose implementation does not analyze -
-// a test double, or a provider-supplied workspace that models projects without git
-// history. Both report false here; the caller's message names the first, which is the one
+// `magus buzz` script outside one), or a workspace whose implementation does not analyze
+// (a test double, or a provider-supplied workspace that models projects without git
+// history). Both report false here; the caller's message names the first, which is the one
 // a reader can act on.
 func AnalyzerFromContext(ctx context.Context) (Analyzer, bool) {
 	ws := types.WorkspaceFromContext(ctx)

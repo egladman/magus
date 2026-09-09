@@ -13,7 +13,7 @@ import (
 )
 
 // conflictRepo builds a repo with a real, in-progress merge conflict: main and side both
-// change shared.txt, and side deletes gone.txt that main changed. Both shapes matter -
+// change shared.txt, and side deletes gone.txt that main changed. Both shapes matter:
 // a VCS invokes a merge driver only for the first.
 func conflictRepo(t *testing.T) string {
 	t.Helper()

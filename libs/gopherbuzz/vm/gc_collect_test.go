@@ -26,7 +26,7 @@ func fillRegistry(vm *VM, n int) {
 // was unreachable". maybeCollect read that as a completed sweep and reset the
 // threshold anyway. The path is live: a collector runs on a VM parented to this
 // tree, so an instance it allocates reaches maybeCollect while the enclosing sweep
-// is still running, and root.collectables is still at its full pre-sweep length -
+// is still running, and root.collectables is still at its full pre-sweep length,
 // so the threshold doubled off a count that was about to shrink, permanently
 // loosening the bound the automatic sweep exists to enforce, once per allocation
 // per collector.

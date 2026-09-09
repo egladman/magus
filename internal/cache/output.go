@@ -671,7 +671,7 @@ func (s *OutputStore) runsDir() string { return filepath.Join(s.cacheDir, RunsDi
 
 // RotateRuns keeps the newest invocation journals (runs/<inv>.jsonl, by modtime) and removes the
 // rest, returning how many it deleted and the bytes that freed. The runs dir is flat (one file per
-// invocation, not keyed like outputs/), so this is a single keep-last over the whole directory -
+// invocation, not keyed like outputs/), so this is a single keep-last over the whole directory:
 // the run-log analogue of pruneKey, and the worker behind the rotate-logs job.
 //
 // TWO caps, and the tighter one wins. keepLast bounds the COUNT; keepBytes bounds the total on
@@ -851,7 +851,7 @@ func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, boo
 	return ref, true
 }
 
-// newestDescriptor returns the newest stored execution's descriptor for cacheKey -
+// newestDescriptor returns the newest stored execution's descriptor for cacheKey:
 // the one a bare step ref answers with. It is what the remote export ships so an
 // importing machine resolves the producer's exact ref. fs.ErrNotExist when the key
 // has no stored execution.
@@ -896,7 +896,7 @@ func (s *OutputStore) ByRef(ref string) ([]byte, OutputDescriptor, error) {
 
 // InvocationByID reads the union run log (<cacheDir>/runs/<inv>.jsonl) for one invocation
 // id and rebuilds its header: the command lineage (subcommand/args/trigger), timing, and outcome.
-// It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it -
+// It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it;
 // `magus query output <ref> --identity` and the viewer surface this lineage. Reads off the cache
 // ROOT (RunsDir), not outputsDir. Returns fs.ErrNotExist when the run log has aged out.
 func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {

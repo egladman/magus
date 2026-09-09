@@ -680,7 +680,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// loses the queue along with the restored terminal.
 	defer sync.close()
 	// Re-placed against THIS patch. A thread arrives placed against the working tree or not
-	// placed at all, and neither is what the viewer is showing when the patch came from a file -
+	// placed at all, and neither is what the viewer is showing when the patch came from a file;
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
 	threads, _ := reviewThreads(ctx, m)
@@ -1184,7 +1184,7 @@ func diffUsage(w io.Writer) {
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
-// daemon's insight scan uses, so the CLI and the console rank the same files the same way -
+// daemon's insight scan uses, so the CLI and the console rank the same files the same way:
 // two different windows would report two different "hottest file" answers for one tree.
 const diffHistoryCommits = 500
 

@@ -178,7 +178,7 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 // TestStoreUpdateSurvivesSeparateStores is the CROSS-PROCESS half, and the one the
 // in-process mutex cannot cover: two Stores on one directory share no mutex, exactly as
 // the CLI, the daemon, and a registering worker do not. Only the file lock stops their
-// read-modify-writes from interleaving, and the symptom when it does is a DROPPED ROW -
+// read-modify-writes from interleaving, and the symptom when it does is a DROPPED ROW:
 // the loser read the ledger before the winner appended, so its write puts back a file
 // that never held the winner's lease.
 //

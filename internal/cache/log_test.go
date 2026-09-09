@@ -837,7 +837,7 @@ func TestPrettyHandlerPrintsAfterCancellation(t *testing.T) {
 // TestFailureCausesSplitsAndStripsPlumbing pins the readability of the `cause:`
 // line, using the exact string a real `magus run ci .` produced. Two independent
 // failures were joined by errors.Join with a newline and then flattened by
-// strings.Fields, so they ran together into one sentence with no boundary -
+// strings.Fields, so they ran together into one sentence with no boundary:
 // "dprint exited 20 test: ctx.needs: advice-test: ..." reads as a single clause
 // and names neither failure clearly.
 func TestFailureCausesSplitsAndStripsPlumbing(t *testing.T) {

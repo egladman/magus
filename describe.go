@@ -421,7 +421,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						// consequences invert: dropping an unresolvable input only
 						// under-declares the cache key, but dropping an output takes the
 						// glob out of the snapshot set, so the file is never recorded and
-						// every later cache hit replays a build that leaves it missing -
+						// every later cache hit replays a build that leaves it missing:
 						// the exact stale-hit failure this footprint exists to prevent.
 						return types.DiagnosticErrorf(types.CrossOutputOwnerUnknown,
 							"%s: target %q: ctx.writesFiles declares an output into %q, which does not resolve to a path in this workspace",

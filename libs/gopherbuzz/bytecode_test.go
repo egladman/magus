@@ -1580,7 +1580,7 @@ return getx();`, CompileOptions{}), 10)
 
 	// LIVE capture: a captured slot is one shared cell, so a write after the closure
 	// is built is visible through it. This asserted 1 (a by-value snapshot) until
-	// upvalues were boxed, which also removed the slot-vs-SharedGlobals divergence -
+	// upvalues were boxed, which also removed the slot-vs-SharedGlobals divergence:
 	// both models now observe the live variable.
 	wantInt(t, runProg(t, `var x = 1;
 fun getx() > int { return x; }

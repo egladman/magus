@@ -260,7 +260,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 		assert.Contains(t, got.Details[1], "web/magusfile.buzz")
 	})
 	// A detail line exists to name a file. Doctor runs with an empty root on the
-	// daemon path, where filepath.Rel fails and used to leave the path blank -
+	// daemon path, where filepath.Rel fails and used to leave the path blank:
 	// the failure said a name was wrong without saying where it lived.
 	t.Run("an empty root still names the file", func(t *testing.T) {
 		root := t.TempDir()

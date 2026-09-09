@@ -624,7 +624,7 @@ func marshalRecord(r Record) []byte {
 //
 // It delegates rather than reimplementing the temp-file-and-rename dance, because the
 // obvious hand-rolled version gets two things wrong and both are silent. It does not fsync
-// before the rename, so a crash can make the rename durable while the bytes are not -
+// before the rename, so a crash can make the rename durable while the bytes are not,
 // leaving a truncated file behind a comment promising that cannot happen. And
 // os.CreateTemp creates 0600, which the rename carries through, so entries end up
 // owner-only when the surrounding files are not.

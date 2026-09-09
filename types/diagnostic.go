@@ -63,7 +63,7 @@ var ErrDiag = diagnostics.ErrSentinel
 var mgs = diagnostics.New(func(c DiagnosticCode) string {
 	switch {
 	// BEFORE the single-digit cases: MGS11## starts with "MGS1" too, so the magusfile family
-	// would otherwise swallow it. TestEveryDiagnosticCodeHasDocPage is what keeps this honest -
+	// would otherwise swallow it. TestEveryDiagnosticCodeHasDocPage is what keeps this honest:
 	// it resolves every code's URL back to a file on disk, so a mis-routed code has no page and
 	// fails rather than shipping a dead link.
 	case strings.HasPrefix(string(c), "MGS11"):

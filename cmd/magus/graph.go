@@ -56,7 +56,7 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 	case "diff":
 		return graphDiff(ctx, root, rest)
 	case "verify":
-		// compat(until: no installed skill or published doc still names `graph verify` -
+		// compat(until: no installed skill or published doc still names `graph verify`;
 		// observe by grepping a fresh `magus agent install` tree and the released docs
 		// for the string): every checkout whose skills predate v39 still tells an agent
 		// to run this, and "unknown subcommand" routes them nowhere.
@@ -948,7 +948,7 @@ func liveBridgeReachable(ctx context.Context) bool {
 // graphOpenLive opens the Graph Explorer served BY the running daemon from its own
 // loopback origin (http://<host>/console/graph/). Under the daemon-origin grammar the origin
 // names which daemon; the page loads both itself and its graph data from that one loopback
-// origin, so the graph never leaves the machine. The clean /console/graph/ path is canonical -
+// origin, so the graph never leaves the machine. The clean /console/graph/ path is canonical:
 // the daemon serves the shell for it and the console's boot router opens the graph surface.
 // There is no #live= host directive and no hosted explorer base: the --url flag governs only
 // the static (--data/--targets/--serve) modes, not --follow.

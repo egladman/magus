@@ -26,7 +26,7 @@ type NoteResolver struct {
 	root string
 	live map[string]bool
 	// node carries the Source ("<path>:<line>") and def_end_line a symbol digest needs; the
-	// graph is the only thing that knows where a symbol currently lives, which is the point -
+	// graph is the only thing that knows where a symbol currently lives, which is the point:
 	// the note stores no location at all.
 	node map[string]types.KnowledgeNode
 	// scope is the store whose notes this resolver is checking. It changes the answer for

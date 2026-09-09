@@ -34,7 +34,7 @@ func WithGraphObserver(o Observer) GraphOption {
 	}
 }
 
-// TopoSort returns project paths in topological order (dependents before dependencies -
+// TopoSort returns project paths in topological order (dependents before dependencies;
 // see View's doc comment for the measured example).
 func (g *Graph) TopoSort() []string {
 	return g.repo.TopoSort()

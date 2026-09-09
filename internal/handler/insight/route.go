@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 )
 
-// Handler serves GET /api/v1/insight: every insight lens as JSON (types.InsightView) -
+// Handler serves GET /api/v1/insight: every insight lens as JSON (types.InsightView),
 // the four VCS-history lenses (hotspots, affinity, ownership, trend) from one bounded git-log
 // scan cached by the service, plus the run-outcome volatility lens folded in fresh. A service
 // with no workspace yields 503, not 500.

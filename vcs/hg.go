@@ -865,7 +865,7 @@ func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 	if err != nil {
 		return err
 	}
-	// A revision predating dir yields no subtree. That is an empty tree, not a failure -
+	// A revision predating dir yields no subtree. That is an empty tree, not a failure;
 	// git reports the same case as "everything was added".
 	staged := filepath.Join(staging, filepath.FromSlash(prefix))
 	if _, err := os.Stat(staged); os.IsNotExist(err) {

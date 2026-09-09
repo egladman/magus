@@ -104,7 +104,7 @@ func ValidLeaseID(id string) bool {
 // blocks a write, gates a run, or refuses a call. The AGENT GUARD is what consults these
 // facts to grade a write, and it lives outside this package and READS this store; a guard
 // verdict is its own, not the ledger's. BaseVerdict is the shape that division takes on a
-// row: registration computes it, records it, and hands it back, and it refuses nothing -
+// row: registration computes it, records it, and hands it back, and it refuses nothing;
 // the caller and the orchestrator decide what a divergence is worth.
 //
 // Why enforcement lives outside rather than here, which is the reason the split exists at

@@ -24,7 +24,7 @@
 // a receipt that would let one be attributed.
 //
 // The reasoning is not privacy, it is measurement. A read count a second person can see is a
-// performance metric, and a performance metric is met by whatever satisfies it most cheaply -
+// performance metric, and a performance metric is met by whatever satisfies it most cheaply,
 // which here is stamping files unread. The measure would then destroy the thing it measures
 // while continuing to report healthy numbers, and everyone downstream would be worse off for
 // having believed it. Keeping the count private to the reader is what leaves it a bookmark:
@@ -174,7 +174,7 @@ func Record(cacheDir string, add []Receipt) error {
 	//
 	// Rename is atomic within a directory, so a reader sees the old file or the new one. It
 	// does not make the read-modify-write atomic: two writers can still interleave and the
-	// later one wins, losing the other's receipts. That is a known and accepted limit -
+	// later one wins, losing the other's receipts. That is a known and accepted limit:
 	// losing a receipt costs a re-read, and the alternative is a lock file in a path this
 	// package would then have to reap.
 	tmp, err := os.CreateTemp(filepath.Dir(dst), ".receipts-*.json")

@@ -400,7 +400,7 @@ func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
 }
 
 // TestRunCIAnchorRejectsProvidedProjectWithoutCIOp verifies the anchor still
-// refuses a provided project when none of its bound spells declare a ci op -
+// refuses a provided project when none of its bound spells declare a ci op:
 // counting provided projects at all must not make the anchor unconditionally pass.
 func TestRunCIAnchorRejectsProvidedProjectWithoutCIOp(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")

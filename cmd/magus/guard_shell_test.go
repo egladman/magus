@@ -189,7 +189,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// test file through a shell heredoc was itself denied.
 		{command: "echo 'run go test ./... to check'"},
 		// A BACKSLASH-escaped separator is not a shell separator: it is a regex
-		// alternation inside a quoted argument. Peeling must not reintroduce this -
+		// alternation inside a quoted argument. Peeling must not reintroduce this:
 		// splitting the line into segments does, which is why peeling substitutes.
 		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
 		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
@@ -1151,7 +1151,7 @@ func TestGuardDeniesScriptedRewrite(t *testing.T) {
 
 // TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an
 // agent trusts the graph at all. `magus refs` answers "unknown, not absent" when a project
-// is not indexed, and an agent that reads that as "no matches" falls back to a text match -
+// is not indexed, and an agent that reads that as "no matches" falls back to a text match,
 // which is exactly the fallback the advisory exists to prevent.
 func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 	t.Parallel()

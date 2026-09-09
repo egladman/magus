@@ -221,7 +221,7 @@ var modeArgv = map[string][][]string{
 	//
 	// watch is deliberately NOT probed. It is a long-running file watcher that starts
 	// watching before -h can stop it, so probing it hangs the test rather than reading
-	// its flags. Its man-page flags stay unverified, and the skip says so out loud -
+	// its flags. Its man-page flags stay unverified, and the skip says so out loud,
 	// which is the honest outcome for a command this check cannot safely enter.
 	"describe": {{"describe", "targets"}, {"describe", "projects"}},
 }
@@ -235,7 +235,7 @@ func argvsFor(name string) [][]string {
 }
 
 // recordedFlagsUnder is the union of everything a probe bound: the record filed under the
-// name itself, plus every record filed under a key extending it. The union is the point -
+// name itself, plus every record filed under a key extending it. The union is the point:
 // a multi-mode command files one record per mode ("affected build", "affected build
 // --plan"), and the man page describes the command, not one mode of it.
 func recordedFlagsUnder(name string) ([]recordedFlag, bool) {

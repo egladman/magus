@@ -369,7 +369,7 @@ func TestListProjects_Manifests(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
 		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
 	}
-	// "has" carries setup.py, NOT pyproject.toml (the first-declared candidate) -
+	// "has" carries setup.py, NOT pyproject.toml (the first-declared candidate).
 	// Manifests must report the first EXISTING candidate, not the first declared one.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "has", "setup.py"), []byte(""), 0o644))
 

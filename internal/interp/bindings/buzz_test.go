@@ -342,7 +342,7 @@ func TestRemovedAPIIsActuallyRemoved(t *testing.T) {
 // a Go host method reached across the binding boundary, or as Buzz source running
 // on the VM?
 //
-// collapseWs is the comparison because BOTH already exist and agree on semantics -
+// collapseWs is the comparison because BOTH already exist and agree on semantics:
 // std.StringsCollapseWs (Go, via strings.Fields) and the hand-rolled version in
 // docs/lib/text.buzz. Nothing had to be written twice to measure it.
 //

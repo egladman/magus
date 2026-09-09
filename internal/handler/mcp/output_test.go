@@ -16,7 +16,7 @@ import (
 
 // fakeOutputReader is a hand-built outputReader: it returns canned bytes and a
 // descriptor, or a chosen error, from OutputByRef, canned matches, or a chosen
-// error, from IdentifyRef, and a caller-supplied rendering from RefMatchCommand -
+// error, from IdentifyRef, and a caller-supplied rendering from RefMatchCommand,
 // so outputTool.Invoke is unit-testable without a real workspace cache or
 // *magus.Magus.
 type fakeOutputReader struct {

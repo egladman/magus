@@ -553,7 +553,7 @@ func buildWithStats(t *testing.T, root string, c *Cache) (Result, bool, *remoteS
 	return r, ran, remoteStatsFrom(ctx)
 }
 
-// The counters exist to separate "the backend returned success" from "bytes moved" -
+// The counters exist to separate "the backend returned success" from "bytes moved",
 // a distinction the old silent-on-success paths could not make.
 func TestRemoteCountersRecordRealTransfer(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())

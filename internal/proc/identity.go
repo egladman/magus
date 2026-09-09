@@ -22,7 +22,7 @@ import (
 // them with the wrong code. Fingerprinting each dev build from its embedded VCS stamp
 // makes builds of different revisions (and every dirty build) refuse to adopt each other.
 
-// devVersionSentinel is the placeholder main.version carries in an unstamped dev build -
+// devVersionSentinel is the placeholder main.version carries in an unstamped dev build:
 // `go build`/`go run ./cmd/magus` without `-ldflags "-X main.version=..."`. Every RELEASE
 // build is stamped with a real version (git describe) by the magusfile, so any value
 // other than this exact string is a stamped release and passes the gate on its version as
@@ -94,7 +94,7 @@ func randomToken() string {
 //   - The dev sentinel is replaced by a build fingerprint: "dev-<revision>" for a CLEAN
 //     build carrying VCS info (two clean builds of one commit are provably the same code
 //     and DO adopt each other, preserving the run-a-daemon-then-adopt-into-it workflow),
-//     or the per-process devUnverifiable token for a VCS-less build (never matches -
+//     or the per-process devUnverifiable token for a VCS-less build (never matches:
 //     adoption refused).
 //
 // Embedding the fingerprint IN the version string (rather than adding a new wire field) is

@@ -542,7 +542,7 @@ func (s *session) locate() {
 // matchAt maps an absolute terminal row to the match index drawn on it, if any.
 //
 // Items sit directly above the prompt line, so the topmost is `visible` rows up
-// from it. A click on the prompt, or anywhere off the block, matches nothing -
+// from it. A click on the prompt, or anywhere off the block, matches nothing,
 // and must not be treated as a selection.
 func (s *session) matchAt(row int) (int, bool) {
 	if !s.mouseOK || s.visible == 0 || len(s.matches) == 0 {

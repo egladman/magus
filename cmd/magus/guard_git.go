@@ -333,7 +333,7 @@ func isStageAllOperand(a string) bool {
 // isDeletingClean reports whether a `git clean` would actually delete.
 //
 // Read as short-flag CLUSTERS rather than as any word containing one of fdxX, which
-// denied `git clean --dry-run` (the d in "dry") and `git clean --exclude=x` (the x) -
+// denied `git clean --dry-run` (the d in "dry") and `git clean --exclude=x` (the x):
 // two invocations that remove nothing. A dry run anywhere wins: -n and --dry-run only
 // list what would go.
 func isDeletingClean(args []string) bool {

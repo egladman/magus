@@ -24,7 +24,7 @@ func init() { Register(Strings) }
 // splitting into lines or fields, padding a column.
 //
 // `compare` in particular is not a convenience. Buzz has no `<` operator on str,
-// so sorting strings at all means writing a byte-comparison loop by hand -
+// so sorting strings at all means writing a byte-comparison loop by hand;
 // docs/lib/text.buzz carries one (strLess) for exactly that reason. A comparator
 // list.sort can be handed is what that loop was standing in for.
 //

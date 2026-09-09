@@ -1642,7 +1642,7 @@ fun probe() > str {
 
 // TestParity_WriteThroughANameJustifiesItsVar covers the var-not-assigned check's
 // blind spot. It fired only for an *ast.IdentExpr target, so `digests[p] = h` and
-// `point.x = 2` both read as "never assigned" and the declaration was rejected -
+// `point.x = 2` both read as "never assigned" and the declaration was rejected,
 // which is what stopped tools/drift.buzz from loading. Upstream accepts both; where
 // it comments at all (W102 on an index-assigned `var`) it warns rather than errors.
 func TestParity_WriteThroughANameJustifiesItsVar(t *testing.T) {

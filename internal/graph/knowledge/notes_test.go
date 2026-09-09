@@ -80,7 +80,7 @@ func TestAssembleNotes_SkipsUnnamed(t *testing.T) {
 // TestPrivateNotesShardIsNeverExported is the one property that makes a notes location
 // outside the repository safe to support at all. @notes is exportable because its content
 // is already committed to the repo everyone clones; a personal note is on one machine and
-// in nobody's repo, so pushing that shard would leak private content into a shared cache -
+// in nobody's repo, so pushing that shard would leak private content into a shared cache,
 // the same hazard @memory's exclusion exists to prevent.
 func TestPrivateNotesShardIsNeverExported(t *testing.T) {
 	assert.True(t, isLocalShard(privateNotesShardName), "personal notes must never reach the remote cache")

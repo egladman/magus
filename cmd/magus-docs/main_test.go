@@ -23,7 +23,7 @@ func TestModuleDocsUpToDate(t *testing.T) {
 	docsDir := filepath.Join("..", "..", "docs", "reference", "buzz")
 
 	// BOTH kinds, matching main.go. Reading only std.All() here would call a
-	// Buzz-implemented module's committed doc an orphan and demand its deletion -
+	// Buzz-implemented module's committed doc an orphan and demand its deletion:
 	// the gate would enforce the opposite of what it is for. hostmodules.All(),
 	// not std.All(): std/encoding's nine leaf modules do not self-register into
 	// std's own registry (see hostmodules's doc for why).

@@ -320,7 +320,7 @@ var Magus = Module{
 	// log/cache/ci/secret/workspace are PROVIDER namespaces: a magusfile selects or
 	// reads through them, and none of those calls is Raises. Every one is made at the
 	// TOP LEVEL of a magusfile, where there is no enclosing function to declare !> and
-	// nothing to catch with, so declaring them raising would make them unwritable -
+	// nothing to catch with, so declaring them raising would make them unwritable,
 	// the same reason magus\project is not Raises. ledger is the one exception: its
 	// methods are ordinary calls made from inside a target or script, not top-level
 	// declarations, so they ARE Raises, the same reason magus\secret.read is too.
@@ -1004,7 +1004,7 @@ func MagusClearLedger(ctx context.Context) (int, error) {
 
 // MagusDescribeFile classifies paths as generated output, declared source, or
 // unclaimed. See runMagusJSON for why it forks rather than reading the workspace on
-// the context: this answer is wanted precisely where there is no workspace loaded -
+// the context: this answer is wanted precisely where there is no workspace loaded,
 // a `magus buzz` script deciding whether a changed file is worth a human's attention.
 func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any) (types.FileReport, error) {
 	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
@@ -1155,7 +1155,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 		}
 		if res.Started {
 			// Recorded even on a non-zero exit. A child that RAN said something, and
-			// that output is the answer for a command whose failure IS its report -
+			// that output is the answer for a command whose failure IS its report:
 			// doctor exits 1 because a check failed, and dropping stdout there left
 			// nothing to decode. The error is still returned alongside, so a caller
 			// that only wants the happy path is unaffected.
@@ -1187,7 +1187,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 //     NondeterministicOutput: same inputs and generator version, yet output differs: a
 //     reproducibility bug.
 //
-// It RETURNS the classification rather than throwing, so the gate owns the response -
+// It RETURNS the classification rather than throwing, so the gate owns the response:
 // fail on a clean-tree drift, warn on a mid-edit dirty one. The record is a plain map:
 //
 //	{ drifted: bool, code: str, message: str, url: str, files: []str }

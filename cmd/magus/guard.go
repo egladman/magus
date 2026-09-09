@@ -477,7 +477,7 @@ const (
 // can set it, because only the wrapper knows which of its host's tools merely look.
 //
 // A payload carrying a PROMPT rather than either is a spawn handoff: it is RECORDED and
-// EXEMPT from judgment. No rule is evaluated against a prompt, so the guard never denies one -
+// EXEMPT from judgment. No rule is evaluated against a prompt, so the guard never denies one:
 // there is no command and no path to judge, only a context transfer to note. It is tested last on
 // purpose, so that adding this branch cannot change the verdict on any payload the guard already
 // judged.

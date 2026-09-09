@@ -16,7 +16,7 @@ import "strings"
 // boxRule renders a horizontal rule of inner columns between two corners, with
 // optional captions set into it.
 //
-// A caption sits one glyph in from its corner with the rule resuming after it -
+// A caption sits one glyph in from its corner with the rule resuming after it,
 // which is what lets a status line or a way out ride the frame instead of
 // spending a whole row. Clipped, never wrapped: a rule is one row by
 // definition, so a caption too long for the terminal loses its tail rather than

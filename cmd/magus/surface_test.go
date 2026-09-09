@@ -136,7 +136,7 @@ func TestCLICommandServerLeavesAreRealSubcommands(t *testing.T) {
 
 // TestCLICommandQueryOutputForm locks the query-output hint to the form queryCmd
 // accepts. queryCmd matches its output positional against hint.QueryOutput.Leaf(),
-// so the hint (`magus query output <ref>`) and the accepted form cannot disagree -
+// so the hint (`magus query output <ref>`) and the accepted form cannot disagree:
 // the exact bug that shipped `magus query <ref>`. This asserts the shape stays
 // two-token (a bare `magus query` would reopen that gap) and renders as expected.
 //

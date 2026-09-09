@@ -304,7 +304,7 @@ func TestHashStepIgnoreDirsKeyStability(t *testing.T) {
 // "src:" line and change) or fail outright, since the file is removed between
 // calls. A memo that silently stopped reusing would still produce a first key
 // equal to a comparison of two independently-computed identical steps, so an
-// assertion that only compared keys would pass with SourceMemo deleted -
+// assertion that only compared keys would pass with SourceMemo deleted;
 // deleting the source file between calls is what makes the second call's
 // result trustworthy evidence of reuse rather than a coincidence.
 func TestStepKeyMemoReusesSourceExpansion(t *testing.T) {

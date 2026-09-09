@@ -194,7 +194,7 @@ func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
 	if err := h.w.WriteByte('\n'); err != nil {
 		return err
 	}
-	// Flush everything except output lines. The run log is not only a durable record -
+	// Flush everything except output lines. The run log is not only a durable record;
 	// it is what a live follower reads (`magus events --follow` tails <cacheDir>/runs/),
 	// and a purely buffered handler makes that stream lag by up to a bufio page, so a
 	// short run delivers nothing until it ends.

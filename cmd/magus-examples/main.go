@@ -91,7 +91,7 @@ func main() {
 	if err != nil {
 		fatalf("%v", err)
 	}
-	// Grouped by page, because inject treats a rendered example with no marker as a hard error -
+	// Grouped by page, because inject treats a rendered example with no marker as a hard error,
 	// which is what keeps the docs and the example set in lockstep, and would otherwise fire for
 	// every example that belongs on a different page.
 	byDoc := map[string]map[string]string{}

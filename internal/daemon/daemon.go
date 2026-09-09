@@ -326,7 +326,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route
-			// (magus.status.v1alpha1.StatusService/GetStatus, mounted below) is its full replacement -
+			// (magus.status.v1alpha1.StatusService/GetStatus, mounted below) is its full replacement:
 			// it serves the same live snapshot plus observing_since and config on the wire contract,
 			// and the console reads it there now.
 			bridgeMux.Handle("/api/v1/events", cors(eventsH))
@@ -507,7 +507,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Share to phone: POST /api/v1/share opens an on-demand, time-boxed LAN
 			// listener serving shareGuarded (the read surface) under a fresh read-only
 			// token. The trigger is loopback-only (RequireLoopbackPeer, atop the
-			// loopback-bound listener) and requires the existing cli/connector bearer -
+			// loopback-bound listener) and requires the existing cli/connector bearer:
 			// only the local, already-authenticated console can open a share. CORS wraps
 			// the bearer so the console's cross-origin POST preflight is answered here.
 			// The manager's parent is ctx, so every open share listener is torn down on

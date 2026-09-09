@@ -69,7 +69,7 @@ func (g *Graph) nearest(term string, kindOK func(kind string) bool) string {
 		for _, form := range nameForms(id, n.Label) {
 			// A length difference is a lower bound on the edit distance, so a form
 			// outside the window cannot beat the threshold. The window costs nothing
-			// in recall and skips the distance computation for most of the graph -
+			// in recall and skips the distance computation for most of the graph,
 			// which is what keeps this affordable against the symbol layer.
 			if gap := utf8.RuneCountInString(form) - want; gap > limit || gap < -limit {
 				continue

@@ -51,7 +51,7 @@ func ParseOccurrences(ctx context.Context, data []byte, projectPath, key string)
 			// to wait out the whole walk.
 			return nil, nil, err
 		}
-		// SymbolInformation carries the display name, and it can live in ANY document -
+		// SymbolInformation carries the display name, and it can live in ANY document,
 		// including one holding no occurrence of the symbol, and including one whose path
 		// falls outside the workspace. So it is read before the workspace filter below,
 		// matching how ParseIndex builds infoByKey: a package whose SymbolInformation is

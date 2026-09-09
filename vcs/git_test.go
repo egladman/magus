@@ -694,7 +694,7 @@ func TestTagsSeesLooseAndPackedRefs(t *testing.T) {
 
 // TestChangedFilesKeepsNonASCIIPathsRaw pins core.quotePath=false on BOTH of ChangedFiles'
 // probes. git otherwise renders a path outside ASCII as a C-quoted, backslash-escaped
-// literal ("uni/caf\303\251.md"), and project.normalizeFiles only trims and slash-converts -
+// literal ("uni/caf\303\251.md"), and project.normalizeFiles only trims and slash-converts,
 // so the quoted string matches no source glob and the project owning that file is silently
 // never rebuilt. No diagnostic, no error; `magus affected` just under-builds forever.
 //

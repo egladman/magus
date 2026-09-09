@@ -50,7 +50,7 @@ func TestCtxDeclarationsMatchAcrossHosts(t *testing.T) {
 	// copies are measured against it. Dropped are the internal marker and the three
 	// v0.4 removal shims, which exist to raise a better error than either copy could.
 	notDeclarations := []string{"__magus_context", "inputs", "outputs", "updates"}
-	// Known absences, each a pre-existing gap this test documents rather than fixes -
+	// Known absences, each a pre-existing gap this test documents rather than fixes;
 	// listing them is what keeps the rest of the surface gated instead of the whole
 	// check being deleted the first time it goes red.
 	//

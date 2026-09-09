@@ -98,7 +98,7 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 	base, addr := opts.Trail(), opts.Socket()
 	if base == "" || addr == "" {
 		// Not "not up yet". Both are published during startup, so a tick that still finds
-		// one empty is a scheduler that will never run a job for the daemon's whole life -
+		// one empty is a scheduler that will never run a job for the daemon's whole life,
 		// and it used to reach that state in silence, which is how mcp.enabled: false came
 		// to disable every scheduled job with nothing said. Once, because the condition
 		// does not change and a line every quarter hour is a line people filter.

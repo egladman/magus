@@ -185,7 +185,7 @@ type Project struct {
 	// ToolBounds is the version window THIS project requires of each binary its spells
 	// drive, keyed by bin name, from magus.project's "tools" key. Intersected with what
 	// the spell itself declares, narrower bound winning on each side, so neither can
-	// loosen the other. The intersection happens once at run start, in checkToolWindows -
+	// loosen the other. The intersection happens once at run start, in checkToolWindows,
 	// NOT at op dispatch, so a project whose targets never dispatch a spell op is held to
 	// its window all the same.
 	//

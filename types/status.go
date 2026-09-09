@@ -100,7 +100,7 @@ type StatusReport struct {
 // ReadinessReport is the JSON body of GET /readyz: Ready mirrors the pass/fail gate a
 // kubelet's status-code check already enforces (200 iff Ready), and Components adds
 // component-level detail an orchestrator ignores but a browser client (the console PWA)
-// can render as per-subsystem daemon health. Adding this body does not change the gate -
+// can render as per-subsystem daemon health. Adding this body does not change the gate;
 // it is purely additive alongside the existing 200/503 status code.
 type ReadinessReport struct {
 	Ready      bool                 `json:"ready"`

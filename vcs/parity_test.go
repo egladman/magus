@@ -369,7 +369,7 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 		require.NoError(t, err, "IgnoredPaths")
 
 		// Both must say TRUE, not merely agree. Agreement alone is satisfied by
-		// false == false, which is what two reporters BOTH returning nothing looks like -
+		// false == false, which is what two reporters BOTH returning nothing looks like,
 		// and hg's and sl's IgnoredPaths swallow a failed probe into an empty map, so
 		// deleting their debugignore call entirely would leave an agreement-only assertion
 		// green.

@@ -346,7 +346,7 @@ func tighter(candidate, current string, want int) bool {
 // entry through the Command.Bin it already names.
 type Tool struct {
 	// Probe is the command that prints this binary's version, its result narrowed by
-	// Key and mixed into the cache key. A zero Command means magus never asks -
+	// Key and mixed into the cache key. A zero Command means magus never asks,
 	// correct for a tool that cannot report one, where Key.Const supplies the token.
 	//
 	// A Command rather than a bare argv so it matches Ready below: both are "run this

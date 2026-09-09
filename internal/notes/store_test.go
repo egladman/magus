@@ -209,7 +209,7 @@ func TestPathNamesTheFileNotTheId(t *testing.T) {
 }
 
 // Re-attestation reads a note, stamps its anchors and saves it. Saving to dir/<id>.md would
-// leave TWO notes where there was one, with the original's anchors still unfingerprinted -
+// leave TWO notes where there was one, with the original's anchors still unfingerprinted,
 // so a save goes back to the file the note came from.
 func TestSaveWritesBackToTheFileItWasReadFrom(t *testing.T) {
 	dir := t.TempDir()

@@ -199,7 +199,7 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 //
 // One socket per user serves every workspace, so "already running" answered the question the
 // caller asked and not the one they meant. Starting the daemon from a second worktree returns 0
-// with nothing loaded from THIS tree, and the console then shows the tree it was started in -
+// with nothing loaded from THIS tree, and the console then shows the tree it was started in,
 // which reads as the command having worked. The roots are already on the status wire; the message
 // simply never said them.
 //
@@ -224,7 +224,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // MAGUS_DAEMON_SOCKET: a child inheriting it believes it is already adopted, binds no
 // socket, and reports the parent's, leaving a daemon `server stop` cannot find.
 //
-// The invocation ancestry and recursion depth, because THE DAEMON DESCENDS FROM NOBODY -
+// The invocation ancestry and recursion depth, because THE DAEMON DESCENDS FROM NOBODY:
 // the same rule submitJob already applies to a job's context. A run starts the daemon,
 // so without this the daemon's process environment permanently records that one run's
 // ancestry, and every workspace it serves would read those refs as its own: claims
@@ -310,7 +310,7 @@ const consoleReadyTimeout = 20 * time.Second
 // the user asked for none.
 //
 // root names the workspace the child will serve. One socket per user serves every
-// workspace, so a daemon started from here is authoritative for whoever connects next -
+// workspace, so a daemon started from here is authoritative for whoever connects next;
 // saying which tree it came up in is what stops it reading as "the daemon", the same
 // reason servingSuffix exists on the `server start` path.
 func ensureConsoleDaemon(ctx context.Context, addr, root string) error {
@@ -442,7 +442,7 @@ var spawnAdmissionDaemon = func() (pid int, logPath string, err error) {
 func ensureAdmissionDaemon(ctx context.Context, addr string) string {
 	// ONE address for all three steps. Spawning against the configured address while
 	// waiting on the default meant any non-default daemon.address timed out after the
-	// full readiness window and then reaped the healthy daemon it had just started -
+	// full readiness window and then reaped the healthy daemon it had just started:
 	// a minute of latency per command, ending in a SIGKILL of the thing that worked.
 	if proc.SocketLive(ctx, addr) {
 		return addr

@@ -282,7 +282,7 @@ func TestParseBuzzProjectOpts_UnknownTargetPolicyKeyErrors(t *testing.T) {
 // TestParseBuzzProjectOpts_KeysFromTheFutureLoad is the deadlock regression, at both
 // depths where a magusfile can carry a key this binary predates.
 //
-// A rejection here aborts workspace load, which takes out every magus command at once -
+// A rejection here aborts workspace load, which takes out every magus command at once,
 // `magus run go-build` included, so the workspace cannot even build the binary that
 // would understand the key. Ignoring it costs one policy not applying.
 func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {

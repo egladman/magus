@@ -42,7 +42,7 @@ func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 }
 
 // The last_green_run contract, decoded. Inheritance is an optimization, so
-// every shape but a complete {run, commit} record reads as "no green run" -
+// every shape but a complete {run, commit} record reads as "no green run",
 // including the raised error, which the annotate ops above must NOT swallow.
 func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
 	drv := &stubDriver{resp: spells.InvokeResponse{Data: map[string]any{

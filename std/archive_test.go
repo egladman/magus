@@ -524,7 +524,7 @@ func TestArchiveList(t *testing.T) {
 	ctx := context.Background()
 	files := map[string]string{"a.txt": "alpha", "dir/b.txt": "bee"}
 
-	// Every container format reports the same entries, sorted the same way -
+	// Every container format reports the same entries, sorted the same way;
 	// that equivalence is the point of listing through one method.
 	for _, tc := range []struct {
 		name string

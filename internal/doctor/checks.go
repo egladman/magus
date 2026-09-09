@@ -1001,7 +1001,7 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Doc
 // ADVICE, never a failure, and the doctrine at types/doctor.go decides that rather
 // than taste: which files are build inputs is the workspace's judgment. A LICENSE
 // nobody's cache key reads is correctly undeclared, and a checker that failed on it
-// would be dictating a layout. What magus can say is that the seeding is happening -
+// would be dictating a layout. What magus can say is that the seeding is happening:
 // the cost is real and invisible, and every entry here is either a declaration
 // somebody forgot or a rerun somebody is paying for on purpose.
 //
@@ -2470,7 +2470,7 @@ func (r *runner) checkConcurrencySizing() types.DoctorCheck {
 // cannot mean what it says. Nobody writes "gen/*.binpb" hoping it matches nothing.
 //
 // Only PATTERNS are reported. A wildcard-free path names one file and is resolved by
-// stat rather than the walk, so it reaches the key from inside a pruned tree normally -
+// stat rather than the walk, so it reaches the key from inside a pruned tree normally;
 // that is the fix this check is the residue of. Letting a pattern in too is what
 // pruning exists to prevent: a bare **/*.js would start hashing all of node_modules.
 func (r *runner) checkUnmatchableSourceGlobs(projects []*types.Project) types.DoctorCheck {

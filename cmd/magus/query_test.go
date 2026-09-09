@@ -159,7 +159,7 @@ func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
 
 // TestShowOutputIdentity_RevisionRendering drives showOutputIdentity end to end in a real git
 // workspace: a target's descriptor is stamped with the revision HEAD was at when it
-// ran (CurrentRevision, resolved once by executeStages), and --identity must render it -
+// ran (CurrentRevision, resolved once by executeStages), and --identity must render it:
 // silently when it still matches HEAD, and with a "recorded at X, you are on Y" line
 // once a later commit moves HEAD away from it.
 func TestShowOutputIdentity_RevisionRendering(t *testing.T) {

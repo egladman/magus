@@ -53,7 +53,7 @@ const buzzScanOptOut = "buzz-scan-ok:"
 // write replace-all in Buzz, because str.replace substitutes only the FIRST
 // occurrence. It is also the most expensive way: each pass copies the whole
 // string, and on the default VM build every copy is a distinct string interned
-// for the life of the process and never freed (see libs/gopherbuzz/vm/value.go -
+// for the life of the process and never freed (see libs/gopherbuzz/vm/value.go;
 // the intern table has no eviction, and it is what bounds the never-freed heap,
 // so the fix cannot be eviction). Removing three of these from the docs render
 // cut its measured peak from 5806MB to 4259MB.

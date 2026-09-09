@@ -277,7 +277,7 @@ func TestParseIndexCallsDropsSelfEdge(t *testing.T) {
 	assert.Empty(t, callsOf(t, syms, "gomod example.com/foo Caller()."))
 }
 
-// A callee the workspace never defines has nothing to navigate to, so it gets no edge -
+// A callee the workspace never defines has nothing to navigate to, so it gets no edge;
 // its usage is still recorded by the referencing file's `references` edge.
 func TestParseIndexCallsSkipsCalleeDefinedElsewhere(t *testing.T) {
 	const external = "scip-go gomod example.com/dep v1 Helper()."

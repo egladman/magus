@@ -286,7 +286,7 @@ func TestStreamEventsFilterNarrows(t *testing.T) {
 }
 
 // TestStreamEventsResumesFromSince covers reconnecting: filter.time.since trims the replay to what
-// the caller has not seen. The boundary is inclusive, so the event resumed FROM arrives again -
+// the caller has not seen. The boundary is inclusive, so the event resumed FROM arrives again;
 // at-least-once is the honest guarantee for a millisecond cursor several events can share.
 func TestStreamEventsResumesFromSince(t *testing.T) {
 	runs := &fakeRuns{events: []journal.Event{

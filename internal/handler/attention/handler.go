@@ -149,7 +149,7 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 //
 // The severity is re-read from the store rather than trusted: it was written by whichever
 // build raised the request, and an attribute is a time series, so a value this build does not
-// know becomes "unknown" instead of a new series. A row missing either timestamp is skipped -
+// know becomes "unknown" instead of a new series. A row missing either timestamp is skipped:
 // there is no duration to report, and zero would read as an instant answer.
 func (h *Handler) recordDisposition(ctx context.Context, req sessions.AttentionRequest) {
 	if h.tel == nil || req.OpenedMs <= 0 || req.DisposedMs < req.OpenedMs {

@@ -521,7 +521,7 @@ func TestRedactingHandlerCoversEveryAnyCarrier(t *testing.T) {
 			assert.NotContains(t, out, tok, "the raw value must not survive")
 			assert.NotContains(t, out, base64.StdEncoding.EncodeToString([]byte(tok)),
 				"nor a base64 form the reader can trivially decode")
-			// The mask is present either literally or, for a []byte attr, base64'd -
+			// The mask is present either literally or, for a []byte attr, base64'd:
 			// those bytes are replaced before encoding/json sees them, so the wire
 			// carries base64 of "***" rather than the characters.
 			maskB64 := base64.StdEncoding.EncodeToString([]byte(mask))

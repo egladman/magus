@@ -119,7 +119,7 @@ type Row struct {
 	Thread string
 	Text   string
 	// Emph is which PART of Text changed, in BYTES of Text, on a RowLine that could be paired
-	// with its counterpart. The zero span means there is nothing to draw harder than the rest -
+	// with its counterpart. The zero span means there is nothing to draw harder than the rest:
 	// the line has no partner, or the whole of it changed and the row color already says so.
 	Emph changeset.Span
 }

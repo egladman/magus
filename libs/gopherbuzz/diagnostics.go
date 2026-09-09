@@ -37,7 +37,7 @@ const (
 	UnresolvedImport diagnostics.Code = "BZZ2001" // an import that cannot be resolved to a module or file
 	FiberMisuse      diagnostics.Code = "BZZ2002" // resume/resolve called wrong: not a fiber, missing argument, or a running fiber
 
-	// Warnings (parser.go). Unlike every code above, a warning never fails Exec/Compile -
+	// Warnings (parser.go). Unlike every code above, a warning never fails Exec/Compile;
 	// see Severity.
 	UnusedImport diagnostics.Code = "BZZ3001" // an import whose namespace binding is never referenced
 

@@ -578,7 +578,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 	// Only a LOCAL var is tracked: scopes[0] is the global scope, where a var may be
 	// written by any later top-level statement or by a function body, so "never
 	// assigned here" says nothing.
-	// `_` is the discard name, never assigned by construction, so it is exempt -
+	// `_` is the discard name, never assigned by construction, so it is exempt:
 	// upstream's own anonymous-objects.buzz writes `var _ = ...`.
 	c.declareTracked(v.Name, v.Pos)
 	if strings.HasSuffix(v.TypeAnnot, "?") && len(c.scopes) > 1 {
@@ -904,7 +904,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		c.raiseDeclared = m.ErrAnnot != ""
 		// A method's *> annotation was never recorded here, unlike a free function's
 		// in checkFunDecl. Nothing surfaced it because every yield check is guarded on
-		// yieldTyp being non-nil, so `yield` inside a method silently went unchecked -
+		// yieldTyp being non-nil, so `yield` inside a method silently went unchecked,
 		// and a method calling another yielding method looked like an undeclared yield.
 		if m.YieldAnnot != "" {
 			c.yieldTyp = c.resolveAnnot(m.YieldAnnot)
@@ -1634,7 +1634,7 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		return types.Any
 	}
 	// The bare `t.0` shorthand is defined only on tuples. A named object or an
-	// anonymous one with a field literally called `@"0"` has to be spelled that way -
+	// anonymous one with a field literally called `@"0"` has to be spelled that way;
 	// upstream has a compile-error test for each. Unknown passes through with the
 	// same reasoning as E28 above: an erased `obj{ :str, :str }` return annotation
 	// tracks as Unknown, and rejecting there would fail upstream's own tuples.buzz.

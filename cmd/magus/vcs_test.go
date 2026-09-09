@@ -121,7 +121,7 @@ func TestFilterStageable(t *testing.T) {
 	// present.txt exists on disk and was never committed: the ordinary new-file case.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
 
-	// stale.txt is a declared output that never existed on disk and was never tracked -
+	// stale.txt is a declared output that never existed on disk and was never tracked,
 	// e.g. libs/diag/MAGUS.md after libs/diag was renamed to libs/diagnostics. This is
 	// the path that must be dropped, not fed to `git add`.
 	paths := []string{"tracked.txt", "present.txt", "stale.txt"}

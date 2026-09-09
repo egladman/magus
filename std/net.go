@@ -35,7 +35,7 @@ const netPollInterval = 100 * time.Millisecond
 // Net is the "net" host module: the two questions a build actually asks about
 // TCP, and nothing else.
 //
-// It is NOT a networking library. There is no listener, no client, no protocol -
+// It is NOT a networking library. There is no listener, no client, no protocol;
 // http already covers requests. What was missing is the pair of things every
 // target that starts a service needs and had to shell out for:
 //

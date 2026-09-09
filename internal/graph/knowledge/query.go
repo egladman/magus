@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Query is deterministic name resolution and retrieval over the knowledge graph -
+// Query is deterministic name resolution and retrieval over the knowledge graph:
 // no LLM. It reuses magus's existing fuzzy-finding score (interactive.LeafScore,
 // which powers `magus x`/`magus where`), generalized from project paths to node
 // IDs and labels. The fielded grammar here is a pragmatic subset: field:value
@@ -97,7 +97,7 @@ func CouldMatchLazyLayer(input string) bool {
 	if len(kinds) == 0 {
 		return true // no kind filter, so the layer was in scope and simply was not loaded
 	}
-	// Every explicit kind is outside the lazy layer (and no wildcard reaches it -
+	// Every explicit kind is outside the lazy layer (and no wildcard reaches it;
 	// SeedsLazyLayer already returned false, so none does), which excludes it outright.
 	return false
 }

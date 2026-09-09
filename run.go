@@ -693,7 +693,7 @@ func applyRunKeying(step *cache.Step, toolVersions, charms []string) {
 // duplication that lets two views disagree about which root a cross-project glob belongs to.
 //
 // Wide is right HERE and only here: the race detector asks "what got written", so it must see
-// paths no glob claimed. The replay asks "did the declared outputs change", so it filters -
+// paths no glob claimed. The replay asks "did the declared outputs change", so it filters;
 // see diff.HashContent.
 func outputWatchDirs(ws *types.Workspace, p *types.Project, target string) []string {
 	sets := outputGlobsByRoot(ws, p, target)
@@ -839,7 +839,7 @@ func (m *Magus) CurrentRevision(ctx context.Context) (name, revision string, dir
 func checkToolWindows(projects []*types.Project, versions map[string]string) error {
 	var violations []string
 	// One error carries one code, so a mixed batch has to choose: too-old always wins.
-	// Recorded as violations are found, not recovered from the formatted message -
+	// Recorded as violations are found, not recovered from the formatted message:
 	// sniffing the sorted text for "older than" made the code turn on which PROJECT NAME
 	// sorted first.
 	sawOld, sawNew := false, false

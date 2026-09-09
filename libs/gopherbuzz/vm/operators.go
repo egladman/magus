@@ -756,7 +756,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 	switch name {
 	// "len" and "size" are the same count. The checker has always typed map.len as
 	// Int (see inferMember's MapType case) while the VM only answered to "size", so
-	// m.len() type-checked and then died at runtime with "null is not callable" -
+	// m.len() type-checked and then died at runtime with "null is not callable",
 	// the worst shape of bug, since the checker actively vouched for it.
 	case "len", "size":
 		// Builtins otherwise win over stored keys (see the caller), but a map is also
@@ -1087,7 +1087,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			}
 			// EVERY occurrence, matching upstream: src/builtin/str.zig's replace calls
 			// Zig's std.mem.replaceOwned, which substitutes throughout. This substituted
-			// only the first for a long time, and the damage was quiet rather than loud -
+			// only the first for a long time, and the damage was quiet rather than loud:
 			// an escaper is the shape that hides it best. docs/lib/feed.buzz escapes HTML
 			// as s.replace("&", "&amp;").replace("<", "&lt;"), which encoded the FIRST
 			// ampersand of a document and left the rest raw; spells/github/actions

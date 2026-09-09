@@ -273,7 +273,7 @@ func bind(fs *flag.FlagSet, args []string) {
 //
 // That is a silent loss: a generator reading the subcommand table would emit a list
 // missing that command, with nothing to say so. It is pinned rather than fixed
-// because fixing it needs the struct's field order, which means resolving the type -
+// because fixing it needs the struct's field order, which means resolving the type,
 // and every table in this repo is written with field names. If a positional entry
 // ever appears, this test is the note explaining why the generated output was short.
 func TestSliceOfStructsDropsAPositionalEntry(t *testing.T) {

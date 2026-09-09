@@ -514,7 +514,7 @@ func TestInvocationByID(t *testing.T) {
 }
 
 // TestInvocationEventsByID pins the read side of the audit trail: the EVENTS survive, not
-// just the header InvocationByID reconstructs from them. journal.KindSecret is the reason -
+// just the header InvocationByID reconstructs from them. journal.KindSecret is the reason:
 // a run's credential reads were recorded and then unreachable, so the trail had no reader.
 func TestInvocationEventsByID(t *testing.T) {
 	dir := t.TempDir()

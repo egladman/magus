@@ -666,7 +666,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			result.Duration = time.Since(start)
 			snapErr := fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err)
 			// Report like the sibling runErr path above: fn already succeeded, so
-			// without this the journal and any observer never see the step finish -
+			// without this the journal and any observer never see the step finish:
 			// it just vanishes mid-run instead of failing loudly.
 			c.errs.Add(1)
 			ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, snapErr, false)

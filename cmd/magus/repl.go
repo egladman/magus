@@ -12,7 +12,7 @@ import (
 // buzzRepl opens the REPL behind a bare `magus buzz`: the full magusfile surface
 // (host modules, the magus.* namespace, spell and project imports), with the
 // magusfile at cwd executed on start so its targets and locals are there to poke
-// at. There is no second, magusfile-less REPL and no flag to ask for this one -
+// at. There is no second, magusfile-less REPL and no flag to ask for this one:
 // magus reads its context everywhere else, and a REPL opened inside a workspace is
 // a REPL on that workspace. Outside one there is simply nothing to autoload, which
 // NewBuzzReplSession already treats as ordinary rather than an error.

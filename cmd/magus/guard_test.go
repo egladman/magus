@@ -37,7 +37,7 @@ var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
 //     stale.
 //   - Every listed decision must RENDER distinctly. writeGuardVerdict's text
 //     arm falls through to "pass" for anything it does not know, so a decision
-//     added to the list but not to the renderer would report itself as a pass -
+//     added to the list but not to the renderer would report itself as a pass:
 //     the quietest possible wrong answer.
 //
 // A decision that fails either direction is not a contract a host glue can be
@@ -366,7 +366,7 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 
 // TestHookCmd_TranscriptFlagRecordsThePointer covers the FLAG path, which is the one the
 // shipped observe template actually uses. That template extracts the path with jq and pipes
-// plain text rather than the whole event, so nothing about the envelope is available to it -
+// plain text rather than the whole event, so nothing about the envelope is available to it;
 // without the flag the transcript link exists only for hosts that pipe raw JSON, which is
 // none of the ones magus ships a template for.
 func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {

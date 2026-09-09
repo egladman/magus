@@ -388,7 +388,7 @@ func findWorkspaceRoot() string {
 
 // ExtractFlag pre-scans args for -config/--config (and its -c/--c short form) so the
 // config file can be loaded before each subcommand registers its real flag set. -c is
-// case-sensitive and distinct from -C (short for --root, bound in cmd/magus/main.go) -
+// case-sensitive and distinct from -C (short for --root, bound in cmd/magus/main.go);
 // matching is exact, so -C is never read as config here. Scanning stops at "--": past
 // that separator the tokens belong to a forwarded tool, not to magus.
 func ExtractFlag(args []string) string {

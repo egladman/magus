@@ -436,7 +436,7 @@ func TestRunCommandSourcesHonorsIgnoreDirs(t *testing.T) {
 	require.Len(t, lines, 1)
 	assert.NotContains(t, lines[0], "skip.txt", "a file under a declared ignore dir must never reach argv")
 
-	// Without the declared ignore dir, the same file DOES survive the walk -
+	// Without the declared ignore dir, the same file DOES survive the walk,
 	// proving the exclusion above came from opts.ignoreDirs, not the glob.
 	require.NoError(t, os.Remove(logFile))
 	_, err = runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}})
