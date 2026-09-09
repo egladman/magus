@@ -830,23 +830,16 @@ func reproTarget(s Step) string {
 	return s.Target + ":" + strings.Join(s.Charms, ",")
 }
 
-// admit takes the seats a step needs before it executes and puts it on the record every
-// observer reads: the local limiter slots, the machine-wide claim `magus status` prints
-// by project and target, the inflight set a killed run is reported from, and the
-// invocation heartbeat the stall watchdog compares against. It returns the clamped slot
-// count and one release that gives them all back in the order below.
+// stepSlots is the limiter weight one step takes.
 //
-// Factored out of RunAll so that work running OUTSIDE the batch can be accounted the
-// same way rather than through a second, quietly divergent bookkeeping path - see
-// [Cache.RunAside].
-func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Context, int, func(), error) {
-	// A heavy step can request extra slots (Step.Slots) to throttle parallel work
-	// around itself. Clamp to [1, budget]: 0 means one slot, and a request above the
-	// budget would exceed capacity and error, so cap it. A request >= the budget holds
-	// every slot, so no peer can enter fn while it runs (it does not take the isolation
-	// lock, so unlike an exclusive step it does not also serialize replays). On an
-	// unlimited limiter (budget <= 0) there is nothing to throttle against, so the
-	// request is a no-op: AcquireN returns immediately.
+// A heavy step can request extra slots (Step.Slots) to throttle parallel work
+// around itself. Clamp to [1, budget]: 0 means one slot, and a request above the
+// budget would exceed capacity and error, so cap it. A request >= the budget holds
+// every slot, so no peer can enter fn while it runs (it does not take the isolation
+// lock, so unlike an exclusive step it does not also serialize replays). On an
+// unlimited limiter (budget <= 0) there is nothing to throttle against, so the
+// request is a no-op: AcquireN returns immediately.
+func stepSlots(s Step, lim *Limiter) int {
 	slots := s.Slots
 	if slots < 1 {
 		slots = 1
@@ -854,54 +847,80 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 	if budget := lim.Capacity(); budget > 0 && slots > budget {
 		slots = budget
 	}
-	if err := lim.AcquireN(ctx, slots); err != nil {
-		return ctx, 0, nil, err
+	return slots
+}
+
+// claimMachine takes the machine-wide half of a step's admission: the concurrency slot
+// and the declared memory arbitrated across every magus on the host. It returns ctx
+// marked as holding the claim and the release that hands it back.
+//
+// It is the FIRST seat a step takes, ahead of both the run-isolation lease and the
+// local limiter slot, because it is the only one whose wait is other processes' to end.
+// Queued here under the isolation lock it is uninterruptible: this wait is ctx-aware
+// but sync.RWMutex is not, so a shared peer that yielded its read lock to fan out parks
+// re-taking it behind the queued step's pending write lock, and the claim that step
+// waits for is the one the parked peer would have released. Neither goroutine is then
+// anywhere it can notice a cancelled context, so Ctrl-C reaches neither.
+//
+// Taking it first costs the throttling the other order bought: a step now holds
+// machine-wide memory while it waits for a local lock or slot. That wait ends on its
+// own, because whoever holds the isolation lock took its claim before the lock and can
+// run to completion.
+//
+// The claim also goes back LAST, after the slot and the lease. That used to matter:
+// freeing the slot is what wakes a local waiter, and a waiter woken while this step's
+// claim was still held queued behind memory the run had already returned. A waiter now
+// asks the budget before it waits for a slot, so there is nobody in that position.
+//
+// A step admitted BENEATH one that already holds a claim takes none, because the
+// ancestor is the one thing that cannot release: it is blocked in dispatch waiting
+// for this step, so a second claim queued behind it would wait forever. Measured
+// 2026-09-08: `magus affected ci` sat 27 minutes at 13s of CPU with no child process
+// running.
+//
+// The cover is a floor, not an exact figure. Step.MemoryMB folds a chain by MAXIMUM,
+// and one ctx.needs(a, b, c) runs its members concurrently, so three 4 GB members are
+// covered by a 4 GB claim; see types.ChainMemoryMB for why the recorded chain cannot
+// yet tell a concurrent needs from a sequential one. Inside this process the limiter
+// still bounds how many run at once; the machine budget does not see them at all.
+//
+// Covering rather than yielding, because a machine claim's re-acquire is FALLIBLE: it
+// re-queues behind strangers and can be refused, so a parent that released and retook
+// could fail after its children had already run. The limiter still bounds how many of
+// these run at once inside this process.
+func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Context, func(), error) {
+	held := admissionFrom(ctx)
+	if held.machineClaim {
+		return ctx, func() {}, nil
 	}
-	// The machine-wide half of the same admission, taken after the local slot so
-	// in-process ordering is unchanged: a step the machine cannot seat queues here,
-	// behind peers this run does not schedule, rather than starting alongside them and
-	// taking the host down.
-	//
-	// It is taken while this step already holds the isolation lock (an exclusive step
-	// took it in RunAll) and its local slots. That ordering is deliberate but it is not
-	// free: an exclusive step queued on the machine budget blocks every replay in THIS
-	// process for as long as it waits, so one worktree's wait becomes another target's
-	// wait here. Acquiring the machine budget first would trade that for a worse one -
-	// the step would hold machine-wide memory while waiting for a local lock, which is
-	// the resource that spans every worktree rather than just this run.
-	//
-	// A step admitted BENEATH one that already holds a claim takes none, because the
-	// ancestor is the one thing that cannot release: it is blocked in dispatch waiting
-	// for this step, so a second claim queued behind it would wait forever. Measured
-	// 2026-09-08: `magus affected ci` sat 27 minutes at 13s of CPU with no child process
-	// running.
-	//
-	// The cover is a floor, not an exact figure. Step.MemoryMB folds a chain by MAXIMUM,
-	// and one ctx.needs(a, b, c) runs its members concurrently, so three 4 GB members are
-	// covered by a 4 GB claim; see types.ChainMemoryMB for why the recorded chain cannot
-	// yet tell a concurrent needs from a sequential one. Inside this process the limiter
-	// still bounds how many run at once; the machine budget does not see them at all.
-	//
-	// Covering rather than yielding, because a machine claim's re-acquire is FALLIBLE: it
-	// re-queues behind strangers and can be refused, so a parent that released and retook
-	// could fail after its children had already run. The limiter still bounds how many of
-	// these run at once inside this process.
-	releaseMachine := func() {}
-	if held := admissionFrom(ctx); !held.machineClaim {
-		release, machineErr := c.machine.acquire(ctx, types.MachineClaim{
-			Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
-			MemoryMB: s.MemoryMB, Slots: slots,
-			PID: os.Getpid(), Dir: workingDir(),
-			Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
-		})
-		if machineErr != nil {
-			lim.ReleaseN(slots)
-			c.logPool(ctx, lim)
-			return ctx, 0, nil, machineErr
-		}
-		releaseMachine = release
-		held.machineClaim = true
-		ctx = held.on(ctx)
+	release, err := c.machine.acquire(ctx, types.MachineClaim{
+		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
+		MemoryMB: s.MemoryMB, Slots: slots,
+		PID: os.Getpid(), Dir: workingDir(),
+		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
+	})
+	if err != nil {
+		return ctx, nil, err
+	}
+	held.machineClaim = true
+	return held.on(ctx), release, nil
+}
+
+// admit takes the in-process seats a step needs before it executes and puts it on the
+// record every observer reads: the local limiter slots, the inflight set a killed run
+// is reported from, and the invocation heartbeat the stall watchdog compares against.
+// The machine-wide claim `magus status` prints by project and target is already held by
+// the time a step reaches here; claimMachine says why it cannot be taken under the
+// isolation lease. It returns the clamped slot count and one release that gives the
+// seats back.
+//
+// Factored out of RunAll so that work running OUTSIDE the batch can be accounted the
+// same way rather than through a second, quietly divergent bookkeeping path; see
+// [Cache.RunAside].
+func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), error) {
+	slots := stepSlots(s, lim)
+	if err := lim.AcquireN(ctx, slots); err != nil {
+		return 0, nil, err
 	}
 	// Report occupancy as it changes, so an interactive run can show a live pool
 	// counter. Emitted on both edges of the slot's life: once here (this step is now
@@ -915,13 +934,8 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 	doneInflight := c.inflight.start(s.ProjectPath, s.Target)
 	prog := ProgressFromContext(ctx)
 	prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "running"})
-	return ctx, slots, func() {
+	return slots, func() {
 		doneInflight()
-		// The machine claim goes back BEFORE the slot, because freeing the slot is what
-		// wakes a local waiter: releasing in the other order lets that waiter ask the
-		// budget while this step's claim is still held, and a plain sequential run then
-		// queues behind memory it has already returned.
-		releaseMachine()
 		lim.ReleaseN(slots)
 		c.logPool(ctx, lim)
 		prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "finished"})
@@ -1044,9 +1058,14 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	if lim == nil {
 		lim = NewLimiter(DefaultConcurrency())
 	}
+	ctx, releaseMachine, err := c.claimMachine(ctx, s, stepSlots(s, lim))
+	if err != nil {
+		return Result{ProjectPath: s.ProjectPath}, err
+	}
+	defer releaseMachine()
 	ctx, releaseIsolation := acquireRunIsolation(ctx, s.Exclusive)
 	defer releaseIsolation()
-	ctx, slots, release, err := c.admit(ctx, s, lim)
+	slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
@@ -1179,7 +1198,21 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := barrier.waitForDeps(gctx, s); err != nil {
 				return fail(err)
 			}
-			stepCtx, releaseIsolation := acquireRunIsolation(gctx, s.Exclusive)
+			// The machine budget comes before the isolation lease and the slot, so a
+			// step queues for it holding nothing a peer needs in order to finish;
+			// claimMachine carries the interleaving that ordering answers.
+			machineCtx, releaseMachine, machineErr := c.claimMachine(gctx, s, stepSlots(s, lim))
+			if machineErr != nil {
+				// A machine refusal is an independent finding: nothing upstream failed and
+				// the batch was not cancelled, the machine refused this step on its own
+				// account. Without this the refusal takes the never-started path, where it
+				// spends no failure budget and joins no error, and a run that did nothing
+				// reports success.
+				ran = gctx.Err() == nil
+				return fail(machineErr)
+			}
+			defer releaseMachine()
+			stepCtx, releaseIsolation := acquireRunIsolation(machineCtx, s.Exclusive)
 			defer releaseIsolation()
 			// acquireIsolation's Lock/RLock is not ctx-aware, so a goroutine can
 			// park there uninterruptibly while a sibling fails. Re-check after it
@@ -1189,15 +1222,10 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}
-			stepCtx, slots, release, admitErr := c.admit(stepCtx, s, lim)
+			// A slot-acquire failure is only ever this batch's own cancellation, which
+			// fail swallows regardless.
+			slots, release, admitErr := c.admit(stepCtx, s, lim)
 			if admitErr != nil {
-				// A machine refusal is an independent finding: nothing upstream failed and
-				// the batch was not cancelled, the machine refused this step on its own
-				// account. Without this the refusal takes the never-started path, where it
-				// spends no failure budget and joins no error, and a run that did nothing
-				// reports success. A slot-acquire failure is only ever this batch's own
-				// cancellation, which fail swallows regardless.
-				ran = gctx.Err() == nil
 				return fail(admitErr)
 			}
 			defer release()
