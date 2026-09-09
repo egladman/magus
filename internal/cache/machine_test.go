@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -164,28 +165,46 @@ func TestMachineBudgetExcludesAnAncestorsClaim(t *testing.T) {
 	assert.Empty(t, child.Holders, "an ancestor is not a peer")
 }
 
-// TestMachineBudgetExcusesOneClaimPerAncestor is C6: an invocation is not a step. A
-// parent running several steps at once holds several claims, and excusing all of them
-// would make its child blind to genuine peers and re-admit the oversubscription this
-// whole mechanism exists to stop.
-func TestMachineBudgetExcusesOneClaimPerAncestor(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
-	for _, target := range []string{"test", "lint", "docs"} {
-		v := b.Request("parent-"+target, types.MachineClaim{
+// TestMachineBudgetSeatsEveryChildOfAFannedOutParent is the cross-process half of the
+// deadlock eb1c6831e closed inside one process. Four steps of ONE invocation each shell
+// out to a magus of their own; every parent is blocked in exec waiting for its child, so
+// a child excused from one parent claim and queued behind the other three is waiting on
+// the very steps that are waiting on it.
+func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
+	b, _, _ := testBudget(t, 12_000, 16)
+	targets := []string{"build", "test", "lint", "docs"}
+	for _, target := range targets {
+		require.True(t, b.Request("parent-"+target, types.MachineClaim{
 			Project: ".", Target: target, MemoryMB: 3000, Slots: 1, PID: 100, Invocation: "100:aaa",
-		})
-		require.True(t, v.Granted, target)
+		}).Granted, target)
 	}
 
-	// One of those three spawned this child. Excusing all three would show it an empty
-	// machine and seat it; excusing one leaves 6000 held, so its 5000 does not fit.
-	child := types.MachineClaim{
-		Project: ".", Target: "build", MemoryMB: 5000, Slots: 1, PID: 200, Ancestors: []string{"100:aaa"},
+	child := func(i int) types.MachineClaim {
+		return types.MachineClaim{
+			Project: ".", Target: targets[i], MemoryMB: 4000, Slots: 1, PID: 200 + i,
+			Invocation: fmt.Sprintf("%d:bbb", 200+i), Ancestors: []string{"100:aaa"},
+		}
 	}
-	v := b.Request("child", child)
-	assert.False(t, v.Granted, "only the parent STEP is excused, not every step its invocation runs")
-	assert.Equal(t, 6000, v.HeldMB, "two of the parent's three claims still count")
-	assert.Len(t, v.Holders, 2)
+	first := ""
+	for i := range 3 {
+		v := b.Request("child-"+targets[i], child(i))
+		require.True(t, v.Granted, targets[i])
+		if first == "" {
+			first = v.ID
+		}
+	}
+
+	// Still a budget: the fourth child is a peer of the three now running, not of the
+	// parents it is excused from, and 16 GB of concurrent declarations do not fit in 12.
+	last := b.Request("child-docs", child(3))
+	assert.False(t, last.Granted, "a fourth concurrent 4 GB child does not fit in 12 GB")
+	assert.True(t, last.Fits, "it would fit on an idle machine, so it queues rather than being refused")
+	assert.Equal(t, 12_000, last.HeldMB, "sibling descendants count; the parents' four claims do not")
+
+	// A queue rather than a deadlock, because what it waits for is running and not
+	// blocked on it.
+	b.Release(first)
+	assert.True(t, b.Request("child-docs", child(3)).Granted, "the queued child is seated once a peer finishes")
 }
 
 func TestMachineSnapshotReportsHoldersAndWaiters(t *testing.T) {
@@ -480,18 +499,16 @@ func TestMachineGateQueuesNormallyWhenNotNested(t *testing.T) {
 	assert.False(t, blindToOwnAncestry(t.Context()), "a top-level run has no ancestry to lose")
 }
 
-// TestAncestryFallsBackToTheEnvironmentForALibraryCaller is the SDK case, and the one
-// that broke CI. A Go test driving magus in-process passes a plain context.Background():
-// only the CLI and the daemon stamp ancestry onto ctx, so reading ctx alone made every
-// library consumer inside a magus process tree look like a nested run that had lost its
-// ancestry - refused against the very claim its own parent was holding, with the
-// variable sitting in the process environment the whole time.
-func TestAncestryFallsBackToTheEnvironmentForALibraryCaller(t *testing.T) {
+// The empty-ctx fallback has no producer on the run path: runResolved's first statement
+// is attributeRun, which reads the environment itself and appends this run, so admit
+// always sees a stamped ctx. It stays as the belt to that suspenders, and this pins the
+// contract rather than a caller.
+func TestAncestryFallsBackToTheEnvironmentForAnUnstampedCaller(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
 
 	assert.Equal(t, []string{"3217:inv-parent"}, ancestorInvocations(context.Background()),
-		"the environment is the only carrier an SDK consumer has")
+		"the environment is the only carrier an unstamped caller has")
 	assert.False(t, blindToOwnAncestry(context.Background()),
 		"a consumer that CAN name its ancestors is not blind, whatever stamped ctx")
 
@@ -500,6 +517,24 @@ func TestAncestryFallsBackToTheEnvironmentForALibraryCaller(t *testing.T) {
 	ctx := types.WithInvocationAncestors(context.Background(), []string{"55:inv-adopted"})
 	assert.Equal(t, []string{"55:inv-adopted"}, ancestorInvocations(ctx),
 		"a stamped ctx is authoritative; the environment is the fallback, not an override")
+}
+
+// The shape a library run actually arrives in. attributeRun leaves ancestry as
+// [parent..., self], and self is stripped by mintedHere, so the answer matches what the
+// environment alone used to give: an SDK consumer is still excused from its parent's
+// claim, by a different branch than the test above.
+func TestAncestryStripsThisRunFromWhatAttributeRunStamped(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+
+	stamped := types.AppendInvocationAncestor(
+		types.WithInvocationAncestors(context.Background(), []string{"3217:inv-parent"}),
+		os.Getpid(), "inv-self")
+
+	assert.Equal(t, []string{"3217:inv-parent"}, ancestorInvocations(stamped),
+		"a run must not count itself among the claims it is excused from")
+	assert.Equal(t, fmt.Sprintf("%d:inv-self", os.Getpid()), selfInvocation(stamped))
+	assert.False(t, blindToOwnAncestry(stamped),
+		"a run that can name its parent is not blind")
 }
 
 // TestLibraryCallerIsExcusedFromItsParentsClaim is the same case end to end through the
@@ -515,11 +550,17 @@ func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	})
 	require.True(t, parent.Granted, "the shard's own run fills the machine")
 
-	// What RunAll builds for an SDK consumer: no ancestry on ctx, resolved from the env.
+	// The ctx admit actually sees for an SDK consumer: attributeRun adopted the parent
+	// from the environment and appended this run, and ancestorInvocations strips the self
+	// entry back off. Modelling this as a bare context.Background() tested a shape
+	// runResolved cannot produce.
+	stamped := types.AppendInvocationAncestor(
+		types.WithInvocationAncestors(context.Background(), []string{"3217:inv-parent"}),
+		os.Getpid(), "inv-self")
 	g, _, _ := testGate(t, b, false)
-	release, err := g.acquire(context.Background(), types.MachineClaim{
+	release, err := g.acquire(stamped, types.MachineClaim{
 		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: 4000,
-		Ancestors: ancestorInvocations(context.Background()),
+		Ancestors: ancestorInvocations(stamped),
 	})
 	require.NoError(t, err, "an in-process run must be excused from the claim its own parent holds")
 	require.NotNil(t, release)

@@ -187,20 +187,25 @@ func (b *MachineBudget) reap() {
 }
 
 // held sums what counts against a claim with these ancestors: every live claim except
-// the one each ancestor invocation is holding on this claim's behalf.
+// the ones its ancestor invocations hold.
 //
 // The ancestor exclusion is what makes a nested magus possible. A target whose suite
 // runs `magus run test .` is a descendant of a run already holding that target's
 // declaration, and counting it would refuse its own child. The memory is not doubled
 // either, since the ancestor is blocked in exec.
 //
-// ONE claim per ancestor invocation, not all of them. An invocation is not a step: a
-// parent running four steps concurrently, one of which spawned this child, holds four
-// claims, and excluding all four would make the child blind to three genuine peers and
-// re-admit the oversubscription this exists to stop. The largest is the one excluded,
-// because the parent step blocked in exec waiting for this child is at most that, and
-// under-excluding is the direction that deadlocks: the child would queue behind memory
-// its own parent cannot release until the child finishes.
+// EVERY claim an ancestor invocation holds, not just the largest. An invocation is not
+// a step: a parent running four steps at once holds four claims, and a child excused
+// from only one queues behind three that nobody can return until this child has run.
+// Excusing all of them does blind a child to its parent's genuinely concurrent
+// siblings, but the alternative is not throttling, it is a hang; under-excluding is the
+// direction that deadlocks. Sibling DESCENDANTS still count against each other, so a
+// fan-out stays bounded, and a declaration larger than the whole budget is still
+// refused.
+//
+// Residual: two INDEPENDENT roots whose children each need more than the other root
+// leaves free still wedge each other. Nothing here can see that; a holder does not
+// report whether it is blocked.
 func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 	excused := b.excusedClaims(ancestors)
 	for id, e := range b.claims {
@@ -213,25 +218,18 @@ func (b *MachineBudget) held(ancestors []string) (mb, slots int) {
 	return mb, slots
 }
 
-// excusedClaims picks the one claim per ancestor invocation that does not count against
-// a descendant: that invocation's largest, by the reasoning on held.
+// excusedClaims is every claim an ancestor invocation holds; none of them counts
+// against a descendant, by the reasoning on held. It shares isMachineAncestor with
+// headReservation so the granted and the queued halves of the exclusion cannot drift.
 func (b *MachineBudget) excusedClaims(ancestors []string) map[string]bool {
 	if len(ancestors) == 0 {
 		return nil
 	}
-	biggest := make(map[string]string, len(ancestors)) // invocation -> claim id
+	out := map[string]bool{}
 	for id, e := range b.claims {
-		inv := e.claim.Invocation
-		if inv == "" || !slices.Contains(ancestors, inv) {
-			continue
+		if isMachineAncestor(e.claim.Invocation, ancestors) {
+			out[id] = true
 		}
-		if cur, ok := biggest[inv]; !ok || b.claims[cur].claim.MemoryMB < e.claim.MemoryMB {
-			biggest[inv] = id
-		}
-	}
-	out := make(map[string]bool, len(biggest))
-	for _, id := range biggest {
-		out[id] = true
 	}
 	return out
 }
