@@ -52,6 +52,11 @@ still working stays listed however long ago it began.
 **--since** *string*
 : Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp
 
+### session load options
+
+**--file** *string*
+: Read the event stream from this file instead of stdin
+
 ### session dispose options
 
 **--reason** *string*
@@ -107,6 +112,12 @@ still working stays listed however long ago it began.
 **ls**
 : List past sessions and the targets they ran (the default)
 
+**load**
+: Load a normalized agent-session event stream from a host transcript
+
+**show**
+: Report one loaded session: what it ran, what the rules say, what it loaded
+
 **attention**
 : List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty
 
@@ -128,7 +139,7 @@ still working stays listed however long ago it began.
 : Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; --observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0.
 
 **1**
-: dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error).
+: dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error). load: at least one line was rejected; the lines that were usable are still loaded, and the summary is still printed, so fixing the recipe and re-running costs nothing. show: the session named has no loaded events.
 
 **2**
 : Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command - deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases.
@@ -151,6 +162,18 @@ magus session --since 24h
 
 ```sh
 magus session -o json
+```
+
+*Load a host transcript a recipe normalized*
+
+```sh
+magus session load --file events.ndjson
+```
+
+*Read one loaded session back*
+
+```sh
+magus session show 8f1c2d4e
 ```
 
 *List open attention requests*

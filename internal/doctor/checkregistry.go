@@ -232,6 +232,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkObserverRecording() },
 	},
 	{
+		Name:           "session-load",
+		Doc:            "whether a host transcript has ever been loaded, and how stale the newest of it is",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkSessionLoad() },
+	},
+	{
 		Name:           "guard-wiring",
 		Doc:            "whether anything in this checkout actually hands the guard a command to judge",
 		Evidence:       types.EvidenceMeasured,

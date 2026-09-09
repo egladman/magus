@@ -383,6 +383,8 @@ const (
 	FlagSessionHookSession = "session"
 	// session hook: --transcript
 	FlagSessionHookTranscript = "transcript"
+	// session load: --file
+	FlagSessionLoadFile = "file"
 	// session notify: --desktop
 	FlagSessionNotifyDesktop = "desktop"
 	// session notify: --outcome
@@ -1102,6 +1104,18 @@ func BindSession(fs *flag.FlagSet) *SessionFlags {
 	var f SessionFlags
 	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many sessions (0 for all)")
 	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
+	return &f
+}
+
+// SessionLoadFlags are the flags declared for `magus session load`.
+type SessionLoadFlags struct {
+	File string // --file
+}
+
+// BindSessionLoad registers `magus session load`'s flags on fs and returns the destination.
+func BindSessionLoad(fs *flag.FlagSet) *SessionLoadFlags {
+	var f SessionLoadFlags
+	fs.StringVar(&f.File, FlagSessionLoadFile, "", "Read the event stream from this file instead of stdin")
 	return &f
 }
 

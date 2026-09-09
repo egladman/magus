@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5315,
-  "edge_count": 9463,
+  "node_count": 5316,
+  "edge_count": 9464,
   "relations": [
     {
       "id": "annotates",
@@ -1367,7 +1367,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1537",
+        "dir_files": "1538",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1737,7 +1737,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "266",
+        "dir_files": "267",
         "dir_languages": "markdown,md#agent-adoption-options,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-options,md#config-history-import-options,md#config-history-passed-options,md#config-mcp-connector-create-options,md#config-set-op"
       }
     },
@@ -30891,6 +30891,16 @@
       "source": "docs/reference/manpage/magus-session.md#session-hook-options",
       "attrs": {
         "anchor": "session-hook-options",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/manpage/magus-session.md#session-load-options",
+      "kind": "docsection",
+      "label": "session load options",
+      "source": "docs/reference/manpage/magus-session.md#session-load-options",
+      "attrs": {
+        "anchor": "session-load-options",
         "level": "3"
       }
     },
@@ -97970,6 +97980,14 @@
     {
       "source": "docsection:docs/reference/manpage/magus-session.md#options",
       "target": "docsection:docs/reference/manpage/magus-session.md#session-hook-options",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-session.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-session.md#options",
+      "target": "docsection:docs/reference/manpage/magus-session.md#session-load-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

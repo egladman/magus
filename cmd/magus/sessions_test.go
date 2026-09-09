@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -50,7 +52,7 @@ func sessionsLeaseCell(t *testing.T, out, session string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		// SESSION, date, time, HOST, LEASE, SPAWNER, PARENT, FACTS, TARGETS...
+		// SESSION, date, time, HOST, LEASE, SPAWNER, PARENT, FACTS, EVENTS, TARGETS...
 		if len(fields) > 4 && fields[0] == session {
 			return fields[4]
 		}
@@ -230,4 +232,194 @@ func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "24h"}))
 	})
 	assert.Contains(t, out, "invOld", "a session inside the window is still listed")
+}
+
+
+// loadStream writes lines to a file and loads them, returning what the command
+// printed. --file rather than stdin because the flag is the path a recipe uses and
+// swapping os.Stdin would test the plumbing rather than the load.
+func loadStream(t *testing.T, root string, lines ...string) (string, error) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "events.ndjson")
+	require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600))
+
+	var err error
+	out := captureStdout(t, func() { err = sessionLoad(root, []string{"--file", path}) })
+	return out, err
+}
+
+// storeBytes is every byte the store holds, which is what the never-store-a-command
+// rule has to hold over: a field that leaks the text leaks it into one of these files.
+func storeBytes(t *testing.T, root string) string {
+	t.Helper()
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+
+	var b strings.Builder
+	for _, e := range entries {
+		body, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		require.NoError(t, err)
+		b.Write(body)
+	}
+	return b.String()
+}
+
+func loadedEvent(t *testing.T, root, session string, i int) sessions.AgentEvent {
+	t.Helper()
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+	events := sessions.AgentEvents(fold, session)
+	require.Greater(t, len(events), i)
+	return events[i]
+}
+
+// TestSessionLoadIsIdempotent is the property every recipe is built on: a recipe
+// re-reads whole transcript files rather than tracking where it stopped, so the
+// second pass over the same file has to be free.
+func TestSessionLoadIsIdempotent(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+
+	lines := []string{
+		`{"host":"h1","session":"s1","ts":1757430000000,"kind":"shell.command","ref":"r1","text":"ls -la"}`,
+		`{"host":"h1","session":"s1","ts":1757430001000,"kind":"skill.load","ref":"r2","text":"magus-run"}`,
+		`{"host":"h1","session":"s1","ts":1757430002000,"kind":"file.write","ref":"r3","text":"internal/foo.go"}`,
+	}
+	out, err := loadStream(t, root, lines...)
+	require.NoError(t, err)
+	assert.Contains(t, out, "loaded 3, deduped 0")
+
+	out, err = loadStream(t, root, lines...)
+	require.NoError(t, err)
+	assert.Contains(t, out, "loaded 0, deduped 3")
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+	assert.Len(t, sessions.AgentEvents(fold, "s1"), 3, "a second load must not double the history")
+}
+
+func TestSessionLoadDropsAnotherRepositorysEvents(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+	elsewhere := t.TempDir()
+
+	out, err := loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"cwd":"`+root+`","kind":"file.read","ref":"r1","text":"a.go"}`,
+		`{"host":"h1","session":"s1","ts":2,"cwd":"`+elsewhere+`","kind":"file.read","ref":"r2","text":"b.go"}`)
+	require.NoError(t, err)
+	assert.Contains(t, out, "loaded 1, deduped 0, dropped 1")
+}
+
+// TestSessionLoadNeverStoresTheCommandText pins the rule the trail already settled:
+// a command line is content, and content stays in the host's own transcript. The
+// assertion is over the FILES rather than over the struct, because a field added
+// later would satisfy a struct-shaped test and still write the line to disk.
+func TestSessionLoadNeverStoresTheCommandText(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+
+	const secret = "curl -H 'Authorization: Bearer sk-not-a-real-token' https://example.com"
+	_, err := loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"`+secret+`"}`)
+	require.NoError(t, err)
+
+	body := storeBytes(t, root)
+	assert.NotContains(t, body, "Bearer", "a stored command line is a stored credential")
+	assert.NotContains(t, body, "example.com")
+
+	ev := loadedEvent(t, root, "s1", 0)
+	assert.Equal(t, "curl", ev.Program)
+	assert.Len(t, ev.Digest, 64, "the digest is what compares two commands nobody may read")
+	assert.Empty(t, ev.Text)
+}
+
+// TestSessionLoadRejudgesADeniedCommand is the feature the trail cannot have: would
+// TODAY's rules have caught a command that ran weeks ago, under whatever rules
+// existed then, or under none at all.
+func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+
+	_, err := loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"go build ./..."}`,
+		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"ls"}`)
+	require.NoError(t, err)
+
+	denied := loadedEvent(t, root, "s1", 0)
+	assert.Equal(t, "deny", denied.Verdict)
+	assert.Equal(t, string(denyRuleRawTool), denied.Rule)
+	assert.Equal(t, "go", denied.Program)
+
+	plain := loadedEvent(t, root, "s1", 1)
+	assert.Equal(t, "pass", plain.Verdict)
+	assert.Empty(t, plain.Rule)
+}
+
+// A rejected line names what is wrong with it and does not take the rest of the
+// stream down: a recipe emitting one bad shape emits it for a whole transcript.
+func TestSessionLoadRejectsAnUnknownKind(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+
+	out, err := loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"kind":"tool.use","ref":"r1","text":"x"}`,
+		`{"host":"h1","session":"s1","ts":2,"kind":"file.read","ref":"r2","text":"a.go"}`,
+		`{"host":"h1","ts":3,"kind":"file.read","ref":"r3","text":"b.go"}`)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "shell.command", "the diagnostic names the set it accepts")
+	assert.Contains(t, err.Error(), "no session")
+	assert.Contains(t, out, "loaded 1", "the usable lines still load")
+}
+
+func TestSessionShowGroupsCommandsByProgram(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+
+	_, err := loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"go build ./...","outcome":{"denied":true}}`,
+		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"go test ./..."}`,
+		`{"host":"h1","session":"s1","ts":3,"kind":"skill.load","ref":"r3","text":"magus-run"}`,
+		`{"host":"h1","session":"s1","ts":4,"kind":"file.write","ref":"r4","text":"internal/foo.go"}`,
+		`{"host":"h1","session":"s1","ts":5,"kind":"hook.output","ref":"r5","text":"deny: use magus"}`)
+	require.NoError(t, err)
+
+	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
+
+	assert.Contains(t, out, "host h1")
+	assert.Contains(t, out, "go ")
+	assert.Contains(t, out, "deny 2")
+	assert.Contains(t, out, "host recorded 1 denied")
+	assert.Contains(t, out, "magus-run")
+	assert.Contains(t, out, "internal/foo.go")
+	assert.Contains(t, out, "hook outputs: 1")
+}
+
+func TestSessionShowNamesTheLoadWhenNothingIsThere(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+
+	err := sessionShow(t.TempDir(), []string{"nope"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "magus session load")
+}
+
+func TestCommandProgramReadsThroughAWrapper(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "go", commandProgram("env GOFLAGS=-mod=mod go build ./..."))
+	assert.Equal(t, "ls", commandProgram("ls -la"))
+	assert.Empty(t, commandProgram(""))
 }

@@ -443,6 +443,7 @@ type Summary struct {
 	StartedMs    int64          `json:"started_ms"`
 	LastMs       int64          `json:"last_ms"`
 	Facts        int            `json:"facts"`
+	Events       int            `json:"events,omitempty"` // of Facts, the ones a `magus session load` put here
 	Targets      []TargetResult `json:"targets,omitempty"`
 }
 
@@ -479,6 +480,8 @@ func Summarize(fold Fold) []Summary {
 			if json.Unmarshal(rec.Payload, &result) == nil {
 				s.Targets = append(s.Targets, result)
 			}
+		case KindAgentEvent:
+			s.Events++
 		}
 	}
 
@@ -488,4 +491,221 @@ func Summarize(fold Fold) []Summary {
 	}
 	slices.SortStableFunc(out, func(a, b Summary) int { return cmp.Compare(b.LastMs, a.LastMs) })
 	return out
+}
+
+
+// The second producer of this store, beside the run path: a host transcript,
+// normalized outside magus and loaded through `magus session load`. It is what
+// closes the join [SessionStart.Host] names as missing, because a loaded session
+// is keyed by the HOST's session id and carries the host's own label.
+//
+// Only the storage side lives here. Extraction is a per-host recipe magus does
+// not ship, and re-judging a command belongs beside the guard rules that judge
+// it, so both stay in the CLI.
+
+// KindAgentEvent is one normalized event from a host's own record of a session.
+const KindAgentEvent = "agent_event"
+
+// The events a load accepts. They are magus's vocabulary rather than any host's:
+// a recipe maps its host's tool names onto these, the same division the guard
+// draws with hookToolCommand and its siblings.
+const (
+	EventShellCommand = "shell.command"
+	EventFileRead     = "file.read"
+	EventFileWrite    = "file.write"
+	EventSkillLoad    = "skill.load"
+	EventHookOutput   = "hook.output"
+	EventSpawn        = "spawn"
+	EventMagusCall    = "magus.call"
+)
+
+// EventKinds is the accepted set, in the order a diagnostic lists it.
+var EventKinds = []string{
+	EventShellCommand, EventFileRead, EventFileWrite,
+	EventSkillLoad, EventHookOutput, EventSpawn, EventMagusCall,
+}
+
+// ValidEventKind reports whether kind is one magus stores.
+func ValidEventKind(kind string) bool {
+	for _, k := range EventKinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// AgentEvent is the payload of a [KindAgentEvent] record: one thing a host
+// observed its session do.
+//
+// A shell command's own text is NEVER stored, whatever the loader was handed.
+// The trail settled that rule (internal/trail's Ran field, and the bearer token
+// an `op=state` response carried), and a load is the surface where breaking it
+// costs most: it ingests a whole session's history at once, unattended. Program,
+// Verdict, Rule and Digest are what survives, and Ref plus Transcript are how a
+// reader opens the original where the host already put it.
+//
+// Every other kind stores Text as given: a path, a skill name, or the hook's own
+// output, all of which magus either printed itself or already records elsewhere.
+type AgentEvent struct {
+	Host string `json:"host"`
+	// Event is one of [EventKinds]. Named Event rather than Kind because Kind is
+	// already the record's own field one level up.
+	Event string `json:"event"`
+	// Ref is the host's id for the thing this event is about, and the dedup key
+	// together with Host, the session and Event. Event is part of the key because a
+	// hook.output shares its ref with the shell.command it judged: the recipe emits
+	// both from one host record. It is what makes a re-run of a recipe idempotent.
+	Ref string `json:"ref"`
+	// At is when the HOST saw the event, in unix milliseconds. The record's own Ts is
+	// when the load ran, which is a different fact and the wrong one to age against.
+	At         int64  `json:"at"`
+	Text       string `json:"text,omitempty"`
+	Transcript string `json:"transcript,omitempty"`
+	// Program is the command's resolved program name, arguments dropped.
+	Program string `json:"program,omitempty"`
+	// Verdict is what today's guard rules say about the command: pass, advise or
+	// deny. It is re-judged at load time rather than read off the transcript, so it
+	// answers whether the CURRENT rules would have caught a past command.
+	Verdict string `json:"verdict,omitempty"`
+	// Rule names the deny rule or the advisory kind behind Verdict. The rule's own
+	// argument is deliberately absent: it renders the resolved argv, which is the
+	// content Text is barred from carrying.
+	Rule string `json:"rule,omitempty"`
+	// Digest is the sha256 of the command text, so two events can be compared for
+	// sameness without either being readable.
+	Digest string `json:"digest,omitempty"`
+	// Exit is the command's status where the host records one; hosts that do not
+	// report exit codes leave it zero, which is why Denied and Interrupted are
+	// separate fields rather than inferred from it.
+	Exit        int  `json:"exit,omitempty"`
+	Denied      bool `json:"denied,omitempty"`
+	Interrupted bool `json:"interrupted,omitempty"`
+}
+
+// LoadEvent is one event with the session it belongs to, as [LoadEvents] takes it.
+type LoadEvent struct {
+	Session string
+	Event   AgentEvent
+}
+
+// LoadResult reports what one load did. ByKind counts what was WRITTEN rather
+// than what arrived, so a re-run that dedups everything reports nothing loaded
+// and no kinds, instead of a breakdown of work it did not do.
+type LoadResult struct {
+	Loaded  int            `json:"loaded"`
+	Deduped int            `json:"deduped"`
+	ByKind  map[string]int `json:"by_kind,omitempty"`
+}
+
+// LoadEvents appends every event dir does not already hold, keyed on
+// (host, session, ref), and reports how many it wrote and how many it skipped.
+//
+// Loading the same stream twice is therefore a no-op, which is the property the
+// recipes are built on: a recipe re-reads whole transcript files rather than
+// tracking where it stopped, and the store is what makes that cheap instead of
+// duplicative.
+//
+// start supplies the fields a session record carries beyond the events
+// themselves; Host is overwritten per session from the events, since that is the
+// join this store exists to record. Events are written in the order given, so a
+// caller that wants them ordered orders them first.
+func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult, error) {
+	fold, err := ReadAll(dir)
+	if err != nil {
+		return LoadResult{}, err
+	}
+	seen := loadedRefs(fold)
+
+	result := LoadResult{ByKind: map[string]int{}}
+	writers := map[string]*Writer{}
+	for _, ev := range events {
+		key := eventKey(ev.Session, ev.Event.Host, ev.Event.Event, ev.Event.Ref)
+		if seen[key] {
+			result.Deduped++
+			continue
+		}
+		w := writers[ev.Session]
+		if w == nil {
+			sessionStart := start
+			sessionStart.Host = ev.Event.Host
+			if w, err = Open(dir, ev.Session, sessionStart); err != nil {
+				return result, err
+			}
+			writers[ev.Session] = w
+		}
+		if err := w.Append(KindAgentEvent, ev.Event); err != nil {
+			return result, err
+		}
+		seen[key] = true
+		result.Loaded++
+		result.ByKind[ev.Event.Event]++
+	}
+	return result, nil
+}
+
+// loadedRefs is the dedup set: every (session, host, kind, ref) the store already holds.
+func loadedRefs(fold Fold) map[string]bool {
+	seen := make(map[string]bool)
+	for _, rec := range fold.Records {
+		if rec.Kind != KindAgentEvent {
+			continue
+		}
+		var ev AgentEvent
+		if json.Unmarshal(rec.Payload, &ev) == nil {
+			seen[eventKey(rec.Session, ev.Host, ev.Event, ev.Ref)] = true
+		}
+	}
+	return seen
+}
+
+func eventKey(session, host, kind, ref string) string {
+	return session + "\x00" + host + "\x00" + kind + "\x00" + ref
+}
+
+// AgentEvents returns the loaded events for one session, in the order the fold
+// holds them. An unknown session is an empty slice rather than an error: a
+// session with no loaded events and one that never existed look the same to
+// every other reader of this store.
+func AgentEvents(fold Fold, session string) []AgentEvent {
+	var out []AgentEvent
+	for _, rec := range fold.Records {
+		if rec.Kind != KindAgentEvent || rec.Session != session {
+			continue
+		}
+		var ev AgentEvent
+		if json.Unmarshal(rec.Payload, &ev) == nil {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// NewestEventMs is the newest host timestamp any loaded event carries, or zero
+// when nothing has been loaded. It reads [AgentEvent.At] rather than the record's
+// Ts, so a store loaded today from a month-old transcript reports the month-old
+// event, which is the age a staleness check is asking about.
+func NewestEventMs(fold Fold) int64 {
+	var newest int64
+	for _, rec := range fold.Records {
+		if rec.Kind != KindAgentEvent {
+			continue
+		}
+		var ev AgentEvent
+		if json.Unmarshal(rec.Payload, &ev) == nil && ev.At > newest {
+			newest = ev.At
+		}
+	}
+	return newest
+}
+
+// ValidSessionID reports whether id can name a session file, and is exported so a
+// loader can refuse a host id before writing half a stream. The rule is the file
+// name's, which is why it is strict: an id that could contain a separator could
+// escape the store directory.
+func ValidSessionID(id string) error {
+	if !sessionRE.MatchString(id) {
+		return fmt.Errorf("session id %q must be alphanumeric with - and _ (it names the session file)", id)
+	}
+	return nil
 }

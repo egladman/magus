@@ -1335,6 +1335,65 @@ still working stays listed however long ago it began.`,
 	Children: []Command{
 		{Name: "ls", Short: "List past sessions and the targets they ran (the default)"},
 		{
+			Name:        "load",
+			Short:       "Load a normalized agent-session event stream from a host transcript",
+			Description: "Read one JSON event per line from stdin, re-judge every shell command against the current guard rules, and record the result in this repository's session store.",
+			Long: `Load what an agent host's own transcript says a session did.
+
+The guard's activity trail records what the hook SAW. A transcript records
+what actually ran, including commands no hook was wired for, the skills a
+session loaded, and what the hook printed back. Joining the two is what makes
+"was this session guarded, and did it comply" answerable at all.
+
+Extraction is NOT magus's job. A per-host recipe you own turns a transcript
+into this stream, the same division ` + "`magus agent adoption`" + ` draws: magus takes
+a corpus in its own vocabulary rather than learning to read a host's logs, so
+a host changing its format costs you one recipe edit instead of a magus
+release.
+
+The stream is one JSON object per line, on stdin or from --file. Every line
+needs host, session, kind and ref; kind is one of shell.command, file.read,
+file.write, skill.load, hook.output, spawn, or magus.call, and any other kind
+is rejected with a diagnostic naming the set. cwd, ts, text, transcript and
+outcome are optional.
+
+Events are keyed on (host, session, ref), so re-running a recipe over the same
+transcript loads nothing twice: a recipe re-reads whole files instead of
+tracking where it stopped. Events whose cwd belongs to another repository are
+dropped, and worktrees of this one are kept. A checkout that no longer exists
+identifies as its own path, so events from a worktree since deleted drop too.
+
+A shell command's TEXT is never stored. It is re-judged in-process against the
+current rules and kept as its program, the verdict (pass, advise or deny), the
+rule or advisory behind that verdict, and a sha256 of the line. That is the
+question the trail cannot answer - would today's rules have caught yesterday's
+command - and it is also the rule the trail already settled: a command line is
+content, and content stays in the host's own transcript, which ref and the
+transcript pointer lead back to.`,
+			Usage: "magus session load [--file <path>]",
+			Flags: []Flag{
+				{Name: "file", Kind: FlagString, Doc: "Read the event stream from this file instead of stdin"},
+			},
+		},
+		{
+			Name:        "show",
+			Short:       "Report one loaded session: what it ran, what the rules say, what it loaded",
+			Description: "Summarize one loaded agent session: events by kind, commands grouped by program with re-judged verdicts, skills loaded, and files read and written.",
+			Long: `Report one loaded session.
+
+Commands are grouped by program and carry two counts that are deliberately
+separate: how many of them today's rules would DENY, and how many the host
+recorded as actually denied. The gap between the two is the audit. A command
+the rules refuse that ran anyway was never judged, because no guard was wired,
+because the binary was too old to judge it, or because the rule arrived after
+the command did.
+
+The id is a host session id, listed by ` + "`magus session`" + `. Sessions reach this
+store through ` + "`magus session load`" + `; a session magus itself ran has target
+results rather than events and is read from the listing instead.`,
+			Usage: "magus session show <session-id>",
+		},
+		{
 			Name:  "attention",
 			Short: "List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty",
 			Long: `List the requests agents have raised in this repository.
@@ -1483,6 +1542,8 @@ none. This is the only command that opens one.`,
 		{"Show recent sessions", "magus session"},
 		{"Show today's work", "magus session --since 24h"},
 		{"Full session records as JSON", "magus session -o json"},
+		{"Load a host transcript a recipe normalized", "magus session load --file events.ndjson"},
+		{"Read one loaded session back", "magus session show 8f1c2d4e"},
 		{"List open attention requests", "magus session attention"},
 		{"Ask whether anyone is waiting", "magus session attention -q"},
 		{"Close one request, saying why", `magus session dispose att-3f9c -reason "approved and pushed by hand"`},
@@ -1496,7 +1557,7 @@ none. This is the only command that opens one.`,
 	// that advise passes and that 2 is overloaded.
 	ExitStatus: []ExitCode{
 		{0, "Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; --observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0."},
-		{1, "dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error)."},
+		{1, "dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error). load: at least one line was rejected; the lines that were usable are still loaded, and the summary is still printed, so fixing the recipe and re-running costs nothing. show: the session named has no loaded events."},
 		{2, "Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command - deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases."},
 	},
 }

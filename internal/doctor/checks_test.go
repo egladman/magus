@@ -6,6 +6,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -764,4 +765,51 @@ func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
 	got := r.checkOutputIsAnotherProjectsSource(projects)
 
 	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+}
+
+// loadOneEvent puts a single event into the session store for root, dated at.
+func loadOneEvent(t *testing.T, root string, at time.Time) {
+	t.Helper()
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	_, err = sessions.LoadEvents(dir, []sessions.LoadEvent{{
+		Session: "s1",
+		Event: sessions.AgentEvent{
+			Host: "h1", Event: sessions.EventFileRead, Ref: "r1", At: at.UnixMilli(), Text: "a.go",
+		},
+	}}, sessions.SessionStart{})
+	require.NoError(t, err)
+}
+
+func TestCheckSessionLoadStates(t *testing.T) {
+	t.Run("never loaded", func(t *testing.T) {
+		t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+		got := (&runner{root: t.TempDir()}).checkSessionLoad()
+
+		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Contains(t, got.Message, "has ever been loaded")
+		assert.Contains(t, got.Details[len(got.Details)-1], "magus session load")
+	})
+
+	t.Run("stale", func(t *testing.T) {
+		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		root := t.TempDir()
+		loadOneEvent(t, root, time.Now().Add(-30*24*time.Hour))
+
+		got := (&runner{root: root}).checkSessionLoad()
+
+		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Contains(t, got.Message, "30 days old")
+	})
+
+	t.Run("current", func(t *testing.T) {
+		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		root := t.TempDir()
+		loadOneEvent(t, root, time.Now().Add(-time.Hour))
+
+		got := (&runner{root: root}).checkSessionLoad()
+
+		assert.Equal(t, types.DoctorOK, got.Status)
+	})
 }

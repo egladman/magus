@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -1664,6 +1665,64 @@ func (r *runner) checkObserverRecording() types.DoctorCheck {
 		}
 	}
 }
+
+// checkSessionLoad reports whether this repository's session store holds anything a
+// host transcript put there, and how stale the newest of it is.
+//
+// It sits beside checkObserverRecording because it answers the half that check cannot:
+// the observer grades the hook's own trail, which by construction holds only what the
+// hook saw. A command run with no guard wired writes nothing anywhere, and the only
+// witness to it is the host's own transcript. Nothing loads one automatically, so
+// without a check the store is silently empty and every audit built on it reports zero
+// rather than "nobody looked".
+//
+// Advice rather than fail, on the doctrine that a convention magus recommends is never a
+// gate: a repository nobody audits is not a broken repository.
+func (r *runner) checkSessionLoad() types.DoctorCheck {
+	const name = "session-load"
+
+	dir, err := sessions.Dir(r.root)
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorAdvice, Message: err.Error()}
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorAdvice, Message: err.Error()}
+	}
+	newest := sessions.NewestEventMs(fold)
+	if newest == 0 {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: "no agent session has ever been loaded here, so nothing can say which commands ran unguarded",
+			Details: []string{
+				"the guard trail holds only what the hook saw; a command run with no hook wired leaves no record at all",
+				"extract a host transcript with the recipe for your agent host, then: " + hint.SessionLoad.String(),
+			},
+		}
+	}
+	age := time.Since(time.UnixMilli(newest))
+	if age > sessionLoadStale {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: fmt.Sprintf("the newest loaded session event is %d days old, so an audit here describes work that has moved on", int(age.Hours()/24)),
+			Details: []string{
+				"newest event: " + time.UnixMilli(newest).Format(time.RFC3339),
+				"re-run the recipe for your agent host; loading the same transcript twice loads nothing twice",
+				"then: " + hint.SessionLoad.String(),
+			},
+		}
+	}
+	return types.DoctorCheck{
+		Name: name, Status: types.DoctorOK,
+		Message: fmt.Sprintf("session history loaded, newest event %s", time.UnixMilli(newest).Format(time.RFC3339)),
+	}
+}
+
+// sessionLoadStale is how old the newest loaded event may be before a load is worth
+// repeating. Two weeks is longer than a working branch and shorter than the trail's own
+// rotation, so it fires on a repository that stopped loading rather than on one between
+// sessions.
+const sessionLoadStale = 14 * 24 * time.Hour
 
 // observerReadRatio is how many reads one write should be accompanied by before the trail is
 // considered to be explaining anything. An agent reads far more than it writes, so anything
