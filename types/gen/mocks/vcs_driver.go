@@ -1122,6 +1122,50 @@ func (_c *MockVCSDriver_PrunePreserved_Call) RunAndReturn(run func(ctx context.C
 	return _c
 }
 
+// ReviewCommand provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) ReviewCommand() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReviewCommand")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MockVCSDriver_ReviewCommand_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReviewCommand'
+type MockVCSDriver_ReviewCommand_Call struct {
+	*mock.Call
+}
+
+// ReviewCommand is a helper method to define mock.On call
+func (_e *MockVCSDriver_Expecter) ReviewCommand() *MockVCSDriver_ReviewCommand_Call {
+	return &MockVCSDriver_ReviewCommand_Call{Call: _e.mock.On("ReviewCommand")}
+}
+
+func (_c *MockVCSDriver_ReviewCommand_Call) Run(run func()) *MockVCSDriver_ReviewCommand_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_ReviewCommand_Call) Return(s string) *MockVCSDriver_ReviewCommand_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MockVCSDriver_ReviewCommand_Call) RunAndReturn(run func() string) *MockVCSDriver_ReviewCommand_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Root provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) Root(ctx context.Context, dir string) (string, error) {
 	ret := _mock.Called(ctx, dir)

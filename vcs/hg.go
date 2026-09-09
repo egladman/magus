@@ -37,6 +37,11 @@ func (v hgVCS) Claims() []string { return []string{".hg"} }
 // both then name the same commit.
 func (v hgVCS) Base() string { return "default" }
 
+// ReviewCommand diffs the working copy against its parent. Mercurial has no index, so
+// what is about to be committed IS the working copy, `hg add` having only marked the file
+// tracked rather than recorded its content.
+func (v hgVCS) ReviewCommand() string { return "hg diff --stat" }
+
 // ParentRef is the first parent of the working directory. `p1(.)` names it
 // explicitly; a bare `.^` is p1 too but reads as a typo next to git's form.
 func (v hgVCS) ParentRef() string { return "p1(.)" }

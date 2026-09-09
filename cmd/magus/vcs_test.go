@@ -325,7 +325,10 @@ func TestVCSAddReportsTheReason(t *testing.T) {
 		Reason:     "golden files the go spell does not claim",
 	}
 
-	out := captureStdout(t, func() { reportStaging(plan, nil, true, false) })
+	out := captureStdout(t, func() { reportStaging(plan, nil, true, false, "hg diff --stat") })
 
 	assert.Contains(t, out, "reason: golden files the go spell does not claim")
+	// A non-git backend, because the review line used to be the string "git diff --cached
+	// --stat" no matter which of the four you were in.
+	assert.Contains(t, out, "review before committing: hg diff --stat")
 }

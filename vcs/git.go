@@ -25,6 +25,10 @@ func (v gitVCS) Name() string     { return "git" }
 func (v gitVCS) Claims() []string { return []string{".git"} }
 func (v gitVCS) Base() string     { return "origin/main" }
 
+// ReviewCommand reads the INDEX, which is git's alone: it is the only one of the four
+// with a staging area between the working copy and a commit.
+func (v gitVCS) ReviewCommand() string { return "git diff --cached --stat" }
+
 // ParentRef is the first parent of the checked-out commit. `^` rather than `~1`:
 // they are the same for a linear commit and differ on a merge, where `^` is the
 // branch being merged INTO - which is the side a CI run wants to measure from.

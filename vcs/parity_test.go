@@ -883,3 +883,20 @@ func TestParityPrunePreservedDropsWhatMagusMinted(t *testing.T) {
 		assert.Equalf(t, "scratch\n", string(untracked), "%s: PrunePreserved changed an untracked file", b.name)
 	})
 }
+
+// Every backend names its own read-back command, and no two of them are the same string.
+// The distinctness is the assertion worth making: a driver that returned git's spelling
+// would satisfy "non-empty" while telling an hg user to run a command hg does not have,
+// which is exactly the bug this method was added to fix.
+func TestParityReviewCommandIsTheBackendsOwn(t *testing.T) {
+	seen := make(map[string]string, len(parityBackends()))
+	for _, b := range parityBackends() {
+		cmd := b.drv.ReviewCommand()
+		require.NotEmptyf(t, cmd, "%s: no review command", b.name)
+		assert.Truef(t, strings.HasPrefix(cmd, b.name+" "), "%s: review command is not this backend's: %q", b.name, cmd)
+		if other, dup := seen[cmd]; dup {
+			t.Errorf("%s and %s share a review command: %q", other, b.name, cmd)
+		}
+		seen[cmd] = b.name
+	}
+}

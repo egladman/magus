@@ -19,6 +19,11 @@ func (v jjVCS) Name() string     { return "jj" }
 func (v jjVCS) Claims() []string { return []string{".jj"} }
 func (v jjVCS) Base() string     { return "trunk()" }
 
+// ReviewCommand diffs @ against its parent. jj has no staging step at all - the working
+// copy IS the change - so there is nothing to record before reading it back, and this
+// answers the same question the other three answer after their staging.
+func (v jjVCS) ReviewCommand() string { return "jj diff --stat" }
+
 // ParentRef is the first parent of the working-copy commit. jj's working copy is
 // itself a commit, so the interesting comparison is against @-, not @.
 func (v jjVCS) ParentRef() string { return "@-" }

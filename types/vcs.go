@@ -24,6 +24,16 @@ type VCSDriver interface {
 	// ref that builds itself, where Base - that ref's own tip - would compare a
 	// commit against itself and report nothing affected.
 	ParentRef() string
+	// ReviewCommand names this backend's command for reading back what is about to be
+	// committed, as a summary. It is what magus prints after recording paths, so the
+	// reader can check the record before it becomes a commit.
+	//
+	// A constant per backend, like Base and ParentRef, because it takes no argument: the
+	// question is always "what have I got staged here". The spellings are not
+	// interchangeable - git reads its INDEX, while hg and Sapling diff the working copy
+	// against its parent and jj has no staging area at all, its working copy being the
+	// change - so the one command that answers it is the driver's to name.
+	ReviewCommand() string
 	// Root, ChangedFiles, and Metadata operate on the repository containing dir. An empty
 	// dir uses the process working directory. Passing an explicit dir is required
 	// for correctness when work runs concurrently, since the process cwd is global.

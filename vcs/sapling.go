@@ -50,6 +50,10 @@ func (v saplingVCS) Claims() []string { return []string{".sl"} }
 // newest locally, which after any commit of your own is your own.
 func (v saplingVCS) Base() string { return "remote/main" }
 
+// ReviewCommand diffs against the parent, for the same reason as Mercurial's: Sapling
+// has no index either.
+func (v saplingVCS) ReviewCommand() string { return "sl diff --stat" }
+
 // ParentRef is the first parent of the working copy, in Sapling's Mercurial-inherited
 // revset syntax.
 func (v saplingVCS) ParentRef() string { return "p1(.)" }

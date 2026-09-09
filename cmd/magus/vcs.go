@@ -268,7 +268,7 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "regeneration completed"))
 	}
-	fmt.Printf("\nrecorded %d path(s); review before continuing: git diff --cached --stat\n", len(staged))
+	fmt.Printf("\nrecorded %d path(s); review before continuing: %s\n", len(staged), driver.ReviewCommand())
 	// Named, never silent: a path magus settled and could not record is one the caller has
 	// to look at, and the count above would otherwise be the only sign it existed.
 	if len(dropped) > 0 {
@@ -797,7 +797,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 		}
 		verdict.Staged, dropped = staged, gone
 	}
-	return emitStaging(verdict, dropped, af.Untracked, globalCfg.DryRun)
+	return emitStaging(verdict, dropped, af.Untracked, globalCfg.DryRun, res.VCS.ReviewCommand())
 }
 
 // workspaceRelPaths turns the paths you typed into workspace-relative ones.
@@ -861,7 +861,11 @@ func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []s
 
 // reportStaging renders the verdict as prose. It reads the value and prints; it decides
 // nothing, so the terminal and `-o json` cannot disagree about what happened.
-func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) {
+//
+// review is the backend's own read-back command (VCSDriver.ReviewCommand), passed in
+// rather than composed: this line used to say `git diff --cached --stat` to everyone, and
+// three of the four backends have no index to read.
+func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, review string) {
 	verb := "staged"
 	if dryRun {
 		verb = "would stage"
@@ -908,7 +912,7 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 		}
 	}
 	if len(v.Staged) > 0 {
-		fmt.Println("\nreview before committing: git diff --cached --stat")
+		fmt.Println("\nreview before committing: " + review)
 	}
 }
 
@@ -973,7 +977,7 @@ func stagePaths(ctx context.Context, root, vcsName string, recorder types.Confli
 // emitStaging renders the verdict: the structured formats get the value itself, and the
 // terminal gets the prose. One decision, several audiences - which is the whole reason
 // the verdict is a value. `-o json` used to be accepted here and answer in text.
-func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) error {
+func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, review string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -986,7 +990,7 @@ func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) 
 		// are deliberately absent: this is the list a caller feeds forward.
 		return emitNames(v.Staged)
 	}
-	reportStaging(v, dropped, untracked, dryRun)
+	reportStaging(v, dropped, untracked, dryRun, review)
 	return nil
 }
 
