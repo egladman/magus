@@ -23,6 +23,22 @@ func (m *Magus) applySandbox(ctx context.Context) (context.Context, error) {
 	return sandboxapply.Apply(ctx, p, m.ws.Root)
 }
 
+// WithSandbox attaches this workspace's sandbox policy to ctx, applying the
+// process-wide landlock ruleset exactly as Run does, and returns ctx untouched when
+// the workspace has the sandbox disabled.
+//
+// It exists for the surfaces that execute workspace code outside a target run: the
+// Buzz script runner in particular, whose script gets the same host module surface a
+// magusfile does and so must get the same policy. Behind the library seam for the same
+// reason ApplyUnionSandbox is: policy assembly stays in one place, so a caller cannot
+// assemble a policy that differs from the one a target gets.
+func (m *Magus) WithSandbox(ctx context.Context) (context.Context, error) {
+	if !m.cfg.Sandbox.Enabled {
+		return ctx, nil
+	}
+	return m.applySandbox(ctx)
+}
+
 // ApplyUnionSandbox unions the landlock policies of every workspace root and
 // applies the combined ruleset to the current process exactly once. Roots whose
 // config disables the sandbox still contribute filesystem rules but no

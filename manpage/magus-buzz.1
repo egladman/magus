@@ -13,6 +13,10 @@ redirected stdin runs as a script instead. In both, the Buzz stdlib, every
 magus host module (fs, os, http, markdown, and the rest), and the magus
 namespace are available, so a one\-off script needs no dependency install.
 .PP
+A script run inside a workspace runs under that workspace's sandbox policy,
+the same one a target gets, so its file, process and network access is
+governed identically and a refusal is recorded on the activity trail.
+.PP
 Parsing is upstream\-strict by default: a file written for the magusfile
 engine needs \-\-embedded, or it fails on rules upstream Buzz enforces and
 magus does not. The most common one is "argument N must be labeled".

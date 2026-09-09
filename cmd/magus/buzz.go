@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -99,8 +100,20 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// ("fork instead") is then wrong. This is not hypothetical: it is what a green
 	// local run and a red CI run of the same script looked like, with nothing in
 	// between to tell them apart.
+	//
+	// The workspace's sandbox policy rides along, because a script reaches the same
+	// fs/proc/http bindings a target does and the guard cannot read a script body: it
+	// allows `magus buzz -` outright. Without the policy on ctx, sandbox.FromContext
+	// returns nil at every binding check and an ad-hoc script writes, execs and fetches
+	// with no policy at all in a workspace that asked for one. The trail base beside it
+	// is what lets a denial land as sandbox_denial, the way a target's does.
 	if m, lerr := loadMagus(ctx, root); lerr == nil && m != nil {
 		ctx = types.WithWorkspace(ctx, m)
+		sctx, serr := m.WithSandbox(ctx)
+		if serr != nil {
+			return serr
+		}
+		ctx = trail.ContextWithBase(sctx, m.CacheDir())
 	} else if lerr != nil {
 		slog.Warn("workspace not attached to this script; its workspace-reading members will raise MGS1022",
 			slog.String("error", lerr.Error()))
