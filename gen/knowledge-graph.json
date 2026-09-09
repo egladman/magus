@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5420,
-  "edge_count": 9655,
+  "edge_count": 9656,
   "relations": [
     {
       "id": "annotates",
@@ -64949,6 +64949,14 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/guides/integrations/agents/opencode.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/session-load.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/session-load.md"
     },
     {
       "source": "doc:docs/guides/integrations/agents/session-load.md",
